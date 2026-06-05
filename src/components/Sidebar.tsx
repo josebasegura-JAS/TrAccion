@@ -1,6 +1,6 @@
-import { BarChart3, Database, Home, Settings, UsersRound } from 'lucide-react';
+import { BarChart3, ClipboardList, Database, Home, Settings, UsersRound } from 'lucide-react';
 
-export type AppView = 'dashboard' | 'plantilla';
+export type AppView = 'dashboard' | 'plantilla' | 'tareas';
 
 export function Sidebar({
   activeView,
@@ -40,6 +40,13 @@ export function Sidebar({
           type="button"
         >
           <UsersRound size={18} /> Plantilla
+        </button>
+        <button
+          className={navButtonClass('tareas')}
+          onClick={() => onViewChange('tareas')}
+          type="button"
+        >
+          <ClipboardList size={18} /> Tareas
         </button>
         <button
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white/60"

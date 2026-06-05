@@ -3,6 +3,7 @@ import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
 import { PlantillaPage } from './components/PlantillaPage';
 import { Sidebar, type AppView } from './components/Sidebar';
+import { TareasPage } from './components/TareasPage';
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
@@ -13,7 +14,7 @@ export function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
         <main className="min-w-0 space-y-5 p-5">
-          {activeView === 'dashboard' ? (
+          {activeView === 'dashboard' && (
             <>
               <section className="rounded-3xl border border-metro-border bg-white p-5 shadow-card">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -36,9 +37,9 @@ export function App() {
               </section>
               <DashboardCards />
             </>
-          ) : (
-            <PlantillaPage />
           )}
+          {activeView === 'plantilla' && <PlantillaPage />}
+          {activeView === 'tareas' && <TareasPage />}
         </main>
       </div>
     </div>
