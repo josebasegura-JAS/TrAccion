@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { EMPTY_EMPLOYEE_DRAFT, type Employee, type EmployeeDraft, type EmployeeField } from '../features/plantilla/domain/employee';
+import {
+  EMPTY_EMPLOYEE_DRAFT,
+  type Employee,
+  type EmployeeDraft,
+  type EmployeeField,
+} from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
@@ -42,7 +47,15 @@ function toDraft(employee: Employee | null): EmployeeDraft {
   };
 }
 
-export function EmployeeEditor({ employee, mode, onDone }: { employee: Employee | null; mode: 'create' | 'edit'; onDone: () => void }) {
+export function EmployeeEditor({
+  employee,
+  mode,
+  onDone,
+}: {
+  employee: Employee | null;
+  mode: 'create' | 'edit';
+  onDone: () => void;
+}) {
   const createEmployee = useEmployeeStore((state) => state.create);
   const updateEmployee = useEmployeeStore((state) => state.update);
   const removeEmployee = useEmployeeStore((state) => state.remove);
@@ -56,16 +69,16 @@ export function EmployeeEditor({ employee, mode, onDone }: { employee: Employee 
   const canSubmit = draft.empleado.trim() && draft.nombreApellidos.trim();
 
   return (
-    <aside className="w-full rounded-2xl border border-metro-border bg-[#FAFBFC] p-4 shadow-card xl:w-[380px]">
-      <div className="mb-4">
+    <aside className="w-full rounded-xl border border-metro-border bg-[#FAFBFC] p-3 shadow-card xl:w-[360px]">
+      <div className="mb-3 rounded-lg border border-metro-border bg-white px-3 py-2">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
-          {isCreate ? 'Alta manual' : 'Panel de edición'}
+          {isCreate ? 'Modo alta' : 'Modo edición'}
         </p>
-        <h3 className="mt-1 text-lg font-bold text-metro-text">
+        <h3 className="mt-1 truncate text-base font-bold text-metro-text">
           {isCreate ? 'Nueva persona' : employee?.nombreApellidos || 'Sin selección'}
         </h3>
-        <p className="text-sm text-metro-muted">
-          {isCreate ? 'Introduce los campos básicos de plantilla.' : `Empleado ${employee?.empleado ?? '—'}`}
+        <p className="text-xs text-metro-muted">
+          {isCreate ? 'Alta manual compacta.' : `Editando empleado ${employee?.empleado ?? '—'}`}
         </p>
       </div>
 
@@ -86,57 +99,85 @@ export function EmployeeEditor({ employee, mode, onDone }: { employee: Employee 
           onDone();
         }}
       >
-        <div className="grid max-h-[520px] gap-2 overflow-y-auto pr-1">
-          {employeeFormFields.map(({ field, label, required }) => (
-            <label className="text-xs font-semibold text-metro-muted" key={field}>
-              {label}
-              <input
-                className="mt-1 w-full rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))}
-                required={required}
-                value={draft[field]}
-              />
-            </label>
-          ))}
+        <div className="grid max-h-[390px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-1">
+          {employeeFormFields.map(({ field, label, required }) => {
+            const isEmployeeKey = field === 'empleado';
+            const isReadOnlyKey = isEmployeeKey && !isCreate;
+
+            return (
+              <label className="text-xs font-semibold text-metro-muted" key={field}>
+                {label}
+                <input
+                  className={`mt-1 w-full rounded-lg border border-metro-border px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red ${
+                    isReadOnlyKey ? 'bg-metro-surface text-metro-muted' : 'bg-white'
+                  }`}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, [field]: event.target.value }))
+                  }
+                  readOnly={isReadOnlyKey}
+                  required={required}
+                  value={draft[field]}
+                />
+                {isReadOnlyKey && (
+                  <span className="mt-1 block text-[11px] font-medium text-metro-muted">
+                    Clave única; no editable.
+                  </span>
+                )}
+              </label>
+            );
+          })}
         </div>
 
         {!isCreate && employee && (
-          <div className="rounded-xl border border-metro-border bg-white p-3 text-xs text-metro-muted">
-            <p>
-              <span className="font-bold text-metro-text">DNI:</span> {employee.dni || '—'}
+          <section className="rounded-lg border border-metro-border bg-white p-3 text-xs text-metro-muted">
+            <p className="mb-2 font-semibold uppercase tracking-wide text-metro-text">
+              Campos derivados
             </p>
-            <p>
-              <span className="font-bold text-metro-text">Residencia EUS:</span> {employee.residenciaEus || '—'}
-            </p>
-            <p>
-              <span className="font-bold text-metro-text">Dirección teletrabajo:</span>{' '}
-              {employee.direccionTeletrabajo || '—'}
-            </p>
-          </div>
+            <dl className="space-y-1">
+              <div className="grid grid-cols-[135px_1fr] gap-2">
+                <dt className="font-bold text-metro-text">DNI</dt>
+                <dd className="truncate" title={employee.dni || '—'}>
+                  {employee.dni || '—'}
+                </dd>
+              </div>
+              <div className="grid grid-cols-[135px_1fr] gap-2">
+                <dt className="font-bold text-metro-text">Residencia EUS</dt>
+                <dd className="truncate" title={employee.residenciaEus || '—'}>
+                  {employee.residenciaEus || '—'}
+                </dd>
+              </div>
+              <div className="grid grid-cols-[135px_1fr] gap-2">
+                <dt className="font-bold text-metro-text">Dirección teletrabajo</dt>
+                <dd className="truncate" title={employee.direccionTeletrabajo || '—'}>
+                  {employee.direccionTeletrabajo || '—'}
+                </dd>
+              </div>
+            </dl>
+          </section>
         )}
 
         <div className="flex flex-wrap gap-2 pt-1">
           <button
-            className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!canSubmit}
             type="submit"
           >
-            {isCreate ? 'Crear' : 'Guardar'}
+            Guardar
           </button>
           {!isCreate && employee && (
             <button
-              className="rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
               onClick={() => {
                 removeEmployee(employee.empleado);
                 onDone();
               }}
               type="button"
             >
-              Borrar
+              Eliminar
             </button>
           )}
           <button
-            className="rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
+            className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
             onClick={onDone}
             type="button"
           >
