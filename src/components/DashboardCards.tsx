@@ -1,10 +1,10 @@
-import { CalendarCheck, FileSpreadsheet, ShieldCheck, UsersRound } from 'lucide-react';
+import { FileSpreadsheet, Filter, PenLine, UsersRound } from 'lucide-react';
 
 const cards = [
   { label: 'Personas en plantilla', value: '4', icon: UsersRound, tone: 'text-metro-red' },
-  { label: 'Registros listos', value: '28', icon: FileSpreadsheet, tone: 'text-emerald-600' },
-  { label: 'Teletrabajo preparado', value: '100%', icon: ShieldCheck, tone: 'text-blue-600' },
-  { label: 'Próxima revisión', value: 'Junio', icon: CalendarCheck, tone: 'text-amber-600' },
+  { label: 'Columnas importadas', value: '14', icon: FileSpreadsheet, tone: 'text-emerald-600' },
+  { label: 'Filtros básicos', value: '2', icon: Filter, tone: 'text-blue-600' },
+  { label: 'Alta y edición', value: 'Activas', icon: PenLine, tone: 'text-amber-600' },
 ];
 
 export function DashboardCards() {
