@@ -16,10 +16,10 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "playwright:install": "playwright install"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
     "electron-is-dev": "^3.0.1",
     "lucide-react": "^0.468.0",
     "zustand": "^5.0.2"
@@ -76,6 +76,10 @@
     },
     "portable": {
       "artifactName": "TrAccion-V1-${version}-portable.exe"
-    }
+    },
+    "npmRebuild": false
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.10.0"
   }
 }

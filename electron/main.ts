@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
+const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -22,14 +23,18 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173');
+    mainWindow.loadURL(devServerUrl);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle('database:status', () => ({ ready: false, engine: 'better-sqlite3', phase: 'prepared' }));
+  ipcMain.handle('database:status', () => ({
+    ready: false,
+    engine: 'better-sqlite3',
+    phase: 'prepared',
+  }));
   createWindow();
 
   app.on('activate', () => {

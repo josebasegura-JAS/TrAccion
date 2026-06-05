@@ -25,6 +25,7 @@ npm run electron:dev
 npm run electron:build
 npm run test
 npm run test:e2e
+npm run playwright:install
 npm run lint
 npm run format
 ```
@@ -40,6 +41,14 @@ Los campos derivados preparados para teletrabajo son:
 - `dni`
 - `direccionTeletrabajo`
 
+## Playwright
+
+Antes de ejecutar pruebas end-to-end en un entorno limpio, instala los navegadores de Playwright:
+
+```bash
+npx playwright install
+```
+
 ## Build Windows
 
-El workflow manual `.github/workflows/build-windows.yml` ejecuta lint, tests, build y `electron-builder` en Windows para publicar el EXE portable como artefacto.
+El workflow manual `.github/workflows/build-windows.yml` se lanza desde GitHub en **Actions → Build Windows EXE → Run workflow**. Ejecuta instalación, lint, tests, build y `electron-builder` en Windows para publicar el EXE portable como artefacto.
