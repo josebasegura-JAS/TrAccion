@@ -1,3 +1,4 @@
+import { File as NodeFile } from 'node:buffer';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useEmployeeStore } from '../store/useEmployeeStore';
 import { buildDireccionTeletrabajo, buildResidenciaEus, hydrateEmployee, normalizeDni } from './derived';
@@ -146,7 +147,7 @@ describe('plantilla import', () => {
   });
 
   it('actualiza por empleado al importar sin duplicar registros y recalcula derivados', async () => {
-    const file = new File(
+    const file: File = new NodeFile(
       ['empleado;nombreApellidos;residencia;nif\n100;Ane Bilbao Actualizada;Sopela Taller;72451233H'],
       'plantilla.csv',
       { type: 'text/csv' },
