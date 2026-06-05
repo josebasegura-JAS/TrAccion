@@ -8,6 +8,8 @@ import {
 import { importEncuestaRows } from './importEncuesta';
 import { sortTeletrabajoByDefault } from './sort';
 import { normalizeDiasTeletrabajo, type TeletrabajoSolicitud } from './solicitud';
+import { detectTeletrabajoWordMarkers } from './word';
+import { unzipDocx, zipDocx, type ZipEntry } from './zip';
 
 function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSolicitud {
   return {
@@ -332,5 +334,25 @@ describe('importador de encuesta de teletrabajo', () => {
       'nueva',
       'nueva',
     ]);
+  });
+});
+
+describe('generación Word de teletrabajo', () => {
+  it('detecta marcadores Word y conserva el DOCX como ZIP válido', async () => {
+    const entries: ZipEntry[] = [
+      {
+        name: 'word/document.xml',
+        data: new TextEncoder().encode(
+          '<w:document><w:body><w:bookmarkStart w:id="1" w:name="nombreApellidos"/><w:bookmarkEnd w:id="1"/><w:t>{{martes}}</w:t></w:body></w:document>',
+        ),
+      },
+    ];
+    const docx = zipDocx(entries);
+
+    await expect(detectTeletrabajoWordMarkers(docx.buffer)).resolves.toEqual([
+      'martes',
+      'nombreApellidos',
+    ]);
+    await expect(unzipDocx(docx.buffer)).resolves.toHaveLength(1);
   });
 });

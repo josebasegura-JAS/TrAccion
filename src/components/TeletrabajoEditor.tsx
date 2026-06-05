@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { FileText, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
@@ -12,6 +12,8 @@ import {
   type TeletrabajoSolicitud,
   type TeletrabajoTextField,
 } from '../features/teletrabajo/domain/solicitud';
+import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
+import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 
 const plantillaTextFields: Array<{
@@ -103,9 +105,12 @@ export function TeletrabajoEditor({
   const removeSolicitud = useTeletrabajoStore((state) => state.remove);
   const employees = useEmployeeStore((state) => state.employees);
   const [draft, setDraft] = useState<TeletrabajoDraft>(() => toDraft(solicitud));
+  const [wordStatus, setWordStatus] = useState('');
+  const [isGeneratingWord, setIsGeneratingWord] = useState(false);
 
   useEffect(() => {
     setDraft(toDraft(solicitud));
+    setWordStatus('');
   }, [solicitud, mode]);
 
   const plantillaEmployee = useMemo(() => {
@@ -132,6 +137,26 @@ export function TeletrabajoEditor({
     setDraft((current) =>
       employee ? draftFromEmployee(current, employee) : { ...current, empleado },
     );
+  };
+
+  const handleGenerateWord = async () => {
+    if (!canSubmit || isGeneratingWord) {
+      return;
+    }
+
+    setIsGeneratingWord(true);
+    setWordStatus('');
+
+    try {
+      const result = await generateTeletrabajoWord(draft, plantillaEmployee);
+      await saveDocxWithDialog(result.blob, result.fileName);
+      setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores detectados.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
+      setWordStatus(message);
+    } finally {
+      setIsGeneratingWord(false);
+    }
   };
 
   const toggleDia = (day: string, checked: boolean) => {
@@ -368,6 +393,12 @@ export function TeletrabajoEditor({
             </label>
           </div>
 
+          {wordStatus && (
+            <p className="rounded-lg border border-metro-border bg-white px-3 py-2 text-xs font-semibold text-metro-muted">
+              {wordStatus}
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
@@ -375,6 +406,15 @@ export function TeletrabajoEditor({
               type="submit"
             >
               Guardar
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canSubmit || isGeneratingWord}
+              onClick={handleGenerateWord}
+              type="button"
+            >
+              <FileText size={15} />
+              {isGeneratingWord ? 'Generando…' : 'Generar Word'}
             </button>
             {!isCreate && solicitud && (
               <button
