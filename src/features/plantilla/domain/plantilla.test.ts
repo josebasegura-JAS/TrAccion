@@ -58,10 +58,67 @@ describe('plantilla import', () => {
     });
   });
 
-  it('importa solo columnas de plantilla e ignora columnas desconocidas', () => {
+  it('importa cabeceras reales con tildes y variantes humanas', () => {
+    expect(
+      rowsToEmployeeDrafts([
+        [
+          'Nº empleado',
+          'Nombre completo',
+          'Puesto Nómina',
+          'Puesto organización',
+          'Centro de trabajo',
+          'Grupo retributivo',
+          'Género',
+          'Dirección',
+          'Número',
+          'Planta',
+          'Código Postal',
+          'Población',
+          'Territorio',
+          'Documento identidad',
+        ],
+        [
+          '101',
+          'Iker Bilbao',
+          'Técnico RRLL',
+          'Gestión Laboral',
+          'Oficinas Centrales',
+          '12',
+          'M',
+          'Gran Vía',
+          '14',
+          '2ºB',
+          '48001',
+          'Bilbao',
+          'Bizkaia',
+          'es 44555111 a',
+        ],
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        empleado: '101',
+        nombreApellidos: 'Iker Bilbao',
+        puestoNomina: 'Técnico RRLL',
+        puestoOrganizativo: 'Gestión Laboral',
+        residencia: 'Oficinas Centrales',
+        nivelRetributivo: '12',
+        sexo: 'M',
+        calle: 'Gran Vía',
+        numero: '14',
+        piso: '2ºB',
+        codigoPostal: '48001',
+        poblacion: 'Bilbao',
+        provincia: 'Bizkaia',
+        nif: 'es 44555111 a',
+      }),
+    ]);
+  });
+
+  it('ignora columnas desconocidas y descarta filas sin empleado', () => {
     expect(
       rowsToEmployeeDrafts([
         ['empleado', 'nombreApellidos', 'campo desconocido', 'nif'],
+        ['', 'Sin Código', 'ignorado', '11111111A'],
         ['101', 'Iker Bilbao', 'ignorado', 'es 44555111 a'],
       ]),
     ).toEqual([
@@ -73,7 +130,22 @@ describe('plantilla import', () => {
     ]);
   });
 
-  it('actualiza por empleado al importar sin duplicar registros', async () => {
+  it('no duplica borradores cuando el empleado aparece repetido en el fichero', () => {
+    expect(
+      rowsToEmployeeDrafts([
+        ['empleado', 'nombreApellidos'],
+        ['101', 'Iker Bilbao'],
+        ['101', 'Iker Bilbao Actualizado'],
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        empleado: '101',
+        nombreApellidos: 'Iker Bilbao Actualizado',
+      }),
+    ]);
+  });
+
+  it('actualiza por empleado al importar sin duplicar registros y recalcula derivados', async () => {
     const file = new File(
       ['empleado;nombreApellidos;residencia;nif\n100;Ane Bilbao Actualizada;Sopela Taller;72451233H'],
       'plantilla.csv',
