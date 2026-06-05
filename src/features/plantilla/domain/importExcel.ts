@@ -1,4 +1,4 @@
-import { EMPLOYEE_FIELDS, EMPTY_EMPLOYEE_DRAFT, type EmployeeDraft, type EmployeeField } from './employee';
+import { EMPTY_EMPLOYEE_DRAFT, type EmployeeDraft, type EmployeeField } from './employee';
 
 interface ZipEntry {
   name: string;
@@ -9,23 +9,51 @@ interface ZipEntry {
 
 type TabularRow = string[];
 
-const FIELD_BY_HEADER = new Map<string, EmployeeField>(
-  EMPLOYEE_FIELDS.flatMap((field) => {
-    const label = field.replace(/([A-Z])/g, ' $1');
-    return [
-      [normalizeHeader(field), field],
-      [normalizeHeader(label), field],
-    ];
-  }),
-);
+const HEADER_ALIASES: ReadonlyArray<readonly [EmployeeField, readonly string[]]> = [
+  [
+    'empleado',
+    [
+      'empleado',
+      'nº empleado',
+      'n empleado',
+      'numero empleado',
+      'número empleado',
+      'num empleado',
+      'cod empleado',
+      'codigo empleado',
+      'código empleado',
+    ],
+  ],
+  [
+    'nombreApellidos',
+    ['nombreApellidos', 'nombre apellidos', 'nombre y apellidos', 'nombre completo', 'apellidos y nombre', 'persona'],
+  ],
+  ['puestoNomina', ['puestoNomina', 'puesto nomina', 'puesto nómina', 'puesto de nomina', 'puesto de nómina']],
+  [
+    'puestoOrganizativo',
+    ['puestoOrganizativo', 'puesto organizativo', 'puesto org', 'puesto organización', 'puesto organizacion'],
+  ],
+  ['residencia', ['residencia', 'centro', 'centro trabajo', 'centro de trabajo']],
+  ['nivelRetributivo', ['nivelRetributivo', 'nivel retributivo', 'nivel', 'grupo retributivo']],
+  ['sexo', ['sexo', 'género', 'genero']],
+  ['calle', ['calle', 'direccion', 'dirección', 'domicilio']],
+  ['numero', ['numero', 'número', 'num', 'nº', 'n']],
+  ['piso', ['piso', 'planta', 'puerta']],
+  ['codigoPostal', ['codigoPostal', 'codigo postal', 'código postal', 'cp', 'c.p.']],
+  ['poblacion', ['poblacion', 'población', 'localidad', 'municipio']],
+  ['provincia', ['provincia', 'territorio']],
+  ['nif', ['nif', 'dni', 'documento', 'documento identidad']],
+];
 
-FIELD_BY_HEADER.set(normalizeHeader('nombre y apellidos'), 'nombreApellidos');
-FIELD_BY_HEADER.set(normalizeHeader('puesto nomina'), 'puestoNomina');
-FIELD_BY_HEADER.set(normalizeHeader('puesto nómina'), 'puestoNomina');
-FIELD_BY_HEADER.set(normalizeHeader('puesto organizativo'), 'puestoOrganizativo');
-FIELD_BY_HEADER.set(normalizeHeader('nivel retributivo'), 'nivelRetributivo');
-FIELD_BY_HEADER.set(normalizeHeader('codigo postal'), 'codigoPostal');
-FIELD_BY_HEADER.set(normalizeHeader('código postal'), 'codigoPostal');
+const FIELD_BY_HEADER = buildFieldByHeader();
+
+function buildFieldByHeader(): Map<string, EmployeeField> {
+  return new Map(
+    HEADER_ALIASES.flatMap(([field, aliases]) =>
+      aliases.map((alias): [string, EmployeeField] => [normalizeHeader(alias), field]),
+    ),
+  );
+}
 
 export async function importEmployeesFromFile(file: File): Promise<EmployeeDraft[]> {
   const buffer = await file.arrayBuffer();
@@ -47,27 +75,37 @@ export function rowsToEmployeeDrafts(rows: TabularRow[]): EmployeeDraft[] {
 
   const fieldByColumn = headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null);
 
-  return dataRows
-    .map((row) => {
-      const draft: EmployeeDraft = { ...EMPTY_EMPLOYEE_DRAFT };
+  const draftsByEmpleado = new Map<string, EmployeeDraft>();
 
-      fieldByColumn.forEach((field, index) => {
-        if (field) {
-          draft[field] = row[index]?.trim() ?? '';
-        }
-      });
+  dataRows.forEach((row) => {
+    const draft: EmployeeDraft = { ...EMPTY_EMPLOYEE_DRAFT };
 
-      return draft;
-    })
-    .filter((draft) => draft.empleado.trim());
+    fieldByColumn.forEach((field, index) => {
+      if (field) {
+        draft[field] = row[index]?.trim() ?? '';
+      }
+    });
+
+    const empleado = draft.empleado.trim();
+    if (empleado) {
+      draftsByEmpleado.set(empleado, draft);
+    }
+  });
+
+  return Array.from(draftsByEmpleado.values());
 }
 
 function normalizeHeader(header: string): string {
   return header
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]/g, '')
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/[_-]/g, ' ')
+    .replace(/º/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function parseDelimitedText(text: string): TabularRow[] {
