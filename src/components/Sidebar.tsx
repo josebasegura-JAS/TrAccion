@@ -12,16 +12,25 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4 text-sm font-medium">
-        <a className="flex items-center gap-3 rounded-xl bg-metro-red px-3 py-2.5 shadow-lg shadow-red-950/30" href="#inicio">
+        <a
+          className="flex items-center gap-3 rounded-xl bg-metro-red px-3 py-2.5 shadow-lg shadow-red-950/30"
+          href="#inicio"
+        >
           <Home size={18} /> Inicio
         </a>
-        <a className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/82 hover:bg-white/8" href="#plantilla">
+        <a
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/80 hover:bg-white/10"
+          href="#plantilla"
+        >
           <UsersRound size={18} /> Plantilla
         </a>
         <a className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/60" href="#datos">
           <Database size={18} /> Datos
         </a>
-        <a className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/60" href="#informes">
+        <a
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/60"
+          href="#informes"
+        >
           <BarChart3 size={18} /> Informes
         </a>
       </nav>
