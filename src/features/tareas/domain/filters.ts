@@ -22,6 +22,7 @@ export function filterTasks(tasks: Task[], filters: TaskFilters): Task[] {
 
     return (
       !task.deletedAt &&
+      task.estado !== 'cerrada' &&
       matchesSearch &&
       (!filters.estado || task.estado === filters.estado) &&
       (!filters.prioridad || task.prioridad === filters.prioridad)

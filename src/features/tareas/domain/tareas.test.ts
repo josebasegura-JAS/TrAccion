@@ -14,6 +14,8 @@ function buildTask(overrides: Partial<Task>): Task {
     responsable: '',
     origenSindicato: '',
     observaciones: '',
+    actualizaciones: [],
+    closedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
@@ -66,10 +68,11 @@ describe('tareas domain', () => {
     expect(filterTasks(source, filters).map((task) => task.id)).toEqual(['curso-alta']);
   });
 
-  it('excluye tareas con deletedAt', () => {
+  it('excluye tareas borradas y cerradas de la vista activa', () => {
     const source = [
       buildTask({ id: 'visible' }),
       buildTask({ id: 'borrada', deletedAt: '2026-01-02T00:00:00.000Z' }),
+      buildTask({ id: 'cerrada', estado: 'cerrada', closedAt: '2026-01-03T00:00:00.000Z' }),
     ];
 
     expect(filterTasks(source, EMPTY_TASK_FILTERS).map((task) => task.id)).toEqual(['visible']);

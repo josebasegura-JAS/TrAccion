@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
-import { EMPTY_TASK_DRAFT, type Task, type TaskDraft, TASK_PRIORITIES, TASK_STATES } from '../domain/task';
+import {
+  EMPTY_TASK_DRAFT,
+  type Task,
+  type TaskDraft,
+  TASK_PRIORITIES,
+  TASK_STATES,
+  type TaskUpdate,
+} from '../domain/task';
 
 const STORAGE_KEY = 'traccion.v1.tareas.tasks';
 
@@ -9,11 +16,20 @@ interface TaskStateStore {
   selectedTaskId: string;
   filters: TaskFilters;
   load: () => void;
-  create: (draft: TaskDraft) => void;
-  update: (id: string, draft: TaskDraft) => void;
+  create: (draft: TaskDraft, updateText?: string) => void;
+  update: (id: string, draft: TaskDraft, updateText?: string) => void;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
+}
+
+function isTaskUpdate(value: unknown): value is TaskUpdate {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof TaskUpdate, unknown>>;
+  return typeof candidate.fechaHora === 'string' && typeof candidate.texto === 'string';
 }
 
 function isTask(value: unknown): value is Task {
@@ -34,6 +50,11 @@ function isTask(value: unknown): value is Task {
 }
 
 function normalizeTask(task: Task): Task {
+  const updatedAt = task.updatedAt ?? task.createdAt;
+  const actualizaciones = Array.isArray(task.actualizaciones)
+    ? task.actualizaciones.filter(isTaskUpdate)
+    : [];
+
   return {
     id: task.id,
     titulo: task.titulo,
@@ -44,8 +65,10 @@ function normalizeTask(task: Task): Task {
     responsable: task.responsable ?? EMPTY_TASK_DRAFT.responsable,
     origenSindicato: task.origenSindicato ?? EMPTY_TASK_DRAFT.origenSindicato,
     observaciones: task.observaciones ?? EMPTY_TASK_DRAFT.observaciones,
+    actualizaciones,
+    closedAt: task.closedAt ?? (task.estado === 'cerrada' ? updatedAt : null),
     createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
+    updatedAt,
     deletedAt: task.deletedAt ?? null,
   };
 }
@@ -68,12 +91,25 @@ function persistTasks(tasks: Task[]): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
 }
 
-function firstVisibleTaskId(tasks: Task[]): string {
-  return tasks.find((task) => !task.deletedAt)?.id ?? '';
+function firstActiveTaskId(tasks: Task[]): string {
+  return tasks.find((task) => !task.deletedAt && task.estado !== 'cerrada')?.id ?? '';
 }
 
 function createTaskId(): string {
   return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildUpdate(text: string | undefined, fechaHora: string): TaskUpdate[] {
+  const trimmedText = text?.trim();
+  return trimmedText ? [{ fechaHora, texto: trimmedText }] : [];
+}
+
+function resolveClosedAt(task: Task, draft: TaskDraft, fechaHora: string): string | null {
+  if (draft.estado !== 'cerrada') {
+    return null;
+  }
+
+  return task.estado === 'cerrada' ? task.closedAt ?? fechaHora : fechaHora;
 }
 
 export const useTaskStore = create<TaskStateStore>((set) => ({
@@ -82,39 +118,57 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   filters: EMPTY_TASK_FILTERS,
   load: () => {
     const tasks = readTasks();
-    set({ tasks, selectedTaskId: firstVisibleTaskId(tasks) });
+    set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
   },
-  create: (draft) => {
+  create: (draft, updateText) => {
     set((state) => {
       const now = new Date().toISOString();
       const task: Task = {
         id: createTaskId(),
         ...draft,
+        actualizaciones: buildUpdate(updateText, now),
+        closedAt: draft.estado === 'cerrada' ? now : null,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
       };
       const tasks = [...state.tasks, task];
       persistTasks(tasks);
-      return { tasks, selectedTaskId: task.id };
+      return { tasks, selectedTaskId: task.estado === 'cerrada' ? firstActiveTaskId(tasks) : task.id };
     });
   },
-  update: (id, draft) => {
+  update: (id, draft, updateText) => {
     set((state) => {
-      const tasks = state.tasks.map((task) =>
-        task.id === id ? { ...task, ...draft, updatedAt: new Date().toISOString() } : task,
-      );
+      const now = new Date().toISOString();
+      const tasks = state.tasks.map((task) => {
+        if (task.id !== id) {
+          return task;
+        }
+
+        return {
+          ...task,
+          ...draft,
+          actualizaciones: [...buildUpdate(updateText, now), ...task.actualizaciones],
+          closedAt: resolveClosedAt(task, draft, now),
+          updatedAt: now,
+        };
+      });
       persistTasks(tasks);
-      return { tasks, selectedTaskId: id };
+      const updatedTask = tasks.find((task) => task.id === id);
+      return {
+        tasks,
+        selectedTaskId: updatedTask?.estado === 'cerrada' ? firstActiveTaskId(tasks) : id,
+      };
     });
   },
   remove: (id) => {
     set((state) => {
+      const now = new Date().toISOString();
       const tasks = state.tasks.map((task) =>
-        task.id === id ? { ...task, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : task,
+        task.id === id ? { ...task, deletedAt: now, updatedAt: now } : task,
       );
       persistTasks(tasks);
-      return { tasks, selectedTaskId: firstVisibleTaskId(tasks) };
+      return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
   },
   selectTask: (taskId) => set({ selectedTaskId: taskId }),

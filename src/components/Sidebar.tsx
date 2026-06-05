@@ -19,11 +19,7 @@ export function Sidebar({
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-[#252B34] text-white">
       <div className="border-b border-white/10 px-5 py-5">
-        <div className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">Metro</div>
-        <div className="mt-1 text-2xl font-bold tracking-tight">RRLL PRO</div>
-        <div className="mt-2 rounded-full bg-metro-red/15 px-3 py-1 text-xs font-medium text-red-100">
-          TrAccion V1
-        </div>
+        <img alt="TrAccion" className="mx-auto h-16 w-auto" src="/traccion-logo.svg" />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4 text-sm font-medium">
