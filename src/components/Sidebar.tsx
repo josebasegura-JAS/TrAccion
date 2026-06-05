@@ -4,13 +4,14 @@ import {
   Database,
   FileText,
   Home,
+  Laptop,
   Settings,
   UsersRound,
 } from 'lucide-react';
 
 const traccionLogoSrc = '../assets/logo/traccion-logo.png';
 
-export type AppView = 'dashboard' | 'plantilla' | 'tareas' | 'peticiones';
+export type AppView = 'dashboard' | 'plantilla' | 'tareas' | 'peticiones' | 'teletrabajo';
 
 export function Sidebar({
   activeView,
@@ -60,6 +61,13 @@ export function Sidebar({
           type="button"
         >
           <FileText size={18} /> Peticiones
+        </button>
+        <button
+          className={navButtonClass('teletrabajo')}
+          onClick={() => onViewChange('teletrabajo')}
+          type="button"
+        >
+          <Laptop size={18} /> Teletrabajo
         </button>
         <button
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white/60"
