@@ -10,7 +10,7 @@ export function normalizeDni(nif: string): string {
   return nif.replace(/\s+/g, '').replace(/^ES/i, '').toUpperCase();
 }
 
-export function translateResidenciaEus(residencia: string): string {
+export function buildResidenciaEus(residencia: string): string {
   return RESIDENCIA_EUS_MAP[residencia] ?? residencia;
 }
 
@@ -27,7 +27,7 @@ export function getEmployeeDerivedFields(employee: EmployeeDraft): EmployeeDeriv
   return {
     dni: normalizeDni(employee.nif),
     residenciaCast: employee.residencia,
-    residenciaEus: translateResidenciaEus(employee.residencia),
+    residenciaEus: buildResidenciaEus(employee.residencia),
     direccionTeletrabajo: buildDireccionTeletrabajo(employee),
   };
 }
