@@ -64,7 +64,8 @@
     "files": [
       "dist/**",
       "dist-electron/**",
-      "package.json"
+      "package.json",
+      "resources/**"
     ],
     "win": {
       "target": [
@@ -74,7 +75,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "resources/traccion-logo.svg"
     },
     "portable": {
       "artifactName": "TrAccion-V1-${version}-portable.exe"

@@ -1,4 +1,4 @@
-import { Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { filterTasks } from '../features/tareas/domain/filters';
 import {
@@ -7,13 +7,25 @@ import {
   type SortDirection,
   type TaskSortKey,
 } from '../features/tareas/domain/sort';
-import { TASK_PRIORITIES, TASK_STATES, type Task } from '../features/tareas/domain/task';
+import { TASK_PRIORITIES, TASK_STATES, type Task, type TaskPriority } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { TaskEditor } from './TaskEditor';
 
 interface SortState {
   key: TaskSortKey;
   direction: SortDirection;
+}
+
+type HistoricSortKey = 'titulo' | 'closedAt' | 'responsable' | 'prioridad';
+
+interface HistoricSortState {
+  key: HistoricSortKey;
+  direction: SortDirection;
+}
+
+interface HistoricYearGroup {
+  year: string;
+  tasks: Task[];
 }
 
 const sortableColumns: Array<{ key: TaskSortKey; label: string; className: string }> = [
@@ -25,11 +37,87 @@ const sortableColumns: Array<{ key: TaskSortKey; label: string; className: strin
   { key: 'origenSindicato', label: 'Origen sindicato', className: 'w-[155px]' },
 ];
 
+const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
+  { key: 'titulo', label: 'Título', className: 'w-[320px]' },
+  { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
+  { key: 'responsable', label: 'Responsable', className: 'w-[190px]' },
+  { key: 'prioridad', label: 'Prioridad', className: 'w-[120px]' },
+];
+
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function getClosedYear(task: Task): string {
+  const closedDate = task.closedAt ? new Date(task.closedAt) : null;
+  return closedDate && !Number.isNaN(closedDate.getTime()) ? String(closedDate.getFullYear()) : 'Sin fecha';
+}
+
+const PRIORITY_ORDER = new Map<TaskPriority, number>(
+  TASK_PRIORITIES.map((priority, index) => [priority, index]),
+);
+
+function compareHistoricTasks(first: Task, second: Task, key: HistoricSortKey): number {
+  if (key === 'closedAt') {
+    return (first.closedAt ?? '').localeCompare(second.closedAt ?? '', 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  }
+
+  if (key === 'prioridad') {
+    return (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
+      (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length);
+  }
+
+  return first[key].localeCompare(second[key], 'es', { numeric: true, sensitivity: 'base' });
+}
+
+function sortHistoricTasks(tasks: Task[], sortState: HistoricSortState): Task[] {
+  return tasks
+    .map((task, index) => ({ task, index }))
+    .sort((first, second) => {
+      const comparison = compareHistoricTasks(first.task, second.task, sortState.key);
+      const orderedComparison = sortState.direction === 'asc' ? comparison : -comparison;
+      return orderedComparison || first.index - second.index;
+    })
+    .map(({ task }) => task);
+}
+
+function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): HistoricYearGroup[] {
+  const groups = new Map<string, Task[]>();
+
+  tasks.forEach((task) => {
+    const year = getClosedYear(task);
+    groups.set(year, [...(groups.get(year) ?? []), task]);
+  });
+
+  return Array.from(groups.entries())
+    .sort(([firstYear], [secondYear]) => secondYear.localeCompare(firstYear, 'es', { numeric: true }))
+    .map(([year, groupTasks]) => ({ year, tasks: sortHistoricTasks(groupTasks, sortState) }));
+}
+
 export function TareasPage() {
   const { filters, load, selectTask, setFilter, tasks } = useTaskStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
+  const [historicSortState, setHistoricSortState] = useState<HistoricSortState>({
+    key: 'closedAt',
+    direction: 'desc',
+  });
+  const [isHistoricOpen, setIsHistoricOpen] = useState(false);
+  const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     load();
@@ -44,6 +132,14 @@ export function TareasPage() {
 
     return sortTasksByColumn(filteredTasks, sortState.key, sortState.direction);
   }, [filteredTasks, sortState]);
+  const historicTasks = useMemo(
+    () => visibleTasks.filter((task) => task.estado === 'cerrada'),
+    [visibleTasks],
+  );
+  const historicGroups = useMemo(
+    () => groupHistoricTasks(historicTasks, historicSortState),
+    [historicTasks, historicSortState],
+  );
 
   const editorTask =
     editorMode === 'edit' ? (visibleTasks.find((task) => task.id === editingTaskId) ?? null) : null;
@@ -69,6 +165,17 @@ export function TareasPage() {
       key,
       direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
     }));
+  };
+
+  const toggleHistoricSort = (key: HistoricSortKey) => {
+    setHistoricSortState((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const toggleHistoricYear = (year: string) => {
+    setOpenYears((current) => ({ ...current, [year]: !current[year] }));
   };
 
   return (
@@ -106,7 +213,7 @@ export function TareasPage() {
         <SelectFilter
           label="Estado"
           onChange={(value) => setFilter('estado', value as typeof filters.estado)}
-          options={TASK_STATES}
+          options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
           value={filters.estado}
         />
         <SelectFilter
@@ -191,6 +298,100 @@ export function TareasPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-xl border border-metro-border">
+        <button
+          className="flex w-full items-center justify-between border-b border-metro-border bg-white px-3 py-2 text-left"
+          onClick={() => setIsHistoricOpen((current) => !current)}
+          type="button"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+            {isHistoricOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Histórico
+          </span>
+          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-metro-dark">
+            {historicTasks.length} registros
+          </span>
+        </button>
+        {isHistoricOpen && (
+          <div className="bg-white">
+            {historicGroups.map((group) => {
+              const isYearOpen = openYears[group.year] ?? false;
+
+              return (
+                <div className="border-b border-metro-border last:border-b-0" key={group.year}>
+                  <button
+                    className="flex w-full items-center gap-2 bg-[#F9FAFB] px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-red-50/50"
+                    onClick={() => toggleHistoricYear(group.year)}
+                    type="button"
+                  >
+                    {isYearOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    {group.year} ({group.tasks.length})
+                  </button>
+                  {isYearOpen && (
+                    <div className="max-h-[320px] overflow-auto">
+                      <table className="min-w-[780px] table-fixed text-left text-xs">
+                        <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+                          <tr>
+                            {historicColumns.map((column) => {
+                              const isActive = historicSortState.key === column.key;
+
+                              return (
+                                <th className={`${column.className} px-3 py-2`} key={column.key}>
+                                  <button
+                                    className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
+                                    onClick={() => toggleHistoricSort(column.key)}
+                                    type="button"
+                                  >
+                                    <span>{column.label}</span>
+                                    {isActive && (
+                                      <span>{historicSortState.direction === 'asc' ? '↑' : '↓'}</span>
+                                    )}
+                                  </button>
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-metro-border bg-white">
+                          {group.tasks.map((task) => (
+                            <tr
+                              className="cursor-pointer hover:bg-red-50/50"
+                              key={task.id}
+                              onClick={() => openEditor(task)}
+                            >
+                              <td
+                                className="truncate px-3 py-1.5 font-semibold text-metro-text"
+                                title={task.titulo}
+                              >
+                                {task.titulo}
+                              </td>
+                              <td
+                                className="truncate px-3 py-1.5 text-metro-muted"
+                                title={formatDateTime(task.closedAt)}
+                              >
+                                {formatDateTime(task.closedAt)}
+                              </td>
+                              <td
+                                className="truncate px-3 py-1.5 text-metro-muted"
+                                title={task.responsable}
+                              >
+                                {task.responsable}
+                              </td>
+                              <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
+                                {task.prioridad}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {editorMode && <TaskEditor mode={editorMode} onDone={closeEditor} task={editorTask} />}

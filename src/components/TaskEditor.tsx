@@ -17,6 +17,16 @@ const taskTextFields: Array<{ field: TaskDraftField; label: string; required?: b
   { field: 'fechaLimite', label: 'Fecha límite' },
 ];
 
+function formatUpdateDate(fechaHora: string): string {
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(fechaHora));
+}
+
 function toDraft(task: Task | null): TaskDraft {
   if (!task) {
     return { ...EMPTY_TASK_DRAFT };
@@ -47,9 +57,11 @@ export function TaskEditor({
   const updateTask = useTaskStore((state) => state.update);
   const removeTask = useTaskStore((state) => state.remove);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
+  const [newUpdateText, setNewUpdateText] = useState('');
 
   useEffect(() => {
     setDraft(toDraft(task));
+    setNewUpdateText('');
   }, [task, mode]);
 
   const isCreate = mode === 'create';
@@ -93,9 +105,9 @@ export function TaskEditor({
             }
 
             if (isCreate) {
-              createTask(draft);
+              createTask(draft, newUpdateText);
             } else if (task) {
-              updateTask(task.id, draft);
+              updateTask(task.id, draft, newUpdateText);
             }
 
             onDone();
@@ -161,6 +173,41 @@ export function TaskEditor({
                 value={draft.descripcion}
               />
             </label>
+
+            <section className="sm:col-span-2 rounded-xl border border-metro-border bg-white p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h4 className="text-sm font-bold text-metro-text">Seguimiento</h4>
+                {!isCreate && task && (
+                  <span className="rounded-full bg-metro-surface px-2 py-1 text-xs font-semibold text-metro-muted">
+                    {task.actualizaciones.length} actualizaciones
+                  </span>
+                )}
+              </div>
+              <label className="text-xs font-semibold text-metro-muted">
+                Añadir actualización
+                <textarea
+                  className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => setNewUpdateText(event.target.value)}
+                  placeholder="Registrar trabajo realizado..."
+                  value={newUpdateText}
+                />
+              </label>
+              {!isCreate && task && task.actualizaciones.length > 0 && (
+                <div className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1">
+                  {task.actualizaciones.map((actualizacion) => (
+                    <article
+                      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
+                      key={`${actualizacion.fechaHora}-${actualizacion.texto}`}
+                    >
+                      <time className="text-xs font-bold text-metro-text" dateTime={actualizacion.fechaHora}>
+                        {formatUpdateDate(actualizacion.fechaHora)}
+                      </time>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-metro-muted">{actualizacion.texto}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
               Observaciones
               <textarea

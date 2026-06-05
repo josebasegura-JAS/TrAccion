@@ -4,6 +4,11 @@ export const TASK_PRIORITIES = ['critica', 'alta', 'media', 'baja'] as const;
 export type TaskState = (typeof TASK_STATES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+export interface TaskUpdate {
+  fechaHora: string;
+  texto: string;
+}
+
 export interface Task {
   id: string;
   titulo: string;
@@ -14,6 +19,8 @@ export interface Task {
   responsable: string;
   origenSindicato: string;
   observaciones: string;
+  actualizaciones: TaskUpdate[];
+  closedAt: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
