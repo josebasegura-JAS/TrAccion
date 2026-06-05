@@ -1,5 +1,5 @@
-import { Plus, Search, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Plus, Search, SlidersHorizontal, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
@@ -69,11 +69,15 @@ function SelectFilter({
 }
 
 export function TeletrabajoPage() {
-  const { filters, load, selectSolicitud, setFilter, solicitudes } = useTeletrabajoStore();
+  const { filters, importEncuesta, load, selectSolicitud, setFilter, solicitudes } =
+    useTeletrabajoStore();
+  const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
+  const [importSummary, setImportSummary] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     load();
@@ -129,6 +133,13 @@ export function TeletrabajoPage() {
     }));
   };
 
+  const handleImportEncuesta = async (file: File) => {
+    const summary = await importEncuesta(file, employees);
+    setImportSummary(
+      `${summary.imported} registros importados · ${summary.updated} registros actualizados · ${summary.ignored} filas ignoradas`,
+    );
+  };
+
   return (
     <section
       className="rounded-2xl border border-metro-border bg-white p-4 shadow-card"
@@ -143,6 +154,26 @@ export function TeletrabajoPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <input
+            accept=".xlsx,.csv,.tsv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleImportEncuesta(file);
+              }
+              event.target.value = '';
+            }}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:bg-metro-surface"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            <Upload size={16} /> Importar encuesta
+          </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}
@@ -152,6 +183,12 @@ export function TeletrabajoPage() {
           </button>
         </div>
       </div>
+
+      {importSummary && (
+        <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text">
+          {importSummary}
+        </div>
+      )}
 
       <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
