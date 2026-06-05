@@ -1,5 +1,7 @@
 import { BarChart3, ClipboardList, Database, Home, Settings, UsersRound } from 'lucide-react';
 
+const traccionLogoSrc = '../assets/logo/traccion-logo.png';
+
 export type AppView = 'dashboard' | 'plantilla' | 'tareas';
 
 export function Sidebar({
@@ -17,9 +19,9 @@ export function Sidebar({
     }`;
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col bg-[#252B34] text-white">
+    <aside className="flex h-screen w-64 shrink-0 flex-col bg-gradient-to-b from-metro-navy to-metro-slate text-white">
       <div className="border-b border-white/10 px-5 py-5">
-        <img alt="TrAccion" className="mx-auto h-16 w-auto" src="/traccion-logo.svg" />
+        <img alt="TrAccion" className="mx-auto h-20 w-auto object-contain" src={traccionLogoSrc} />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4 text-sm font-medium">

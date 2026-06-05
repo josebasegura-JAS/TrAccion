@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
-const appIconPath = path.join(__dirname, '../resources/traccion-logo.svg');
+const appIconPath = path.join(__dirname, '../build/icon/traccion-icon.ico');
 
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -29,8 +29,8 @@ function createWindow() {
     height: 860,
     minWidth: 1180,
     minHeight: 720,
-    title: 'TrAccion V1',
-    backgroundColor: '#F5F6F8',
+    title: 'TrAccion',
+    backgroundColor: '#D9EDF2',
     icon: appIconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="title">
-  <title id="title">TrAccion</title>
-  <rect width="640" height="220" rx="38" fill="#ffffff"/>
-  <path d="M72 60h214v42h-82v58h82v42H72v-42h82v-58H72z" fill="#E30613"/>
-  <path d="M328 65h44l98 132h-50l-16-24h-111l-16 24h-48zm-8 70h58l-29-43z" fill="#252B34"/>
-  <path d="M488 104c0-27 22-44 57-44 24 0 43 8 57 23l-26 28c-8-8-17-12-29-12-16 0-26 8-26 22s10 22 27 22c12 0 22-4 30-13l25 28c-14 16-34 25-59 25-35 0-56-17-56-45z" fill="#E30613"/>
-</svg>

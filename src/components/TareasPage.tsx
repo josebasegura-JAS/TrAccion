@@ -7,7 +7,12 @@ import {
   type SortDirection,
   type TaskSortKey,
 } from '../features/tareas/domain/sort';
-import { TASK_PRIORITIES, TASK_STATES, type Task, type TaskPriority } from '../features/tareas/domain/task';
+import {
+  TASK_PRIORITIES,
+  TASK_STATES,
+  type Task,
+  type TaskPriority,
+} from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { TaskEditor } from './TaskEditor';
 
@@ -60,7 +65,9 @@ function formatDateTime(value: string | null): string {
 
 function getClosedYear(task: Task): string {
   const closedDate = task.closedAt ? new Date(task.closedAt) : null;
-  return closedDate && !Number.isNaN(closedDate.getTime()) ? String(closedDate.getFullYear()) : 'Sin fecha';
+  return closedDate && !Number.isNaN(closedDate.getTime())
+    ? String(closedDate.getFullYear())
+    : 'Sin fecha';
 }
 
 const PRIORITY_ORDER = new Map<TaskPriority, number>(
@@ -76,8 +83,10 @@ function compareHistoricTasks(first: Task, second: Task, key: HistoricSortKey): 
   }
 
   if (key === 'prioridad') {
-    return (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
-      (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length);
+    return (
+      (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
+      (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length)
+    );
   }
 
   return first[key].localeCompare(second[key], 'es', { numeric: true, sensitivity: 'base' });
@@ -103,7 +112,9 @@ function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): Histor
   });
 
   return Array.from(groups.entries())
-    .sort(([firstYear], [secondYear]) => secondYear.localeCompare(firstYear, 'es', { numeric: true }))
+    .sort(([firstYear], [secondYear]) =>
+      secondYear.localeCompare(firstYear, 'es', { numeric: true }),
+    )
     .map(([year, groupTasks]) => ({ year, tasks: sortHistoricTasks(groupTasks, sortState) }));
 }
 
@@ -179,12 +190,15 @@ export function TareasPage() {
   };
 
   return (
-    <section className="rounded-2xl border border-metro-border bg-white p-4 shadow-card" id="tareas">
+    <section
+      className="rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+      id="tareas"
+    >
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-xl font-bold text-metro-text">Tareas</h2>
-          <p className="mt-0.5 text-sm text-metro-muted">
+          <h2 className="text-2xl font-bold text-metro-text">Tareas</h2>
+          <p className="mt-0.5 text-base text-metro-muted">
             Listado de tareas con alta manual, edición, borrado lógico, búsqueda y filtros.
           </p>
         </div>
@@ -263,7 +277,10 @@ export function TareasPage() {
                   key={task.id}
                   onClick={() => openEditor(task)}
                 >
-                  <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>
+                  <td
+                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
+                    title={task.titulo}
+                  >
                     {task.titulo}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.estado}>
@@ -272,13 +289,19 @@ export function TareasPage() {
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
                     {task.prioridad}
                   </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.fechaLimite || '—'}>
+                  <td
+                    className="truncate px-3 py-1.5 text-metro-muted"
+                    title={task.fechaLimite || '—'}
+                  >
                     {task.fechaLimite || '—'}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>
                     {task.responsable}
                   </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.origenSindicato}>
+                  <td
+                    className="truncate px-3 py-1.5 text-metro-muted"
+                    title={task.origenSindicato}
+                  >
                     {task.origenSindicato}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
@@ -315,6 +338,9 @@ export function TareasPage() {
         </button>
         {isHistoricOpen && (
           <div className="bg-white">
+            {historicGroups.length === 0 && (
+              <p className="px-3 py-3 text-sm text-metro-muted">No hay tareas cerradas.</p>
+            )}
             {historicGroups.map((group) => {
               const isYearOpen = openYears[group.year] ?? false;
 
@@ -345,7 +371,9 @@ export function TareasPage() {
                                   >
                                     <span>{column.label}</span>
                                     {isActive && (
-                                      <span>{historicSortState.direction === 'asc' ? '↑' : '↓'}</span>
+                                      <span>
+                                        {historicSortState.direction === 'asc' ? '↑' : '↓'}
+                                      </span>
                                     )}
                                   </button>
                                 </th>
@@ -378,7 +406,10 @@ export function TareasPage() {
                               >
                                 {task.responsable}
                               </td>
-                              <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
+                              <td
+                                className="truncate px-3 py-1.5 text-metro-muted"
+                                title={task.prioridad}
+                              >
                                 {task.prioridad}
                               </td>
                             </tr>
