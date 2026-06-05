@@ -1,7 +1,7 @@
 export {
   buildDireccionTeletrabajo,
+  buildResidenciaEus,
   getEmployeeDerivedFields,
   hydrateEmployee,
   normalizeDni,
-  translateResidenciaEus,
 } from '../features/plantilla/domain/derived';
