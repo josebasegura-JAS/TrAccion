@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import type { MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -6,6 +7,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
+
+function createContextMenu(mainWindow: BrowserWindow): void {
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const template: MenuItemConstructorOptions[] = [
+      { role: 'cut', enabled: params.isEditable },
+      { role: 'copy', enabled: params.selectionText.length > 0 },
+      { role: 'paste', enabled: params.isEditable },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ];
+
+    Menu.buildFromTemplate(template).popup({ window: mainWindow });
+  });
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -22,6 +37,8 @@ function createWindow() {
     },
   });
 
+  createContextMenu(mainWindow);
+
   if (isDev) {
     mainWindow.loadURL(devServerUrl);
   } else {
@@ -30,6 +47,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   ipcMain.handle('database:status', () => ({
     ready: false,
     engine: 'better-sqlite3',
