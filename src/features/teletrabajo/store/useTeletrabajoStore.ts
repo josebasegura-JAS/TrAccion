@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import type { Employee } from '../../plantilla/domain/employee';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
+import { importEncuestaFromFile, type ImportEncuestaSummary } from '../domain/importEncuesta';
 import {
   EMPTY_TELETRABAJO_DRAFT,
   TELETRABAJO_ESTADOS,
@@ -18,6 +20,7 @@ interface TeletrabajoStateStore {
   load: () => void;
   create: (draft: TeletrabajoDraft) => void;
   update: (id: string, draft: TeletrabajoDraft) => void;
+  importEncuesta: (file: File, employees: readonly Employee[]) => Promise<ImportEncuestaSummary>;
   remove: (id: string) => void;
   selectSolicitud: (solicitudId: string) => void;
   setFilter: <K extends keyof TeletrabajoFilters>(key: K, value: TeletrabajoFilters[K]) => void;
@@ -113,7 +116,7 @@ function normalizeDraft(draft: TeletrabajoDraft): TeletrabajoDraft {
   };
 }
 
-export const useTeletrabajoStore = create<TeletrabajoStateStore>((set) => ({
+export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => ({
   solicitudes: [],
   selectedSolicitudId: '',
   filters: EMPTY_TELETRABAJO_FILTERS,
@@ -147,6 +150,17 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set) => ({
       persistSolicitudes(solicitudes);
       return { solicitudes, selectedSolicitudId: id };
     });
+  },
+  importEncuesta: async (file, employees) => {
+    const result = await importEncuestaFromFile(file, employees, get().solicitudes);
+    set(() => {
+      persistSolicitudes(result.solicitudes);
+      return {
+        solicitudes: result.solicitudes,
+        selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
+      };
+    });
+    return result.summary;
   },
   remove: (id) => {
     set((state) => {
