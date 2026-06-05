@@ -1,8 +1,16 @@
-import { BarChart3, ClipboardList, Database, Home, Settings, UsersRound } from 'lucide-react';
+import {
+  BarChart3,
+  ClipboardList,
+  Database,
+  FileText,
+  Home,
+  Settings,
+  UsersRound,
+} from 'lucide-react';
 
 const traccionLogoSrc = '../assets/logo/traccion-logo.png';
 
-export type AppView = 'dashboard' | 'plantilla' | 'tareas';
+export type AppView = 'dashboard' | 'plantilla' | 'tareas' | 'peticiones';
 
 export function Sidebar({
   activeView,
@@ -45,6 +53,13 @@ export function Sidebar({
           type="button"
         >
           <ClipboardList size={18} /> Tareas
+        </button>
+        <button
+          className={navButtonClass('peticiones')}
+          onClick={() => onViewChange('peticiones')}
+          type="button"
+        >
+          <FileText size={18} /> Peticiones
         </button>
         <button
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white/60"
