@@ -5,6 +5,7 @@ import { PeticionesPage } from './components/PeticionesPage';
 import { PlantillaPage } from './components/PlantillaPage';
 import { Sidebar, type AppView } from './components/Sidebar';
 import { TareasPage } from './components/TareasPage';
+import { TeletrabajoPage } from './components/TeletrabajoPage';
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
@@ -39,6 +40,7 @@ export function App() {
           {activeView === 'plantilla' && <PlantillaPage />}
           {activeView === 'tareas' && <TareasPage />}
           {activeView === 'peticiones' && <PeticionesPage />}
+          {activeView === 'teletrabajo' && <TeletrabajoPage />}
         </main>
       </div>
     </div>
