@@ -1,21 +1,26 @@
-import { Download, FileUp, Plus, Search, SlidersHorizontal } from 'lucide-react';
-import { useMemo } from 'react';
+import { FileUp, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
-import { filterEmployees, useEmployeeStore } from '../store/employeeStore';
-
-function unique(values: string[]) {
-  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
-}
+import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
+import { uniqueSorted } from '../features/plantilla/domain/filters';
 
 export function PlantillaPage() {
-  const { employees, filters, selectedEmployeeId, selectEmployee, setFilter } = useEmployeeStore();
-  const filteredEmployees = useMemo(() => filterEmployees(employees, filters), [employees, filters]);
-  const selectedEmployee = employees.find((employee) => employee.empleado === selectedEmployeeId) ?? employees[0];
+  const { employees, filters, selectedEmployeeId, importExcel, load, selectEmployee, setFilter } = useEmployeeStore();
+  const [editorMode, setEditorMode] = useState<'create' | 'edit'>('edit');
+  const [importMessage, setImportMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const residencias = unique(employees.map((employee) => employee.residencia));
-  const unidades = unique(employees.map((employee) => employee.unidad));
-  const puestos = unique(employees.map((employee) => employee.puestoNomina));
-  const estados = unique(employees.map((employee) => employee.estado));
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const visibleEmployees = useMemo(() => employees.filter((employee) => !employee.deletedAt), [employees]);
+  const filteredEmployees = useMemo(() => filterEmployees(employees, filters), [employees, filters]);
+  const selectedEmployee = visibleEmployees.find((employee) => employee.empleado === selectedEmployeeId) ?? visibleEmployees[0] ?? null;
+  const editorEmployee = editorMode === 'edit' ? selectedEmployee : null;
+
+  const residencias = uniqueSorted(visibleEmployees.map((employee) => employee.residencia));
+  const niveles = uniqueSorted(visibleEmployees.map((employee) => employee.nivelRetributivo));
 
   return (
     <section className="rounded-3xl border border-metro-border bg-white p-5 shadow-card" id="plantilla">
@@ -24,37 +29,62 @@ export function PlantillaPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
           <h2 className="text-2xl font-bold text-metro-text">Plantilla</h2>
           <p className="mt-1 text-sm text-metro-muted">
-            Gestión mock de plantilla completa preparada para importación, SQLite y teletrabajo.
+            Listado de personas con alta manual, edición, borrado lógico e importación Excel.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red" type="button">
-            <FileUp size={16} /> Importar
+          <input
+            accept=".xlsx,.xls,.csv,.tsv,.txt"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) {
+                return;
+              }
+
+              await importExcel(file);
+              setImportMessage(`Importación completada: ${file.name}`);
+              event.target.value = '';
+            }}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            <FileUp size={16} /> Importar Excel
           </button>
-          <button className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red" type="button">
-            <Download size={16} /> Exportar
-          </button>
-          <button className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" type="button">
+          <button
+            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+            onClick={() => setEditorMode('create')}
+            type="button"
+          >
             <Plus size={16} /> Nuevo
           </button>
         </div>
       </div>
 
-      <div className="mb-4 grid gap-3 rounded-2xl border border-metro-border bg-metro-surface p-3 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
+      {importMessage && (
+        <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800">
+          {importMessage}
+        </div>
+      )}
+
+      <div className="mb-4 grid gap-3 rounded-2xl border border-metro-border bg-metro-surface p-3 lg:grid-cols-[1.5fr_1fr_1fr]">
         <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm text-metro-muted">
           <Search size={16} />
           <input
             className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
             onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por empleado, nombre, NIF..."
+            placeholder="Buscar por empleado o nombre..."
             type="search"
             value={filters.search}
           />
         </label>
         <SelectFilter label="Residencia" onChange={(value) => setFilter('residencia', value)} options={residencias} value={filters.residencia} />
-        <SelectFilter label="Unidad" onChange={(value) => setFilter('unidad', value)} options={unidades} value={filters.unidad} />
-        <SelectFilter label="Puesto" onChange={(value) => setFilter('puesto', value)} options={puestos} value={filters.puesto} />
-        <SelectFilter label="Estado" onChange={(value) => setFilter('estado', value)} options={estados} value={filters.estado} />
+        <SelectFilter label="Nivel retributivo" onChange={(value) => setFilter('nivelRetributivo', value)} options={niveles} value={filters.nivelRetributivo} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -68,39 +98,32 @@ export function PlantillaPage() {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-[#F9FAFB] text-xs uppercase tracking-wide text-metro-muted">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
                 <tr>
-                  <th className="px-4 py-3">Empleado</th>
-                  <th className="px-4 py-3">Nombre y apellidos</th>
-                  <th className="px-4 py-3">Puesto nómina</th>
-                  <th className="px-4 py-3">Residencia</th>
-                  <th className="px-4 py-3">Unidad</th>
-                  <th className="px-4 py-3">Nivel</th>
-                  <th className="px-4 py-3">Sexo</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Acciones</th>
+                  <th className="px-3 py-2">Empleado</th>
+                  <th className="px-3 py-2">Nombre y apellidos</th>
+                  <th className="px-3 py-2">Puesto nómina</th>
+                  <th className="px-3 py-2">Residencia</th>
+                  <th className="px-3 py-2">Nivel</th>
+                  <th className="px-3 py-2">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-metro-border bg-white">
                 {filteredEmployees.map((employee) => (
                   <tr className="hover:bg-red-50/50" key={employee.empleado}>
-                    <td className="px-4 py-3 font-semibold text-metro-text">{employee.empleado}</td>
-                    <td className="px-4 py-3 text-metro-text">{employee.nombreApellidos}</td>
-                    <td className="px-4 py-3 text-metro-muted">{employee.puestoNomina}</td>
-                    <td className="px-4 py-3 text-metro-muted">{employee.residencia}</td>
-                    <td className="px-4 py-3 text-metro-muted">{employee.unidad}</td>
-                    <td className="px-4 py-3 text-metro-muted">{employee.nivelRetributivo}</td>
-                    <td className="px-4 py-3 text-metro-muted">{employee.sexo}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text">
-                        {employee.estado}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-metro-text">{employee.empleado}</td>
+                    <td className="min-w-[190px] px-3 py-2 text-metro-text">{employee.nombreApellidos}</td>
+                    <td className="min-w-[160px] px-3 py-2 text-metro-muted">{employee.puestoNomina}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-metro-muted">{employee.residencia}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-metro-muted">{employee.nivelRetributivo}</td>
+                    <td className="whitespace-nowrap px-3 py-2">
                       <button
                         className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-                        onClick={() => selectEmployee(employee.empleado)}
+                        onClick={() => {
+                          selectEmployee(employee.empleado);
+                          setEditorMode('edit');
+                        }}
                         type="button"
                       >
                         Editar
@@ -112,7 +135,7 @@ export function PlantillaPage() {
             </table>
           </div>
         </div>
-        {selectedEmployee && <EmployeeEditor employee={selectedEmployee} />}
+        <EmployeeEditor employee={editorEmployee} mode={editorMode} onDone={() => setEditorMode('edit')} />
       </div>
     </section>
   );

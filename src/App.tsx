@@ -16,8 +16,8 @@ export function App() {
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">TrAccion V1</p>
                 <h2 className="mt-1 text-2xl font-bold text-metro-text">Panel RRLL preparado para crecer</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-metro-muted">
-                  Aplicación base Electron + React con módulo Plantilla mock, normalizaciones de teletrabajo,
-                  estado local Zustand y capa SQLite nativa preparada para fases posteriores.
+                  Aplicación base Electron + React con primer módulo real de Plantilla: listado, búsqueda, filtros,
+                  alta manual, edición, borrado lógico e importación Excel.
                 </p>
               </div>
               <div className="rounded-2xl bg-metro-red px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-red-900/20">
