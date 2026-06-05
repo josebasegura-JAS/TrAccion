@@ -52,7 +52,9 @@ function isTask(value: unknown): value is Task {
 function normalizeTask(task: Task): Task {
   const updatedAt = task.updatedAt ?? task.createdAt;
   const actualizaciones = Array.isArray(task.actualizaciones)
-    ? task.actualizaciones.filter(isTaskUpdate)
+    ? task.actualizaciones
+        .filter(isTaskUpdate)
+        .sort((first, second) => second.fechaHora.localeCompare(first.fechaHora))
     : [];
 
   return {
@@ -109,7 +111,7 @@ function resolveClosedAt(task: Task, draft: TaskDraft, fechaHora: string): strin
     return null;
   }
 
-  return task.estado === 'cerrada' ? task.closedAt ?? fechaHora : fechaHora;
+  return task.estado === 'cerrada' ? (task.closedAt ?? fechaHora) : fechaHora;
 }
 
 export const useTaskStore = create<TaskStateStore>((set) => ({
@@ -134,7 +136,10 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       };
       const tasks = [...state.tasks, task];
       persistTasks(tasks);
-      return { tasks, selectedTaskId: task.estado === 'cerrada' ? firstActiveTaskId(tasks) : task.id };
+      return {
+        tasks,
+        selectedTaskId: task.estado === 'cerrada' ? firstActiveTaskId(tasks) : task.id,
+      };
     });
   },
   update: (id, draft, updateText) => {

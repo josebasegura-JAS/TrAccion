@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  color: #1d1d1f;
-  background: #eef1f5;
-  font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+  color: #1e2a3d;
+  background: #d9edf2;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
 }
 
 * {
@@ -16,11 +16,12 @@ body {
   margin: 0;
   min-width: 1180px;
   min-height: 100vh;
-  background: #eef1f5;
+  background: #d9edf2;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }

@@ -1,8 +1,8 @@
 {
   "name": "traccion-v1",
   "version": "0.1.0",
-  "description": "TrAccion V1 - RRLL Dashboard moderno con Electron, React y TypeScript",
-  "author": "Metro RRLL",
+  "description": "TrAccion - RRLL Dashboard moderno con Electron, React y TypeScript",
+  "author": "TrAccion",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -57,7 +57,7 @@
   },
   "build": {
     "appId": "com.metro.rrll.traccion",
-    "productName": "TrAccion V1",
+    "productName": "TrAccion",
     "directories": {
       "output": "release"
     },
@@ -65,7 +65,8 @@
       "dist/**",
       "dist-electron/**",
       "package.json",
-      "resources/**"
+      "assets/logo/**",
+      "build/icon/**"
     ],
     "win": {
       "target": [
@@ -76,12 +77,13 @@
           ]
         }
       ],
-      "icon": "resources/traccion-logo.svg"
+      "icon": "build/icon/traccion-icon.ico"
     },
     "portable": {
-      "artifactName": "TrAccion-V1-${version}-portable.exe"
+      "artifactName": "TrAccion-${version}-portable.exe"
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "icon": "build/icon/traccion-icon.ico"
   },
   "optionalDependencies": {
     "better-sqlite3": "^11.10.0"

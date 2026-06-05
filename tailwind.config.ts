@@ -6,16 +6,25 @@ export default {
     extend: {
       colors: {
         metro: {
-          red: '#E30613',
-          dark: '#B0000D',
-          surface: '#F5F6F8',
-          text: '#1D1D1F',
-          muted: '#687280',
-          border: '#E5E7EB',
+          red: '#C62828',
+          dark: '#9E1D1D',
+          navy: '#0F1B2D',
+          slate: '#1E2A3D',
+          bluegray: '#3A4758',
+          surface: '#FFFFFF',
+          app: '#D9EDF2',
+          panel: '#F4FAFC',
+          text: '#1E2A3D',
+          muted: '#4F5D6B',
+          secondary: '#6B7C93',
+          border: '#D6DEE8',
+          success: '#2E7D32',
+          warning: '#F59E0B',
+          info: '#2563EB',
         },
       },
       fontFamily: {
-        sans: ['Segoe UI', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         card: '0 10px 30px rgba(15, 23, 42, 0.06)',
