@@ -35,7 +35,6 @@ import {
   type TicketRestaurantAbsenceSaveResult,
 } from '../domain/importAbsences';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
-import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MONTH_OPTIONS = [
@@ -92,8 +91,6 @@ export function TicketRestaurantePage() {
   const absences = useTicketRestauranteStore((state) => state.absences);
   const people = useTicketRestauranteStore((state) => state.people);
   const config = useTicketRestauranteStore((state) => state.config);
-  const employees = useEmployeeStore((state) => state.employees);
-  const loadEmployees = useEmployeeStore((state) => state.load);
   const loadTickets = useTicketRestauranteStore((state) => state.load);
   const createCalendar = useTicketRestauranteStore((state) => state.createCalendar);
   const updateCalendar = useTicketRestauranteStore((state) => state.updateCalendar);
@@ -104,7 +101,6 @@ export function TicketRestaurantePage() {
   const removeAbsence = useTicketRestauranteStore((state) => state.removeAbsence);
   const upsertPerson = useTicketRestauranteStore((state) => state.upsertPerson);
   const removePerson = useTicketRestauranteStore((state) => state.removePerson);
-  const importPeople = useTicketRestauranteStore((state) => state.importPeople);
   const updateConfig = useTicketRestauranteStore((state) => state.updateConfig);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview>('calendarios');
@@ -126,8 +122,7 @@ export function TicketRestaurantePage() {
 
   useEffect(() => {
     loadTickets();
-    loadEmployees();
-  }, [loadEmployees, loadTickets]);
+  }, [loadTickets]);
 
   const visibleCalendars = useMemo(
     () => sortByName(visibleTicketCalendars(calendars)),
@@ -223,23 +218,24 @@ export function TicketRestaurantePage() {
     setEditingPersonId(person.empleado);
   };
 
-  const importPeopleFromTemplate = () => {
-    const defaultCalendarId = selectedCalendarId || visibleCalendars[0]?.id || '';
-    if (!defaultCalendarId) {
+  const removeCalendarAndPeople = (calendarId: string) => {
+    const associatedPeople = visiblePeople.filter((person) => person.calendarId === calendarId);
+    const calendarName = calendars.find((calendar) => calendar.id === calendarId)?.nombre ?? 'este calendario';
+
+    if (associatedPeople.length > 0) {
+      const confirmed = window.confirm(
+        `El calendario "${calendarName}" tiene ${associatedPeople.length} persona(s) adscrita(s). ` +
+          'Si continúas, se eliminarán también esas personas de Ticket Restaurante. ¿Continuar?',
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    } else if (!window.confirm(`¿Eliminar el calendario "${calendarName}"?`)) {
       return;
     }
 
-    importPeople(
-      employees
-        .filter((employee) => !employee.deletedAt)
-        .map((employee) => ({
-          empleado: employee.empleado,
-          nombreApellidos: employee.nombreApellidos,
-          puesto: employee.puestoOrganizativo || employee.puestoNomina,
-          calendarId: defaultCalendarId,
-          activo: true,
-        })),
-    );
+    removeCalendar(calendarId);
   };
 
   const handleYearChange = (value: string) => {
@@ -449,7 +445,7 @@ export function TicketRestaurantePage() {
             <CalendarList
               calendars={visibleCalendars}
               onEdit={editCalendar}
-              onRemove={removeCalendar}
+              onRemove={removeCalendarAndPeople}
               onToggleActive={toggleCalendarActive}
               selectedCalendarId={selectedCalendarId}
             />
@@ -494,7 +490,6 @@ export function TicketRestaurantePage() {
           onCancel={resetPersonForm}
           onChange={setPersonDraft}
           onEdit={editPerson}
-          onImportFromTemplate={importPeopleFromTemplate}
           onRemove={removePerson}
           onSave={savePerson}
           people={visiblePeople}
@@ -801,7 +796,6 @@ function PeoplePanel({
   onCancel,
   onChange,
   onEdit,
-  onImportFromTemplate,
   onRemove,
   onSave,
   people,
@@ -812,7 +806,6 @@ function PeoplePanel({
   onCancel: () => void;
   onChange: (draft: TicketPersonDraft) => void;
   onEdit: (person: TicketPerson) => void;
-  onImportFromTemplate: () => void;
   onRemove: (empleado: string) => void;
   onSave: () => void;
   people: TicketPerson[];
@@ -893,14 +886,6 @@ function PeoplePanel({
               </button>
             ) : null}
           </div>
-          <button
-            className="w-full rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={calendars.length === 0}
-            onClick={onImportFromTemplate}
-            type="button"
-          >
-            Importar plantilla visible al calendario seleccionado
-          </button>
         </div>
       </div>
       <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
@@ -960,7 +945,7 @@ function PeoplePanel({
               {people.length === 0 ? (
                 <tr>
                   <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
-                    Añade personas o importa la plantilla para poder calcular tickets.
+                    Añade personas manualmente para poder calcular tickets.
                   </td>
                 </tr>
               ) : null}

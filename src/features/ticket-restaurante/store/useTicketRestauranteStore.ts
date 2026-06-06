@@ -32,7 +32,6 @@ interface TicketRestauranteState {
   removeAbsence: (id: string) => void;
   upsertPerson: (draft: TicketPersonDraft) => void;
   removePerson: (empleado: string) => void;
-  importPeople: (drafts: TicketPersonDraft[]) => void;
   updateConfig: (config: TicketRestaurantConfig) => void;
 }
 
@@ -195,8 +194,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
           ? { ...calendar, activo: false, updatedAt, deletedAt: updatedAt }
           : calendar,
       );
+      const people = state.people.map((person) =>
+        person.calendarId === id && !person.deletedAt
+          ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
+          : person,
+      );
       persist(CALENDARS_STORAGE_KEY, calendars);
-      return { calendars };
+      persist(PEOPLE_STORAGE_KEY, people);
+      return { calendars, people };
     });
   },
   toggleDay: (calendarId, fecha) => {
@@ -246,21 +251,6 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
           ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
           : person,
       );
-      persist(PEOPLE_STORAGE_KEY, people);
-      return { people };
-    });
-  },
-  importPeople: (drafts) => {
-    set((state) => {
-      const now = nowIso();
-      const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
-      drafts.forEach((draft) => {
-        peopleByEmployee.set(
-          draft.empleado,
-          buildTicketPerson(draft, now, peopleByEmployee.get(draft.empleado)),
-        );
-      });
-      const people = Array.from(peopleByEmployee.values());
       persist(PEOPLE_STORAGE_KEY, people);
       return { people };
     });
