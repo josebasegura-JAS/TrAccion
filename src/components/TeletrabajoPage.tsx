@@ -1,4 +1,4 @@
-import { Plus, Search, SlidersHorizontal, Upload } from 'lucide-react';
+import { FileText, Plus, Search, SlidersHorizontal, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
@@ -14,6 +14,9 @@ import {
   type SortDirection,
   type TeletrabajoSortKey,
 } from '../features/teletrabajo/domain/sort';
+import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
+import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 
 interface SortState {
@@ -77,6 +80,9 @@ export function TeletrabajoPage() {
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
   const [importSummary, setImportSummary] = useState<string>('');
+  const [wordStatus, setWordStatus] = useState<string>('');
+  const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
+  const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -140,6 +146,31 @@ export function TeletrabajoPage() {
     );
   };
 
+  const handleGenerateWord = async (solicitud: TeletrabajoSolicitud) => {
+    if (solicitud.estado !== 'aprobada' || generatingWordId) {
+      return;
+    }
+
+    const employee =
+      employees.find(
+        (candidate) => !candidate.deletedAt && candidate.empleado.trim() === solicitud.empleado.trim(),
+      ) ?? null;
+
+    setGeneratingWordId(solicitud.id);
+    setWordStatus('');
+
+    try {
+      const result = await generateTeletrabajoWord(solicitud, employee, rutaPlantillaTeletrabajo);
+      await saveDocxWithDialog(result.blob, result.fileName);
+      setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
+      setWordStatus(message);
+    } finally {
+      setGeneratingWordId(null);
+    }
+  };
+
   return (
     <section
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
@@ -187,6 +218,12 @@ export function TeletrabajoPage() {
       {importSummary && (
         <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text">
           {importSummary}
+        </div>
+      )}
+
+      {wordStatus && (
+        <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text">
+          {wordStatus}
         </div>
       )}
 
@@ -305,16 +342,33 @@ export function TeletrabajoPage() {
                     {solicitud.periodo}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <button
-                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        remove(solicitud.id);
-                      }}
-                      type="button"
-                    >
-                      Eliminar
-                    </button>
+                    <div className="inline-flex items-center justify-end gap-1">
+                      {solicitud.estado === 'aprobada' && (
+                        <button
+                          aria-label="Generar acuerdo Word"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={generatingWordId !== null}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleGenerateWord(solicitud);
+                          }}
+                          title="Generar acuerdo Word"
+                          type="button"
+                        >
+                          {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
+                        </button>
+                      )}
+                      <button
+                        className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          remove(solicitud.id);
+                        }}
+                        type="button"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
