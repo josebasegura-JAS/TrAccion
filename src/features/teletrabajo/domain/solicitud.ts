@@ -19,6 +19,8 @@ export interface TeletrabajoSolicitud {
   tipoSolicitud: TeletrabajoTipoSolicitud;
   diasTeletrabajo: TeletrabajoDia[];
   fechaSolicitud: string;
+  fechaOrdenador: string;
+  fechaCascos: string;
   periodo: string;
   observaciones: string;
   validacionSeguridadInformatica: boolean;
@@ -42,6 +44,8 @@ export type TeletrabajoDraft = Pick<
   | 'tipoSolicitud'
   | 'diasTeletrabajo'
   | 'fechaSolicitud'
+  | 'fechaOrdenador'
+  | 'fechaCascos'
   | 'periodo'
   | 'observaciones'
   | 'validacionSeguridadInformatica'
@@ -59,6 +63,8 @@ export type TeletrabajoTextField = Extract<
   | 'dni'
   | 'direccionTeletrabajo'
   | 'fechaSolicitud'
+  | 'fechaOrdenador'
+  | 'fechaCascos'
   | 'periodo'
 >;
 
@@ -74,6 +80,8 @@ export const EMPTY_TELETRABAJO_DRAFT: TeletrabajoDraft = {
   tipoSolicitud: 'nueva',
   diasTeletrabajo: [],
   fechaSolicitud: '',
+  fechaOrdenador: '',
+  fechaCascos: '',
   periodo: '',
   observaciones: '',
   validacionSeguridadInformatica: false,

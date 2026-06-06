@@ -25,6 +25,8 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     tipoSolicitud: 'nueva',
     diasTeletrabajo: ['martes'],
     fechaSolicitud: '2026-01-01',
+    fechaOrdenador: '2026-01-02',
+    fechaCascos: '2026-01-03',
     periodo: '2026-2027',
     observaciones: '',
     validacionSeguridadInformatica: false,

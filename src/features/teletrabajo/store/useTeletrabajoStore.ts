@@ -62,6 +62,8 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
       ? normalizeDiasTeletrabajo(solicitud.diasTeletrabajo)
       : EMPTY_TELETRABAJO_DRAFT.diasTeletrabajo,
     fechaSolicitud: solicitud.fechaSolicitud ?? EMPTY_TELETRABAJO_DRAFT.fechaSolicitud,
+    fechaOrdenador: solicitud.fechaOrdenador ?? EMPTY_TELETRABAJO_DRAFT.fechaOrdenador,
+    fechaCascos: solicitud.fechaCascos ?? EMPTY_TELETRABAJO_DRAFT.fechaCascos,
     periodo: solicitud.periodo ?? EMPTY_TELETRABAJO_DRAFT.periodo,
     observaciones: solicitud.observaciones ?? EMPTY_TELETRABAJO_DRAFT.observaciones,
     validacionSeguridadInformatica: Boolean(solicitud.validacionSeguridadInformatica),
@@ -110,6 +112,8 @@ function normalizeDraft(draft: TeletrabajoDraft): TeletrabajoDraft {
     dni: draft.dni.trim(),
     direccionTeletrabajo: draft.direccionTeletrabajo.trim(),
     fechaSolicitud: draft.fechaSolicitud.trim(),
+    fechaOrdenador: draft.fechaOrdenador.trim(),
+    fechaCascos: draft.fechaCascos.trim(),
     periodo: draft.periodo.trim(),
     observaciones: draft.observaciones.trim(),
     diasTeletrabajo: normalizeDiasTeletrabajo(draft.diasTeletrabajo),

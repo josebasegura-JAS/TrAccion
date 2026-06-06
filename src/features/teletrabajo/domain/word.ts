@@ -1,4 +1,5 @@
 import type { Employee } from '../../plantilla/domain/employee';
+import { normalizeJobPosition, type JobPositionTranslation } from '../../plantilla/domain/jobPositionTranslation';
 import {
   TELETRABAJO_TEMPLATE_UNAVAILABLE_MESSAGE,
   validateConfiguredTeletrabajoTemplatePath,
@@ -74,6 +75,8 @@ const TELETRABAJO_REQUIRED_FIELDS = [
   ['diasTeletrabajoCast', 'Días de teletrabajo CAST'],
   ['diasTeletrabajoEus', 'Días de teletrabajo EUS'],
   ['porcentajeTeletrabajo', 'Porcentaje'],
+  ['fechaOrdenadorFormatted', 'Fecha Ordenador'],
+  ['fechaCascosFormatted', 'Fecha Cascos'],
 ] as const;
 
 const TELETRABAJO_MARKER_MAP = [
@@ -97,6 +100,8 @@ const TELETRABAJO_MARKER_MAP = [
   ['«Fecha_Inicio_Teletrabajo_EUS»', 'fechaInicioTeletrabajoEusFormatted'],
   ['«Fecha_Fin_Teletrabajo_EUS»', 'fechaFinTeletrabajoEusFormatted'],
   ['«Fecha_Periodo_CAST»', 'fechaPeriodoCast'],
+  ['«fecha»', 'currentDateNumeric'],
+  ['«Fecha»', 'currentDateNumeric'],
   ['«Fecha_Actual»', 'currentDateNumeric'],
   ['«Fecha_Actual_EUS»', 'currentDateEusNumeric'],
   ['«M_1ºdata»', 'fechaInicioTeletrabajoEusFormatted'],
@@ -161,7 +166,7 @@ function formatDateEus(value: string): string {
   return `${parts.year}ko ${MONTHS_EUS[parts.month - 1]} ${parts.day}a`;
 }
 
-function formatDateNumeric(value: string): string {
+function formatDateCastNumeric(value: string): string {
   const parts = parseDateOnly(value);
   if (!parts) return value.trim();
   return `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}/${parts.year}`;
@@ -198,7 +203,9 @@ function joinDays(days: readonly TeletrabajoDia[], language: 'cast' | 'eus'): st
 }
 
 function percentageFromDays(days: readonly TeletrabajoDia[]): string {
-  return `${days.length * 20}%`;
+  if (days.length >= 2) return '40';
+  if (days.length === 1) return '20';
+  return '';
 }
 
 function todayIso(now = new Date()): string {
@@ -207,9 +214,24 @@ function todayIso(now = new Date()): string {
   ).padStart(2, '0')}`;
 }
 
+function findTranslatedPosition(
+  puestoCastellano: string,
+  translations: readonly JobPositionTranslation[],
+): string {
+  const normalized = normalizeJobPosition(puestoCastellano);
+  if (!normalized) return '';
+
+  return (
+    translations.find(
+      (translation) => normalizeJobPosition(translation.puestoCastellano) === normalized,
+    )?.puestoEuskera ?? ''
+  );
+}
+
 function buildTeletrabajoData(
   source: TeletrabajoWordSource,
   plantillaEmployee: Employee | null,
+  jobPositionTranslations: readonly JobPositionTranslation[] = [],
   now = new Date(),
 ): Record<string, string> {
   const periodDates = datesFromPeriod(source.periodo);
@@ -219,6 +241,7 @@ function buildTeletrabajoData(
   const fechaFinTeletrabajoEus = periodDates.end;
   const currentIso = todayIso(now);
   const puesto = plantillaEmployee?.puestoNomina || source.puestoNomina || source.puestoOrganizativo;
+  const puestoEus = findTranslatedPosition(puesto, jobPositionTranslations);
 
   return {
     nombreCompleto: source.nombreApellidos || plantillaEmployee?.nombreApellidos || '',
@@ -226,15 +249,15 @@ function buildTeletrabajoData(
     tipoSolicitud: normalizeTipoSolicitud(source.tipoSolicitud),
     dni: plantillaEmployee?.dni || source.dni || '',
     puestoCast: puesto,
-    puestoEus: plantillaEmployee?.puestoEus || puesto,
+    puestoEus,
     direccionTeletrabajo: plantillaEmployee?.direccionTeletrabajo || source.direccionTeletrabajo || '',
     residenciaCast: plantillaEmployee?.residenciaCast || source.residencia || '',
     residenciaEus: plantillaEmployee?.residenciaEus || plantillaEmployee?.residenciaCast || source.residencia || '',
     diasTeletrabajoCast: joinDays(source.diasTeletrabajo, 'cast'),
     diasTeletrabajoEus: joinDays(source.diasTeletrabajo, 'eus'),
     porcentajeTeletrabajo: percentageFromDays(source.diasTeletrabajo),
-    fechaOrdenadorFormatted: '',
-    fechaCascosFormatted: '',
+    fechaOrdenadorFormatted: formatDateCast(source.fechaOrdenador),
+    fechaCascosFormatted: formatDateCast(source.fechaCascos),
     fechaInicioTeletrabajoCast,
     fechaFinTeletrabajoCast,
     fechaInicioTeletrabajoEus,
@@ -244,7 +267,7 @@ function buildTeletrabajoData(
     fechaInicioTeletrabajoEusFormatted: formatDateEus(fechaInicioTeletrabajoEus),
     fechaFinTeletrabajoEusFormatted: formatDateEus(fechaFinTeletrabajoEus),
     fechaPeriodoCast: formatDatePeriodCast(fechaInicioTeletrabajoCast, fechaFinTeletrabajoCast),
-    currentDateNumeric: formatDateNumeric(currentIso),
+    currentDateNumeric: formatDateCastNumeric(currentIso),
     currentDateEusNumeric: formatDateEusNumeric(currentIso),
     currentDateCast: formatDateCast(currentIso),
     currentDateEus: formatDateEus(currentIso),
@@ -407,10 +430,11 @@ export async function generateTeletrabajoWord(
   source: TeletrabajoWordSource,
   plantillaEmployee: Employee | null,
   templatePath: string,
+  jobPositionTranslations: readonly JobPositionTranslation[] = [],
 ): Promise<TeletrabajoWordResult> {
   const templateBuffer = await readTemplateFromConfiguredPath(templatePath);
   const entries = await unzipDocx(templateBuffer);
-  const data = buildTeletrabajoData(source, plantillaEmployee);
+  const data = buildTeletrabajoData(source, plantillaEmployee, jobPositionTranslations);
   const missing = validateTeletrabajoData(data);
 
   if (missing.length) {

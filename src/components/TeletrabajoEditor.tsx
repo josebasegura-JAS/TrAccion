@@ -59,6 +59,8 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
     tipoSolicitud: solicitud.tipoSolicitud,
     diasTeletrabajo: solicitud.diasTeletrabajo,
     fechaSolicitud: solicitud.fechaSolicitud,
+    fechaOrdenador: solicitud.fechaOrdenador,
+    fechaCascos: solicitud.fechaCascos,
     periodo: solicitud.periodo,
     observaciones: solicitud.observaciones,
     validacionSeguridadInformatica: solicitud.validacionSeguridadInformatica,
@@ -89,6 +91,8 @@ function hasRequiredManualData(draft: TeletrabajoDraft): boolean {
     draft.dni,
     draft.direccionTeletrabajo,
     draft.periodo,
+    draft.fechaOrdenador,
+    draft.fechaCascos,
   ].every((value) => value.trim().length > 0);
 }
 
@@ -106,6 +110,7 @@ export function TeletrabajoEditor({
   const removeSolicitud = useTeletrabajoStore((state) => state.remove);
   const employees = useEmployeeStore((state) => state.employees);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
+  const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [draft, setDraft] = useState<TeletrabajoDraft>(() => toDraft(solicitud));
   const [wordStatus, setWordStatus] = useState('');
   const [isGeneratingWord, setIsGeneratingWord] = useState(false);
@@ -154,6 +159,7 @@ export function TeletrabajoEditor({
         draft,
         plantillaEmployee,
         rutaPlantillaTeletrabajo,
+        jobPositionTranslations,
       );
       await saveDocxWithDialog(result.blob, result.fileName);
       setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores detectados.`);
@@ -302,6 +308,32 @@ export function TeletrabajoEditor({
                 }
                 type="date"
                 value={draft.fechaSolicitud}
+              />
+            </label>
+
+            <label className="text-xs font-semibold text-metro-muted">
+              Fecha entrega ordenador
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, fechaOrdenador: event.target.value }))
+                }
+                required
+                type="date"
+                value={draft.fechaOrdenador}
+              />
+            </label>
+
+            <label className="text-xs font-semibold text-metro-muted">
+              Fecha entrega cascos
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, fechaCascos: event.target.value }))
+                }
+                required
+                type="date"
+                value={draft.fechaCascos}
               />
             </label>
 

@@ -32,6 +32,11 @@ interface EspecialOutlookDraftResult {
   message: string;
 }
 
+interface TeletrabajoOpenWordResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TraccionApi {
   databaseStatus: () => Promise<{
     ready: boolean;
@@ -40,6 +45,7 @@ interface TraccionApi {
   }>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
+  openTeletrabajoWord?: (buffer: ArrayBuffer, fileName: string) => Promise<TeletrabajoOpenWordResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
   parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
 }

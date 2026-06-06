@@ -76,6 +76,7 @@ export function TeletrabajoPage() {
     useTeletrabajoStore();
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
+  const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
@@ -160,7 +161,12 @@ export function TeletrabajoPage() {
     setWordStatus('');
 
     try {
-      const result = await generateTeletrabajoWord(solicitud, employee, rutaPlantillaTeletrabajo);
+      const result = await generateTeletrabajoWord(
+        solicitud,
+        employee,
+        rutaPlantillaTeletrabajo,
+        jobPositionTranslations,
+      );
       await saveDocxWithDialog(result.blob, result.fileName);
       setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
     } catch (error) {

@@ -21,7 +21,19 @@ interface WindowWithSaveFilePicker extends Window {
 
 const WORD_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  return await blob.arrayBuffer();
+}
+
 export async function saveDocxWithDialog(blob: Blob, fileName: string): Promise<void> {
+  if (window.traccion?.openTeletrabajoWord) {
+    const result = await window.traccion.openTeletrabajoWord(await blobToArrayBuffer(blob), fileName);
+    if (!result.ok) {
+      throw new Error(result.message || 'No se ha podido abrir el Word generado.');
+    }
+    return;
+  }
+
   const windowWithPicker = window as WindowWithSaveFilePicker;
 
   if (windowWithPicker.showSaveFilePicker) {
