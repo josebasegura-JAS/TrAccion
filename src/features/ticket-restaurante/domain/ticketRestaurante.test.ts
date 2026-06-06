@@ -1,0 +1,104 @@
+import { describe, expect, it } from 'vitest';
+import type { Employee } from '../../plantilla/domain/employee';
+import {
+  assignPersonaCalendario,
+  calculateDerechosTicketMes,
+  countTicketDaysInMonth,
+  type PersonaCalendario,
+  type TicketCalendar,
+} from './ticketRestaurante';
+
+const timestamp = '2026-01-01T00:00:00.000Z';
+
+function buildCalendar(overrides: Partial<TicketCalendar>): TicketCalendar {
+  return {
+    id: 'calendar-base',
+    nombre: 'Calendario base',
+    activo: true,
+    diasTicket: [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+function buildEmployee(overrides: Partial<Employee>): Employee {
+  return {
+    empleado: '1001',
+    nombreApellidos: 'Persona Base',
+    puestoNomina: '',
+    puestoOrganizativo: '',
+    residencia: '',
+    nivelRetributivo: '',
+    sexo: '',
+    calle: '',
+    numero: '',
+    piso: '',
+    codigoPostal: '',
+    poblacion: '',
+    provincia: '',
+    nif: '',
+    dni: '',
+    residenciaCast: '',
+    residenciaEus: '',
+    direccionTeletrabajo: '',
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+describe('ticket restaurante domain', () => {
+  it('asigna una persona a un calendario', () => {
+    const assignments = assignPersonaCalendario([], '1001', 'calendar-a', timestamp);
+
+    expect(assignments).toEqual([
+      { empleado: '1001', calendarId: 'calendar-a', createdAt: timestamp },
+    ]);
+  });
+
+  it('cuenta solo días con ticket del mes seleccionado', () => {
+    const calendar = buildCalendar({
+      diasTicket: [
+        { fecha: '2026-01-02', tieneTicket: true },
+        { fecha: '2026-01-03', tieneTicket: false },
+        { fecha: '2026-01-04', tieneTicket: true },
+        { fecha: '2026-02-01', tieneTicket: true },
+      ],
+    });
+
+    expect(countTicketDaysInMonth(calendar, '2026-01')).toBe(2);
+  });
+
+  it('excluye calendarios borrados de la visualización de derechos', () => {
+    const assignments: PersonaCalendario[] = [
+      { empleado: '1001', calendarId: 'calendar-deleted', createdAt: timestamp },
+    ];
+    const calendars = [
+      buildCalendar({
+        id: 'calendar-deleted',
+        nombre: 'Calendario borrado',
+        deletedAt: '2026-01-05T00:00:00.000Z',
+        diasTicket: [{ fecha: '2026-01-02', tieneTicket: true }],
+      }),
+    ];
+    const employees = [buildEmployee({ empleado: '1001', nombreApellidos: 'Persona Uno' })];
+
+    expect(
+      calculateDerechosTicketMes({ assignments, calendars, employees, month: '2026-01' }),
+    ).toEqual([]);
+  });
+
+  it('cambia el calendario de una persona manteniendo una única asignación', () => {
+    const assignments = assignPersonaCalendario(
+      [{ empleado: '1001', calendarId: 'calendar-a', createdAt: timestamp }],
+      '1001',
+      'calendar-b',
+      '2026-01-02T00:00:00.000Z',
+    );
+
+    expect(assignments).toEqual([
+      { empleado: '1001', calendarId: 'calendar-b', createdAt: '2026-01-02T00:00:00.000Z' },
+    ]);
+  });
+});
