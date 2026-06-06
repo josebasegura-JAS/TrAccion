@@ -39,6 +39,32 @@ function sortRecipients(items: EspecialRecipient[]): EspecialRecipient[] {
   );
 }
 
+type OutlookDraftApi = {
+  createDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
+};
+
+function getOutlookDraftApi(): OutlookDraftApi | null {
+  if (window.traccion?.createOutlookDraft) {
+    return {
+      createDraft: (payload) => window.traccion!.createOutlookDraft(payload),
+    };
+  }
+
+  if (window.rrllOutlook?.createDraft) {
+    return {
+      createDraft: (payload) =>
+        window.rrllOutlook!.createDraft({
+          subject: payload.subject,
+          htmlBody: payload.html,
+          to: payload.to.join(';'),
+          cc: payload.cc.join(';'),
+        }),
+    };
+  }
+
+  return null;
+}
+
 export function EspecialesPage() {
   const { recipients, load, createRecipient, updateRecipient, removeRecipient } =
     useEspecialesStore();
@@ -90,7 +116,7 @@ export function EspecialesPage() {
     if (!serviceDraft.evento.trim()) {
       return 'falta evento';
     }
-    if (!window.traccion?.createOutlookDraft) {
+    if (!getOutlookDraftApi()) {
       return 'falta API Outlook';
     }
     return '';
@@ -235,7 +261,13 @@ export function EspecialesPage() {
         cc: recipientGroups.cc.map((recipient) => recipient.email),
       };
       setOutlookStatus('Llamando a Outlook...');
-      const result = await window.traccion?.createOutlookDraft(payload);
+      const outlookApi = getOutlookDraftApi();
+      if (!outlookApi) {
+        throw new Error(
+          'API Outlook no disponible. Abre TrAccion desde Electron, no desde el navegador.',
+        );
+      }
+      const result = await outlookApi.createDraft(payload);
       if (!result?.ok) {
         throw new Error(result?.message || 'Outlook no disponible');
       }

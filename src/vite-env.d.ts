@@ -7,6 +7,13 @@ interface EspecialOutlookDraftPayload {
   cc: string[];
 }
 
+interface LegacyEspecialOutlookDraftPayload {
+  subject: string;
+  htmlBody: string;
+  to: string;
+  cc: string;
+}
+
 interface EspecialOutlookDraftResult {
   ok: boolean;
   message: string;
@@ -23,6 +30,13 @@ interface TraccionApi {
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
 }
 
+interface RrllOutlookApi {
+  createDraft: (
+    payload: EspecialOutlookDraftPayload | LegacyEspecialOutlookDraftPayload,
+  ) => Promise<EspecialOutlookDraftResult>;
+}
+
 interface Window {
   traccion?: TraccionApi;
+  rrllOutlook?: RrllOutlookApi;
 }

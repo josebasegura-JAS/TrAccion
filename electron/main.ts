@@ -63,83 +63,152 @@ interface OutlookDraftResult {
   message: string;
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+function normalizeRecipientList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .slice(0, 200);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 200);
+  }
+
+  return [];
 }
 
-function isOutlookDraftPayload(value: unknown): value is OutlookDraftPayload {
+function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   if (!value || typeof value !== 'object') {
-    return false;
+    return null;
   }
 
-  const candidate = value as Partial<OutlookDraftPayload>;
-  return (
-    typeof candidate.subject === 'string' &&
-    typeof candidate.html === 'string' &&
-    isStringArray(candidate.to) &&
-    isStringArray(candidate.cc) &&
-    candidate.subject.length <= 255 &&
-    candidate.html.length <= 100_000 &&
-    candidate.to.length <= 200 &&
-    candidate.cc.length <= 200
-  );
+  const candidate = value as Partial<OutlookDraftPayload> & { htmlBody?: unknown };
+  const subject = typeof candidate.subject === 'string' ? candidate.subject.trim() : '';
+  const htmlSource = typeof candidate.html === 'string' ? candidate.html : candidate.htmlBody;
+  const html = typeof htmlSource === 'string' ? htmlSource : '';
+  const to = normalizeRecipientList(candidate.to);
+  const cc = normalizeRecipientList(candidate.cc);
+
+  if (
+    !subject ||
+    !html ||
+    !to.length ||
+    subject.length > 255 ||
+    html.length > 100_000 ||
+    to.length > 200 ||
+    cc.length > 200
+  ) {
+    return null;
+  }
+
+  return { subject, html, to, cc };
 }
 
-function sanitizeMailDraft(payload: OutlookDraftPayload): OutlookDraftPayload {
-  return {
-    subject: payload.subject.trim(),
-    html: payload.html,
-    to: payload.to.map((recipient) => recipient.trim()).filter(Boolean),
-    cc: payload.cc.map((recipient) => recipient.trim()).filter(Boolean),
-  };
+function psLiteral(value: string): string {
+  return `'${String(value || '').replace(/'/g, "''")}'`;
 }
 
-async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
-  if (process.platform !== 'win32') {
-    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
-  }
+function buildOutlookDraftPowerShellScript(payload: OutlookDraftPayload): string {
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$outlook = New-Object -ComObject Outlook.Application",
+    '$mail = $outlook.CreateItem(0)',
+    '$mail.BodyFormat = 2',
+    `$mail.Subject = ${psLiteral(payload.subject)}`,
+    `$mail.To = ${psLiteral(payload.to.join(';'))}`,
+    `$mail.CC = ${psLiteral(payload.cc.join(';'))}`,
+    `$mail.HTMLBody = ${psLiteral(payload.html)}`,
+    '$mail.Display()',
+    "Write-Output 'OK_DRAFT_DISPLAYED'",
+  ].join('\n');
+}
 
-  if (!isOutlookDraftPayload(payload)) {
-    return { ok: false, message: 'Datos de correo no válidos.' };
-  }
+function buildOutlookDraftVbs(payload: OutlookDraftPayload): string {
+  const escapeVbs = (value: string) => String(value || '').replace(/"/g, '""');
+  return [
+    'Set OutlookApp = CreateObject("Outlook.Application")',
+    'Set Mail = OutlookApp.CreateItem(0)',
+    'Mail.BodyFormat = 2',
+    `Mail.Subject = "${escapeVbs(payload.subject)}"`,
+    `Mail.To = "${escapeVbs(payload.to.join(';'))}"`,
+    payload.cc.length ? `Mail.CC = "${escapeVbs(payload.cc.join(';'))}"` : '',
+    `Mail.HTMLBody = "${escapeVbs(payload.html)}"`,
+    'Mail.Display',
+  ]
+    .filter(Boolean)
+    .join('\r\n');
+}
 
-  const safePayload = sanitizeMailDraft(payload);
+async function runOutlookPowerShell(payload: OutlookDraftPayload): Promise<void> {
+  const script = buildOutlookDraftPowerShellScript(payload);
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { windowsHide: true },
+    );
+    let stderr = '';
+    let stdout = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child.kill();
+      reject(new Error('Outlook no respondió al intentar crear el borrador.'));
+    }, 15_000);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('error', (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0 && stdout.includes('OK_DRAFT_DISPLAYED')) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          stderr.trim() || stdout.trim() || `PowerShell terminó con código ${code ?? 'desconocido'}.`,
+        ),
+      );
+    });
+  });
+}
+
+async function runOutlookVbs(payload: OutlookDraftPayload): Promise<void> {
   const stamp = `${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
-  const jsonPath = path.join(tmpdir(), `traccion-especiales-${stamp}.json`);
-  const scriptPath = path.join(tmpdir(), `traccion-especiales-${stamp}.ps1`);
-  const script = `
-$ErrorActionPreference = 'Stop'
-$payload = Get-Content -Raw -LiteralPath $args[0] | ConvertFrom-Json
-$outlook = New-Object -ComObject Outlook.Application
-$mail = $outlook.CreateItem(0)
-$mail.BodyFormat = 2
-$mail.Subject = [string]$payload.subject
-$mail.To = [string]::Join(';', @($payload.to))
-$mail.CC = [string]::Join(';', @($payload.cc))
-$mail.HTMLBody = [string]$payload.html
-$mail.Display()
-`;
+  const scriptPath = path.join(tmpdir(), `traccion-especiales-${stamp}.vbs`);
 
   try {
-    await writeFile(jsonPath, JSON.stringify(safePayload), 'utf8');
-    await writeFile(scriptPath, script, 'utf8');
-
+    await writeFile(scriptPath, buildOutlookDraftVbs(payload), 'utf8');
     await new Promise<void>((resolve, reject) => {
-      const child = spawn('powershell.exe', [
-        '-NoProfile',
-        '-STA',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        scriptPath,
-        jsonPath,
-      ]);
+      const child = spawn('cscript.exe', ['//NoLogo', scriptPath], { windowsHide: true });
       let stderr = '';
-      let stdout = '';
 
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString('utf8');
-      });
       child.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString('utf8');
       });
@@ -147,24 +216,42 @@ $mail.Display()
       child.on('close', (code) => {
         if (code === 0) {
           resolve();
-        } else {
-          reject(
-            new Error(
-              stderr.trim() ||
-                stdout.trim() ||
-                `PowerShell terminó con código ${code ?? 'desconocido'}.`,
-            ),
-          );
+          return;
         }
+        reject(new Error(stderr.trim() || `cscript terminó con código ${code ?? 'desconocido'}.`));
       });
     });
-
-    return { ok: true, message: 'Borrador creado en Outlook.' };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error desconocido al abrir Outlook.';
-    return { ok: false, message };
   } finally {
-    await Promise.allSettled([rm(jsonPath, { force: true }), rm(scriptPath, { force: true })]);
+    await rm(scriptPath, { force: true });
+  }
+}
+
+async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
+  }
+
+  const safePayload = normalizeMailDraftPayload(payload);
+  if (!safePayload) {
+    return { ok: false, message: 'Faltan datos obligatorios para crear el borrador de Outlook.' };
+  }
+
+  try {
+    await runOutlookPowerShell(safePayload);
+    return { ok: true, message: 'Borrador creado en Outlook.' };
+  } catch (powerShellError) {
+    try {
+      await runOutlookVbs(safePayload);
+      return { ok: true, message: 'Borrador creado en Outlook.' };
+    } catch (vbsError) {
+      const powerShellMessage =
+        powerShellError instanceof Error ? powerShellError.message : 'error desconocido';
+      const vbsMessage = vbsError instanceof Error ? vbsError.message : 'error desconocido';
+      return {
+        ok: false,
+        message: `Falló PowerShell y fallback VBS: ${powerShellMessage} / ${vbsMessage}`,
+      };
+    }
   }
 }
 
