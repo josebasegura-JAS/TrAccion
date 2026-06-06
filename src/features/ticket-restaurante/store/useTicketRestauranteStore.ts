@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   buildTicketCalendar,
   buildTicketPerson,
+  splitTicketPersonFullName,
   DEFAULT_TICKET_RESTAURANT_CONFIG,
   toggleDiaSinTicket,
   type TicketCalendar,
@@ -61,7 +62,7 @@ function isTicketPerson(value: unknown): value is TicketPerson {
   const candidate = value as Partial<TicketPerson>;
   return (
     typeof candidate.empleado === 'string' &&
-    typeof candidate.nombreApellidos === 'string' &&
+    (typeof candidate.nombreApellidos === 'string' || typeof candidate.nombre === 'string') &&
     typeof candidate.puesto === 'string' &&
     typeof candidate.calendarId === 'string' &&
     typeof candidate.activo === 'boolean' &&
@@ -104,6 +105,24 @@ function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value i
   }
 
   return parsed.filter(guard);
+}
+
+
+function normalizeStoredTicketPerson(person: TicketPerson): TicketPerson {
+  const nombreApellidos = person.nombreApellidos || [person.nombre, person.apellido1, person.apellido2]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const splitName = splitTicketPersonFullName(nombreApellidos);
+
+  return {
+    ...person,
+    nombre: person.nombre || splitName.nombre,
+    apellido1: person.apellido1 || splitName.apellido1,
+    apellido2: person.apellido2 || splitName.apellido2,
+    dni: person.dni || '',
+    nombreApellidos,
+  };
 }
 
 function readConfig(): TicketRestaurantConfig {
@@ -153,7 +172,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
     set({
       calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar),
       absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
-      people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson),
+      people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
     });
   },
@@ -245,12 +264,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
   },
   removePerson: (empleado) => {
     set((state) => {
-      const updatedAt = nowIso();
-      const people = state.people.map((person) =>
-        person.empleado === empleado
-          ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
-          : person,
-      );
+      const people = state.people.filter((person) => person.empleado !== empleado);
       persist(PEOPLE_STORAGE_KEY, people);
       return { people };
     });

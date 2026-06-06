@@ -40,6 +40,10 @@ export interface TicketRestaurantAbsenceDraft {
 
 export interface TicketPerson {
   empleado: string;
+  nombre: string;
+  apellido1: string;
+  apellido2: string;
+  dni: string;
   nombreApellidos: string;
   puesto: string;
   calendarId: string;
@@ -51,7 +55,23 @@ export interface TicketPerson {
 
 export interface TicketPersonDraft {
   empleado: string;
+  nombre: string;
+  apellido1: string;
+  apellido2: string;
+  dni: string;
   nombreApellidos: string;
+  puesto: string;
+  calendarId: string;
+  activo: boolean;
+}
+
+export interface TicketPersonDraftInput {
+  empleado: string;
+  nombre?: string;
+  apellido1?: string;
+  apellido2?: string;
+  dni?: string;
+  nombreApellidos?: string;
   puesto: string;
   calendarId: string;
   activo: boolean;
@@ -101,6 +121,10 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
   empleado: '',
+  nombre: '',
+  apellido1: '',
+  apellido2: '',
+  dni: '',
   nombreApellidos: '',
   puesto: '',
   calendarId: '',
@@ -188,20 +212,66 @@ export function toggleDiaSinTicket(calendar: TicketCalendar, fecha: string): Tic
   };
 }
 
+function cleanTicketPersonText(value: string | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ');
+}
+
+export function buildTicketPersonFullName(
+  draft: Pick<TicketPersonDraftInput, 'nombre' | 'apellido1' | 'apellido2' | 'nombreApellidos'>,
+): string {
+  const partsName = [draft.nombre, draft.apellido1, draft.apellido2]
+    .map(cleanTicketPersonText)
+    .filter(Boolean)
+    .join(' ');
+
+  return partsName || cleanTicketPersonText(draft.nombreApellidos);
+}
+
+export function splitTicketPersonFullName(nombreApellidos: string): Pick<TicketPersonDraft, 'nombre' | 'apellido1' | 'apellido2'> {
+  const parts = cleanTicketPersonText(nombreApellidos).split(' ').filter(Boolean);
+  if (parts.length <= 1) {
+    return { nombre: parts.join(' '), apellido1: '', apellido2: '' };
+  }
+
+  if (parts.length === 2) {
+    return { nombre: parts[0] ?? '', apellido1: parts[1] ?? '', apellido2: '' };
+  }
+
+  return {
+    nombre: parts.slice(0, -2).join(' '),
+    apellido1: parts.at(-2) ?? '',
+    apellido2: parts.at(-1) ?? '',
+  };
+}
+
 export function buildTicketPerson(
-  draft: TicketPersonDraft,
+  draft: TicketPersonDraftInput,
   now: string,
   previous?: TicketPerson,
 ): TicketPerson {
+  const nombre = cleanTicketPersonText(draft.nombre);
+  const apellido1 = cleanTicketPersonText(draft.apellido1);
+  const apellido2 = cleanTicketPersonText(draft.apellido2);
+  const nombreApellidos = buildTicketPersonFullName({
+    ...draft,
+    nombre,
+    apellido1,
+    apellido2,
+  });
+
   return {
     empleado: draft.empleado.trim(),
-    nombreApellidos: draft.nombreApellidos.trim().replace(/\s+/g, ' '),
-    puesto: draft.puesto.trim().replace(/\s+/g, ' '),
+    nombre,
+    apellido1,
+    apellido2,
+    dni: cleanTicketPersonText(draft.dni),
+    nombreApellidos,
+    puesto: cleanTicketPersonText(draft.puesto),
     calendarId: draft.calendarId,
     activo: draft.activo,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
-    deletedAt: previous?.deletedAt ?? null,
+    deletedAt: null,
   };
 }
 

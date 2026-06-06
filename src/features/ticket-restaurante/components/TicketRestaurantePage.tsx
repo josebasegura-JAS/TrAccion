@@ -65,6 +65,10 @@ type TicketRestauranteSubview = 'calendarios' | 'personas' | 'calculo' | 'ausenc
 function toPersonDraft(person: TicketPerson): TicketPersonDraft {
   return {
     empleado: person.empleado,
+    nombre: person.nombre,
+    apellido1: person.apellido1,
+    apellido2: person.apellido2,
+    dni: person.dni,
     nombreApellidos: person.nombreApellidos,
     puesto: person.puesto,
     calendarId: person.calendarId,
@@ -203,7 +207,7 @@ export function TicketRestaurantePage() {
   const savePerson = () => {
     if (
       !personDraft.empleado.trim() ||
-      !personDraft.nombreApellidos.trim() ||
+      !personDraft.nombre.trim() ||
       !personDraft.calendarId
     ) {
       return;
@@ -810,7 +814,7 @@ function PeoplePanel({
   onSave: () => void;
   people: TicketPerson[];
 }) {
-  const canSave = draft.empleado.trim() && draft.nombreApellidos.trim() && draft.calendarId;
+  const canSave = draft.empleado.trim() && draft.nombre.trim() && draft.calendarId;
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(320px,0.7fr)_minmax(520px,1.3fr)]">
@@ -828,11 +832,35 @@ function PeoplePanel({
             />
           </label>
           <label className="block text-xs font-semibold text-metro-text">
-            Nombre y apellidos
+            Nombre
             <input
               className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, nombreApellidos: event.target.value })}
-              value={draft.nombreApellidos}
+              onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
+              value={draft.nombre}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-metro-text">
+            Apellido 1
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, apellido1: event.target.value })}
+              value={draft.apellido1}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-metro-text">
+            Apellido 2
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, apellido2: event.target.value })}
+              value={draft.apellido2}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-metro-text">
+            DNI
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, dni: event.target.value })}
+              value={draft.dni}
             />
           </label>
           <label className="block text-xs font-semibold text-metro-text">
@@ -901,6 +929,9 @@ function PeoplePanel({
               <tr>
                 <th className="px-2 py-1">empleado</th>
                 <th className="px-2 py-1">nombre</th>
+                <th className="px-2 py-1">apellido 1</th>
+                <th className="px-2 py-1">apellido 2</th>
+                <th className="px-2 py-1">dni</th>
                 <th className="px-2 py-1">puesto</th>
                 <th className="px-2 py-1">calendario</th>
                 <th className="px-2 py-1">estado</th>
@@ -915,7 +946,10 @@ function PeoplePanel({
                   onDoubleClick={() => onEdit(person)}
                 >
                   <td className="px-2 py-1 font-semibold">{person.empleado}</td>
-                  <td className="px-2 py-1">{person.nombreApellidos}</td>
+                  <td className="px-2 py-1">{person.nombre}</td>
+                  <td className="px-2 py-1">{person.apellido1}</td>
+                  <td className="px-2 py-1">{person.apellido2}</td>
+                  <td className="px-2 py-1">{person.dni}</td>
                   <td className="px-2 py-1">{person.puesto}</td>
                   <td className="px-2 py-1">
                     {calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ??
@@ -933,7 +967,11 @@ function PeoplePanel({
                       </button>
                       <button
                         className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
-                        onClick={() => onRemove(person.empleado)}
+                        onClick={() => {
+                          if (window.confirm(`¿Eliminar la persona con Nº empleado ${person.empleado}?`)) {
+                            onRemove(person.empleado);
+                          }
+                        }}
                         type="button"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -944,7 +982,7 @@ function PeoplePanel({
               ))}
               {people.length === 0 ? (
                 <tr>
-                  <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
+                  <td className="px-2 py-4 text-center text-metro-muted" colSpan={9}>
                     Añade personas manualmente para poder calcular tickets.
                   </td>
                 </tr>
