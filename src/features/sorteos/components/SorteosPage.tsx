@@ -1,0 +1,506 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Download, Gift, History, Search, ShieldMinus, Trash2 } from 'lucide-react';
+import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
+import {
+  buildSorteosSummary,
+  normalizeSorteosPeople,
+  searchPeopleForExclusion,
+  SORTEOS_MIN_SEARCH_LENGTH,
+  validateSorteosDraft,
+  type SorteosDraw,
+  type SorteosDraft,
+  type SorteosWinner,
+} from '../domain/sorteos';
+import { useSorteosStore } from '../store/useSorteosStore';
+
+const today = new Date().toISOString().slice(0, 10);
+
+type PendingConfirmation =
+  | { type: 'delete-draw'; drawId: string }
+  | { type: 'reset-all-exclusions' }
+  | null;
+
+function buildDrawExportPreview(draw: SorteosDraw): string {
+  return `${draw.title} (${draw.date}) - ${draw.winners.length} ganador(es)`;
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-metro-muted">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-metro-text">{value}</p>
+    </div>
+  );
+}
+
+function WinnersTable({ draw }: { draw: SorteosDraw }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
+      <table className="w-full table-auto text-left text-sm">
+        <thead className="bg-metro-panel text-[11px] uppercase tracking-[0.16em] text-metro-muted">
+          <tr>
+            <th className="px-3 py-2 font-semibold">Posición</th>
+            <th className="px-3 py-2 font-semibold">Nº empleado</th>
+            <th className="px-3 py-2 font-semibold">Nombre y apellidos</th>
+            <th className="px-3 py-2 font-semibold">Sorteo</th>
+            <th className="px-3 py-2 font-semibold">Fecha</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-metro-border">
+          {draw.winners.map((winner: SorteosWinner) => (
+            <tr className="hover:bg-metro-panel/70" key={`${draw.id}-${winner.position}-${winner.empleado}`}>
+              <td className="px-3 py-2 font-semibold text-metro-red">{winner.position}</td>
+              <td className="px-3 py-2 text-metro-text">{winner.empleado}</td>
+              <td className="px-3 py-2 text-metro-text">{winner.nombreApellidos}</td>
+              <td className="px-3 py-2 text-metro-muted">{draw.title}</td>
+              <td className="px-3 py-2 text-metro-muted">{draw.date}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function SorteosPage() {
+  const { employees, load: loadEmployees } = useEmployeeStore();
+  const {
+    addExclusion,
+    createDraw,
+    deleteDraw,
+    draws,
+    exclusions,
+    load: loadSorteos,
+    removeExclusion,
+    resetAllExclusions,
+    resetDrawWinnerExclusions,
+    viewDraw,
+    visibleResult,
+  } = useSorteosStore();
+  const [draft, setDraft] = useState<SorteosDraft>({ title: '', date: today, winnersCount: 1 });
+  const [errors, setErrors] = useState<string[]>([]);
+  const [exportNotice, setExportNotice] = useState('');
+  const [search, setSearch] = useState('');
+  const [exclusionsOpen, setExclusionsOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+
+  useEffect(() => {
+    loadEmployees();
+    loadSorteos();
+  }, [loadEmployees, loadSorteos]);
+
+  const people = useMemo(() => normalizeSorteosPeople(employees), [employees]);
+  const summary = useMemo(() => buildSorteosSummary(people, exclusions, draws), [draws, exclusions, people]);
+  const searchResults = useMemo(
+    () => searchPeopleForExclusion(people, exclusions, search),
+    [exclusions, people, search],
+  );
+
+  const handleDraftChange = <K extends keyof SorteosDraft>(key: K, value: SorteosDraft[K]) => {
+    setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
+  };
+
+  const handleDraw = () => {
+    const validation = validateSorteosDraft(draft, people, exclusions);
+    if (!validation.valid) {
+      setErrors(validation.errors);
+      return;
+    }
+
+    const result = createDraw(draft, people);
+    setErrors(result.errors);
+    if (result.valid) {
+      setDraft({ title: '', date: today, winnersCount: 1 });
+    }
+  };
+
+  const handleExport = (draw: SorteosDraw) => {
+    setExportNotice(
+      `Exportación preparada para ${buildDrawExportPreview(draw)}. Pendiente conectar con el patrón de exportación Excel de TrAccion cuando exista.`,
+    );
+  };
+
+  const requestDeleteDraw = (drawId: string) => {
+    setPendingConfirmation({ type: 'delete-draw', drawId });
+  };
+
+  const requestResetAllExclusions = () => {
+    setPendingConfirmation({ type: 'reset-all-exclusions' });
+  };
+
+  const cancelConfirmation = () => {
+    setPendingConfirmation(null);
+  };
+
+  const confirmDeleteDraw = (removeLinkedWinnerExclusions: boolean) => {
+    if (pendingConfirmation?.type !== 'delete-draw') {
+      return;
+    }
+
+    deleteDraw(pendingConfirmation.drawId, removeLinkedWinnerExclusions);
+    setPendingConfirmation(null);
+  };
+
+  const confirmResetAllExclusions = () => {
+    resetAllExclusions();
+    setPendingConfirmation(null);
+  };
+
+  return (
+    <section className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card" id="sorteos">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-metro-red">Sorteos</p>
+          <h2 className="text-xl font-bold text-metro-text">Gestor de sorteos</h2>
+          <p className="mt-0.5 text-sm text-metro-muted">
+            Sorteos sobre la plantilla actual, con exclusiones e histórico persistidos.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <SummaryCard label="Disponibles" value={summary.disponibles} />
+        <SummaryCard label="Excluidos" value={summary.excluidos} />
+        <SummaryCard label="Histórico" value={summary.historico} />
+        <SummaryCard label="Total plantilla" value={summary.totalPlantilla} />
+        <SummaryCard label="Total excluidas" value={summary.totalExcluidas} />
+        <SummaryCard label="Total disponibles" value={summary.totalDisponibles} />
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(280px,0.85fr)_minmax(460px,1.15fr)]">
+        <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+          <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-metro-text">
+            <Gift className="h-4 w-4 text-metro-red" />
+            Crear sorteo
+          </h3>
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-metro-text">
+              Título del sorteo
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => handleDraftChange('title', event.target.value)}
+                value={draft.title}
+              />
+            </label>
+            <label className="block text-sm font-semibold text-metro-text">
+              Fecha del sorteo
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => handleDraftChange('date', event.target.value)}
+                type="date"
+                value={draft.date}
+              />
+            </label>
+            <label className="block text-sm font-semibold text-metro-text">
+              Nº de ganadores
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                min="1"
+                onChange={(event) => handleDraftChange('winnersCount', Number(event.target.value))}
+                type="number"
+                value={draft.winnersCount}
+              />
+            </label>
+            {errors.length > 0 && (
+              <div className="rounded-lg border border-red-300/40 bg-red-500/10 p-2 text-sm text-red-100">
+                <ul className="list-disc space-y-1 pl-4">
+                  {errors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <button
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-600"
+              onClick={handleDraw}
+              type="button"
+            >
+              <Gift className="h-4 w-4" />
+              Sortear
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-bold text-metro-text">Resultado del sorteo</h3>
+              <p className="text-xs text-metro-muted">Se muestra inmediatamente tras sortear o al ver histórico.</p>
+            </div>
+            <button
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!visibleResult}
+              onClick={() => visibleResult && handleExport(visibleResult)}
+              type="button"
+            >
+              <Download className="h-4 w-4" />
+              Exportar
+            </button>
+          </div>
+          {exportNotice && (
+            <p className="mb-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
+              {exportNotice}
+            </p>
+          )}
+          {visibleResult ? (
+            <WinnersTable draw={visibleResult} />
+          ) : (
+            <div className="rounded-xl border border-dashed border-metro-border bg-metro-surface p-6 text-center text-sm text-metro-muted">
+              No hay resultado visible. Realiza un sorteo o pulsa “Ver ganadores” en el histórico.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-metro-border bg-metro-panel">
+        <button
+          className="flex w-full items-center justify-between px-3 py-3 text-left"
+          onClick={() => setExclusionsOpen((open) => !open)}
+          type="button"
+        >
+          <span className="flex items-center gap-2 text-base font-bold text-metro-text">
+            <ShieldMinus className="h-4 w-4 text-metro-red" />
+            Exclusiones
+          </span>
+          {exclusionsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+        {exclusionsOpen && (
+          <div className="space-y-3 border-t border-metro-border p-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.2fr)]">
+              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                <label className="block text-sm font-semibold text-metro-text">
+                  Buscar persona a excluir
+                  <div className="mt-1 flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 focus-within:border-metro-red">
+                    <Search className="h-4 w-4 text-metro-muted" />
+                    <input
+                      className="w-full bg-transparent text-sm text-metro-text outline-none"
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Nº empleado, nombre o apellidos"
+                      value={search}
+                    />
+                  </div>
+                </label>
+                <p className="mt-2 text-xs text-metro-muted">
+                  Introduce al menos {SORTEOS_MIN_SEARCH_LENGTH} caracteres. Se muestran hasta 30 resultados.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {searchResults.map((person) => (
+                    <div
+                      className="flex items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2"
+                      key={person.empleado}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-metro-text">{person.nombreApellidos}</p>
+                        <p className="text-xs text-metro-muted">{person.empleado}</p>
+                      </div>
+                      <button
+                        className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+                        onClick={() => addExclusion(person)}
+                        type="button"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  ))}
+                  {search.length >= SORTEOS_MIN_SEARCH_LENGTH && searchResults.length === 0 && (
+                    <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
+                      No hay resultados disponibles para excluir.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h4 className="text-sm font-bold text-metro-text">Personas excluidas</h4>
+                  <button
+                    className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-bold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={exclusions.length === 0}
+                    onClick={requestResetAllExclusions}
+                    type="button"
+                  >
+                    Resetear todas las exclusiones
+                  </button>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-metro-border">
+                  <table className="w-full table-auto text-left text-sm">
+                    <thead className="bg-metro-panel text-[11px] uppercase tracking-[0.16em] text-metro-muted">
+                      <tr>
+                        <th className="px-3 py-2">Nº empleado</th>
+                        <th className="px-3 py-2">Nombre</th>
+                        <th className="px-3 py-2">Motivo</th>
+                        <th className="px-3 py-2">Fecha</th>
+                        <th className="px-3 py-2">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-metro-border">
+                      {exclusions.map((exclusion) => (
+                        <tr key={exclusion.id}>
+                          <td className="px-3 py-2 text-metro-text">{exclusion.empleado}</td>
+                          <td className="px-3 py-2 text-metro-text">{exclusion.nombreApellidos}</td>
+                          <td className="px-3 py-2 text-metro-muted">{exclusion.reason}</td>
+                          <td className="px-3 py-2 text-metro-muted">{exclusion.excludedAt.slice(0, 10)}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                              onClick={() => removeExclusion(exclusion.id)}
+                              type="button"
+                            >
+                              Quitar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {exclusions.length === 0 && (
+                        <tr>
+                          <td className="px-3 py-4 text-center text-metro-muted" colSpan={5}>
+                            No hay exclusiones registradas.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {pendingConfirmation?.type === 'delete-draw' && (
+        <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-metro-text">
+          <p className="font-semibold">¿Eliminar sorteo?</p>
+          <p className="mt-1 text-metro-muted">
+            Indica si quieres quitar también las exclusiones vinculadas a ganadores de ese sorteo.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+              onClick={() => confirmDeleteDraw(true)}
+              type="button"
+            >
+              Eliminar y quitar exclusiones
+            </button>
+            <button
+              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              onClick={() => confirmDeleteDraw(false)}
+              type="button"
+            >
+              Eliminar solo sorteo
+            </button>
+            <button
+              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              onClick={cancelConfirmation}
+              type="button"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingConfirmation?.type === 'reset-all-exclusions' && (
+        <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-metro-text">
+          <p className="font-semibold">¿Resetear todas las exclusiones?</p>
+          <p className="mt-1 text-metro-muted">Esta acción elimina exclusiones manuales y de ganadores.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+              onClick={confirmResetAllExclusions}
+              type="button"
+            >
+              Resetear todas las exclusiones
+            </button>
+            <button
+              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              onClick={cancelConfirmation}
+              type="button"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-metro-border bg-metro-panel">
+        <button
+          className="flex w-full items-center justify-between px-3 py-3 text-left"
+          onClick={() => setHistoryOpen((open) => !open)}
+          type="button"
+        >
+          <span className="flex items-center gap-2 text-base font-bold text-metro-text">
+            <History className="h-4 w-4 text-metro-red" />
+            Histórico de sorteos
+          </span>
+          {historyOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+        {historyOpen && (
+          <div className="border-t border-metro-border p-3">
+            <div className="overflow-hidden rounded-lg border border-metro-border bg-metro-surface">
+              <table className="w-full table-auto text-left text-sm">
+                <thead className="bg-metro-panel text-[11px] uppercase tracking-[0.16em] text-metro-muted">
+                  <tr>
+                    <th className="px-3 py-2">Sorteo</th>
+                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2">Ganadores</th>
+                    <th className="px-3 py-2">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-metro-border">
+                  {draws.map((draw) => (
+                    <tr key={draw.id}>
+                      <td className="px-3 py-2 font-semibold text-metro-text">{draw.title}</td>
+                      <td className="px-3 py-2 text-metro-muted">{draw.date}</td>
+                      <td className="px-3 py-2 text-metro-muted">{draw.winners.length}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                            onClick={() => viewDraw(draw.id)}
+                            type="button"
+                          >
+                            Ver ganadores
+                          </button>
+                          <button
+                            className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                            onClick={() => handleExport(draw)}
+                            type="button"
+                          >
+                            Exportar
+                          </button>
+                          <button
+                            className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                            onClick={() => resetDrawWinnerExclusions(draw.id)}
+                            type="button"
+                          >
+                            Resetear exclusiones por sorteo
+                          </button>
+                          <button
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-400/40 px-2 py-1 text-xs font-semibold text-red-100 hover:border-red-300"
+                            onClick={() => requestDeleteDraw(draw.id)}
+                            type="button"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {draws.length === 0 && (
+                    <tr>
+                      <td className="px-3 py-4 text-center text-metro-muted" colSpan={4}>
+                        No hay sorteos en el histórico.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}

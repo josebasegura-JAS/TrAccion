@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from './features/especiales/components/EspecialesPage';
 import { PeticionesPage } from './components/PeticionesPage';
+import { SorteosPage } from './features/sorteos/components/SorteosPage';
 import { PlantillaPage } from './components/PlantillaPage';
 import { Sidebar, type AppView } from './components/Sidebar';
 import { TareasPage } from './components/TareasPage';
@@ -48,6 +49,7 @@ export function App() {
           {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
+          {activeView === 'sorteos' && <SorteosPage />}
           {activeView === 'vinculograma' && <VinculogramaPage />}
           {activeView === 'especiales' && <EspecialesPage />}
           {activeView === 'ajustes' && <AjustesPage />}
