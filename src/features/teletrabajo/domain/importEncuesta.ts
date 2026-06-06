@@ -67,7 +67,7 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]>
       'persona',
     ],
   ],
-  ['respuesta', ['respuesta']],
+  ['respuesta', ['respuesta', 'selecciona si vas a teletrabajar', 'vas a teletrabajar']],
   [
     'tipoSolicitud',
     ['tipo solicitud', 'tipo', 'nueva renovacion', 'nueva renovación', 'renovación', 'renovacion'],
@@ -85,7 +85,17 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]>
     ],
   ],
   ['periodo', ['periodo', 'período', 'campaña', 'campana', 'curso']],
-  ['observaciones', ['aportaciones', 'observaciones', 'comentario', 'comentarios', 'notas']],
+  [
+    'observaciones',
+    [
+      'aportaciones',
+      'observaciones',
+      'comentario',
+      'comentarios',
+      'notas',
+      'si has respondido anteriormente que si por favor escribe brevemente que tipo de teletrabajo solicitas tiempo si te quieres acoger al teletrabajo por el periodo completo solo unos meses cuales semanas etc dias martes y jueves solo martes solo jueves o solo miercoles gracias por tu colaboracion',
+    ],
+  ],
 ];
 
 const FIELD_BY_HEADER = buildFieldByHeader();
@@ -138,9 +148,7 @@ export function rowsToTeletrabajoDrafts(
 
   const headers = rows[headerIndex] ?? [];
   const dataRows = rows.slice(headerIndex + 1);
-  const fieldByColumn = headers.map(
-    (header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null,
-  );
+  const fieldByColumn = headers.map((header) => resolveEncuestaField(header));
   const employeesByEmpleado = new Map(
     employees.map((employee): [string, Employee] => [employee.empleado.trim(), employee]),
   );
@@ -179,6 +187,28 @@ export function rowsToTeletrabajoDrafts(
   });
 
   return { drafts, ignored };
+}
+
+function resolveEncuestaField(header: string): EncuestaField | null {
+  const normalized = normalizeHeader(header);
+  const directField = FIELD_BY_HEADER.get(normalized);
+
+  if (directField) {
+    return directField;
+  }
+
+  if (normalized.includes('selecciona si vas a teletrabajar')) {
+    return 'respuesta';
+  }
+
+  if (
+    normalized.includes('si has respondido anteriormente que si') ||
+    (normalized.includes('tipo de teletrabajo') && normalized.includes('martes'))
+  ) {
+    return 'observaciones';
+  }
+
+  return null;
 }
 
 function readEncuestaRow(

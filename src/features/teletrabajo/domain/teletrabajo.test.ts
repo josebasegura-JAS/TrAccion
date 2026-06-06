@@ -196,6 +196,37 @@ describe('importador de encuesta de teletrabajo', () => {
     });
   });
 
+  it('importa el formato de Microsoft Forms con pregunta y aportaciones largas', () => {
+    const result = importEncuestaRows(
+      [
+        ['', '', '', 'Solicitud Teletrabajo 2026-2027'],
+        ['', '', '', 'Pregunta', 'Aportaciones'],
+        [
+          'Nº. Emp.',
+          'Apellidos y Nombre',
+          'Respuesta/Puntuación',
+          'Selecciona si vas a Teletrabajar',
+          'Si has respondido anteriormente que sí, por favor, escribe brevemente qué tipo de teletrabajo solicitas:\n\nTiempo: Si te quieres acoger al Teletrabajo por el periodo completo, sólo unos meses (cuáles), semanas etc.\n\nDías: martes y jueves, sólo martes, sólo jueves o sólo miércoles.\n\nGracias por tu colaboración.',
+        ],
+        ['1188', 'Persona No', 'Respuesta', 'No', ''],
+        ['', '', 'Punt.', '100', '', '50'],
+        ['678', 'Persona Si', 'Respuesta', 'Sí', 'Teletrabajo por periodo completo, martes y jueves.'],
+        ['', '', 'Punt.', '100', '', '100'],
+      ],
+      [],
+      [],
+    );
+
+    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 3 });
+    expect(result.solicitudes[0]).toMatchObject({
+      empleado: '678',
+      nombreApellidos: 'Persona Si',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes', 'jueves'],
+      observaciones: 'Teletrabajo por periodo completo, martes y jueves.',
+    });
+  });
+
   it('ignora filas auxiliares Punt.', () => {
     const result = importEncuestaRows(
       [
