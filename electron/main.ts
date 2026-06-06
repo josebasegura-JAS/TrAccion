@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -109,106 +110,157 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   return { subject, html, to, cc };
 }
 
-function psLiteral(value: string): string {
-  return `'${String(value || '').replace(/'/g, "''")}'`;
+function powerShellStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
-function buildOutlookDraftPowerShellScript(payload: OutlookDraftPayload): string {
+function vbsStringLiteral(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function buildOutlookDraftPowerShellScript(payloadPath: string): string {
   return [
     "$ErrorActionPreference = 'Stop'",
-    "$outlook = New-Object -ComObject Outlook.Application",
+    `$payload = Get-Content -LiteralPath ${powerShellStringLiteral(payloadPath)} -Raw -Encoding UTF8 | ConvertFrom-Json`,
+    '$outlook = New-Object -ComObject Outlook.Application',
     '$mail = $outlook.CreateItem(0)',
     '$mail.BodyFormat = 2',
-    `$mail.Subject = ${psLiteral(payload.subject)}`,
-    `$mail.To = ${psLiteral(payload.to.join(';'))}`,
-    `$mail.CC = ${psLiteral(payload.cc.join(';'))}`,
-    `$mail.HTMLBody = ${psLiteral(payload.html)}`,
-    '$mail.Display()',
+    '$mail.Subject = [string]$payload.subject',
+    '$mail.To = [string]$payload.to',
+    '$mail.CC = [string]$payload.cc',
+    '$mail.HTMLBody = [string]$payload.html',
+    '$mail.Display() | Out-Null',
     "Write-Output 'OK_DRAFT_DISPLAYED'",
   ].join('\n');
 }
 
-function buildOutlookDraftVbs(payload: OutlookDraftPayload): string {
-  const escapeVbs = (value: string) => String(value || '').replace(/"/g, '""');
+function buildOutlookDraftVbs(payloadPath: string): string {
+  const jsonPath = vbsStringLiteral(payloadPath);
   return [
+    'Option Explicit',
+    'Dim Stream, Json, Payload, OutlookApp, Mail',
+    'Set Stream = CreateObject("ADODB.Stream")',
+    'Stream.Type = 2',
+    'Stream.Charset = "utf-8"',
+    'Stream.Open',
+    `Stream.LoadFromFile ${jsonPath}`,
+    'Json = Stream.ReadText',
+    'Stream.Close',
+    'Set Payload = ParseJsonObject(Json)',
     'Set OutlookApp = CreateObject("Outlook.Application")',
     'Set Mail = OutlookApp.CreateItem(0)',
     'Mail.BodyFormat = 2',
-    `Mail.Subject = "${escapeVbs(payload.subject)}"`,
-    `Mail.To = "${escapeVbs(payload.to.join(';'))}"`,
-    payload.cc.length ? `Mail.CC = "${escapeVbs(payload.cc.join(';'))}"` : '',
-    `Mail.HTMLBody = "${escapeVbs(payload.html)}"`,
+    'Mail.Subject = Payload("subject")',
+    'Mail.To = Payload("to")',
+    'Mail.CC = Payload("cc")',
+    'Mail.HTMLBody = Payload("html")',
     'Mail.Display',
-  ]
-    .filter(Boolean)
-    .join('\r\n');
+    '',
+    'Function ParseJsonObject(ByVal Text)',
+    '  Dim ScriptControl',
+    '  Set ScriptControl = CreateObject("MSScriptControl.ScriptControl")',
+    '  ScriptControl.Language = "JScript"',
+    '  Set ParseJsonObject = ScriptControl.Eval("(" & Text & ")")',
+    'End Function',
+  ].join('\r\n');
+}
+
+async function withOutlookDraftTempFiles<T>(
+  payload: OutlookDraftPayload,
+  extension: 'ps1' | 'vbs',
+  buildScript: (payloadPath: string) => string,
+  runScript: (scriptPath: string) => Promise<T>,
+): Promise<T> {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), 'traccion-especiales-'));
+  const payloadPath = path.join(tempRoot, `${randomUUID()}.json`);
+  const scriptPath = path.join(tempRoot, `${randomUUID()}.${extension}`);
+  const serializedPayload = JSON.stringify({
+    subject: payload.subject,
+    html: payload.html,
+    to: payload.to.join(';'),
+    cc: payload.cc.join(';'),
+  });
+
+  try {
+    await writeFile(payloadPath, serializedPayload, 'utf8');
+    await writeFile(scriptPath, buildScript(payloadPath), 'utf8');
+    return await runScript(scriptPath);
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
 }
 
 async function runOutlookPowerShell(payload: OutlookDraftPayload): Promise<void> {
-  const script = buildOutlookDraftPowerShellScript(payload);
-  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  await withOutlookDraftTempFiles(
+    payload,
+    'ps1',
+    buildOutlookDraftPowerShellScript,
+    async (scriptPath) => {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(
+          'powershell.exe',
+          ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+          { windowsHide: true },
+        );
+        let stderr = '';
+        let stdout = '';
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          child.kill();
+          reject(new Error('Outlook no respondió al intentar crear el borrador.'));
+        }, 15_000);
 
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
-      { windowsHide: true },
-    );
-    let stderr = '';
-    let stdout = '';
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      child.kill();
-      reject(new Error('Outlook no respondió al intentar crear el borrador.'));
-    }, 15_000);
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    child.on('error', (error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on('close', (code) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      if (code === 0 && stdout.includes('OK_DRAFT_DISPLAYED')) {
-        resolve();
-        return;
-      }
-      reject(
-        new Error(
-          stderr.trim() || stdout.trim() || `PowerShell terminó con código ${code ?? 'desconocido'}.`,
-        ),
-      );
-    });
-  });
+        child.stdout.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString('utf8');
+        });
+        child.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString('utf8');
+        });
+        child.on('error', (error) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.on('close', (code) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          if (code === 0 && stdout.includes('OK_DRAFT_DISPLAYED')) {
+            resolve();
+            return;
+          }
+          reject(
+            new Error(
+              stderr.trim() ||
+                stdout.trim() ||
+                `PowerShell terminó con código ${code ?? 'desconocido'}.`,
+            ),
+          );
+        });
+      });
+    },
+  );
 }
 
 async function runOutlookVbs(payload: OutlookDraftPayload): Promise<void> {
-  const stamp = `${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
-  const scriptPath = path.join(tmpdir(), `traccion-especiales-${stamp}.vbs`);
-
-  try {
-    await writeFile(scriptPath, buildOutlookDraftVbs(payload), 'utf8');
+  await withOutlookDraftTempFiles(payload, 'vbs', buildOutlookDraftVbs, async (scriptPath) => {
     await new Promise<void>((resolve, reject) => {
       const child = spawn('cscript.exe', ['//NoLogo', scriptPath], { windowsHide: true });
       let stderr = '';
+      let stdout = '';
 
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
       child.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString('utf8');
       });
@@ -218,12 +270,16 @@ async function runOutlookVbs(payload: OutlookDraftPayload): Promise<void> {
           resolve();
           return;
         }
-        reject(new Error(stderr.trim() || `cscript terminó con código ${code ?? 'desconocido'}.`));
+        reject(
+          new Error(
+            stderr.trim() ||
+              stdout.trim() ||
+              `cscript terminó con código ${code ?? 'desconocido'}.`,
+          ),
+        );
       });
     });
-  } finally {
-    await rm(scriptPath, { force: true });
-  }
+  });
 }
 
 async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
