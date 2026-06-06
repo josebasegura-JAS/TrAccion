@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   buildTicketCalendar,
+  calculateTicketContribution,
   normalizeTicketIsoWeekdays,
   buildTicketPerson,
   splitTicketPersonFullName,
@@ -19,12 +20,14 @@ const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
 const PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
 const CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
+const DEBT_LEDGER_STORAGE_KEY = 'traccion.v1.ticketRestaurante.debtLedger';
 
 interface TicketRestauranteState {
   calendars: TicketCalendar[];
   absences: TicketRestaurantAbsence[];
   people: TicketPerson[];
   config: TicketRestaurantConfig;
+  debtLedger: Record<string, number>;
   load: () => void;
   createCalendar: (draft: TicketCalendarDraft) => string;
   updateCalendar: (id: string, draft: TicketCalendarDraft) => void;
@@ -34,7 +37,10 @@ interface TicketRestauranteState {
   saveAbsences: (absences: TicketRestaurantAbsence[]) => void;
   removeAbsence: (id: string) => void;
   upsertPerson: (draft: TicketPersonDraft) => void;
-  importPeople: (drafts: TicketPeopleImportDraft[]) => { imported: number; createdCalendars: number };
+  importPeople: (drafts: TicketPeopleImportDraft[]) => {
+    imported: number;
+    createdCalendars: number;
+  };
   removePerson: (empleado: string) => void;
   updateConfig: (config: TicketRestaurantConfig) => void;
 }
@@ -110,8 +116,6 @@ function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value i
   return parsed.filter(guard);
 }
 
-
-
 function normalizeStoredTicketCalendar(calendar: TicketCalendar): TicketCalendar {
   return {
     ...calendar,
@@ -120,10 +124,9 @@ function normalizeStoredTicketCalendar(calendar: TicketCalendar): TicketCalendar
 }
 
 function normalizeStoredTicketPerson(person: TicketPerson): TicketPerson {
-  const nombreApellidos = person.nombreApellidos || [person.nombre, person.apellido1, person.apellido2]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
+  const nombreApellidos =
+    person.nombreApellidos ||
+    [person.nombre, person.apellido1, person.apellido2].filter(Boolean).join(' ').trim();
   const splitName = splitTicketPersonFullName(nombreApellidos);
 
   return {
@@ -160,6 +163,46 @@ function readConfig(): TicketRestaurantConfig {
   };
 }
 
+function readDebtLedger(): Record<string, number> {
+  const stored = window.localStorage.getItem(DEBT_LEDGER_STORAGE_KEY);
+  if (!stored) {
+    return {};
+  }
+
+  const parsed: unknown = JSON.parse(stored);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(parsed).filter(
+      (entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] >= 0,
+    ),
+  );
+}
+
+function recalculateDebtLedger(
+  people: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+  absences: readonly TicketRestaurantAbsence[],
+  config: TicketRestaurantConfig,
+): Record<string, number> {
+  const today = new Date();
+  const calculation = calculateTicketContribution(
+    people,
+    calendars,
+    absences,
+    config,
+    today.getFullYear(),
+    today.getMonth() + 1,
+  );
+  return Object.fromEntries(
+    calculation.rows
+      .filter((row) => row.deudaPendiente > 0)
+      .map((row) => [row.empleado, row.deudaPendiente]),
+  );
+}
+
 function persist<T>(storageKey: string, value: T): void {
   window.localStorage.setItem(storageKey, JSON.stringify(value));
 }
@@ -179,20 +222,31 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
   absences: [],
   people: [],
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
+  debtLedger: {},
   load: () => {
     set({
-      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar),
+      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
+        normalizeStoredTicketCalendar,
+      ),
       absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
       people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
+      debtLedger: readDebtLedger(),
     });
   },
   createCalendar: (draft) => {
     const id = createId('ticket-calendar');
     set((state) => {
       const calendars = [...state.calendars, buildTicketCalendar(draft, nowIso(), id)];
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        calendars,
+        state.absences,
+        state.config,
+      );
       persist(CALENDARS_STORAGE_KEY, calendars);
-      return { calendars };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { calendars, debtLedger };
     });
     return id;
   },
@@ -202,8 +256,15 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       const calendars = state.calendars.map((calendar) =>
         calendar.id === id ? buildTicketCalendar(draft, updatedAt, id, calendar) : calendar,
       );
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        calendars,
+        state.absences,
+        state.config,
+      );
       persist(CALENDARS_STORAGE_KEY, calendars);
-      return { calendars };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { calendars, debtLedger };
     });
   },
   toggleCalendarActive: (id) => {
@@ -212,8 +273,15 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       const calendars = state.calendars.map((calendar) =>
         calendar.id === id ? { ...calendar, activo: !calendar.activo, updatedAt } : calendar,
       );
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        calendars,
+        state.absences,
+        state.config,
+      );
       persist(CALENDARS_STORAGE_KEY, calendars);
-      return { calendars };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { calendars, debtLedger };
     });
   },
   removeCalendar: (id) => {
@@ -230,8 +298,10 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
           : person,
       );
       persist(CALENDARS_STORAGE_KEY, calendars);
+      const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
       persist(PEOPLE_STORAGE_KEY, people);
-      return { calendars, people };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { calendars, people, debtLedger };
     });
   },
   toggleDay: (calendarId, fecha) => {
@@ -242,13 +312,29 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
           ? { ...toggleDiaSinTicket(calendar, fecha), updatedAt }
           : calendar,
       );
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        calendars,
+        state.absences,
+        state.config,
+      );
       persist(CALENDARS_STORAGE_KEY, calendars);
-      return { calendars };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { calendars, debtLedger };
     });
   },
   saveAbsences: (absences) => {
-    persist(ABSENCES_STORAGE_KEY, absences);
-    set({ absences });
+    set((state) => {
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        state.calendars,
+        absences,
+        state.config,
+      );
+      persist(ABSENCES_STORAGE_KEY, absences);
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { absences, debtLedger };
+    });
   },
   removeAbsence: (id) => {
     set((state) => {
@@ -256,8 +342,15 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       const absences = state.absences.map((absence) =>
         absence.id === id ? { ...absence, updatedAt, deletedAt: updatedAt } : absence,
       );
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        state.calendars,
+        absences,
+        state.config,
+      );
       persist(ABSENCES_STORAGE_KEY, absences);
-      return { absences };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { absences, debtLedger };
     });
   },
   upsertPerson: (draft) => {
@@ -269,8 +362,15 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
             person.empleado === draft.empleado ? buildTicketPerson(draft, now, person) : person,
           )
         : [...state.people, buildTicketPerson(draft, now)];
+      const debtLedger = recalculateDebtLedger(
+        people,
+        state.calendars,
+        state.absences,
+        state.config,
+      );
       persist(PEOPLE_STORAGE_KEY, people);
-      return { people };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { people, debtLedger };
     });
   },
 
@@ -313,20 +413,38 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
 
       const people = Array.from(peopleByEmployee.values());
       persist(CALENDARS_STORAGE_KEY, calendars);
+      const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
       persist(PEOPLE_STORAGE_KEY, people);
-      return { calendars, people };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { calendars, people, debtLedger };
     });
     return result;
   },
   removePerson: (empleado) => {
     set((state) => {
       const people = state.people.filter((person) => person.empleado !== empleado);
+      const debtLedger = recalculateDebtLedger(
+        people,
+        state.calendars,
+        state.absences,
+        state.config,
+      );
       persist(PEOPLE_STORAGE_KEY, people);
-      return { people };
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { people, debtLedger };
     });
   },
   updateConfig: (config) => {
-    persist(CONFIG_STORAGE_KEY, config);
-    set({ config });
+    set((state) => {
+      const debtLedger = recalculateDebtLedger(
+        state.people,
+        state.calendars,
+        state.absences,
+        config,
+      );
+      persist(CONFIG_STORAGE_KEY, config);
+      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
+      return { config, debtLedger };
+    });
   },
 }));
