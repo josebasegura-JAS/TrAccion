@@ -132,6 +132,25 @@ describe('ticket restaurante domain', () => {
     ).toEqual([]);
   });
 
+  it('no calcula descuento para una ausencia de una persona sin calendario asignado', () => {
+    const calendars = [
+      buildCalendar({
+        diasTicket: [{ fecha: '2026-01-02', tieneTicket: true }],
+      }),
+    ];
+    const employees = [buildEmployee({ empleado: '1001', nombreApellidos: 'Persona Uno' })];
+
+    expect(
+      calculateDerechosTicketMes({
+        assignments: [],
+        calendars,
+        employees,
+        month: '2026-01',
+        ausencias: [buildAusencia({ fecha: '2026-01-02' })],
+      }),
+    ).toEqual([]);
+  });
+
   it('cambia el calendario de una persona manteniendo una única asignación', () => {
     const assignments = assignPersonaCalendario(
       [{ empleado: '1001', calendarId: 'calendar-a', createdAt: timestamp }],
