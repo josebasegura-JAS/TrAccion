@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Database,
   FileText,
+  Gift,
   Home,
   Laptop,
   LayoutDashboard,
@@ -32,6 +33,7 @@ export type AppView =
   | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
+  | 'sorteos'
   | 'vinculograma'
   | 'especiales'
   | 'ajustes';
@@ -81,6 +83,7 @@ const navigationGroups: NavigationGroup[] = [
       { label: 'Peticiones', icon: FileText, view: 'peticiones' },
       { label: 'Criterios RRLL', icon: ShieldCheck, view: 'criterios-rrll' },
       { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' },
+      { label: 'Sorteos', icon: Gift, view: 'sorteos' },
       { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
       { label: 'Especiales', icon: MailPlus, view: 'especiales' },
     ],
