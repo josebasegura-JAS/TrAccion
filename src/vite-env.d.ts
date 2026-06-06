@@ -37,12 +37,24 @@ interface TeletrabajoOpenWordResult {
   message: string;
 }
 
+interface TraccionDatabaseLockInfo {
+  ownerId: string;
+  username: string;
+  hostname: string;
+  pid: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface TraccionDatabaseStatus {
   ready: boolean;
   engine: string;
   phase: string;
   path?: string;
   schemaVersion?: number;
+  isDefaultPath?: boolean;
+  lockPath?: string;
+  lock?: TraccionDatabaseLockInfo;
   message?: string;
 }
 
@@ -53,11 +65,16 @@ interface TraccionStorageRecord {
 
 interface TraccionApi {
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
+  selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
+  resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
-  openTeletrabajoWord?: (buffer: ArrayBuffer, fileName: string) => Promise<TeletrabajoOpenWordResult>;
+  openTeletrabajoWord?: (
+    buffer: ArrayBuffer,
+    fileName: string,
+  ) => Promise<TeletrabajoOpenWordResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
   parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
 }

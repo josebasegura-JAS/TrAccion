@@ -1,4 +1,4 @@
-import { FolderOpen, Plus } from 'lucide-react';
+import { Database, FolderOpen, Plus, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
@@ -14,16 +14,73 @@ export function AjustesPage() {
     (state) => state.setRutaPlantillaTeletrabajo,
   );
   const [status, setStatus] = useState('');
+  const [databaseStatus, setDatabaseStatus] = useState<TraccionDatabaseStatus | null>(null);
+  const [databaseActionStatus, setDatabaseActionStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    window.traccion
+      ?.databaseStatus()
+      .then(setDatabaseStatus)
+      .catch(() => {
+        setDatabaseActionStatus('No se ha podido leer el estado de SQLite.');
+      });
+  }, []);
+
   const handleAddTaskPhase = () => {
     addTaskPhase(newTaskPhase);
     setNewTaskPhase('');
   };
+
+  const handleSelectDatabaseDirectory = async () => {
+    setDatabaseActionStatus('');
+
+    if (!window.traccion?.selectDatabaseDirectory) {
+      setDatabaseActionStatus('El selector de base de datos solo está disponible en escritorio.');
+      return;
+    }
+
+    const nextStatus = await window.traccion.selectDatabaseDirectory();
+    setDatabaseStatus(nextStatus);
+    setDatabaseActionStatus(
+      nextStatus.ready
+        ? 'Ruta SQLite actualizada. Se usará traccion.sqlite dentro de la carpeta elegida.'
+        : (nextStatus.message ?? 'No se ha podido activar la ruta seleccionada.'),
+    );
+  };
+
+  const handleResetDatabaseDirectory = async () => {
+    setDatabaseActionStatus('');
+
+    if (!window.traccion?.resetDatabaseDirectory) {
+      setDatabaseActionStatus(
+        'La restauración de la base de datos solo está disponible en escritorio.',
+      );
+      return;
+    }
+
+    const nextStatus = await window.traccion.resetDatabaseDirectory();
+    setDatabaseStatus(nextStatus);
+    setDatabaseActionStatus(
+      nextStatus.ready
+        ? 'Ruta SQLite por defecto restaurada.'
+        : (nextStatus.message ?? 'No se ha podido restaurar la ruta por defecto.'),
+    );
+  };
+
+  const databasePhaseLabel = databaseStatus?.ready
+    ? 'activa'
+    : databaseStatus?.phase === 'locked'
+      ? 'ocupada'
+      : databaseStatus?.phase === 'fallback'
+        ? 'fallback'
+        : databaseStatus?.phase === 'error'
+          ? 'error'
+          : 'no accesible';
 
   const handleSelectTemplate = async () => {
     setStatus('');
@@ -56,6 +113,69 @@ export function AjustesPage() {
           Configura rutas externas necesarias para generar documentos sin almacenar plantillas
           dentro de TrAccion.
         </p>
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
+          <p className="mt-1 text-sm text-metro-muted">
+            SQLite sigue siendo un espejo de localStorage. Selecciona una carpeta local o
+            compartida; TrAccion usará dentro el fichero traccion.sqlite sin sobrescribir bases
+            existentes.
+          </p>
+        </div>
+
+        <div className="grid gap-3 text-sm text-metro-text md:grid-cols-2">
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+              Ruta activa
+            </p>
+            <p className="mt-1 break-all font-medium">
+              {databaseStatus?.path ?? 'SQLite no inicializado'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+              Estado
+            </p>
+            <p className="mt-1 font-medium">{databasePhaseLabel}</p>
+            <p className="mt-1 text-xs text-metro-muted">
+              {databaseStatus?.isDefaultPath ? 'Ruta por defecto del equipo' : 'Ruta personalizada'}
+            </p>
+          </div>
+        </div>
+
+        {databaseStatus?.lock && (
+          <p className="mt-3 rounded-xl border border-metro-border bg-metro-surface p-3 text-xs text-metro-muted">
+            Lock: {databaseStatus.lock.username}@{databaseStatus.lock.hostname} · PID{' '}
+            {databaseStatus.lock.pid} · {databaseStatus.lock.updatedAt}
+          </p>
+        )}
+
+        {(databaseStatus?.message || databaseActionStatus) && (
+          <p className="mt-3 text-xs font-semibold text-metro-muted">
+            {databaseActionStatus || databaseStatus?.message}
+          </p>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+            onClick={handleSelectDatabaseDirectory}
+            type="button"
+          >
+            <Database size={16} />
+            Seleccionar ubicación
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={handleResetDatabaseDirectory}
+            type="button"
+          >
+            <RotateCcw size={16} />
+            Restaurar ruta por defecto
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
@@ -94,8 +214,8 @@ export function AjustesPage() {
         <div className="mb-4">
           <h3 className="text-base font-bold text-metro-text">Fases de tareas</h3>
           <p className="mt-1 text-sm text-metro-muted">
-            Configura las fases usadas en Tareas. Desactivar una fase evita nuevas selecciones,
-            pero mantiene el histórico y las tareas existentes.
+            Configura las fases usadas en Tareas. Desactivar una fase evita nuevas selecciones, pero
+            mantiene el histórico y las tareas existentes.
           </p>
         </div>
 

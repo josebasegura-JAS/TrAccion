@@ -3,9 +3,12 @@ import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
 import {
+  changeSqliteDirectory,
+  closeSqlitePersistence,
   getSqliteStatus,
   initializeSqlitePersistence,
   migrateLocalStorageSnapshot,
+  resetSqliteDirectory,
   savePersistedRecord,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
@@ -318,7 +321,6 @@ async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult>
   }
 }
 
-
 function normalizeDocxOutputPayload(payload: unknown): { buffer: Buffer; fileName: string } {
   if (!payload || typeof payload !== 'object') {
     throw new Error('Documento Word no válido.');
@@ -382,6 +384,30 @@ function assertDocxPath(filePath: string): void {
 
 function registerIpcHandlers(): void {
   ipcMain.handle('database:status', () => getSqliteStatus());
+
+  ipcMain.handle('database:select-directory', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar carpeta para la base SQLite de TrAccion',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return getSqliteStatus();
+    }
+
+    const selectedDirectory = result.filePaths[0];
+    if (!selectedDirectory) {
+      return getSqliteStatus();
+    }
+
+    return changeSqliteDirectory(selectedDirectory);
+  });
+
+  ipcMain.handle('database:reset-directory', () => resetSqliteDirectory());
 
   ipcMain.handle('database:migrate-local-storage', (_event, payload: unknown) => {
     if (
@@ -470,6 +496,10 @@ app.whenReady().then(async () => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  closeSqlitePersistence().catch(() => undefined);
 });
 
 app.on('window-all-closed', () => {
