@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTicketRestaurantAbsence,
+  buildTicketPerson,
   buildYearCalendar,
+  calculateTicketMonth,
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
   previousCalendarYear,
@@ -115,6 +117,71 @@ const realZerkosRows = [
   ['ZERKOS'],
   ['Página', '1'],
 ];
+
+describe('ticket restaurante calculation domain', () => {
+  it('arrastra deuda cuando no hay tickets suficientes en meses anteriores', () => {
+    const calendar = buildCalendar({
+      diasSinTicket: Array.from(
+        { length: 31 },
+        (_, index) => `2026-01-${String(index + 1).padStart(2, '0')}`,
+      ),
+    });
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const absence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-01-05',
+        hasta: '2026-01-09',
+        motivo: 'IT',
+        totalDias: 5,
+        afectaTicket: true,
+      },
+      timestamp,
+      'absence-1',
+    );
+
+    const january = calculateTicketMonth(
+      [person],
+      [calendar],
+      [absence],
+      { importeTicket: 16, pedidoMensual: 0 },
+      2026,
+      1,
+    );
+    const february = calculateTicketMonth(
+      [person],
+      [calendar],
+      [absence],
+      { importeTicket: 16, pedidoMensual: 0 },
+      2026,
+      2,
+    );
+
+    expect(january.rows[0]).toMatchObject({
+      diasTeoricos: 0,
+      ausenciasMes: 5,
+      deudaEntrante: 0,
+      ausenciasAplicadas: 0,
+      deudaPendiente: 5,
+      ticketsFinales: 0,
+    });
+    expect(february.rows[0]).toMatchObject({
+      deudaEntrante: 5,
+      ausenciasAplicadas: 5,
+      deudaPendiente: 0,
+    });
+  });
+});
 
 describe('ticket restaurante absence importer domain', () => {
   const cleanRows = [

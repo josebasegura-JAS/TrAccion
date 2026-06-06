@@ -155,7 +155,8 @@ export function TicketRestaurantePage() {
     [people],
   );
   const monthCalculation = useMemo(
-    () => calculateTicketMonth(people, calendars, absences, config, calculationYear, calculationMonth),
+    () =>
+      calculateTicketMonth(people, calendars, absences, config, calculationYear, calculationMonth),
     [absences, calendars, calculationMonth, calculationYear, config, people],
   );
   const visibleAbsences = useMemo(
@@ -206,7 +207,11 @@ export function TicketRestaurantePage() {
   };
 
   const savePerson = () => {
-    if (!personDraft.empleado.trim() || !personDraft.nombreApellidos.trim() || !personDraft.calendarId) {
+    if (
+      !personDraft.empleado.trim() ||
+      !personDraft.nombreApellidos.trim() ||
+      !personDraft.calendarId
+    ) {
       return;
     }
 
@@ -790,7 +795,6 @@ function EmptyCalendar() {
   );
 }
 
-
 function PeoplePanel({
   calendars,
   draft,
@@ -921,12 +925,17 @@ function PeoplePanel({
             </thead>
             <tbody className="divide-y divide-metro-border text-metro-text">
               {people.map((person) => (
-                <tr className="hover:bg-metro-surface" key={person.empleado} onDoubleClick={() => onEdit(person)}>
+                <tr
+                  className="hover:bg-metro-surface"
+                  key={person.empleado}
+                  onDoubleClick={() => onEdit(person)}
+                >
                   <td className="px-2 py-1 font-semibold">{person.empleado}</td>
                   <td className="px-2 py-1">{person.nombreApellidos}</td>
                   <td className="px-2 py-1">{person.puesto}</td>
                   <td className="px-2 py-1">
-                    {calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? 'Sin calendario'}
+                    {calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ??
+                      'Sin calendario'}
                   </td>
                   <td className="px-2 py-1">{person.activo ? 'Activo' : 'Inactivo'}</td>
                   <td className="px-2 py-1">
@@ -990,7 +999,7 @@ function CalculationPanel({
             Cálculo mensual
           </h3>
           <p className="text-xs text-metro-muted">
-            Calcula tickets teóricos menos días sin ticket y ausencias que afectan al ticket.
+            Calcula tickets teóricos, ausencias del mes y deuda arrastrada pendiente.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
@@ -1046,10 +1055,13 @@ function CalculationPanel({
           </label>
         </div>
       </div>
-      <div className="mb-2 grid gap-2 md:grid-cols-5">
+      <div className="mb-2 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
         <CalculationKpi label="Personas" value={calculation.totals.personas} />
         <CalculationKpi label="Días teóricos" value={calculation.totals.diasTeoricos} />
-        <CalculationKpi label="Ausencias" value={calculation.totals.ausenciasAplicadas} />
+        <CalculationKpi label="Ausencias mes" value={calculation.totals.ausenciasMes} />
+        <CalculationKpi label="Deuda entrante" value={calculation.totals.deudaEntrante} />
+        <CalculationKpi label="Descontado" value={calculation.totals.ausenciasAplicadas} />
+        <CalculationKpi label="Deuda pendiente" value={calculation.totals.deudaPendiente} />
         <CalculationKpi label="Tickets finales" value={calculation.totals.ticketsFinales} />
         <CalculationKpi label="Importe" value={`${calculation.totals.importe.toFixed(2)} €`} />
       </div>
@@ -1062,7 +1074,10 @@ function CalculationPanel({
               <th className="px-2 py-1">calendario</th>
               <th className="px-2 py-1 text-right">teóricos</th>
               <th className="px-2 py-1 text-right">sin ticket</th>
-              <th className="px-2 py-1 text-right">ausencias</th>
+              <th className="px-2 py-1 text-right">aus. mes</th>
+              <th className="px-2 py-1 text-right">deuda ent.</th>
+              <th className="px-2 py-1 text-right">descontado</th>
+              <th className="px-2 py-1 text-right">pendiente</th>
               <th className="px-2 py-1 text-right">tickets</th>
               <th className="px-2 py-1 text-right">importe</th>
             </tr>
@@ -1075,14 +1090,19 @@ function CalculationPanel({
                 <td className="px-2 py-1">{row.calendario}</td>
                 <td className="px-2 py-1 text-right">{row.diasTeoricos}</td>
                 <td className="px-2 py-1 text-right">{row.diasSinTicket}</td>
+                <td className="px-2 py-1 text-right">{row.ausenciasMes}</td>
+                <td className="px-2 py-1 text-right">{row.deudaEntrante}</td>
                 <td className="px-2 py-1 text-right">{row.ausenciasAplicadas}</td>
+                <td className="px-2 py-1 text-right font-semibold text-metro-red">
+                  {row.deudaPendiente}
+                </td>
                 <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
                 <td className="px-2 py-1 text-right">{row.importe.toFixed(2)} €</td>
               </tr>
             ))}
             {calculation.rows.length === 0 ? (
               <tr>
-                <td className="px-2 py-4 text-center text-metro-muted" colSpan={8}>
+                <td className="px-2 py-4 text-center text-metro-muted" colSpan={11}>
                   No hay personas activas para calcular.
                 </td>
               </tr>
@@ -1210,7 +1230,7 @@ function AbsencesTable({
             ))}
             {absences.length === 0 ? (
               <tr>
-                <td className="px-2 py-4 text-center text-metro-muted" colSpan={8}>
+                <td className="px-2 py-4 text-center text-metro-muted" colSpan={11}>
                   No hay ausencias guardadas.
                 </td>
               </tr>
