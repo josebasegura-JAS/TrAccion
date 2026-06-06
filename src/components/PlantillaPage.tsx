@@ -1,6 +1,7 @@
-import { FileUp, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { FileUp, Languages, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
+import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
@@ -39,6 +40,7 @@ export function PlantillaPage() {
   const { employees, filters, importExcel, load, remove, selectEmployee, setFilter } =
     useEmployeeStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
+  const [isTranslationsModalOpen, setTranslationsModalOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'empleado', direction: 'asc' });
   const [importMessage, setImportMessage] = useState('');
@@ -129,6 +131,13 @@ export function PlantillaPage() {
             ref={fileInputRef}
             type="file"
           />
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => setTranslationsModalOpen(true)}
+            type="button"
+          >
+            <Languages size={16} /> Traducir puestos
+          </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
             onClick={() => fileInputRef.current?.click()}
@@ -264,6 +273,10 @@ export function PlantillaPage() {
 
       {editorMode && (
         <EmployeeEditor employee={editorEmployee} mode={editorMode} onDone={closeEditor} />
+      )}
+
+      {isTranslationsModalOpen && (
+        <JobPositionTranslationsModal onClose={() => setTranslationsModalOpen(false)} />
       )}
     </section>
   );

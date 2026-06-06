@@ -3,20 +3,25 @@ import { mockEmployees } from '../../../data/mockEmployees';
 import { hydrateEmployee } from '../domain/derived';
 import { EMPTY_EMPLOYEE_FILTERS, filterEmployees, type EmployeeFilters } from '../domain/filters';
 import { importEmployeesFromFile } from '../domain/importExcel';
+import { importJobPositionTranslationsFromFile } from '../domain/importJobPositionTranslations';
+import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft } from '../domain/employee';
 
 const STORAGE_KEY = 'traccion.v1.plantilla.employees';
+const JOB_POSITION_TRANSLATIONS_STORAGE_KEY = 'traccion.v1.plantilla.jobPositionTranslations';
 
 interface EmployeeState {
   employees: Employee[];
   selectedEmployeeId: string;
   filters: EmployeeFilters;
+  jobPositionTranslations: JobPositionTranslation[];
   load: () => void;
   save: () => void;
   create: (draft: EmployeeDraft) => void;
   update: (empleado: string, draft: EmployeeDraft) => void;
   remove: (empleado: string) => void;
   importExcel: (file: File) => Promise<void>;
+  importJobPositionTranslations: (file: File) => Promise<number>;
   selectEmployee: (employeeId: string) => void;
   setFilter: <K extends keyof EmployeeFilters>(key: K, value: EmployeeFilters[K]) => void;
 }
@@ -48,6 +53,53 @@ function persistEmployees(employees: Employee[]): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
 }
 
+function isJobPositionTranslation(value: unknown): value is JobPositionTranslation {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof JobPositionTranslation, unknown>>;
+  return typeof candidate.puestoCastellano === 'string' && typeof candidate.puestoEuskera === 'string';
+}
+
+function readJobPositionTranslations(): JobPositionTranslation[] {
+  const stored = window.localStorage.getItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY);
+  if (!stored) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(stored);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed.filter(isJobPositionTranslation);
+}
+
+function persistJobPositionTranslations(translations: JobPositionTranslation[]): void {
+  window.localStorage.setItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, JSON.stringify(translations));
+}
+
+function upsertJobPositionTranslations(
+  current: JobPositionTranslation[],
+  imported: JobPositionTranslation[],
+): JobPositionTranslation[] {
+  const translationsByPosition = new Map(
+    current.map((translation) => [normalizeJobPosition(translation.puestoCastellano), translation]),
+  );
+
+  imported.forEach((translation) => {
+    translationsByPosition.set(normalizeJobPosition(translation.puestoCastellano), translation);
+  });
+
+  return Array.from(translationsByPosition.values()).sort((first, second) =>
+    first.puestoCastellano.localeCompare(second.puestoCastellano, 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    }),
+  );
+}
+
 function upsertEmployees(current: Employee[], drafts: EmployeeDraft[]): Employee[] {
   const employeesById = new Map(current.map((employee) => [employee.empleado, employee]));
 
@@ -67,9 +119,11 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   employees: mockEmployees,
   selectedEmployeeId: firstVisibleEmployeeId(mockEmployees),
   filters: EMPTY_EMPLOYEE_FILTERS,
+  jobPositionTranslations: [],
   load: () => {
     const employees = readEmployees();
-    set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+    const jobPositionTranslations = readJobPositionTranslations();
+    set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees) });
   },
   save: () => persistEmployees(get().employees),
   create: (draft) => {
@@ -104,6 +158,18 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       persistEmployees(employees);
       return { employees, selectedEmployeeId: firstVisibleEmployeeId(employees) };
     });
+  },
+  importJobPositionTranslations: async (file) => {
+    const importedTranslations = await importJobPositionTranslationsFromFile(file);
+    set((state) => {
+      const jobPositionTranslations = upsertJobPositionTranslations(
+        state.jobPositionTranslations,
+        importedTranslations,
+      );
+      persistJobPositionTranslations(jobPositionTranslations);
+      return { jobPositionTranslations };
+    });
+    return importedTranslations.length;
   },
   selectEmployee: (employeeId) => set({ selectedEmployeeId: employeeId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),
