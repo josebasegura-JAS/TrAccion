@@ -69,13 +69,13 @@ export function PeticionEditor({
   const canSubmit = draft.titulo.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-[1px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-[1px]">
       <aside
         aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-[#FAFBFC] p-3 shadow-2xl"
+        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
         role="dialog"
       >
-        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-white px-3 py-2">
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
               {isCreate ? 'Nueva petición' : 'Editar petición'}
@@ -89,7 +89,7 @@ export function PeticionEditor({
           </div>
           <button
             aria-label="Cerrar editor"
-            className="rounded-lg border border-metro-border bg-white p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
             onClick={onDone}
             type="button"
           >
@@ -119,7 +119,7 @@ export function PeticionEditor({
               <label className="text-xs font-semibold text-metro-muted" key={field}>
                 {label}
                 <input
-                  className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, [field]: event.target.value }))
                   }
@@ -132,7 +132,7 @@ export function PeticionEditor({
             <label className="text-xs font-semibold text-metro-muted">
               Estado
               <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -151,7 +151,7 @@ export function PeticionEditor({
             <label className="text-xs font-semibold text-metro-muted">
               Prioridad
               <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -170,7 +170,7 @@ export function PeticionEditor({
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
               Descripción
               <textarea
-                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, descripcion: event.target.value }))
                 }
@@ -178,7 +178,7 @@ export function PeticionEditor({
               />
             </label>
 
-            <section className="sm:col-span-2 rounded-xl border border-metro-border bg-white p-3">
+            <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-metro-text">Seguimiento</h4>
                 {!isCreate && peticion && (
@@ -190,7 +190,7 @@ export function PeticionEditor({
               <label className="text-xs font-semibold text-metro-muted">
                 Añadir seguimiento
                 <textarea
-                  className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                   onChange={(event) => setNewUpdateText(event.target.value)}
                   placeholder="Registrar seguimiento..."
                   value={newUpdateText}
@@ -220,7 +220,7 @@ export function PeticionEditor({
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
               Observaciones
               <textarea
-                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, observaciones: event.target.value }))
                 }
@@ -239,7 +239,7 @@ export function PeticionEditor({
             </button>
             {!isCreate && peticion && (
               <button
-                className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
                 onClick={() => {
                   removePeticion(peticion.id);
                   onDone();
@@ -250,7 +250,7 @@ export function PeticionEditor({
               </button>
             )}
             <button
-              className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
+              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
               onClick={onDone}
               type="button"
             >

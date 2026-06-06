@@ -301,7 +301,7 @@ export function TicketRestaurantePage() {
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="ticket-restaurante"
     >
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -345,7 +345,7 @@ export function TicketRestaurantePage() {
               <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
                 Nombre
                 <input
-                  className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
                   onChange={(event) =>
                     setCalendarDraft((current) => ({ ...current, nombre: event.target.value }))
                   }
@@ -364,7 +364,7 @@ export function TicketRestaurantePage() {
                 />
                 Calendario activo
               </label>
-              <div className="rounded-xl border border-metro-border bg-white p-3">
+              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Días con derecho
                 </p>
@@ -388,7 +388,7 @@ export function TicketRestaurantePage() {
                     Tiene ticket
                   </label>
                   <button
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
                     onClick={addRule}
                     type="button"
                   >
@@ -397,14 +397,14 @@ export function TicketRestaurantePage() {
                 </div>
                 <div className="mt-3 max-h-48 overflow-auto rounded-lg border border-metro-border">
                   <table className="min-w-full table-fixed text-left text-xs">
-                    <thead className="sticky top-0 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+                    <thead className="sticky top-0 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
                       <tr>
                         <th className="px-3 py-2">Fecha</th>
                         <th className="px-3 py-2">Tiene ticket</th>
                         <th className="px-3 py-2 text-right">Acciones</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-metro-border bg-white">
+                    <tbody className="divide-y divide-metro-border bg-metro-surface">
                       {calendarDraft.diasTicket.map((rule) => (
                         <tr key={rule.fecha}>
                           <td className="px-3 py-1.5 font-semibold text-metro-text">
@@ -437,7 +437,7 @@ export function TicketRestaurantePage() {
                   <Save size={16} /> Guardar
                 </button>
                 <button
-                  className="rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                  className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
                   onClick={resetCalendarForm}
                   type="button"
                 >
@@ -457,7 +457,7 @@ export function TicketRestaurantePage() {
 
       {section === 'asignaciones' && (
         <div className="space-y-3">
-          <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto]">
+          <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto]">
             <SelectBox label="Persona" onChange={setSelectedEmpleado} value={selectedEmpleado}>
               {employees.map((employee) => (
                 <option key={employee.empleado} value={employee.empleado}>
@@ -495,11 +495,11 @@ export function TicketRestaurantePage() {
 
       {section === 'derechos' && (
         <div className="space-y-3">
-          <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:grid-cols-[220px_1fr]">
+          <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[220px_1fr]">
             <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
               Mes
               <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => setMonth(event.target.value)}
                 type="month"
                 value={month}
@@ -516,9 +516,9 @@ export function TicketRestaurantePage() {
 
       {section === 'ausencias' && (
         <div className="space-y-3">
-          <div className="flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="grid flex-1 gap-2 lg:grid-cols-[minmax(220px,1fr)_180px]">
-              <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
+              <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
                 <Search size={16} className="text-metro-red" />
                 <input
                   className="w-full bg-transparent text-metro-text outline-none"
@@ -614,10 +614,10 @@ function AusenciaEditorModal({
   onSave: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-[1px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-[1px]">
       <div
         aria-modal="true"
-        className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+        className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
         role="dialog"
       >
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -653,7 +653,7 @@ function AusenciaEditorModal({
           <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
             Fecha
             <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
               onChange={(event) => onChange({ ...draft, fecha: event.target.value })}
               type="date"
               value={draft.fecha}
@@ -686,7 +686,7 @@ function AusenciaEditorModal({
           <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
             Observaciones
             <textarea
-              className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
+              className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
               onChange={(event) => onChange({ ...draft, observaciones: event.target.value })}
               placeholder="Observaciones"
               value={draft.observaciones}
@@ -694,7 +694,7 @@ function AusenciaEditorModal({
           </label>
           <div className="flex flex-wrap justify-end gap-2 border-t border-metro-border pt-3">
             <button
-              className="rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
               onClick={onCancel}
               type="button"
             >
@@ -728,7 +728,7 @@ function SectionButton({
       className={
         active
           ? 'rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark'
-          : 'rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red'
+          : 'rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red'
       }
       onClick={onClick}
       type="button"
@@ -752,7 +752,7 @@ function SelectBox({
   return (
     <select
       aria-label={label}
-      className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
       onChange={(event) => onChange(event.target.value)}
       value={value}
     >
@@ -778,7 +778,7 @@ function CalendarsTable({
       <TableHeader count={calendars.length} icon="calendarios" title="Calendarios" />
       <div className="max-h-[520px] overflow-auto">
         <table className="min-w-[760px] table-fixed text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+          <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
               <th className="w-[240px] px-3 py-2">Nombre</th>
               <th className="w-[95px] px-3 py-2">Activo</th>
@@ -787,9 +787,9 @@ function CalendarsTable({
               <th className="w-[220px] px-3 py-2 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-metro-border bg-white">
+          <tbody className="divide-y divide-metro-border bg-metro-surface">
             {calendars.map((calendar) => (
-              <tr className="hover:bg-red-50/50" key={calendar.id}>
+              <tr className="hover:bg-metro-red/10" key={calendar.id}>
                 <td
                   className="truncate px-3 py-1.5 font-semibold text-metro-text"
                   title={calendar.nombre}
@@ -853,7 +853,7 @@ function AssignmentsTable({
       />
       <div className="max-h-[460px] overflow-auto">
         <table className="min-w-[760px] table-fixed text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+          <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
               <th className="w-[130px] px-3 py-2">Empleado</th>
               <th className="w-[320px] px-3 py-2">Nombre y apellidos</th>
@@ -861,9 +861,9 @@ function AssignmentsTable({
               <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-metro-border bg-white">
+          <tbody className="divide-y divide-metro-border bg-metro-surface">
             {assignments.map((assignment) => (
-              <tr className="hover:bg-red-50/50" key={assignment.empleado}>
+              <tr className="hover:bg-metro-red/10" key={assignment.empleado}>
                 <td className="truncate px-3 py-1.5 font-semibold text-metro-text">
                   {assignment.empleado}
                 </td>
@@ -911,7 +911,7 @@ function AusenciasTable({
       <TableHeader count={ausencias.length} icon="ausencias" title="Ausencias" />
       <div className="max-h-[520px] overflow-auto">
         <table className="min-w-[820px] table-fixed text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+          <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
               <SortableHeader
                 className="w-[120px]"
@@ -956,9 +956,9 @@ function AusenciasTable({
               <th className="w-[160px] px-3 py-2 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-metro-border bg-white">
+          <tbody className="divide-y divide-metro-border bg-metro-surface">
             {ausencias.map((ausencia) => (
-              <tr className="hover:bg-red-50/50" key={ausencia.id}>
+              <tr className="hover:bg-metro-red/10" key={ausencia.id}>
                 <td className="truncate px-3 py-1.5 font-semibold text-metro-text">
                   {ausencia.empleado}
                 </td>
@@ -1009,7 +1009,7 @@ function RightsTable({
       <TableHeader count={rights.length} icon="derechos" title="Derechos mensuales" />
       <div className="max-h-[460px] overflow-auto">
         <table className="min-w-[760px] table-fixed text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+          <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
               <SortableHeader
                 className="w-[130px]"
@@ -1061,9 +1061,9 @@ function RightsTable({
               </SortableHeader>
             </tr>
           </thead>
-          <tbody className="divide-y divide-metro-border bg-white">
+          <tbody className="divide-y divide-metro-border bg-metro-surface">
             {rights.map((right) => (
-              <tr className="hover:bg-red-50/50" key={right.empleado}>
+              <tr className="hover:bg-metro-red/10" key={right.empleado}>
                 <td className="truncate px-3 py-1.5 font-semibold text-metro-text">
                   {right.empleado}
                 </td>
@@ -1089,7 +1089,7 @@ function RightsTable({
 
 function TableHeader({ count, icon, title }: { count: number; icon: string; title: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-metro-border bg-white px-3 py-2">
+    <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
       <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
         {icon === 'calendarios' && <CalendarDays size={16} className="text-metro-red" />}
         {icon === 'asignaciones' && <UsersRound size={16} className="text-metro-red" />}
@@ -1097,7 +1097,7 @@ function TableHeader({ count, icon, title }: { count: number; icon: string; titl
         {icon === 'ausencias' && <CalendarDays size={16} className="text-metro-red" />}
         {title}
       </div>
-      <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-metro-dark">
+      <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
         {count} registros
       </span>
     </div>

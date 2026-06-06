@@ -70,13 +70,13 @@ export function EmployeeEditor({
   const canSubmit = draft.empleado.trim() && draft.nombreApellidos.trim();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-[1px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-[1px]">
       <aside
         aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-[#FAFBFC] p-3 shadow-2xl"
+        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
         role="dialog"
       >
-        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-white px-3 py-2">
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
               {isCreate ? 'Nueva persona' : 'Editar persona'}
@@ -92,7 +92,7 @@ export function EmployeeEditor({
           </div>
           <button
             aria-label="Cerrar editor"
-            className="rounded-lg border border-metro-border bg-white p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
             onClick={onDone}
             type="button"
           >
@@ -127,7 +127,7 @@ export function EmployeeEditor({
                   {label}
                   <input
                     className={`mt-1 w-full rounded-lg border border-metro-border px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red ${
-                      isReadOnlyKey ? 'bg-metro-surface text-metro-muted' : 'bg-white'
+                      isReadOnlyKey ? 'bg-metro-surface text-metro-muted' : 'bg-metro-surface'
                     }`}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, [field]: event.target.value }))
@@ -147,7 +147,7 @@ export function EmployeeEditor({
           </div>
 
           {!isCreate && employee && (
-            <section className="rounded-lg border border-metro-border bg-white p-3 text-xs text-metro-muted">
+            <section className="rounded-lg border border-metro-border bg-metro-surface p-3 text-xs text-metro-muted">
               <p className="mb-2 font-semibold uppercase tracking-wide text-metro-text">
                 Campos derivados
               </p>
@@ -184,7 +184,7 @@ export function EmployeeEditor({
             </button>
             {!isCreate && employee && (
               <button
-                className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
                 onClick={() => {
                   removeEmployee(employee.empleado);
                   onDone();
@@ -195,7 +195,7 @@ export function EmployeeEditor({
               </button>
             )}
             <button
-              className="rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
+              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
               onClick={onDone}
               type="button"
             >

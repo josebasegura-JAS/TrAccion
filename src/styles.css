@@ -3,19 +3,43 @@
 @tailwind utilities;
 
 :root {
-  color: #1e2a3d;
-  background: #d9edf2;
+  --app-bg: #374151;
+  --sidebar-bg: #08111f;
+  --sidebar-bg-soft: #0f172a;
+  --topbar-bg: #0b1324;
+  --surface: #1f2937;
+  --surface-soft: #243244;
+  --surface-raised: #273548;
+  --border: #334155;
+  --border-soft: rgba(148, 163, 184, 0.18);
+  --text-primary: #f3f4f6;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --accent-red: #dc2626;
+  --accent-red-soft: rgba(220, 38, 38, 0.14);
+  --accent-blue: #3b82f6;
+  --accent-green: #22c55e;
+  --accent-amber: #f59e0b;
+  color: var(--text-primary);
+  background: var(--app-bg);
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--app-bg);
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: #d9edf2;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 32rem),
+    linear-gradient(135deg, #374151 0%, #273548 48%, #1f2937 100%);
 }
 
 button,
@@ -23,4 +47,41 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(148, 163, 184, 0.72);
+}
+
+button,
+input,
+select,
+textarea,
+a {
+  outline-color: var(--accent-red);
+}
+
+::selection {
+  background: var(--accent-red-soft);
+  color: var(--text-primary);
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.36);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.32);
+  border: 2px solid rgba(15, 23, 42, 0.36);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }

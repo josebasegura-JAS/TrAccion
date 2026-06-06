@@ -18,12 +18,12 @@ import {
 import { useEspecialesStore } from '../store/useEspecialesStore';
 
 const inputClass =
-  'mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red';
+  'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red';
 const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-metro-muted';
 const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:bg-metro-secondary';
 const secondaryButtonClass =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red disabled:cursor-not-allowed disabled:text-metro-secondary';
+  'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red disabled:cursor-not-allowed disabled:text-metro-secondary';
 
 function toRecipientDraft(recipient: EspecialRecipient): EspecialRecipientDraft {
   return {
@@ -40,7 +40,8 @@ function sortRecipients(items: EspecialRecipient[]): EspecialRecipient[] {
 }
 
 export function EspecialesPage() {
-  const { recipients, load, createRecipient, updateRecipient, removeRecipient } = useEspecialesStore();
+  const { recipients, load, createRecipient, updateRecipient, removeRecipient } =
+    useEspecialesStore();
   const [serviceDraft, setServiceDraft] = useState<EspecialServiceDraft>(
     EMPTY_ESPECIAL_SERVICE_DRAFT,
   );
@@ -160,7 +161,9 @@ export function EspecialesPage() {
       setMsgStatus('Mensaje importado correctamente');
       setMsgStatusIsError(false);
     } else if (parsed.partial) {
-      setMsgStatus('Mensaje importado parcialmente. Revisa los campos antes de generar el borrador.');
+      setMsgStatus(
+        'Mensaje importado parcialmente. Revisa los campos antes de generar el borrador.',
+      );
       setMsgStatusIsError(true);
     } else {
       setMsgStatus('No se ha podido interpretar el mensaje.');
@@ -218,7 +221,7 @@ export function EspecialesPage() {
 
   return (
     <section className="space-y-4" id="especiales">
-      <div className="rounded-2xl border border-metro-border bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
@@ -237,7 +240,9 @@ export function EspecialesPage() {
               type="button"
             >
               <MailPlus size={16} />
-              {isGeneratingDraft ? 'Generando borrador en Outlook...' : 'Generar borrador en Outlook'}
+              {isGeneratingDraft
+                ? 'Generando borrador en Outlook...'
+                : 'Generar borrador en Outlook'}
             </button>
             <button className={secondaryButtonClass} onClick={resetForm} type="button">
               <RotateCcw size={16} /> Limpiar formulario
@@ -249,7 +254,9 @@ export function EspecialesPage() {
           <div className="space-y-4">
             <div
               className={`flex min-h-[120px] flex-col items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center text-sm font-semibold transition ${
-                isDropActive ? 'border-metro-red bg-red-50/70' : 'border-metro-border bg-[#FAFBFC]'
+                isDropActive
+                  ? 'border-metro-red bg-metro-red/10'
+                  : 'border-metro-border bg-metro-panel'
               }`}
               onDragEnter={(event) => {
                 event.preventDefault();
@@ -375,13 +382,13 @@ export function EspecialesPage() {
               </label>
             </div>
 
-            <div className="rounded-2xl border border-metro-border bg-[#FAFBFC] p-4">
+            <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
                 <p className="text-xs font-semibold text-metro-muted">Asunto: {subject}</p>
               </div>
               <div
-                className="min-h-[220px] rounded-xl border border-metro-border bg-white p-4 text-sm text-metro-text"
+                className="min-h-[220px] rounded-xl border border-metro-border bg-metro-surface p-4 text-sm text-metro-text"
                 dangerouslySetInnerHTML={{ __html: previewHtml }}
               />
             </div>
@@ -389,7 +396,7 @@ export function EspecialesPage() {
 
           <aside className="space-y-4">
             {draftUnavailableReason && (
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              <p className="rounded-xl border border-metro-warning/30 bg-metro-warning/10 px-3 py-2 text-xs font-semibold text-amber-200">
                 No disponible: {draftUnavailableReason}.
               </p>
             )}
@@ -407,7 +414,7 @@ export function EspecialesPage() {
               title="Con copia (CC)"
             />
 
-            <div className="rounded-2xl border border-metro-border bg-[#FAFBFC] p-4">
+            <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
               <h3 className="text-base font-bold text-metro-text">Destinatario</h3>
               <div className="mt-3 space-y-3">
                 <label className={labelClass}>
@@ -466,8 +473,8 @@ export function EspecialesPage() {
                   outlookStatusTone === 'success'
                     ? 'bg-green-50 text-metro-success'
                     : outlookStatusTone === 'error'
-                      ? 'bg-red-50 text-metro-red'
-                      : 'bg-[#FAFBFC] text-metro-muted'
+                      ? 'bg-metro-red/10 text-metro-red'
+                      : 'bg-metro-panel text-metro-muted'
                 }`}
               >
                 {outlookStatus}
@@ -492,13 +499,13 @@ function RecipientTable({
   onDelete: (recipientId: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-metro-border bg-[#FAFBFC] p-4">
+    <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
       <h3 className="mb-3 text-base font-bold text-metro-text">
         {title} ({items.length})
       </h3>
-      <div className="overflow-hidden rounded-xl border border-metro-border bg-white">
+      <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
         <table className="w-full text-left text-xs">
-          <thead className="bg-[#F4FAFC] text-metro-muted">
+          <thead className="bg-metro-panel text-metro-muted">
             <tr>
               <th className="px-3 py-2 font-semibold">Nombre</th>
               <th className="px-3 py-2 font-semibold">Email</th>
@@ -514,7 +521,7 @@ function RecipientTable({
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
                       <button
-                        className="rounded-lg border border-metro-border bg-white p-1.5 text-metro-muted hover:border-metro-red hover:text-metro-red"
+                        className="rounded-lg border border-metro-border bg-metro-surface p-1.5 text-metro-muted hover:border-metro-red hover:text-metro-red"
                         onClick={() => onEdit(item)}
                         title="Editar"
                         type="button"
@@ -522,7 +529,7 @@ function RecipientTable({
                         <Save size={14} />
                       </button>
                       <button
-                        className="rounded-lg border border-metro-border bg-white p-1.5 text-metro-muted hover:border-metro-red hover:text-metro-red"
+                        className="rounded-lg border border-metro-border bg-metro-surface p-1.5 text-metro-muted hover:border-metro-red hover:text-metro-red"
                         onClick={() => onDelete(item.id)}
                         title="Eliminar"
                         type="button"

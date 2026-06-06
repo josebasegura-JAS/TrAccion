@@ -136,7 +136,7 @@ export function PeticionesPage() {
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="peticiones"
     >
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -158,8 +158,8 @@ export function PeticionesPage() {
         </div>
       </div>
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
+      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
             className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
@@ -184,17 +184,17 @@ export function PeticionesPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-white px-3 py-2">
+        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Peticiones
           </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-metro-dark">
+          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredPeticiones.length} registros
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
                   const isActive = sortState?.key === column.key;
@@ -217,7 +217,7 @@ export function PeticionesPage() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-metro-border bg-white">
+            <tbody className="divide-y divide-metro-border bg-metro-surface">
               {sortedPeticiones.length === 0 && (
                 <tr>
                   <td className="px-3 py-4 text-center text-sm text-metro-muted" colSpan={7}>
@@ -227,7 +227,7 @@ export function PeticionesPage() {
               )}
               {sortedPeticiones.map((peticion) => (
                 <tr
-                  className="cursor-pointer hover:bg-red-50/50"
+                  className="cursor-pointer hover:bg-metro-red/10"
                   key={peticion.id}
                   onClick={() => openEditor(peticion)}
                 >
@@ -279,19 +279,19 @@ export function PeticionesPage() {
 
       <div className="mt-4 overflow-hidden rounded-xl border border-metro-border">
         <button
-          className="flex w-full items-center justify-between border-b border-metro-border bg-white px-3 py-2 text-left"
+          className="flex w-full items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2 text-left"
           onClick={() => setIsHistoricOpen((current) => !current)}
           type="button"
         >
           <span className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             {isHistoricOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Histórico
           </span>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-metro-dark">
+          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {historicPeticiones.length} registros
           </span>
         </button>
         {isHistoricOpen && (
-          <div className="bg-white">
+          <div className="bg-metro-surface">
             {historicGroups.length === 0 && (
               <p className="px-3 py-3 text-sm text-metro-muted">No hay peticiones cerradas.</p>
             )}
@@ -301,7 +301,7 @@ export function PeticionesPage() {
               return (
                 <div className="border-b border-metro-border last:border-b-0" key={group.year}>
                   <button
-                    className="flex w-full items-center gap-2 bg-[#F9FAFB] px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-red-50/50"
+                    className="flex w-full items-center gap-2 bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
                     onClick={() => toggleHistoricYear(group.year)}
                     type="button"
                   >
@@ -311,7 +311,7 @@ export function PeticionesPage() {
                   {isYearOpen && (
                     <div className="max-h-[320px] overflow-auto">
                       <table className="w-full table-fixed text-left text-xs">
-                        <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+                        <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
                           <tr>
                             {historicColumns.map((column) => {
                               const isActive = historicSortState.key === column.key;
@@ -335,10 +335,10 @@ export function PeticionesPage() {
                             })}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-metro-border bg-white">
+                        <tbody className="divide-y divide-metro-border bg-metro-surface">
                           {group.peticiones.map((peticion) => (
                             <tr
-                              className="cursor-pointer hover:bg-red-50/50"
+                              className="cursor-pointer hover:bg-metro-red/10"
                               key={peticion.id}
                               onClick={() => openEditor(peticion)}
                             >
@@ -400,7 +400,7 @@ function SelectFilter({
   return (
     <select
       aria-label={label}
-      className="rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
       onChange={(event) => onChange(event.target.value)}
       value={value}
     >
