@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Download, Gift, History, Search, ShieldMinus, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Gift,
+  History,
+  Search,
+  ShieldMinus,
+  Trash2,
+} from 'lucide-react';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   buildSorteosSummary,
@@ -26,9 +35,11 @@ function buildDrawExportPreview(draw: SorteosDraw): string {
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-metro-muted">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-metro-text">{value}</p>
+    <div className="min-w-0 rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 shadow-sm">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-metro-muted">
+        {label}
+      </p>
+      <p className="mt-0.5 text-xl font-bold leading-none text-metro-text">{value}</p>
     </div>
   );
 }
@@ -48,7 +59,10 @@ function WinnersTable({ draw }: { draw: SorteosDraw }) {
         </thead>
         <tbody className="divide-y divide-metro-border">
           {draw.winners.map((winner: SorteosWinner) => (
-            <tr className="hover:bg-metro-panel/70" key={`${draw.id}-${winner.position}-${winner.empleado}`}>
+            <tr
+              className="hover:bg-metro-panel/70"
+              key={`${draw.id}-${winner.position}-${winner.empleado}`}
+            >
               <td className="px-3 py-2 font-semibold text-metro-red">{winner.position}</td>
               <td className="px-3 py-2 text-metro-text">{winner.empleado}</td>
               <td className="px-3 py-2 text-metro-text">{winner.nombreApellidos}</td>
@@ -91,7 +105,10 @@ export function SorteosPage() {
   }, [loadEmployees, loadSorteos]);
 
   const people = useMemo(() => normalizeSorteosPeople(employees), [employees]);
-  const summary = useMemo(() => buildSorteosSummary(people, exclusions, draws), [draws, exclusions, people]);
+  const summary = useMemo(
+    () => buildSorteosSummary(people, exclusions, draws),
+    [draws, exclusions, people],
+  );
   const searchResults = useMemo(
     () => searchPeopleForExclusion(people, exclusions, search),
     [exclusions, people, search],
@@ -148,71 +165,51 @@ export function SorteosPage() {
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card" id="sorteos">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-metro-red">Sorteos</p>
-          <h2 className="text-xl font-bold text-metro-text">Gestor de sorteos</h2>
-          <p className="mt-0.5 text-sm text-metro-muted">
-            Sorteos sobre la plantilla actual, con exclusiones e histórico persistidos.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <SummaryCard label="Disponibles" value={summary.disponibles} />
-        <SummaryCard label="Excluidos" value={summary.excluidos} />
-        <SummaryCard label="Histórico" value={summary.historico} />
-        <SummaryCard label="Total plantilla" value={summary.totalPlantilla} />
-        <SummaryCard label="Total excluidas" value={summary.totalExcluidas} />
-        <SummaryCard label="Total disponibles" value={summary.totalDisponibles} />
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-[minmax(280px,0.85fr)_minmax(460px,1.15fr)]">
-        <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
-          <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-metro-text">
-            <Gift className="h-4 w-4 text-metro-red" />
-            Crear sorteo
-          </h3>
-          <div className="space-y-3">
-            <label className="block text-sm font-semibold text-metro-text">
-              Título del sorteo
+    <section
+      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card"
+      id="sorteos"
+    >
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)] xl:items-start">
+        <div className="min-w-0 rounded-xl border border-metro-border bg-metro-panel p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Gift className="h-4 w-4 shrink-0 text-metro-red" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-metro-red">
+                Sorteos
+              </p>
+              <h2 className="truncate text-base font-bold text-metro-text">Crear sorteo</h2>
+            </div>
+          </div>
+          <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(180px,1fr)_minmax(140px,0.45fr)_minmax(96px,0.3fr)_auto] md:items-end">
+            <label className="min-w-0 text-xs font-semibold text-metro-text">
+              Título
               <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => handleDraftChange('title', event.target.value)}
                 value={draft.title}
               />
             </label>
-            <label className="block text-sm font-semibold text-metro-text">
-              Fecha del sorteo
+            <label className="min-w-0 text-xs font-semibold text-metro-text">
+              Fecha
               <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => handleDraftChange('date', event.target.value)}
                 type="date"
                 value={draft.date}
               />
             </label>
-            <label className="block text-sm font-semibold text-metro-text">
-              Nº de ganadores
+            <label className="min-w-0 text-xs font-semibold text-metro-text">
+              Nº ganadores
               <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 min="1"
                 onChange={(event) => handleDraftChange('winnersCount', Number(event.target.value))}
                 type="number"
                 value={draft.winnersCount}
               />
             </label>
-            {errors.length > 0 && (
-              <div className="rounded-lg border border-red-300/40 bg-red-500/10 p-2 text-sm text-red-100">
-                <ul className="list-disc space-y-1 pl-4">
-                  {errors.map((error) => (
-                    <li key={error}>{error}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
             <button
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-600"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 md:w-auto md:self-end"
               onClick={handleDraw}
               type="button"
             >
@@ -220,37 +217,62 @@ export function SorteosPage() {
               Sortear
             </button>
           </div>
+          {errors.length > 0 && (
+            <div className="mt-2 rounded-lg border border-red-300/40 bg-red-500/10 p-2 text-sm text-red-100">
+              <ul className="list-disc space-y-1 pl-4">
+                {errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
-        <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-base font-bold text-metro-text">Resultado del sorteo</h3>
-              <p className="text-xs text-metro-muted">Se muestra inmediatamente tras sortear o al ver histórico.</p>
-            </div>
-            <button
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!visibleResult}
-              onClick={() => visibleResult && handleExport(visibleResult)}
-              type="button"
-            >
-              <Download className="h-4 w-4" />
-              Exportar
-            </button>
-          </div>
-          {exportNotice && (
-            <p className="mb-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
-              {exportNotice}
+        <div className="min-w-0 rounded-xl border border-metro-border bg-metro-panel p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-metro-red">
+              Plantilla / disponibilidad
             </p>
-          )}
-          {visibleResult ? (
-            <WinnersTable draw={visibleResult} />
-          ) : (
-            <div className="rounded-xl border border-dashed border-metro-border bg-metro-surface p-6 text-center text-sm text-metro-muted">
-              No hay resultado visible. Realiza un sorteo o pulsa “Ver ganadores” en el histórico.
-            </div>
-          )}
+          </div>
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-4">
+            <SummaryCard label="Total plantilla" value={summary.totalPlantilla} />
+            <SummaryCard label="Disponibles" value={summary.disponibles} />
+            <SummaryCard label="Excluidos" value={summary.excluidos} />
+            <SummaryCard label="Histórico" value={summary.historico} />
+          </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-bold text-metro-text">Resultado del sorteo</h3>
+            <p className="text-xs text-metro-muted">
+              Se muestra inmediatamente tras sortear o al ver histórico.
+            </p>
+          </div>
+          <button
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!visibleResult}
+            onClick={() => visibleResult && handleExport(visibleResult)}
+            type="button"
+          >
+            <Download className="h-4 w-4" />
+            Exportar
+          </button>
+        </div>
+        {exportNotice && (
+          <p className="mb-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
+            {exportNotice}
+          </p>
+        )}
+        {visibleResult ? (
+          <WinnersTable draw={visibleResult} />
+        ) : (
+          <div className="rounded-xl border border-dashed border-metro-border bg-metro-surface p-6 text-center text-sm text-metro-muted">
+            No hay resultado visible. Realiza un sorteo o pulsa “Ver ganadores” en el histórico.
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-metro-border bg-metro-panel">
@@ -282,7 +304,8 @@ export function SorteosPage() {
                   </div>
                 </label>
                 <p className="mt-2 text-xs text-metro-muted">
-                  Introduce al menos {SORTEOS_MIN_SEARCH_LENGTH} caracteres. Se muestran hasta 30 resultados.
+                  Introduce al menos {SORTEOS_MIN_SEARCH_LENGTH} caracteres. Se muestran hasta 30
+                  resultados.
                 </p>
                 <div className="mt-3 space-y-2">
                   {searchResults.map((person) => (
@@ -291,7 +314,9 @@ export function SorteosPage() {
                       key={person.empleado}
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-metro-text">{person.nombreApellidos}</p>
+                        <p className="truncate text-sm font-semibold text-metro-text">
+                          {person.nombreApellidos}
+                        </p>
                         <p className="text-xs text-metro-muted">{person.empleado}</p>
                       </div>
                       <button
@@ -340,7 +365,9 @@ export function SorteosPage() {
                           <td className="px-3 py-2 text-metro-text">{exclusion.empleado}</td>
                           <td className="px-3 py-2 text-metro-text">{exclusion.nombreApellidos}</td>
                           <td className="px-3 py-2 text-metro-muted">{exclusion.reason}</td>
-                          <td className="px-3 py-2 text-metro-muted">{exclusion.excludedAt.slice(0, 10)}</td>
+                          <td className="px-3 py-2 text-metro-muted">
+                            {exclusion.excludedAt.slice(0, 10)}
+                          </td>
                           <td className="px-3 py-2">
                             <button
                               className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
@@ -403,7 +430,9 @@ export function SorteosPage() {
       {pendingConfirmation?.type === 'reset-all-exclusions' && (
         <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-metro-text">
           <p className="font-semibold">¿Resetear todas las exclusiones?</p>
-          <p className="mt-1 text-metro-muted">Esta acción elimina exclusiones manuales y de ganadores.</p>
+          <p className="mt-1 text-metro-muted">
+            Esta acción elimina exclusiones manuales y de ganadores.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
