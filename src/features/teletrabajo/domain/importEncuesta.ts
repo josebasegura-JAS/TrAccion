@@ -18,6 +18,7 @@ type TabularRow = string[];
 type EncuestaField =
   | 'empleado'
   | 'nombreApellidos'
+  | 'respuesta'
   | 'tipoSolicitud'
   | 'diasTeletrabajo'
   | 'periodo'
@@ -45,6 +46,8 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]>
     [
       'empleado',
       'nº empleado',
+      'nº emp',
+      'n emp',
       'numero empleado',
       'número empleado',
       'num empleado',
@@ -55,8 +58,16 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]>
   ],
   [
     'nombreApellidos',
-    ['nombreApellidos', 'nombre apellidos', 'nombre y apellidos', 'nombre completo', 'persona'],
+    [
+      'nombreApellidos',
+      'nombre apellidos',
+      'nombre y apellidos',
+      'apellidos y nombre',
+      'nombre completo',
+      'persona',
+    ],
   ],
+  ['respuesta', ['respuesta']],
   [
     'tipoSolicitud',
     ['tipo solicitud', 'tipo', 'nueva renovacion', 'nueva renovación', 'renovación', 'renovacion'],
@@ -74,7 +85,7 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]>
     ],
   ],
   ['periodo', ['periodo', 'período', 'campaña', 'campana', 'curso']],
-  ['observaciones', ['observaciones', 'comentario', 'comentarios', 'notas']],
+  ['observaciones', ['aportaciones', 'observaciones', 'comentario', 'comentarios', 'notas']],
 ];
 
 const FIELD_BY_HEADER = buildFieldByHeader();
@@ -110,7 +121,7 @@ export function importEncuestaRows(
   options: EncuestaParseOptions = {},
 ): ImportEncuestaResult {
   const now = options.now ?? new Date();
-  const defaultPeriodo = options.defaultPeriodo ?? getDefaultPeriodo(now);
+  const defaultPeriodo = options.defaultPeriodo ?? detectPeriodo(rows) ?? '2026-2027';
   const drafts = rowsToTeletrabajoDrafts(rows, employees, defaultPeriodo);
   return upsertEncuestaSolicitudes(currentSolicitudes, drafts, now);
 }
@@ -118,14 +129,18 @@ export function importEncuestaRows(
 export function rowsToTeletrabajoDrafts(
   rows: readonly TabularRow[],
   employees: readonly Employee[],
-  defaultPeriodo = getDefaultPeriodo(new Date()),
+  defaultPeriodo = '2026-2027',
 ): { drafts: TeletrabajoDraft[]; ignored: number } {
-  const [headers, ...dataRows] = rows;
-  if (!headers) {
+  const headerIndex = findEncuestaHeaderIndex(rows);
+  if (headerIndex < 0) {
     return { drafts: [], ignored: 0 };
   }
 
-  const fieldByColumn = headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null);
+  const headers = rows[headerIndex] ?? [];
+  const dataRows = rows.slice(headerIndex + 1);
+  const fieldByColumn = headers.map(
+    (header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null,
+  );
   const employeesByEmpleado = new Map(
     employees.map((employee): [string, Employee] => [employee.empleado.trim(), employee]),
   );
@@ -136,11 +151,12 @@ export function rowsToTeletrabajoDrafts(
     const raw = readEncuestaRow(row, fieldByColumn);
     const empleado = raw.empleado.trim();
 
-    if (!empleado) {
+    if (!empleado || isAuxiliaryRow(row) || !isAffirmativeResponse(raw.respuesta)) {
       ignored += 1;
       return;
     }
 
+    const aportaciones = raw.observaciones.trim();
     const employee = employeesByEmpleado.get(empleado);
     drafts.push({
       ...EMPTY_TELETRABAJO_DRAFT,
@@ -153,9 +169,9 @@ export function rowsToTeletrabajoDrafts(
       direccionTeletrabajo: employee?.direccionTeletrabajo ?? '',
       estado: 'pendiente',
       tipoSolicitud: normalizeTipoSolicitud(raw.tipoSolicitud),
-      diasTeletrabajo: normalizeEncuestaDias(raw.diasTeletrabajo),
+      diasTeletrabajo: normalizeEncuestaDias(`${raw.diasTeletrabajo} ${aportaciones}`),
       periodo: raw.periodo.trim() || defaultPeriodo,
-      observaciones: raw.observaciones.trim(),
+      observaciones: aportaciones,
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
       validacionJefatura: false,
@@ -172,6 +188,7 @@ function readEncuestaRow(
   const values: Record<EncuestaField, string> = {
     empleado: '',
     nombreApellidos: '',
+    respuesta: '',
     tipoSolicitud: '',
     diasTeletrabajo: '',
     periodo: '',
@@ -195,7 +212,10 @@ function upsertEncuestaSolicitudes(
   const now = nowDate.toISOString();
   const solicitudes = [...currentSolicitudes];
   const indexByKey = new Map(
-    solicitudes.map((solicitud, index): [string, number] => [getSolicitudKey(solicitud.empleado, solicitud.periodo), index]),
+    solicitudes.map((solicitud, index): [string, number] => [
+      getSolicitudKey(solicitud.empleado, solicitud.periodo),
+      index,
+    ]),
   );
   let imported = 0;
   let updated = 0;
@@ -242,9 +262,37 @@ function createSolicitudId(): string {
   return `teletrabajo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function getDefaultPeriodo(date: Date): string {
-  const year = date.getFullYear();
-  return `${year}-${year + 1}`;
+function findEncuestaHeaderIndex(rows: readonly TabularRow[]): number {
+  return rows.findIndex((row) => {
+    const fields = new Set(
+      row
+        .map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null)
+        .filter((field): field is EncuestaField => field !== null),
+    );
+
+    return fields.has('empleado') && fields.has('nombreApellidos');
+  });
+}
+
+function detectPeriodo(rows: readonly TabularRow[]): string | null {
+  for (const row of rows) {
+    for (const cell of row) {
+      const match = cell.match(/(20\d{2})\s*[-/]\s*(20\d{2})/);
+      if (match) {
+        return `${match[1]}-${match[2]}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isAffirmativeResponse(value: string): boolean {
+  return normalizeHeader(value) === 'si';
+}
+
+function isAuxiliaryRow(row: readonly string[]): boolean {
+  return row.some((cell) => normalizeHeader(cell) === 'punt');
 }
 
 function normalizeHeader(header: string): string {
@@ -263,30 +311,26 @@ function normalizeHeader(header: string): string {
 function normalizeTipoSolicitud(value: string): TeletrabajoTipoSolicitud {
   const normalized = normalizeHeader(value);
 
-  if (normalized.includes('renovacion')) {
-    return 'renovacion';
-  }
-
   if (normalized.includes('nueva')) {
     return 'nueva';
   }
 
-  return 'nueva';
+  return 'renovacion';
 }
 
 function normalizeEncuestaDias(value: string): TeletrabajoDia[] {
   const normalized = normalizeHeader(value);
   const days: TeletrabajoDia[] = [];
 
-  if (normalized.includes('martes')) {
+  if (/\b(martes|asteartea?)\b/.test(normalized)) {
     days.push('martes');
   }
 
-  if (normalized.includes('miercoles')) {
+  if (/\b(miercoles|asteazkena?)\b/.test(normalized)) {
     days.push('miercoles');
   }
 
-  if (normalized.includes('jueves')) {
+  if (/\b(jueves|osteguna?|ostegunetan)\b/.test(normalized)) {
     days.push('jueves');
   }
 
@@ -422,7 +466,9 @@ async function readZipText(
 async function inflateRaw(data: Uint8Array): Promise<ArrayBuffer> {
   const payload = new Uint8Array(data.byteLength);
   payload.set(data);
-  const stream = new Blob([payload.buffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const stream = new Blob([payload.buffer])
+    .stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'));
   return new Response(stream).arrayBuffer();
 }
 
