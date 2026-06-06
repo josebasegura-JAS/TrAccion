@@ -1,6 +1,7 @@
 import { Database, FolderOpen, Plus, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
+import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 
 export function AjustesPage() {
@@ -14,7 +15,7 @@ export function AjustesPage() {
     (state) => state.setRutaPlantillaTeletrabajo,
   );
   const [status, setStatus] = useState('');
-  const [databaseStatus, setDatabaseStatus] = useState<TraccionDatabaseStatus | null>(null);
+  const databaseStatus = useDatabaseStatus();
   const [databaseActionStatus, setDatabaseActionStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
 
@@ -23,12 +24,9 @@ export function AjustesPage() {
   }, [load]);
 
   useEffect(() => {
-    window.traccion
-      ?.databaseStatus()
-      .then(setDatabaseStatus)
-      .catch(() => {
-        setDatabaseActionStatus('No se ha podido leer el estado de SQLite.');
-      });
+    if (window.location.hash === '#base-de-datos') {
+      document.getElementById('base-de-datos')?.scrollIntoView({ block: 'start' });
+    }
   }, []);
 
   const handleAddTaskPhase = () => {
@@ -45,7 +43,7 @@ export function AjustesPage() {
     }
 
     const nextStatus = await window.traccion.selectDatabaseDirectory();
-    setDatabaseStatus(nextStatus);
+    publishDatabaseStatus(nextStatus);
     setDatabaseActionStatus(
       nextStatus.ready
         ? 'Ruta SQLite actualizada. Se usará traccion.sqlite dentro de la carpeta elegida.'
@@ -64,7 +62,7 @@ export function AjustesPage() {
     }
 
     const nextStatus = await window.traccion.resetDatabaseDirectory();
-    setDatabaseStatus(nextStatus);
+    publishDatabaseStatus(nextStatus);
     setDatabaseActionStatus(
       nextStatus.ready
         ? 'Ruta SQLite por defecto restaurada.'
@@ -115,7 +113,10 @@ export function AjustesPage() {
         </p>
       </div>
 
-      <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+      <div
+        id="base-de-datos"
+        className="mb-4 scroll-mt-6 rounded-2xl border border-metro-border bg-metro-panel p-4"
+      >
         <div className="mb-4">
           <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
           <p className="mt-1 text-sm text-metro-muted">
