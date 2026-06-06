@@ -219,51 +219,50 @@ export function TareasPage() {
         </div>
       </div>
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(135px,0.7fr))]">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-          <Search size={16} />
-          <input
-            className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-            onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por título, descripción, sindicato u origen..."
-            type="search"
-            value={filters.search}
-          />
-        </label>
-        <SelectFilter
-          label="Tipo"
-          onChange={(value) => setFilter('tipo', value as typeof filters.tipo)}
-          options={TASK_TYPES}
-          value={filters.tipo}
-        />
-        <SelectFilter
-          label="Fase"
-          onChange={(value) => setFilter('fase', value)}
-          options={phaseFilterOptions}
-          value={filters.fase}
-        />
-        <SelectFilter
-          label="Estado"
-          onChange={(value) => setFilter('estado', value as typeof filters.estado)}
-          options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
-          value={filters.estado}
-        />
-        <SelectFilter
-          label="Prioridad"
-          onChange={(value) => setFilter('prioridad', value as typeof filters.prioridad)}
-          options={TASK_PRIORITIES}
-          value={filters.prioridad}
-        />
-      </div>
-
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+        <div className="flex flex-col gap-2 border-b border-metro-border bg-metro-surface px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Tareas activas
+            <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
+              {filteredTasks.length} registros
+            </span>
           </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-            {filteredTasks.length} registros
-          </span>
+          <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(210px,1.3fr)_repeat(4,minmax(112px,0.7fr))]">
+            <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-1.5 text-sm text-metro-muted">
+              <Search size={16} />
+              <input
+                className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
+                onChange={(event) => setFilter('search', event.target.value)}
+                placeholder="Buscar..."
+                type="search"
+                value={filters.search}
+              />
+            </label>
+            <SelectFilter
+              label="Tipo"
+              onChange={(value) => setFilter('tipo', value as typeof filters.tipo)}
+              options={TASK_TYPES}
+              value={filters.tipo}
+            />
+            <SelectFilter
+              label="Fase"
+              onChange={(value) => setFilter('fase', value)}
+              options={phaseFilterOptions}
+              value={filters.fase}
+            />
+            <SelectFilter
+              label="Estado"
+              onChange={(value) => setFilter('estado', value as typeof filters.estado)}
+              options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
+              value={filters.estado}
+            />
+            <SelectFilter
+              label="Prioridad"
+              onChange={(value) => setFilter('prioridad', value as typeof filters.prioridad)}
+              options={TASK_PRIORITIES}
+              value={filters.prioridad}
+            />
+          </div>
         </div>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full table-fixed text-left text-xs">
@@ -285,7 +284,7 @@ export function TareasPage() {
                     </th>
                   );
                 })}
-                <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
+                <th className="w-[82px] px-3 py-2 text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-metro-border bg-metro-surface">
@@ -297,7 +296,7 @@ export function TareasPage() {
                 </tr>
               )}
               {sortedTasks.map((task) => (
-                <tr className="hover:bg-metro-red/10" key={task.id}>
+                <tr className="cursor-pointer hover:bg-metro-red/10" key={task.id} onClick={() => openEditor(task)}>
                   <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>
                     {task.titulo}
                   </td>
@@ -324,15 +323,11 @@ export function TareasPage() {
                   </td>
                   <td className="px-3 py-1.5 text-right">
                     <button
-                      className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text hover:border-metro-red"
-                      onClick={() => openEditor(task)}
-                      type="button"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      className="ml-2 rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                      onClick={() => remove(task.id)}
+                      className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        remove(task.id);
+                      }}
                       type="button"
                     >
                       Eliminar
