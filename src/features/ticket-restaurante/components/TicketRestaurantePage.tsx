@@ -1,9 +1,11 @@
 import {
   CalendarDays,
+  Calculator,
   ChevronLeft,
   ChevronRight,
   FileUp,
   Pencil,
+  Settings,
   Plus,
   Save,
   Trash2,
@@ -11,7 +13,9 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   buildYearCalendar,
+  calculateTicketMonth,
   EMPTY_TICKET_CALENDAR_DRAFT,
+  EMPTY_TICKET_PERSON_DRAFT,
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
   previousCalendarYear,
@@ -19,6 +23,9 @@ import {
   type CalendarDay,
   type TicketCalendar,
   type TicketCalendarDraft,
+  type TicketPerson,
+  type TicketPersonCalculation,
+  type TicketPersonDraft,
   type TicketRestaurantAbsence,
 } from '../domain/ticketRestaurante';
 import {
@@ -29,6 +36,7 @@ import {
   type TicketRestaurantAbsenceSaveResult,
 } from '../domain/importAbsences';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
+import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MONTH_OPTIONS = [
@@ -54,7 +62,17 @@ function currentMonth(): number {
   return new Date().getMonth() + 1;
 }
 
-type TicketRestauranteSubview = 'calendarios' | 'ausencias';
+type TicketRestauranteSubview = 'calendarios' | 'personas' | 'calculo' | 'ausencias';
+
+function toPersonDraft(person: TicketPerson): TicketPersonDraft {
+  return {
+    empleado: person.empleado,
+    nombreApellidos: person.nombreApellidos,
+    puesto: person.puesto,
+    calendarId: person.calendarId,
+    activo: person.activo,
+  };
+}
 
 function toCalendarDraft(calendar: TicketCalendar): TicketCalendarDraft {
   return {
@@ -73,6 +91,10 @@ function sortByName(calendars: TicketCalendar[]): TicketCalendar[] {
 export function TicketRestaurantePage() {
   const calendars = useTicketRestauranteStore((state) => state.calendars);
   const absences = useTicketRestauranteStore((state) => state.absences);
+  const people = useTicketRestauranteStore((state) => state.people);
+  const config = useTicketRestauranteStore((state) => state.config);
+  const employees = useEmployeeStore((state) => state.employees);
+  const loadEmployees = useEmployeeStore((state) => state.load);
   const loadTickets = useTicketRestauranteStore((state) => state.load);
   const createCalendar = useTicketRestauranteStore((state) => state.createCalendar);
   const updateCalendar = useTicketRestauranteStore((state) => state.updateCalendar);
@@ -81,14 +103,22 @@ export function TicketRestaurantePage() {
   const toggleDay = useTicketRestauranteStore((state) => state.toggleDay);
   const saveAbsences = useTicketRestauranteStore((state) => state.saveAbsences);
   const removeAbsence = useTicketRestauranteStore((state) => state.removeAbsence);
+  const upsertPerson = useTicketRestauranteStore((state) => state.upsertPerson);
+  const removePerson = useTicketRestauranteStore((state) => state.removePerson);
+  const importPeople = useTicketRestauranteStore((state) => state.importPeople);
+  const updateConfig = useTicketRestauranteStore((state) => state.updateConfig);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview>('calendarios');
   const [year, setYear] = useState(currentYear());
   const [absenceYear, setAbsenceYear] = useState(currentYear());
+  const [calculationYear, setCalculationYear] = useState(currentYear());
+  const [calculationMonth, setCalculationMonth] = useState(currentMonth());
   const [absenceMonth, setAbsenceMonth] = useState(currentMonth());
   const [calendarDraft, setCalendarDraft] = useState<TicketCalendarDraft>(
     EMPTY_TICKET_CALENDAR_DRAFT,
   );
+  const [personDraft, setPersonDraft] = useState<TicketPersonDraft>(EMPTY_TICKET_PERSON_DRAFT);
+  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<TicketRestaurantAbsencePreviewRow[]>([]);
   const [importMessage, setImportMessage] = useState('');
@@ -97,7 +127,8 @@ export function TicketRestaurantePage() {
 
   useEffect(() => {
     loadTickets();
-  }, [loadTickets]);
+    loadEmployees();
+  }, [loadEmployees, loadTickets]);
 
   const visibleCalendars = useMemo(
     () => sortByName(visibleTicketCalendars(calendars)),
@@ -110,6 +141,22 @@ export function TicketRestaurantePage() {
   const yearCalendar = useMemo(
     () => (selectedCalendar ? buildYearCalendar(selectedCalendar, year) : []),
     [selectedCalendar, year],
+  );
+  const visiblePeople = useMemo(
+    () =>
+      [...people]
+        .filter((person) => !person.deletedAt)
+        .sort((first, second) =>
+          first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+            numeric: true,
+            sensitivity: 'base',
+          }),
+        ),
+    [people],
+  );
+  const monthCalculation = useMemo(
+    () => calculateTicketMonth(people, calendars, absences, config, calculationYear, calculationMonth),
+    [absences, calendars, calculationMonth, calculationYear, config, people],
   );
   const visibleAbsences = useMemo(
     () => filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth),
@@ -153,6 +200,44 @@ export function TicketRestaurantePage() {
     setSelectedCalendarId(calendar.id);
   };
 
+  const resetPersonForm = () => {
+    setPersonDraft(EMPTY_TICKET_PERSON_DRAFT);
+    setEditingPersonId(null);
+  };
+
+  const savePerson = () => {
+    if (!personDraft.empleado.trim() || !personDraft.nombreApellidos.trim() || !personDraft.calendarId) {
+      return;
+    }
+
+    upsertPerson(personDraft);
+    resetPersonForm();
+  };
+
+  const editPerson = (person: TicketPerson) => {
+    setPersonDraft(toPersonDraft(person));
+    setEditingPersonId(person.empleado);
+  };
+
+  const importPeopleFromTemplate = () => {
+    const defaultCalendarId = selectedCalendarId || visibleCalendars[0]?.id || '';
+    if (!defaultCalendarId) {
+      return;
+    }
+
+    importPeople(
+      employees
+        .filter((employee) => !employee.deletedAt)
+        .map((employee) => ({
+          empleado: employee.empleado,
+          nombreApellidos: employee.nombreApellidos,
+          puesto: employee.puestoOrganizativo || employee.puestoNomina,
+          calendarId: defaultCalendarId,
+          activo: true,
+        })),
+    );
+  };
+
   const handleYearChange = (value: string) => {
     const parsedYear = Number(value);
     if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
@@ -164,6 +249,20 @@ export function TicketRestaurantePage() {
     const parsedYear = Number(value);
     if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
       setAbsenceYear(parsedYear);
+    }
+  };
+
+  const handleCalculationYearChange = (value: string) => {
+    const parsedYear = Number(value);
+    if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
+      setCalculationYear(parsedYear);
+    }
+  };
+
+  const handleCalculationMonthChange = (value: string) => {
+    const parsedMonth = Number(value);
+    if (Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12) {
+      setCalculationMonth(parsedMonth);
     }
   };
 
@@ -271,6 +370,16 @@ export function TicketRestaurantePage() {
           onClick={() => setActiveSubview('calendarios')}
         />
         <SubviewButton
+          active={activeSubview === 'personas'}
+          label="Personas"
+          onClick={() => setActiveSubview('personas')}
+        />
+        <SubviewButton
+          active={activeSubview === 'calculo'}
+          label="Cálculo mensual"
+          onClick={() => setActiveSubview('calculo')}
+        />
+        <SubviewButton
           active={activeSubview === 'ausencias'}
           label="Ausencias"
           onClick={() => setActiveSubview('ausencias')}
@@ -373,6 +482,29 @@ export function TicketRestaurantePage() {
             )}
           </div>
         </>
+      ) : activeSubview === 'personas' ? (
+        <PeoplePanel
+          calendars={visibleCalendars}
+          draft={personDraft}
+          editingPersonId={editingPersonId}
+          onCancel={resetPersonForm}
+          onChange={setPersonDraft}
+          onEdit={editPerson}
+          onImportFromTemplate={importPeopleFromTemplate}
+          onRemove={removePerson}
+          onSave={savePerson}
+          people={visiblePeople}
+        />
+      ) : activeSubview === 'calculo' ? (
+        <CalculationPanel
+          calculation={monthCalculation}
+          config={config}
+          month={calculationMonth}
+          onConfigChange={updateConfig}
+          onMonthChange={handleCalculationMonthChange}
+          onYearChange={handleCalculationYearChange}
+          year={calculationYear}
+        />
       ) : (
         <AbsencesTable
           absences={visibleAbsences}
@@ -654,6 +786,319 @@ function EmptyCalendar() {
         <p className="mt-3 font-semibold text-metro-text">Sin calendario seleccionado</p>
         <p className="mt-1 text-sm text-metro-muted">Crea o selecciona un calendario.</p>
       </div>
+    </div>
+  );
+}
+
+
+function PeoplePanel({
+  calendars,
+  draft,
+  editingPersonId,
+  onCancel,
+  onChange,
+  onEdit,
+  onImportFromTemplate,
+  onRemove,
+  onSave,
+  people,
+}: {
+  calendars: TicketCalendar[];
+  draft: TicketPersonDraft;
+  editingPersonId: string | null;
+  onCancel: () => void;
+  onChange: (draft: TicketPersonDraft) => void;
+  onEdit: (person: TicketPerson) => void;
+  onImportFromTemplate: () => void;
+  onRemove: (empleado: string) => void;
+  onSave: () => void;
+  people: TicketPerson[];
+}) {
+  const canSave = draft.empleado.trim() && draft.nombreApellidos.trim() && draft.calendarId;
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-[minmax(320px,0.7fr)_minmax(520px,1.3fr)]">
+      <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+        <h3 className="mb-2 text-base font-bold text-metro-text">
+          {editingPersonId ? 'Editar persona Ticket' : 'Añadir persona Ticket'}
+        </h3>
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-metro-text">
+            Nº empleado
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, empleado: event.target.value })}
+              value={draft.empleado}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-metro-text">
+            Nombre y apellidos
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, nombreApellidos: event.target.value })}
+              value={draft.nombreApellidos}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-metro-text">
+            Puesto
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, puesto: event.target.value })}
+              value={draft.puesto}
+            />
+          </label>
+          <label className="block text-xs font-semibold text-metro-text">
+            Calendario
+            <select
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, calendarId: event.target.value })}
+              value={draft.calendarId}
+            >
+              <option value="">Seleccionar calendario</option>
+              {calendars.map((calendar) => (
+                <option key={calendar.id} value={calendar.id}>
+                  {calendar.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-semibold text-metro-text">
+            <input
+              checked={draft.activo}
+              className="h-3.5 w-3.5 accent-metro-red"
+              onChange={(event) => onChange({ ...draft, activo: event.target.checked })}
+              type="checkbox"
+            />
+            Activo
+          </label>
+          <div className="flex gap-2">
+            <button
+              className="flex-1 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canSave}
+              onClick={onSave}
+              type="button"
+            >
+              Guardar
+            </button>
+            {editingPersonId ? (
+              <button
+                className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+                onClick={onCancel}
+                type="button"
+              >
+                Cancelar
+              </button>
+            ) : null}
+          </div>
+          <button
+            className="w-full rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={calendars.length === 0}
+            onClick={onImportFromTemplate}
+            type="button"
+          >
+            Importar plantilla visible al calendario seleccionado
+          </button>
+        </div>
+      </div>
+      <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-base font-bold text-metro-text">Personas con derecho a ticket</h3>
+          <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
+            {people.length}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-xs">
+            <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+              <tr>
+                <th className="px-2 py-1">empleado</th>
+                <th className="px-2 py-1">nombre</th>
+                <th className="px-2 py-1">puesto</th>
+                <th className="px-2 py-1">calendario</th>
+                <th className="px-2 py-1">estado</th>
+                <th className="px-2 py-1">acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-metro-border text-metro-text">
+              {people.map((person) => (
+                <tr className="hover:bg-metro-surface" key={person.empleado} onDoubleClick={() => onEdit(person)}>
+                  <td className="px-2 py-1 font-semibold">{person.empleado}</td>
+                  <td className="px-2 py-1">{person.nombreApellidos}</td>
+                  <td className="px-2 py-1">{person.puesto}</td>
+                  <td className="px-2 py-1">
+                    {calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? 'Sin calendario'}
+                  </td>
+                  <td className="px-2 py-1">{person.activo ? 'Activo' : 'Inactivo'}</td>
+                  <td className="px-2 py-1">
+                    <div className="flex gap-1.5">
+                      <button
+                        className="rounded-md border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
+                        onClick={() => onEdit(person)}
+                        type="button"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+                        onClick={() => onRemove(person.empleado)}
+                        type="button"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {people.length === 0 ? (
+                <tr>
+                  <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
+                    Añade personas o importa la plantilla para poder calcular tickets.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalculationPanel({
+  calculation,
+  config,
+  month,
+  onConfigChange,
+  onMonthChange,
+  onYearChange,
+  year,
+}: {
+  calculation: ReturnType<typeof calculateTicketMonth>;
+  config: { importeTicket: number; pedidoMensual: number };
+  month: number;
+  onConfigChange: (config: { importeTicket: number; pedidoMensual: number }) => void;
+  onMonthChange: (value: string) => void;
+  onYearChange: (value: string) => void;
+  year: number;
+}) {
+  return (
+    <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+      <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
+            <Calculator className="h-4 w-4 text-metro-red" />
+            Cálculo mensual
+          </h3>
+          <p className="text-xs text-metro-muted">
+            Calcula tickets teóricos menos días sin ticket y ausencias que afectan al ticket.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-4">
+          <select
+            aria-label="Selector mes cálculo"
+            className="rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => onMonthChange(event.target.value)}
+            value={month}
+          >
+            {MONTH_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Selector año cálculo"
+            className="rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+            max="2200"
+            min="1900"
+            onChange={(event) => onYearChange(event.target.value)}
+            type="number"
+            value={year}
+          />
+          <label className="relative block">
+            <span className="absolute -top-2 left-2 bg-metro-surface px-1 text-[10px] font-semibold text-metro-muted">
+              €/ticket
+            </span>
+            <input
+              className="w-full rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              min="0"
+              onChange={(event) =>
+                onConfigChange({ ...config, importeTicket: Number(event.target.value) || 0 })
+              }
+              step="0.01"
+              type="number"
+              value={config.importeTicket}
+            />
+          </label>
+          <label className="relative block">
+            <span className="absolute -top-2 left-2 bg-metro-surface px-1 text-[10px] font-semibold text-metro-muted">
+              Pedido
+            </span>
+            <input
+              className="w-full rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              min="0"
+              onChange={(event) =>
+                onConfigChange({ ...config, pedidoMensual: Number(event.target.value) || 0 })
+              }
+              type="number"
+              value={config.pedidoMensual}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="mb-2 grid gap-2 md:grid-cols-5">
+        <CalculationKpi label="Personas" value={calculation.totals.personas} />
+        <CalculationKpi label="Días teóricos" value={calculation.totals.diasTeoricos} />
+        <CalculationKpi label="Ausencias" value={calculation.totals.ausenciasAplicadas} />
+        <CalculationKpi label="Tickets finales" value={calculation.totals.ticketsFinales} />
+        <CalculationKpi label="Importe" value={`${calculation.totals.importe.toFixed(2)} €`} />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-xs">
+          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+            <tr>
+              <th className="px-2 py-1">empleado</th>
+              <th className="px-2 py-1">nombre</th>
+              <th className="px-2 py-1">calendario</th>
+              <th className="px-2 py-1 text-right">teóricos</th>
+              <th className="px-2 py-1 text-right">sin ticket</th>
+              <th className="px-2 py-1 text-right">ausencias</th>
+              <th className="px-2 py-1 text-right">tickets</th>
+              <th className="px-2 py-1 text-right">importe</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-metro-border text-metro-text">
+            {calculation.rows.map((row: TicketPersonCalculation) => (
+              <tr key={row.empleado}>
+                <td className="px-2 py-1 font-semibold">{row.empleado}</td>
+                <td className="px-2 py-1">{row.nombreApellidos}</td>
+                <td className="px-2 py-1">{row.calendario}</td>
+                <td className="px-2 py-1 text-right">{row.diasTeoricos}</td>
+                <td className="px-2 py-1 text-right">{row.diasSinTicket}</td>
+                <td className="px-2 py-1 text-right">{row.ausenciasAplicadas}</td>
+                <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
+                <td className="px-2 py-1 text-right">{row.importe.toFixed(2)} €</td>
+              </tr>
+            ))}
+            {calculation.rows.length === 0 ? (
+              <tr>
+                <td className="px-2 py-4 text-center text-metro-muted" colSpan={8}>
+                  No hay personas activas para calcular.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CalculationKpi({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">{label}</p>
+      <p className="mt-1 text-lg font-bold text-metro-text">{value}</p>
     </div>
   );
 }

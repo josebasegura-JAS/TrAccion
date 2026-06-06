@@ -1,18 +1,27 @@
 import { create } from 'zustand';
 import {
   buildTicketCalendar,
+  buildTicketPerson,
+  DEFAULT_TICKET_RESTAURANT_CONFIG,
   toggleDiaSinTicket,
   type TicketCalendar,
   type TicketCalendarDraft,
+  type TicketPerson,
+  type TicketPersonDraft,
   type TicketRestaurantAbsence,
+  type TicketRestaurantConfig,
 } from '../domain/ticketRestaurante';
 
 const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
+const PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
+const CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
 
 interface TicketRestauranteState {
   calendars: TicketCalendar[];
   absences: TicketRestaurantAbsence[];
+  people: TicketPerson[];
+  config: TicketRestaurantConfig;
   load: () => void;
   createCalendar: (draft: TicketCalendarDraft) => string;
   updateCalendar: (id: string, draft: TicketCalendarDraft) => void;
@@ -21,6 +30,10 @@ interface TicketRestauranteState {
   toggleDay: (calendarId: string, fecha: string) => void;
   saveAbsences: (absences: TicketRestaurantAbsence[]) => void;
   removeAbsence: (id: string) => void;
+  upsertPerson: (draft: TicketPersonDraft) => void;
+  removePerson: (empleado: string) => void;
+  importPeople: (drafts: TicketPersonDraft[]) => void;
+  updateConfig: (config: TicketRestaurantConfig) => void;
 }
 
 function isTicketCalendar(value: unknown): value is TicketCalendar {
@@ -41,6 +54,23 @@ function isTicketCalendar(value: unknown): value is TicketCalendar {
   );
 }
 
+function isTicketPerson(value: unknown): value is TicketPerson {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<TicketPerson>;
+  return (
+    typeof candidate.empleado === 'string' &&
+    typeof candidate.nombreApellidos === 'string' &&
+    typeof candidate.puesto === 'string' &&
+    typeof candidate.calendarId === 'string' &&
+    typeof candidate.activo === 'boolean' &&
+    typeof candidate.createdAt === 'string' &&
+    typeof candidate.updatedAt === 'string' &&
+    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
+  );
+}
 
 function isTicketRestaurantAbsence(value: unknown): value is TicketRestaurantAbsence {
   if (!value || typeof value !== 'object') {
@@ -63,8 +93,8 @@ function isTicketRestaurantAbsence(value: unknown): value is TicketRestaurantAbs
   );
 }
 
-function readAbsences(): TicketRestaurantAbsence[] {
-  const stored = window.localStorage.getItem(ABSENCES_STORAGE_KEY);
+function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value is T): T[] {
+  const stored = window.localStorage.getItem(storageKey);
   if (!stored) {
     return [];
   }
@@ -74,29 +104,35 @@ function readAbsences(): TicketRestaurantAbsence[] {
     return [];
   }
 
-  return parsed.filter(isTicketRestaurantAbsence);
+  return parsed.filter(guard);
 }
 
-function readCalendars(): TicketCalendar[] {
-  const stored = window.localStorage.getItem(CALENDARS_STORAGE_KEY);
+function readConfig(): TicketRestaurantConfig {
+  const stored = window.localStorage.getItem(CONFIG_STORAGE_KEY);
   if (!stored) {
-    return [];
+    return DEFAULT_TICKET_RESTAURANT_CONFIG;
   }
 
   const parsed: unknown = JSON.parse(stored);
-  if (!Array.isArray(parsed)) {
-    return [];
+  if (!parsed || typeof parsed !== 'object') {
+    return DEFAULT_TICKET_RESTAURANT_CONFIG;
   }
 
-  return parsed.filter(isTicketCalendar);
+  const candidate = parsed as Partial<TicketRestaurantConfig>;
+  return {
+    importeTicket:
+      typeof candidate.importeTicket === 'number' && candidate.importeTicket >= 0
+        ? candidate.importeTicket
+        : DEFAULT_TICKET_RESTAURANT_CONFIG.importeTicket,
+    pedidoMensual:
+      typeof candidate.pedidoMensual === 'number' && candidate.pedidoMensual >= 0
+        ? candidate.pedidoMensual
+        : DEFAULT_TICKET_RESTAURANT_CONFIG.pedidoMensual,
+  };
 }
 
-function persistCalendars(calendars: TicketCalendar[]): void {
-  window.localStorage.setItem(CALENDARS_STORAGE_KEY, JSON.stringify(calendars));
-}
-
-function persistAbsences(absences: TicketRestaurantAbsence[]): void {
-  window.localStorage.setItem(ABSENCES_STORAGE_KEY, JSON.stringify(absences));
+function persist<T>(storageKey: string, value: T): void {
+  window.localStorage.setItem(storageKey, JSON.stringify(value));
 }
 
 function nowIso(): string {
@@ -112,14 +148,21 @@ function createId(prefix: string): string {
 export const useTicketRestauranteStore = create<TicketRestauranteState>((set) => ({
   calendars: [],
   absences: [],
+  people: [],
+  config: DEFAULT_TICKET_RESTAURANT_CONFIG,
   load: () => {
-    set({ calendars: readCalendars(), absences: readAbsences() });
+    set({
+      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar),
+      absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
+      people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson),
+      config: readConfig(),
+    });
   },
   createCalendar: (draft) => {
     const id = createId('ticket-calendar');
     set((state) => {
       const calendars = [...state.calendars, buildTicketCalendar(draft, nowIso(), id)];
-      persistCalendars(calendars);
+      persist(CALENDARS_STORAGE_KEY, calendars);
       return { calendars };
     });
     return id;
@@ -130,7 +173,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       const calendars = state.calendars.map((calendar) =>
         calendar.id === id ? buildTicketCalendar(draft, updatedAt, id, calendar) : calendar,
       );
-      persistCalendars(calendars);
+      persist(CALENDARS_STORAGE_KEY, calendars);
       return { calendars };
     });
   },
@@ -140,7 +183,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       const calendars = state.calendars.map((calendar) =>
         calendar.id === id ? { ...calendar, activo: !calendar.activo, updatedAt } : calendar,
       );
-      persistCalendars(calendars);
+      persist(CALENDARS_STORAGE_KEY, calendars);
       return { calendars };
     });
   },
@@ -152,7 +195,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
           ? { ...calendar, activo: false, updatedAt, deletedAt: updatedAt }
           : calendar,
       );
-      persistCalendars(calendars);
+      persist(CALENDARS_STORAGE_KEY, calendars);
       return { calendars };
     });
   },
@@ -160,14 +203,16 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
     set((state) => {
       const updatedAt = nowIso();
       const calendars = state.calendars.map((calendar) =>
-        calendar.id === calendarId ? { ...toggleDiaSinTicket(calendar, fecha), updatedAt } : calendar,
+        calendar.id === calendarId
+          ? { ...toggleDiaSinTicket(calendar, fecha), updatedAt }
+          : calendar,
       );
-      persistCalendars(calendars);
+      persist(CALENDARS_STORAGE_KEY, calendars);
       return { calendars };
     });
   },
   saveAbsences: (absences) => {
-    persistAbsences(absences);
+    persist(ABSENCES_STORAGE_KEY, absences);
     set({ absences });
   },
   removeAbsence: (id) => {
@@ -176,8 +221,52 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       const absences = state.absences.map((absence) =>
         absence.id === id ? { ...absence, updatedAt, deletedAt: updatedAt } : absence,
       );
-      persistAbsences(absences);
+      persist(ABSENCES_STORAGE_KEY, absences);
       return { absences };
     });
+  },
+  upsertPerson: (draft) => {
+    set((state) => {
+      const now = nowIso();
+      const previous = state.people.find((person) => person.empleado === draft.empleado);
+      const people = previous
+        ? state.people.map((person) =>
+            person.empleado === draft.empleado ? buildTicketPerson(draft, now, person) : person,
+          )
+        : [...state.people, buildTicketPerson(draft, now)];
+      persist(PEOPLE_STORAGE_KEY, people);
+      return { people };
+    });
+  },
+  removePerson: (empleado) => {
+    set((state) => {
+      const updatedAt = nowIso();
+      const people = state.people.map((person) =>
+        person.empleado === empleado
+          ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
+          : person,
+      );
+      persist(PEOPLE_STORAGE_KEY, people);
+      return { people };
+    });
+  },
+  importPeople: (drafts) => {
+    set((state) => {
+      const now = nowIso();
+      const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
+      drafts.forEach((draft) => {
+        peopleByEmployee.set(
+          draft.empleado,
+          buildTicketPerson(draft, now, peopleByEmployee.get(draft.empleado)),
+        );
+      });
+      const people = Array.from(peopleByEmployee.values());
+      persist(PEOPLE_STORAGE_KEY, people);
+      return { people };
+    });
+  },
+  updateConfig: (config) => {
+    persist(CONFIG_STORAGE_KEY, config);
+    set({ config });
   },
 }));

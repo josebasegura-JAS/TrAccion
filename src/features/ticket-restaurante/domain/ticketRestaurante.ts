@@ -38,6 +38,70 @@ export interface TicketRestaurantAbsenceDraft {
   afectaTicket: boolean;
 }
 
+
+export interface TicketPerson {
+  empleado: string;
+  nombreApellidos: string;
+  puesto: string;
+  calendarId: string;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface TicketPersonDraft {
+  empleado: string;
+  nombreApellidos: string;
+  puesto: string;
+  calendarId: string;
+  activo: boolean;
+}
+
+export interface TicketRestaurantConfig {
+  importeTicket: number;
+  pedidoMensual: number;
+}
+
+export interface TicketPersonCalculation {
+  empleado: string;
+  nombreApellidos: string;
+  puesto: string;
+  calendario: string;
+  diasTeoricos: number;
+  diasSinTicket: number;
+  ausenciasAplicadas: number;
+  ticketsFinales: number;
+  importe: number;
+  ausenciaIds: string[];
+}
+
+export interface TicketMonthCalculation {
+  year: number;
+  month: number;
+  rows: TicketPersonCalculation[];
+  totals: {
+    personas: number;
+    diasTeoricos: number;
+    ausenciasAplicadas: number;
+    ticketsFinales: number;
+    importe: number;
+  };
+}
+
+export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
+  importeTicket: 16,
+  pedidoMensual: 0,
+};
+
+export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
+  empleado: '',
+  nombreApellidos: '',
+  puesto: '',
+  calendarId: '',
+  activo: true,
+};
+
 export interface CalendarDay {
   fecha: string;
   diaMes: number;
@@ -117,6 +181,119 @@ export function toggleDiaSinTicket(calendar: TicketCalendar, fecha: string): Tic
     ...calendar,
     diasSinTicket: normalizeDiasSinTicket(Array.from(actuales)),
   };
+}
+
+
+export function buildTicketPerson(
+  draft: TicketPersonDraft,
+  now: string,
+  previous?: TicketPerson,
+): TicketPerson {
+  return {
+    empleado: draft.empleado.trim(),
+    nombreApellidos: draft.nombreApellidos.trim().replace(/\s+/g, ' '),
+    puesto: draft.puesto.trim().replace(/\s+/g, ' '),
+    calendarId: draft.calendarId,
+    activo: draft.activo,
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: previous?.deletedAt ?? null,
+  };
+}
+
+export function visibleTicketPeople(people: TicketPerson[]): TicketPerson[] {
+  return people.filter((person) => !person.deletedAt);
+}
+
+export function calculateTicketMonth(
+  people: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+  absences: readonly TicketRestaurantAbsence[],
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+): TicketMonthCalculation {
+  const monthStart = toIsoDate(year, month, 1);
+  const monthEnd = toIsoDate(year, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
+  const calendarById = new Map(calendars.filter((calendar) => !calendar.deletedAt).map((calendar) => [calendar.id, calendar]));
+  const rows = people
+    .filter((person) => !person.deletedAt && person.activo)
+    .map((person) => {
+      const calendar = calendarById.get(person.calendarId);
+      const calendarDays = calendar ? buildMonthWorkDays(calendar, year, month) : [];
+      const appliedAbsences = absences.filter(
+        (absence) =>
+          !absence.deletedAt &&
+          absence.afectaTicket &&
+          absence.empleado === person.empleado &&
+          absence.desde <= monthEnd &&
+          absence.hasta >= monthStart,
+      );
+      const absenceDays = new Set<string>();
+      appliedAbsences.forEach((absence) => {
+        calendarDays.forEach((fecha) => {
+          if (fecha >= absence.desde && fecha <= absence.hasta) {
+            absenceDays.add(fecha);
+          }
+        });
+      });
+      const ausenciasAplicadas = absenceDays.size;
+      const diasTeoricos = calendarDays.length;
+      const ticketsFinales = Math.max(0, diasTeoricos - ausenciasAplicadas);
+
+      return {
+        empleado: person.empleado,
+        nombreApellidos: person.nombreApellidos,
+        puesto: person.puesto,
+        calendario: calendar?.nombre ?? 'Sin calendario',
+        diasTeoricos,
+        diasSinTicket: calendar ? countMonthNoTicketDays(calendar, year, month) : 0,
+        ausenciasAplicadas,
+        ticketsFinales,
+        importe: roundCurrency(ticketsFinales * config.importeTicket),
+        ausenciaIds: appliedAbsences.map((absence) => absence.id),
+      };
+    })
+    .sort((first, second) => first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', { numeric: true, sensitivity: 'base' }));
+
+  return {
+    year,
+    month,
+    rows,
+    totals: rows.reduce(
+      (totals, row) => ({
+        personas: totals.personas + 1,
+        diasTeoricos: totals.diasTeoricos + row.diasTeoricos,
+        ausenciasAplicadas: totals.ausenciasAplicadas + row.ausenciasAplicadas,
+        ticketsFinales: totals.ticketsFinales + row.ticketsFinales,
+        importe: roundCurrency(totals.importe + row.importe),
+      }),
+      { personas: 0, diasTeoricos: 0, ausenciasAplicadas: 0, ticketsFinales: 0, importe: 0 },
+    ),
+  };
+}
+
+function buildMonthWorkDays(calendar: TicketCalendar, year: number, month: number): string[] {
+  const noTicket = new Set(calendar.diasSinTicket);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const dates: string[] = [];
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const fecha = toIsoDate(year, month, day);
+    const weekDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    if (weekDay !== 0 && weekDay !== 6 && !noTicket.has(fecha)) {
+      dates.push(fecha);
+    }
+  }
+  return dates;
+}
+
+function countMonthNoTicketDays(calendar: TicketCalendar, year: number, month: number): number {
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  return calendar.diasSinTicket.filter((fecha) => fecha.startsWith(prefix)).length;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 export function buildTicketRestaurantAbsence(
