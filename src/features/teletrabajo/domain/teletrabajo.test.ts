@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   EMPTY_TELETRABAJO_FILTERS,
@@ -8,8 +9,24 @@ import {
 import { importEncuestaRows } from './importEncuesta';
 import { sortTeletrabajoByDefault } from './sort';
 import { normalizeDiasTeletrabajo, type TeletrabajoSolicitud } from './solicitud';
-import { detectTeletrabajoWordMarkers } from './word';
+import { detectTeletrabajoWordMarkers, generateTeletrabajoWord } from './word';
 import { unzipDocx, zipDocx, type ZipEntry } from './zip';
+
+function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('No se ha podido leer el Blob.'));
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error('El Blob leído no ha devuelto ArrayBuffer.'));
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+}
 
 function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSolicitud {
   return {
@@ -150,6 +167,7 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     nombreApellidos: 'Persona Plantilla',
     puestoNomina: 'Puesto Nómina Plantilla',
     puestoOrganizativo: 'Puesto Organizativo Plantilla',
+    puestoEus: 'Puesto Euskera Plantilla',
     residencia: 'Bilbao',
     nivelRetributivo: 'N1',
     sexo: 'M',
@@ -175,9 +193,18 @@ describe('importador de encuesta de teletrabajo', () => {
       [
         ['Encuesta Teletrabajo 2026-2027'],
         ['Texto informativo previo'],
-        ['Aux', 'Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones', 'Otra columna'],
-        ['1', '200', 'Persona Sí', 'Sí', 'martes y jueves', 'ignorada'],
-        ['2', '201', 'Persona No', 'No', 'jueves', 'ignorada'],
+        [
+          'Aux',
+          'Nº. Emp.',
+          'Apellidos y Nombre',
+          'Respuesta',
+          'Fecha ordenador',
+          'Fecha cascos',
+          'Aportaciones',
+          'Otra columna',
+        ],
+        ['1', '200', 'Persona Sí', 'Sí', '2026-09-10', '2026-09-11', 'martes y jueves', 'ignorada'],
+        ['2', '201', 'Persona No', 'No', '', '', 'jueves', 'ignorada'],
       ],
       [],
       [],
@@ -189,6 +216,8 @@ describe('importador de encuesta de teletrabajo', () => {
       nombreApellidos: 'Persona Sí',
       periodo: '2026-2027',
       diasTeletrabajo: ['martes', 'jueves'],
+      fechaOrdenador: '2026-09-10',
+      fechaCascos: '2026-09-11',
       observaciones: 'martes y jueves',
       estado: 'pendiente',
       tipoSolicitud: 'renovacion',
@@ -212,7 +241,13 @@ describe('importador de encuesta de teletrabajo', () => {
         ],
         ['1188', 'Persona No', 'Respuesta', 'No', ''],
         ['', '', 'Punt.', '100', '', '50'],
-        ['678', 'Persona Si', 'Respuesta', 'Sí', 'Teletrabajo por periodo completo, martes y jueves.'],
+        [
+          '678',
+          'Persona Si',
+          'Respuesta',
+          'Sí',
+          'Teletrabajo por periodo completo, martes y jueves.',
+        ],
         ['', '', 'Punt.', '100', '', '100'],
       ],
       [],
@@ -384,6 +419,81 @@ describe('importador de encuesta de teletrabajo', () => {
 });
 
 describe('generación Word de teletrabajo', () => {
+  it('sustituye los marcadores originales y los partidos entre nodos con los datos del acuerdo', async () => {
+    const documentXml = [
+      '<w:document><w:body>',
+      '<w:t>«Nombre_Completo»</w:t>',
+      '<w:t>«Puesto_EUS»</w:t>',
+      '<w:t>«Puesto_CAST»</w:t>',
+      '<w:t>«Porcentaje»</w:t>',
+      '<w:t>«Fecha_Ordenador»</w:t>',
+      '<w:t>«Fecha_Cascos»</w:t>',
+      '<w:t>«D/M/A» D/M/A</w:t>',
+      '<w:t>«U/H/E» U/H/E</w:t>',
+      '<w:t>«fecha»</w:t>',
+      '<w:t>«M_1º</w:t><w:t>data»</w:t>',
+      '<w:t>M_2º</w:t><w:t>data</w:t>',
+      '</w:body></w:document>',
+    ].join('');
+    const template = zipDocx([
+      {
+        name: 'word/document.xml',
+        data: new TextEncoder().encode(documentXml),
+      },
+    ]);
+    const previousTraccion = window.traccion;
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        readTeletrabajoTemplate: async () => template.buffer,
+      },
+    });
+
+    try {
+      const result = await generateTeletrabajoWord(
+        buildSolicitud({
+          nombreApellidos: 'Persona Plantilla',
+          estado: 'aprobada',
+          diasTeletrabajo: ['martes', 'jueves'],
+          fechaOrdenador: '2026-09-10',
+          fechaCascos: '2026-09-11',
+          periodo: '2026-2027',
+        }),
+        buildEmployee({ puestoEus: 'Analista EUS' }),
+        '/tmp/plantilla.docx',
+        [{ puestoCastellano: 'Puesto Nómina Plantilla', puestoEuskera: 'No debe usarse' }],
+      );
+      const entries = await unzipDocx(await readBlobAsArrayBuffer(result.blob));
+      const updatedDocument = new TextDecoder().decode(entries[0].data);
+      const today = new Date();
+      const numericCast = `${String(today.getDate()).padStart(2, '0')}/${String(
+        today.getMonth() + 1,
+      ).padStart(2, '0')}/${today.getFullYear()}`;
+      const numericEus = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(
+        2,
+        '0',
+      )}/${String(today.getDate()).padStart(2, '0')}`;
+
+      expect(updatedDocument).toContain('Persona Plantilla');
+      expect(updatedDocument).toContain('Analista EUS');
+      expect(updatedDocument).toContain('Puesto Nómina Plantilla');
+      expect(updatedDocument).toContain('40');
+      expect(updatedDocument).toContain('10 de septiembre de 2026');
+      expect(updatedDocument).toContain('11 de septiembre de 2026');
+      expect(updatedDocument).toContain(`${numericCast} ${numericCast}`);
+      expect(updatedDocument).toContain(`${numericEus} ${numericEus}`);
+      expect(updatedDocument).toContain('1 de septiembre de 2026 y el 30 de junio de 2027');
+      expect(updatedDocument).toContain('2026ko irailaren 1a');
+      expect(updatedDocument).toContain('2027ko ekainaren 30a');
+      expect(updatedDocument).not.toMatch(/«[^»]+»|\b(?:D\/M\/A|U\/H\/E|M_[12]ºdata)\b/);
+    } finally {
+      Object.defineProperty(window, 'traccion', {
+        configurable: true,
+        value: previousTraccion,
+      });
+    }
+  });
+
   it('detecta marcadores originales de la plantilla Word y conserva el DOCX como ZIP válido', async () => {
     const entries: ZipEntry[] = [
       {

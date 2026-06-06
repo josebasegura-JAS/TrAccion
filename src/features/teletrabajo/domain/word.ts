@@ -1,5 +1,8 @@
 import type { Employee } from '../../plantilla/domain/employee';
-import { normalizeJobPosition, type JobPositionTranslation } from '../../plantilla/domain/jobPositionTranslation';
+import {
+  normalizeJobPosition,
+  type JobPositionTranslation,
+} from '../../plantilla/domain/jobPositionTranslation';
 import {
   TELETRABAJO_TEMPLATE_UNAVAILABLE_MESSAGE,
   validateConfiguredTeletrabajoTemplatePath,
@@ -79,7 +82,7 @@ const TELETRABAJO_REQUIRED_FIELDS = [
   ['fechaCascosFormatted', 'Fecha Cascos'],
 ] as const;
 
-const TELETRABAJO_MARKER_MAP = [
+const TELEWORK_AGREEMENT_MARKER_MAP = [
   ['«Nombre_Completo»', 'nombreCompleto'],
   ['«Numero_Empleado»', 'employeeNumber'],
   ['«Número_Empleado»', 'employeeNumber'],
@@ -95,23 +98,23 @@ const TELETRABAJO_MARKER_MAP = [
   ['«Porcentaje»', 'porcentajeTeletrabajo'],
   ['«Fecha_Ordenador»', 'fechaOrdenadorFormatted'],
   ['«Fecha_Cascos»', 'fechaCascosFormatted'],
-  ['«Fecha_Inicio_Teletrabajo_CAST»', 'fechaInicioTeletrabajoCastFormatted'],
-  ['«Fecha_Fin_Teletrabajo_CAST»', 'fechaFinTeletrabajoCastFormatted'],
-  ['«Fecha_Inicio_Teletrabajo_EUS»', 'fechaInicioTeletrabajoEusFormatted'],
-  ['«Fecha_Fin_Teletrabajo_EUS»', 'fechaFinTeletrabajoEusFormatted'],
-  ['«Fecha_Periodo_CAST»', 'fechaPeriodoCast'],
-  ['«fecha»', 'currentDateNumeric'],
-  ['«Fecha»', 'currentDateNumeric'],
-  ['«Fecha_Actual»', 'currentDateNumeric'],
-  ['«Fecha_Actual_EUS»', 'currentDateEusNumeric'],
+  ['«Fecha_Inicio_CAST»', 'fechaInicioTeletrabajoCastFormatted'],
+  ['«Fecha_Fin_CAST»', 'fechaFinTeletrabajoCastFormatted'],
+  ['«Fecha_Inicio_EUS»', 'fechaInicioTeletrabajoEusFormatted'],
+  ['«Fecha_Fin_EUS»', 'fechaFinTeletrabajoEusFormatted'],
+  ['«U/H/E»', 'currentDateEusNumeric'],
+  ['U/H/E', 'currentDateEusNumeric'],
+  ['«D/M/A»', 'currentDateNumeric'],
+  ['D/M/A', 'currentDateNumeric'],
   ['«M_1ºdata»', 'fechaInicioTeletrabajoEusFormatted'],
-  ['«M_2ºdata»', 'fechaFinTeletrabajoEusFormatted'],
   ['M_1ºdata', 'fechaInicioTeletrabajoEusFormatted'],
+  ['«M_2ºdata»', 'fechaFinTeletrabajoEusFormatted'],
   ['M_2ºdata', 'fechaFinTeletrabajoEusFormatted'],
+  ['«fecha»', 'fechaPeriodoCast'],
 ] as const;
 
 export const TELETRABAJO_WORD_MARKER_SOURCES: readonly TeletrabajoWordMarkerMapping[] =
-  TELETRABAJO_MARKER_MAP.map(([marker, source]) => ({ marker, source }));
+  TELEWORK_AGREEMENT_MARKER_MAP.map(([marker, source]) => ({ marker, source }));
 
 function escapeXml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -166,7 +169,7 @@ function formatDateEus(value: string): string {
   return `${parts.year}ko ${MONTHS_EUS[parts.month - 1]} ${parts.day}a`;
 }
 
-function formatDateCastNumeric(value: string): string {
+function formatDateNumeric(value: string): string {
   const parts = parseDateOnly(value);
   if (!parts) return value.trim();
   return `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}/${parts.year}`;
@@ -228,7 +231,23 @@ function findTranslatedPosition(
   );
 }
 
-function buildTeletrabajoData(
+function resolvePuestoEus(
+  plantillaEmployee: Employee | null,
+  puestoCast: string,
+  translations: readonly JobPositionTranslation[],
+): string {
+  const puestoEusPlantilla = plantillaEmployee?.puestoEus.trim() ?? '';
+  if (puestoEusPlantilla) return puestoEusPlantilla;
+
+  const translated = findTranslatedPosition(puestoCast, translations).trim();
+  if (translated) return translated;
+
+  // Fallback controlado: si Plantilla no contiene Puesto_EUS ni traducción auxiliar,
+  // el marcador «Puesto_EUS» se rellena con Puesto_CAST para no dejar el acuerdo incompleto.
+  return puestoCast;
+}
+
+function buildTeleworkAgreementData(
   source: TeletrabajoWordSource,
   plantillaEmployee: Employee | null,
   jobPositionTranslations: readonly JobPositionTranslation[] = [],
@@ -240,8 +259,9 @@ function buildTeletrabajoData(
   const fechaInicioTeletrabajoEus = periodDates.start;
   const fechaFinTeletrabajoEus = periodDates.end;
   const currentIso = todayIso(now);
-  const puesto = plantillaEmployee?.puestoNomina || source.puestoNomina || source.puestoOrganizativo;
-  const puestoEus = findTranslatedPosition(puesto, jobPositionTranslations);
+  const puesto =
+    plantillaEmployee?.puestoNomina || source.puestoNomina || source.puestoOrganizativo;
+  const puestoEus = resolvePuestoEus(plantillaEmployee, puesto, jobPositionTranslations);
 
   return {
     nombreCompleto: source.nombreApellidos || plantillaEmployee?.nombreApellidos || '',
@@ -250,9 +270,14 @@ function buildTeletrabajoData(
     dni: plantillaEmployee?.dni || source.dni || '',
     puestoCast: puesto,
     puestoEus,
-    direccionTeletrabajo: plantillaEmployee?.direccionTeletrabajo || source.direccionTeletrabajo || '',
+    direccionTeletrabajo:
+      plantillaEmployee?.direccionTeletrabajo || source.direccionTeletrabajo || '',
     residenciaCast: plantillaEmployee?.residenciaCast || source.residencia || '',
-    residenciaEus: plantillaEmployee?.residenciaEus || plantillaEmployee?.residenciaCast || source.residencia || '',
+    residenciaEus:
+      plantillaEmployee?.residenciaEus ||
+      plantillaEmployee?.residenciaCast ||
+      source.residencia ||
+      '',
     diasTeletrabajoCast: joinDays(source.diasTeletrabajo, 'cast'),
     diasTeletrabajoEus: joinDays(source.diasTeletrabajo, 'eus'),
     porcentajeTeletrabajo: percentageFromDays(source.diasTeletrabajo),
@@ -267,7 +292,7 @@ function buildTeletrabajoData(
     fechaInicioTeletrabajoEusFormatted: formatDateEus(fechaInicioTeletrabajoEus),
     fechaFinTeletrabajoEusFormatted: formatDateEus(fechaFinTeletrabajoEus),
     fechaPeriodoCast: formatDatePeriodCast(fechaInicioTeletrabajoCast, fechaFinTeletrabajoCast),
-    currentDateNumeric: formatDateCastNumeric(currentIso),
+    currentDateNumeric: formatDateNumeric(currentIso),
     currentDateEusNumeric: formatDateEusNumeric(currentIso),
     currentDateCast: formatDateCast(currentIso),
     currentDateEus: formatDateEus(currentIso),
@@ -317,7 +342,8 @@ function replaceMarkersInTextNodes(
     node.text = plainText;
   });
 
-  const occurrences: Array<{ marker: string; replacement: string; index: number; end: number }> = [];
+  const occurrences: Array<{ marker: string; replacement: string; index: number; end: number }> =
+    [];
   replacements.forEach((replacement, marker) => {
     findAllOccurrences(fullText, marker).forEach((index) =>
       occurrences.push({ marker, replacement, index, end: index + marker.length }),
@@ -329,7 +355,10 @@ function replaceMarkersInTextNodes(
   const selectedOccurrences: typeof occurrences = [];
   const occupied = new Array(fullText.length).fill(false);
   occurrences
-    .sort((left, right) => left.index - right.index || right.end - right.index - (left.end - left.index))
+    .sort(
+      (left, right) =>
+        left.index - right.index || right.end - right.index - (left.end - left.index),
+    )
     .forEach((occurrence) => {
       for (let pos = occurrence.index; pos < occurrence.end; pos += 1) {
         if (occupied[pos]) return;
@@ -357,7 +386,8 @@ function replaceMarkersInTextNodes(
       const firstNode = nodes[start.nodeIndex];
       const lastNode = nodes[end.nodeIndex];
       firstNode.text = `${firstNode.text.slice(0, start.offset)}${occurrence.replacement}`;
-      for (let index = start.nodeIndex + 1; index < end.nodeIndex; index += 1) nodes[index].text = '';
+      for (let index = start.nodeIndex + 1; index < end.nodeIndex; index += 1)
+        nodes[index].text = '';
       lastNode.text = lastNode.text.slice(end.offset + 1);
     });
 
@@ -418,7 +448,7 @@ export async function detectTeletrabajoWordMarkers(templateBuffer: ArrayBuffer):
   entries.forEach((entry) => {
     if (!/^word\/.*\.xml$/i.test(entry.name)) return;
     const xml = textDecoder.decode(entry.data);
-    TELETRABAJO_MARKER_MAP.forEach(([marker]) => {
+    TELEWORK_AGREEMENT_MARKER_MAP.forEach(([marker]) => {
       if (xml.includes(marker)) markers.add(marker);
     });
   });
@@ -434,15 +464,17 @@ export async function generateTeletrabajoWord(
 ): Promise<TeletrabajoWordResult> {
   const templateBuffer = await readTemplateFromConfiguredPath(templatePath);
   const entries = await unzipDocx(templateBuffer);
-  const data = buildTeletrabajoData(source, plantillaEmployee, jobPositionTranslations);
+  const data = buildTeleworkAgreementData(source, plantillaEmployee, jobPositionTranslations);
   const missing = validateTeletrabajoData(data);
 
   if (missing.length) {
-    throw new Error(`No se puede generar el acuerdo. Faltan datos obligatorios: ${missing.join(', ')}.`);
+    throw new Error(
+      `No se puede generar el acuerdo. Faltan datos obligatorios: ${missing.join(', ')}.`,
+    );
   }
 
   const replacements = new Map(
-    TELETRABAJO_MARKER_MAP.map(([marker, key]) => [marker, docxReplacementXml(data[key])]),
+    TELEWORK_AGREEMENT_MARKER_MAP.map(([marker, key]) => [marker, docxReplacementXml(data[key])]),
   );
   const foundMarkers = new Set<string>();
   const outputEntries: ZipEntry[] = entries.map((entry) => {
@@ -451,7 +483,10 @@ export async function generateTeletrabajoWord(
     const updated = replaceMarkersInTextNodes(xml, replacements, foundMarkers);
     return updated === xml ? entry : { ...entry, data: textEncoder.encode(updated) };
   });
-  const detectedMarkers = [...foundMarkers].map((marker) => ({ marker, source: sourceDescription(marker) }));
+  const detectedMarkers = [...foundMarkers].map((marker) => ({
+    marker,
+    source: sourceDescription(marker),
+  }));
   const emptyMarkers = detectedMarkers.filter((mapping) => !data[mapping.source]);
 
   return {
