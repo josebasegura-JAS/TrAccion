@@ -128,7 +128,7 @@ function parseDateOnly(value: string): { year: number; month: number; day: numbe
   let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (match) return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
 
-  match = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/);
+  match = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
   if (match) {
     let year = Number(match[3]);
     if (year < 100) year += year > 70 ? 1900 : 2000;
