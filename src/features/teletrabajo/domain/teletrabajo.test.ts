@@ -168,68 +168,113 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
 }
 
 describe('importador de encuesta de teletrabajo', () => {
-  it('importa con Nº empleado', () => {
+  it('detecta cabecera desplazada y solo importa respuestas Sí del formato real', () => {
     const result = importEncuestaRows(
       [
-        ['Nº empleado', 'nombre completo', 'periodo'],
-        ['200', 'Persona Encuesta', '2026-2027'],
-      ],
-      [],
-      [],
-    );
-
-    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 0 });
-    expect(result.solicitudes[0]).toMatchObject({
-      empleado: '200',
-      nombreApellidos: 'Persona Encuesta',
-      periodo: '2026-2027',
-    });
-  });
-
-  it('ignora columnas desconocidas', () => {
-    const result = importEncuestaRows(
-      [
-        ['empleado', 'columna inventada', 'observaciones'],
-        ['201', 'No debe importarse', 'Texto libre'],
-      ],
-      [],
-      [],
-    );
-
-    expect(result.solicitudes[0]).toMatchObject({
-      empleado: '201',
-      observaciones: 'Texto libre',
-    });
-  });
-
-  it('descarta fila sin empleado', () => {
-    const result = importEncuestaRows(
-      [
-        ['empleado', 'nombre completo'],
-        ['', 'Sin empleado'],
-        ['202', 'Con empleado'],
+        ['Encuesta Teletrabajo 2026-2027'],
+        ['Texto informativo previo'],
+        ['Aux', 'Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones', 'Otra columna'],
+        ['1', '200', 'Persona Sí', 'Sí', 'martes y jueves', 'ignorada'],
+        ['2', '201', 'Persona No', 'No', 'jueves', 'ignorada'],
       ],
       [],
       [],
     );
 
     expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 1 });
-    expect(result.solicitudes).toHaveLength(1);
+    expect(result.solicitudes[0]).toMatchObject({
+      empleado: '200',
+      nombreApellidos: 'Persona Sí',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes', 'jueves'],
+      observaciones: 'martes y jueves',
+      estado: 'pendiente',
+      tipoSolicitud: 'renovacion',
+      validacionSeguridadInformatica: false,
+      validacionPrevencion: false,
+      validacionJefatura: false,
+    });
+  });
+
+  it('ignora filas auxiliares Punt.', () => {
+    const result = importEncuestaRows(
+      [
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['Punt.', '', '', ''],
+        ['202', 'Persona Encuesta', 'Sí', 'jueves'],
+      ],
+      [],
+      [],
+    );
+
+    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 1 });
+    expect(result.solicitudes.map((solicitud) => solicitud.empleado)).toEqual(['202']);
+  });
+
+  it('detecta martes, miércoles y jueves en castellano desde Aportaciones', () => {
+    const result = importEncuestaRows(
+      [
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['203', 'Persona Martes Jueves', 'Sí', 'martes y jueves'],
+        ['204', 'Persona Tres Días', 'Sí', 'martes, miércoles y jueves'],
+      ],
+      [],
+      [],
+    );
+
+    expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
+      ['martes', 'jueves'],
+      ['martes', 'miercoles', 'jueves'],
+    ]);
+  });
+
+  it('detecta astearte eta ostegunetan en euskera desde Aportaciones', () => {
+    const result = importEncuestaRows(
+      [
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['205', 'Persona Euskera', 'Sí', 'astearte eta ostegunetan'],
+        ['206', 'Persona Euskera Artículo', 'Sí', 'asteartea eta osteguna'],
+      ],
+      [],
+      [],
+    );
+
+    expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
+      ['martes', 'jueves'],
+      ['martes', 'jueves'],
+    ]);
+  });
+
+  it('mantiene completa la observación ambigua aunque detecte días', () => {
+    const observacion = 'martes y jueves, aunque me vale uno; si no es posible jueves me adapto';
+    const result = importEncuestaRows(
+      [
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['207', 'Persona Ambigua', 'Sí', observacion],
+      ],
+      [],
+      [],
+    );
+
+    expect(result.solicitudes[0]).toMatchObject({
+      diasTeletrabajo: ['martes', 'jueves'],
+      observaciones: observacion,
+    });
   });
 
   it('enriquece desde Plantilla cuando existe empleado', () => {
-    const employee = buildEmployee({ empleado: '203' });
+    const employee = buildEmployee({ empleado: '208' });
     const result = importEncuestaRows(
       [
-        ['empleado', 'nombre completo'],
-        ['203', 'Nombre Encuesta'],
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['208', 'Nombre Encuesta', 'Sí', 'martes'],
       ],
       [employee],
       [],
     );
 
     expect(result.solicitudes[0]).toMatchObject({
-      empleado: '203',
+      empleado: '208',
       nombreApellidos: 'Persona Plantilla',
       puestoNomina: 'Puesto Nómina Plantilla',
       puestoOrganizativo: 'Puesto Organizativo Plantilla',
@@ -242,15 +287,15 @@ describe('importador de encuesta de teletrabajo', () => {
   it('importa aunque empleado no exista en Plantilla', () => {
     const result = importEncuestaRows(
       [
-        ['empleado', 'nombre completo'],
-        ['204', 'Persona Externa'],
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['209', 'Persona Externa', 'Sí', 'jueves'],
       ],
       [],
       [],
     );
 
     expect(result.solicitudes[0]).toMatchObject({
-      empleado: '204',
+      empleado: '209',
       nombreApellidos: 'Persona Externa',
       puestoNomina: '',
       puestoOrganizativo: '',
@@ -260,48 +305,19 @@ describe('importador de encuesta de teletrabajo', () => {
     });
   });
 
-  it('normaliza días martes/miércoles/jueves', () => {
-    const result = importEncuestaRows(
-      [
-        ['empleado', 'días teletrabajo'],
-        ['205', 'Martes y Miércoles'],
-        ['206', 'jueves'],
-      ],
-      [],
-      [],
-    );
-
-    expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
-      ['martes', 'miercoles'],
-      ['jueves'],
-    ]);
-  });
-
-  it('ignora lunes/viernes', () => {
-    const result = importEncuestaRows(
-      [
-        ['empleado', 'días'],
-        ['207', 'lunes y viernes'],
-      ],
-      [],
-      [],
-    );
-
-    expect(result.solicitudes[0].diasTeletrabajo).toEqual([]);
-  });
-
   it('actualiza por empleado + periodo sin duplicar', () => {
     const current = buildSolicitud({
       id: 'existente',
-      empleado: '208',
+      empleado: '210',
       periodo: '2026-2027',
       observaciones: 'Anterior',
       deletedAt: '2026-02-01T00:00:00.000Z',
     });
     const result = importEncuestaRows(
       [
-        ['empleado', 'periodo', 'observaciones'],
-        ['208', '2026-2027', 'Nueva observación'],
+        ['Renovación Teletrabajo 2026-2027'],
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['210', 'Persona Actualizada', 'Sí', 'Nueva observación martes'],
       ],
       [],
       [current],
@@ -312,28 +328,25 @@ describe('importador de encuesta de teletrabajo', () => {
     expect(result.solicitudes).toHaveLength(1);
     expect(result.solicitudes[0]).toMatchObject({
       id: 'existente',
-      observaciones: 'Nueva observación',
+      observaciones: 'Nueva observación martes',
+      diasTeletrabajo: ['martes'],
       deletedAt: '2026-02-01T00:00:00.000Z',
     });
   });
 
-  it('normaliza tipoSolicitud renovacion/nueva', () => {
+  it('usa 2026-2027 como fallback cuando no detecta periodo', () => {
     const result = importEncuestaRows(
       [
-        ['empleado', 'tipo solicitud'],
-        ['209', 'Renovación'],
-        ['210', 'Nueva solicitud'],
-        ['211', ''],
+        ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+        ['211', 'Persona Sin Periodo', 'Sí', 'preferiblemente martes'],
       ],
       [],
       [],
+      { now: new Date('2030-01-01T00:00:00.000Z') },
     );
 
-    expect(result.solicitudes.map((solicitud) => solicitud.tipoSolicitud)).toEqual([
-      'renovacion',
-      'nueva',
-      'nueva',
-    ]);
+    expect(result.solicitudes[0].periodo).toBe('2026-2027');
+    expect(result.solicitudes[0].tipoSolicitud).toBe('renovacion');
   });
 });
 
