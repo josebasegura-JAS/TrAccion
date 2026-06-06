@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BriefcaseBusiness,
   ClipboardList,
   Gift,
   Home,
@@ -54,13 +53,12 @@ const navigationGroups: NavigationGroup[] = [
   {
     id: 'personas',
     label: 'Personas',
-    description: 'Plantilla, teletrabajo, vinculograma y situaciones personales.',
+    description: 'Gestión de plantilla, teletrabajo y vinculaciones.',
     icon: UsersRound,
     items: [
       { label: 'Plantilla', icon: UsersRound, view: 'plantilla' },
       { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' },
       { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
-      { label: 'Licencias y Excedencias', icon: BriefcaseBusiness, disabled: true },
     ],
   },
   {
@@ -78,7 +76,7 @@ const navigationGroups: NavigationGroup[] = [
   {
     id: 'operativa',
     label: 'Operativa diaria',
-    description: 'Seguimiento diario de trabajo y configuración de la aplicación.',
+    description: 'Seguimiento diario del trabajo y configuración de la aplicación.',
     icon: ClipboardList,
     items: [
       { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
