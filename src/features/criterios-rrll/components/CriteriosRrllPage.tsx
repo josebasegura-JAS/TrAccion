@@ -39,7 +39,7 @@ function SelectFilter({
   value: string;
 }) {
   return (
-    <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
+    <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
       <span className="shrink-0 text-xs font-bold uppercase tracking-wide">{label}</span>
       <select
         className="w-full bg-transparent text-metro-text outline-none"
@@ -113,7 +113,7 @@ export function CriteriosRrllPage() {
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="criterios-rrll"
     >
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -135,8 +135,8 @@ export function CriteriosRrllPage() {
         </div>
       </div>
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)]">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
+      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)]">
+        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
             className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
@@ -155,17 +155,17 @@ export function CriteriosRrllPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-white px-3 py-2">
+        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Criterios RRLL
           </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-metro-dark">
+          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredCriterios.length} registros
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
                   const isActive = sortState?.key === column.key;
@@ -187,10 +187,10 @@ export function CriteriosRrllPage() {
                 <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-metro-border bg-white">
+            <tbody className="divide-y divide-metro-border bg-metro-surface">
               {sortedCriterios.map((criterio) => (
                 <tr
-                  className="cursor-pointer hover:bg-red-50/50"
+                  className="cursor-pointer hover:bg-metro-red/10"
                   key={criterio.id}
                   onClick={() => openEditor(criterio)}
                 >
@@ -235,7 +235,7 @@ export function CriteriosRrllPage() {
             </tbody>
           </table>
           {sortedCriterios.length === 0 && (
-            <p className="border-t border-metro-border bg-white px-3 py-3 text-sm text-metro-muted">
+            <p className="border-t border-metro-border bg-metro-surface px-3 py-3 text-sm text-metro-muted">
               No hay criterios para los filtros seleccionados.
             </p>
           )}

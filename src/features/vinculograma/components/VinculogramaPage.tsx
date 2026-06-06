@@ -16,12 +16,12 @@ import { useVinculogramaStore } from '../store/useVinculogramaStore';
 
 const EXPIRED_VISIBILITY_KEY = 'traccion.v1.vinculograma.showExpired';
 const inputClass =
-  'mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red';
+  'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red';
 const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-metro-muted';
 const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark';
 const secondaryButtonClass =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red';
+  'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -88,8 +88,8 @@ function VinculogramaModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-metro-border bg-white shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
         <div className="flex items-start justify-between border-b border-metro-border px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
@@ -132,10 +132,10 @@ function VinculogramaModal({
               />
             </label>
             {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-metro-border bg-white shadow-xl">
+              <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-metro-border bg-metro-surface shadow-xl">
                 {suggestions.map((suggestion) => (
                   <button
-                    className="block w-full px-3 py-2 text-left text-sm hover:bg-red-50"
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-metro-red/10"
                     key={suggestion.empleado}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => selectSuggestion(suggestion)}
@@ -213,7 +213,7 @@ function VinculogramaTable({
   return (
     <div className="overflow-hidden rounded-xl border border-metro-border">
       <table className="w-full table-fixed text-left text-xs">
-        <thead className="bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+        <thead className="bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
           <tr>
             <th className="w-[120px] px-3 py-2">Nº empleado</th>
             <th className="px-3 py-2">Nombre</th>
@@ -222,7 +222,7 @@ function VinculogramaTable({
             <th className="w-[110px] px-3 py-2 text-right">Acciones</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-metro-border bg-white">
+        <tbody className="divide-y divide-metro-border bg-metro-surface">
           {records.length === 0 && (
             <tr>
               <td className="px-3 py-6 text-center text-sm text-metro-muted" colSpan={5}>
@@ -234,12 +234,12 @@ function VinculogramaTable({
             const status = getVinculogramaStatus(record.expiryDate, today);
             const statusClass =
               status === 'Vigente'
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-amber-50 text-amber-700';
+                ? 'bg-metro-success/10 text-emerald-200'
+                : 'bg-metro-warning/10 text-amber-200';
 
             return (
               <tr
-                className="cursor-pointer hover:bg-red-50/50"
+                className="cursor-pointer hover:bg-metro-red/10"
                 key={record.id}
                 onClick={() => onEdit(record)}
                 onDoubleClick={() => onEdit(record)}
@@ -352,7 +352,7 @@ export function VinculogramaPage() {
 
   return (
     <section className="space-y-4" id="vinculograma">
-      <div className="rounded-2xl border border-metro-border bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
@@ -369,12 +369,12 @@ export function VinculogramaPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-metro-border bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <Link2 size={16} className="text-metro-red" /> Vinculogramas vigentes
           </div>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+          <span className="rounded-full bg-metro-success/10 px-3 py-1 text-xs font-bold text-emerald-200">
             {vigentes.length} registros
           </span>
         </div>
@@ -389,11 +389,11 @@ export function VinculogramaPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-metro-border bg-white p-4 shadow-card">
+      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <Search size={16} className="text-metro-red" /> Vinculogramas vencidos
-            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+            <span className="rounded-full bg-metro-warning/10 px-3 py-1 text-xs font-bold text-amber-200">
               {vencidos.length} registros
             </span>
           </div>

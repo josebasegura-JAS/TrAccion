@@ -37,12 +37,12 @@ export function Sidebar({
   const navButtonClass = (view: AppView) =>
     `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
       activeView === view
-        ? 'bg-metro-red text-white shadow-lg shadow-red-950/25'
-        : 'text-white/80 hover:bg-white/10'
+        ? 'bg-metro-red/95 text-white shadow-lg shadow-red-950/25 ring-1 ring-red-400/20'
+        : 'text-slate-300 hover:bg-white/[0.08] hover:text-white'
     }`;
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col bg-gradient-to-b from-metro-navy to-metro-slate text-white">
+    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-metro-navy via-metro-topbar to-metro-slate text-white shadow-2xl shadow-slate-950/30">
       <div className="border-b border-white/10 px-5 py-5">
         <img alt="TrAccion" className="mx-auto h-20 w-auto object-contain" src={traccionLogoSrc} />
       </div>
@@ -112,13 +112,13 @@ export function Sidebar({
           <MailPlus size={18} /> Especiales
         </button>
         <button
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white/60"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-500"
           type="button"
         >
           <Database size={18} /> Datos
         </button>
         <button
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white/60"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-500"
           type="button"
         >
           <BarChart3 size={18} /> Informes

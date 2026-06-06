@@ -36,7 +36,8 @@ function compareEmployeeValues(first: Employee, second: Employee, key: SortKey):
 }
 
 export function PlantillaPage() {
-  const { employees, filters, importExcel, load, remove, selectEmployee, setFilter } = useEmployeeStore();
+  const { employees, filters, importExcel, load, remove, selectEmployee, setFilter } =
+    useEmployeeStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'empleado', direction: 'asc' });
@@ -100,7 +101,7 @@ export function PlantillaPage() {
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="plantilla"
     >
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -129,7 +130,7 @@ export function PlantillaPage() {
             type="file"
           />
           <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >
@@ -146,13 +147,13 @@ export function PlantillaPage() {
       </div>
 
       {importMessage && (
-        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+        <div className="mb-3 rounded-xl border border-metro-success/30 bg-metro-success/10 px-3 py-2 text-sm font-semibold text-emerald-200">
           {importMessage}
         </div>
       )}
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
+      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
             className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
@@ -177,17 +178,17 @@ export function PlantillaPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-white px-3 py-2">
+        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Personas en plantilla
           </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-metro-dark">
+          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredEmployees.length} registros
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
+            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
                   const isActive = sortState.key === column.key;
@@ -208,10 +209,10 @@ export function PlantillaPage() {
                 <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-metro-border bg-white">
+            <tbody className="divide-y divide-metro-border bg-metro-surface">
               {sortedEmployees.map((employee) => (
                 <tr
-                  className="cursor-pointer hover:bg-red-50/50"
+                  className="cursor-pointer hover:bg-metro-red/10"
                   key={employee.empleado}
                   onClick={() => openEditor(employee)}
                 >
@@ -282,7 +283,7 @@ function SelectFilter({
   return (
     <select
       aria-label={label}
-      className="rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
       onChange={(event) => onChange(event.target.value)}
       value={value}
     >

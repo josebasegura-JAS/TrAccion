@@ -18,12 +18,12 @@ export function App() {
   return (
     <div className="flex min-h-screen bg-metro-app font-sans text-metro-text">
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col bg-metro-app/95">
         <Header />
-        <main className="min-w-0 space-y-5 p-5">
+        <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
           {activeView === 'dashboard' && (
             <>
-              <section className="rounded-3xl border border-metro-border bg-white p-5 shadow-card">
+              <section className="rounded-3xl border border-metro-border bg-metro-surface/95 p-5 shadow-glow">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
