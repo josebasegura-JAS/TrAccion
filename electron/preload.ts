@@ -7,6 +7,8 @@ const parseOutlookMsg = (payload: unknown) => ipcRenderer.invoke('msg:parseOutlo
 
 contextBridge.exposeInMainWorld('traccion', {
   databaseStatus: () => ipcRenderer.invoke('database:status'),
+  selectDatabaseDirectory: () => ipcRenderer.invoke('database:select-directory'),
+  resetDatabaseDirectory: () => ipcRenderer.invoke('database:reset-directory'),
   migrateLocalStorage: (records: { key: string; value: string }[]) =>
     ipcRenderer.invoke('database:migrate-local-storage', { records }),
   saveLocalStorageRecord: (record: { key: string; value: string }) =>
