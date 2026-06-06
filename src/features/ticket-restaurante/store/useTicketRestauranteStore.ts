@@ -12,6 +12,7 @@ import {
   type TicketRestaurantAbsence,
   type TicketRestaurantConfig,
 } from '../domain/ticketRestaurante';
+import { normalizeCalendarName, type TicketPeopleImportDraft } from '../domain/importPeople';
 
 const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
@@ -32,6 +33,7 @@ interface TicketRestauranteState {
   saveAbsences: (absences: TicketRestaurantAbsence[]) => void;
   removeAbsence: (id: string) => void;
   upsertPerson: (draft: TicketPersonDraft) => void;
+  importPeople: (drafts: TicketPeopleImportDraft[]) => { imported: number; createdCalendars: number };
   removePerson: (empleado: string) => void;
   updateConfig: (config: TicketRestaurantConfig) => void;
 }
@@ -261,6 +263,51 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       persist(PEOPLE_STORAGE_KEY, people);
       return { people };
     });
+  },
+
+  importPeople: (drafts) => {
+    let result = { imported: 0, createdCalendars: 0 };
+    set((state) => {
+      const now = nowIso();
+      const calendars = [...state.calendars];
+      const calendarIdByName = new Map(
+        calendars
+          .filter((calendar) => !calendar.deletedAt)
+          .map((calendar) => [normalizeCalendarName(calendar.nombre), calendar.id]),
+      );
+      const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
+
+      drafts.forEach((draft) => {
+        const normalizedCalendarName = normalizeCalendarName(draft.calendarName);
+        let calendarId = draft.calendarId || calendarIdByName.get(normalizedCalendarName) || '';
+
+        if (!calendarId) {
+          calendarId = createId('ticket-calendar');
+          calendars.push(
+            buildTicketCalendar(
+              { nombre: draft.calendarName, activo: true, diasSinTicket: [] },
+              now,
+              calendarId,
+            ),
+          );
+          calendarIdByName.set(normalizedCalendarName, calendarId);
+          result = { ...result, createdCalendars: result.createdCalendars + 1 };
+        }
+
+        const previous = peopleByEmployee.get(draft.empleado);
+        peopleByEmployee.set(
+          draft.empleado,
+          buildTicketPerson({ ...draft, calendarId }, now, previous),
+        );
+        result = { ...result, imported: result.imported + 1 };
+      });
+
+      const people = Array.from(peopleByEmployee.values());
+      persist(CALENDARS_STORAGE_KEY, calendars);
+      persist(PEOPLE_STORAGE_KEY, people);
+      return { calendars, people };
+    });
+    return result;
   },
   removePerson: (empleado) => {
     set((state) => {

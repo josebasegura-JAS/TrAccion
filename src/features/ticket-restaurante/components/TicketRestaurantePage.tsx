@@ -34,7 +34,9 @@ import {
   type TicketRestaurantAbsencePreviewRow,
   type TicketRestaurantAbsenceSaveResult,
 } from '../domain/importAbsences';
+import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
+import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MONTH_OPTIONS = [
@@ -106,6 +108,9 @@ export function TicketRestaurantePage() {
   const upsertPerson = useTicketRestauranteStore((state) => state.upsertPerson);
   const removePerson = useTicketRestauranteStore((state) => state.removePerson);
   const updateConfig = useTicketRestauranteStore((state) => state.updateConfig);
+  const importPeople = useTicketRestauranteStore((state) => state.importPeople);
+  const employees = useEmployeeStore((state) => state.employees);
+  const loadEmployees = useEmployeeStore((state) => state.load);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview>('calendarios');
   const [year, setYear] = useState(currentYear());
@@ -121,12 +126,15 @@ export function TicketRestaurantePage() {
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<TicketRestaurantAbsencePreviewRow[]>([]);
   const [importMessage, setImportMessage] = useState('');
+  const [peopleImportMessage, setPeopleImportMessage] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const peopleFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadTickets();
-  }, [loadTickets]);
+    loadEmployees();
+  }, [loadEmployees, loadTickets]);
 
   const visibleCalendars = useMemo(
     () => sortByName(visibleTicketCalendars(calendars)),
@@ -297,6 +305,34 @@ export function TicketRestaurantePage() {
     setIsPreviewOpen(true);
   };
 
+
+  const handlePeopleImportFile = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    const result = await importTicketPeopleFromFile(file, employees, calendars);
+    if (peopleFileInputRef.current) {
+      peopleFileInputRef.current.value = '';
+    }
+
+    if (result.drafts.length === 0) {
+      setPeopleImportMessage('No se ha importado ninguna persona. Revisa Nº empleado y Calendario.');
+      return;
+    }
+
+    const saveResult = importPeople(result.drafts);
+    const missingText = result.missingEmployees.length > 0
+      ? ` · No encontrados en Plantilla: ${result.missingEmployees.join(', ')}`
+      : '';
+    const ignoredText = result.ignored > 0 ? ` · Filas ignoradas: ${result.ignored}` : '';
+    const duplicateText = result.duplicateRows > 0 ? ` · Duplicados en Excel: ${result.duplicateRows}` : '';
+
+    setPeopleImportMessage(
+      `Personas importadas/actualizadas: ${saveResult.imported} · Calendarios creados: ${saveResult.createdCalendars}${ignoredText}${duplicateText}${missingText}`,
+    );
+  };
+
   const updatePreviewRow = (
     rowId: string,
     field: keyof Omit<TicketRestaurantAbsencePreviewRow, 'id' | 'errors'>,
@@ -364,6 +400,13 @@ export function TicketRestaurantePage() {
         className="hidden"
         onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)}
         ref={fileInputRef}
+        type="file"
+      />
+      <input
+        accept=".xlsx,.csv,.tsv"
+        className="hidden"
+        onChange={(event) => void handlePeopleImportFile(event.target.files?.[0] ?? null)}
+        ref={peopleFileInputRef}
         type="file"
       />
 
@@ -494,6 +537,8 @@ export function TicketRestaurantePage() {
           onCancel={resetPersonForm}
           onChange={setPersonDraft}
           onEdit={editPerson}
+          importMessage={peopleImportMessage}
+          onImport={() => peopleFileInputRef.current?.click()}
           onRemove={removePerson}
           onSave={savePerson}
           people={visiblePeople}
@@ -797,9 +842,11 @@ function PeoplePanel({
   calendars,
   draft,
   editingPersonId,
+  importMessage,
   onCancel,
   onChange,
   onEdit,
+  onImport,
   onRemove,
   onSave,
   people,
@@ -807,9 +854,11 @@ function PeoplePanel({
   calendars: TicketCalendar[];
   draft: TicketPersonDraft;
   editingPersonId: string | null;
+  importMessage: string;
   onCancel: () => void;
   onChange: (draft: TicketPersonDraft) => void;
   onEdit: (person: TicketPerson) => void;
+  onImport: () => void;
   onRemove: (empleado: string) => void;
   onSave: () => void;
   people: TicketPerson[];
@@ -917,11 +966,26 @@ function PeoplePanel({
         </div>
       </div>
       <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-base font-bold text-metro-text">Personas con derecho a ticket</h3>
-          <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
-            {people.length}
-          </span>
+        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-bold text-metro-text">Personas con derecho a ticket</h3>
+            {importMessage ? (
+              <p className="mt-1 max-w-2xl text-xs text-metro-muted">{importMessage}</p>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+              onClick={onImport}
+              type="button"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              Importar personas
+            </button>
+            <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
+              {people.length}
+            </span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-xs">
