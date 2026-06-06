@@ -4,6 +4,7 @@ import {
   assignPersonaCalendario,
   calculateDerechosTicketMes,
   countTicketDaysInMonth,
+  type AusenciaTicket,
   type PersonaCalendario,
   type TicketCalendar,
 } from './ticketRestaurante';
@@ -46,6 +47,48 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     deletedAt: null,
     ...overrides,
   };
+}
+
+function buildAusencia(overrides: Partial<AusenciaTicket>): AusenciaTicket {
+  return {
+    id: 'ausencia-base',
+    empleado: '1001',
+    fecha: '2026-01-02',
+    tipo: 'IT',
+    afectaTicket: true,
+    observaciones: '',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+function calculateSingleRight(
+  ausencias: AusenciaTicket[],
+  calendarOverrides?: Partial<TicketCalendar>,
+) {
+  const assignments: PersonaCalendario[] = [
+    { empleado: '1001', calendarId: 'calendar-base', createdAt: timestamp },
+  ];
+  const calendars = [
+    buildCalendar({
+      diasTicket: [
+        { fecha: '2026-01-02', tieneTicket: true },
+        { fecha: '2026-01-03', tieneTicket: false },
+      ],
+      ...calendarOverrides,
+    }),
+  ];
+  const employees = [buildEmployee({ empleado: '1001', nombreApellidos: 'Persona Uno' })];
+
+  return calculateDerechosTicketMes({
+    assignments,
+    calendars,
+    employees,
+    month: '2026-01',
+    ausencias,
+  })[0];
 }
 
 describe('ticket restaurante domain', () => {
@@ -100,5 +143,72 @@ describe('ticket restaurante domain', () => {
     expect(assignments).toEqual([
       { empleado: '1001', calendarId: 'calendar-b', createdAt: '2026-01-02T00:00:00.000Z' },
     ]);
+  });
+
+  it('descuenta una ausencia afectaTicket si cae en un día con ticket', () => {
+    expect(calculateSingleRight([buildAusencia({ fecha: '2026-01-02' })])).toMatchObject({
+      diasTicketMes: 1,
+      ausenciasDescontadas: 1,
+      ticketsFinales: 0,
+    });
+  });
+
+  it('no descuenta una ausencia sin afectaTicket', () => {
+    expect(
+      calculateSingleRight([buildAusencia({ fecha: '2026-01-02', afectaTicket: false })]),
+    ).toMatchObject({
+      diasTicketMes: 1,
+      ausenciasDescontadas: 0,
+      ticketsFinales: 1,
+    });
+  });
+
+  it('no descuenta una ausencia en día sin ticket', () => {
+    expect(calculateSingleRight([buildAusencia({ fecha: '2026-01-03' })])).toMatchObject({
+      diasTicketMes: 1,
+      ausenciasDescontadas: 0,
+      ticketsFinales: 1,
+    });
+  });
+
+  it('descuenta una sola vez ausencias duplicadas del mismo empleado y fecha', () => {
+    expect(
+      calculateSingleRight([
+        buildAusencia({ id: 'ausencia-1', fecha: '2026-01-02' }),
+        buildAusencia({ id: 'ausencia-2', fecha: '2026-01-02', tipo: 'VAC' }),
+      ]),
+    ).toMatchObject({
+      diasTicketMes: 1,
+      ausenciasDescontadas: 1,
+      ticketsFinales: 0,
+    });
+  });
+
+  it('no descuenta una ausencia borrada lógicamente', () => {
+    expect(
+      calculateSingleRight([
+        buildAusencia({ fecha: '2026-01-02', deletedAt: '2026-01-04T00:00:00.000Z' }),
+      ]),
+    ).toMatchObject({
+      diasTicketMes: 1,
+      ausenciasDescontadas: 0,
+      ticketsFinales: 1,
+    });
+  });
+
+  it('no deja los ticketsFinales por debajo de cero', () => {
+    expect(
+      calculateSingleRight(
+        [
+          buildAusencia({ id: 'ausencia-1', fecha: '2026-01-02' }),
+          buildAusencia({ id: 'ausencia-2', fecha: '2026-01-04' }),
+        ],
+        { diasTicket: [{ fecha: '2026-01-02', tieneTicket: true }] },
+      ),
+    ).toMatchObject({
+      diasTicketMes: 1,
+      ausenciasDescontadas: 1,
+      ticketsFinales: 0,
+    });
   });
 });

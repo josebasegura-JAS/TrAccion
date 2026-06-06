@@ -27,17 +27,51 @@ export interface PersonaCalendario {
   createdAt: string;
 }
 
+export type AusenciaTicketTipo = 'IT' | 'VAC' | 'PERMISO' | 'OTRO';
+
+export interface AusenciaTicket {
+  id: string;
+  empleado: string;
+  fecha: string;
+  tipo: AusenciaTicketTipo;
+  afectaTicket: boolean;
+  observaciones: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface AusenciaTicketDraft {
+  empleado: string;
+  fecha: string;
+  tipo: AusenciaTicketTipo;
+  afectaTicket: boolean;
+  observaciones: string;
+}
+
 export interface DerechoTicketMes {
   empleado: string;
   nombreApellidos: string;
   calendario: string;
   diasTicketMes: number;
+  ausenciasDescontadas: number;
+  ticketsFinales: number;
 }
 
 export const EMPTY_TICKET_CALENDAR_DRAFT: TicketCalendarDraft = {
   nombre: '',
   activo: true,
   diasTicket: [],
+};
+
+export const AUSENCIA_TICKET_TIPOS: AusenciaTicketTipo[] = ['IT', 'VAC', 'PERMISO', 'OTRO'];
+
+export const EMPTY_AUSENCIA_TICKET_DRAFT: AusenciaTicketDraft = {
+  empleado: '',
+  fecha: '',
+  tipo: 'IT',
+  afectaTicket: true,
+  observaciones: '',
 };
 
 export function normalizeTicketDayRules(rules: DiaTicket[]): DiaTicket[] {
@@ -74,6 +108,29 @@ export function buildTicketCalendar(
 
 export function visibleTicketCalendars(calendars: TicketCalendar[]): TicketCalendar[] {
   return calendars.filter((calendar) => !calendar.deletedAt);
+}
+
+export function buildAusenciaTicket(
+  draft: AusenciaTicketDraft,
+  now: string,
+  id: string,
+  previous?: AusenciaTicket,
+): AusenciaTicket {
+  return {
+    id,
+    empleado: draft.empleado.trim(),
+    fecha: draft.fecha.trim(),
+    tipo: draft.tipo,
+    afectaTicket: draft.afectaTicket,
+    observaciones: draft.observaciones.trim(),
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: previous?.deletedAt ?? null,
+  };
+}
+
+export function visibleAusenciasTicket(ausencias: AusenciaTicket[]): AusenciaTicket[] {
+  return ausencias.filter((ausencia) => !ausencia.deletedAt);
 }
 
 export function activeTicketCalendars(calendars: TicketCalendar[]): TicketCalendar[] {
@@ -113,11 +170,13 @@ export function calculateDerechosTicketMes({
   calendars,
   employees,
   month,
+  ausencias = [],
 }: {
   assignments: PersonaCalendario[];
   calendars: TicketCalendar[];
   employees: Employee[];
   month: string;
+  ausencias?: AusenciaTicket[];
 }): DerechoTicketMes[] {
   const visibleEmployeesById = new Map(
     employees
@@ -126,6 +185,10 @@ export function calculateDerechosTicketMes({
   );
   const calendarsById = new Map(
     visibleTicketCalendars(calendars).map((calendar) => [calendar.id, calendar]),
+  );
+  const fechasAusenciaDescontablesPorEmpleado = buildFechasAusenciaDescontablesPorEmpleado(
+    ausencias,
+    month,
   );
 
   return assignments
@@ -137,17 +200,49 @@ export function calculateDerechosTicketMes({
         return null;
       }
 
+      const diasTicketMes = countTicketDaysInMonth(calendar, month);
+      const fechasTicket = new Set(
+        calendar.diasTicket
+          .filter((day) => day.tieneTicket && day.fecha.startsWith(`${month}-`))
+          .map((day) => day.fecha),
+      );
+      const ausenciasDescontadas = Array.from(
+        fechasAusenciaDescontablesPorEmpleado.get(employee.empleado) ?? [],
+      ).filter((fecha) => fechasTicket.has(fecha)).length;
+
       return {
         empleado: employee.empleado,
         nombreApellidos: employee.nombreApellidos,
         calendario: calendar.nombre,
-        diasTicketMes: countTicketDaysInMonth(calendar, month),
+        diasTicketMes,
+        ausenciasDescontadas,
+        ticketsFinales: Math.max(0, diasTicketMes - ausenciasDescontadas),
       };
     })
     .filter((right): right is DerechoTicketMes => right !== null)
     .sort((first, second) =>
       first.empleado.localeCompare(second.empleado, 'es', { numeric: true, sensitivity: 'base' }),
     );
+}
+
+function buildFechasAusenciaDescontablesPorEmpleado(
+  ausencias: AusenciaTicket[],
+  month: string,
+): Map<string, Set<string>> {
+  const fechasPorEmpleado = new Map<string, Set<string>>();
+
+  ausencias
+    .filter(
+      (ausencia) =>
+        ausencia.afectaTicket && !ausencia.deletedAt && ausencia.fecha.startsWith(`${month}-`),
+    )
+    .forEach((ausencia) => {
+      const fechas = fechasPorEmpleado.get(ausencia.empleado) ?? new Set<string>();
+      fechas.add(ausencia.fecha);
+      fechasPorEmpleado.set(ausencia.empleado, fechas);
+    });
+
+  return fechasPorEmpleado;
 }
 
 function isIsoDate(value: string): boolean {
