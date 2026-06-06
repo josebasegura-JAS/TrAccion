@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
-import { readFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,6 +51,113 @@ function createWindow() {
   }
 }
 
+interface OutlookDraftPayload {
+  subject: string;
+  html: string;
+  to: string[];
+  cc: string[];
+}
+
+interface OutlookDraftResult {
+  ok: boolean;
+  message: string;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isOutlookDraftPayload(value: unknown): value is OutlookDraftPayload {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<OutlookDraftPayload>;
+  return (
+    typeof candidate.subject === 'string' &&
+    typeof candidate.html === 'string' &&
+    isStringArray(candidate.to) &&
+    isStringArray(candidate.cc) &&
+    candidate.subject.length <= 255 &&
+    candidate.html.length <= 100_000 &&
+    candidate.to.length <= 200 &&
+    candidate.cc.length <= 200
+  );
+}
+
+function sanitizeMailDraft(payload: OutlookDraftPayload): OutlookDraftPayload {
+  return {
+    subject: payload.subject.trim(),
+    html: payload.html,
+    to: payload.to.map((recipient) => recipient.trim()).filter(Boolean),
+    cc: payload.cc.map((recipient) => recipient.trim()).filter(Boolean),
+  };
+}
+
+async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
+  }
+
+  if (!isOutlookDraftPayload(payload)) {
+    return { ok: false, message: 'Datos de correo no válidos.' };
+  }
+
+  const safePayload = sanitizeMailDraft(payload);
+  const stamp = `${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
+  const jsonPath = path.join(tmpdir(), `traccion-especiales-${stamp}.json`);
+  const scriptPath = path.join(tmpdir(), `traccion-especiales-${stamp}.ps1`);
+  const script = `
+$ErrorActionPreference = 'Stop'
+$payload = Get-Content -Raw -LiteralPath $args[0] | ConvertFrom-Json
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.CreateItem(0)
+$mail.Subject = [string]$payload.subject
+$mail.To = [string]::Join(';', @($payload.to))
+$mail.CC = [string]::Join(';', @($payload.cc))
+$mail.HTMLBody = [string]$payload.html
+$mail.Display($false)
+`;
+
+  try {
+    await writeFile(jsonPath, JSON.stringify(safePayload), 'utf8');
+    await writeFile(scriptPath, script, 'utf8');
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        jsonPath,
+      ]);
+      let stderr = '';
+
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(stderr.trim() || `PowerShell terminó con código ${code ?? 'desconocido'}.`),
+          );
+        }
+      });
+    });
+
+    return { ok: true, message: 'Borrador creado en Outlook.' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error desconocido al abrir Outlook.';
+    return { ok: false, message };
+  } finally {
+    await Promise.allSettled([rm(jsonPath, { force: true }), rm(scriptPath, { force: true })]);
+  }
+}
+
 function assertDocxPath(filePath: string): void {
   if (path.extname(filePath).toLowerCase() !== '.docx') {
     throw new Error('La ruta configurada debe apuntar a un archivo DOCX.');
@@ -88,6 +197,10 @@ function registerIpcHandlers(): void {
       fileBuffer.byteOffset + fileBuffer.byteLength,
     );
   });
+
+  ipcMain.handle('especiales:create-outlook-draft', async (_event, payload: unknown) =>
+    createOutlookDraft(payload),
+  );
 }
 
 app.whenReady().then(() => {

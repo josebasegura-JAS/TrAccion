@@ -1,5 +1,17 @@
 /// <reference types="vite/client" />
 
+interface EspecialOutlookDraftPayload {
+  subject: string;
+  html: string;
+  to: string[];
+  cc: string[];
+}
+
+interface EspecialOutlookDraftResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TraccionApi {
   databaseStatus: () => Promise<{
     ready: boolean;
@@ -8,6 +20,7 @@ interface TraccionApi {
   }>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
+  createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
 }
 
 interface Window {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AjustesPage } from './components/AjustesPage';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
+import { EspecialesPage } from './features/especiales/components/EspecialesPage';
 import { PeticionesPage } from './components/PeticionesPage';
 import { PlantillaPage } from './components/PlantillaPage';
 import { Sidebar, type AppView } from './components/Sidebar';
@@ -44,6 +45,7 @@ export function App() {
           {activeView === 'peticiones' && <PeticionesPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
+          {activeView === 'especiales' && <EspecialesPage />}
           {activeView === 'ajustes' && <AjustesPage />}
         </main>
       </div>
