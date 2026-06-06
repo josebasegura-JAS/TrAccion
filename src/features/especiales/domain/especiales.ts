@@ -368,6 +368,7 @@ export function extractIntranetParagraph(text: string): string {
   const literalStart = match.index;
   const afterMarker = normalized.slice(match.index + match[0].length);
   const stopMatch =
+    /(?:\n|\s)+(?:[A-Za-z]:\\|\\\\)/.exec(afterMarker) ||
     /(?:\n\s*\n|\n|\s{3,})(?:El\s+servicio\s+especial|El\s+PMC|La\s+publicaci[oó]n|Se\s+confirmar[aá]|Los\s+gr[aá]ficos|Un\s+saludo|$)/i.exec(
       afterMarker,
     ) ||
@@ -391,7 +392,7 @@ export function extractIntranetParagraph(text: string): string {
     .replace(/^ste\s+Servicio/i, 'Este Servicio')
     .trim();
 
-  return `${prefix}${cleanValue}`
+  return `${prefix} ${cleanValue}`
     .replace(/\s+/g, ' ')
     .replace(/^ste\s+Servicio/i, 'Este Servicio')
     .trim();
