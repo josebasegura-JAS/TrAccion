@@ -3,6 +3,7 @@ import {
   ClipboardList,
   Database,
   FileText,
+  ListChecks,
   Home,
   MailPlus,
   Laptop,
@@ -19,6 +20,7 @@ export type AppView =
   | 'plantilla'
   | 'tareas'
   | 'peticiones'
+  | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
   | 'vinculograma'
@@ -73,6 +75,13 @@ export function Sidebar({
           type="button"
         >
           <FileText size={18} /> Peticiones
+        </button>
+        <button
+          className={navButtonClass('criterios-rrll')}
+          onClick={() => onViewChange('criterios-rrll')}
+          type="button"
+        >
+          <ListChecks size={18} /> Criterios RRLL
         </button>
         <button
           className={navButtonClass('teletrabajo')}
