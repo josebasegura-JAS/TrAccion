@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   buildVinculograma,
   type Vinculograma,
@@ -35,7 +36,7 @@ function isVinculograma(value: unknown): value is Vinculograma {
 }
 
 function readRecords(): Vinculograma[] {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -49,7 +50,7 @@ function readRecords(): Vinculograma[] {
 }
 
 function persistRecords(records: Vinculograma[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(records));
 }
 
 function nowIso(): string {

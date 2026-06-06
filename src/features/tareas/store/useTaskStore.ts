@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   CLOSED_TASK_PHASE,
   DEFAULT_TASK_PHASE,
@@ -130,7 +131,7 @@ function normalizeTask(task: Task): Task {
 }
 
 function readStoredArray(storageKey: string): unknown[] {
-  const stored = window.localStorage.getItem(storageKey);
+  const stored = readStorageItem(storageKey);
   if (!stored) {
     return [];
   }
@@ -144,7 +145,7 @@ function readCurrentTasks(): Task[] {
 }
 
 function readMigratedPeticiones(): Task[] {
-  if (window.localStorage.getItem(PETICIONES_MIGRATION_FLAG_KEY) === 'true') {
+  if (readStorageItem(PETICIONES_MIGRATION_FLAG_KEY) === 'true') {
     return [];
   }
 
@@ -166,12 +167,12 @@ function readTasks(): Task[] {
 
   const tasks = [...currentTasks, ...migratedTasks];
   persistTasks(tasks);
-  window.localStorage.setItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
+  writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
   return tasks;
 }
 
 function persistTasks(tasks: Task[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(tasks));
 }
 
 function firstActiveTaskId(tasks: Task[]): string {

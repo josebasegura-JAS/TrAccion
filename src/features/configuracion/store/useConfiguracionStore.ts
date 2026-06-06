@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { normalizeTemplatePath } from '../domain/teletrabajoTemplate';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   createTaskPhaseIdFromName,
   DEFAULT_TASK_PHASES,
@@ -64,7 +65,7 @@ function isConfiguracionState(value: unknown): value is ConfiguracionState {
 }
 
 function readConfiguracion(): ConfiguracionState {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
     return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES };
   }
@@ -81,7 +82,7 @@ function readConfiguracion(): ConfiguracionState {
 }
 
 function persistConfiguracion(configuracion: ConfiguracionState): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(configuracion));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(configuracion));
 }
 
 const initialConfiguracion = readConfiguracion();
