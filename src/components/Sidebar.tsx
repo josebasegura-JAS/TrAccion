@@ -4,7 +4,6 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   Database,
-  FileText,
   Gift,
   Home,
   Laptop,
@@ -29,7 +28,6 @@ export type AppView =
   | 'dashboard'
   | 'plantilla'
   | 'tareas'
-  | 'peticiones'
   | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
@@ -80,7 +78,6 @@ const navigationGroups: NavigationGroup[] = [
     icon: BriefcaseBusiness,
     items: [
       { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
-      { label: 'Peticiones', icon: FileText, view: 'peticiones' },
       { label: 'Criterios RRLL', icon: ShieldCheck, view: 'criterios-rrll' },
       { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' },
       { label: 'Sorteos', icon: Gift, view: 'sorteos' },

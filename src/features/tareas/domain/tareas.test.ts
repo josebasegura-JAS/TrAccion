@@ -1,24 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_TASK_FILTERS, filterTasks, type TaskFilters } from './filters';
+import { groupHistoricTasksByYear } from './historico';
 import { sortTasksByDefault } from './sort';
-import type { Task } from './task';
+import { migratePeticionToTask, type Task } from './task';
 
 function buildTask(overrides: Partial<Task>): Task {
   return {
     id: 'task-base',
     titulo: 'Título base',
     descripcion: 'Descripción base',
+    tipo: 'interna',
+    fase: 'tarea',
     estado: 'pendiente',
     prioridad: 'media',
     fechaLimite: '',
     responsable: '',
-    origenSindicato: '',
+    origen: '',
+    sindicato: '',
     observaciones: '',
-    actualizaciones: [],
-    closedAt: null,
+    seguimiento: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
+    closedAt: null,
     ...overrides,
   };
 }
@@ -44,37 +48,121 @@ describe('tareas domain', () => {
     ]);
   });
 
-  it('busca únicamente por título y descripción', () => {
+  it('permite tareas de tipo interna', () => {
+    const source = [buildTask({ id: 'interna', tipo: 'interna' })];
+
+    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, tipo: 'interna' }).map((task) => task.id)).toEqual([
+      'interna',
+    ]);
+  });
+
+  it('permite tareas de tipo sindical', () => {
+    const source = [buildTask({ id: 'sindical', tipo: 'sindical', sindicato: 'UGT' })];
+
+    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, tipo: 'sindical' }).map((task) => task.id)).toEqual([
+      'sindical',
+    ]);
+  });
+
+  it('filtra por fase configurable', () => {
     const source = [
-      buildTask({ id: 'titulo', titulo: 'Revisar acta', responsable: 'No coincide' }),
+      buildTask({ id: 'comite', fase: 'comite' }),
+      buildTask({ id: 'paritaria', fase: 'paritaria' }),
+    ];
+
+    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, fase: 'paritaria' }).map((task) => task.id)).toEqual([
+      'paritaria',
+    ]);
+  });
+
+  it('filtra por tipo, fase, estado y prioridad', () => {
+    const source = [
+      buildTask({ id: 'match', tipo: 'sindical', fase: 'peticion', estado: 'bloqueada', prioridad: 'alta' }),
+      buildTask({ id: 'otro-tipo', tipo: 'interna', fase: 'peticion', estado: 'bloqueada', prioridad: 'alta' }),
+      buildTask({ id: 'otra-fase', tipo: 'sindical', fase: 'comite', estado: 'bloqueada', prioridad: 'alta' }),
+      buildTask({ id: 'otro-estado', tipo: 'sindical', fase: 'peticion', estado: 'resuelta', prioridad: 'alta' }),
+      buildTask({ id: 'otra-prioridad', tipo: 'sindical', fase: 'peticion', estado: 'bloqueada', prioridad: 'baja' }),
+    ];
+    const filters: TaskFilters = {
+      ...EMPTY_TASK_FILTERS,
+      tipo: 'sindical',
+      fase: 'peticion',
+      estado: 'bloqueada',
+      prioridad: 'alta',
+    };
+
+    expect(filterTasks(source, filters).map((task) => task.id)).toEqual(['match']);
+  });
+
+  it('busca por título, descripción, sindicato y origen', () => {
+    const source = [
+      buildTask({ id: 'titulo', titulo: 'Revisar acta' }),
       buildTask({ id: 'descripcion', descripcion: 'Seguimiento de acta sindical' }),
-      buildTask({ id: 'responsable', titulo: 'Otra tarea', descripcion: '', responsable: 'Acta' }),
+      buildTask({ id: 'sindicato', sindicato: 'Acta sindicato' }),
+      buildTask({ id: 'origen', origen: 'Acta origen' }),
+      buildTask({ id: 'sin-coincidencia', responsable: 'Acta responsable' }),
     ];
 
     expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, search: 'acta' }).map((task) => task.id)).toEqual([
       'titulo',
       'descripcion',
+      'sindicato',
+      'origen',
     ]);
   });
 
-  it('filtra por estado y prioridad', () => {
-    const source = [
-      buildTask({ id: 'pendiente-alta', estado: 'pendiente', prioridad: 'alta' }),
-      buildTask({ id: 'curso-alta', estado: 'en curso', prioridad: 'alta' }),
-      buildTask({ id: 'curso-baja', estado: 'en curso', prioridad: 'baja' }),
-    ];
-    const filters: TaskFilters = { ...EMPTY_TASK_FILTERS, estado: 'en curso', prioridad: 'alta' };
-
-    expect(filterTasks(source, filters).map((task) => task.id)).toEqual(['curso-alta']);
-  });
-
-  it('excluye tareas borradas y cerradas de la vista activa', () => {
+  it('excluye cerradas por estado de la vista activa', () => {
     const source = [
       buildTask({ id: 'visible' }),
-      buildTask({ id: 'borrada', deletedAt: '2026-01-02T00:00:00.000Z' }),
-      buildTask({ id: 'cerrada', estado: 'cerrada', closedAt: '2026-01-03T00:00:00.000Z' }),
+      buildTask({ id: 'cerrada-estado', estado: 'cerrada', closedAt: '2026-01-03T00:00:00.000Z' }),
     ];
 
     expect(filterTasks(source, EMPTY_TASK_FILTERS).map((task) => task.id)).toEqual(['visible']);
+  });
+
+  it('excluye cerradas por fase de la vista activa', () => {
+    const source = [buildTask({ id: 'visible' }), buildTask({ id: 'cerrada-fase', fase: 'cerrada' })];
+
+    expect(filterTasks(source, EMPTY_TASK_FILTERS).map((task) => task.id)).toEqual(['visible']);
+  });
+
+  it('agrupa el histórico por año con tareas internas y sindicales cerradas', () => {
+    const source = [
+      buildTask({ id: 'interna-2026', tipo: 'interna', estado: 'cerrada', closedAt: '2026-02-01T00:00:00.000Z' }),
+      buildTask({ id: 'sindical-2025', tipo: 'sindical', fase: 'cerrada', closedAt: '2025-02-01T00:00:00.000Z' }),
+      buildTask({ id: 'activa', tipo: 'sindical', fase: 'peticion' }),
+    ];
+
+    expect(groupHistoricTasksByYear(source)).toEqual([
+      { year: '2026', tasks: [source[0]] },
+      { year: '2025', tasks: [source[1]] },
+    ]);
+  });
+
+  it('migra una petición antigua a tarea sindical en fase petición manteniendo seguimiento', () => {
+    const task = migratePeticionToTask({
+      id: 'peticion-1',
+      titulo: 'Solicitud sindical',
+      descripcion: 'Detalle',
+      estado: 'cerrada',
+      prioridad: 'alta',
+      fechaLimite: '2026-03-01',
+      solicitante: 'Delegado',
+      sindicato: 'CCOO',
+      observaciones: 'Obs',
+      seguimiento: [{ fechaHora: '2026-02-01T00:00:00.000Z', texto: 'Entrada' }],
+      closedAt: '2026-04-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    });
+
+    expect(task).toMatchObject({
+      id: 'migrada-peticion-1',
+      tipo: 'sindical',
+      fase: 'peticion',
+      origen: 'Delegado',
+      sindicato: 'CCOO',
+      seguimiento: [{ fechaHora: '2026-02-01T00:00:00.000Z', texto: 'Entrada' }],
+    });
   });
 });

@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronRight, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
+import { getTaskClosedYear } from '../features/tareas/domain/historico';
 import {
   sortTasksByColumn,
   sortTasksByDefault,
@@ -8,8 +10,10 @@ import {
   type TaskSortKey,
 } from '../features/tareas/domain/sort';
 import {
+  isTaskClosed,
   TASK_PRIORITIES,
   TASK_STATES,
+  TASK_TYPES,
   type Task,
   type TaskPriority,
 } from '../features/tareas/domain/task';
@@ -34,12 +38,14 @@ interface HistoricYearGroup {
 }
 
 const sortableColumns: Array<{ key: TaskSortKey; label: string; className: string }> = [
-  { key: 'titulo', label: 'Título', className: 'w-[220px]' },
+  { key: 'titulo', label: 'Título', className: 'w-[210px]' },
+  { key: 'tipo', label: 'Tipo', className: 'w-[95px]' },
+  { key: 'fase', label: 'Fase', className: 'w-[125px]' },
   { key: 'estado', label: 'Estado', className: 'w-[115px]' },
   { key: 'prioridad', label: 'Prioridad', className: 'w-[105px]' },
   { key: 'fechaLimite', label: 'Fecha límite', className: 'w-[120px]' },
-  { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
-  { key: 'origenSindicato', label: 'Origen sindicato', className: 'w-[155px]' },
+  { key: 'responsable', label: 'Responsable', className: 'w-[145px]' },
+  { key: 'sindicato', label: 'Sindicato', className: 'w-[130px]' },
 ];
 
 const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
@@ -61,13 +67,6 @@ function formatDateTime(value: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
-}
-
-function getClosedYear(task: Task): string {
-  const closedDate = task.closedAt ? new Date(task.closedAt) : null;
-  return closedDate && !Number.isNaN(closedDate.getTime())
-    ? String(closedDate.getFullYear())
-    : 'Sin fecha';
 }
 
 const PRIORITY_ORDER = new Map<TaskPriority, number>(
@@ -107,7 +106,7 @@ function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): Histor
   const groups = new Map<string, Task[]>();
 
   tasks.forEach((task) => {
-    const year = getClosedYear(task);
+    const year = getTaskClosedYear(task);
     groups.set(year, [...(groups.get(year) ?? []), task]);
   });
 
@@ -120,6 +119,8 @@ function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): Histor
 
 export function TareasPage() {
   const { filters, load, remove, selectTask, setFilter, tasks } = useTaskStore();
+  const taskPhases = useConfiguracionStore((state) => state.taskPhases);
+  const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
@@ -132,8 +133,13 @@ export function TareasPage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadConfiguracion();
+  }, [load, loadConfiguracion]);
 
+  const phaseFilterOptions = useMemo(
+    () => taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre),
+    [taskPhases],
+  );
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const filteredTasks = useMemo(() => filterTasks(tasks, filters), [filters, tasks]);
   const sortedTasks = useMemo(() => {
@@ -144,7 +150,7 @@ export function TareasPage() {
     return sortTasksByColumn(filteredTasks, sortState.key, sortState.direction);
   }, [filteredTasks, sortState]);
   const historicTasks = useMemo(
-    () => visibleTasks.filter((task) => task.estado === 'cerrada'),
+    () => visibleTasks.filter((task) => isTaskClosed(task)),
     [visibleTasks],
   );
   const historicGroups = useMemo(
@@ -199,7 +205,7 @@ export function TareasPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
           <h2 className="text-2xl font-bold text-metro-text">Tareas</h2>
           <p className="mt-0.5 text-base text-metro-muted">
-            Listado de tareas con alta manual, edición, borrado lógico, búsqueda y filtros.
+            Centro operativo único para tareas internas y solicitudes sindicales por fase.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -213,17 +219,29 @@ export function TareasPage() {
         </div>
       </div>
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 xl:grid-cols-[minmax(220px,1.3fr)_repeat(4,minmax(135px,0.7fr))]">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
             className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
             onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por título o descripción..."
+            placeholder="Buscar por título, descripción, sindicato u origen..."
             type="search"
             value={filters.search}
           />
         </label>
+        <SelectFilter
+          label="Tipo"
+          onChange={(value) => setFilter('tipo', value as typeof filters.tipo)}
+          options={TASK_TYPES}
+          value={filters.tipo}
+        />
+        <SelectFilter
+          label="Fase"
+          onChange={(value) => setFilter('fase', value)}
+          options={phaseFilterOptions}
+          value={filters.fase}
+        />
         <SelectFilter
           label="Estado"
           onChange={(value) => setFilter('estado', value as typeof filters.estado)}
@@ -241,7 +259,7 @@ export function TareasPage() {
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-metro-red" /> Tareas
+            <SlidersHorizontal size={16} className="text-metro-red" /> Tareas activas
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredTasks.length} registros
@@ -271,17 +289,23 @@ export function TareasPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-metro-border bg-metro-surface">
+              {sortedTasks.length === 0 && (
+                <tr>
+                  <td className="px-3 py-5 text-center text-sm text-metro-muted" colSpan={9}>
+                    No hay tareas activas con los filtros aplicados.
+                  </td>
+                </tr>
+              )}
               {sortedTasks.map((task) => (
-                <tr
-                  className="cursor-pointer hover:bg-metro-red/10"
-                  key={task.id}
-                  onClick={() => openEditor(task)}
-                >
-                  <td
-                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                    title={task.titulo}
-                  >
+                <tr className="hover:bg-metro-red/10" key={task.id}>
+                  <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>
                     {task.titulo}
+                  </td>
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.tipo}>
+                    {task.tipo}
+                  </td>
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.fase}>
+                    {task.fase}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.estado}>
                     {task.estado}
@@ -289,28 +313,26 @@ export function TareasPage() {
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
                     {task.prioridad}
                   </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={task.fechaLimite || '—'}
-                  >
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.fechaLimite || '—'}>
                     {task.fechaLimite || '—'}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>
-                    {task.responsable}
+                    {task.responsable || '—'}
                   </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={task.origenSindicato}
-                  >
-                    {task.origenSindicato}
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.sindicato}>
+                    {task.sindicato || '—'}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     <button
-                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        remove(task.id);
-                      }}
+                      className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text hover:border-metro-red"
+                      onClick={() => openEditor(task)}
+                      type="button"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      className="ml-2 rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                      onClick={() => remove(task.id)}
                       type="button"
                     >
                       Eliminar
@@ -404,7 +426,7 @@ export function TareasPage() {
                                 className="truncate px-3 py-1.5 text-metro-muted"
                                 title={task.responsable}
                               >
-                                {task.responsable}
+                                {task.responsable || '—'}
                               </td>
                               <td
                                 className="truncate px-3 py-1.5 text-metro-muted"
