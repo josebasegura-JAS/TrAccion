@@ -9,6 +9,7 @@ import { Sidebar, type AppView } from './components/Sidebar';
 import { TareasPage } from './components/TareasPage';
 import { TeletrabajoPage } from './components/TeletrabajoPage';
 import { TicketRestaurantePage } from './features/ticket-restaurante/components/TicketRestaurantePage';
+import { VinculogramaPage } from './features/vinculograma/components/VinculogramaPage';
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
@@ -45,6 +46,7 @@ export function App() {
           {activeView === 'peticiones' && <PeticionesPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
+          {activeView === 'vinculograma' && <VinculogramaPage />}
           {activeView === 'especiales' && <EspecialesPage />}
           {activeView === 'ajustes' && <AjustesPage />}
         </main>
