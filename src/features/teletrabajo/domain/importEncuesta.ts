@@ -22,6 +22,8 @@ type EncuestaField =
   | 'tipoSolicitud'
   | 'diasTeletrabajo'
   | 'periodo'
+  | 'fechaOrdenador'
+  | 'fechaCascos'
   | 'observaciones';
 
 export interface ImportEncuestaSummary {
@@ -85,6 +87,17 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]>
     ],
   ],
   ['periodo', ['periodo', 'período', 'campaña', 'campana', 'curso']],
+  [
+    'fechaOrdenador',
+    [
+      'fecha ordenador',
+      'fecha entrega ordenador',
+      'entrega ordenador',
+      'fecha equipo',
+      'fecha entrega equipo',
+    ],
+  ],
+  ['fechaCascos', ['fecha cascos', 'fecha entrega cascos', 'entrega cascos', 'fecha auriculares']],
   [
     'observaciones',
     [
@@ -178,6 +191,8 @@ export function rowsToTeletrabajoDrafts(
       estado: 'pendiente',
       tipoSolicitud: normalizeTipoSolicitud(raw.tipoSolicitud),
       diasTeletrabajo: normalizeEncuestaDias(`${raw.diasTeletrabajo} ${aportaciones}`),
+      fechaOrdenador: raw.fechaOrdenador.trim(),
+      fechaCascos: raw.fechaCascos.trim(),
       periodo: raw.periodo.trim() || defaultPeriodo,
       observaciones: aportaciones,
       validacionSeguridadInformatica: false,
@@ -222,6 +237,8 @@ function readEncuestaRow(
     tipoSolicitud: '',
     diasTeletrabajo: '',
     periodo: '',
+    fechaOrdenador: '',
+    fechaCascos: '',
     observaciones: '',
   };
 
