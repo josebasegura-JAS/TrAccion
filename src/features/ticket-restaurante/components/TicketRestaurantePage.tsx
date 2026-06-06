@@ -1,4 +1,4 @@
-import { CalendarDays, Plus, Save, SlidersHorizontal, UsersRound } from 'lucide-react';
+import { CalendarDays, Plus, Save, Search, SlidersHorizontal, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
@@ -20,6 +20,14 @@ import {
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 
 type TicketSection = 'calendarios' | 'asignaciones' | 'derechos' | 'ausencias';
+type SortDirection = 'asc' | 'desc';
+type AusenciaSortKey = 'empleado' | 'nombreApellidos' | 'fecha' | 'tipo' | 'afectaTicket';
+type DerechoSortKey = keyof DerechoTicketMes;
+
+interface SortState<T extends string> {
+  key: T;
+  direction: SortDirection;
+}
 
 function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
@@ -44,9 +52,26 @@ function toAusenciaDraft(ausencia: AusenciaTicket): AusenciaTicketDraft {
 }
 
 function sortByText<T>(items: T[], pick: (item: T) => string): T[] {
-  return [...items].sort((first, second) =>
-    pick(first).localeCompare(pick(second), 'es', { numeric: true, sensitivity: 'base' }),
-  );
+  return [...items].sort((first, second) => compareText(pick(first), pick(second)));
+}
+
+function compareText(first: string, second: string): number {
+  return first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' });
+}
+
+function compareNumber(first: number, second: number): number {
+  return first - second;
+}
+
+function applyDirection(result: number, direction: SortDirection): number {
+  return direction === 'asc' ? result : -result;
+}
+
+function toggleSortState<T extends string>(current: SortState<T> | null, key: T): SortState<T> {
+  return {
+    key,
+    direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+  };
 }
 
 export function TicketRestaurantePage() {
@@ -78,6 +103,11 @@ export function TicketRestaurantePage() {
     EMPTY_AUSENCIA_TICKET_DRAFT,
   );
   const [editingAusenciaId, setEditingAusenciaId] = useState<string | null>(null);
+  const [isAusenciaEditorOpen, setIsAusenciaEditorOpen] = useState(false);
+  const [ausenciaSearch, setAusenciaSearch] = useState('');
+  const [ausenciaTipoFilter, setAusenciaTipoFilter] = useState('');
+  const [ausenciaSort, setAusenciaSort] = useState<SortState<AusenciaSortKey> | null>(null);
+  const [derechoSort, setDerechoSort] = useState<SortState<DerechoSortKey> | null>(null);
 
   useEffect(() => {
     loadEmployees();
@@ -104,10 +134,7 @@ export function TicketRestaurantePage() {
     () => sortByText(assignments, (assignment) => assignment.empleado),
     [assignments],
   );
-  const visibleAusencias = useMemo(
-    () => sortByText(visibleAusenciasTicket(ausencias), (ausencia) => ausencia.fecha),
-    [ausencias],
-  );
+  const visibleAusencias = useMemo(() => visibleAusenciasTicket(ausencias), [ausencias]);
   const rights = useMemo(
     () =>
       calculateDerechosTicketMes({
@@ -128,6 +155,60 @@ export function TicketRestaurantePage() {
     () => new Map(employees.map((employee) => [employee.empleado, employee])),
     [employees],
   );
+  const filteredAusencias = useMemo(() => {
+    const normalizedSearch = ausenciaSearch.trim().toLocaleLowerCase('es');
+    return visibleAusencias.filter((ausencia) => {
+      const nombreApellidos = employeeById.get(ausencia.empleado)?.nombreApellidos ?? '';
+      const matchesSearch =
+        !normalizedSearch ||
+        ausencia.empleado.toLocaleLowerCase('es').includes(normalizedSearch) ||
+        nombreApellidos.toLocaleLowerCase('es').includes(normalizedSearch);
+      const matchesTipo = !ausenciaTipoFilter || ausencia.tipo === ausenciaTipoFilter;
+
+      return matchesSearch && matchesTipo;
+    });
+  }, [ausenciaSearch, ausenciaTipoFilter, employeeById, visibleAusencias]);
+  const sortedAusencias = useMemo(() => {
+    const sortState = ausenciaSort ?? { key: 'fecha', direction: 'asc' as const };
+
+    return [...filteredAusencias].sort((first, second) => {
+      const firstName = employeeById.get(first.empleado)?.nombreApellidos ?? '';
+      const secondName = employeeById.get(second.empleado)?.nombreApellidos ?? '';
+      const resultByKey: Record<AusenciaSortKey, number> = {
+        empleado: compareText(first.empleado, second.empleado),
+        nombreApellidos: compareText(firstName, secondName),
+        fecha: compareText(first.fecha, second.fecha),
+        tipo: compareText(first.tipo, second.tipo),
+        afectaTicket: compareText(
+          first.afectaTicket ? 'Sí' : 'No',
+          second.afectaTicket ? 'Sí' : 'No',
+        ),
+      };
+
+      return applyDirection(resultByKey[sortState.key], sortState.direction);
+    });
+  }, [ausenciaSort, employeeById, filteredAusencias]);
+  const sortedRights = useMemo(() => {
+    if (!derechoSort) {
+      return rights;
+    }
+
+    return [...rights].sort((first, second) => {
+      const resultByKey: Record<DerechoSortKey, number> = {
+        empleado: compareText(first.empleado, second.empleado),
+        nombreApellidos: compareText(first.nombreApellidos, second.nombreApellidos),
+        calendario: compareText(first.calendario, second.calendario),
+        diasTicketMes: compareNumber(first.diasTicketMes, second.diasTicketMes),
+        ausenciasDescontadas: compareNumber(
+          first.ausenciasDescontadas,
+          second.ausenciasDescontadas,
+        ),
+        ticketsFinales: compareNumber(first.ticketsFinales, second.ticketsFinales),
+      };
+
+      return applyDirection(resultByKey[derechoSort.key], derechoSort.direction);
+    });
+  }, [derechoSort, rights]);
 
   const resetCalendarForm = () => {
     setCalendarDraft(EMPTY_TICKET_CALENDAR_DRAFT);
@@ -187,9 +268,16 @@ export function TicketRestaurantePage() {
     setSelectedCalendarId('');
   };
 
-  const resetAusenciaForm = () => {
+  const openCreateAusencia = () => {
     setAusenciaDraft(EMPTY_AUSENCIA_TICKET_DRAFT);
     setEditingAusenciaId(null);
+    setIsAusenciaEditorOpen(true);
+  };
+
+  const closeAusenciaEditor = () => {
+    setAusenciaDraft(EMPTY_AUSENCIA_TICKET_DRAFT);
+    setEditingAusenciaId(null);
+    setIsAusenciaEditorOpen(false);
   };
 
   const saveAusencia = () => {
@@ -202,12 +290,13 @@ export function TicketRestaurantePage() {
     } else {
       createAusencia(ausenciaDraft);
     }
-    resetAusenciaForm();
+    closeAusenciaEditor();
   };
 
   const editAusencia = (ausencia: AusenciaTicket) => {
     setAusenciaDraft(toAusenciaDraft(ausencia));
     setEditingAusenciaId(ausencia.id);
+    setIsAusenciaEditorOpen(true);
   };
 
   return (
@@ -417,113 +506,211 @@ export function TicketRestaurantePage() {
               />
             </label>
           </div>
-          <RightsTable rights={rights} />
+          <RightsTable
+            onSort={(key) => setDerechoSort((current) => toggleSortState(current, key))}
+            rights={sortedRights}
+            sortState={derechoSort}
+          />
         </div>
       )}
 
       {section === 'ausencias' && (
         <div className="space-y-3">
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={resetAusenciaForm}
-            type="button"
-          >
-            <Plus size={16} /> Nueva ausencia
-          </button>
-          <div className="grid gap-4 2xl:grid-cols-[430px_minmax(0,1fr)]">
-            <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-metro-text">
-                <CalendarDays size={16} className="text-metro-red" />
-                {editingAusenciaId ? 'Editar ausencia' : 'Nueva ausencia'}
-              </div>
-              <div className="space-y-3">
-                <SelectBox
-                  label="Persona"
-                  onChange={(empleado) => setAusenciaDraft((current) => ({ ...current, empleado }))}
-                  value={ausenciaDraft.empleado}
-                >
-                  {employees.map((employee) => (
-                    <option key={employee.empleado} value={employee.empleado}>
-                      {employee.empleado} · {employee.nombreApellidos}
-                    </option>
-                  ))}
-                </SelectBox>
+          <div className="flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="grid flex-1 gap-2 lg:grid-cols-[minmax(220px,1fr)_180px]">
+              <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-white px-3 py-1.5 text-sm text-metro-muted">
+                <Search size={16} className="text-metro-red" />
                 <input
-                  className="w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) =>
-                    setAusenciaDraft((current) => ({ ...current, fecha: event.target.value }))
-                  }
-                  type="date"
-                  value={ausenciaDraft.fecha}
+                  className="w-full bg-transparent text-metro-text outline-none"
+                  onChange={(event) => setAusenciaSearch(event.target.value)}
+                  placeholder="Buscar empleado o nombre"
+                  type="search"
+                  value={ausenciaSearch}
                 />
-                <SelectBox
-                  label="Tipo"
-                  onChange={(tipo) =>
-                    setAusenciaDraft((current) => ({
-                      ...current,
-                      tipo: AUSENCIA_TICKET_TIPOS.find((candidate) => candidate === tipo) ?? 'OTRO',
-                    }))
-                  }
-                  value={ausenciaDraft.tipo}
-                >
-                  {AUSENCIA_TICKET_TIPOS.map((tipo) => (
-                    <option key={tipo} value={tipo}>
-                      {tipo}
-                    </option>
-                  ))}
-                </SelectBox>
-                <label className="flex items-center gap-2 text-sm font-semibold text-metro-text">
-                  <input
-                    checked={ausenciaDraft.afectaTicket}
-                    onChange={(event) =>
-                      setAusenciaDraft((current) => ({
-                        ...current,
-                        afectaTicket: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  Afecta ticket
-                </label>
-                <textarea
-                  className="min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) =>
-                    setAusenciaDraft((current) => ({
-                      ...current,
-                      observaciones: event.target.value,
-                    }))
-                  }
-                  placeholder="Observaciones"
-                  value={ausenciaDraft.observaciones}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                    onClick={saveAusencia}
-                    type="button"
-                  >
-                    <Save size={16} /> Guardar
-                  </button>
-                  <button
-                    className="rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-                    onClick={resetAusenciaForm}
-                    type="button"
-                  >
-                    Limpiar
-                  </button>
-                </div>
-              </div>
+              </label>
+              <SelectBox label="Tipo" onChange={setAusenciaTipoFilter} value={ausenciaTipoFilter}>
+                {AUSENCIA_TICKET_TIPOS.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo}
+                  </option>
+                ))}
+              </SelectBox>
             </div>
-            <AusenciasTable
-              ausencias={visibleAusencias}
-              employeeName={(empleado) => employeeById.get(empleado)?.nombreApellidos ?? '—'}
-              onEdit={editAusencia}
-              onRemove={removeAusencia}
-            />
+            <button
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+              onClick={openCreateAusencia}
+              type="button"
+            >
+              <Plus size={16} /> Nueva ausencia
+            </button>
           </div>
+          <AusenciasTable
+            ausencias={sortedAusencias}
+            employeeName={(empleado) => employeeById.get(empleado)?.nombreApellidos ?? '—'}
+            onEdit={editAusencia}
+            onRemove={removeAusencia}
+            onSort={(key) => setAusenciaSort((current) => toggleSortState(current, key))}
+            sortState={ausenciaSort}
+          />
         </div>
       )}
+
+      {isAusenciaEditorOpen && (
+        <AusenciaEditorModal
+          draft={ausenciaDraft}
+          employees={employees}
+          isEditing={Boolean(editingAusenciaId)}
+          onCancel={closeAusenciaEditor}
+          onChange={setAusenciaDraft}
+          onSave={saveAusencia}
+        />
+      )}
     </section>
+  );
+}
+
+function SortableHeader<T extends string>({
+  children,
+  className,
+  keyName,
+  onSort,
+  sortState,
+}: {
+  children: string;
+  className: string;
+  keyName: T;
+  onSort: (key: T) => void;
+  sortState: SortState<T> | null;
+}) {
+  const indicator = sortState?.key === keyName ? (sortState.direction === 'asc' ? ' ↑' : ' ↓') : '';
+
+  return (
+    <th className={`${className} px-3 py-2`}>
+      <button
+        className="flex w-full items-center gap-1 text-left font-semibold uppercase tracking-wide hover:text-metro-red"
+        onClick={() => onSort(keyName)}
+        type="button"
+      >
+        {children}
+        <span aria-hidden="true">{indicator}</span>
+      </button>
+    </th>
+  );
+}
+
+function AusenciaEditorModal({
+  draft,
+  employees,
+  isEditing,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  draft: AusenciaTicketDraft;
+  employees: Array<{ empleado: string; nombreApellidos: string }>;
+  isEditing: boolean;
+  onCancel: () => void;
+  onChange: (value: AusenciaTicketDraft) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-[1px]">
+      <div
+        aria-modal="true"
+        className="max-h-[90vh] w-full max-w-xl overflow-auto rounded-2xl border border-metro-border bg-white p-4 shadow-card"
+        role="dialog"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+              Ausencias
+            </p>
+            <h3 className="text-xl font-bold text-metro-text">
+              {isEditing ? 'Editar ausencia' : 'Nueva ausencia'}
+            </h3>
+          </div>
+          <button
+            aria-label="Cerrar editor de ausencia"
+            className="rounded-full border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-red"
+            onClick={onCancel}
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <SelectBox
+            label="Persona"
+            onChange={(empleado) => onChange({ ...draft, empleado })}
+            value={draft.empleado}
+          >
+            {employees.map((employee) => (
+              <option key={employee.empleado} value={employee.empleado}>
+                {employee.empleado} · {employee.nombreApellidos}
+              </option>
+            ))}
+          </SelectBox>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+            Fecha
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, fecha: event.target.value })}
+              type="date"
+              value={draft.fecha}
+            />
+          </label>
+          <SelectBox
+            label="Tipo"
+            onChange={(tipo) =>
+              onChange({
+                ...draft,
+                tipo: AUSENCIA_TICKET_TIPOS.find((candidate) => candidate === tipo) ?? 'OTRO',
+              })
+            }
+            value={draft.tipo}
+          >
+            {AUSENCIA_TICKET_TIPOS.map((tipo) => (
+              <option key={tipo} value={tipo}>
+                {tipo}
+              </option>
+            ))}
+          </SelectBox>
+          <label className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+            <input
+              checked={draft.afectaTicket}
+              onChange={(event) => onChange({ ...draft, afectaTicket: event.target.checked })}
+              type="checkbox"
+            />
+            Afecta ticket
+          </label>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+            Observaciones
+            <textarea
+              className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, observaciones: event.target.value })}
+              placeholder="Observaciones"
+              value={draft.observaciones}
+            />
+          </label>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-metro-border pt-3">
+            <button
+              className="rounded-xl border border-metro-border bg-white px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={onCancel}
+              type="button"
+            >
+              Cancelar
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+              onClick={onSave}
+              type="button"
+            >
+              <Save size={16} /> Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -709,11 +896,15 @@ function AusenciasTable({
   employeeName,
   onEdit,
   onRemove,
+  onSort,
+  sortState,
 }: {
   ausencias: AusenciaTicket[];
   employeeName: (empleado: string) => string;
   onEdit: (ausencia: AusenciaTicket) => void;
   onRemove: (id: string) => void;
+  onSort: (key: AusenciaSortKey) => void;
+  sortState: SortState<AusenciaSortKey> | null;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-metro-border">
@@ -722,11 +913,46 @@ function AusenciasTable({
         <table className="min-w-[820px] table-fixed text-left text-xs">
           <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
-              <th className="w-[120px] px-3 py-2">Empleado</th>
-              <th className="w-[260px] px-3 py-2">Nombre y apellidos</th>
-              <th className="w-[120px] px-3 py-2">Fecha</th>
-              <th className="w-[100px] px-3 py-2">Tipo</th>
-              <th className="w-[120px] px-3 py-2">Afecta ticket</th>
+              <SortableHeader
+                className="w-[120px]"
+                keyName="empleado"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Empleado
+              </SortableHeader>
+              <SortableHeader
+                className="w-[260px]"
+                keyName="nombreApellidos"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Nombre y apellidos
+              </SortableHeader>
+              <SortableHeader
+                className="w-[120px]"
+                keyName="fecha"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Fecha
+              </SortableHeader>
+              <SortableHeader
+                className="w-[100px]"
+                keyName="tipo"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Tipo
+              </SortableHeader>
+              <SortableHeader
+                className="w-[120px]"
+                keyName="afectaTicket"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Afecta ticket
+              </SortableHeader>
               <th className="w-[160px] px-3 py-2 text-right">Acciones</th>
             </tr>
           </thead>
@@ -769,7 +995,15 @@ function AusenciasTable({
   );
 }
 
-function RightsTable({ rights }: { rights: DerechoTicketMes[] }) {
+function RightsTable({
+  onSort,
+  rights,
+  sortState,
+}: {
+  onSort: (key: DerechoSortKey) => void;
+  rights: DerechoTicketMes[];
+  sortState: SortState<DerechoSortKey> | null;
+}) {
   return (
     <div className="overflow-hidden rounded-xl border border-metro-border">
       <TableHeader count={rights.length} icon="derechos" title="Derechos mensuales" />
@@ -777,12 +1011,54 @@ function RightsTable({ rights }: { rights: DerechoTicketMes[] }) {
         <table className="min-w-[760px] table-fixed text-left text-xs">
           <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
-              <th className="w-[130px] px-3 py-2">Empleado</th>
-              <th className="w-[320px] px-3 py-2">Nombre y apellidos</th>
-              <th className="w-[220px] px-3 py-2">Calendario</th>
-              <th className="w-[130px] px-3 py-2 text-right">Días ticket mes</th>
-              <th className="w-[160px] px-3 py-2 text-right">Ausencias descontadas</th>
-              <th className="w-[130px] px-3 py-2 text-right">Tickets finales</th>
+              <SortableHeader
+                className="w-[130px]"
+                keyName="empleado"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Empleado
+              </SortableHeader>
+              <SortableHeader
+                className="w-[320px]"
+                keyName="nombreApellidos"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Nombre y apellidos
+              </SortableHeader>
+              <SortableHeader
+                className="w-[220px]"
+                keyName="calendario"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Calendario
+              </SortableHeader>
+              <SortableHeader
+                className="w-[130px] text-right"
+                keyName="diasTicketMes"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Días ticket mes
+              </SortableHeader>
+              <SortableHeader
+                className="w-[160px] text-right"
+                keyName="ausenciasDescontadas"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Ausencias descontadas
+              </SortableHeader>
+              <SortableHeader
+                className="w-[130px] text-right"
+                keyName="ticketsFinales"
+                onSort={onSort}
+                sortState={sortState}
+              >
+                Tickets finales
+              </SortableHeader>
             </tr>
           </thead>
           <tbody className="divide-y divide-metro-border bg-white">
