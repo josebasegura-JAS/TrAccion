@@ -4,7 +4,6 @@ import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
 import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from './features/especiales/components/EspecialesPage';
-import { PeticionesPage } from './components/PeticionesPage';
 import { SorteosPage } from './features/sorteos/components/SorteosPage';
 import { PlantillaPage } from './components/PlantillaPage';
 import { Sidebar, type AppView } from './components/Sidebar';
@@ -45,7 +44,6 @@ export function App() {
           )}
           {activeView === 'plantilla' && <PlantillaPage />}
           {activeView === 'tareas' && <TareasPage />}
-          {activeView === 'peticiones' && <PeticionesPage />}
           {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}

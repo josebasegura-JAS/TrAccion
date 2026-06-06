@@ -1,35 +1,52 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import {
+  CLOSED_TASK_PHASE,
+  DEFAULT_TASK_PHASE,
   EMPTY_TASK_DRAFT,
-  type Task,
-  type TaskDraft,
+  isTaskClosed,
+  migratePeticionToTask,
   TASK_PRIORITIES,
   TASK_STATES,
-  type TaskUpdate,
+  TASK_TYPES,
+  type LegacyPeticionForTaskMigration,
+  type Task,
+  type TaskDraft,
+  type TaskSeguimientoEntry,
 } from '../domain/task';
 
 const STORAGE_KEY = 'traccion.v1.tareas.tasks';
+const LEGACY_PETICIONES_STORAGE_KEY = 'traccion.v1.peticiones.peticiones';
+const PETICIONES_MIGRATION_FLAG_KEY = 'traccion.v1.tareas.peticionesMigrated';
 
 interface TaskStateStore {
   tasks: Task[];
   selectedTaskId: string;
   filters: TaskFilters;
   load: () => void;
-  create: (draft: TaskDraft, updateText?: string) => void;
-  update: (id: string, draft: TaskDraft, updateText?: string) => void;
+  create: (draft: TaskDraft, seguimientoText?: string) => void;
+  update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
 
-function isTaskUpdate(value: unknown): value is TaskUpdate {
+function isTaskSeguimientoEntry(value: unknown): value is TaskSeguimientoEntry {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
-  const candidate = value as Partial<Record<keyof TaskUpdate, unknown>>;
+  const candidate = value as Partial<Record<keyof TaskSeguimientoEntry, unknown>>;
   return typeof candidate.fechaHora === 'string' && typeof candidate.texto === 'string';
+}
+
+function hasStringProperty<K extends string>(value: unknown, property: K): value is Record<K, string> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    property in value &&
+    typeof (value as Record<K, unknown>)[property] === 'string'
+  );
 }
 
 function isTask(value: unknown): value is Task {
@@ -49,44 +66,108 @@ function isTask(value: unknown): value is Task {
   );
 }
 
-function normalizeTask(task: Task): Task {
-  const updatedAt = task.updatedAt ?? task.createdAt;
-  const actualizaciones = Array.isArray(task.actualizaciones)
-    ? task.actualizaciones
-        .filter(isTaskUpdate)
+function isLegacyPeticion(value: unknown): value is LegacyPeticionForTaskMigration {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof LegacyPeticionForTaskMigration, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.titulo === 'string' &&
+    typeof candidate.descripcion === 'string' &&
+    typeof candidate.estado === 'string' &&
+    typeof candidate.prioridad === 'string' &&
+    typeof candidate.createdAt === 'string'
+  );
+}
+
+function normalizeSeguimiento(task: Task): TaskSeguimientoEntry[] {
+  if (Array.isArray(task.seguimiento)) {
+    return task.seguimiento
+      .filter(isTaskSeguimientoEntry)
+      .sort((first, second) => second.fechaHora.localeCompare(first.fechaHora));
+  }
+
+  const legacyUpdates = (task as { actualizaciones?: unknown }).actualizaciones;
+
+  return Array.isArray(legacyUpdates)
+    ? legacyUpdates
+        .filter(isTaskSeguimientoEntry)
         .sort((first, second) => second.fechaHora.localeCompare(first.fechaHora))
     : [];
+}
+
+function normalizeTask(task: Task): Task {
+  const updatedAt = task.updatedAt ?? task.createdAt;
+  const tipo = (TASK_TYPES as readonly string[]).includes(task.tipo) ? task.tipo : EMPTY_TASK_DRAFT.tipo;
+  const fase = typeof task.fase === 'string' && task.fase.trim() ? task.fase : DEFAULT_TASK_PHASE;
+  const estado = (TASK_STATES as readonly string[]).includes(task.estado)
+    ? task.estado
+    : EMPTY_TASK_DRAFT.estado;
 
   return {
     id: task.id,
     titulo: task.titulo,
     descripcion: task.descripcion,
-    estado: task.estado,
+    tipo,
+    fase,
+    estado,
     prioridad: task.prioridad,
     fechaLimite: task.fechaLimite ?? EMPTY_TASK_DRAFT.fechaLimite,
     responsable: task.responsable ?? EMPTY_TASK_DRAFT.responsable,
-    origenSindicato: task.origenSindicato ?? EMPTY_TASK_DRAFT.origenSindicato,
+    origen:
+      task.origen ??
+      (hasStringProperty(task, 'origenSindicato') ? task.origenSindicato : EMPTY_TASK_DRAFT.origen),
+    sindicato: task.sindicato ?? EMPTY_TASK_DRAFT.sindicato,
     observaciones: task.observaciones ?? EMPTY_TASK_DRAFT.observaciones,
-    actualizaciones,
-    closedAt: task.closedAt ?? (task.estado === 'cerrada' ? updatedAt : null),
+    seguimiento: normalizeSeguimiento(task),
     createdAt: task.createdAt,
     updatedAt,
     deletedAt: task.deletedAt ?? null,
+    closedAt: task.closedAt ?? (estado === 'cerrada' || fase === CLOSED_TASK_PHASE ? updatedAt : null),
   };
 }
 
-function readTasks(): Task[] {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+function readStoredArray(storageKey: string): unknown[] {
+  const stored = window.localStorage.getItem(storageKey);
   if (!stored) {
     return [];
   }
 
   const parsed: unknown = JSON.parse(stored);
-  if (!Array.isArray(parsed)) {
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function readCurrentTasks(): Task[] {
+  return readStoredArray(STORAGE_KEY).filter(isTask).map(normalizeTask);
+}
+
+function readMigratedPeticiones(): Task[] {
+  if (window.localStorage.getItem(PETICIONES_MIGRATION_FLAG_KEY) === 'true') {
     return [];
   }
 
-  return parsed.filter(isTask).map(normalizeTask);
+  return readStoredArray(LEGACY_PETICIONES_STORAGE_KEY)
+    .filter(isLegacyPeticion)
+    .map(migratePeticionToTask)
+    .map(normalizeTask);
+}
+
+function readTasks(): Task[] {
+  const currentTasks = readCurrentTasks();
+  const migratedTasks = readMigratedPeticiones().filter(
+    (migratedTask) => !currentTasks.some((task) => task.id === migratedTask.id),
+  );
+
+  if (migratedTasks.length === 0) {
+    return currentTasks;
+  }
+
+  const tasks = [...currentTasks, ...migratedTasks];
+  persistTasks(tasks);
+  window.localStorage.setItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
+  return tasks;
 }
 
 function persistTasks(tasks: Task[]): void {
@@ -94,24 +175,24 @@ function persistTasks(tasks: Task[]): void {
 }
 
 function firstActiveTaskId(tasks: Task[]): string {
-  return tasks.find((task) => !task.deletedAt && task.estado !== 'cerrada')?.id ?? '';
+  return tasks.find((task) => !task.deletedAt && !isTaskClosed(task))?.id ?? '';
 }
 
 function createTaskId(): string {
   return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function buildUpdate(text: string | undefined, fechaHora: string): TaskUpdate[] {
+function buildSeguimiento(text: string | undefined, fechaHora: string): TaskSeguimientoEntry[] {
   const trimmedText = text?.trim();
   return trimmedText ? [{ fechaHora, texto: trimmedText }] : [];
 }
 
 function resolveClosedAt(task: Task, draft: TaskDraft, fechaHora: string): string | null {
-  if (draft.estado !== 'cerrada') {
+  if (!isTaskClosed(draft)) {
     return null;
   }
 
-  return task.estado === 'cerrada' ? (task.closedAt ?? fechaHora) : fechaHora;
+  return isTaskClosed(task) ? (task.closedAt ?? fechaHora) : fechaHora;
 }
 
 export const useTaskStore = create<TaskStateStore>((set) => ({
@@ -122,27 +203,27 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
     const tasks = readTasks();
     set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
   },
-  create: (draft, updateText) => {
+  create: (draft, seguimientoText) => {
     set((state) => {
       const now = new Date().toISOString();
       const task: Task = {
         id: createTaskId(),
         ...draft,
-        actualizaciones: buildUpdate(updateText, now),
-        closedAt: draft.estado === 'cerrada' ? now : null,
+        seguimiento: buildSeguimiento(seguimientoText, now),
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        closedAt: isTaskClosed(draft) ? now : null,
       };
       const tasks = [...state.tasks, task];
       persistTasks(tasks);
       return {
         tasks,
-        selectedTaskId: task.estado === 'cerrada' ? firstActiveTaskId(tasks) : task.id,
+        selectedTaskId: isTaskClosed(task) ? firstActiveTaskId(tasks) : task.id,
       };
     });
   },
-  update: (id, draft, updateText) => {
+  update: (id, draft, seguimientoText) => {
     set((state) => {
       const now = new Date().toISOString();
       const tasks = state.tasks.map((task) => {
@@ -153,7 +234,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         return {
           ...task,
           ...draft,
-          actualizaciones: [...buildUpdate(updateText, now), ...task.actualizaciones],
+          seguimiento: [...buildSeguimiento(seguimientoText, now), ...task.seguimiento],
           closedAt: resolveClosedAt(task, draft, now),
           updatedAt: now,
         };
@@ -162,7 +243,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       const updatedTask = tasks.find((task) => task.id === id);
       return {
         tasks,
-        selectedTaskId: updatedTask?.estado === 'cerrada' ? firstActiveTaskId(tasks) : id,
+        selectedTaskId: updatedTask && isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
       };
     });
   },

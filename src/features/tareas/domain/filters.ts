@@ -1,13 +1,17 @@
-import type { Task, TaskPriority, TaskState } from './task';
+import { isTaskClosed, type Task, type TaskPriority, type TaskState, type TaskType } from './task';
 
 export interface TaskFilters {
   search: string;
+  tipo: '' | TaskType;
+  fase: string;
   estado: '' | TaskState;
   prioridad: '' | TaskPriority;
 }
 
 export const EMPTY_TASK_FILTERS: TaskFilters = {
   search: '',
+  tipo: '',
+  fase: '',
   estado: '',
   prioridad: '',
 };
@@ -17,13 +21,18 @@ export function filterTasks(tasks: Task[], filters: TaskFilters): Task[] {
 
   return tasks.filter((task) => {
     const matchesSearch = normalizedSearch
-      ? [task.titulo, task.descripcion].join(' ').toLowerCase().includes(normalizedSearch)
+      ? [task.titulo, task.descripcion, task.sindicato, task.origen]
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedSearch)
       : true;
 
     return (
       !task.deletedAt &&
-      task.estado !== 'cerrada' &&
+      !isTaskClosed(task) &&
       matchesSearch &&
+      (!filters.tipo || task.tipo === filters.tipo) &&
+      (!filters.fase || task.fase === filters.fase) &&
       (!filters.estado || task.estado === filters.estado) &&
       (!filters.prioridad || task.prioridad === filters.prioridad)
     );

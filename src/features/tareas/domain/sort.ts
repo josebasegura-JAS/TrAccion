@@ -1,13 +1,23 @@
 import { TASK_PRIORITIES, type Task } from './task';
 
-export type TaskSortKey = 'titulo' | 'estado' | 'prioridad' | 'fechaLimite' | 'responsable' | 'origenSindicato';
+export type TaskSortKey =
+  | 'titulo'
+  | 'tipo'
+  | 'fase'
+  | 'estado'
+  | 'prioridad'
+  | 'fechaLimite'
+  | 'responsable'
+  | 'sindicato';
 export type SortDirection = 'asc' | 'desc';
 
 const PRIORITY_ORDER = new Map(TASK_PRIORITIES.map((priority, index) => [priority, index]));
 
 function comparePriority(first: Task, second: Task): number {
-  return (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
-    (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length);
+  return (
+    (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
+    (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length)
+  );
 }
 
 function compareDateWithEmptyLast(firstDate: string, secondDate: string): number {
