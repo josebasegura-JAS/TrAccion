@@ -1,36 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildEspecialHtml,
+  buildEspecialesHtmlBody,
+  buildEspecialesSubject,
   buildEspecialMailDraft,
-  buildEspecialSubject,
+  buildIntranetParagraphHtml,
+  buildTurnosPath,
+  detectAutoFields,
+  normalizeDateInput,
+  normalizeTimeInput,
   splitEspecialRecipients,
-  visibleEspecialEvents,
-  type EspecialEvent,
+  stripIntranetNameFromParagraph,
   type EspecialRecipient,
 } from './especiales';
 
 function buildRecipient(overrides: Partial<EspecialRecipient>): EspecialRecipient {
   return {
     id: 'recipient-base',
-    nombre: 'Nombre Base',
+    name: 'Nombre Base',
     email: 'base@example.com',
-    tipo: 'para',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-    ...overrides,
-  };
-}
-
-function buildEvent(overrides: Partial<EspecialEvent>): EspecialEvent {
-  return {
-    id: 'event-base',
-    evento: 'Athletic - Real Sociedad',
-    fecha: '2026-01-10',
-    hora: '20:00',
-    enlace: 'https://example.com',
-    ruta: 'Sala 1',
-    observaciones: 'Refuerzo operativo',
+    type: 'to',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
@@ -39,68 +27,82 @@ function buildEvent(overrides: Partial<EspecialEvent>): EspecialEvent {
 }
 
 describe('especiales domain', () => {
-  it('genera el asunto con el formato exacto del servicio especial', () => {
-    expect(buildEspecialSubject(' Athletic - Real Sociedad ')).toBe(
-      'Servicio Especial Athletic - Real Sociedad',
+  it('genera el asunto exacto de RRLL Dashboard', () => {
+    expect(buildEspecialesSubject({ msgSubject: 'BEC Alejandro Sanz' })).toBe(
+      'Servicio Especial BEC Alejandro Sanz',
     );
   });
 
-  it('separa destinatarios Para y CC excluyendo borrados', () => {
+  it('genera el cuerpo HTML exacto base con Verdana 11pt y textos de RRLL Dashboard', () => {
+    const html = buildEspecialesHtmlBody({
+      evento: 'BEC Alejandro Sanz',
+      fecha: '2026-06-14',
+      enlace: 'BEC Alejandro Sanz Domingo',
+      ruta: 'G:\\DC\\PAS_TURNOS_RRLL\\2026\\TURNOS',
+      msgSubject: 'BEC Alejandro Sanz',
+    });
+
+    expect(html).toContain('font-family: Verdana, Arial, sans-serif; font-size: 11pt;');
+    expect(html).toContain('<p>Kaixo,</p>');
+    expect(html).toContain(
+      'Adjunto acceso a los turnos de conducción de Servicio Especial donde ya están disponibles en la intranet los turnos de conducción de:',
+    );
+    expect(html).toContain('<p><strong>• Servicio Especial BEC Alejandro Sanz</strong></p>');
+    expect(html).toContain(
+      'Las personas -> turnos -> trenes -> Invierno -> Servicios Especiales -> 2026',
+    );
+    expect(html).toContain(
+      'Este Servicio Especial aparecerá en la Intranet como: BEC Alejandro Sanz Domingo',
+    );
+    expect(html).toContain('G:\\DC\\PAS_TURNOS_RRLL\\2026\\TURNOS');
+    expect(html).toContain('<p>Ondo izan</p>');
+  });
+
+  it('mantiene literal de intranet si ya viene completo y extrae el nombre', () => {
+    const literal = 'Este Servicio Especial aparecerá en la Intranet como: BEC Evento Domingo';
+
+    expect(buildIntranetParagraphHtml(literal)).toBe(`<p>${literal}</p>`);
+    expect(stripIntranetNameFromParagraph(literal)).toBe('BEC Evento Domingo');
+  });
+
+  it('separa Para y CC excluyendo borrados', () => {
     const recipients = [
-      buildRecipient({ id: 'para-1', email: 'para@example.com', tipo: 'para' }),
-      buildRecipient({ id: 'cc-1', email: 'cc@example.com', tipo: 'cc' }),
+      buildRecipient({ id: 'to-1', email: 'to@example.com', type: 'to' }),
+      buildRecipient({ id: 'cc-1', email: 'cc@example.com', type: 'cc' }),
       buildRecipient({
         id: 'deleted',
         email: 'deleted@example.com',
-        tipo: 'para',
+        type: 'to',
         deletedAt: '2026-01-02T00:00:00.000Z',
       }),
     ];
 
     expect(splitEspecialRecipients(recipients)).toEqual({
-      para: [recipients[0]],
+      to: [recipients[0]],
       cc: [recipients[1]],
     });
+    expect(buildEspecialMailDraft({ evento: 'Evento' }, recipients)).toMatchObject({
+      subject: 'Servicio Especial Evento',
+      to: ['to@example.com'],
+      cc: ['cc@example.com'],
+    });
   });
 
-  it('genera HTML Verdana con los datos principales del evento', () => {
-    const html = buildEspecialHtml({
-      evento: 'Athletic - Real Sociedad',
-      fecha: '2026-01-10',
-      hora: '20:00',
-      enlace: 'https://example.com',
-      ruta: 'Sala 1',
-      observaciones: 'Refuerzo operativo',
-    });
-
-    expect(html).toContain('font-family: Verdana');
-    expect(html).toContain('<strong>Evento:</strong> Athletic - Real Sociedad');
-    expect(html).toContain('<strong>Fecha:</strong> 2026-01-10');
-    expect(html).toContain('<strong>Hora:</strong> 20:00');
-    expect(html).toContain('<strong>Enlace:</strong> https://example.com');
-    expect(html).toContain('<strong>Ruta:</strong> Sala 1');
-    expect(html).toContain('<strong>Observaciones:</strong> Refuerzo operativo');
+  it('normaliza fechas, horas y ruta de turnos igual que el módulo antiguo', () => {
+    expect(normalizeDateInput('domingo 14 de junio de 2026')).toBe('2026-06-14');
+    expect(normalizeDateInput('14/06/26')).toBe('2026-06-14');
+    expect(normalizeTimeInput('20.30 h')).toBe('20:30');
+    expect(buildTurnosPath('2026')).toBe('G:\\DC\\PAS_TURNOS_RRLL\\2026\\TURNOS');
   });
 
-  it('excluye registros deletedAt en listados y borradores', () => {
-    const events = [
-      buildEvent({ id: 'visible' }),
-      buildEvent({ id: 'deleted', deletedAt: '2026-01-02T00:00:00.000Z' }),
-    ];
-    const recipients = [
-      buildRecipient({ id: 'visible-para', email: 'visible@example.com', tipo: 'para' }),
-      buildRecipient({
-        id: 'deleted-cc',
-        email: 'deleted@example.com',
-        tipo: 'cc',
-        deletedAt: '2026-01-02T00:00:00.000Z',
-      }),
-    ];
+  it('detecta evento, fecha, hora, ruta y texto de intranet desde texto de mensaje', () => {
+    const text = `Servicio Especial: BEC Alejandro Sanz\n14/06/2026\n20:30 h\nEste Servicio Especial aparecerá en la Intranet como: BEC Alejandro Sanz Domingo\nG:\\DC\\PAS_TURNOS_RRLL\\2026\\TURNOS`;
+    const auto = detectAutoFields(text, 'Servicio Especial BEC Alejandro Sanz', [text]);
 
-    expect(visibleEspecialEvents(events).map((event) => event.id)).toEqual(['visible']);
-    expect(buildEspecialMailDraft(events[0], recipients)).toMatchObject({
-      to: ['visible@example.com'],
-      cc: [],
-    });
+    expect(auto.evento).toBe('BEC Alejandro Sanz');
+    expect(auto.fecha).toBe('2026-06-14');
+    expect(auto.hora).toBe('20:30');
+    expect(auto.enlace).toBe('BEC Alejandro Sanz Domingo');
+    expect(auto.ruta).toBe('G:\\DC\\PAS_TURNOS_RRLL\\2026\\TURNOS');
   });
 });

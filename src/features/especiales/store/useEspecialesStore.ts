@@ -1,72 +1,70 @@
 import { create } from 'zustand';
 import {
-  buildEspecialEvent,
   buildEspecialRecipient,
-  type EspecialEvent,
-  type EspecialEventDraft,
+  isValidEmail,
+  normalizeEmail,
+  normalizeRecipientType,
   type EspecialRecipient,
   type EspecialRecipientDraft,
   type EspecialRecipientType,
 } from '../domain/especiales';
 
-const EVENTS_STORAGE_KEY = 'traccion.v1.especiales.events';
-const RECIPIENTS_STORAGE_KEY = 'traccion.v1.especiales.recipients';
+const RECIPIENTS_STORAGE_KEY = 'rrll_especiales_destinatarios';
 
 interface EspecialesState {
-  events: EspecialEvent[];
   recipients: EspecialRecipient[];
   load: () => void;
-  createEvent: (draft: EspecialEventDraft) => string;
-  updateEvent: (id: string, draft: EspecialEventDraft) => void;
-  removeEvent: (id: string) => void;
-  createRecipient: (draft: EspecialRecipientDraft) => void;
-  updateRecipient: (id: string, draft: EspecialRecipientDraft) => void;
+  createRecipient: (draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
+  updateRecipient: (id: string, draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
   removeRecipient: (id: string) => void;
 }
 
 function isEspecialRecipientType(value: unknown): value is EspecialRecipientType {
-  return value === 'para' || value === 'cc';
+  return value === 'to' || value === 'cc' || value === 'para';
 }
 
-function isEspecialEvent(value: unknown): value is EspecialEvent {
+function isLegacyRecipient(value: unknown): value is {
+  id?: string;
+  name?: string;
+  nombre?: string;
+  email?: string;
+  type?: string;
+  tipo?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+} {
   if (!value || typeof value !== 'object') {
     return false;
   }
-
-  const candidate = value as Partial<EspecialEvent>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.evento === 'string' &&
-    typeof candidate.fecha === 'string' &&
-    typeof candidate.hora === 'string' &&
-    typeof candidate.enlace === 'string' &&
-    typeof candidate.ruta === 'string' &&
-    typeof candidate.observaciones === 'string' &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
-  );
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.email === 'string';
 }
 
-function isEspecialRecipient(value: unknown): value is EspecialRecipient {
-  if (!value || typeof value !== 'object') {
-    return false;
+function normalizeStoredRecipient(value: unknown): EspecialRecipient | null {
+  if (!isLegacyRecipient(value)) {
+    return null;
   }
 
-  const candidate = value as Partial<EspecialRecipient>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.nombre === 'string' &&
-    typeof candidate.email === 'string' &&
-    isEspecialRecipientType(candidate.tipo) &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
-  );
+  const now = new Date().toISOString();
+  const email = value.email?.trim() ?? '';
+  if (!isValidEmail(email)) {
+    return null;
+  }
+
+  return {
+    id: value.id || createId('especial-recipient'),
+    name: value.name || value.nombre || '',
+    email,
+    type: normalizeRecipientType(isEspecialRecipientType(value.type) ? value.type : value.tipo),
+    createdAt: value.createdAt || now,
+    updatedAt: value.updatedAt || now,
+    deletedAt: value.deletedAt ?? null,
+  };
 }
 
-function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value is T): T[] {
-  const stored = window.localStorage.getItem(storageKey);
+function readRecipients(): EspecialRecipient[] {
+  const stored = window.localStorage.getItem(RECIPIENTS_STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -76,11 +74,10 @@ function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value i
     return [];
   }
 
-  return parsed.filter(guard);
+  return parsed.map(normalizeStoredRecipient).filter((recipient): recipient is EspecialRecipient => !!recipient);
 }
 
-function persist(events: EspecialEvent[], recipients: EspecialRecipient[]): void {
-  window.localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
+function persist(recipients: EspecialRecipient[]): void {
   window.localStorage.setItem(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
 }
 
@@ -91,66 +88,87 @@ function nowIso(): string {
 function createId(prefix: string): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
-    : `${prefix}-${Date.now()}`;
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function duplicatedEmail(
+  recipients: EspecialRecipient[],
+  email: string,
+  editingId?: string,
+): EspecialRecipient | undefined {
+  const normalized = normalizeEmail(email);
+  return recipients.find(
+    (recipient) =>
+      !recipient.deletedAt && normalizeEmail(recipient.email) === normalized && recipient.id !== editingId,
+  );
 }
 
 export const useEspecialesStore = create<EspecialesState>((set) => ({
-  events: [],
   recipients: [],
   load: () => {
-    set({
-      events: readJsonArray(EVENTS_STORAGE_KEY, isEspecialEvent),
-      recipients: readJsonArray(RECIPIENTS_STORAGE_KEY, isEspecialRecipient),
-    });
-  },
-  createEvent: (draft) => {
-    const id = createId('especial-event');
-    set((state) => {
-      const events = [...state.events, buildEspecialEvent(draft, nowIso(), id)];
-      persist(events, state.recipients);
-      return { events };
-    });
-    return id;
-  },
-  updateEvent: (id, draft) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const events = state.events.map((event) =>
-        event.id === id ? buildEspecialEvent(draft, updatedAt, id, event) : event,
-      );
-      persist(events, state.recipients);
-      return { events };
-    });
-  },
-  removeEvent: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const events = state.events.map((event) =>
-        event.id === id ? { ...event, updatedAt, deletedAt: updatedAt } : event,
-      );
-      persist(events, state.recipients);
-      return { events };
-    });
+    set({ recipients: readRecipients() });
   },
   createRecipient: (draft) => {
+    const name = draft.name.trim();
+    const email = draft.email.trim();
+    if (!name) {
+      return { ok: false, message: 'Debes indicar un nombre.' };
+    }
+    if (!isValidEmail(email)) {
+      return { ok: false, message: 'El email no tiene un formato válido.' };
+    }
+
+    let result: { ok: boolean; message?: string } = { ok: true };
     set((state) => {
+      const duplicate = duplicatedEmail(state.recipients, email);
+      if (duplicate) {
+        const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
+        result = {
+          ok: false,
+          message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.`,
+        };
+        return state;
+      }
+
       const recipients = [
         ...state.recipients,
         buildEspecialRecipient(draft, nowIso(), createId('especial-recipient')),
       ];
-      persist(state.events, recipients);
+      persist(recipients);
       return { recipients };
     });
+    return result;
   },
   updateRecipient: (id, draft) => {
+    const name = draft.name.trim();
+    const email = draft.email.trim();
+    if (!name) {
+      return { ok: false, message: 'Debes indicar un nombre.' };
+    }
+    if (!isValidEmail(email)) {
+      return { ok: false, message: 'El email no tiene un formato válido.' };
+    }
+
+    let result: { ok: boolean; message?: string } = { ok: true };
     set((state) => {
+      const duplicate = duplicatedEmail(state.recipients, email, id);
+      if (duplicate) {
+        const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
+        result = {
+          ok: false,
+          message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.`,
+        };
+        return state;
+      }
+
       const updatedAt = nowIso();
       const recipients = state.recipients.map((recipient) =>
         recipient.id === id ? buildEspecialRecipient(draft, updatedAt, id, recipient) : recipient,
       );
-      persist(state.events, recipients);
+      persist(recipients);
       return { recipients };
     });
+    return result;
   },
   removeRecipient: (id) => {
     set((state) => {
@@ -158,7 +176,7 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
       const recipients = state.recipients.map((recipient) =>
         recipient.id === id ? { ...recipient, updatedAt, deletedAt: updatedAt } : recipient,
       );
-      persist(state.events, recipients);
+      persist(recipients);
       return { recipients };
     });
   },
