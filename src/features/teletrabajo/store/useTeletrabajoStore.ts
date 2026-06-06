@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Employee } from '../../plantilla/domain/employee';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
 import { importEncuestaFromFile, type ImportEncuestaSummary } from '../domain/importEncuesta';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   EMPTY_TELETRABAJO_DRAFT,
   TELETRABAJO_ESTADOS,
@@ -76,7 +77,7 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
 }
 
 function readSolicitudes(): TeletrabajoSolicitud[] {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -90,7 +91,7 @@ function readSolicitudes(): TeletrabajoSolicitud[] {
 }
 
 function persistSolicitudes(solicitudes: TeletrabajoSolicitud[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(solicitudes));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(solicitudes));
 }
 
 function firstVisibleSolicitudId(solicitudes: TeletrabajoSolicitud[]): string {

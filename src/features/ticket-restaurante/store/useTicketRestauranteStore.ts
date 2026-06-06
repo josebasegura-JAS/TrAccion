@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   buildTicketCalendar,
   calculateTicketContribution,
@@ -103,7 +104,7 @@ function isTicketRestaurantAbsence(value: unknown): value is TicketRestaurantAbs
 }
 
 function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value is T): T[] {
-  const stored = window.localStorage.getItem(storageKey);
+  const stored = readStorageItem(storageKey);
   if (!stored) {
     return [];
   }
@@ -140,7 +141,7 @@ function normalizeStoredTicketPerson(person: TicketPerson): TicketPerson {
 }
 
 function readConfig(): TicketRestaurantConfig {
-  const stored = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+  const stored = readStorageItem(CONFIG_STORAGE_KEY);
   if (!stored) {
     return DEFAULT_TICKET_RESTAURANT_CONFIG;
   }
@@ -164,7 +165,7 @@ function readConfig(): TicketRestaurantConfig {
 }
 
 function readDebtLedger(): Record<string, number> {
-  const stored = window.localStorage.getItem(DEBT_LEDGER_STORAGE_KEY);
+  const stored = readStorageItem(DEBT_LEDGER_STORAGE_KEY);
   if (!stored) {
     return {};
   }
@@ -204,7 +205,7 @@ function recalculateDebtLedger(
 }
 
 function persist<T>(storageKey: string, value: T): void {
-  window.localStorage.setItem(storageKey, JSON.stringify(value));
+  writeStorageItem(storageKey, JSON.stringify(value));
 }
 
 function nowIso(): string {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AjustesPage } from './components/AjustesPage';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
@@ -11,9 +11,14 @@ import { TareasPage } from './components/TareasPage';
 import { TeletrabajoPage } from './components/TeletrabajoPage';
 import { TicketRestaurantePage } from './features/ticket-restaurante/components/TicketRestaurantePage';
 import { VinculogramaPage } from './features/vinculograma/components/VinculogramaPage';
+import { bootstrapSqlitePersistence } from './services/persistence';
 
 export function App() {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+
+  useEffect(() => {
+    bootstrapSqlitePersistence();
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-metro-app font-sans text-metro-text">

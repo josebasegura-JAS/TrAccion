@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   buildEspecialRecipient,
   isValidEmail,
@@ -64,7 +65,7 @@ function normalizeStoredRecipient(value: unknown): EspecialRecipient | null {
 }
 
 function readRecipients(): EspecialRecipient[] {
-  const stored = window.localStorage.getItem(RECIPIENTS_STORAGE_KEY);
+  const stored = readStorageItem(RECIPIENTS_STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -78,7 +79,7 @@ function readRecipients(): EspecialRecipient[] {
 }
 
 function persist(recipients: EspecialRecipient[]): void {
-  window.localStorage.setItem(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
+  writeStorageItem(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
 }
 
 function nowIso(): string {
