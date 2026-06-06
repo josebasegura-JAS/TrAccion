@@ -16,6 +16,8 @@ import {
   type EspecialServiceDraft,
 } from '../domain/especiales';
 import { useEspecialesStore } from '../store/useEspecialesStore';
+import type { ExportColumn } from '../../../shared/export/types';
+import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 
 const inputClass =
   'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red';
@@ -24,6 +26,12 @@ const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:bg-metro-secondary';
 const secondaryButtonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red disabled:cursor-not-allowed disabled:text-metro-secondary';
+
+const recipientExportColumns: ExportColumn<EspecialRecipient>[] = [
+  { key: 'name', header: 'Nombre', value: (recipient) => recipient.name },
+  { key: 'email', header: 'Email', value: (recipient) => recipient.email },
+  { key: 'type', header: 'Tipo', value: (recipient) => (recipient.type === 'to' ? 'Para' : 'CC') },
+];
 
 function toRecipientDraft(recipient: EspecialRecipient): EspecialRecipientDraft {
   return {
@@ -601,9 +609,20 @@ function RecipientTable({
 }) {
   return (
     <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
-      <h3 className="mb-3 text-base font-bold text-metro-text">
-        {title} ({items.length})
-      </h3>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-bold text-metro-text">
+          {title} ({items.length})
+        </h3>
+        <ExportPrintButtons
+          payload={{
+            title: `Especiales - ${title}`,
+            filename: `especiales-${title}`,
+            columns: recipientExportColumns,
+            rows: items,
+            filterLabel: `Tipo: ${title}`,
+          }}
+        />
+      </div>
       <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
         <table className="w-full text-left text-xs">
           <thead className="bg-metro-panel text-metro-muted">

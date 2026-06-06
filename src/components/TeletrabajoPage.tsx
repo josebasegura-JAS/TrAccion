@@ -18,6 +18,9 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
+import { buildFilterLabel } from '../shared/export/filterLabel';
+import type { ExportColumn } from '../shared/export/types';
+import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 
 interface SortState {
   key: TeletrabajoSortKey;
@@ -33,6 +36,25 @@ const sortableColumns: Array<{ key: TeletrabajoSortKey; label: string; className
   { key: 'diasTeletrabajo', label: 'Días', className: 'w-[150px]' },
   { key: 'estado', label: 'Estado', className: 'w-[110px]' },
   { key: 'periodo', label: 'Periodo', className: 'w-[110px]' },
+];
+
+const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
+  { key: 'empleado', header: 'Empleado', value: (solicitud) => solicitud.empleado },
+  {
+    key: 'nombreApellidos',
+    header: 'Nombre y apellidos',
+    value: (solicitud) => solicitud.nombreApellidos,
+  },
+  { key: 'puestoNomina', header: 'Puesto nómina', value: (solicitud) => solicitud.puestoNomina },
+  { key: 'residencia', header: 'Residencia', value: (solicitud) => solicitud.residencia },
+  { key: 'tipoSolicitud', header: 'Tipo', value: (solicitud) => solicitud.tipoSolicitud },
+  {
+    key: 'diasTeletrabajo',
+    header: 'Días',
+    value: (solicitud) => solicitud.diasTeletrabajo.join(', '),
+  },
+  { key: 'estado', header: 'Estado', value: (solicitud) => solicitud.estado },
+  { key: 'periodo', header: 'Periodo', value: (solicitud) => solicitud.periodo },
 ];
 
 function uniqueSorted(values: string[]): string[] {
@@ -116,6 +138,12 @@ export function TeletrabajoPage() {
     () => uniqueSorted(visibleSolicitudes.map((solicitud) => solicitud.periodo)).reverse(),
     [visibleSolicitudes],
   );
+  const teletrabajoFilterLabel = buildFilterLabel([
+    ['Búsqueda', filters.search],
+    ['Estado', filters.estado],
+    ['Tipo', filters.tipoSolicitud],
+    ['Periodo', filters.periodo],
+  ]);
 
   const openEditor = (solicitud: TeletrabajoSolicitud) => {
     selectSolicitud(solicitud.id);
@@ -154,7 +182,8 @@ export function TeletrabajoPage() {
 
     const employee =
       employees.find(
-        (candidate) => !candidate.deletedAt && candidate.empleado.trim() === solicitud.empleado.trim(),
+        (candidate) =>
+          !candidate.deletedAt && candidate.empleado.trim() === solicitud.empleado.trim(),
       ) ?? null;
 
     setGeneratingWordId(solicitud.id);
@@ -265,9 +294,18 @@ export function TeletrabajoPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo
+            <ExportPrintButtons
+              payload={{
+                title: 'Solicitudes de teletrabajo',
+                filename: 'teletrabajo-solicitudes',
+                columns: teletrabajoExportColumns,
+                rows: sortedSolicitudes,
+                filterLabel: teletrabajoFilterLabel,
+              }}
+            />
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredSolicitudes.length} registros

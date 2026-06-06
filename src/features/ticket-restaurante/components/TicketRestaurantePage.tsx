@@ -7,7 +7,6 @@ import {
   FileUp,
   Pencil,
   Plus,
-  Printer,
   Save,
   Trash2,
 } from 'lucide-react';
@@ -40,6 +39,9 @@ import {
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
+import { buildFilterLabel } from '../../../shared/export/filterLabel';
+import type { ExportColumn, ExportTablePayload } from '../../../shared/export/types';
+import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MONTH_OPTIONS = [
@@ -118,29 +120,6 @@ const ABSENCE_MODEL_HEADERS = [
   'Motivo',
   'Total días',
 ];
-const MONTHLY_EXPORT_HEADERS = [
-  'Nombre',
-  'Apellido1',
-  'Apellido2',
-  'DNI',
-  'Pedido',
-  'Nº Emp',
-  'Numero Tickets',
-  'Importe',
-  'Total',
-  'Fec Inicio',
-  'Fec Cad',
-  'Hoja Gastos',
-  'Ausencias',
-];
-const CONTRIBUTION_EXPORT_HEADERS = [
-  'Nº empleado',
-  'Nombre y apellidos',
-  'Calendario',
-  'Número de días con ticket',
-  'Importe ticket',
-];
-
 function exportCsv(
   filename: string,
   headers: readonly string[],
@@ -163,87 +142,69 @@ function formatCsvValue(value: string | number): string {
   return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function printTable(
-  title: string,
-  headers: readonly string[],
-  rows: readonly (readonly (string | number)[])[],
-): void {
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-  if (!printWindow) {
-    return;
-  }
-
-  const tableRows = rows
-    .map(
-      (row) => `<tr>${row.map((value) => `<td>${escapeHtml(String(value))}</td>`).join('')}</tr>`,
-    )
-    .join('');
-  printWindow.document.write(
-    `<!doctype html><html><head><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:24px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}</style></head><body><h1>${escapeHtml(title)}</h1><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`,
-  );
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function buildPeopleExportRows(
-  people: readonly TicketPerson[],
+const ticketPersonExportColumns = (
   calendars: readonly TicketCalendar[],
-): (string | number)[][] {
-  return people.map((person) => [
-    person.empleado,
-    person.nombre,
-    person.apellido1,
-    person.apellido2,
-    person.dni,
-    person.puesto,
-    calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? '',
-  ]);
-}
+): ExportColumn<TicketPerson>[] => [
+  { key: 'empleado', header: 'Nº empleado', value: (person) => person.empleado },
+  { key: 'nombre', header: 'Nombre', value: (person) => person.nombre },
+  { key: 'apellido1', header: 'Apellido1', value: (person) => person.apellido1 },
+  { key: 'apellido2', header: 'Apellido2', value: (person) => person.apellido2 },
+  { key: 'dni', header: 'DNI', value: (person) => person.dni },
+  { key: 'puesto', header: 'Puesto', value: (person) => person.puesto },
+  {
+    key: 'calendario',
+    header: 'Calendario',
+    value: (person) =>
+      calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? null,
+  },
+  { key: 'activo', header: 'Estado', value: (person) => (person.activo ? 'Activo' : 'Inactivo') },
+];
 
-function buildMonthlyExportRows(
-  rows: readonly TicketPersonCalculation[],
+const monthlyCalculationExportColumns = (
   importeTicket: number,
-  pedidoMensual: number,
-): (string | number)[][] {
-  return rows.map((row) => [
-    row.nombre,
-    row.apellido1,
-    row.apellido2,
-    row.dni,
-    pedidoMensual,
-    row.empleado,
-    row.ticketsFinales,
-    importeTicket.toFixed(2),
-    row.importe.toFixed(2),
-    '',
-    '',
-    '',
-    row.ausenciasMes,
-  ]);
-}
+): ExportColumn<TicketPersonCalculation>[] => [
+  { key: 'empleado', header: 'Nº empleado', value: (row) => row.empleado },
+  { key: 'nombreApellidos', header: 'Nombre y apellidos', value: (row) => row.nombreApellidos },
+  { key: 'calendario', header: 'Calendario', value: (row) => row.calendario },
+  { key: 'diasTeoricos', header: 'Días teóricos', value: (row) => row.diasTeoricos },
+  { key: 'ausenciasMes', header: 'Ausencias mes', value: (row) => row.ausenciasMes },
+  { key: 'ticketsFinales', header: 'Tickets a pedir', value: (row) => row.ticketsFinales },
+  { key: 'importeTicket', header: 'Importe ticket', value: () => importeTicket.toFixed(2) },
+];
 
-function buildContributionExportRows(
-  rows: readonly TicketPersonCalculation[],
+const contributionCalculationExportColumns = (
   importeTicket: number,
-): (string | number)[][] {
-  return rows.map((row) => [
-    row.empleado,
-    row.nombreApellidos,
-    row.calendario,
-    row.ticketsFinales,
-    importeTicket.toFixed(2),
-  ]);
-}
+): ExportColumn<TicketPersonCalculation>[] => [
+  { key: 'empleado', header: 'Nº empleado', value: (row) => row.empleado },
+  { key: 'nombreApellidos', header: 'Nombre y apellidos', value: (row) => row.nombreApellidos },
+  { key: 'calendario', header: 'Calendario', value: (row) => row.calendario },
+  { key: 'diasTeoricos', header: 'Días teóricos', value: (row) => row.diasTeoricos },
+  {
+    key: 'ausenciasAplicadas',
+    header: 'Ausencias aplicadas',
+    value: (row) => row.ausenciasAplicadas,
+  },
+  { key: 'ticketsFinales', header: 'Tickets finales', value: (row) => row.ticketsFinales },
+  { key: 'importeTicket', header: 'Importe ticket', value: () => importeTicket.toFixed(2) },
+];
+
+const absenceExportColumns: ExportColumn<TicketRestaurantAbsence>[] = [
+  { key: 'empleado', header: 'Nº empleado', value: (absence) => absence.empleado },
+  {
+    key: 'nombreApellidos',
+    header: 'Nombre y apellidos',
+    value: (absence) => absence.nombreApellidos,
+  },
+  { key: 'desde', header: 'Desde', value: (absence) => absence.desde },
+  { key: 'hasta', header: 'Hasta', value: (absence) => absence.hasta },
+  { key: 'motivo', header: 'Motivo', value: (absence) => absence.motivo },
+  { key: 'totalDias', header: 'Total días', value: (absence) => absence.totalDias },
+  {
+    key: 'afectaTicket',
+    header: 'Afecta ticket',
+    value: (absence) => (absence.afectaTicket ? 'Sí' : 'No'),
+  },
+];
 
 function toAbsencePreviewRow(absence: TicketRestaurantAbsence): TicketRestaurantAbsencePreviewRow {
   return {
@@ -743,24 +704,16 @@ export function TicketRestaurantePage() {
           onChange={setPersonDraft}
           onEdit={editPerson}
           importMessage={peopleImportMessage}
-          onExport={() =>
-            exportCsv(
-              'ticket-restaurante-personas.csv',
-              PEOPLE_EXPORT_HEADERS,
-              buildPeopleExportRows(visiblePeople, visibleCalendars),
-            )
-          }
+          exportPayload={{
+            title: 'Personas Ticket Restaurante',
+            filename: 'ticket-restaurante-personas',
+            columns: ticketPersonExportColumns(visibleCalendars),
+            rows: visiblePeople,
+          }}
           onExportModel={() =>
             exportCsv('modelo-personas-ticket-restaurante.csv', PEOPLE_EXPORT_HEADERS, [])
           }
           onImport={() => peopleFileInputRef.current?.click()}
-          onPrint={() =>
-            printTable(
-              'Personas Ticket Restaurante',
-              PEOPLE_EXPORT_HEADERS,
-              buildPeopleExportRows(visiblePeople, visibleCalendars),
-            )
-          }
           onRemove={removePerson}
           onSave={savePerson}
           people={visiblePeople}
@@ -772,29 +725,17 @@ export function TicketRestaurantePage() {
           mode="monthly"
           month={calculationMonth}
           onConfigChange={updateConfig}
-          onExport={() =>
-            exportCsv(
-              `ticket-restaurante-computo-mensual-${calculationYear}-${String(calculationMonth).padStart(2, '0')}.csv`,
-              MONTHLY_EXPORT_HEADERS,
-              buildMonthlyExportRows(
-                monthCalculation.rows,
-                config.importeTicket,
-                config.pedidoMensual,
-              ),
-            )
-          }
+          exportPayload={{
+            title: 'Cómputo mensual Ticket Restaurante',
+            filename: `ticket-restaurante-computo-mensual-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
+            columns: monthlyCalculationExportColumns(config.importeTicket),
+            rows: monthCalculation.rows,
+            filterLabel: buildFilterLabel([
+              ['Mes', calculationMonth],
+              ['Año', calculationYear],
+            ]),
+          }}
           onMonthChange={handleCalculationMonthChange}
-          onPrint={() =>
-            printTable(
-              'Cómputo mensual Ticket Restaurante',
-              MONTHLY_EXPORT_HEADERS,
-              buildMonthlyExportRows(
-                monthCalculation.rows,
-                config.importeTicket,
-                config.pedidoMensual,
-              ),
-            )
-          }
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
@@ -805,27 +746,33 @@ export function TicketRestaurantePage() {
           mode="contribution"
           month={calculationMonth}
           onConfigChange={updateConfig}
-          onExport={() =>
-            exportCsv(
-              `ticket-restaurante-computo-cotizacion-${calculationYear}-${String(calculationMonth).padStart(2, '0')}.csv`,
-              CONTRIBUTION_EXPORT_HEADERS,
-              buildContributionExportRows(contributionCalculation.rows, config.importeTicket),
-            )
-          }
+          exportPayload={{
+            title: 'Cómputo cotización Ticket Restaurante',
+            filename: `ticket-restaurante-computo-cotizacion-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
+            columns: contributionCalculationExportColumns(config.importeTicket),
+            rows: contributionCalculation.rows,
+            filterLabel: buildFilterLabel([
+              ['Mes', calculationMonth],
+              ['Año', calculationYear],
+            ]),
+          }}
           onMonthChange={handleCalculationMonthChange}
-          onPrint={() =>
-            printTable(
-              'Cómputo cotización Ticket Restaurante',
-              CONTRIBUTION_EXPORT_HEADERS,
-              buildContributionExportRows(contributionCalculation.rows, config.importeTicket),
-            )
-          }
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
       ) : (
         <AbsencesTable
           absences={visibleAbsences}
+          exportPayload={{
+            title: 'Ausencias Ticket Restaurante',
+            filename: `ticket-restaurante-ausencias-${absenceYear}-${String(absenceMonth).padStart(2, '0')}`,
+            columns: absenceExportColumns,
+            rows: visibleAbsences,
+            filterLabel: buildFilterLabel([
+              ['Mes', absenceMonth],
+              ['Año', absenceYear],
+            ]),
+          }}
           importMessage={importMessage}
           month={absenceMonth}
           onEdit={editAbsence}
@@ -1161,10 +1108,9 @@ function PeoplePanel({
   onCancel,
   onChange,
   onEdit,
-  onExport,
+  exportPayload,
   onExportModel,
   onImport,
-  onPrint,
   onRemove,
   onSave,
   people,
@@ -1176,10 +1122,9 @@ function PeoplePanel({
   onCancel: () => void;
   onChange: (draft: TicketPersonDraft) => void;
   onEdit: (person: TicketPerson) => void;
-  onExport: () => void;
+  exportPayload: ExportTablePayload<TicketPerson>;
   onExportModel: () => void;
   onImport: () => void;
-  onPrint: () => void;
   onRemove: (empleado: string) => void;
   onSave: () => void;
   people: TicketPerson[];
@@ -1295,14 +1240,7 @@ function PeoplePanel({
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-              onClick={onExport}
-              type="button"
-            >
-              <FileDown className="h-3.5 w-3.5" />
-              Exportar personas
-            </button>
+            <ExportPrintButtons payload={exportPayload} />
             <button
               className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
               onClick={onExportModel}
@@ -1311,14 +1249,7 @@ function PeoplePanel({
               <FileDown className="h-3.5 w-3.5" />
               Modelo personas
             </button>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-              onClick={onPrint}
-              type="button"
-            >
-              <Printer className="h-3.5 w-3.5" />
-              Imprimir
-            </button>
+
             <button
               className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
               onClick={onImport}
@@ -1414,9 +1345,8 @@ function CalculationPanel({
   mode,
   month,
   onConfigChange,
-  onExport,
+  exportPayload,
   onMonthChange,
-  onPrint,
   onYearChange,
   year,
 }: {
@@ -1425,9 +1355,8 @@ function CalculationPanel({
   mode: 'monthly' | 'contribution';
   month: number;
   onConfigChange: (config: { importeTicket: number; pedidoMensual: number }) => void;
-  onExport: () => void;
+  exportPayload: ExportTablePayload<TicketPersonCalculation>;
   onMonthChange: (value: string) => void;
-  onPrint: () => void;
   onYearChange: (value: string) => void;
   year: number;
 }) {
@@ -1446,22 +1375,7 @@ function CalculationPanel({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onExport}
-            type="button"
-          >
-            <FileDown className="h-3.5 w-3.5" />
-            Exportar
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onPrint}
-            type="button"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            Imprimir
-          </button>
+          <ExportPrintButtons payload={exportPayload} />
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
           <select
@@ -1596,6 +1510,7 @@ function CalculationKpi({ label, value }: { label: string; value: number | strin
 
 function AbsencesTable({
   absences,
+  exportPayload,
   importMessage,
   month,
   onEdit,
@@ -1607,6 +1522,7 @@ function AbsencesTable({
   year,
 }: {
   absences: TicketRestaurantAbsence[];
+  exportPayload: ExportTablePayload<TicketRestaurantAbsence>;
   importMessage: string;
   month: number;
   onEdit: (absence: TicketRestaurantAbsence) => void;
@@ -1628,6 +1544,7 @@ function AbsencesTable({
         </div>
         <div className="flex flex-col items-start gap-1.5 lg:items-end">
           <div className="flex flex-wrap gap-2">
+            <ExportPrintButtons payload={exportPayload} />
             <button
               className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
               onClick={onExportModel}
