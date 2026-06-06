@@ -63,10 +63,23 @@ interface TraccionStorageRecord {
   value: string;
 }
 
+interface TraccionStorageRecordSnapshot extends TraccionStorageRecord {
+  updatedAt: string;
+}
+
+interface TraccionPersistedRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionStorageRecordSnapshot[];
+  refreshToken: string | null;
+  latestUpdatedAt: string | null;
+}
+
 interface TraccionApi {
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
+  loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
+  backupLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;
   selectTeletrabajoTemplate: () => Promise<string | null>;

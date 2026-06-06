@@ -5,8 +5,10 @@ import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.j
 import {
   changeSqliteDirectory,
   closeSqlitePersistence,
+  createLocalStorageBackup,
   getSqliteStatus,
   initializeSqlitePersistence,
+  loadPersistedRecordsSnapshot,
   migrateLocalStorageSnapshot,
   resetSqliteDirectory,
   savePersistedRecord,
@@ -408,6 +410,20 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('database:reset-directory', () => resetSqliteDirectory());
+
+  ipcMain.handle('database:load-persisted-records', () => loadPersistedRecordsSnapshot());
+
+  ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !Array.isArray((payload as { records?: unknown }).records)
+    ) {
+      return getSqliteStatus();
+    }
+
+    return createLocalStorageBackup(payload as { records: { key: string; value: string }[] });
+  });
 
   ipcMain.handle('database:migrate-local-storage', (_event, payload: unknown) => {
     if (

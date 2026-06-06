@@ -17,6 +17,17 @@ export interface PersistedStorageRecord {
   value: string;
 }
 
+export interface PersistedStorageRecordSnapshot extends PersistedStorageRecord {
+  updatedAt: string;
+}
+
+export interface PersistedRecordsSnapshot {
+  status: DatabaseStatus;
+  records: PersistedStorageRecordSnapshot[];
+  refreshToken: string | null;
+  latestUpdatedAt: string | null;
+}
+
 export interface LocalStorageBackupPayload {
   records: PersistedStorageRecord[];
 }
@@ -310,6 +321,12 @@ function migrateToVersion1(db: Database): void {
       created_at TEXT NOT NULL,
       payload_json TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS app_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   const currentVersion = readCurrentSchemaVersion(db);
@@ -451,6 +468,56 @@ export function getSqliteStatus(): DatabaseStatus {
   );
 }
 
+interface PersistedRecordRow {
+  key: string;
+  value_json: string;
+  updated_at: string;
+}
+
+interface MetadataRow {
+  value: string;
+}
+
+function isPersistedRecordRow(value: unknown): value is PersistedRecordRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<PersistedRecordRow>;
+  return (
+    typeof candidate.key === 'string' &&
+    typeof candidate.value_json === 'string' &&
+    typeof candidate.updated_at === 'string'
+  );
+}
+
+function isMetadataRow(value: unknown): value is MetadataRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<MetadataRow>;
+  return typeof candidate.value === 'string';
+}
+
+function updateRefreshMetadata(db: Database, updatedAt: string): void {
+  const token = `${updatedAt}:${ownerId}`;
+  db.prepare(
+    `INSERT INTO app_metadata (key, value, updated_at)
+     VALUES ('persisted_records_refresh_token', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = excluded.updated_at`,
+  ).run(token, updatedAt);
+}
+
+function readRefreshToken(db: Database): string | null {
+  const row = db
+    .prepare("SELECT value FROM app_metadata WHERE key = 'persisted_records_refresh_token'")
+    .get();
+  return isMetadataRow(row) ? row.value : null;
+}
+
 export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
   const currentStatus = getSqliteStatus();
   if (!currentStatus.ready || currentStatus.phase === 'locked') {
@@ -458,16 +525,16 @@ export function savePersistedRecord(record: PersistedStorageRecord): DatabaseSta
   }
 
   const now = new Date().toISOString();
-  requireDatabase()
-    .prepare(
-      `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
+  const db = requireDatabase();
+  db.prepare(
+    `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
        VALUES (?, ?, 'localStorage', ?, ?)
        ON CONFLICT(key) DO UPDATE SET
          value_json = excluded.value_json,
          source = excluded.source,
          updated_at = excluded.updated_at`,
-    )
-    .run(record.key, record.value, now, now);
+  ).run(record.key, record.value, now, now);
+  updateRefreshMetadata(db, now);
 
   return currentStatus;
 }
@@ -485,10 +552,7 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
       typeof record.key === 'string' && typeof record.value === 'string',
   );
 
-  db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)').run(
-    now,
-    JSON.stringify({ records }),
-  );
+  createLocalStorageBackup({ records });
 
   const upsert = db.prepare(
     `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
@@ -503,7 +567,60 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
     upsert.run(record.key, record.value, now, now);
   }
 
+  if (records.length > 0) {
+    updateRefreshMetadata(db, now);
+  }
+
   return currentStatus;
+}
+
+export function createLocalStorageBackup(payload: LocalStorageBackupPayload): DatabaseStatus {
+  const currentStatus = getSqliteStatus();
+  if (!currentStatus.ready || currentStatus.phase === 'locked') {
+    return currentStatus;
+  }
+
+  const records = payload.records.filter(
+    (record): record is PersistedStorageRecord =>
+      typeof record.key === 'string' && typeof record.value === 'string',
+  );
+  requireDatabase()
+    .prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
+    .run(new Date().toISOString(), JSON.stringify({ records }));
+
+  return currentStatus;
+}
+
+export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
+  const currentStatus = getSqliteStatus();
+  if (!currentStatus.ready || currentStatus.phase === 'locked') {
+    return { status: currentStatus, records: [], refreshToken: null, latestUpdatedAt: null };
+  }
+
+  const db = requireDatabase();
+  const rows = db
+    .prepare('SELECT key, value_json, updated_at FROM persisted_records ORDER BY key')
+    .all()
+    .filter(isPersistedRecordRow);
+  const records = rows.map((row) => ({
+    key: row.key,
+    value: row.value_json,
+    updatedAt: row.updated_at,
+  }));
+  const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
+    if (!latest) {
+      return record.updatedAt;
+    }
+
+    return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
+  }, null);
+
+  return {
+    status: currentStatus,
+    records,
+    refreshToken: readRefreshToken(db),
+    latestUpdatedAt,
+  };
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
