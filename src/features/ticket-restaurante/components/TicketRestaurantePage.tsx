@@ -5,7 +5,6 @@ import {
   ChevronRight,
   FileUp,
   Pencil,
-  Settings,
   Plus,
   Save,
   Trash2,
