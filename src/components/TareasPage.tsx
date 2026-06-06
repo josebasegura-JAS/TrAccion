@@ -18,6 +18,9 @@ import {
   type TaskPriority,
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
+import { buildFilterLabel } from '../shared/export/filterLabel';
+import type { ExportColumn } from '../shared/export/types';
+import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { TaskEditor } from './TaskEditor';
 
 interface SortState {
@@ -53,6 +56,17 @@ const historicColumns: Array<{ key: HistoricSortKey; label: string; className: s
   { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
   { key: 'responsable', label: 'Responsable', className: 'w-[190px]' },
   { key: 'prioridad', label: 'Prioridad', className: 'w-[120px]' },
+];
+
+const taskExportColumns: ExportColumn<Task>[] = [
+  { key: 'titulo', header: 'Título', value: (task) => task.titulo },
+  { key: 'tipo', header: 'Tipo', value: (task) => task.tipo },
+  { key: 'fase', header: 'Fase', value: (task) => task.fase },
+  { key: 'estado', header: 'Estado', value: (task) => task.estado },
+  { key: 'prioridad', header: 'Prioridad', value: (task) => task.prioridad },
+  { key: 'fechaLimite', header: 'Fecha límite', value: (task) => task.fechaLimite || null },
+  { key: 'responsable', header: 'Responsable', value: (task) => task.responsable || null },
+  { key: 'sindicato', header: 'Sindicato', value: (task) => task.sindicato || null },
 ];
 
 function formatDateTime(value: string | null): string {
@@ -157,6 +171,13 @@ export function TareasPage() {
     () => groupHistoricTasks(historicTasks, historicSortState),
     [historicTasks, historicSortState],
   );
+  const activeTasksFilterLabel = buildFilterLabel([
+    ['Búsqueda', filters.search],
+    ['Tipo', filters.tipo],
+    ['Fase', filters.fase],
+    ['Estado', filters.estado],
+    ['Prioridad', filters.prioridad],
+  ]);
 
   const editorTask =
     editorMode === 'edit' ? (visibleTasks.find((task) => task.id === editingTaskId) ?? null) : null;
@@ -221,11 +242,20 @@ export function TareasPage() {
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-col gap-2 border-b border-metro-border bg-metro-surface px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-metro-text">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Tareas activas
             <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
               {filteredTasks.length} registros
             </span>
+            <ExportPrintButtons
+              payload={{
+                title: 'Tareas activas',
+                filename: 'tareas-activas',
+                columns: taskExportColumns,
+                rows: sortedTasks,
+                filterLabel: activeTasksFilterLabel,
+              }}
+            />
           </div>
           <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(210px,1.3fr)_repeat(4,minmax(112px,0.7fr))]">
             <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-1.5 text-sm text-metro-muted">
@@ -296,8 +326,15 @@ export function TareasPage() {
                 </tr>
               )}
               {sortedTasks.map((task) => (
-                <tr className="cursor-pointer hover:bg-metro-red/10" key={task.id} onClick={() => openEditor(task)}>
-                  <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>
+                <tr
+                  className="cursor-pointer hover:bg-metro-red/10"
+                  key={task.id}
+                  onClick={() => openEditor(task)}
+                >
+                  <td
+                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
+                    title={task.titulo}
+                  >
                     {task.titulo}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.tipo}>
@@ -312,7 +349,10 @@ export function TareasPage() {
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
                     {task.prioridad}
                   </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.fechaLimite || '—'}>
+                  <td
+                    className="truncate px-3 py-1.5 text-metro-muted"
+                    title={task.fechaLimite || '—'}
+                  >
                     {task.fechaLimite || '—'}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>

@@ -1,14 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronUp,
-  Download,
-  Gift,
-  History,
-  Search,
-  ShieldMinus,
-  Trash2,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Gift, History, Search, ShieldMinus, Trash2 } from 'lucide-react';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   buildSorteosSummary,
@@ -18,9 +9,12 @@ import {
   validateSorteosDraft,
   type SorteosDraw,
   type SorteosDraft,
+  type SorteosExclusion,
   type SorteosWinner,
 } from '../domain/sorteos';
 import { useSorteosStore } from '../store/useSorteosStore';
+import type { ExportColumn } from '../../../shared/export/types';
+import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -29,9 +23,34 @@ type PendingConfirmation =
   | { type: 'reset-all-exclusions' }
   | null;
 
-function buildDrawExportPreview(draw: SorteosDraw): string {
-  return `${draw.title} (${draw.date}) - ${draw.winners.length} ganador(es)`;
-}
+const winnerExportColumns = (draw: SorteosDraw): ExportColumn<SorteosWinner>[] => [
+  { key: 'position', header: 'Posición', value: (winner) => winner.position },
+  { key: 'empleado', header: 'Nº empleado', value: (winner) => winner.empleado },
+  {
+    key: 'nombreApellidos',
+    header: 'Nombre y apellidos',
+    value: (winner) => winner.nombreApellidos,
+  },
+  { key: 'sorteo', header: 'Sorteo', value: () => draw.title },
+  { key: 'fecha', header: 'Fecha', value: () => draw.date },
+];
+
+const exclusionExportColumns: ExportColumn<SorteosExclusion>[] = [
+  { key: 'empleado', header: 'Nº empleado', value: (exclusion) => exclusion.empleado },
+  {
+    key: 'nombreApellidos',
+    header: 'Nombre y apellidos',
+    value: (exclusion) => exclusion.nombreApellidos,
+  },
+  { key: 'reason', header: 'Motivo', value: (exclusion) => exclusion.reason },
+  { key: 'excludedAt', header: 'Fecha exclusión', value: (exclusion) => exclusion.excludedAt },
+];
+
+const drawHistoryExportColumns: ExportColumn<SorteosDraw>[] = [
+  { key: 'title', header: 'Sorteo', value: (draw) => draw.title },
+  { key: 'date', header: 'Fecha', value: (draw) => draw.date },
+  { key: 'winners', header: 'Ganadores', value: (draw) => draw.winners.length },
+];
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
@@ -93,7 +112,6 @@ export function SorteosPage() {
   } = useSorteosStore();
   const [draft, setDraft] = useState<SorteosDraft>({ title: '', date: today, winnersCount: 1 });
   const [errors, setErrors] = useState<string[]>([]);
-  const [exportNotice, setExportNotice] = useState('');
   const [search, setSearch] = useState('');
   const [exclusionsOpen, setExclusionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
@@ -130,12 +148,6 @@ export function SorteosPage() {
     if (result.valid) {
       setDraft({ title: '', date: today, winnersCount: 1 });
     }
-  };
-
-  const handleExport = (draw: SorteosDraw) => {
-    setExportNotice(
-      `Exportación preparada para ${buildDrawExportPreview(draw)}. Pendiente conectar con el patrón de exportación Excel de TrAccion cuando exista.`,
-    );
   };
 
   const requestDeleteDraw = (drawId: string) => {
@@ -251,21 +263,18 @@ export function SorteosPage() {
               Se muestra inmediatamente tras sortear o al ver histórico.
             </p>
           </div>
-          <button
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!visibleResult}
-            onClick={() => visibleResult && handleExport(visibleResult)}
-            type="button"
-          >
-            <Download className="h-4 w-4" />
-            Exportar
-          </button>
+          {visibleResult ? (
+            <ExportPrintButtons
+              payload={{
+                title: `Ganadores - ${visibleResult.title}`,
+                filename: `sorteo-ganadores-${visibleResult.date}-${visibleResult.title}`,
+                columns: winnerExportColumns(visibleResult),
+                rows: visibleResult.winners,
+                filterLabel: `Sorteo: ${visibleResult.title} · Fecha: ${visibleResult.date}`,
+              }}
+            />
+          ) : null}
         </div>
-        {exportNotice && (
-          <p className="mb-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
-            {exportNotice}
-          </p>
-        )}
         {visibleResult ? (
           <WinnersTable draw={visibleResult} />
         ) : (
@@ -339,6 +348,14 @@ export function SorteosPage() {
               <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h4 className="text-sm font-bold text-metro-text">Personas excluidas</h4>
+                  <ExportPrintButtons
+                    payload={{
+                      title: 'Personas excluidas de sorteos',
+                      filename: 'sorteos-excluidos',
+                      columns: exclusionExportColumns,
+                      rows: exclusions,
+                    }}
+                  />
                   <button
                     className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-bold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={exclusions.length === 0}
@@ -453,17 +470,25 @@ export function SorteosPage() {
       )}
 
       <div className="rounded-xl border border-metro-border bg-metro-panel">
-        <button
-          className="flex w-full items-center justify-between px-3 py-3 text-left"
-          onClick={() => setHistoryOpen((open) => !open)}
-          type="button"
-        >
-          <span className="flex items-center gap-2 text-base font-bold text-metro-text">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3">
+          <button
+            className="flex items-center gap-2 text-left text-base font-bold text-metro-text"
+            onClick={() => setHistoryOpen((open) => !open)}
+            type="button"
+          >
             <History className="h-4 w-4 text-metro-red" />
             Histórico de sorteos
-          </span>
-          {historyOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
+            {historyOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          <ExportPrintButtons
+            payload={{
+              title: 'Histórico de sorteos',
+              filename: 'sorteos-historico',
+              columns: drawHistoryExportColumns,
+              rows: draws,
+            }}
+          />
+        </div>
         {historyOpen && (
           <div className="border-t border-metro-border p-3">
             <div className="overflow-hidden rounded-lg border border-metro-border bg-metro-surface">
@@ -491,13 +516,15 @@ export function SorteosPage() {
                           >
                             Ver ganadores
                           </button>
-                          <button
-                            className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
-                            onClick={() => handleExport(draw)}
-                            type="button"
-                          >
-                            Exportar
-                          </button>
+                          <ExportPrintButtons
+                            payload={{
+                              title: `Ganadores - ${draw.title}`,
+                              filename: `sorteo-ganadores-${draw.date}-${draw.title}`,
+                              columns: winnerExportColumns(draw),
+                              rows: draw.winners,
+                              filterLabel: `Sorteo: ${draw.title} · Fecha: ${draw.date}`,
+                            }}
+                          />
                           <button
                             className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
                             onClick={() => resetDrawWinnerExclusions(draw.id)}

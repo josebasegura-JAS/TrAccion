@@ -14,6 +14,8 @@ import {
   type VinculogramaDraft,
 } from '../domain/vinculograma';
 import { useVinculogramaStore } from '../store/useVinculogramaStore';
+import type { ExportColumn } from '../../../shared/export/types';
+import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 
 const EXPIRED_VISIBILITY_KEY = 'traccion.v1.vinculograma.showExpired';
 const inputClass =
@@ -23,6 +25,19 @@ const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark';
 const secondaryButtonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red';
+
+const vinculogramaExportColumns = (today: string): ExportColumn<Vinculograma>[] => [
+  { key: 'employeeNumber', header: 'Nº empleado', value: (record) => record.employeeNumber },
+  { key: 'nombreCompleto', header: 'Nombre', value: (record) => record.nombreCompleto },
+  { key: 'linkedPerson', header: 'Persona vinculada', value: (record) => record.linkedPerson },
+  { key: 'requestDate', header: 'Fecha solicitud', value: (record) => record.requestDate },
+  { key: 'expiryDate', header: 'Fecha vigencia', value: (record) => record.expiryDate },
+  {
+    key: 'estado',
+    header: 'Estado',
+    value: (record) => getVinculogramaStatus(record.expiryDate, today),
+  },
+];
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -372,8 +387,17 @@ export function VinculogramaPage() {
 
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <Link2 size={16} className="text-metro-red" /> Vinculogramas vigentes
+            <ExportPrintButtons
+              payload={{
+                title: 'Vinculogramas vigentes',
+                filename: 'vinculogramas-vigentes',
+                columns: vinculogramaExportColumns(today),
+                rows: vigentes,
+                filterLabel: 'Estado: vigente',
+              }}
+            />
           </div>
           <span className="rounded-full bg-metro-success/10 px-3 py-1 text-xs font-bold text-emerald-200">
             {vigentes.length} registros
@@ -397,6 +421,15 @@ export function VinculogramaPage() {
             <span className="rounded-full bg-metro-warning/10 px-3 py-1 text-xs font-bold text-amber-200">
               {vencidos.length} registros
             </span>
+            <ExportPrintButtons
+              payload={{
+                title: 'Vinculogramas vencidos',
+                filename: 'vinculogramas-vencidos',
+                columns: vinculogramaExportColumns(today),
+                rows: vencidos,
+                filterLabel: 'Estado: vencido',
+              }}
+            />
           </div>
           <button className={secondaryButtonClass} onClick={toggleExpired} type="button">
             {showExpired ? 'Ocultar' : 'Mostrar'}

@@ -12,6 +12,9 @@ import {
   type CriterioRrll,
   type CriterioRrllEstado,
 } from '../domain/criterioRrll';
+import { buildFilterLabel } from '../../../shared/export/filterLabel';
+import type { ExportColumn } from '../../../shared/export/types';
+import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 
@@ -25,6 +28,14 @@ const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; classNam
   { key: 'estado', label: 'Estado', className: 'w-[120px]' },
   { key: 'fecha', label: 'Fecha', className: 'w-[115px]' },
   { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
+];
+
+const criterioExportColumns: ExportColumn<CriterioRrll>[] = [
+  { key: 'tema', header: 'Tema', value: (criterio) => criterio.tema },
+  { key: 'estado', header: 'Estado', value: (criterio) => criterio.estado },
+  { key: 'fecha', header: 'Fecha', value: (criterio) => criterio.fecha || null },
+  { key: 'responsable', header: 'Responsable', value: (criterio) => criterio.responsable },
+  { key: 'criterio', header: 'Criterio', value: (criterio) => criterio.criterio },
 ];
 
 function SelectFilter({
@@ -87,6 +98,10 @@ export function CriteriosRrllPage() {
     editorMode === 'edit'
       ? (visibleCriterios.find((criterio) => criterio.id === editingCriterioId) ?? null)
       : null;
+  const criterioFilterLabel = buildFilterLabel([
+    ['Búsqueda', filters.search],
+    ['Estado', filters.estado],
+  ]);
 
   const openEditor = (criterio: CriterioRrll) => {
     selectCriterio(criterio.id);
@@ -155,9 +170,18 @@ export function CriteriosRrllPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Criterios RRLL
+            <ExportPrintButtons
+              payload={{
+                title: 'Criterios RRLL',
+                filename: 'criterios-rrll',
+                columns: criterioExportColumns,
+                rows: sortedCriterios,
+                filterLabel: criterioFilterLabel,
+              }}
+            />
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredCriterios.length} registros

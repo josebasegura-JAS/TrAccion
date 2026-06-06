@@ -3,10 +3,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
-import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
+import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
+import { buildFilterLabel } from '../shared/export/filterLabel';
+import type { ExportColumn } from '../shared/export/types';
+import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 
-type SortKey = 'empleado' | 'nombreApellidos' | 'puestoNomina' | 'puestoEus' | 'residencia' | 'nivelRetributivo';
+type SortKey =
+  | 'empleado'
+  | 'nombreApellidos'
+  | 'puestoNomina'
+  | 'puestoEus'
+  | 'residencia'
+  | 'nivelRetributivo';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -22,6 +31,19 @@ const sortableColumns: Array<{ key: SortKey; label: string; className: string }>
   { key: 'puestoEus', label: 'Puesto EUS', className: 'w-[190px]' },
   { key: 'residencia', label: 'Residencia', className: 'w-[120px]' },
   { key: 'nivelRetributivo', label: 'Nivel', className: 'w-[95px]' },
+];
+
+const employeeExportColumns: ExportColumn<Employee>[] = [
+  { key: 'empleado', header: 'Empleado', value: (employee) => employee.empleado },
+  {
+    key: 'nombreApellidos',
+    header: 'Nombre y apellidos',
+    value: (employee) => employee.nombreApellidos,
+  },
+  { key: 'puestoNomina', header: 'Puesto nómina', value: (employee) => employee.puestoNomina },
+  { key: 'puestoEus', header: 'Puesto EUS', value: (employee) => employee.puestoEus || null },
+  { key: 'residencia', header: 'Residencia', value: (employee) => employee.residencia },
+  { key: 'nivelRetributivo', header: 'Nivel', value: (employee) => employee.nivelRetributivo },
 ];
 
 function compareEmployeeValues(first: Employee, second: Employee, key: SortKey): number {
@@ -109,11 +131,20 @@ export function PlantillaPage() {
 
   const residencias = uniqueSorted(visibleEmployees.map((employee) => employee.residencia));
   const niveles = uniqueSorted(visibleEmployees.map((employee) => employee.nivelRetributivo));
-  const emptyPuestoEusCount = visibleEmployees.filter((employee) => !employee.puestoEus.trim()).length;
+  const emptyPuestoEusCount = visibleEmployees.filter(
+    (employee) => !employee.puestoEus.trim(),
+  ).length;
+  const employeeFilterLabel = buildFilterLabel([
+    ['Búsqueda', filters.search],
+    ['Residencia', filters.residencia],
+    ['Nivel retributivo', filters.nivelRetributivo],
+  ]);
 
   const handleGlobalJobPositionUpdate = () => {
     const { updated, missing } = updateEmptyEmployeeJobPositionTranslations();
-    setImportMessage(`Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`);
+    setImportMessage(
+      `Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`,
+    );
   };
 
   return (
@@ -157,7 +188,11 @@ export function PlantillaPage() {
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
             disabled={emptyPuestoEusCount === 0}
             onClick={handleGlobalJobPositionUpdate}
-            title={emptyPuestoEusCount === 0 ? 'No hay puestos EUS pendientes' : `${emptyPuestoEusCount} puestos EUS pendientes`}
+            title={
+              emptyPuestoEusCount === 0
+                ? 'No hay puestos EUS pendientes'
+                : `${emptyPuestoEusCount} puestos EUS pendientes`
+            }
             type="button"
           >
             <RefreshCw size={16} /> Actualizar puestos global
@@ -211,9 +246,18 @@ export function PlantillaPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Personas en plantilla
+            <ExportPrintButtons
+              payload={{
+                title: 'Personas en plantilla',
+                filename: 'plantilla-personas',
+                columns: employeeExportColumns,
+                rows: sortedEmployees,
+                filterLabel: employeeFilterLabel,
+              }}
+            />
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredEmployees.length} registros
