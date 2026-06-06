@@ -348,7 +348,7 @@ export function cleanEventFromSubject(subject: string): string {
 
 export function normalizeDetectionText(value: string): string {
   return value
-    .replace(new RegExp('\\u0000', 'g'), ' ')
+    .split('\u0000').join(' ')
     .replace(/\r/g, '\n')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
@@ -529,7 +529,13 @@ function isCleanIntranetCandidate(value: string): boolean {
   if (!text || text.length < 4 || text.length > 140) {
     return false;
   }
-  if (new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\ufffd]').test(text)) {
+  const hasInvalidControlCharacter = [...text].some((char) => {
+    const code = char.charCodeAt(0);
+
+    return code <= 0x08 || code === 0x0b || code === 0x0c || (code >= 0x0e && code <= 0x1f) || code === 0xfffd;
+  });
+
+  if (hasInvalidControlCharacter) {
     return false;
   }
   if (new RegExp('[{}\\[\\]\\x7f]').test(text)) {
