@@ -196,7 +196,7 @@ export function detectYearFromText(text: string): string {
     return fourDigitMatch[1];
   }
 
-  const shortYearMatch = text.match(/\b\d{1,2}[\/. -]\d{1,2}[\/. -](\d{2})\b/);
+  const shortYearMatch = text.match(/\b\d{1,2}[/ .-]\d{1,2}[/ .-](\d{2})\b/);
   return shortYearMatch ? `20${shortYearMatch[1]}` : '';
 }
 
@@ -244,12 +244,12 @@ export function buildEspecialMailDraft(
 
 export function normalizeDateInput(raw: string): string {
   const value = raw.trim();
-  const iso = value.match(/\b(\d{4})[\/. -](\d{1,2})[\/. -](\d{1,2})\b/);
+  const iso = value.match(/\b(\d{4})[/ .-](\d{1,2})[/ .-](\d{1,2})\b/);
   if (iso) {
     return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
   }
 
-  const es = value.match(/\b(\d{1,2})[\/. -](\d{1,2})[\/. -](\d{2,4})\b/);
+  const es = value.match(/\b(\d{1,2})[/ .-](\d{1,2})[/ .-](\d{2,4})\b/);
   if (es) {
     const year = es[3].length === 2 ? `20${es[3]}` : es[3];
     return `${year}-${es[2].padStart(2, '0')}-${es[1].padStart(2, '0')}`;
@@ -307,7 +307,7 @@ export function decodeMimeWords(value: string): string {
         const bytes = encoding === 'B' ? decodeBase64Bytes(content) : decodeQBytes(content);
         const normalizedCharset = charset.includes('8859-1') ? 'iso-8859-1' : 'utf-8';
         return new TextDecoder(normalizedCharset).decode(bytes);
-      } catch (_error) {
+      } catch {
         return content.replace(/_/g, ' ');
       }
     })
@@ -338,17 +338,17 @@ export function cleanEventFromSubject(subject: string): string {
     .replace(/^\s*bec\b/gi, ' ')
     .replace(/\b(?:servicio\s+especial|concierto|evento)\b/gi, ' ')
     .replace(/\b(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/gi, ' ')
-    .replace(/\b\d{1,2}[\/. -]\d{1,2}[\/. -]\d{2,4}\b/g, ' ')
+    .replace(/\b\d{1,2}[/ .-]\d{1,2}[/ .-]\d{2,4}\b/g, ' ')
     .replace(/\b\d{1,2}\s+de\s+[a-záéíóúñ]+\s+de\s+\d{2,4}\b/gi, ' ')
     .replace(/\b\d{1,2}(?::|\.)\d{2}\s*h?\b/gi, ' ')
-    .replace(/[|,\-–—]+/g, ' ')
+    .replace(/[|,–—,-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 export function normalizeDetectionText(value: string): string {
   return value
-    .replace(/\u0000/g, ' ')
+    .replace(new RegExp('\\u0000', 'g'), ' ')
     .replace(/\r/g, '\n')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
@@ -379,7 +379,7 @@ export function extractIntranetParagraph(text: string): string {
   const cleanValue = valueCandidate
     .replace(/\n+/g, ' ')
     .replace(/\s+/g, ' ')
-    .replace(/[.;,\-–—]+$/g, '')
+    .replace(/[.;,–—-]+$/g, '')
     .trim();
   if (!isCleanIntranetCandidate(cleanValue)) {
     return '';
@@ -408,9 +408,9 @@ export function detectAutoFields(
   extraSources: string[] = [],
 ): Pick<ParsedMsgData, 'evento' | 'fecha' | 'hora' | 'enlace' | 'intranetName' | 'intranetParagraph' | 'ruta'> {
   const source = normalizeDetectionText(text);
-  const eventMatch = source.match(/(?:servicio\s+especial|concierto|evento)\s*[:\-]?\s*([^\n\r]{4,120})/i);
+  const eventMatch = source.match(/(?:servicio\s+especial|concierto|evento)\s*[:-]?\s*([^\n\r]{4,120})/i);
   const dateMatch = source.match(
-    /(?:\b(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b\s*)?(\d{1,2}[\/. -]\d{1,2}[\/. -]\d{2,4}|\d{1,2}\s+de\s+[a-záéíóúñ]+\s+de\s+\d{2,4})/i,
+    /(?:\b(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b\s*)?(\d{1,2}[/ .-]\d{1,2}[/ .-]\d{2,4}|\d{1,2}\s+de\s+[a-záéíóúñ]+\s+de\s+\d{2,4})/i,
   );
   const timeMatch = source.match(/\b(\d{1,2}(?::|\.)\d{2}\s*h?)\b/i);
   const uncMatch = source.match(/(?:[A-Za-z]:\\|\\\\)[^\n\r;,"<>]+/);
@@ -475,7 +475,7 @@ export async function parseOutlookMsg(file: File): Promise<ParsedMsgResult> {
         ...auto,
       },
     };
-  } catch (_error) {
+  } catch {
     return { ok: false, message: 'No se ha podido importar el mensaje .msg.' };
   }
 }
@@ -504,7 +504,7 @@ function extractIntranetParagraphFromMsgBuffer(buffer: ArrayBuffer): string {
 function decodeArrayBuffer(buffer: ArrayBuffer, encoding: string): string {
   try {
     return new TextDecoder(encoding).decode(buffer);
-  } catch (_error) {
+  } catch {
     return '';
   }
 }
@@ -529,10 +529,10 @@ function isCleanIntranetCandidate(value: string): boolean {
   if (!text || text.length < 4 || text.length > 140) {
     return false;
   }
-  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffd]/.test(text)) {
+  if (new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\ufffd]').test(text)) {
     return false;
   }
-  if (/[{}\[\]\x7f]/.test(text)) {
+  if (new RegExp('[{}\\[\\]\\x7f]').test(text)) {
     return false;
   }
   const readable = (text.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]/g) || []).length;
