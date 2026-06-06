@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { readStorageItem, writeStorageItem } from '../services/persistence';
+import { useDatabaseStatus } from '../services/databaseStatus';
+import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../services/persistence';
 import {
   ClipboardList,
+  Database,
   Gift,
   Home,
   Laptop,
   Link2,
+  LockKeyhole,
   MailPlus,
   Pin,
   PinOff,
@@ -98,6 +101,115 @@ const getGroupForView = (view: AppView): NavigationGroupId | null => {
 const isNavigationGroupId = (value: string | null): value is NavigationGroupId =>
   navigationGroups.some((group) => group.id === value);
 
+type DatabaseIndicatorViewModel = {
+  label: string;
+  statusText: string;
+  routeText: string;
+  lastSyncText: string;
+  dotClassName: string;
+  textClassName: string;
+  icon: 'database' | 'lock';
+};
+
+const formatDatabaseTimestamp = (timestamp: string | null | undefined) => {
+  if (!timestamp) {
+    return 'Sin sincronización/hidratación registrada';
+  }
+
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
+};
+
+const buildDatabaseIndicatorViewModel = (
+  databaseStatus: TraccionDatabaseStatus | null,
+): DatabaseIndicatorViewModel => {
+  const hydrationMetadata = typeof window === 'undefined' ? null : readHydrationMetadata();
+  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'localStorage local';
+  const lastSyncText = formatDatabaseTimestamp(hydrationMetadata?.lastUpdatedAt);
+
+  if (!databaseStatus) {
+    return {
+      label: 'Local',
+      statusText: 'fallback localStorage',
+      routeText,
+      lastSyncText,
+      dotClassName: 'bg-orange-400 ring-orange-300/25',
+      textClassName: 'text-orange-100',
+      icon: 'database',
+    };
+  }
+
+  if (databaseStatus.phase === 'locked') {
+    return {
+      label: 'Bloq.',
+      statusText: databaseStatus.message ?? 'base bloqueada',
+      routeText,
+      lastSyncText,
+      dotClassName: 'bg-slate-400 ring-slate-300/25',
+      textClassName: 'text-slate-200',
+      icon: 'lock',
+    };
+  }
+
+  if (databaseStatus.phase === 'error') {
+    return {
+      label: 'Error',
+      statusText: databaseStatus.message ?? 'error o ruta no accesible',
+      routeText,
+      lastSyncText,
+      dotClassName: 'bg-red-500 ring-red-300/25',
+      textClassName: 'text-red-100',
+      icon: 'database',
+    };
+  }
+
+  if (databaseStatus.ready && !databaseStatus.isDefaultPath) {
+    return {
+      label: 'SQLite',
+      statusText: 'SQLite activa en ruta compartida/personalizada',
+      routeText,
+      lastSyncText,
+      dotClassName: 'bg-emerald-400 ring-emerald-300/25',
+      textClassName: 'text-emerald-100',
+      icon: 'database',
+    };
+  }
+
+  if (databaseStatus.ready) {
+    return {
+      label: 'SQLite',
+      statusText: 'SQLite activa en ruta local por defecto',
+      routeText,
+      lastSyncText,
+      dotClassName: 'bg-sky-400 ring-sky-300/25',
+      textClassName: 'text-sky-100',
+      icon: 'database',
+    };
+  }
+
+  if (databaseStatus.phase === 'fallback') {
+    return {
+      label: 'Local',
+      statusText: databaseStatus.message ?? 'fallback localStorage',
+      routeText,
+      lastSyncText,
+      dotClassName: 'bg-orange-400 ring-orange-300/25',
+      textClassName: 'text-orange-100',
+      icon: 'database',
+    };
+  }
+
+  return {
+    label: 'Revisar',
+    statusText: databaseStatus.message ?? 'ruta no accesible',
+    routeText,
+    lastSyncText,
+    dotClassName: 'bg-red-500 ring-red-300/25',
+    textClassName: 'text-red-100',
+    icon: 'database',
+  };
+};
+
 const readStoredPinnedPreference = () => {
   if (typeof window === 'undefined') {
     return false;
@@ -112,7 +224,9 @@ const readStoredActiveGroup = (activeView: AppView) => {
   }
 
   const storedGroup = readStorageItem(SIDEBAR_ACTIVE_GROUP_KEY);
-  return isNavigationGroupId(storedGroup) ? storedGroup : getGroupForView(activeView) ?? 'personas';
+  return isNavigationGroupId(storedGroup)
+    ? storedGroup
+    : (getGroupForView(activeView) ?? 'personas');
 };
 
 export function Sidebar({
@@ -132,6 +246,9 @@ export function Sidebar({
     [activeGroupId],
   );
   const shouldShowPanel = isPanelOpen || isPinned;
+  const databaseStatus = useDatabaseStatus();
+  const databaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus);
+  const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}\nEstado: ${databaseIndicator.statusText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}`;
 
   useEffect(() => {
     writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned));
@@ -168,6 +285,14 @@ export function Sidebar({
     }
   };
 
+  const handleDatabaseIndicatorSelect = () => {
+    if (typeof window !== 'undefined') {
+      window.location.hash = 'base-de-datos';
+    }
+
+    onViewChange('ajustes');
+  };
+
   const handleViewSelect = (view: AppView) => {
     onViewChange(view);
 
@@ -195,7 +320,10 @@ export function Sidebar({
           <img alt="TrAccion" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
         </div>
 
-        <nav aria-label="Grupos principales" className="flex flex-1 flex-col items-center px-2 py-4">
+        <nav
+          aria-label="Grupos principales"
+          className="flex flex-1 flex-col items-center px-2 py-4"
+        >
           <div className="flex flex-col items-center gap-2">
             <button
               aria-current={activeView === 'dashboard' ? 'page' : undefined}
@@ -212,7 +340,11 @@ export function Sidebar({
               {activeView === 'dashboard' && (
                 <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
               )}
-              <Home className={activeView === 'dashboard' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
+              <Home
+                className={activeView === 'dashboard' ? 'text-red-200' : undefined}
+                size={21}
+                strokeWidth={2.1}
+              />
               <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
                 Inicio
               </span>
@@ -252,7 +384,34 @@ export function Sidebar({
             })}
           </div>
 
-          <div className="mt-auto flex flex-col items-center border-t border-white/10 pt-3">
+          <div className="mt-auto flex flex-col items-center gap-2 border-t border-white/10 pt-3">
+            <button
+              aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`}
+              className="group/rail relative flex w-12 flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[0.58rem] font-semibold uppercase tracking-[0.08em] text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+              onClick={handleDatabaseIndicatorSelect}
+              title={databaseIndicatorTooltip}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={`flex h-4 w-4 items-center justify-center rounded-full ring-4 ${databaseIndicator.dotClassName}`}
+              >
+                {databaseIndicator.icon === 'lock' ? (
+                  <LockKeyhole className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />
+                ) : (
+                  <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />
+                )}
+              </span>
+              <span className="max-w-full truncate">{databaseIndicator.label}</span>
+              <span className="pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+                <span className="block font-semibold">{databaseIndicator.statusText}</span>
+                <span className="mt-1 block break-all text-slate-300">
+                  {databaseIndicator.routeText}
+                </span>
+                <span className="mt-1 block text-slate-400">{databaseIndicator.lastSyncText}</span>
+              </span>
+            </button>
+
             <button
               aria-current={activeView === 'ajustes' ? 'page' : undefined}
               aria-label="Ajustes"
@@ -268,7 +427,11 @@ export function Sidebar({
               {activeView === 'ajustes' && (
                 <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
               )}
-              <Settings className={activeView === 'ajustes' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
+              <Settings
+                className={activeView === 'ajustes' ? 'text-red-200' : undefined}
+                size={21}
+                strokeWidth={2.1}
+              />
               <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
                 Ajustes
               </span>
@@ -284,7 +447,9 @@ export function Sidebar({
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-metro-red">
                 Navegación
               </p>
-              <h2 className="truncate text-base font-semibold text-metro-text">{activeGroup.label}</h2>
+              <h2 className="truncate text-base font-semibold text-metro-text">
+                {activeGroup.label}
+              </h2>
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -316,7 +481,10 @@ export function Sidebar({
             <p className="text-sm leading-5 text-metro-muted">{activeGroup.description}</p>
           </div>
 
-          <nav aria-label={`Opciones de ${activeGroup.label}`} className="flex-1 space-y-1 px-3 py-4">
+          <nav
+            aria-label={`Opciones de ${activeGroup.label}`}
+            className="flex-1 space-y-1 px-3 py-4"
+          >
             {activeGroup.items.map((item) => {
               const Icon = item.icon;
               const isActiveItem = item.view === activeView;
@@ -346,6 +514,32 @@ export function Sidebar({
           </nav>
 
           <div className="border-t border-white/10 px-4 py-3 text-xs leading-5 text-slate-500">
+            <button
+              aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`}
+              className="mb-3 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left transition hover:bg-white/[0.07]"
+              onClick={handleDatabaseIndicatorSelect}
+              title={databaseIndicatorTooltip}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-4 ${databaseIndicator.dotClassName}`}
+              >
+                {databaseIndicator.icon === 'lock' ? (
+                  <LockKeyhole className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />
+                ) : (
+                  <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>
+                  {databaseIndicator.label}
+                </span>
+                <span className="block truncate text-[0.68rem] text-slate-400">
+                  {databaseIndicator.statusText}
+                </span>
+              </span>
+            </button>
             {isPinned
               ? 'Panel fijado: el área principal reserva espacio en escritorio.'
               : 'Panel temporal: se oculta al abrir un módulo.'}

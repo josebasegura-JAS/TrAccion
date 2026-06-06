@@ -26,7 +26,7 @@ const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetadata';
 
 type PersistedStorageKey = (typeof PERSISTED_STORAGE_KEYS)[number];
 
-interface HydrationMetadata {
+export interface HydrationMetadata {
   lastUpdatedAt: string;
   sqlitePath: string | null;
   refreshToken: string | null;
@@ -56,7 +56,7 @@ function isHydrationMetadata(value: unknown): value is HydrationMetadata {
   );
 }
 
-function readHydrationMetadata(): HydrationMetadata | null {
+export function readHydrationMetadata(): HydrationMetadata | null {
   const stored = window.localStorage.getItem(SQLITE_HYDRATION_METADATA_KEY);
   if (!stored) {
     return null;
