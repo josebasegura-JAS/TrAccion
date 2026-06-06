@@ -1,11 +1,6 @@
-import type { IpcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-const { contextBridge, ipcRenderer } = require('electron') as {
-  contextBridge: Electron.ContextBridge;
-  ipcRenderer: IpcRenderer;
-};
-
-const createOutlookDraft = (payload: unknown): Promise<unknown> =>
+const createOutlookDraft = (payload: unknown) =>
   ipcRenderer.invoke('especiales:create-outlook-draft', payload);
 
 contextBridge.exposeInMainWorld('traccion', {
@@ -15,6 +10,7 @@ contextBridge.exposeInMainWorld('traccion', {
   createOutlookDraft,
 });
 
+// Compatibilidad con el módulo Especiales de RRLL Dashboard y con builds intermedias.
 contextBridge.exposeInMainWorld('rrllOutlook', {
   createDraft: createOutlookDraft,
 });
