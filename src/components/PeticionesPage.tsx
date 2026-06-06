@@ -56,7 +56,7 @@ function formatDateTime(value: string | null): string {
 }
 
 export function PeticionesPage() {
-  const { filters, load, peticiones, selectPeticion, setFilter } = usePeticionStore();
+  const { filters, load, peticiones, remove, selectPeticion, setFilter } = usePeticionStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingPeticionId, setEditingPeticionId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
@@ -226,7 +226,11 @@ export function PeticionesPage() {
                 </tr>
               )}
               {sortedPeticiones.map((peticion) => (
-                <tr className="hover:bg-red-50/50" key={peticion.id}>
+                <tr
+                  className="cursor-pointer hover:bg-red-50/50"
+                  key={peticion.id}
+                  onClick={() => openEditor(peticion)}
+                >
                   <td
                     className="truncate px-3 py-1.5 font-semibold text-metro-text"
                     title={peticion.titulo}
@@ -254,13 +258,16 @@ export function PeticionesPage() {
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={peticion.sindicato}>
                     {peticion.sindicato}
                   </td>
-                  <td className="px-3 py-1.5 text-right">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
                     <button
-                      className="rounded-lg border border-metro-border bg-white px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
-                      onClick={() => openEditor(peticion)}
+                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        remove(peticion.id);
+                      }}
                       type="button"
                     >
-                      Editar
+                      Eliminar
                     </button>
                   </td>
                 </tr>
