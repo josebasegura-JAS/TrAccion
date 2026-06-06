@@ -76,11 +76,7 @@ const MONTH_NAMES = [
 
 export function normalizeDiasSinTicket(fechas: string[]): string[] {
   return Array.from(
-    new Set(
-      fechas
-        .map((fecha) => fecha.trim())
-        .filter((fecha) => isIsoDate(fecha)),
-    ),
+    new Set(fechas.map((fecha) => fecha.trim()).filter((fecha) => isIsoDate(fecha))),
   ).sort((first, second) => first.localeCompare(second));
 }
 
@@ -148,6 +144,19 @@ export function visibleTicketRestaurantAbsences(
   absences: TicketRestaurantAbsence[],
 ): TicketRestaurantAbsence[] {
   return absences.filter((absence) => !absence.deletedAt);
+}
+
+export function filterTicketRestaurantAbsencesByMonth(
+  absences: TicketRestaurantAbsence[],
+  year: number,
+  month: number,
+): TicketRestaurantAbsence[] {
+  const monthStart = toIsoDate(year, month, 1);
+  const monthEnd = toIsoDate(year, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
+
+  return absences.filter(
+    (absence) => !absence.deletedAt && absence.desde <= monthEnd && absence.hasta >= monthStart,
+  );
 }
 
 export function buildYearCalendar(calendar: TicketCalendar, year: number): CalendarMonth[] {

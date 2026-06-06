@@ -1,12 +1,21 @@
-import { CalendarDays, ChevronLeft, ChevronRight, FileUp, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  FileUp,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   buildYearCalendar,
   EMPTY_TICKET_CALENDAR_DRAFT,
+  filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
   previousCalendarYear,
   visibleTicketCalendars,
-  visibleTicketRestaurantAbsences,
   type CalendarDay,
   type TicketCalendar,
   type TicketCalendarDraft,
@@ -22,10 +31,30 @@ import {
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const MONTH_OPTIONS = [
+  { value: 1, label: 'Enero' },
+  { value: 2, label: 'Febrero' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Abril' },
+  { value: 5, label: 'Mayo' },
+  { value: 6, label: 'Junio' },
+  { value: 7, label: 'Julio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Septiembre' },
+  { value: 10, label: 'Octubre' },
+  { value: 11, label: 'Noviembre' },
+  { value: 12, label: 'Diciembre' },
+];
 
 function currentYear(): number {
   return new Date().getFullYear();
 }
+
+function currentMonth(): number {
+  return new Date().getMonth() + 1;
+}
+
+type TicketRestauranteSubview = 'calendarios' | 'ausencias';
 
 function toCalendarDraft(calendar: TicketCalendar): TicketCalendarDraft {
   return {
@@ -53,7 +82,10 @@ export function TicketRestaurantePage() {
   const saveAbsences = useTicketRestauranteStore((state) => state.saveAbsences);
   const removeAbsence = useTicketRestauranteStore((state) => state.removeAbsence);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
+  const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview>('calendarios');
   const [year, setYear] = useState(currentYear());
+  const [absenceYear, setAbsenceYear] = useState(currentYear());
+  const [absenceMonth, setAbsenceMonth] = useState(currentMonth());
   const [calendarDraft, setCalendarDraft] = useState<TicketCalendarDraft>(
     EMPTY_TICKET_CALENDAR_DRAFT,
   );
@@ -79,7 +111,10 @@ export function TicketRestaurantePage() {
     () => (selectedCalendar ? buildYearCalendar(selectedCalendar, year) : []),
     [selectedCalendar, year],
   );
-  const visibleAbsences = useMemo(() => visibleTicketRestaurantAbsences(absences), [absences]);
+  const visibleAbsences = useMemo(
+    () => filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth),
+    [absenceMonth, absenceYear, absences],
+  );
 
   useEffect(() => {
     if (
@@ -122,6 +157,20 @@ export function TicketRestaurantePage() {
     const parsedYear = Number(value);
     if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
       setYear(parsedYear);
+    }
+  };
+
+  const handleAbsenceYearChange = (value: string) => {
+    const parsedYear = Number(value);
+    if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
+      setAbsenceYear(parsedYear);
+    }
+  };
+
+  const handleAbsenceMonthChange = (value: string) => {
+    const parsedMonth = Number(value);
+    if (Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12) {
+      setAbsenceMonth(parsedMonth);
     }
   };
 
@@ -190,7 +239,6 @@ export function TicketRestaurantePage() {
     setIsPreviewOpen(false);
   };
 
-
   return (
     <section
       className="rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card"
@@ -201,126 +249,142 @@ export function TicketRestaurantePage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-metro-red">
             Ticket Restaurante
           </p>
-          <h2 className="text-xl font-bold text-metro-text">Definir Calendarios</h2>
+          <h2 className="text-xl font-bold text-metro-text">Ticket Restaurante</h2>
           <p className="mt-0.5 text-sm text-metro-muted">
-            Gestión anual de días sin ticket por calendario.
+            Gestión anual de calendarios y ausencias de Ticket Restaurante.
           </p>
         </div>
-        <div className="flex flex-col items-start gap-1.5 lg:items-end">
-          <input
-            accept=".xlsx,.csv,.tsv"
-            className="hidden"
-            onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)}
-            ref={fileInputRef}
-            type="file"
-          />
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            <FileUp className="h-3.5 w-3.5" />
-            Importar ausencias
-          </button>
-          {importMessage ? <p className="max-w-sm text-xs text-metro-muted">{importMessage}</p> : null}
-        </div>
       </div>
 
-      <div className="mb-3 grid gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 xl:grid-cols-[minmax(280px,0.9fr)_minmax(250px,0.75fr)_minmax(320px,1fr)]">
-        <CalendarEditor
-          draft={calendarDraft}
-          editingCalendarId={editingCalendarId}
-          onCancel={resetForm}
-          onChange={setCalendarDraft}
-          onSave={saveCalendar}
-        />
+      <input
+        accept=".xlsx,.csv,.tsv"
+        className="hidden"
+        onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)}
+        ref={fileInputRef}
+        type="file"
+      />
 
-        <div className="rounded-xl border border-metro-border bg-metro-surface p-2.5">
-          <h3 className="mb-2 text-sm font-bold text-metro-text">Selector calendario</h3>
-          <div className="space-y-2">
-            <SelectBox
-              label="Selector calendario"
-              onChange={setSelectedCalendarId}
-              value={selectedCalendarId}
-            >
-              {visibleCalendars.map((calendar) => (
-                <option key={calendar.id} value={calendar.id}>
-                  {calendar.nombre}
-                  {calendar.activo ? '' : ' (inactivo)'}
-                </option>
-              ))}
-            </SelectBox>
-            <div className="flex items-center gap-1.5">
-              <button
-                className="rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!selectedCalendar}
-                onClick={() => setYear(previousCalendarYear(year))}
-                type="button"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <input
-                aria-label="Selector año"
-                className="w-20 rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
-                max="2200"
-                min="1900"
-                onChange={(event) => handleYearChange(event.target.value)}
-                type="number"
-                value={year}
-              />
-              <button
-                className="rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!selectedCalendar}
-                onClick={() => setYear(nextCalendarYear(year))}
-                type="button"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
+      <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-metro-border bg-metro-panel p-2">
+        <SubviewButton
+          active={activeSubview === 'calendarios'}
+          label="Calendarios"
+          onClick={() => setActiveSubview('calendarios')}
+        />
+        <SubviewButton
+          active={activeSubview === 'ausencias'}
+          label="Ausencias"
+          onClick={() => setActiveSubview('ausencias')}
+        />
+      </div>
+
+      {activeSubview === 'calendarios' ? (
+        <>
+          <div className="mb-3 grid gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 xl:grid-cols-[minmax(280px,0.9fr)_minmax(250px,0.75fr)_minmax(320px,1fr)]">
+            <CalendarEditor
+              draft={calendarDraft}
+              editingCalendarId={editingCalendarId}
+              onCancel={resetForm}
+              onChange={setCalendarDraft}
+              onSave={saveCalendar}
+            />
+
+            <div className="rounded-xl border border-metro-border bg-metro-surface p-2.5">
+              <h3 className="mb-2 text-sm font-bold text-metro-text">Selector calendario</h3>
+              <div className="space-y-2">
+                <SelectBox
+                  label="Selector calendario"
+                  onChange={setSelectedCalendarId}
+                  value={selectedCalendarId}
+                >
+                  {visibleCalendars.map((calendar) => (
+                    <option key={calendar.id} value={calendar.id}>
+                      {calendar.nombre}
+                      {calendar.activo ? '' : ' (inactivo)'}
+                    </option>
+                  ))}
+                </SelectBox>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    className="rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!selectedCalendar}
+                    onClick={() => setYear(previousCalendarYear(year))}
+                    type="button"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <input
+                    aria-label="Selector año"
+                    className="w-20 rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+                    max="2200"
+                    min="1900"
+                    onChange={(event) => handleYearChange(event.target.value)}
+                    type="number"
+                    value={year}
+                  />
+                  <button
+                    className="rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!selectedCalendar}
+                    onClick={() => setYear(nextCalendarYear(year))}
+                    type="button"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <CalendarList
-          calendars={visibleCalendars}
-          onEdit={editCalendar}
-          onRemove={removeCalendar}
-          onToggleActive={toggleCalendarActive}
-          selectedCalendarId={selectedCalendarId}
+            <CalendarList
+              calendars={visibleCalendars}
+              onEdit={editCalendar}
+              onRemove={removeCalendar}
+              onToggleActive={toggleCalendarActive}
+              selectedCalendarId={selectedCalendarId}
+            />
+          </div>
+
+          <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+            <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
+                  <CalendarDays className="h-4 w-4 text-metro-red" />
+                  Vista anual {year}
+                </h3>
+                <p className="text-xs text-metro-muted">
+                  Pulsa un día para marcarlo o desmarcarlo como sin ticket.
+                </p>
+              </div>
+              <Legend />
+            </div>
+
+            {selectedCalendar ? (
+              <div className="grid gap-2 lg:grid-cols-3">
+                {yearCalendar.map((month) => (
+                  <MonthCalendar
+                    key={month.mes}
+                    monthName={month.nombre}
+                    leadingBlanks={month.blancosIniciales}
+                    days={month.dias}
+                    onToggleDay={(fecha) => toggleDay(selectedCalendar.id, fecha)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyCalendar />
+            )}
+          </div>
+        </>
+      ) : (
+        <AbsencesTable
+          absences={visibleAbsences}
+          importMessage={importMessage}
+          month={absenceMonth}
+          onImport={() => fileInputRef.current?.click()}
+          onMonthChange={handleAbsenceMonthChange}
+          onRemove={removeAbsence}
+          onYearChange={handleAbsenceYearChange}
+          year={absenceYear}
         />
-      </div>
-
-      <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
-        <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
-              <CalendarDays className="h-4 w-4 text-metro-red" />
-              Vista anual {year}
-            </h3>
-            <p className="text-xs text-metro-muted">
-              Pulsa un día para marcarlo o desmarcarlo como sin ticket.
-            </p>
-          </div>
-          <Legend />
-        </div>
-
-        {selectedCalendar ? (
-          <div className="grid gap-2 lg:grid-cols-3">
-            {yearCalendar.map((month) => (
-              <MonthCalendar
-                key={month.mes}
-                monthName={month.nombre}
-                leadingBlanks={month.blancosIniciales}
-                days={month.dias}
-                onToggleDay={(fecha) => toggleDay(selectedCalendar.id, fecha)}
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyCalendar />
-        )}
-      </div>
-
-      <AbsencesTable absences={visibleAbsences} onRemove={removeAbsence} />
+      )}
 
       {isPreviewOpen ? (
         <AbsencePreviewModal
@@ -336,6 +400,30 @@ export function TicketRestaurantePage() {
         />
       ) : null}
     </section>
+  );
+}
+
+function SubviewButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+        active
+          ? 'bg-metro-red text-white'
+          : 'border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red'
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
   );
 }
 
@@ -572,18 +660,73 @@ function EmptyCalendar() {
 
 function AbsencesTable({
   absences,
+  importMessage,
+  month,
+  onImport,
+  onMonthChange,
   onRemove,
+  onYearChange,
+  year,
 }: {
   absences: TicketRestaurantAbsence[];
+  importMessage: string;
+  month: number;
+  onImport: () => void;
+  onMonthChange: (value: string) => void;
   onRemove: (id: string) => void;
+  onYearChange: (value: string) => void;
+  year: number;
 }) {
   return (
-    <div className="mt-3 rounded-xl border border-metro-border bg-metro-panel p-2.5">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-base font-bold text-metro-text">Ausencias</h3>
-        <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
-          {absences.length}
-        </span>
+    <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-base font-bold text-metro-text">Ausencias</h3>
+          <p className="text-xs text-metro-muted">
+            Importa, revisa y filtra ausencias por mes antes de aplicarlas al Ticket Restaurante.
+          </p>
+        </div>
+        <div className="flex flex-col items-start gap-1.5 lg:items-end">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={onImport}
+            type="button"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            Importar ausencias
+          </button>
+          {importMessage ? (
+            <p className="max-w-sm text-xs text-metro-muted">{importMessage}</p>
+          ) : null}
+        </div>
+      </div>
+      <div className="mb-2 flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs font-semibold text-metro-muted">
+          Ausencias del mes seleccionado: <span className="text-metro-red">{absences.length}</span>
+        </div>
+        <div className="flex gap-2">
+          <select
+            aria-label="Selector mes ausencias"
+            className="rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => onMonthChange(event.target.value)}
+            value={month}
+          >
+            {MONTH_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Selector año ausencias"
+            className="w-24 rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+            max="2200"
+            min="1900"
+            onChange={(event) => onYearChange(event.target.value)}
+            type="number"
+            value={year}
+          />
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-xs">
@@ -659,7 +802,9 @@ function AbsencePreviewModal({
         <div className="flex items-center justify-between border-b border-metro-border p-3">
           <div>
             <h3 className="text-lg font-bold text-metro-text">Revisar ausencias importadas</h3>
-            <p className="text-xs text-metro-muted">Edita, añade o elimina filas antes de guardar.</p>
+            <p className="text-xs text-metro-muted">
+              Edita, añade o elimina filas antes de guardar.
+            </p>
           </div>
           <button
             className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
@@ -700,7 +845,9 @@ function AbsencePreviewModal({
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                     {row.errors.length > 0 ? (
-                      <p className="mt-1 max-w-48 text-[11px] text-metro-red">{row.errors.join(' ')}</p>
+                      <p className="mt-1 max-w-48 text-[11px] text-metro-red">
+                        {row.errors.join(' ')}
+                      </p>
                     ) : null}
                   </td>
                 </tr>

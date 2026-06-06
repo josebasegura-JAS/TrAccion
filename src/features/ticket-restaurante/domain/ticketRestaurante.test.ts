@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildTicketRestaurantAbsence,
   buildYearCalendar,
+  filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
   previousCalendarYear,
   toggleDiaSinTicket,
   visibleTicketCalendars,
   type TicketCalendar,
+  type TicketRestaurantAbsence,
 } from './ticketRestaurante';
 
 const timestamp = '2026-01-01T00:00:00.000Z';
@@ -79,6 +82,40 @@ import {
   saveTicketRestaurantAbsencePreviewRows,
 } from './importAbsences';
 
+const realZerkosRows = [
+  [
+    'EMPLEADO',
+    'PUESTO ORGANIZATIVO',
+    'RESIDENCIA',
+    'NIVEL.',
+    'AUS.',
+    'AÑO',
+    'DESDE',
+    'HASTA',
+    'DIAS',
+    'J',
+  ],
+  ['31', 'Rodríguez Corral, Fernando', 'Ingeniería', 'Ariz Taller', 'N-F'],
+  ['DDA', '2026', '04/05/2026', '04/05/2026', '1', '--'],
+  ['Total días', '', '', '', '1'],
+  ['46', 'Empleado Cuarenta y Seis', 'Ingeniería', 'Ariz Taller', 'N-F'],
+  ['DDA', '2026', '11/05/2026', '15/05/2026', '5', '--'],
+  ['VAC', '2026', '05/05/2026', '08/05/2026', '4', '--'],
+  ['Total días', '', '', '', '9'],
+  ['639', 'Empleado Seiscientos Treinta y Nueve', 'Ingeniería', 'Ariz Taller', 'N-F'],
+  ['DDA', '2026', '13/05/2026', '13/05/2026', '1', '--'],
+  ['642', 'Empleado Seiscientos Cuarenta y Dos', 'Ingeniería', 'Ariz Taller', 'N-F'],
+  ['DDA', '2026', '07/05/2026', '07/05/2026', '1', '--'],
+  ['ENF', '2026', '11/05/2026', '22/05/2026', '12', 'SI'],
+  ['861', 'Empleado Ochocientos Sesenta y Uno', 'Ingeniería', 'Ariz Taller', 'N-F'],
+  ['HOS', '2026', '15/05/2026', '15/05/2026', '1', 'NO'],
+  ['931', 'Empleado Novecientos Treinta y Uno', 'Ingeniería', 'Ariz Taller', 'N-F'],
+  ['DDA', '2026', '27/05/2026', '27/05/2026', '1', '--'],
+  ['Ausencia.rpt'],
+  ['ZERKOS'],
+  ['Página', '1'],
+];
+
 describe('ticket restaurante absence importer domain', () => {
   const cleanRows = [
     ['Informe'],
@@ -110,13 +147,23 @@ describe('ticket restaurante absence importer domain', () => {
   });
 
   it('normaliza fechas', () => {
-    expect(normalizeTicketRestaurantAbsenceRow({ empleado: '1', desde: '15/03/2026', motivo: 'IT' }, 'a')).toMatchObject({
+    expect(
+      normalizeTicketRestaurantAbsenceRow(
+        { empleado: '1', desde: '15/03/2026', motivo: 'IT' },
+        'a',
+      ),
+    ).toMatchObject({
       desde: '2026-03-15',
     });
   });
 
   it('usa Desde cuando Hasta está vacío', () => {
-    expect(normalizeTicketRestaurantAbsenceRow({ empleado: '1', desde: '15/03/2026', motivo: 'IT' }, 'a')).toMatchObject({
+    expect(
+      normalizeTicketRestaurantAbsenceRow(
+        { empleado: '1', desde: '15/03/2026', motivo: 'IT' },
+        'a',
+      ),
+    ).toMatchObject({
       hasta: '2026-03-15',
     });
   });
@@ -141,16 +188,21 @@ describe('ticket restaurante absence importer domain', () => {
 
   it('rechaza empleado vacío/no numérico', () => {
     expect(
-      normalizeTicketRestaurantAbsenceRow({ empleado: '', desde: '15/03/2026', motivo: 'IT' }, 'a').errors,
+      normalizeTicketRestaurantAbsenceRow({ empleado: '', desde: '15/03/2026', motivo: 'IT' }, 'a')
+        .errors,
     ).toContain('Nº empleado obligatorio.');
     expect(
-      normalizeTicketRestaurantAbsenceRow({ empleado: 'ABC', desde: '15/03/2026', motivo: 'IT' }, 'a').errors,
+      normalizeTicketRestaurantAbsenceRow(
+        { empleado: 'ABC', desde: '15/03/2026', motivo: 'IT' },
+        'a',
+      ).errors,
     ).toContain('Nº empleado debe ser numérico.');
   });
 
   it('rechaza motivo vacío', () => {
     expect(
-      normalizeTicketRestaurantAbsenceRow({ empleado: '1', desde: '15/03/2026', motivo: '' }, 'a').errors,
+      normalizeTicketRestaurantAbsenceRow({ empleado: '1', desde: '15/03/2026', motivo: '' }, 'a')
+        .errors,
     ).toContain('Motivo obligatorio.');
   });
 
@@ -210,7 +262,11 @@ describe('ticket restaurante absence importer domain', () => {
       'a',
     );
     const first = saveTicketRestaurantAbsencePreviewRows([], [row], new Date(timestamp));
-    const second = saveTicketRestaurantAbsencePreviewRows(first.absences, [row], new Date(timestamp));
+    const second = saveTicketRestaurantAbsencePreviewRows(
+      first.absences,
+      [row],
+      new Date(timestamp),
+    );
 
     expect(second.summary.duplicadas).toBe(1);
     expect(second.absences).toHaveLength(1);
@@ -259,5 +315,101 @@ describe('ticket restaurante absence importer domain', () => {
     ]);
 
     expect(rows[0]).toMatchObject({ empleado: '123', motivo: 'IT', desde: '2026-03-01' });
+  });
+
+  it('detecta formato ZERKOS real', () => {
+    expect(detectTicketRestaurantAbsenceFormat(realZerkosRows)).toBe('zerkos');
+  });
+
+  it('detecta fila empleado real', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows[0]).toMatchObject({
+      empleado: '31',
+      nombreApellidos: 'Rodríguez Corral, Fernando',
+    });
+  });
+
+  it('asocia ausencias al empleado activo real', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows.filter((row) => row.empleado === '46').map((row) => row.motivo)).toEqual([
+      'DDA',
+      'VAC',
+    ]);
+  });
+
+  it('ignora Total días en ZERKOS real', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows.some((row) => row.motivo === 'Total días')).toBe(false);
+  });
+
+  it('ignora pie Ausencia.rpt en ZERKOS real', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows.every((row) => row.motivo !== 'Ausencia.rpt')).toBe(true);
+  });
+
+  it('importa DDA con -- aplicando regla por defecto', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows.find((row) => row.empleado === '31' && row.motivo === 'DDA')).toMatchObject({
+      afectaTicket: true,
+    });
+  });
+
+  it('importa ENF con SI como afectaTicket true', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows.find((row) => row.empleado === '642' && row.motivo === 'ENF')).toMatchObject({
+      afectaTicket: true,
+    });
+  });
+
+  it('importa HOS con NO como afectaTicket false', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(rows.find((row) => row.empleado === '861' && row.motivo === 'HOS')).toMatchObject({
+      afectaTicket: false,
+    });
+  });
+
+  it('detecta todas las ausencias esperadas del ZERKOS real', () => {
+    const rows = importTicketRestaurantAbsences(realZerkosRows);
+
+    expect(
+      rows.map((row) => [row.empleado, row.motivo, row.desde, row.hasta, row.totalDias]),
+    ).toEqual([
+      ['31', 'DDA', '2026-05-04', '2026-05-04', '1'],
+      ['46', 'DDA', '2026-05-11', '2026-05-15', '5'],
+      ['46', 'VAC', '2026-05-05', '2026-05-08', '4'],
+      ['639', 'DDA', '2026-05-13', '2026-05-13', '1'],
+      ['642', 'DDA', '2026-05-07', '2026-05-07', '1'],
+      ['642', 'ENF', '2026-05-11', '2026-05-22', '12'],
+      ['861', 'HOS', '2026-05-15', '2026-05-15', '1'],
+      ['931', 'DDA', '2026-05-27', '2026-05-27', '1'],
+    ]);
+  });
+
+  it('filtra una ausencia que cruza meses en ambos meses', () => {
+    const absence = buildTicketRestaurantAbsence(
+      {
+        empleado: '1',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-05-28',
+        hasta: '2026-06-03',
+        motivo: 'DDA',
+        totalDias: 7,
+        afectaTicket: true,
+      },
+      timestamp,
+      'absence-cross-month',
+    );
+    const absences: TicketRestaurantAbsence[] = [absence];
+
+    expect(filterTicketRestaurantAbsencesByMonth(absences, 2026, 5)).toHaveLength(1);
+    expect(filterTicketRestaurantAbsencesByMonth(absences, 2026, 6)).toHaveLength(1);
+    expect(filterTicketRestaurantAbsencesByMonth(absences, 2026, 7)).toHaveLength(0);
   });
 });
