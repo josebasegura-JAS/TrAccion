@@ -21,6 +21,8 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.vinculograma.showExpired',
 ] as const;
 
+const SQLITE_MIGRATION_FLAG_KEY = 'traccion.v1.sqlite.localStorageBackupCreated';
+
 type PersistedStorageKey = (typeof PERSISTED_STORAGE_KEYS)[number];
 
 function isPersistedStorageKey(key: string): key is PersistedStorageKey {
@@ -60,24 +62,28 @@ export function writeJsonStorage<T>(key: string, value: T): void {
   writeStorageItem(key, JSON.stringify(value));
 }
 
-function readCompleteLocalStorageSnapshot(): { key: string; value: string }[] {
-  return Array.from({ length: window.localStorage.length }, (_value, index) => {
-    const key = window.localStorage.key(index);
-    if (!key) {
-      return null;
-    }
-
-    const value = window.localStorage.getItem(key);
-    return value === null ? null : { key, value };
-  }).filter((record): record is { key: string; value: string } => record !== null);
-}
-
 export function bootstrapSqlitePersistence(): void {
   if (!window.traccion?.migrateLocalStorage) {
     return;
   }
 
-  window.traccion.migrateLocalStorage(readCompleteLocalStorageSnapshot()).catch((error: unknown) => {
-    console.warn('No se ha podido crear el backup SQLite de localStorage.', error);
+  if (window.localStorage.getItem(SQLITE_MIGRATION_FLAG_KEY) === 'true') {
+    return;
+  }
+
+  const records = PERSISTED_STORAGE_KEYS.flatMap((key) => {
+    const value = window.localStorage.getItem(key);
+    return value === null ? [] : [{ key, value }];
   });
+
+  window.traccion
+    .migrateLocalStorage(records)
+    .then((status) => {
+      if (status.ready) {
+        window.localStorage.setItem(SQLITE_MIGRATION_FLAG_KEY, 'true');
+      }
+    })
+    .catch((error: unknown) => {
+      console.warn('No se ha podido crear el backup inicial SQLite de localStorage.', error);
+    });
 }

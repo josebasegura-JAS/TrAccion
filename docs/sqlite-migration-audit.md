@@ -4,7 +4,7 @@
 
 **Migración parcial segura / infraestructura base.** La app mantiene stores Zustand síncronos que leen `localStorage` durante la carga de módulo y exponen API síncrona. En Electron, el acceso correcto a SQLite desde renderer debe pasar por `preload` + IPC, que es asíncrono. Migrar todo a lectura SQLite real en una sola intervención obligaría a rehidratar todos los stores, cambiar ciclos de carga y tocar componentes: riesgo alto de alterar lógica funcional.
 
-Se implementa una capa central que conserva la persistencia actual en `localStorage`, crea SQLite en el proceso main, registra migraciones versionadas, guarda backup previo de la base antes de migrar, copia un snapshot completo de `localStorage` a SQLite en cada arranque y espeja las escrituras posteriores de claves conocidas desde una única capa de renderer.
+Se implementa una capa central que conserva la persistencia actual en `localStorage`, crea SQLite en el proceso main, registra migraciones versionadas, guarda backup previo de la base antes de migrar, copia el snapshot inicial de `localStorage` a SQLite y espeja las escrituras posteriores desde una única capa de renderer.
 
 ## Persistencia actual por módulo y archivo
 
@@ -27,7 +27,7 @@ Se implementa una capa central que conserva la persistencia actual en `localStor
 - Importaciones de ficheros: Plantilla (`.xlsx`, `.xls`, `.csv`, `.tsv`, `.txt`), traducciones de puesto (`.xlsx`), Teletrabajo (`.xlsx`, `.csv`, `.tsv`) y Ticket restaurante (`.xlsx`, `.csv`, `.tsv`). Los parsers leen `File.arrayBuffer()` y transforman a modelos de dominio antes de persistir vía stores.
 - Exportaciones: Ticket restaurante exporta CSV con `Blob` + `URL.createObjectURL`; Teletrabajo genera DOCX y usa selector nativo si está disponible o descarga en navegador.
 - JSON: los stores serializan/deserializan arrays u objetos por clave; no hay backend ni ficheros JSON de datos persistidos en disco.
-- Backups: no existía backup funcional de datos de usuario antes de esta intervención; ahora SQLite guarda snapshots completos de `localStorage` en `local_storage_backups` durante el arranque y copia la base existente como `traccion.sqlite.backup-<timestamp>` antes de abrirla.
+- Backups: no existía backup funcional de datos de usuario antes de esta intervención; ahora SQLite guarda snapshot inicial de `localStorage` en `local_storage_backups` y copia la base existente como `traccion.sqlite.backup-<timestamp>` antes de abrirla.
 - Persistencia en memoria: cada store mantiene su estado Zustand tras `load`; si SQLite falla, la app sigue con la misma memoria + `localStorage` actual.
 
 ## Infraestructura SQLite/Electron detectada
@@ -77,11 +77,11 @@ Este esquema cubre la persistencia actual sin rediseñar módulos: conserva cada
 - `electron/preload.ts` y `electron/preload.cts`: API segura renderer-main para snapshot y escrituras.
 - `src/services/persistence.ts`: capa única renderer para leer/escribir `localStorage` y espejar a SQLite.
 - Stores y preferencias UI con persistencia: sustitución de accesos directos a `localStorage` por la capa central, sin cambiar API pública ni lógica de negocio.
-- `src/App.tsx`: arranque del backup de `localStorage` hacia SQLite.
+- `src/App.tsx`: arranque del backup inicial de `localStorage` hacia SQLite.
 - `src/vite-env.d.ts`: tipos de la API IPC expuesta.
 
 ## Riesgos y pendientes
 
 - La lectura funcional sigue siendo `localStorage`; SQLite queda preparado y sincronizado como infraestructura base, no como fuente primaria.
-- La sincronización renderer → SQLite es asíncrona; si la app se cierra inmediatamente tras escribir, `localStorage` conserva el dato y SQLite volverá a tomar un snapshot completo en el siguiente arranque.
+- La sincronización renderer → SQLite es asíncrona; si la app se cierra inmediatamente tras escribir, `localStorage` conserva el dato y SQLite podrá respaldarse en el siguiente arranque.
 - Para migración total se recomienda convertir los `load()` de stores a hidratación asíncrona desde SQLite, por módulos y con tests por cada store.
