@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BarChart3,
   BriefcaseBusiness,
   ClipboardList,
-  Database,
   Gift,
   Home,
   Laptop,
-  LayoutDashboard,
   Link2,
   MailPlus,
   Pin,
@@ -36,7 +33,7 @@ export type AppView =
   | 'especiales'
   | 'ajustes';
 
-type NavigationGroupId = 'general' | 'personas' | 'gestion' | 'organos' | 'sistema';
+type NavigationGroupId = 'personas' | 'herramientas' | 'operativa';
 
 type NavigationItem = {
   label: string;
@@ -55,55 +52,51 @@ type NavigationGroup = {
 
 const navigationGroups: NavigationGroup[] = [
   {
-    id: 'general',
-    label: 'General',
-    description: 'Vista principal',
-    icon: Home,
-    items: [{ label: 'Inicio', icon: LayoutDashboard, view: 'dashboard' }],
-  },
-  {
     id: 'personas',
     label: 'Personas',
-    description: 'Plantilla y teletrabajo',
+    description: 'Plantilla, teletrabajo, vinculograma y situaciones personales.',
     icon: UsersRound,
     items: [
       { label: 'Plantilla', icon: UsersRound, view: 'plantilla' },
       { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' },
+      { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
+      { label: 'Licencias y Excedencias', icon: BriefcaseBusiness, disabled: true },
     ],
   },
   {
-    id: 'gestion',
-    label: 'Gestión',
-    description: 'Operativa RRLL',
-    icon: BriefcaseBusiness,
+    id: 'herramientas',
+    label: 'Herramientas',
+    description: 'Utilidades de cálculo, criterios, sorteos y comunicaciones especiales.',
+    icon: Gift,
     items: [
-      { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
-      { label: 'Criterios RRLL', icon: ShieldCheck, view: 'criterios-rrll' },
       { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' },
+      { label: 'Criterios RRLL', icon: ShieldCheck, view: 'criterios-rrll' },
       { label: 'Sorteos', icon: Gift, view: 'sorteos' },
-      { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
       { label: 'Especiales', icon: MailPlus, view: 'especiales' },
     ],
   },
   {
-    id: 'sistema',
-    label: 'Sistema',
-    description: 'Datos, informes y ajustes',
-    icon: Settings,
+    id: 'operativa',
+    label: 'Operativa diaria',
+    description: 'Seguimiento diario de trabajo y configuración de la aplicación.',
+    icon: ClipboardList,
     items: [
-      { label: 'Datos', icon: Database, disabled: true },
-      { label: 'Informes', icon: BarChart3, disabled: true },
+      { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
       { label: 'Ajustes', icon: Settings, view: 'ajustes' },
     ],
   },
 ];
 
-const getGroupForView = (view: AppView): NavigationGroupId => {
+const getGroupForView = (view: AppView): NavigationGroupId | null => {
+  if (view === 'dashboard') {
+    return null;
+  }
+
   const group = navigationGroups.find((navigationGroup) =>
     navigationGroup.items.some((item) => item.view === view),
   );
 
-  return group?.id ?? 'general';
+  return group?.id ?? null;
 };
 
 const isNavigationGroupId = (value: string | null): value is NavigationGroupId =>
@@ -119,11 +112,11 @@ const readStoredPinnedPreference = () => {
 
 const readStoredActiveGroup = (activeView: AppView) => {
   if (typeof window === 'undefined') {
-    return getGroupForView(activeView);
+    return getGroupForView(activeView) ?? 'personas';
   }
 
   const storedGroup = window.localStorage.getItem(SIDEBAR_ACTIVE_GROUP_KEY);
-  return isNavigationGroupId(storedGroup) ? storedGroup : getGroupForView(activeView);
+  return isNavigationGroupId(storedGroup) ? storedGroup : getGroupForView(activeView) ?? 'personas';
 };
 
 export function Sidebar({
@@ -153,8 +146,18 @@ export function Sidebar({
   }, [activeGroupId]);
 
   useEffect(() => {
-    setActiveGroupId(activeViewGroupId);
+    if (activeViewGroupId) {
+      setActiveGroupId(activeViewGroupId);
+    }
   }, [activeViewGroupId]);
+
+  const handleHomeSelect = () => {
+    onViewChange('dashboard');
+
+    if (!isPinned) {
+      setIsPanelOpen(false);
+    }
+  };
 
   const handleGroupSelect = (groupId: NavigationGroupId) => {
     setActiveGroupId(groupId);
@@ -189,6 +192,27 @@ export function Sidebar({
         </div>
 
         <nav aria-label="Grupos principales" className="flex flex-1 flex-col items-center gap-2 px-2 py-4">
+          <button
+            aria-current={activeView === 'dashboard' ? 'page' : undefined}
+            aria-label="Inicio"
+            className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+              activeView === 'dashboard'
+                ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
+                : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
+            }`}
+            onClick={handleHomeSelect}
+            title="Inicio"
+            type="button"
+          >
+            {activeView === 'dashboard' && (
+              <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
+            )}
+            <Home className={activeView === 'dashboard' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
+            <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+              Inicio
+            </span>
+          </button>
+
           {navigationGroups.map((group) => {
             const Icon = group.icon;
             const isActiveGroup = group.id === activeGroupId;
@@ -279,6 +303,7 @@ export function Sidebar({
                   disabled={item.disabled}
                   key={item.label}
                   onClick={() => item.view && handleViewSelect(item.view)}
+                  title={item.disabled ? 'Módulo no disponible en este paquete' : item.label}
                   type="button"
                 >
                   {isActiveItem && (
