@@ -1,4 +1,8 @@
-import { buildTicketRestaurantAbsence, isIsoDate, type TicketRestaurantAbsence } from './ticketRestaurante';
+import {
+  buildTicketRestaurantAbsence,
+  isIsoDate,
+  type TicketRestaurantAbsence,
+} from './ticketRestaurante';
 
 export type TicketRestaurantAbsenceFormat = 'clean' | 'zerkos';
 export type TicketRestaurantAbsenceField =
@@ -64,10 +68,14 @@ const ZERKOS_LABELS = [
   'desde',
   'hasta',
   'dias',
+  'j',
 ];
 const HEADER_ALIASES: ReadonlyArray<readonly [TicketRestaurantAbsenceField, readonly string[]]> = [
   ['empleado', ['n empleado', 'num empleado', 'numero empleado', 'nº empleado', 'empleado']],
-  ['nombreApellidos', ['nombre y apellidos', 'nombre apellidos', 'nombre completo', 'apellidos y nombre']],
+  [
+    'nombreApellidos',
+    ['nombre y apellidos', 'nombre apellidos', 'nombre completo', 'apellidos y nombre'],
+  ],
   ['desde', ['desde', 'fecha desde', 'from', 'from date']],
   ['hasta', ['hasta', 'fecha hasta', 'to', 'to date']],
   ['motivo', ['motivo', 'aus', 'ausencia', 'reason']],
@@ -117,9 +125,7 @@ export function detectTicketRestaurantAbsenceFormat(
     return 'clean';
   }
 
-  const labels = new Set(rows.flatMap((row) => row.map((cell) => normalizeHeader(cell))));
-  const foundZerkosLabels = ZERKOS_LABELS.filter((label) => labels.has(label)).length;
-  return foundZerkosLabels >= 7 ? 'zerkos' : null;
+  return findZerkosHeaderIndex(rows) >= 0 ? 'zerkos' : null;
 }
 
 export function parseTicketRestaurantCleanAbsenceRows(
@@ -151,6 +157,10 @@ export function parseTicketRestaurantZerkosAbsenceRows(
   let fieldByColumn: (TicketRestaurantAbsenceField | null)[] = [];
 
   rows.forEach((row) => {
+    if (isZerkosIgnoredRow(row)) {
+      return;
+    }
+
     const employee = readZerkosEmployee(row);
     if (employee.empleado) {
       activeEmployee = employee;
@@ -163,12 +173,12 @@ export function parseTicketRestaurantZerkosAbsenceRows(
       return;
     }
 
-    if (!activeEmployee.empleado || fieldByColumn.length === 0) {
+    if (!activeEmployee.empleado) {
       return;
     }
 
-    const raw = readCleanRow(row, fieldByColumn);
-    if (!hasAnyValue(raw) || (!raw.desde && !raw.motivo)) {
+    const raw = readZerkosAbsenceRow(row, fieldByColumn);
+    if (!raw || !raw.desde) {
       return;
     }
 
@@ -195,7 +205,8 @@ export function normalizeTicketRestaurantAbsenceRow(
   const empleado = normalizeEmployeeNumber(row.empleado ?? '');
   const desde = normalizeDate(row.desde ?? '');
   const hasta = normalizeDate(row.hasta ?? '') || desde;
-  const totalDias = normalizeTotalDays(row.totalDias ?? '') || calculateInclusiveDaysText(desde, hasta);
+  const totalDias =
+    normalizeTotalDays(row.totalDias ?? '') || calculateInclusiveDaysText(desde, hasta);
   const previewRow: TicketRestaurantAbsencePreviewRow = {
     id,
     empleado,
@@ -293,7 +304,9 @@ export function saveTicketRestaurantAbsencePreviewRows(
   return { absences: result, summary, errors: [] };
 }
 
-function validateTicketRestaurantAbsencePreviewRow(row: TicketRestaurantAbsencePreviewRow): string[] {
+function validateTicketRestaurantAbsencePreviewRow(
+  row: TicketRestaurantAbsencePreviewRow,
+): string[] {
   const errors: string[] = [];
   if (!row.empleado) {
     errors.push('Nº empleado obligatorio.');
@@ -347,13 +360,53 @@ function readCleanRow(
   return values;
 }
 
-function readZerkosEmployee(row: readonly string[]): Pick<RawAbsenceRow, 'empleado' | 'nombreApellidos'> {
+function findZerkosHeaderIndex(rows: readonly TabularRow[]): number {
+  const realHeaderIndex = rows.findIndex((row) => {
+    const labels = new Set(row.map((cell) => normalizeHeader(cell)));
+    const foundZerkosLabels = ZERKOS_LABELS.filter((label) => labels.has(label)).length;
+    const hasEmployeeBlock =
+      labels.has('empleado') && labels.has('puesto organizativo') && labels.has('residencia');
+    const hasAbsenceBlock =
+      labels.has('aus') && labels.has('ano') && labels.has('desde') && labels.has('hasta');
+    return foundZerkosLabels >= 7 && hasEmployeeBlock && hasAbsenceBlock;
+  });
+
+  if (realHeaderIndex >= 0) {
+    return realHeaderIndex;
+  }
+
+  const labels = new Set(rows.flatMap((row) => row.map((cell) => normalizeHeader(cell))));
+  const foundZerkosLabels = ZERKOS_LABELS.filter((label) => labels.has(label)).length;
+  return foundZerkosLabels >= 7 ? 0 : -1;
+}
+
+function readZerkosEmployee(
+  row: readonly string[],
+): Pick<RawAbsenceRow, 'empleado' | 'nombreApellidos'> {
+  const firstCell = cleanText(row[0] ?? '');
+  const employeeNumber = normalizeEmployeeNumber(firstCell);
+  if (
+    /^\d+$/.test(employeeNumber) &&
+    cleanText(row[1] ?? '') &&
+    cleanText(row[2] ?? '') &&
+    cleanText(row[3] ?? '') &&
+    cleanText(row[4] ?? '')
+  ) {
+    return {
+      empleado: employeeNumber,
+      nombreApellidos: cleanText(row[1] ?? ''),
+    };
+  }
+
   const labelIndex = row.findIndex((cell) => normalizeHeader(cell) === 'empleado');
   if (labelIndex < 0) {
     return {};
   }
 
-  const values = row.slice(labelIndex + 1).map(cleanText).filter(Boolean);
+  const values = row
+    .slice(labelIndex + 1)
+    .map(cleanText)
+    .filter(Boolean);
   const candidate = values.join(' ');
   const match = candidate.match(/^(\d+)\s*(.*)$/) ?? candidate.match(/(\d+)/);
   if (!match) {
@@ -362,8 +415,60 @@ function readZerkosEmployee(row: readonly string[]): Pick<RawAbsenceRow, 'emplea
 
   return {
     empleado: normalizeEmployeeNumber(match[1] ?? ''),
-    nombreApellidos: cleanText(match[2] ?? values.filter((value) => !/^\d+$/.test(value)).join(' ')),
+    nombreApellidos: cleanText(
+      match[2] ?? values.filter((value) => !/^\d+$/.test(value)).join(' '),
+    ),
   };
+}
+
+function readZerkosAbsenceRow(
+  row: readonly string[],
+  fieldByColumn: readonly (TicketRestaurantAbsenceField | null)[],
+): RawAbsenceRow | null {
+  const fixedRow = readFixedZerkosAbsenceRow(row);
+  if (fixedRow) {
+    return fixedRow;
+  }
+
+  if (fieldByColumn.length === 0) {
+    return null;
+  }
+
+  const raw = readCleanRow(row, fieldByColumn);
+  if (!hasAnyValue(raw) || (!raw.desde && !raw.motivo)) {
+    return null;
+  }
+
+  return raw;
+}
+
+function readFixedZerkosAbsenceRow(row: readonly string[]): RawAbsenceRow | null {
+  const motivo = cleanText(row[0] ?? '');
+  const desde = cleanText(row[2] ?? '');
+  if (!isZerkosAbsenceCode(motivo) || !desde) {
+    return null;
+  }
+
+  return {
+    motivo,
+    desde,
+    hasta: cleanText(row[3] ?? ''),
+    totalDias: cleanText(row[4] ?? ''),
+    afectaTicket: cleanText(row[5] ?? ''),
+  };
+}
+
+function isZerkosAbsenceCode(value: string): boolean {
+  return /^[A-Z]{2,6}$/.test(cleanText(value).toUpperCase());
+}
+
+function isZerkosIgnoredRow(row: readonly string[]): boolean {
+  const values = row.map((cell) => normalizeHeader(cell)).filter(Boolean);
+  if (values.length === 0) {
+    return true;
+  }
+
+  return ['total dias', 'ausenciarpt', 'zerkos', 'pagina'].includes(values[0]);
 }
 
 function hasAnyValue(row: RawAbsenceRow): boolean {
@@ -389,7 +494,9 @@ function buildExactKey(row: TicketRestaurantAbsencePreviewRow): string {
 }
 
 function buildAbsenceExactKey(absence: TicketRestaurantAbsence): string {
-  return [absence.empleado, normalizeHeader(absence.motivo), absence.desde, absence.hasta].join('|');
+  return [absence.empleado, normalizeHeader(absence.motivo), absence.desde, absence.hasta].join(
+    '|',
+  );
 }
 
 function isOverlappingSameReason(
@@ -405,7 +512,9 @@ function isOverlappingSameReason(
 }
 
 function normalizeEmployeeNumber(value: string): string {
-  return cleanText(value).replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
+  return cleanText(value)
+    .replace(/^0+(?=\d)/, '')
+    .replace(/\.0$/, '');
 }
 
 function cleanText(value: string): string {
@@ -611,7 +720,9 @@ async function readZipText(
 async function inflateRaw(data: Uint8Array): Promise<ArrayBuffer> {
   const payload = new Uint8Array(data.byteLength);
   payload.set(data);
-  const stream = new Blob([payload.buffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const stream = new Blob([payload.buffer])
+    .stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'));
   return new Response(stream).arrayBuffer();
 }
 
