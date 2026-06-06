@@ -51,6 +51,13 @@ type NavigationGroup = {
 
 const navigationGroups: NavigationGroup[] = [
   {
+    id: 'operativa',
+    label: 'Operativa diaria',
+    description: 'Seguimiento diario del trabajo operativo.',
+    icon: ClipboardList,
+    items: [{ label: 'Tareas', icon: ClipboardList, view: 'tareas' }],
+  },
+  {
     id: 'personas',
     label: 'Personas',
     description: 'Gestión de plantilla, teletrabajo y vinculaciones.',
@@ -73,20 +80,10 @@ const navigationGroups: NavigationGroup[] = [
       { label: 'Especiales', icon: MailPlus, view: 'especiales' },
     ],
   },
-  {
-    id: 'operativa',
-    label: 'Operativa diaria',
-    description: 'Seguimiento diario del trabajo y configuración de la aplicación.',
-    icon: ClipboardList,
-    items: [
-      { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
-      { label: 'Ajustes', icon: Settings, view: 'ajustes' },
-    ],
-  },
 ];
 
 const getGroupForView = (view: AppView): NavigationGroupId | null => {
-  if (view === 'dashboard') {
+  if (view === 'dashboard' || view === 'ajustes') {
     return null;
   }
 
@@ -162,6 +159,14 @@ export function Sidebar({
     setIsPanelOpen(true);
   };
 
+  const handleSettingsSelect = () => {
+    onViewChange('ajustes');
+
+    if (!isPinned) {
+      setIsPanelOpen(false);
+    }
+  };
+
   const handleViewSelect = (view: AppView) => {
     onViewChange(view);
 
@@ -189,60 +194,85 @@ export function Sidebar({
           <img alt="TrAccion" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
         </div>
 
-        <nav aria-label="Grupos principales" className="flex flex-1 flex-col items-center gap-2 px-2 py-4">
-          <button
-            aria-current={activeView === 'dashboard' ? 'page' : undefined}
-            aria-label="Inicio"
-            className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
-              activeView === 'dashboard'
-                ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
-                : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
-            }`}
-            onClick={handleHomeSelect}
-            title="Inicio"
-            type="button"
-          >
-            {activeView === 'dashboard' && (
-              <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
-            )}
-            <Home className={activeView === 'dashboard' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
-            <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
-              Inicio
-            </span>
-          </button>
+        <nav aria-label="Grupos principales" className="flex flex-1 flex-col items-center px-2 py-4">
+          <div className="flex flex-col items-center gap-2">
+            <button
+              aria-current={activeView === 'dashboard' ? 'page' : undefined}
+              aria-label="Inicio"
+              className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+                activeView === 'dashboard'
+                  ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
+                  : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
+              }`}
+              onClick={handleHomeSelect}
+              title="Inicio"
+              type="button"
+            >
+              {activeView === 'dashboard' && (
+                <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
+              )}
+              <Home className={activeView === 'dashboard' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
+              <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+                Inicio
+              </span>
+            </button>
 
-          {navigationGroups.map((group) => {
-            const Icon = group.icon;
-            const isActiveGroup = group.id === activeGroupId;
-            const containsActiveView = group.id === activeViewGroupId;
+            {navigationGroups.map((group) => {
+              const Icon = group.icon;
+              const isActiveGroup = group.id === activeGroupId;
+              const containsActiveView = group.id === activeViewGroupId;
 
-            return (
-              <button
-                aria-label={group.label}
-                className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
-                  isActiveGroup || containsActiveView
-                    ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
-                    : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
-                }`}
-                key={group.id}
-                onClick={() => handleGroupSelect(group.id)}
-                title={group.label}
-                type="button"
-              >
-                {(isActiveGroup || containsActiveView) && (
-                  <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
-                )}
-                <Icon
-                  className={containsActiveView ? 'text-red-200' : undefined}
-                  size={21}
-                  strokeWidth={2.1}
-                />
-                <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
-                  {group.label}
-                </span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  aria-label={group.label}
+                  className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+                    isActiveGroup || containsActiveView
+                      ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
+                      : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
+                  }`}
+                  key={group.id}
+                  onClick={() => handleGroupSelect(group.id)}
+                  title={group.label}
+                  type="button"
+                >
+                  {(isActiveGroup || containsActiveView) && (
+                    <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
+                  )}
+                  <Icon
+                    className={containsActiveView ? 'text-red-200' : undefined}
+                    size={21}
+                    strokeWidth={2.1}
+                  />
+                  <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+                    {group.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-auto flex flex-col items-center border-t border-white/10 pt-3">
+            <button
+              aria-current={activeView === 'ajustes' ? 'page' : undefined}
+              aria-label="Ajustes"
+              className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+                activeView === 'ajustes'
+                  ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
+                  : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
+              }`}
+              onClick={handleSettingsSelect}
+              title="Ajustes"
+              type="button"
+            >
+              {activeView === 'ajustes' && (
+                <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />
+              )}
+              <Settings className={activeView === 'ajustes' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
+              <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+                Ajustes
+              </span>
+            </button>
+          </div>
         </nav>
       </div>
 
