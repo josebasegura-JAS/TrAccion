@@ -44,6 +44,10 @@ type OutlookDraftApi = {
 };
 
 function getOutlookDraftApi(): OutlookDraftApi | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
   if (window.traccion?.createOutlookDraft) {
     return {
       createDraft: (payload) => window.traccion!.createOutlookDraft(payload),
@@ -85,12 +89,28 @@ export function EspecialesPage() {
   );
   const [isDropActive, setIsDropActive] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [hasOutlookApi, setHasOutlookApi] = useState(() => Boolean(getOutlookDraftApi()));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const refreshOutlookApiStatus = () => {
+      setHasOutlookApi(Boolean(getOutlookDraftApi()));
+    };
+
+    refreshOutlookApiStatus();
+    const retryTimers = [100, 500, 1500].map((delay) =>
+      window.setTimeout(refreshOutlookApiStatus, delay),
+    );
+
+    return () => {
+      retryTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
 
   const recipientGroups = useMemo(() => splitEspecialRecipients(recipients), [recipients]);
   const generatedPreviewHtml = useMemo(() => buildEspecialesHtmlBody(serviceDraft), [serviceDraft]);
@@ -116,11 +136,11 @@ export function EspecialesPage() {
     if (!serviceDraft.evento.trim()) {
       return 'falta evento';
     }
-    if (!getOutlookDraftApi()) {
+    if (!hasOutlookApi) {
       return 'falta API Outlook';
     }
     return '';
-  }, [recipientGroups.to.length, serviceDraft.evento]);
+  }, [hasOutlookApi, recipientGroups.to.length, serviceDraft.evento]);
 
   const setField = (field: keyof EspecialServiceDraft, value: string) => {
     setServiceDraft((current) => ({ ...current, [field]: value }));
