@@ -60,13 +60,28 @@ export function EspecialesPage() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const recipientGroups = useMemo(() => splitEspecialRecipients(recipients), [recipients]);
-  const previewHtml = useMemo(() => buildEspecialesHtmlBody(serviceDraft), [serviceDraft]);
+  const generatedPreviewHtml = useMemo(() => buildEspecialesHtmlBody(serviceDraft), [serviceDraft]);
+  const [editedPreviewHtml, setEditedPreviewHtml] = useState(generatedPreviewHtml);
+  const [hasEditedPreview, setHasEditedPreview] = useState(false);
+
+  useEffect(() => {
+    if (hasEditedPreview) {
+      return;
+    }
+
+    setEditedPreviewHtml(generatedPreviewHtml);
+    if (previewRef.current && previewRef.current.innerHTML !== generatedPreviewHtml) {
+      previewRef.current.innerHTML = generatedPreviewHtml;
+    }
+  }, [generatedPreviewHtml, hasEditedPreview]);
+  const previewHtml = hasEditedPreview ? editedPreviewHtml : generatedPreviewHtml;
   const subject = useMemo(() => buildEspecialesSubject(serviceDraft), [serviceDraft]);
   const draftUnavailableReason = useMemo(() => {
     if (!recipientGroups.to.length) {
@@ -85,6 +100,20 @@ export function EspecialesPage() {
     setServiceDraft((current) => ({ ...current, [field]: value }));
   };
 
+  const resetPreview = () => {
+    setHasEditedPreview(false);
+    setEditedPreviewHtml(generatedPreviewHtml);
+    if (previewRef.current) {
+      previewRef.current.innerHTML = generatedPreviewHtml;
+    }
+  };
+
+  const updatePreviewHtml = () => {
+    const html = previewRef.current?.innerHTML ?? '';
+    setHasEditedPreview(true);
+    setEditedPreviewHtml(html);
+  };
+
   const resetForm = () => {
     setServiceDraft(EMPTY_ESPECIAL_SERVICE_DRAFT);
     setMessageFile(null);
@@ -92,6 +121,7 @@ export function EspecialesPage() {
     setMsgStatusIsError(false);
     setOutlookStatus('');
     setOutlookStatusTone('neutral');
+    setHasEditedPreview(false);
   };
 
   const saveRecipient = (type?: EspecialRecipientType) => {
@@ -147,6 +177,7 @@ export function EspecialesPage() {
 
     const data = parsed.data;
     const year = detectYearFromText(`${data.subject} ${data.fecha}`);
+    setHasEditedPreview(false);
     setServiceDraft((current) => ({
       ...current,
       evento: data.evento || data.subject || current.evento,
@@ -196,9 +227,10 @@ export function EspecialesPage() {
     setOutlookStatusTone('neutral');
 
     try {
+      const currentPreviewHtml = previewRef.current?.innerHTML || previewHtml;
       const payload = {
         subject,
-        html: previewHtml,
+        html: currentPreviewHtml,
         to: recipientGroups.to.map((recipient) => recipient.email),
         cc: recipientGroups.cc.map((recipient) => recipient.email),
       };
@@ -383,12 +415,29 @@ export function EspecialesPage() {
             </div>
 
             <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
-                <p className="text-xs font-semibold text-metro-muted">Asunto: {subject}</p>
+              <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
+                  <p className="text-xs font-semibold text-metro-muted">Asunto: {subject}</p>
+                </div>
+                <button
+                  className={secondaryButtonClass}
+                  disabled={!hasEditedPreview}
+                  onClick={resetPreview}
+                  type="button"
+                >
+                  Regenerar preview
+                </button>
               </div>
               <div
-                className="min-h-[220px] rounded-xl border border-metro-border bg-metro-surface p-4 text-sm text-metro-text"
+                ref={previewRef}
+                aria-label="Editor del cuerpo del correo"
+                className="min-h-[220px] rounded-xl border border-metro-border bg-metro-surface p-4 text-sm leading-relaxed text-metro-text outline-none focus:border-metro-red [&_p]:mb-3 [&_p]:leading-relaxed [&_strong]:font-bold"
+                contentEditable
+                onInput={updatePreviewHtml}
+                role="textbox"
+                suppressContentEditableWarning
+                style={{ whiteSpace: 'pre-wrap' }}
                 dangerouslySetInnerHTML={{ __html: previewHtml }}
               />
             </div>

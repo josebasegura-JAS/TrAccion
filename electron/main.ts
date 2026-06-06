@@ -112,11 +112,12 @@ $ErrorActionPreference = 'Stop'
 $payload = Get-Content -Raw -LiteralPath $args[0] | ConvertFrom-Json
 $outlook = New-Object -ComObject Outlook.Application
 $mail = $outlook.CreateItem(0)
+$mail.BodyFormat = 2
 $mail.Subject = [string]$payload.subject
 $mail.To = [string]::Join(';', @($payload.to))
 $mail.CC = [string]::Join(';', @($payload.cc))
 $mail.HTMLBody = [string]$payload.html
-$mail.Display($false)
+$mail.Display()
 `;
 
   try {
@@ -126,6 +127,7 @@ $mail.Display($false)
     await new Promise<void>((resolve, reject) => {
       const child = spawn('powershell.exe', [
         '-NoProfile',
+        '-STA',
         '-ExecutionPolicy',
         'Bypass',
         '-File',
@@ -133,7 +135,11 @@ $mail.Display($false)
         jsonPath,
       ]);
       let stderr = '';
+      let stdout = '';
 
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
       child.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString('utf8');
       });
@@ -143,7 +149,11 @@ $mail.Display($false)
           resolve();
         } else {
           reject(
-            new Error(stderr.trim() || `PowerShell terminó con código ${code ?? 'desconocido'}.`),
+            new Error(
+              stderr.trim() ||
+                stdout.trim() ||
+                `PowerShell terminó con código ${code ?? 'desconocido'}.`,
+            ),
           );
         }
       });
