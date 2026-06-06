@@ -35,6 +35,7 @@ export function getEmployeeDerivedFields(employee: EmployeeDraft): EmployeeDeriv
 export function hydrateEmployee(draft: EmployeeDraft, deletedAt: string | null = null): Employee {
   return {
     ...draft,
+    puestoEus: draft.puestoEus ?? '',
     ...getEmployeeDerivedFields(draft),
     deletedAt,
   };

@@ -22,6 +22,7 @@ interface EmployeeState {
   remove: (empleado: string) => void;
   importExcel: (file: File) => Promise<void>;
   importJobPositionTranslations: (file: File) => Promise<number>;
+  updateEmptyEmployeeJobPositionTranslations: () => { updated: number; missing: number };
   selectEmployee: (employeeId: string) => void;
   setFilter: <K extends keyof EmployeeFilters>(key: K, value: EmployeeFilters[K]) => void;
 }
@@ -100,12 +101,43 @@ function upsertJobPositionTranslations(
   );
 }
 
+
+function resolveEmployeeJobPositionTranslation(
+  employee: Employee,
+  translations: JobPositionTranslation[],
+): string {
+  const positionKeys = [employee.puestoNomina, employee.puestoOrganizativo]
+    .map((position) => normalizeJobPosition(position))
+    .filter(Boolean);
+
+  if (!positionKeys.length) {
+    return '';
+  }
+
+  const translationsByPosition = new Map(
+    translations.map((translation) => [normalizeJobPosition(translation.puestoCastellano), translation.puestoEuskera]),
+  );
+
+  for (const positionKey of positionKeys) {
+    const translatedPosition = translationsByPosition.get(positionKey);
+    if (translatedPosition) {
+      return translatedPosition;
+    }
+  }
+
+  return '';
+}
+
 function upsertEmployees(current: Employee[], drafts: EmployeeDraft[]): Employee[] {
   const employeesById = new Map(current.map((employee) => [employee.empleado, employee]));
 
   drafts.forEach((draft) => {
     const previous = employeesById.get(draft.empleado);
-    employeesById.set(draft.empleado, hydrateEmployee(draft, previous?.deletedAt ?? null));
+    const nextDraft = {
+      ...draft,
+      puestoEus: draft.puestoEus.trim() || previous?.puestoEus || '',
+    };
+    employeesById.set(draft.empleado, hydrateEmployee(nextDraft, previous?.deletedAt ?? null));
   });
 
   return Array.from(employeesById.values());
@@ -170,6 +202,33 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       return { jobPositionTranslations };
     });
     return importedTranslations.length;
+  },
+  updateEmptyEmployeeJobPositionTranslations: () => {
+    const { employees, jobPositionTranslations } = get();
+    let updated = 0;
+    let missing = 0;
+
+    const nextEmployees = employees.map((employee) => {
+      if (employee.deletedAt || employee.puestoEus.trim()) {
+        return employee;
+      }
+
+      const puestoEus = resolveEmployeeJobPositionTranslation(employee, jobPositionTranslations);
+      if (!puestoEus) {
+        missing += 1;
+        return employee;
+      }
+
+      updated += 1;
+      return { ...employee, puestoEus };
+    });
+
+    if (updated > 0) {
+      persistEmployees(nextEmployees);
+      set({ employees: nextEmployees });
+    }
+
+    return { updated, missing };
   },
   selectEmployee: (employeeId) => set({ selectedEmployeeId: employeeId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),

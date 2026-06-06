@@ -1,4 +1,4 @@
-import { FileUp, Languages, Search, X } from 'lucide-react';
+import { FileUp, Languages, RefreshCw, Search, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 
@@ -7,7 +7,11 @@ interface JobPositionTranslationsModalProps {
 }
 
 export function JobPositionTranslationsModal({ onClose }: JobPositionTranslationsModalProps) {
-  const { jobPositionTranslations, importJobPositionTranslations } = useEmployeeStore();
+  const {
+    jobPositionTranslations,
+    importJobPositionTranslations,
+    updateEmptyEmployeeJobPositionTranslations,
+  } = useEmployeeStore();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -87,6 +91,17 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               ref={fileInputRef}
               type="file"
             />
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => {
+                const { updated, missing } = updateEmptyEmployeeJobPositionTranslations();
+                setError('');
+                setMessage(`Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`);
+              }}
+              type="button"
+            >
+              <RefreshCw size={16} /> Actualizar plantilla
+            </button>
             <button
               className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
               onClick={() => fileInputRef.current?.click()}

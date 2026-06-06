@@ -226,7 +226,7 @@ function buildTeletrabajoData(
     tipoSolicitud: normalizeTipoSolicitud(source.tipoSolicitud),
     dni: plantillaEmployee?.dni || source.dni || '',
     puestoCast: puesto,
-    puestoEus: puesto,
+    puestoEus: plantillaEmployee?.puestoEus || puesto,
     direccionTeletrabajo: plantillaEmployee?.direccionTeletrabajo || source.direccionTeletrabajo || '',
     residenciaCast: plantillaEmployee?.residenciaCast || source.residencia || '',
     residenciaEus: plantillaEmployee?.residenciaEus || plantillaEmployee?.residenciaCast || source.residencia || '',

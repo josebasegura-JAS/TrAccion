@@ -33,6 +33,7 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EmployeeField, readonly string[]]>
     'puestoOrganizativo',
     ['puestoOrganizativo', 'puesto organizativo', 'puesto org', 'puesto organización', 'puesto organizacion'],
   ],
+  ['puestoEus', ['Puesto_EUS', 'puestoEus', 'puesto eus', 'puesto euskera', 'lanpostua']],
   ['residencia', ['residencia', 'centro', 'centro trabajo', 'centro de trabajo']],
   ['nivelRetributivo', ['nivelRetributivo', 'nivel retributivo', 'nivel', 'grupo retributivo']],
   ['sexo', ['sexo', 'género', 'genero']],

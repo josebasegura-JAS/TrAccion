@@ -1,4 +1,4 @@
-import { FileUp, Languages, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { FileUp, Languages, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
@@ -6,7 +6,7 @@ import type { Employee } from '../features/plantilla/domain/employee';
 import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
 
-type SortKey = 'empleado' | 'nombreApellidos' | 'puestoNomina' | 'residencia' | 'nivelRetributivo';
+type SortKey = 'empleado' | 'nombreApellidos' | 'puestoNomina' | 'puestoEus' | 'residencia' | 'nivelRetributivo';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -18,8 +18,9 @@ interface SortState {
 const sortableColumns: Array<{ key: SortKey; label: string; className: string }> = [
   { key: 'empleado', label: 'Empleado', className: 'w-[105px]' },
   { key: 'nombreApellidos', label: 'Nombre y apellidos', className: 'w-[220px]' },
-  { key: 'puestoNomina', label: 'Puesto nómina', className: 'w-[210px]' },
-  { key: 'residencia', label: 'Residencia', className: 'w-[130px]' },
+  { key: 'puestoNomina', label: 'Puesto nómina', className: 'w-[190px]' },
+  { key: 'puestoEus', label: 'Puesto EUS', className: 'w-[190px]' },
+  { key: 'residencia', label: 'Residencia', className: 'w-[120px]' },
   { key: 'nivelRetributivo', label: 'Nivel', className: 'w-[95px]' },
 ];
 
@@ -37,8 +38,16 @@ function compareEmployeeValues(first: Employee, second: Employee, key: SortKey):
 }
 
 export function PlantillaPage() {
-  const { employees, filters, importExcel, load, remove, selectEmployee, setFilter } =
-    useEmployeeStore();
+  const {
+    employees,
+    filters,
+    importExcel,
+    load,
+    remove,
+    selectEmployee,
+    setFilter,
+    updateEmptyEmployeeJobPositionTranslations,
+  } = useEmployeeStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [isTranslationsModalOpen, setTranslationsModalOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
@@ -100,6 +109,12 @@ export function PlantillaPage() {
 
   const residencias = uniqueSorted(visibleEmployees.map((employee) => employee.residencia));
   const niveles = uniqueSorted(visibleEmployees.map((employee) => employee.nivelRetributivo));
+  const emptyPuestoEusCount = visibleEmployees.filter((employee) => !employee.puestoEus.trim()).length;
+
+  const handleGlobalJobPositionUpdate = () => {
+    const { updated, missing } = updateEmptyEmployeeJobPositionTranslations();
+    setImportMessage(`Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`);
+  };
 
   return (
     <section
@@ -137,6 +152,15 @@ export function PlantillaPage() {
             type="button"
           >
             <Languages size={16} /> Traducir puestos
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={emptyPuestoEusCount === 0}
+            onClick={handleGlobalJobPositionUpdate}
+            title={emptyPuestoEusCount === 0 ? 'No hay puestos EUS pendientes' : `${emptyPuestoEusCount} puestos EUS pendientes`}
+            type="button"
+          >
+            <RefreshCw size={16} /> Actualizar puestos global
           </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
@@ -242,6 +266,12 @@ export function PlantillaPage() {
                     title={employee.puestoNomina}
                   >
                     {employee.puestoNomina}
+                  </td>
+                  <td
+                    className="truncate px-3 py-1.5 text-metro-muted"
+                    title={employee.puestoEus || 'Sin traducción'}
+                  >
+                    {employee.puestoEus || '—'}
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={employee.residencia}>
                     {employee.residencia}
