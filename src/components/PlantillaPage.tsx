@@ -36,7 +36,7 @@ function compareEmployeeValues(first: Employee, second: Employee, key: SortKey):
 }
 
 export function PlantillaPage() {
-  const { employees, filters, importExcel, load, selectEmployee, setFilter } = useEmployeeStore();
+  const { employees, filters, importExcel, load, remove, selectEmployee, setFilter } = useEmployeeStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState>({ key: 'empleado', direction: 'asc' });
@@ -186,7 +186,7 @@ export function PlantillaPage() {
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="min-w-[860px] table-fixed text-left text-xs">
+          <table className="w-full table-fixed text-left text-xs">
             <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
@@ -247,11 +247,11 @@ export function PlantillaPage() {
                       className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
                       onClick={(event) => {
                         event.stopPropagation();
-                        openEditor(employee);
+                        remove(employee.empleado);
                       }}
                       type="button"
                     >
-                      Editar
+                      Eliminar
                     </button>
                   </td>
                 </tr>

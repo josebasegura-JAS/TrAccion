@@ -69,7 +69,7 @@ function SelectFilter({
 }
 
 export function TeletrabajoPage() {
-  const { filters, importEncuesta, load, selectSolicitud, setFilter, solicitudes } =
+  const { filters, importEncuesta, load, remove, selectSolicitud, setFilter, solicitudes } =
     useTeletrabajoStore();
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
@@ -231,7 +231,7 @@ export function TeletrabajoPage() {
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="min-w-[1120px] table-fixed text-left text-xs">
+          <table className="w-full table-fixed text-left text-xs">
             <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
@@ -309,11 +309,11 @@ export function TeletrabajoPage() {
                       className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
                       onClick={(event) => {
                         event.stopPropagation();
-                        openEditor(solicitud);
+                        remove(solicitud.id);
                       }}
                       type="button"
                     >
-                      Editar
+                      Eliminar
                     </button>
                   </td>
                 </tr>

@@ -193,7 +193,7 @@ export function PeticionesPage() {
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="min-w-[970px] table-fixed text-left text-xs">
+          <table className="w-full table-fixed text-left text-xs">
             <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
@@ -310,7 +310,7 @@ export function PeticionesPage() {
                   </button>
                   {isYearOpen && (
                     <div className="max-h-[320px] overflow-auto">
-                      <table className="min-w-[780px] table-fixed text-left text-xs">
+                      <table className="w-full table-fixed text-left text-xs">
                         <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
                           <tr>
                             {historicColumns.map((column) => {

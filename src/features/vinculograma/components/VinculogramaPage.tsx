@@ -1,4 +1,4 @@
-import { Edit2, Link2, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Link2, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
@@ -201,16 +201,18 @@ function VinculogramaTable({
   emptyText,
   records,
   today,
+  onDelete,
   onEdit,
 }: {
   emptyText: string;
   records: Vinculograma[];
   today: string;
+  onDelete: (record: Vinculograma) => void;
   onEdit: (record: Vinculograma) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-metro-border">
-      <table className="min-w-[860px] w-full table-fixed text-left text-xs">
+      <table className="w-full table-fixed text-left text-xs">
         <thead className="bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
           <tr>
             <th className="w-[120px] px-3 py-2">Nº empleado</th>
@@ -264,11 +266,11 @@ function VinculogramaTable({
                     className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onEdit(record);
+                      onDelete(record);
                     }}
                     type="button"
                   >
-                    <Edit2 size={13} className="inline" /> Editar
+                    Eliminar
                   </button>
                 </td>
               </tr>
@@ -338,6 +340,10 @@ export function VinculogramaPage() {
     closeModal();
   };
 
+  const deleteTableRecord = (record: Vinculograma) => {
+    remove(record.id);
+  };
+
   const toggleExpired = () => {
     const nextValue = !showExpired;
     setShowExpired(nextValue);
@@ -375,6 +381,7 @@ export function VinculogramaPage() {
         <div className="overflow-auto">
           <VinculogramaTable
             emptyText="No hay vinculogramas vigentes."
+            onDelete={deleteTableRecord}
             onEdit={openEditModal}
             records={vigentes}
             today={today}
@@ -398,6 +405,7 @@ export function VinculogramaPage() {
           <div className="overflow-auto">
             <VinculogramaTable
               emptyText="No hay vinculogramas vencidos."
+              onDelete={deleteTableRecord}
               onEdit={openEditModal}
               records={vencidos}
               today={today}

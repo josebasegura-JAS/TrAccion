@@ -119,7 +119,7 @@ function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): Histor
 }
 
 export function TareasPage() {
-  const { filters, load, selectTask, setFilter, tasks } = useTaskStore();
+  const { filters, load, remove, selectTask, setFilter, tasks } = useTaskStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
@@ -248,7 +248,7 @@ export function TareasPage() {
           </span>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="min-w-[970px] table-fixed text-left text-xs">
+          <table className="w-full table-fixed text-left text-xs">
             <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
                 {sortableColumns.map((column) => {
@@ -309,11 +309,11 @@ export function TareasPage() {
                       className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
                       onClick={(event) => {
                         event.stopPropagation();
-                        openEditor(task);
+                        remove(task.id);
                       }}
                       type="button"
                     >
-                      Editar
+                      Eliminar
                     </button>
                   </td>
                 </tr>
@@ -356,7 +356,7 @@ export function TareasPage() {
                   </button>
                   {isYearOpen && (
                     <div className="max-h-[320px] overflow-auto">
-                      <table className="min-w-[780px] table-fixed text-left text-xs">
+                      <table className="w-full table-fixed text-left text-xs">
                         <thead className="sticky top-0 z-10 bg-[#F9FAFB] text-[11px] uppercase tracking-wide text-metro-muted">
                           <tr>
                             {historicColumns.map((column) => {
