@@ -1,9 +1,12 @@
 import type { Employee } from '../../plantilla/domain/employee';
+import {
+  TELETRABAJO_TEMPLATE_UNAVAILABLE_MESSAGE,
+  validateConfiguredTeletrabajoTemplatePath,
+} from '../../configuracion/domain/teletrabajoTemplate';
 import type { TeletrabajoDia, TeletrabajoDraft, TeletrabajoSolicitud } from './solicitud';
 import { unzipDocx, zipDocx, type ZipEntry } from './zip';
 
 const WORD_DOCUMENT_ENTRY = 'word/document.xml';
-const TEMPLATE_URL = '/templates/rrll-dashboard-teletrabajo.docx';
 const WORD_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -42,7 +45,6 @@ const DIRECT_FIELD_MARKERS = [
 
 const DIA_MARKERS: readonly TeletrabajoDia[] = ['martes', 'miercoles', 'jueves'];
 
-export const TELETRABAJO_WORD_TEMPLATE_URL = TEMPLATE_URL;
 
 export const TELETRABAJO_WORD_MARKER_SOURCES: readonly TeletrabajoWordMarkerMapping[] = [
   ...DIRECT_FIELD_MARKERS.map((marker) => ({ marker, source: `Teletrabajo.${marker}` })),
@@ -235,21 +237,26 @@ function buildFileName(source: TeletrabajoWordSource): string {
   return `teletrabajo-${empleado}-${periodo}.docx`;
 }
 
-async function fetchTemplate(): Promise<ArrayBuffer> {
-  const response = await fetch(TEMPLATE_URL);
+async function readTemplateFromConfiguredPath(path: string): Promise<ArrayBuffer> {
+  const templatePath = validateConfiguredTeletrabajoTemplatePath(path);
 
-  if (!response.ok) {
-    throw new Error(`No se ha encontrado la plantilla DOCX de RRLL Dashboard en ${TEMPLATE_URL}.`);
+  if (!window.traccion?.readTeletrabajoTemplate) {
+    throw new Error(TELETRABAJO_TEMPLATE_UNAVAILABLE_MESSAGE);
   }
 
-  return response.arrayBuffer();
+  try {
+    return await window.traccion.readTeletrabajoTemplate(templatePath);
+  } catch {
+    throw new Error(TELETRABAJO_TEMPLATE_UNAVAILABLE_MESSAGE);
+  }
 }
 
 export async function generateTeletrabajoWord(
   source: TeletrabajoWordSource,
   plantillaEmployee: Employee | null,
+  templatePath: string,
 ): Promise<TeletrabajoWordResult> {
-  const templateBuffer = await fetchTemplate();
+  const templateBuffer = await readTemplateFromConfiguredPath(templatePath);
   const entries = await unzipDocx(templateBuffer);
   const documentEntry = findDocumentEntry(entries);
   const documentXml = textDecoder.decode(documentEntry.data);

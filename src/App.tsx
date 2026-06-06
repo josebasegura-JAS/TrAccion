@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AjustesPage } from './components/AjustesPage';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
 import { PeticionesPage } from './components/PeticionesPage';
@@ -43,6 +44,7 @@ export function App() {
           {activeView === 'peticiones' && <PeticionesPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
+          {activeView === 'ajustes' && <AjustesPage />}
         </main>
       </div>
     </div>

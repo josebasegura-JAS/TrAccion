@@ -18,7 +18,8 @@ export type AppView =
   | 'tareas'
   | 'peticiones'
   | 'teletrabajo'
-  | 'ticket-restaurante';
+  | 'ticket-restaurante'
+  | 'ajustes';
 
 export function Sidebar({
   activeView,
@@ -97,10 +98,14 @@ export function Sidebar({
         </button>
       </nav>
 
-      <div className="border-t border-white/10 p-3 text-sm text-white/60">
-        <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
+      <div className="border-t border-white/10 p-3 text-sm">
+        <button
+          className={navButtonClass('ajustes')}
+          onClick={() => onViewChange('ajustes')}
+          type="button"
+        >
           <Settings size={18} /> Configuración
-        </div>
+        </button>
       </div>
     </aside>
   );

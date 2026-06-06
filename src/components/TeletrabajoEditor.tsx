@@ -13,6 +13,7 @@ import {
   type TeletrabajoTextField,
 } from '../features/teletrabajo/domain/solicitud';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
+import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 
@@ -104,6 +105,9 @@ export function TeletrabajoEditor({
   const updateSolicitud = useTeletrabajoStore((state) => state.update);
   const removeSolicitud = useTeletrabajoStore((state) => state.remove);
   const employees = useEmployeeStore((state) => state.employees);
+  const rutaPlantillaTeletrabajo = useConfiguracionStore(
+    (state) => state.rutaPlantillaTeletrabajo,
+  );
   const [draft, setDraft] = useState<TeletrabajoDraft>(() => toDraft(solicitud));
   const [wordStatus, setWordStatus] = useState('');
   const [isGeneratingWord, setIsGeneratingWord] = useState(false);
@@ -148,7 +152,11 @@ export function TeletrabajoEditor({
     setWordStatus('');
 
     try {
-      const result = await generateTeletrabajoWord(draft, plantillaEmployee);
+      const result = await generateTeletrabajoWord(
+        draft,
+        plantillaEmployee,
+        rutaPlantillaTeletrabajo,
+      );
       await saveDocxWithDialog(result.blob, result.fileName);
       setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores detectados.`);
     } catch (error) {
