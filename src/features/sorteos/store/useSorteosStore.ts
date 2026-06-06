@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   addManualExclusion,
   deleteSorteo,
@@ -78,7 +79,7 @@ function isExclusion(value: unknown): value is SorteosExclusion {
 }
 
 function readArray<T>(storageKey: string, guard: (value: unknown) => value is T): T[] {
-  const stored = window.localStorage.getItem(storageKey);
+  const stored = readStorageItem(storageKey);
   if (!stored) {
     return [];
   }
@@ -92,8 +93,8 @@ function readArray<T>(storageKey: string, guard: (value: unknown) => value is T)
 }
 
 function persist(draws: SorteosDraw[], exclusions: SorteosExclusion[]): void {
-  window.localStorage.setItem(DRAWS_STORAGE_KEY, JSON.stringify(draws));
-  window.localStorage.setItem(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions));
+  writeStorageItem(DRAWS_STORAGE_KEY, JSON.stringify(draws));
+  writeStorageItem(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions));
 }
 
 function nowIso(): string {

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
@@ -54,7 +55,7 @@ function normalizeCriterioRrll(criterio: CriterioRrll): CriterioRrll {
 }
 
 function readCriteriosRrll(): CriterioRrll[] {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -68,7 +69,7 @@ function readCriteriosRrll(): CriterioRrll[] {
 }
 
 function persistCriteriosRrll(criterios: CriterioRrll[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(criterios));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(criterios));
 }
 
 function firstActiveCriterioId(criterios: CriterioRrll[]): string {

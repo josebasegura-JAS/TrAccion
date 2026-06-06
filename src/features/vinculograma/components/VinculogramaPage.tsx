@@ -1,6 +1,7 @@
 import { Link2, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   calculateExpiryDate,
   EMPTY_VINCULOGRAMA_DRAFT,
@@ -28,11 +29,11 @@ function todayIso(): string {
 }
 
 function readExpiredVisibility(): boolean {
-  return window.localStorage.getItem(EXPIRED_VISIBILITY_KEY) === 'true';
+  return readStorageItem(EXPIRED_VISIBILITY_KEY) === 'true';
 }
 
 function persistExpiredVisibility(value: boolean): void {
-  window.localStorage.setItem(EXPIRED_VISIBILITY_KEY, String(value));
+  writeStorageItem(EXPIRED_VISIBILITY_KEY, String(value));
 }
 
 function toDraft(record: Vinculograma): VinculogramaDraft {

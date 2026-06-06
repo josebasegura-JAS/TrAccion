@@ -2,6 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
+import {
+  getSqliteStatus,
+  initializeSqlitePersistence,
+  migrateLocalStorageSnapshot,
+  savePersistedRecord,
+} from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -375,11 +381,32 @@ function assertDocxPath(filePath: string): void {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle('database:status', () => ({
-    ready: false,
-    engine: 'better-sqlite3',
-    phase: 'prepared',
-  }));
+  ipcMain.handle('database:status', () => getSqliteStatus());
+
+  ipcMain.handle('database:migrate-local-storage', (_event, payload: unknown) => {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !Array.isArray((payload as { records?: unknown }).records)
+    ) {
+      return getSqliteStatus();
+    }
+
+    return migrateLocalStorageSnapshot(payload as { records: { key: string; value: string }[] });
+  });
+
+  ipcMain.handle('database:save-local-storage-record', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return getSqliteStatus();
+    }
+
+    const candidate = payload as { key?: unknown; value?: unknown };
+    if (typeof candidate.key !== 'string' || typeof candidate.value !== 'string') {
+      return getSqliteStatus();
+    }
+
+    return savePersistedRecord({ key: candidate.key, value: candidate.value });
+  });
 
   ipcMain.handle('teletrabajo:select-template', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -431,9 +458,10 @@ function registerIpcHandlers(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setAppUserModelId('com.metro.rrll.traccion');
   Menu.setApplicationMenu(null);
+  await initializeSqlitePersistence();
   registerIpcHandlers();
   createWindow();
 

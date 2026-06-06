@@ -37,12 +37,24 @@ interface TeletrabajoOpenWordResult {
   message: string;
 }
 
+interface TraccionDatabaseStatus {
+  ready: boolean;
+  engine: string;
+  phase: string;
+  path?: string;
+  schemaVersion?: number;
+  message?: string;
+}
+
+interface TraccionStorageRecord {
+  key: string;
+  value: string;
+}
+
 interface TraccionApi {
-  databaseStatus: () => Promise<{
-    ready: boolean;
-    engine: string;
-    phase: string;
-  }>;
+  databaseStatus: () => Promise<TraccionDatabaseStatus>;
+  migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
+  saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
   openTeletrabajoWord?: (buffer: ArrayBuffer, fileName: string) => Promise<TeletrabajoOpenWordResult>;

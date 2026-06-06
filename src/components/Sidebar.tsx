@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { readStorageItem, writeStorageItem } from '../services/persistence';
 import {
   ClipboardList,
   Gift,
@@ -102,7 +103,7 @@ const readStoredPinnedPreference = () => {
     return false;
   }
 
-  return window.localStorage.getItem(SIDEBAR_PINNED_KEY) === 'true';
+  return readStorageItem(SIDEBAR_PINNED_KEY) === 'true';
 };
 
 const readStoredActiveGroup = (activeView: AppView) => {
@@ -110,7 +111,7 @@ const readStoredActiveGroup = (activeView: AppView) => {
     return getGroupForView(activeView) ?? 'personas';
   }
 
-  const storedGroup = window.localStorage.getItem(SIDEBAR_ACTIVE_GROUP_KEY);
+  const storedGroup = readStorageItem(SIDEBAR_ACTIVE_GROUP_KEY);
   return isNavigationGroupId(storedGroup) ? storedGroup : getGroupForView(activeView) ?? 'personas';
 };
 
@@ -133,11 +134,11 @@ export function Sidebar({
   const shouldShowPanel = isPanelOpen || isPinned;
 
   useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_PINNED_KEY, String(isPinned));
+    writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned));
   }, [isPinned]);
 
   useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_ACTIVE_GROUP_KEY, activeGroupId);
+    writeStorageItem(SIDEBAR_ACTIVE_GROUP_KEY, activeGroupId);
   }, [activeGroupId]);
 
   useEffect(() => {

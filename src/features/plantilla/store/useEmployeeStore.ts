@@ -6,6 +6,7 @@ import { importEmployeesFromFile } from '../domain/importExcel';
 import { importJobPositionTranslationsFromFile } from '../domain/importJobPositionTranslations';
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft } from '../domain/employee';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 
 const STORAGE_KEY = 'traccion.v1.plantilla.employees';
 const JOB_POSITION_TRANSLATIONS_STORAGE_KEY = 'traccion.v1.plantilla.jobPositionTranslations';
@@ -37,7 +38,7 @@ function isEmployee(value: unknown): value is Employee {
 }
 
 function readEmployees(): Employee[] {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
     return mockEmployees;
   }
@@ -51,7 +52,7 @@ function readEmployees(): Employee[] {
 }
 
 function persistEmployees(employees: Employee[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(employees));
 }
 
 function isJobPositionTranslation(value: unknown): value is JobPositionTranslation {
@@ -64,7 +65,7 @@ function isJobPositionTranslation(value: unknown): value is JobPositionTranslati
 }
 
 function readJobPositionTranslations(): JobPositionTranslation[] {
-  const stored = window.localStorage.getItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY);
+  const stored = readStorageItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -78,7 +79,7 @@ function readJobPositionTranslations(): JobPositionTranslation[] {
 }
 
 function persistJobPositionTranslations(translations: JobPositionTranslation[]): void {
-  window.localStorage.setItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, JSON.stringify(translations));
+  writeStorageItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, JSON.stringify(translations));
 }
 
 function upsertJobPositionTranslations(

@@ -7,6 +7,10 @@ const parseOutlookMsg = (payload: unknown) => ipcRenderer.invoke('msg:parseOutlo
 
 contextBridge.exposeInMainWorld('traccion', {
   databaseStatus: () => ipcRenderer.invoke('database:status'),
+  migrateLocalStorage: (records: { key: string; value: string }[]) =>
+    ipcRenderer.invoke('database:migrate-local-storage', { records }),
+  saveLocalStorageRecord: (record: { key: string; value: string }) =>
+    ipcRenderer.invoke('database:save-local-storage-record', record),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   openTeletrabajoWord: (buffer: ArrayBuffer, fileName: string) =>
