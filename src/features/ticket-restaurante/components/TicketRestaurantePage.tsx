@@ -1,15 +1,24 @@
-import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Plus, Save, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, FileUp, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   buildYearCalendar,
   EMPTY_TICKET_CALENDAR_DRAFT,
   nextCalendarYear,
   previousCalendarYear,
   visibleTicketCalendars,
+  visibleTicketRestaurantAbsences,
   type CalendarDay,
   type TicketCalendar,
   type TicketCalendarDraft,
+  type TicketRestaurantAbsence,
 } from '../domain/ticketRestaurante';
+import {
+  importTicketRestaurantAbsencesFromFile,
+  saveTicketRestaurantAbsencePreviewRows,
+  validateTicketRestaurantAbsencePreviewRows,
+  type TicketRestaurantAbsencePreviewRow,
+  type TicketRestaurantAbsenceSaveResult,
+} from '../domain/importAbsences';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -34,18 +43,25 @@ function sortByName(calendars: TicketCalendar[]): TicketCalendar[] {
 
 export function TicketRestaurantePage() {
   const calendars = useTicketRestauranteStore((state) => state.calendars);
+  const absences = useTicketRestauranteStore((state) => state.absences);
   const loadTickets = useTicketRestauranteStore((state) => state.load);
   const createCalendar = useTicketRestauranteStore((state) => state.createCalendar);
   const updateCalendar = useTicketRestauranteStore((state) => state.updateCalendar);
   const toggleCalendarActive = useTicketRestauranteStore((state) => state.toggleCalendarActive);
   const removeCalendar = useTicketRestauranteStore((state) => state.removeCalendar);
   const toggleDay = useTicketRestauranteStore((state) => state.toggleDay);
+  const saveAbsences = useTicketRestauranteStore((state) => state.saveAbsences);
+  const removeAbsence = useTicketRestauranteStore((state) => state.removeAbsence);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [year, setYear] = useState(currentYear());
   const [calendarDraft, setCalendarDraft] = useState<TicketCalendarDraft>(
     EMPTY_TICKET_CALENDAR_DRAFT,
   );
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
+  const [previewRows, setPreviewRows] = useState<TicketRestaurantAbsencePreviewRow[]>([]);
+  const [importMessage, setImportMessage] = useState('');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadTickets();
@@ -63,6 +79,7 @@ export function TicketRestaurantePage() {
     () => (selectedCalendar ? buildYearCalendar(selectedCalendar, year) : []),
     [selectedCalendar, year],
   );
+  const visibleAbsences = useMemo(() => visibleTicketRestaurantAbsences(absences), [absences]);
 
   useEffect(() => {
     if (
@@ -108,19 +125,105 @@ export function TicketRestaurantePage() {
     }
   };
 
+  const handleImportFile = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    const rows = await importTicketRestaurantAbsencesFromFile(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    if (rows.length === 0) {
+      setImportMessage('No se han detectado ausencias con formato limpio o ZERKOS.');
+      return;
+    }
+
+    setPreviewRows(rows);
+    setImportMessage('');
+    setIsPreviewOpen(true);
+  };
+
+  const updatePreviewRow = (
+    rowId: string,
+    field: keyof Omit<TicketRestaurantAbsencePreviewRow, 'id' | 'errors'>,
+    value: string | boolean,
+  ) => {
+    setPreviewRows((rows) =>
+      rows.map((row) => (row.id === rowId ? { ...row, [field]: value, errors: [] } : row)),
+    );
+  };
+
+  const addPreviewRow = () => {
+    setPreviewRows((rows) => [
+      ...rows,
+      {
+        id: `preview-manual-${Date.now()}`,
+        empleado: '',
+        nombreApellidos: '',
+        desde: '',
+        hasta: '',
+        motivo: '',
+        totalDias: '',
+        afectaTicket: true,
+        errors: [],
+      },
+    ]);
+  };
+
+  const removePreviewRow = (rowId: string) => {
+    setPreviewRows((rows) => rows.filter((row) => row.id !== rowId));
+  };
+
+  const savePreviewRows = () => {
+    const result = saveTicketRestaurantAbsencePreviewRows(absences, previewRows);
+    if (result.errors.length > 0) {
+      setPreviewRows(validateTicketRestaurantAbsencePreviewRows(previewRows));
+      setImportMessage(result.errors.join(' '));
+      return;
+    }
+
+    saveAbsences(result.absences);
+    setImportMessage(formatSaveSummary(result));
+    setPreviewRows([]);
+    setIsPreviewOpen(false);
+  };
+
+
   return (
     <section
       className="rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card"
       id="ticket-restaurante"
     >
-      <div className="mb-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-metro-red">
-          Ticket Restaurante
-        </p>
-        <h2 className="text-xl font-bold text-metro-text">Definir Calendarios</h2>
-        <p className="mt-0.5 text-sm text-metro-muted">
-          Gestión anual de días sin ticket por calendario.
-        </p>
+      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-metro-red">
+            Ticket Restaurante
+          </p>
+          <h2 className="text-xl font-bold text-metro-text">Definir Calendarios</h2>
+          <p className="mt-0.5 text-sm text-metro-muted">
+            Gestión anual de días sin ticket por calendario.
+          </p>
+        </div>
+        <div className="flex flex-col items-start gap-1.5 lg:items-end">
+          <input
+            accept=".xlsx,.csv,.tsv"
+            className="hidden"
+            onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            Importar ausencias
+          </button>
+          {importMessage ? <p className="max-w-sm text-xs text-metro-muted">{importMessage}</p> : null}
+        </div>
       </div>
 
       <div className="mb-3 grid gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 xl:grid-cols-[minmax(280px,0.9fr)_minmax(250px,0.75fr)_minmax(320px,1fr)]">
@@ -216,6 +319,22 @@ export function TicketRestaurantePage() {
           <EmptyCalendar />
         )}
       </div>
+
+      <AbsencesTable absences={visibleAbsences} onRemove={removeAbsence} />
+
+      {isPreviewOpen ? (
+        <AbsencePreviewModal
+          onAdd={addPreviewRow}
+          onCancel={() => {
+            setIsPreviewOpen(false);
+            setPreviewRows([]);
+          }}
+          onChange={updatePreviewRow}
+          onRemove={removePreviewRow}
+          onSave={savePreviewRows}
+          rows={previewRows}
+        />
+      ) : null}
     </section>
   );
 }
@@ -449,6 +568,196 @@ function EmptyCalendar() {
       </div>
     </div>
   );
+}
+
+function AbsencesTable({
+  absences,
+  onRemove,
+}: {
+  absences: TicketRestaurantAbsence[];
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-xl border border-metro-border bg-metro-panel p-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-base font-bold text-metro-text">Ausencias</h3>
+        <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
+          {absences.length}
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-xs">
+          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+            <tr>
+              <th className="px-2 py-1">empleado</th>
+              <th className="px-2 py-1">nombreApellidos</th>
+              <th className="px-2 py-1">desde</th>
+              <th className="px-2 py-1">hasta</th>
+              <th className="px-2 py-1">motivo</th>
+              <th className="px-2 py-1">totalDias</th>
+              <th className="px-2 py-1">afectaTicket</th>
+              <th className="px-2 py-1">acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-metro-border text-metro-text">
+            {absences.map((absence) => (
+              <tr key={absence.id}>
+                <td className="px-2 py-1 font-semibold">{absence.empleado}</td>
+                <td className="px-2 py-1">{absence.nombreApellidos}</td>
+                <td className="px-2 py-1">{absence.desde}</td>
+                <td className="px-2 py-1">{absence.hasta}</td>
+                <td className="px-2 py-1">{absence.motivo}</td>
+                <td className="px-2 py-1">{absence.totalDias}</td>
+                <td className="px-2 py-1">{absence.afectaTicket ? 'Sí' : 'No'}</td>
+                <td className="px-2 py-1">
+                  <button
+                    className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+                    onClick={() => onRemove(absence.id)}
+                    type="button"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {absences.length === 0 ? (
+              <tr>
+                <td className="px-2 py-4 text-center text-metro-muted" colSpan={8}>
+                  No hay ausencias guardadas.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AbsencePreviewModal({
+  onAdd,
+  onCancel,
+  onChange,
+  onRemove,
+  onSave,
+  rows,
+}: {
+  onAdd: () => void;
+  onCancel: () => void;
+  onChange: (
+    rowId: string,
+    field: keyof Omit<TicketRestaurantAbsencePreviewRow, 'id' | 'errors'>,
+    value: string | boolean,
+  ) => void;
+  onRemove: (rowId: string) => void;
+  onSave: () => void;
+  rows: TicketRestaurantAbsencePreviewRow[];
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+        <div className="flex items-center justify-between border-b border-metro-border p-3">
+          <div>
+            <h3 className="text-lg font-bold text-metro-text">Revisar ausencias importadas</h3>
+            <p className="text-xs text-metro-muted">Edita, añade o elimina filas antes de guardar.</p>
+          </div>
+          <button
+            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onAdd}
+            type="button"
+          >
+            Añadir ausencia manual
+          </button>
+        </div>
+        <div className="max-h-[65vh] overflow-auto p-3">
+          <table className="min-w-full text-left text-xs">
+            <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+              <tr>
+                <th className="px-1 py-1">Nº empleado</th>
+                <th className="px-1 py-1">Nombre y apellidos</th>
+                <th className="px-1 py-1">Desde</th>
+                <th className="px-1 py-1">Hasta</th>
+                <th className="px-1 py-1">Motivo</th>
+                <th className="px-1 py-1">Total días</th>
+                <th className="px-1 py-1">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-metro-border">
+              {rows.map((row) => (
+                <tr className={row.errors.length > 0 ? 'bg-metro-red/10' : ''} key={row.id}>
+                  <PreviewInput field="empleado" onChange={onChange} row={row} />
+                  <PreviewInput field="nombreApellidos" onChange={onChange} row={row} />
+                  <PreviewInput field="desde" onChange={onChange} row={row} type="date" />
+                  <PreviewInput field="hasta" onChange={onChange} row={row} type="date" />
+                  <PreviewInput field="motivo" onChange={onChange} row={row} />
+                  <PreviewInput field="totalDias" onChange={onChange} row={row} type="number" />
+                  <td className="px-1 py-1 align-top">
+                    <button
+                      className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+                      onClick={() => onRemove(row.id)}
+                      type="button"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    {row.errors.length > 0 ? (
+                      <p className="mt-1 max-w-48 text-[11px] text-metro-red">{row.errors.join(' ')}</p>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-metro-border p-3">
+          <button
+            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={onSave}
+            type="button"
+          >
+            Guardar ausencias
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewInput({
+  field,
+  onChange,
+  row,
+  type = 'text',
+}: {
+  field: keyof Omit<TicketRestaurantAbsencePreviewRow, 'id' | 'errors' | 'afectaTicket'>;
+  onChange: (
+    rowId: string,
+    field: keyof Omit<TicketRestaurantAbsencePreviewRow, 'id' | 'errors'>,
+    value: string | boolean,
+  ) => void;
+  row: TicketRestaurantAbsencePreviewRow;
+  type?: string;
+}) {
+  return (
+    <td className="px-1 py-1 align-top">
+      <input
+        className="w-full min-w-28 rounded-lg border border-metro-border bg-metro-surface px-2 py-1 text-xs text-metro-text outline-none focus:border-metro-red"
+        onChange={(event) => onChange(row.id, field, event.target.value)}
+        type={type}
+        value={String(row[field])}
+      />
+    </td>
+  );
+}
+
+function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
+  return `Ausencias guardadas: ${result.summary.nuevas} nuevas, ${result.summary.sustituidas} sustituidas, ${result.summary.duplicadas} duplicadas ignoradas, ${result.summary.invalidas} inválidas.`;
 }
 
 function SelectBox({

@@ -14,6 +14,30 @@ export interface TicketCalendarDraft {
   diasSinTicket: string[];
 }
 
+export interface TicketRestaurantAbsence {
+  id: string;
+  empleado: string;
+  nombreApellidos: string;
+  desde: string;
+  hasta: string;
+  motivo: string;
+  totalDias: number;
+  afectaTicket: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface TicketRestaurantAbsenceDraft {
+  empleado: string;
+  nombreApellidos: string;
+  desde: string;
+  hasta: string;
+  motivo: string;
+  totalDias: number;
+  afectaTicket: boolean;
+}
+
 export interface CalendarDay {
   fecha: string;
   diaMes: number;
@@ -99,6 +123,33 @@ export function toggleDiaSinTicket(calendar: TicketCalendar, fecha: string): Tic
   };
 }
 
+export function buildTicketRestaurantAbsence(
+  draft: TicketRestaurantAbsenceDraft,
+  now: string,
+  id: string,
+  previous?: TicketRestaurantAbsence,
+): TicketRestaurantAbsence {
+  return {
+    id,
+    empleado: draft.empleado.trim(),
+    nombreApellidos: draft.nombreApellidos.trim().replace(/\s+/g, ' '),
+    desde: draft.desde,
+    hasta: draft.hasta,
+    motivo: draft.motivo.trim().replace(/\s+/g, ' '),
+    totalDias: draft.totalDias,
+    afectaTicket: draft.afectaTicket,
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+    deletedAt: previous?.deletedAt ?? null,
+  };
+}
+
+export function visibleTicketRestaurantAbsences(
+  absences: TicketRestaurantAbsence[],
+): TicketRestaurantAbsence[] {
+  return absences.filter((absence) => !absence.deletedAt);
+}
+
 export function buildYearCalendar(calendar: TicketCalendar, year: number): CalendarMonth[] {
   const sinTicket = new Set(calendar.diasSinTicket);
 
@@ -142,7 +193,7 @@ function toIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function isIsoDate(value: string): boolean {
+export function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
