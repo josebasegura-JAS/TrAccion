@@ -1,5 +1,18 @@
 /// <reference types="vite/client" />
 
+interface ElectronParsedOutlookMsgResult {
+  ok: boolean;
+  message?: string;
+  data?: {
+    subject: string;
+    body: string;
+    htmlBody: string;
+    senderName: string;
+    senderEmail: string;
+    date: string;
+  };
+}
+
 interface EspecialOutlookDraftPayload {
   subject: string;
   html: string;
@@ -28,6 +41,11 @@ interface TraccionApi {
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
+  parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
+}
+
+interface RrllMsgApi {
+  parseOutlookMsg: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
 }
 
 interface RrllOutlookApi {
@@ -38,5 +56,6 @@ interface RrllOutlookApi {
 
 interface Window {
   traccion?: TraccionApi;
+  rrllMsg?: RrllMsgApi;
   rrllOutlook?: RrllOutlookApi;
 }

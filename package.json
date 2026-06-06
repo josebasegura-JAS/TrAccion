@@ -20,6 +20,7 @@
     "playwright:install": "playwright install"
   },
   "dependencies": {
+    "@kenjiuno/msgreader": "^1.15.0",
     "electron-is-dev": "^3.0.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

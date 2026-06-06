@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -354,6 +355,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle('especiales:create-outlook-draft', async (_event, payload: unknown) =>
     createOutlookDraft(payload),
   );
+
+  ipcMain.handle('msg:parseOutlookMsg', async (_event, payload: unknown) => {
+    try {
+      const buffer = normalizeOutlookMsgPayload(payload);
+      if (!buffer?.length) {
+        return { ok: false, message: 'Contenido .msg no válido.' };
+      }
+
+      return parseOutlookMsgBuffer(buffer);
+    } catch (error) {
+      console.error('Error parseando .msg:', error);
+      return { ok: false, message: 'No se ha podido importar el mensaje .msg.' };
+    }
+  });
 }
 
 app.whenReady().then(() => {

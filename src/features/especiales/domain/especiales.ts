@@ -437,47 +437,89 @@ export async function parseOutlookMsg(file: File): Promise<ParsedMsgResult> {
 
   try {
     const buffer = await file.arrayBuffer();
-    const rawIntranetParagraph = extractIntranetParagraphFromMsgBuffer(buffer);
-    const rawIntranetName = stripIntranetNameFromParagraph(rawIntranetParagraph);
-    const rawUtf16Text = decodeArrayBuffer(buffer, 'utf-16le');
-    const rawLatin1Text = decodeArrayBuffer(buffer, 'iso-8859-1');
-    const subject = decodeMimeWords(extractMsgSubject(rawUtf16Text, rawLatin1Text, file.name));
-    const body = decodeMimeWords(rawUtf16Text || rawLatin1Text);
-    const htmlBody = '';
-    const senderEmail = extractFirstEmail(`${rawUtf16Text}\n${rawLatin1Text}`);
-    const htmlText = stripHtmlToText(htmlBody);
-    const safeDetectionSources = [body, htmlText, rawUtf16Text, rawLatin1Text, subject].filter(Boolean);
-    const textForDetection = `${subject}\n${body}\n${htmlText}`;
-    const auto = detectAutoFields(textForDetection, subject, safeDetectionSources);
-
-    if (rawIntranetParagraph && !auto.intranetParagraph) {
-      auto.intranetParagraph = rawIntranetParagraph;
-    }
-    if (rawIntranetName && !auto.intranetName) {
-      auto.intranetName = rawIntranetName;
-      auto.enlace = rawIntranetName;
+    const electronParsed = await parseOutlookMsgWithElectron(buffer);
+    if (electronParsed.ok && electronParsed.data) {
+      return buildParsedMsgResult(electronParsed.data, buffer, file.name);
     }
 
-    const hasMainData = Boolean(auto.evento && auto.fecha && auto.hora);
-    const hasSomeMainData = [auto.evento, auto.fecha, auto.hora].filter(Boolean).length > 0;
-
-    return {
-      ok: Boolean(subject || body || htmlBody),
-      hasMainData,
-      partial: !hasMainData && hasSomeMainData,
-      data: {
-        subject,
-        body,
-        htmlBody,
-        senderName: '',
-        senderEmail,
-        date: '',
-        ...auto,
-      },
-    };
+    return buildParsedMsgResult(parseOutlookMsgWithBrowserFallback(buffer, file.name), buffer, file.name);
   } catch {
     return { ok: false, message: 'No se ha podido importar el mensaje .msg.' };
   }
+}
+
+async function parseOutlookMsgWithElectron(buffer: ArrayBuffer): Promise<{
+  ok: boolean;
+  message?: string;
+  data?: Pick<ParsedMsgData, 'subject' | 'body' | 'htmlBody' | 'senderName' | 'senderEmail' | 'date'>;
+}> {
+  const parser = window.rrllMsg?.parseOutlookMsg ?? window.traccion?.parseOutlookMsg;
+  if (!parser) {
+    return { ok: false, message: 'No existe API Electron para importar .msg.' };
+  }
+
+  return parser(buffer);
+}
+
+function parseOutlookMsgWithBrowserFallback(
+  buffer: ArrayBuffer,
+  fileName: string,
+): Pick<ParsedMsgData, 'subject' | 'body' | 'htmlBody' | 'senderName' | 'senderEmail' | 'date'> {
+  const rawUtf16Text = decodeArrayBuffer(buffer, 'utf-16le');
+  const rawLatin1Text = decodeArrayBuffer(buffer, 'iso-8859-1');
+
+  return {
+    subject: decodeMimeWords(extractMsgSubject(rawUtf16Text, rawLatin1Text, fileName)),
+    body: decodeMimeWords(rawUtf16Text || rawLatin1Text),
+    htmlBody: '',
+    senderName: '',
+    senderEmail: extractFirstEmail(`${rawUtf16Text}\n${rawLatin1Text}`),
+    date: '',
+  };
+}
+
+function buildParsedMsgResult(
+  parsed: Pick<ParsedMsgData, 'subject' | 'body' | 'htmlBody' | 'senderName' | 'senderEmail' | 'date'>,
+  buffer: ArrayBuffer,
+  fileName: string,
+): ParsedMsgResult {
+  const rawIntranetParagraph = extractIntranetParagraphFromMsgBuffer(buffer);
+  const rawIntranetName = stripIntranetNameFromParagraph(rawIntranetParagraph);
+  const rawUtf16Text = decodeArrayBuffer(buffer, 'utf-16le');
+  const rawLatin1Text = decodeArrayBuffer(buffer, 'iso-8859-1');
+  const subject = decodeMimeWords(parsed.subject || extractMsgSubject(rawUtf16Text, rawLatin1Text, fileName));
+  const body = decodeMimeWords(parsed.body || rawUtf16Text || rawLatin1Text);
+  const htmlBody = parsed.htmlBody || '';
+  const htmlText = stripHtmlToText(htmlBody);
+  const safeDetectionSources = [body, htmlText, rawUtf16Text, rawLatin1Text, subject].filter(Boolean);
+  const textForDetection = `${subject}\n${body}\n${htmlText}`;
+  const auto = detectAutoFields(textForDetection, subject, safeDetectionSources);
+
+  if (rawIntranetParagraph && !auto.intranetParagraph) {
+    auto.intranetParagraph = rawIntranetParagraph;
+  }
+  if (rawIntranetName && !auto.intranetName) {
+    auto.intranetName = rawIntranetName;
+    auto.enlace = rawIntranetName;
+  }
+
+  const hasMainData = Boolean(auto.evento && auto.fecha && auto.hora);
+  const hasSomeMainData = [auto.evento, auto.fecha, auto.hora].filter(Boolean).length > 0;
+
+  return {
+    ok: Boolean(subject || body || htmlBody),
+    hasMainData,
+    partial: !hasMainData && hasSomeMainData,
+    data: {
+      subject,
+      body,
+      htmlBody,
+      senderName: parsed.senderName,
+      senderEmail: parsed.senderEmail,
+      date: parsed.date,
+      ...auto,
+    },
+  };
 }
 
 function extractFirstIntranetParagraph(sources: string[]): string {
