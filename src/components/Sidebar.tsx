@@ -6,6 +6,7 @@ import {
   Home,
   MailPlus,
   Laptop,
+  Link2,
   Settings,
   Utensils,
   UsersRound,
@@ -20,6 +21,7 @@ export type AppView =
   | 'peticiones'
   | 'teletrabajo'
   | 'ticket-restaurante'
+  | 'vinculograma'
   | 'especiales'
   | 'ajustes';
 
@@ -85,6 +87,13 @@ export function Sidebar({
           type="button"
         >
           <Utensils size={18} /> Ticket Restaurante
+        </button>
+        <button
+          className={navButtonClass('vinculograma')}
+          onClick={() => onViewChange('vinculograma')}
+          type="button"
+        >
+          <Link2 size={18} /> Vinculograma
         </button>
         <button
           className={navButtonClass('especiales')}
