@@ -12,7 +12,8 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   buildYearCalendar,
-  calculateTicketMonth,
+  calculateMonthlyTicketOrder,
+  calculateTicketContribution,
   EMPTY_TICKET_CALENDAR_DRAFT,
   EMPTY_TICKET_PERSON_DRAFT,
   filterTicketRestaurantAbsencesByMonth,
@@ -62,7 +63,7 @@ function currentMonth(): number {
   return new Date().getMonth() + 1;
 }
 
-type TicketRestauranteSubview = 'calendarios' | 'personas' | 'calculo' | 'ausencias';
+type TicketRestauranteSubview = 'calendarios' | 'personas' | 'computoMensual' | 'computoCotizacion' | 'ausencias';
 
 function toPersonDraft(person: TicketPerson): TicketPersonDraft {
   return {
@@ -83,6 +84,7 @@ function toCalendarDraft(calendar: TicketCalendar): TicketCalendarDraft {
     nombre: calendar.nombre,
     activo: calendar.activo,
     diasSinTicket: calendar.diasSinTicket,
+    ticketIsoWeekdays: calendar.ticketIsoWeekdays,
   };
 }
 
@@ -162,9 +164,15 @@ export function TicketRestaurantePage() {
   );
   const monthCalculation = useMemo(
     () =>
-      calculateTicketMonth(people, calendars, absences, config, calculationYear, calculationMonth),
+      calculateMonthlyTicketOrder(people, calendars, absences, config, calculationYear, calculationMonth),
     [absences, calendars, calculationMonth, calculationYear, config, people],
   );
+  const contributionCalculation = useMemo(
+    () =>
+      calculateTicketContribution(people, calendars, absences, config, calculationYear, calculationMonth),
+    [absences, calendars, calculationMonth, calculationYear, config, people],
+  );
+
   const visibleAbsences = useMemo(
     () => filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth),
     [absenceMonth, absenceYear, absences],
@@ -422,9 +430,14 @@ export function TicketRestaurantePage() {
           onClick={() => setActiveSubview('personas')}
         />
         <SubviewButton
-          active={activeSubview === 'calculo'}
-          label="Cálculo mensual"
-          onClick={() => setActiveSubview('calculo')}
+          active={activeSubview === 'computoMensual'}
+          label="Cómputo mensual"
+          onClick={() => setActiveSubview('computoMensual')}
+        />
+        <SubviewButton
+          active={activeSubview === 'computoCotizacion'}
+          label="Cómputo cotización"
+          onClick={() => setActiveSubview('computoCotizacion')}
         />
         <SubviewButton
           active={activeSubview === 'ausencias'}
@@ -543,10 +556,22 @@ export function TicketRestaurantePage() {
           onSave={savePerson}
           people={visiblePeople}
         />
-      ) : activeSubview === 'calculo' ? (
+      ) : activeSubview === 'computoMensual' ? (
         <CalculationPanel
           calculation={monthCalculation}
           config={config}
+          mode="monthly"
+          month={calculationMonth}
+          onConfigChange={updateConfig}
+          onMonthChange={handleCalculationMonthChange}
+          onYearChange={handleCalculationYearChange}
+          year={calculationYear}
+        />
+      ) : activeSubview === 'computoCotizacion' ? (
+        <CalculationPanel
+          calculation={contributionCalculation}
+          config={config}
+          mode="contribution"
           month={calculationMonth}
           onConfigChange={updateConfig}
           onMonthChange={handleCalculationMonthChange}
@@ -648,6 +673,43 @@ function CalendarEditor({
           />
           Activo
         </label>
+        <div>
+          <p className="mb-1 text-xs font-semibold text-metro-text">Días con derecho a ticket</p>
+          <div className="grid grid-cols-7 gap-1">
+            {WEEK_DAYS.map((label, index) => {
+              const isoDay = index + 1;
+              const selectedDays = draft.ticketIsoWeekdays ?? [1, 2, 3, 4, 5];
+              const checked = selectedDays.includes(isoDay);
+
+              return (
+                <label
+                  className={
+                    checked
+                      ? 'rounded-lg border border-metro-red bg-metro-red/10 px-1 py-1 text-center text-xs font-bold text-metro-text'
+                      : 'rounded-lg border border-metro-border px-1 py-1 text-center text-xs font-bold text-metro-muted'
+                  }
+                  key={label}
+                >
+                  <input
+                    checked={checked}
+                    className="sr-only"
+                    onChange={(event) => {
+                      const currentDays = new Set(selectedDays);
+                      if (event.target.checked) currentDays.add(isoDay);
+                      else currentDays.delete(isoDay);
+                      onChange({
+                        ...draft,
+                        ticketIsoWeekdays: Array.from(currentDays).sort((first, second) => first - second),
+                      });
+                    }}
+                    type="checkbox"
+                  />
+                  {label}
+                </label>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex gap-2">
           <button
             className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
@@ -710,7 +772,7 @@ function CalendarList({
                   {calendar.nombre}
                 </p>
                 <p className="text-xs text-metro-muted">
-                  {calendar.activo ? 'Activo' : 'Inactivo'} · {calendar.diasSinTicket.length} días
+                  {calendar.activo ? 'Activo' : 'Inactivo'} · días {calendar.ticketIsoWeekdays.join('-')} · {calendar.diasSinTicket.length} días
                   sin ticket
                 </p>
               </div>
@@ -1062,14 +1124,16 @@ function PeoplePanel({
 function CalculationPanel({
   calculation,
   config,
+  mode,
   month,
   onConfigChange,
   onMonthChange,
   onYearChange,
   year,
 }: {
-  calculation: ReturnType<typeof calculateTicketMonth>;
+  calculation: ReturnType<typeof calculateMonthlyTicketOrder>;
   config: { importeTicket: number; pedidoMensual: number };
+  mode: 'monthly' | 'contribution';
   month: number;
   onConfigChange: (config: { importeTicket: number; pedidoMensual: number }) => void;
   onMonthChange: (value: string) => void;
@@ -1082,10 +1146,12 @@ function CalculationPanel({
         <div>
           <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
             <Calculator className="h-4 w-4 text-metro-red" />
-            Cálculo mensual
+            {mode === 'monthly' ? 'Cómputo mensual' : 'Cómputo cotización'}
           </h3>
           <p className="text-xs text-metro-muted">
-            Calcula tickets teóricos, ausencias del mes y deuda arrastrada pendiente.
+            {mode === 'monthly'
+              ? 'Calcula los tickets a pedir: días ticket del calendario menos ausencias del propio mes.'
+              : 'Calcula la cotización con ausencias a mes vencido y deuda pendiente anterior.'}
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
@@ -1159,13 +1225,19 @@ function CalculationPanel({
               <th className="px-2 py-1">nombre</th>
               <th className="px-2 py-1">calendario</th>
               <th className="px-2 py-1 text-right">teóricos</th>
-              <th className="px-2 py-1 text-right">sin ticket</th>
-              <th className="px-2 py-1 text-right">aus. mes</th>
-              <th className="px-2 py-1 text-right">deuda ent.</th>
-              <th className="px-2 py-1 text-right">descontado</th>
-              <th className="px-2 py-1 text-right">pendiente</th>
-              <th className="px-2 py-1 text-right">tickets</th>
-              <th className="px-2 py-1 text-right">importe</th>
+              {mode === 'monthly' ? (
+                <>
+                  <th className="px-2 py-1 text-right">ausencias</th>
+                  <th className="px-2 py-1 text-right">tickets a pedir</th>
+                  <th className="px-2 py-1 text-right">importe ticket</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-2 py-1 text-right">ausencias aplicadas</th>
+                  <th className="px-2 py-1 text-right">tickets finales</th>
+                  <th className="px-2 py-1 text-right">importe ticket</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-metro-border text-metro-text">
@@ -1175,20 +1247,24 @@ function CalculationPanel({
                 <td className="px-2 py-1">{row.nombreApellidos}</td>
                 <td className="px-2 py-1">{row.calendario}</td>
                 <td className="px-2 py-1 text-right">{row.diasTeoricos}</td>
-                <td className="px-2 py-1 text-right">{row.diasSinTicket}</td>
-                <td className="px-2 py-1 text-right">{row.ausenciasMes}</td>
-                <td className="px-2 py-1 text-right">{row.deudaEntrante}</td>
-                <td className="px-2 py-1 text-right">{row.ausenciasAplicadas}</td>
-                <td className="px-2 py-1 text-right font-semibold text-metro-red">
-                  {row.deudaPendiente}
-                </td>
-                <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
-                <td className="px-2 py-1 text-right">{row.importe.toFixed(2)} €</td>
+                {mode === 'monthly' ? (
+                  <>
+                    <td className="px-2 py-1 text-right">{row.ausenciasMes}</td>
+                    <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
+                    <td className="px-2 py-1 text-right">{config.importeTicket.toFixed(2)} €</td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-2 py-1 text-right">{row.ausenciasAplicadas}</td>
+                    <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
+                    <td className="px-2 py-1 text-right">{config.importeTicket.toFixed(2)} €</td>
+                  </>
+                )}
               </tr>
             ))}
             {calculation.rows.length === 0 ? (
               <tr>
-                <td className="px-2 py-4 text-center text-metro-muted" colSpan={11}>
+                <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
                   No hay personas activas para calcular.
                 </td>
               </tr>
@@ -1316,7 +1392,7 @@ function AbsencesTable({
             ))}
             {absences.length === 0 ? (
               <tr>
-                <td className="px-2 py-4 text-center text-metro-muted" colSpan={11}>
+                <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
                   No hay ausencias guardadas.
                 </td>
               </tr>

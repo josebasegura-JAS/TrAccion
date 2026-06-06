@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   buildTicketCalendar,
+  normalizeTicketIsoWeekdays,
   buildTicketPerson,
   splitTicketPersonFullName,
   DEFAULT_TICKET_RESTAURANT_CONFIG,
@@ -110,6 +111,14 @@ function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value i
 }
 
 
+
+function normalizeStoredTicketCalendar(calendar: TicketCalendar): TicketCalendar {
+  return {
+    ...calendar,
+    ticketIsoWeekdays: normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays),
+  };
+}
+
 function normalizeStoredTicketPerson(person: TicketPerson): TicketPerson {
   const nombreApellidos = person.nombreApellidos || [person.nombre, person.apellido1, person.apellido2]
     .filter(Boolean)
@@ -172,7 +181,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
   load: () => {
     set({
-      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar),
+      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar),
       absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
       people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
