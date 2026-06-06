@@ -119,11 +119,11 @@ const realZerkosRows = [
 ];
 
 describe('ticket restaurante calculation domain', () => {
-  it('arrastra deuda cuando no hay tickets suficientes en meses anteriores', () => {
+  it('arrastra deuda desde marzo cuando no hay tickets suficientes en meses anteriores', () => {
     const calendar = buildCalendar({
       diasSinTicket: Array.from(
-        { length: 31 },
-        (_, index) => `2026-01-${String(index + 1).padStart(2, '0')}`,
+        { length: 30 },
+        (_, index) => `2026-04-${String(index + 1).padStart(2, '0')}`,
       ),
     });
     const person = buildTicketPerson(
@@ -140,8 +140,8 @@ describe('ticket restaurante calculation domain', () => {
       {
         empleado: '123',
         nombreApellidos: 'Ana Metro',
-        desde: '2026-01-05',
-        hasta: '2026-01-09',
+        desde: '2026-03-02',
+        hasta: '2026-03-06',
         motivo: 'IT',
         totalDias: 5,
         afectaTicket: true,
@@ -150,32 +150,45 @@ describe('ticket restaurante calculation domain', () => {
       'absence-1',
     );
 
-    const january = calculateTicketMonth(
+    const march = calculateTicketMonth(
       [person],
       [calendar],
       [absence],
       { importeTicket: 16, pedidoMensual: 0 },
       2026,
-      1,
+      3,
     );
-    const february = calculateTicketMonth(
+    const april = calculateTicketMonth(
       [person],
       [calendar],
       [absence],
       { importeTicket: 16, pedidoMensual: 0 },
       2026,
-      2,
+      4,
+    );
+    const may = calculateTicketMonth(
+      [person],
+      [calendar],
+      [absence],
+      { importeTicket: 16, pedidoMensual: 0 },
+      2026,
+      5,
     );
 
-    expect(january.rows[0]).toMatchObject({
-      diasTeoricos: 0,
-      ausenciasMes: 5,
+    expect(march.rows[0]).toMatchObject({
       deudaEntrante: 0,
+      ausenciasAplicadas: 0,
+      deudaPendiente: 0,
+      ticketsFinales: 22,
+    });
+    expect(april.rows[0]).toMatchObject({
+      diasTeoricos: 0,
+      deudaEntrante: 5,
       ausenciasAplicadas: 0,
       deudaPendiente: 5,
       ticketsFinales: 0,
     });
-    expect(february.rows[0]).toMatchObject({
+    expect(may.rows[0]).toMatchObject({
       deudaEntrante: 5,
       ausenciasAplicadas: 5,
       deudaPendiente: 0,

@@ -86,6 +86,10 @@ export interface TicketRestaurantConfig {
 
 export interface TicketPersonCalculation {
   empleado: string;
+  nombre: string;
+  apellido1: string;
+  apellido2: string;
+  dni: string;
   nombreApellidos: string;
   puesto: string;
   calendario: string;
@@ -199,7 +203,9 @@ export function buildTicketCalendar(
     nombre: draft.nombre.trim(),
     activo: draft.activo,
     diasSinTicket: normalizeDiasSinTicket(draft.diasSinTicket),
-    ticketIsoWeekdays: normalizeTicketIsoWeekdays(draft.ticketIsoWeekdays ?? previous?.ticketIsoWeekdays),
+    ticketIsoWeekdays: normalizeTicketIsoWeekdays(
+      draft.ticketIsoWeekdays ?? previous?.ticketIsoWeekdays,
+    ),
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     deletedAt: previous?.deletedAt ?? null,
@@ -243,7 +249,9 @@ export function buildTicketPersonFullName(
   return partsName || cleanTicketPersonText(draft.nombreApellidos);
 }
 
-export function splitTicketPersonFullName(nombreApellidos: string): Pick<TicketPersonDraft, 'nombre' | 'apellido1' | 'apellido2'> {
+export function splitTicketPersonFullName(
+  nombreApellidos: string,
+): Pick<TicketPersonDraft, 'nombre' | 'apellido1' | 'apellido2'> {
   const parts = cleanTicketPersonText(nombreApellidos).split(' ').filter(Boolean);
   if (parts.length <= 1) {
     return { nombre: parts.join(' '), apellido1: '', apellido2: '' };
@@ -303,7 +311,15 @@ export function calculateMonthlyTicketOrder(
   year: number,
   month: number,
 ): TicketMonthCalculation {
-  return calculateTicketMonthInternal(people, calendars, absences, config, year, month, 'monthlyOrder');
+  return calculateTicketMonthInternal(
+    people,
+    calendars,
+    absences,
+    config,
+    year,
+    month,
+    'monthlyOrder',
+  );
 }
 
 export function calculateTicketContribution(
@@ -314,7 +330,15 @@ export function calculateTicketContribution(
   year: number,
   month: number,
 ): TicketMonthCalculation {
-  return calculateTicketMonthInternal(people, calendars, absences, config, year, month, 'contribution');
+  return calculateTicketMonthInternal(
+    people,
+    calendars,
+    absences,
+    config,
+    year,
+    month,
+    'contribution',
+  );
 }
 
 export function calculateTicketMonth(
@@ -407,6 +431,10 @@ function calculatePersonMonthlyOrder(
 
   return {
     empleado: person.empleado,
+    nombre: person.nombre,
+    apellido1: person.apellido1,
+    apellido2: person.apellido2,
+    dni: person.dni,
     nombreApellidos: person.nombreApellidos,
     puesto: person.puesto,
     calendario: calendar?.nombre ?? 'Sin calendario',
@@ -418,7 +446,9 @@ function calculatePersonMonthlyOrder(
     deudaPendiente: 0,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * config.importeTicket),
-    ausenciaIds: getPersonMonthAbsences(person.empleado, absences, monthStart, monthEnd).map((absence) => absence.id),
+    ausenciaIds: getPersonMonthAbsences(person.empleado, absences, monthStart, monthEnd).map(
+      (absence) => absence.id,
+    ),
   };
 }
 
@@ -430,30 +460,103 @@ function calculatePersonContribution(
   year: number,
   month: number,
 ): TicketPersonCalculation {
-  const monthStart = toIsoDate(year, month, 1);
   const ticketDays = calendar ? buildMonthTicketDays(calendar, year, month) : [];
-  const debtDays = calendar
-    ? buildPendingContributionAbsenceDays(person, calendar, absences, monthStart)
-    : new Set<string>();
-  const ausenciasAplicadas = Math.min(ticketDays.length, debtDays.size);
-  const deudaPendiente = Math.max(0, debtDays.size - ausenciasAplicadas);
-  const ticketsFinales = Math.max(0, ticketDays.length - ausenciasAplicadas);
+  const debtStatus = calendar
+    ? calculatePersonContributionDebtStatus(person, calendar, absences, year, month)
+    : { deudaEntrante: 0, ausenciasAplicadas: 0, deudaPendiente: 0, ausenciaIds: [] };
+  const ticketsFinales = Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
 
   return {
     empleado: person.empleado,
+    nombre: person.nombre,
+    apellido1: person.apellido1,
+    apellido2: person.apellido2,
+    dni: person.dni,
     nombreApellidos: person.nombreApellidos,
     puesto: person.puesto,
     calendario: calendar?.nombre ?? 'Sin calendario',
     diasTeoricos: ticketDays.length,
     diasSinTicket: calendar ? countMonthNoTicketDays(calendar, year, month) : 0,
     ausenciasMes: 0,
-    deudaEntrante: debtDays.size,
-    ausenciasAplicadas,
-    deudaPendiente,
+    deudaEntrante: debtStatus.deudaEntrante,
+    ausenciasAplicadas: debtStatus.ausenciasAplicadas,
+    deudaPendiente: debtStatus.deudaPendiente,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * config.importeTicket),
-    ausenciaIds: getPersonAbsencesBefore(person.empleado, absences, monthStart).map((absence) => absence.id),
+    ausenciaIds: debtStatus.ausenciaIds,
   };
+}
+
+interface ContributionDebtStatus {
+  deudaEntrante: number;
+  ausenciasAplicadas: number;
+  deudaPendiente: number;
+  ausenciaIds: string[];
+}
+
+function calculatePersonContributionDebtStatus(
+  person: TicketPerson,
+  calendar: TicketCalendar,
+  absences: readonly TicketRestaurantAbsence[],
+  targetYear: number,
+  targetMonth: number,
+): ContributionDebtStatus {
+  const targetMonthStart = toIsoDate(targetYear, targetMonth, 1);
+  const firstContributionMonthStart = '2026-04-01';
+  if (targetMonthStart < firstContributionMonthStart) {
+    return { deudaEntrante: 0, ausenciasAplicadas: 0, deudaPendiente: 0, ausenciaIds: [] };
+  }
+
+  let debt = 0;
+  const absenceIds = new Set<string>();
+  let cursorYear = 2026;
+  let cursorMonth = 4;
+
+  while (toIsoDate(cursorYear, cursorMonth, 1) <= targetMonthStart) {
+    const previousMonth = addMonths(cursorYear, cursorMonth, -1);
+    const previousMonthStart = toIsoDate(previousMonth.year, previousMonth.month, 1);
+    const previousMonthEnd = toIsoDate(
+      previousMonth.year,
+      previousMonth.month,
+      new Date(Date.UTC(previousMonth.year, previousMonth.month, 0)).getUTCDate(),
+    );
+    const previousMonthDebt = buildPersonAbsenceTicketDays(
+      person,
+      calendar,
+      absences,
+      maxIsoDate(previousMonthStart, '2026-03-01'),
+      previousMonthEnd,
+    );
+    debt += previousMonthDebt.size;
+    getPersonMonthAbsences(person.empleado, absences, previousMonthStart, previousMonthEnd)
+      .filter((absence) => absence.hasta >= '2026-03-01')
+      .forEach((absence) => absenceIds.add(absence.id));
+
+    const availableTickets = buildMonthTicketDays(calendar, cursorYear, cursorMonth).length;
+    const applied = Math.min(availableTickets, debt);
+    const pending = debt - applied;
+
+    if (cursorYear === targetYear && cursorMonth === targetMonth) {
+      return {
+        deudaEntrante: debt,
+        ausenciasAplicadas: applied,
+        deudaPendiente: pending,
+        ausenciaIds: Array.from(absenceIds),
+      };
+    }
+
+    debt = pending;
+    const nextMonth = addMonths(cursorYear, cursorMonth, 1);
+    cursorYear = nextMonth.year;
+    cursorMonth = nextMonth.month;
+  }
+
+  return { deudaEntrante: 0, ausenciasAplicadas: 0, deudaPendiente: 0, ausenciaIds: [] };
+}
+
+function addMonths(year: number, month: number, offset: number): { year: number; month: number } {
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
 }
 
 function buildMonthTicketDays(calendar: TicketCalendar, year: number, month: number): string[] {
@@ -485,34 +588,15 @@ function buildPersonAbsenceTicketDays(
       return;
     }
 
-    forEachIsoDate(maxIsoDate(absence.desde, monthStart), minIsoDate(absence.hasta, monthEnd), (fecha) => {
-      if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) {
-        dates.add(fecha);
-      }
-    });
-  });
-  return dates;
-}
-
-function buildPendingContributionAbsenceDays(
-  person: TicketPerson,
-  calendar: TicketCalendar,
-  absences: readonly TicketRestaurantAbsence[],
-  targetMonthStart: string,
-): Set<string> {
-  const dates = new Set<string>();
-  const noTicket = new Set(calendar.diasSinTicket);
-  const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
-  getPersonAbsencesBefore(person.empleado, absences, targetMonthStart).forEach((absence) => {
-    if (absenceIsNonDiscountableByCalendar(absence, calendar)) {
-      return;
-    }
-
-    forEachIsoDate(absence.desde, minIsoDate(absence.hasta, previousIsoDate(targetMonthStart)), (fecha) => {
-      if (fecha >= '2026-03-01' && calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) {
-        dates.add(fecha);
-      }
-    });
+    forEachIsoDate(
+      maxIsoDate(absence.desde, monthStart),
+      minIsoDate(absence.hasta, monthEnd),
+      (fecha) => {
+        if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) {
+          dates.add(fecha);
+        }
+      },
+    );
   });
   return dates;
 }
@@ -531,12 +615,22 @@ function getIsoWeekday(fecha: string): number {
   return day === 0 ? 7 : day;
 }
 
-function absenceIsNonDiscountableByCalendar(absence: TicketRestaurantAbsence, calendar: TicketCalendar): boolean {
-  return normalizePlainText(absence.motivo) === 'sin' && normalizePlainText(calendar.nombre) === 'liberados';
+function absenceIsNonDiscountableByCalendar(
+  absence: TicketRestaurantAbsence,
+  calendar: TicketCalendar,
+): boolean {
+  return (
+    normalizePlainText(absence.motivo) === 'sin' &&
+    normalizePlainText(calendar.nombre) === 'liberados'
+  );
 }
 
 function normalizePlainText(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 function getPersonMonthAbsences(
@@ -555,20 +649,6 @@ function getPersonMonthAbsences(
   );
 }
 
-function getPersonAbsencesBefore(
-  empleado: string,
-  absences: readonly TicketRestaurantAbsence[],
-  targetMonthStart: string,
-): TicketRestaurantAbsence[] {
-  return absences.filter(
-    (absence) =>
-      !absence.deletedAt &&
-      absence.afectaTicket &&
-      absence.empleado === empleado &&
-      absence.desde < targetMonthStart,
-  );
-}
-
 function forEachIsoDate(from: string, to: string, visitor: (fecha: string) => void): void {
   const cursor = new Date(`${from}T00:00:00.000Z`);
   const end = new Date(`${to}T00:00:00.000Z`);
@@ -576,12 +656,6 @@ function forEachIsoDate(from: string, to: string, visitor: (fecha: string) => vo
     visitor(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-}
-
-function previousIsoDate(fecha: string): string {
-  const date = new Date(`${fecha}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() - 1);
-  return date.toISOString().slice(0, 10);
 }
 
 function minIsoDate(first: string, second: string): string {
@@ -595,7 +669,9 @@ function maxIsoDate(first: string, second: string): string {
 function countMonthNoTicketDays(calendar: TicketCalendar, year: number, month: number): number {
   const prefix = `${year}-${String(month).padStart(2, '0')}-`;
   const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
-  return calendar.diasSinTicket.filter((fecha) => fecha.startsWith(prefix) && ticketIsoWeekdays.has(getIsoWeekday(fecha))).length;
+  return calendar.diasSinTicket.filter(
+    (fecha) => fecha.startsWith(prefix) && ticketIsoWeekdays.has(getIsoWeekday(fecha)),
+  ).length;
 }
 
 function roundCurrency(value: number): number {

@@ -3,9 +3,11 @@ import {
   Calculator,
   ChevronLeft,
   ChevronRight,
+  FileDown,
   FileUp,
   Pencil,
   Plus,
+  Printer,
   Save,
   Trash2,
 } from 'lucide-react';
@@ -63,7 +65,12 @@ function currentMonth(): number {
   return new Date().getMonth() + 1;
 }
 
-type TicketRestauranteSubview = 'calendarios' | 'personas' | 'computoMensual' | 'computoCotizacion' | 'ausencias';
+type TicketRestauranteSubview =
+  | 'calendarios'
+  | 'personas'
+  | 'computoMensual'
+  | 'computoCotizacion'
+  | 'ausencias';
 
 function toPersonDraft(person: TicketPerson): TicketPersonDraft {
   return {
@@ -92,6 +99,164 @@ function sortByName(calendars: TicketCalendar[]): TicketCalendar[] {
   return [...calendars].sort((first, second) =>
     first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
   );
+}
+
+const PEOPLE_EXPORT_HEADERS = [
+  'Nº empleado',
+  'Nombre',
+  'Apellido1',
+  'Apellido2',
+  'DNI',
+  'Puesto',
+  'Calendario',
+];
+const ABSENCE_MODEL_HEADERS = [
+  'Nº empleado',
+  'Nombre y apellidos',
+  'Desde',
+  'Hasta',
+  'Motivo',
+  'Total días',
+];
+const MONTHLY_EXPORT_HEADERS = [
+  'Nombre',
+  'Apellido1',
+  'Apellido2',
+  'DNI',
+  'Pedido',
+  'Nº Emp',
+  'Numero Tickets',
+  'Importe',
+  'Total',
+  'Fec Inicio',
+  'Fec Cad',
+  'Hoja Gastos',
+  'Ausencias',
+];
+const CONTRIBUTION_EXPORT_HEADERS = [
+  'Nº empleado',
+  'Nombre y apellidos',
+  'Calendario',
+  'Número de días con ticket',
+  'Importe ticket',
+];
+
+function exportCsv(
+  filename: string,
+  headers: readonly string[],
+  rows: readonly (readonly (string | number)[])[],
+): void {
+  const csv = [headers, ...rows].map((row) => row.map(formatCsvValue).join(';')).join('\n');
+  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function formatCsvValue(value: string | number): string {
+  const text = String(value);
+  return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function printTable(
+  title: string,
+  headers: readonly string[],
+  rows: readonly (readonly (string | number)[])[],
+): void {
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  if (!printWindow) {
+    return;
+  }
+
+  const tableRows = rows
+    .map(
+      (row) => `<tr>${row.map((value) => `<td>${escapeHtml(String(value))}</td>`).join('')}</tr>`,
+    )
+    .join('');
+  printWindow.document.write(
+    `<!doctype html><html><head><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:24px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #999;padding:4px;text-align:left}th{background:#eee}</style></head><body><h1>${escapeHtml(title)}</h1><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`,
+  );
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildPeopleExportRows(
+  people: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+): (string | number)[][] {
+  return people.map((person) => [
+    person.empleado,
+    person.nombre,
+    person.apellido1,
+    person.apellido2,
+    person.dni,
+    person.puesto,
+    calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? '',
+  ]);
+}
+
+function buildMonthlyExportRows(
+  rows: readonly TicketPersonCalculation[],
+  importeTicket: number,
+  pedidoMensual: number,
+): (string | number)[][] {
+  return rows.map((row) => [
+    row.nombre,
+    row.apellido1,
+    row.apellido2,
+    row.dni,
+    pedidoMensual,
+    row.empleado,
+    row.ticketsFinales,
+    importeTicket.toFixed(2),
+    row.importe.toFixed(2),
+    '',
+    '',
+    '',
+    row.ausenciasMes,
+  ]);
+}
+
+function buildContributionExportRows(
+  rows: readonly TicketPersonCalculation[],
+  importeTicket: number,
+): (string | number)[][] {
+  return rows.map((row) => [
+    row.empleado,
+    row.nombreApellidos,
+    row.calendario,
+    row.ticketsFinales,
+    importeTicket.toFixed(2),
+  ]);
+}
+
+function toAbsencePreviewRow(absence: TicketRestaurantAbsence): TicketRestaurantAbsencePreviewRow {
+  return {
+    id: `preview-edit-${absence.id}`,
+    empleado: absence.empleado,
+    nombreApellidos: absence.nombreApellidos,
+    desde: absence.desde,
+    hasta: absence.hasta,
+    motivo: absence.motivo,
+    totalDias: String(absence.totalDias),
+    afectaTicket: absence.afectaTicket,
+    errors: [],
+  };
 }
 
 export function TicketRestaurantePage() {
@@ -130,6 +295,7 @@ export function TicketRestaurantePage() {
   const [importMessage, setImportMessage] = useState('');
   const [peopleImportMessage, setPeopleImportMessage] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const peopleFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -164,12 +330,26 @@ export function TicketRestaurantePage() {
   );
   const monthCalculation = useMemo(
     () =>
-      calculateMonthlyTicketOrder(people, calendars, absences, config, calculationYear, calculationMonth),
+      calculateMonthlyTicketOrder(
+        people,
+        calendars,
+        absences,
+        config,
+        calculationYear,
+        calculationMonth,
+      ),
     [absences, calendars, calculationMonth, calculationYear, config, people],
   );
   const contributionCalculation = useMemo(
     () =>
-      calculateTicketContribution(people, calendars, absences, config, calculationYear, calculationMonth),
+      calculateTicketContribution(
+        people,
+        calendars,
+        absences,
+        config,
+        calculationYear,
+        calculationMonth,
+      ),
     [absences, calendars, calculationMonth, calculationYear, config, people],
   );
 
@@ -221,11 +401,7 @@ export function TicketRestaurantePage() {
   };
 
   const savePerson = () => {
-    if (
-      !personDraft.empleado.trim() ||
-      !personDraft.nombre.trim() ||
-      !personDraft.calendarId
-    ) {
+    if (!personDraft.empleado.trim() || !personDraft.nombre.trim() || !personDraft.calendarId) {
       return;
     }
 
@@ -240,7 +416,8 @@ export function TicketRestaurantePage() {
 
   const removeCalendarAndPeople = (calendarId: string) => {
     const associatedPeople = visiblePeople.filter((person) => person.calendarId === calendarId);
-    const calendarName = calendars.find((calendar) => calendar.id === calendarId)?.nombre ?? 'este calendario';
+    const calendarName =
+      calendars.find((calendar) => calendar.id === calendarId)?.nombre ?? 'este calendario';
 
     if (associatedPeople.length > 0) {
       const confirmed = window.confirm(
@@ -308,11 +485,11 @@ export function TicketRestaurantePage() {
       return;
     }
 
+    setEditingAbsenceId(null);
     setPreviewRows(rows);
     setImportMessage('');
     setIsPreviewOpen(true);
   };
-
 
   const handlePeopleImportFile = async (file: File | null) => {
     if (!file) {
@@ -325,16 +502,20 @@ export function TicketRestaurantePage() {
     }
 
     if (result.drafts.length === 0) {
-      setPeopleImportMessage('No se ha importado ninguna persona. Revisa Nº empleado y Calendario.');
+      setPeopleImportMessage(
+        'No se ha importado ninguna persona. Revisa Nº empleado y Calendario.',
+      );
       return;
     }
 
     const saveResult = importPeople(result.drafts);
-    const missingText = result.missingEmployees.length > 0
-      ? ` · No encontrados en Plantilla: ${result.missingEmployees.join(', ')}`
-      : '';
+    const missingText =
+      result.missingEmployees.length > 0
+        ? ` · No encontrados en Plantilla: ${result.missingEmployees.join(', ')}`
+        : '';
     const ignoredText = result.ignored > 0 ? ` · Filas ignoradas: ${result.ignored}` : '';
-    const duplicateText = result.duplicateRows > 0 ? ` · Duplicados en Excel: ${result.duplicateRows}` : '';
+    const duplicateText =
+      result.duplicateRows > 0 ? ` · Duplicados en Excel: ${result.duplicateRows}` : '';
 
     setPeopleImportMessage(
       `Personas importadas/actualizadas: ${saveResult.imported} · Calendarios creados: ${saveResult.createdCalendars}${ignoredText}${duplicateText}${missingText}`,
@@ -373,7 +554,10 @@ export function TicketRestaurantePage() {
   };
 
   const savePreviewRows = () => {
-    const result = saveTicketRestaurantAbsencePreviewRows(absences, previewRows);
+    const currentAbsences = editingAbsenceId
+      ? absences.filter((absence) => absence.id !== editingAbsenceId)
+      : absences;
+    const result = saveTicketRestaurantAbsencePreviewRows(currentAbsences, previewRows);
     if (result.errors.length > 0) {
       setPreviewRows(validateTicketRestaurantAbsencePreviewRows(previewRows));
       setImportMessage(result.errors.join(' '));
@@ -383,7 +567,15 @@ export function TicketRestaurantePage() {
     saveAbsences(result.absences);
     setImportMessage(formatSaveSummary(result));
     setPreviewRows([]);
+    setEditingAbsenceId(null);
     setIsPreviewOpen(false);
+  };
+
+  const editAbsence = (absence: TicketRestaurantAbsence) => {
+    setEditingAbsenceId(absence.id);
+    setPreviewRows([toAbsencePreviewRow(absence)]);
+    setImportMessage('Edita la ausencia y confirma para guardar los cambios.');
+    setIsPreviewOpen(true);
   };
 
   return (
@@ -551,7 +743,24 @@ export function TicketRestaurantePage() {
           onChange={setPersonDraft}
           onEdit={editPerson}
           importMessage={peopleImportMessage}
+          onExport={() =>
+            exportCsv(
+              'ticket-restaurante-personas.csv',
+              PEOPLE_EXPORT_HEADERS,
+              buildPeopleExportRows(visiblePeople, visibleCalendars),
+            )
+          }
+          onExportModel={() =>
+            exportCsv('modelo-personas-ticket-restaurante.csv', PEOPLE_EXPORT_HEADERS, [])
+          }
           onImport={() => peopleFileInputRef.current?.click()}
+          onPrint={() =>
+            printTable(
+              'Personas Ticket Restaurante',
+              PEOPLE_EXPORT_HEADERS,
+              buildPeopleExportRows(visiblePeople, visibleCalendars),
+            )
+          }
           onRemove={removePerson}
           onSave={savePerson}
           people={visiblePeople}
@@ -563,7 +772,29 @@ export function TicketRestaurantePage() {
           mode="monthly"
           month={calculationMonth}
           onConfigChange={updateConfig}
+          onExport={() =>
+            exportCsv(
+              `ticket-restaurante-computo-mensual-${calculationYear}-${String(calculationMonth).padStart(2, '0')}.csv`,
+              MONTHLY_EXPORT_HEADERS,
+              buildMonthlyExportRows(
+                monthCalculation.rows,
+                config.importeTicket,
+                config.pedidoMensual,
+              ),
+            )
+          }
           onMonthChange={handleCalculationMonthChange}
+          onPrint={() =>
+            printTable(
+              'Cómputo mensual Ticket Restaurante',
+              MONTHLY_EXPORT_HEADERS,
+              buildMonthlyExportRows(
+                monthCalculation.rows,
+                config.importeTicket,
+                config.pedidoMensual,
+              ),
+            )
+          }
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
@@ -574,7 +805,21 @@ export function TicketRestaurantePage() {
           mode="contribution"
           month={calculationMonth}
           onConfigChange={updateConfig}
+          onExport={() =>
+            exportCsv(
+              `ticket-restaurante-computo-cotizacion-${calculationYear}-${String(calculationMonth).padStart(2, '0')}.csv`,
+              CONTRIBUTION_EXPORT_HEADERS,
+              buildContributionExportRows(contributionCalculation.rows, config.importeTicket),
+            )
+          }
           onMonthChange={handleCalculationMonthChange}
+          onPrint={() =>
+            printTable(
+              'Cómputo cotización Ticket Restaurante',
+              CONTRIBUTION_EXPORT_HEADERS,
+              buildContributionExportRows(contributionCalculation.rows, config.importeTicket),
+            )
+          }
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
@@ -583,6 +828,10 @@ export function TicketRestaurantePage() {
           absences={visibleAbsences}
           importMessage={importMessage}
           month={absenceMonth}
+          onEdit={editAbsence}
+          onExportModel={() =>
+            exportCsv('modelo-ausencias-ticket-restaurante.csv', ABSENCE_MODEL_HEADERS, [])
+          }
           onImport={() => fileInputRef.current?.click()}
           onMonthChange={handleAbsenceMonthChange}
           onRemove={removeAbsence}
@@ -596,6 +845,7 @@ export function TicketRestaurantePage() {
           onAdd={addPreviewRow}
           onCancel={() => {
             setIsPreviewOpen(false);
+            setEditingAbsenceId(null);
             setPreviewRows([]);
           }}
           onChange={updatePreviewRow}
@@ -699,7 +949,9 @@ function CalendarEditor({
                       else currentDays.delete(isoDay);
                       onChange({
                         ...draft,
-                        ticketIsoWeekdays: Array.from(currentDays).sort((first, second) => first - second),
+                        ticketIsoWeekdays: Array.from(currentDays).sort(
+                          (first, second) => first - second,
+                        ),
                       });
                     }}
                     type="checkbox"
@@ -772,8 +1024,9 @@ function CalendarList({
                   {calendar.nombre}
                 </p>
                 <p className="text-xs text-metro-muted">
-                  {calendar.activo ? 'Activo' : 'Inactivo'} · días {calendar.ticketIsoWeekdays.join('-')} · {calendar.diasSinTicket.length} días
-                  sin ticket
+                  {calendar.activo ? 'Activo' : 'Inactivo'} · días{' '}
+                  {calendar.ticketIsoWeekdays.join('-')} · {calendar.diasSinTicket.length} días sin
+                  ticket
                 </p>
               </div>
               <button
@@ -908,7 +1161,10 @@ function PeoplePanel({
   onCancel,
   onChange,
   onEdit,
+  onExport,
+  onExportModel,
   onImport,
+  onPrint,
   onRemove,
   onSave,
   people,
@@ -920,7 +1176,10 @@ function PeoplePanel({
   onCancel: () => void;
   onChange: (draft: TicketPersonDraft) => void;
   onEdit: (person: TicketPerson) => void;
+  onExport: () => void;
+  onExportModel: () => void;
   onImport: () => void;
+  onPrint: () => void;
   onRemove: (empleado: string) => void;
   onSave: () => void;
   people: TicketPerson[];
@@ -1035,7 +1294,31 @@ function PeoplePanel({
               <p className="mt-1 max-w-2xl text-xs text-metro-muted">{importMessage}</p>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+              onClick={onExport}
+              type="button"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              Exportar personas
+            </button>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+              onClick={onExportModel}
+              type="button"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              Modelo personas
+            </button>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+              onClick={onPrint}
+              type="button"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Imprimir
+            </button>
             <button
               className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
               onClick={onImport}
@@ -1053,13 +1336,13 @@ function PeoplePanel({
           <table className="min-w-full text-left text-xs">
             <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
               <tr>
-                <th className="px-2 py-1">empleado</th>
-                <th className="px-2 py-1">nombre</th>
-                <th className="px-2 py-1">apellido 1</th>
-                <th className="px-2 py-1">apellido 2</th>
-                <th className="px-2 py-1">dni</th>
-                <th className="px-2 py-1">puesto</th>
-                <th className="px-2 py-1">calendario</th>
+                <th className="px-2 py-1">Nº empleado</th>
+                <th className="px-2 py-1">Nombre</th>
+                <th className="px-2 py-1">Apellido1</th>
+                <th className="px-2 py-1">Apellido2</th>
+                <th className="px-2 py-1">DNI</th>
+                <th className="px-2 py-1">Puesto</th>
+                <th className="px-2 py-1">Calendario</th>
                 <th className="px-2 py-1">estado</th>
                 <th className="px-2 py-1">acciones</th>
               </tr>
@@ -1094,7 +1377,11 @@ function PeoplePanel({
                       <button
                         className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
                         onClick={() => {
-                          if (window.confirm(`¿Eliminar la persona con Nº empleado ${person.empleado}?`)) {
+                          if (
+                            window.confirm(
+                              `¿Eliminar la persona con Nº empleado ${person.empleado}?`,
+                            )
+                          ) {
                             onRemove(person.empleado);
                           }
                         }}
@@ -1127,7 +1414,9 @@ function CalculationPanel({
   mode,
   month,
   onConfigChange,
+  onExport,
   onMonthChange,
+  onPrint,
   onYearChange,
   year,
 }: {
@@ -1136,7 +1425,9 @@ function CalculationPanel({
   mode: 'monthly' | 'contribution';
   month: number;
   onConfigChange: (config: { importeTicket: number; pedidoMensual: number }) => void;
+  onExport: () => void;
   onMonthChange: (value: string) => void;
+  onPrint: () => void;
   onYearChange: (value: string) => void;
   year: number;
 }) {
@@ -1153,6 +1444,24 @@ function CalculationPanel({
               ? 'Calcula los tickets a pedir: días ticket del calendario menos ausencias del propio mes.'
               : 'Calcula la cotización con ausencias a mes vencido y deuda pendiente anterior.'}
           </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onExport}
+            type="button"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            Exportar
+          </button>
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onPrint}
+            type="button"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Imprimir
+          </button>
         </div>
         <div className="grid gap-2 sm:grid-cols-4">
           <select
@@ -1289,6 +1598,8 @@ function AbsencesTable({
   absences,
   importMessage,
   month,
+  onEdit,
+  onExportModel,
   onImport,
   onMonthChange,
   onRemove,
@@ -1298,6 +1609,8 @@ function AbsencesTable({
   absences: TicketRestaurantAbsence[];
   importMessage: string;
   month: number;
+  onEdit: (absence: TicketRestaurantAbsence) => void;
+  onExportModel: () => void;
   onImport: () => void;
   onMonthChange: (value: string) => void;
   onRemove: (id: string) => void;
@@ -1314,14 +1627,24 @@ function AbsencesTable({
           </p>
         </div>
         <div className="flex flex-col items-start gap-1.5 lg:items-end">
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-            onClick={onImport}
-            type="button"
-          >
-            <FileUp className="h-3.5 w-3.5" />
-            Importar ausencias
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+              onClick={onExportModel}
+              type="button"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              Modelo ausencias
+            </button>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+              onClick={onImport}
+              type="button"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              Importar ausencias
+            </button>
+          </div>
           {importMessage ? (
             <p className="max-w-sm text-xs text-metro-muted">{importMessage}</p>
           ) : null}
@@ -1359,19 +1682,19 @@ function AbsencesTable({
         <table className="min-w-full text-left text-xs">
           <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
             <tr>
-              <th className="px-2 py-1">empleado</th>
-              <th className="px-2 py-1">nombreApellidos</th>
-              <th className="px-2 py-1">desde</th>
-              <th className="px-2 py-1">hasta</th>
-              <th className="px-2 py-1">motivo</th>
-              <th className="px-2 py-1">totalDias</th>
-              <th className="px-2 py-1">afectaTicket</th>
+              <th className="px-2 py-1">Nº empleado</th>
+              <th className="px-2 py-1">Nombre y apellidos</th>
+              <th className="px-2 py-1">Desde</th>
+              <th className="px-2 py-1">Hasta</th>
+              <th className="px-2 py-1">Motivo</th>
+              <th className="px-2 py-1">Total días</th>
+              <th className="px-2 py-1">Afecta ticket</th>
               <th className="px-2 py-1">acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-metro-border text-metro-text">
             {absences.map((absence) => (
-              <tr key={absence.id}>
+              <tr key={absence.id} onDoubleClick={() => onEdit(absence)}>
                 <td className="px-2 py-1 font-semibold">{absence.empleado}</td>
                 <td className="px-2 py-1">{absence.nombreApellidos}</td>
                 <td className="px-2 py-1">{absence.desde}</td>
@@ -1451,6 +1774,7 @@ function AbsencePreviewModal({
                 <th className="px-1 py-1">Hasta</th>
                 <th className="px-1 py-1">Motivo</th>
                 <th className="px-1 py-1">Total días</th>
+                <th className="px-1 py-1">Afecta ticket</th>
                 <th className="px-1 py-1">Acciones</th>
               </tr>
             </thead>
@@ -1463,6 +1787,14 @@ function AbsencePreviewModal({
                   <PreviewInput field="hasta" onChange={onChange} row={row} type="date" />
                   <PreviewInput field="motivo" onChange={onChange} row={row} />
                   <PreviewInput field="totalDias" onChange={onChange} row={row} type="number" />
+                  <td className="px-1 py-1 align-top text-center">
+                    <input
+                      checked={row.afectaTicket}
+                      className="h-4 w-4 accent-metro-red"
+                      onChange={(event) => onChange(row.id, 'afectaTicket', event.target.checked)}
+                      type="checkbox"
+                    />
+                  </td>
                   <td className="px-1 py-1 align-top">
                     <button
                       className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
