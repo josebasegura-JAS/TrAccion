@@ -335,7 +335,6 @@ export function stripHtmlToText(html: string): string {
 
 export function cleanEventFromSubject(subject: string): string {
   return subject
-    .replace(/^\s*bec\b/gi, ' ')
     .replace(/\b(?:servicio\s+especial|concierto|evento)\b/gi, ' ')
     .replace(/\b(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/gi, ' ')
     .replace(/\b\d{1,2}[/ .-]\d{1,2}[/ .-]\d{2,4}\b/g, ' ')
@@ -529,20 +528,30 @@ function isCleanIntranetCandidate(value: string): boolean {
   if (!text || text.length < 4 || text.length > 140) {
     return false;
   }
-  const hasInvalidControlCharacter = [...text].some((char) => {
-    const code = char.charCodeAt(0);
-
-    return code <= 0x08 || code === 0x0b || code === 0x0c || (code >= 0x0e && code <= 0x1f) || code === 0xfffd;
-  });
-
-  if (hasInvalidControlCharacter) {
+  if (hasForbiddenControlCharacter(text)) {
     return false;
   }
-  if (new RegExp('[{}\\[\\]\\x7f]').test(text)) {
+  if (hasForbiddenStructuralCharacter(text)) {
     return false;
   }
   const readable = (text.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]/g) || []).length;
   return readable / text.length >= 0.55;
+}
+
+
+function hasForbiddenControlCharacter(text: string): boolean {
+  for (const char of text) {
+    const code = char.charCodeAt(0);
+    if (code === 0xfffd || code <= 0x08 || code === 0x0b || code === 0x0c || (code >= 0x0e && code <= 0x1f)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasForbiddenStructuralCharacter(text: string): boolean {
+  return text.includes('{') || text.includes('}') || text.includes('[') || text.includes(']') || text.includes(String.fromCharCode(0x7f));
 }
 
 function normalizePlainText(value: string): string {
