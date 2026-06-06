@@ -4,6 +4,7 @@ import {
   Database,
   FileText,
   Home,
+  MailPlus,
   Laptop,
   Settings,
   Utensils,
@@ -19,6 +20,7 @@ export type AppView =
   | 'peticiones'
   | 'teletrabajo'
   | 'ticket-restaurante'
+  | 'especiales'
   | 'ajustes';
 
 export function Sidebar({
@@ -83,6 +85,13 @@ export function Sidebar({
           type="button"
         >
           <Utensils size={18} /> Ticket Restaurante
+        </button>
+        <button
+          className={navButtonClass('especiales')}
+          onClick={() => onViewChange('especiales')}
+          type="button"
+        >
+          <MailPlus size={18} /> Especiales
         </button>
         <button
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white/60"
