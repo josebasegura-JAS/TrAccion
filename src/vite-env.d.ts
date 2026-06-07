@@ -99,6 +99,7 @@ interface TraccionRecordLockResult {
 }
 
 interface TraccionApi {
+  getWindowsUser?: () => Promise<string>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
