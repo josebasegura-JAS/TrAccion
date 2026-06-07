@@ -17,7 +17,8 @@
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
-    "playwright:install": "playwright install"
+    "playwright:install": "playwright install",
+    "electron:rebuild": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
@@ -25,7 +26,8 @@
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.2",
+    "better-sqlite3": "^11.10.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -83,10 +85,7 @@
     "portable": {
       "artifactName": "TrAccion-${version}-portable.exe"
     },
-    "npmRebuild": false,
+    "npmRebuild": true,
     "icon": "build/icon/traccion-icon.ico"
-  },
-  "optionalDependencies": {
-    "better-sqlite3": "^11.10.0"
   }
 }
