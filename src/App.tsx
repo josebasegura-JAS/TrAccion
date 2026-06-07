@@ -36,6 +36,11 @@ const LicenciasSinSueldoPage = lazy(() =>
 const SorteosPage = lazy(() =>
   import('./features/sorteos/components/SorteosPage').then((module) => ({ default: module.SorteosPage })),
 );
+const PresupuestosPage = lazy(() =>
+  import('./features/presupuestos/components/PresupuestosPage').then((module) => ({
+    default: module.PresupuestosPage,
+  })),
+);
 const PlantillaPage = lazy(() =>
   import('./components/PlantillaPage').then((module) => ({ default: module.PlantillaPage })),
 );
@@ -76,6 +81,7 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   'criterios-rrll': 'Cargando Criterios...',
   teletrabajo: 'Cargando Teletrabajo...',
   'ticket-restaurante': 'Cargando Ticket Restaurante...',
+  presupuestos: 'Cargando Presupuestos...',
   'licencias-sin-sueldo': 'Cargando Licencias...',
   sorteos: 'Cargando Sorteos...',
   vinculograma: 'Cargando Vinculograma...',
@@ -168,6 +174,7 @@ export function App() {
               />
             )}
             {activeView === 'licencias-sin-sueldo' && <LicenciasSinSueldoPage />}
+            {activeView === 'presupuestos' && <PresupuestosPage />}
             {activeView === 'sorteos' && <SorteosPage />}
             {activeView === 'vinculograma' && <VinculogramaPage />}
             {activeView === 'especiales' && <EspecialesPage />}

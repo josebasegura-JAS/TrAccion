@@ -43,6 +43,10 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Ticket Restaurante',
     subtitle: 'Calendarios, ausencias, cálculo mensual y cotización.',
   },
+  presupuestos: {
+    title: 'Presupuestos RRLL',
+    subtitle: 'Escenarios presupuestarios, simulación anual y comparativa con reales.',
+  },
   'licencias-sin-sueldo': {
     title: 'Licencias sin sueldo',
     subtitle: 'Permisos no retribuidos por aprobación, firma, vigencia e histórico.',

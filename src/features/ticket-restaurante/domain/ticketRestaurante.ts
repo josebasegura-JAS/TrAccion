@@ -690,7 +690,7 @@ function addMonths(year: number, month: number, offset: number): { year: number;
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
 }
 
-function buildMonthTicketDays(calendar: TicketCalendar, year: number, month: number): string[] {
+export function buildMonthTicketDays(calendar: TicketCalendar, year: number, month: number): string[] {
   const noTicket = new Set(calendar.diasSinTicket);
   const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -923,6 +923,10 @@ export function filterTicketRestaurantAbsencesByMonth(
   return absences.filter(
     (absence) => !absence.deletedAt && absence.desde <= monthEnd && absence.hasta >= monthStart,
   );
+}
+
+export function countTicketCalendarDays(calendar: TicketCalendar, year: number, month: number): number {
+  return buildMonthTicketDays(calendar, year, month).length;
 }
 
 export function buildYearCalendar(calendar: TicketCalendar, year: number): CalendarMonth[] {

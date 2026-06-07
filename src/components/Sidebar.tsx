@@ -5,6 +5,7 @@ import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../ser
 import {
   CalendarDays,
   FileText,
+  Landmark,
   ClipboardList,
   Database,
   Gift,
@@ -37,6 +38,7 @@ export type AppView =
   | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
+  | 'presupuestos'
   | 'licencias-sin-sueldo'
   | 'sorteos'
   | 'vinculograma'
@@ -92,6 +94,7 @@ const navigationGroups: NavigationGroup[] = [
     icon: Gift,
     items: [
       { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' },
+      { label: 'Presupuestos', icon: Landmark, view: 'presupuestos' },
       { label: 'Criterios RRLL', icon: ShieldCheck, view: 'criterios-rrll' },
       { label: 'Sorteos', icon: Gift, view: 'sorteos' },
       { label: 'Especiales', icon: MailPlus, view: 'especiales' },
