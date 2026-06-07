@@ -14,6 +14,7 @@ import type { Employee } from '../features/plantilla/domain/employee';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
 import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
+import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
@@ -131,6 +132,23 @@ export function PlantillaPage() {
     ['Residencia', filters.residencia],
     ['Nivel retributivo', filters.nivelRetributivo],
   ]);
+  const activeFilterChips: ActiveFilterChip[] = [
+    filters.search.trim()
+      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      : null,
+    filters.residencia
+      ? { key: 'residencia', label: 'Residencia', value: filters.residencia, onClear: () => setFilter('residencia', '') }
+      : null,
+    filters.nivelRetributivo
+      ? { key: 'nivelRetributivo', label: 'Nivel retributivo', value: filters.nivelRetributivo, onClear: () => setFilter('nivelRetributivo', '') }
+      : null,
+  ].filter((filter): filter is ActiveFilterChip => filter !== null);
+
+  const clearActiveFilters = () => {
+    setFilter('search', '');
+    setFilter('residencia', '');
+    setFilter('nivelRetributivo', '');
+  };
 
   const { preferences, setSort, setColumnWidth, resetPreferences } =
     useTableViewPreferences<EmployeeTableColumnId>({
@@ -345,6 +363,12 @@ export function PlantillaPage() {
           value={filters.nivelRetributivo}
         />
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div className="mb-3">
+          <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">

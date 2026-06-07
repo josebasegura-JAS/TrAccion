@@ -18,6 +18,7 @@ import {
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
+import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
@@ -197,6 +198,31 @@ export function TareasPage({
     ['Estado', filters.estado],
     ['Prioridad', filters.prioridad],
   ]);
+  const activeFilterChips: ActiveFilterChip[] = [
+    filters.search.trim()
+      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      : null,
+    filters.tipo
+      ? { key: 'tipo', label: 'Tipo', value: filters.tipo, onClear: () => setFilter('tipo', '') }
+      : null,
+    filters.fase
+      ? { key: 'fase', label: 'Fase', value: filters.fase, onClear: () => setFilter('fase', '') }
+      : null,
+    filters.estado
+      ? { key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') }
+      : null,
+    filters.prioridad
+      ? { key: 'prioridad', label: 'Prioridad', value: filters.prioridad, onClear: () => setFilter('prioridad', '') }
+      : null,
+  ].filter((filter): filter is ActiveFilterChip => filter !== null);
+
+  const clearActiveFilters = () => {
+    setFilter('search', '');
+    setFilter('tipo', '');
+    setFilter('fase', '');
+    setFilter('estado', '');
+    setFilter('prioridad', '');
+  };
 
   const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActiveTaskTableColumnId>(
     {
@@ -460,6 +486,11 @@ export function TareasPage({
             />
           </div>
         </div>
+        {activeFilterChips.length > 0 && (
+          <div className="border-b border-metro-border bg-metro-panel px-3 py-2">
+            <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
+          </div>
+        )}
         <DataTable
           ariaLabel="Tareas activas"
           columnWidths={preferences.columnWidths}

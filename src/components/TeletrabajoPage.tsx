@@ -20,6 +20,7 @@ import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
+import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 
@@ -336,6 +337,27 @@ export function TeletrabajoPage({
     ['Tipo', filters.tipoSolicitud],
     ['Periodo', filters.periodo],
   ]);
+  const activeFilterChips: ActiveFilterChip[] = [
+    filters.search.trim()
+      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      : null,
+    filters.estado
+      ? { key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') }
+      : null,
+    filters.tipoSolicitud
+      ? { key: 'tipoSolicitud', label: 'Tipo', value: filters.tipoSolicitud, onClear: () => setFilter('tipoSolicitud', '') }
+      : null,
+    filters.periodo
+      ? { key: 'periodo', label: 'Periodo', value: filters.periodo, onClear: () => setFilter('periodo', '') }
+      : null,
+  ].filter((filter): filter is ActiveFilterChip => filter !== null);
+
+  const clearActiveFilters = () => {
+    setFilter('search', '');
+    setFilter('estado', '');
+    setFilter('tipoSolicitud', '');
+    setFilter('periodo', '');
+  };
 
   const openEditor = (solicitud: TeletrabajoSolicitud) => {
     selectSolicitud(solicitud.id);
@@ -468,6 +490,12 @@ export function TeletrabajoPage({
           value={filters.periodo}
         />
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div className="mb-3">
+          <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
