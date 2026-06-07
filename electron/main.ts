@@ -55,8 +55,9 @@ function createSplashWindow(): BrowserWindow {
     maximizable: false,
     closable: true,
     frame: false,
-    show: false,
+    show: true,
     alwaysOnTop: true,
+    skipTaskbar: true,
     title: 'Cargando TrAccion',
     backgroundColor: '#0F1F2A',
     icon: appIconPath,
@@ -67,19 +68,37 @@ function createSplashWindow(): BrowserWindow {
     },
   });
 
-  splashWindow.once('ready-to-show', () => {
-    if (!splashWindow.isDestroyed()) {
-      splashWindow.show();
-    }
-  });
-
-  splashWindow.loadFile(splashHtmlPath).catch(() => {
-    if (!splashWindow.isDestroyed()) {
-      splashWindow.show();
-    }
-  });
+  splashWindow.center();
+  splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
 
   return splashWindow;
+}
+
+function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promise<void> {
+  if (splashWindow.isDestroyed()) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      setTimeout(resolve, 60);
+    };
+
+    const timeout = setTimeout(finish, timeoutMs);
+    splashWindow.webContents.once('did-finish-load', () => {
+      clearTimeout(timeout);
+      finish();
+    });
+    splashWindow.webContents.once('did-fail-load', () => {
+      clearTimeout(timeout);
+      finish();
+    });
+  });
 }
 
 function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow): void {
@@ -632,6 +651,7 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('com.metro.rrll.traccion');
   Menu.setApplicationMenu(null);
   const splashWindow = createSplashWindow();
+  await waitForSplashPaint(splashWindow);
   await initializeSqlitePersistence();
   registerIpcHandlers();
   createWindow(splashWindow);
