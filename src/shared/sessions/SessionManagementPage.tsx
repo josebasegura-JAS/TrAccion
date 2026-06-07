@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
+import { useSharedRecordLock } from '../../services/useSharedRecordLock';
 import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
@@ -510,6 +511,12 @@ function SessionCard({
   tasksById: Map<string, Task>;
 }) {
   const unassignedTasks = availableTasks.filter((task) => !session.items.includes(task.id));
+  const recordLock = useSharedRecordLock({
+    module: config.moduleId,
+    recordId: session.id,
+    enabled: isExpanded && session.status === 'open',
+  });
+  const isReadOnly = recordLock.isReadOnly;
   const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
 
   return (
@@ -528,14 +535,18 @@ function SessionCard({
         <div className="flex shrink-0 flex-wrap gap-2">
           <ExportPrintButtons payload={sessionExportPayload} />
           <button
-            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!isExpanded || isReadOnly}
+            title={!isExpanded ? 'Abre la sesión para bloquearla antes de cerrarla' : undefined}
             onClick={() => onClose(session)}
             type="button"
           >
             Cerrar sesión
           </button>
           <button
-            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10"
+            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!isExpanded || isReadOnly}
+            title={!isExpanded ? 'Abre la sesión para bloquearla antes de eliminarla' : undefined}
             onClick={() => onRemove(session.id)}
             type="button"
           >
@@ -546,11 +557,21 @@ function SessionCard({
 
       {isExpanded && (
         <div className="mt-3 rounded-xl border border-metro-border bg-metro-app/40 p-3">
+          {recordLock.message && (
+            <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              isReadOnly
+                ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                : 'border-metro-border bg-metro-surface text-metro-muted'
+            }`}>
+              {recordLock.message}
+            </p>
+          )}
           <div className="flex flex-col gap-2 lg:flex-row">
             <select
               className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              disabled={isReadOnly}
               onChange={(event) => {
-                if (event.target.value) {
+                if (!isReadOnly && event.target.value) {
                   addTask(session.id, event.target.value);
                   event.target.value = '';
                 }
@@ -595,7 +616,7 @@ function SessionCard({
                   <div className="flex shrink-0 gap-1">
                     <button
                       className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                      disabled={index === 0}
+                      disabled={isReadOnly || index === 0}
                       onClick={() => moveTask(session.id, taskId, 'up')}
                       type="button"
                     >
@@ -603,14 +624,15 @@ function SessionCard({
                     </button>
                     <button
                       className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                      disabled={index === session.items.length - 1}
+                      disabled={isReadOnly || index === session.items.length - 1}
                       onClick={() => moveTask(session.id, taskId, 'down')}
                       type="button"
                     >
                       ↓
                     </button>
                     <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200"
+                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isReadOnly}
                       onClick={() => removeTask(session.id, taskId)}
                       type="button"
                     >
