@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { readStorageItem, writeStorageItem } from '../../services/persistence';
 
 export type TableSortDirection = 'asc' | 'desc';
 
@@ -41,7 +42,7 @@ function readStoredPreferences(storageKey: string): StoredTableViewPreferences |
     return null;
   }
 
-  const storedValue = window.localStorage.getItem(storageKey);
+  const storedValue = readStorageItem(storageKey);
   if (!storedValue) {
     return null;
   }
@@ -129,7 +130,7 @@ function writeStoredPreferences<ColumnId extends string>(
     ),
   };
 
-  window.localStorage.setItem(storageKey, JSON.stringify(storedPreferences));
+  writeStorageItem(storageKey, JSON.stringify(storedPreferences));
 }
 
 export function useTableViewPreferences<ColumnId extends string>({
@@ -166,9 +167,7 @@ export function useTableViewPreferences<ColumnId extends string>({
   }, []);
 
   const resetPreferences = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(storageKey);
-    }
+    writeStoredPreferences(storageKey, defaultPreferences);
     skipNextWriteRef.current = true;
     setPreferences(defaultPreferences);
   }, [defaultPreferences, storageKey]);
