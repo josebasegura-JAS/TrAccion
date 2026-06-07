@@ -1,5 +1,5 @@
 import { readStorageItem } from './persistence';
-import type { AppView } from '../components/Sidebar';
+import type { AppView } from '../navigation/navigation';
 
 export interface GlobalSearchResult {
   id: string;
