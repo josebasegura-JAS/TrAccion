@@ -136,7 +136,14 @@ export function App() {
               />
             )}
             {activeView === 'actas' && <ActasPage />}
-            {activeView === 'paritaria' && <ParitariaPage />}
+            {activeView === 'paritaria' && (
+              <ParitariaPage
+                initialSessionId={navigationTarget?.view === 'paritaria' ? navigationTarget.recordId : null}
+                navigationNonce={
+                  navigationTarget?.view === 'paritaria' ? navigationTarget.nonce : undefined
+                }
+              />
+            )}
             {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
             {activeView === 'teletrabajo' && (
               <TeletrabajoPage
