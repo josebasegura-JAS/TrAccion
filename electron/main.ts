@@ -30,6 +30,8 @@ const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
+const splashMinimumVisibleMs = 1_400;
+const splashMaximumVisibleMs = 25_000;
 
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -112,7 +114,21 @@ function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: 
   }
 }
 
-function createWindow(splashWindow: BrowserWindow | null = null): BrowserWindow {
+function showMainAfterSplash(
+  splashWindow: BrowserWindow | null,
+  mainWindow: BrowserWindow,
+  splashStartedAt: number,
+): void {
+  const elapsedMs = Date.now() - splashStartedAt;
+  const remainingMs = Math.max(0, splashMinimumVisibleMs - elapsedMs);
+
+  setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow), remainingMs);
+}
+
+function createWindow(
+  splashWindow: BrowserWindow | null = null,
+  splashStartedAt = Date.now(),
+): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1360,
     height: 860,
@@ -131,22 +147,33 @@ function createWindow(splashWindow: BrowserWindow | null = null): BrowserWindow 
 
   createContextMenu(mainWindow);
 
-  mainWindow.once('ready-to-show', () => {
-    closeSplashAndShowMain(splashWindow, mainWindow);
-  });
-
-  mainWindow.webContents.once('did-finish-load', () => {
+  const forceShowTimer = setTimeout(() => {
     if (!mainWindow.isVisible()) {
-      closeSplashAndShowMain(splashWindow, mainWindow);
+      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+    }
+  }, splashMaximumVisibleMs);
+
+  mainWindow.once('closed', () => clearTimeout(forceShowTimer));
+
+  ipcMain.once('app:renderer-ready', () => {
+    clearTimeout(forceShowTimer);
+    if (!mainWindow.isVisible()) {
+      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
     }
   });
 
   if (isDev) {
-    mainWindow.loadURL(devServerUrl).catch(() => closeSplashAndShowMain(splashWindow, mainWindow));
+    mainWindow.loadURL(devServerUrl).catch(() => {
+      clearTimeout(forceShowTimer);
+      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+    });
   } else {
     mainWindow
       .loadFile(path.join(__dirname, '../dist/index.html'))
-      .catch(() => closeSplashAndShowMain(splashWindow, mainWindow));
+      .catch(() => {
+        clearTimeout(forceShowTimer);
+        showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+      });
   }
 
   return mainWindow;
@@ -650,11 +677,12 @@ function registerIpcHandlers(): void {
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.metro.rrll.traccion');
   Menu.setApplicationMenu(null);
+  const splashStartedAt = Date.now();
   const splashWindow = createSplashWindow();
   await waitForSplashPaint(splashWindow);
   await initializeSqlitePersistence();
   registerIpcHandlers();
-  createWindow(splashWindow);
+  createWindow(splashWindow, splashStartedAt);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

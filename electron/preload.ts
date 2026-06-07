@@ -6,6 +6,7 @@ const createOutlookDraft = (payload: unknown) =>
 const parseOutlookMsg = (payload: unknown) => ipcRenderer.invoke('msg:parseOutlookMsg', payload);
 
 contextBridge.exposeInMainWorld('traccion', {
+  notifyRendererReady: () => ipcRenderer.send('app:renderer-ready'),
   getWindowsUser: () => ipcRenderer.invoke('app:get-windows-user'),
   databaseStatus: () => ipcRenderer.invoke('database:status'),
   selectDatabaseDirectory: () => ipcRenderer.invoke('database:select-directory'),
