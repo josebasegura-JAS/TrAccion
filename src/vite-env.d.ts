@@ -77,6 +77,21 @@ interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsToken
   records: TraccionStorageRecordSnapshot[];
 }
 
+interface TraccionLocalBackupEntry {
+  id: string;
+  fileName: string;
+  kind: 'sqlite' | 'json';
+  path: string;
+  sizeBytes: number;
+  createdAt: string;
+  isLiveCopy: boolean;
+}
+
+interface TraccionRestoreLocalBackupResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  message: string;
+}
 
 interface TraccionRecordLockOwnerInfo {
   ownerId: string;
@@ -105,6 +120,8 @@ interface TraccionApi {
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
+  listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
+  restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
   backupLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
