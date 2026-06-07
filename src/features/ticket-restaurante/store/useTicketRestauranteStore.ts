@@ -4,6 +4,7 @@ import {
   buildTicketCalendar,
   calculateTicketContribution,
   normalizeTicketIsoWeekdays,
+  normalizeTicketRestaurantConfig,
   buildTicketPerson,
   splitTicketPersonFullName,
   DEFAULT_TICKET_RESTAURANT_CONFIG,
@@ -152,7 +153,7 @@ function readConfig(): TicketRestaurantConfig {
   }
 
   const candidate = parsed as Partial<TicketRestaurantConfig>;
-  return {
+  return normalizeTicketRestaurantConfig({
     importeTicket:
       typeof candidate.importeTicket === 'number' && candidate.importeTicket >= 0
         ? candidate.importeTicket
@@ -161,7 +162,11 @@ function readConfig(): TicketRestaurantConfig {
       typeof candidate.pedidoMensual === 'number' && candidate.pedidoMensual >= 0
         ? candidate.pedidoMensual
         : DEFAULT_TICKET_RESTAURANT_CONFIG.pedidoMensual,
-  };
+    priceHistory: Array.isArray(candidate.priceHistory)
+      ? candidate.priceHistory
+      : DEFAULT_TICKET_RESTAURANT_CONFIG.priceHistory,
+    rules: candidate.rules ?? DEFAULT_TICKET_RESTAURANT_CONFIG.rules,
+  });
 }
 
 function readDebtLedger(): Record<string, number> {

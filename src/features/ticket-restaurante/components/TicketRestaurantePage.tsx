@@ -4,9 +4,11 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Euro,
   FileUp,
   Pencil,
   Plus,
+  Settings,
   Save,
   Trash2,
 } from 'lucide-react';
@@ -18,6 +20,8 @@ import {
   EMPTY_TICKET_CALENDAR_DRAFT,
   EMPTY_TICKET_PERSON_DRAFT,
   filterTicketRestaurantAbsencesByMonth,
+  getEffectiveTicketPrice,
+  normalizeTicketRestaurantConfig,
   nextCalendarYear,
   previousCalendarYear,
   visibleTicketCalendars,
@@ -28,6 +32,7 @@ import {
   type TicketPersonCalculation,
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
+  type TicketRestaurantConfig,
 } from '../domain/ticketRestaurante';
 import {
   importTicketRestaurantAbsencesFromFile,
@@ -202,6 +207,11 @@ function currentYear(): number {
 
 function currentMonth(): number {
   return new Date().getMonth() + 1;
+}
+
+function addYearMonth(year: number, month: number, offset: number): { year: number; month: number } {
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
 }
 
 type TicketRestauranteSubview =
@@ -385,15 +395,19 @@ function addDays(fecha: string, days: number): string {
 function absenceDiscountsTicket(
   absence: TicketRestaurantAbsence,
   calendar: TicketCalendar | null,
+  config: TicketRestaurantConfig,
 ): boolean {
   if (!calendar || !absence.afectaTicket) {
     return false;
   }
 
-  if (
-    normalizePlainText(absence.motivo) === 'sin' &&
-    normalizePlainText(calendar.nombre) === 'liberados'
-  ) {
+  const nonDiscountable = Object.entries(config.rules.nonDiscountableMotivesByCalendar).some(
+    ([calendarName, motives]) =>
+      normalizePlainText(calendar.nombre) === normalizePlainText(calendarName) &&
+      motives.some((motivo) => normalizePlainText(absence.motivo) === normalizePlainText(motivo)),
+  );
+
+  if (nonDiscountable) {
     return false;
   }
 
@@ -447,6 +461,8 @@ export function TicketRestaurantePage() {
   const [peopleImportMessage, setPeopleImportMessage] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const peopleFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -621,6 +637,18 @@ export function TicketRestaurantePage() {
     }
   };
 
+  const moveCalculationMonth = (offset: number) => {
+    const next = addYearMonth(calculationYear, calculationMonth, offset);
+    setCalculationYear(next.year);
+    setCalculationMonth(next.month);
+  };
+
+  const moveAbsenceMonth = (offset: number) => {
+    const next = addYearMonth(absenceYear, absenceMonth, offset);
+    setAbsenceYear(next.year);
+    setAbsenceMonth(next.month);
+  };
+
   const handleImportFile = async (file: File | null) => {
     if (!file) {
       return;
@@ -789,6 +817,25 @@ export function TicketRestaurantePage() {
         />
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-metro-border bg-metro-panel p-2">
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+          onClick={() => setIsPriceModalOpen(true)}
+          type="button"
+        >
+          <Euro className="h-3.5 w-3.5 text-metro-red" />
+          Precio ticket
+        </button>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+          onClick={() => setIsRulesModalOpen(true)}
+          type="button"
+        >
+          <Settings className="h-3.5 w-3.5 text-metro-red" />
+          Reglas de cálculo
+        </button>
+      </div>
+
       {activeSubview === 'calendarios' ? (
         <>
           <div className="mb-3 grid gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 xl:grid-cols-[minmax(280px,0.9fr)_minmax(250px,0.75fr)_minmax(320px,1fr)]">
@@ -916,11 +963,10 @@ export function TicketRestaurantePage() {
           config={config}
           mode="monthly"
           month={calculationMonth}
-          onConfigChange={updateConfig}
           exportPayload={{
             title: 'Cómputo mensual Ticket Restaurante',
             filename: `ticket-restaurante-computo-mensual-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
-            columns: monthlyCalculationExportColumns(config.importeTicket),
+            columns: monthlyCalculationExportColumns(getEffectiveTicketPrice(config, calculationYear, calculationMonth)),
             rows: monthCalculation.rows,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
@@ -928,6 +974,8 @@ export function TicketRestaurantePage() {
             ]),
           }}
           onMonthChange={handleCalculationMonthChange}
+          onNextMonth={() => moveCalculationMonth(1)}
+          onPreviousMonth={() => moveCalculationMonth(-1)}
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
@@ -939,11 +987,10 @@ export function TicketRestaurantePage() {
           config={config}
           mode="contribution"
           month={calculationMonth}
-          onConfigChange={updateConfig}
           exportPayload={{
             title: 'Cómputo cotización Ticket Restaurante',
             filename: `ticket-restaurante-computo-cotizacion-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
-            columns: contributionCalculationExportColumns(config.importeTicket),
+            columns: contributionCalculationExportColumns(getEffectiveTicketPrice(config, calculationYear, calculationMonth)),
             rows: contributionCalculation.rows,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
@@ -951,6 +998,8 @@ export function TicketRestaurantePage() {
             ]),
           }}
           onMonthChange={handleCalculationMonthChange}
+          onNextMonth={() => moveCalculationMonth(1)}
+          onPreviousMonth={() => moveCalculationMonth(-1)}
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
@@ -975,11 +1024,35 @@ export function TicketRestaurantePage() {
           }
           onImport={() => fileInputRef.current?.click()}
           onMonthChange={handleAbsenceMonthChange}
+          onNextMonth={() => moveAbsenceMonth(1)}
+          onPreviousMonth={() => moveAbsenceMonth(-1)}
           onRemove={removeAbsence}
           onYearChange={handleAbsenceYearChange}
           year={absenceYear}
         />
       )}
+
+      {isPriceModalOpen ? (
+        <TicketPriceModal
+          config={config}
+          onClose={() => setIsPriceModalOpen(false)}
+          onSave={(nextConfig) => {
+            updateConfig(nextConfig);
+            setIsPriceModalOpen(false);
+          }}
+        />
+      ) : null}
+
+      {isRulesModalOpen ? (
+        <TicketRulesModal
+          config={config}
+          onClose={() => setIsRulesModalOpen(false)}
+          onSave={(nextConfig) => {
+            updateConfig(nextConfig);
+            setIsRulesModalOpen(false);
+          }}
+        />
+      ) : null}
 
       {isPreviewOpen ? (
         <AbsencePreviewModal
@@ -1615,6 +1688,308 @@ function PeoplePanel({
   );
 }
 
+
+function MonthNavigator({
+  ariaLabel,
+  month,
+  onMonthChange,
+  onNextMonth,
+  onPreviousMonth,
+  onYearChange,
+  year,
+}: {
+  ariaLabel: string;
+  month: number;
+  onMonthChange: (value: string) => void;
+  onNextMonth: () => void;
+  onPreviousMonth: () => void;
+  onYearChange: (value: string) => void;
+  year: number;
+}) {
+  return (
+    <div className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface p-1">
+      <button
+        aria-label="Mes anterior"
+        className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+        onClick={onPreviousMonth}
+        type="button"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <select
+        aria-label={ariaLabel}
+        className="h-8 rounded-md border border-metro-border bg-metro-surface px-2 text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+        onChange={(event) => onMonthChange(event.target.value)}
+        value={month}
+      >
+        {MONTH_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <input
+        aria-label={`${ariaLabel} año`}
+        className="h-8 w-20 rounded-md border border-metro-border bg-metro-surface px-2 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+        max="2200"
+        min="1900"
+        onChange={(event) => onYearChange(event.target.value)}
+        type="number"
+        value={year}
+      />
+      <button
+        aria-label="Mes posterior"
+        className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+        onClick={onNextMonth}
+        type="button"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function TicketPriceModal({
+  config,
+  onClose,
+  onSave,
+}: {
+  config: TicketRestaurantConfig;
+  onClose: () => void;
+  onSave: (config: TicketRestaurantConfig) => void;
+}) {
+  const normalizedConfig = normalizeTicketRestaurantConfig(config);
+  const latestPrice = normalizedConfig.priceHistory.at(-1) ?? normalizedConfig.priceHistory[0];
+  const [amount, setAmount] = useState(String(latestPrice?.amount ?? normalizedConfig.importeTicket));
+  const [effectiveFrom, setEffectiveFrom] = useState(latestPrice?.effectiveFrom ?? '2026-03-01');
+  const parsedAmount = Number(amount.replace(',', '.'));
+  const canSave = Number.isFinite(parsedAmount) && parsedAmount >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom);
+
+  const savePrice = () => {
+    if (!canSave) return;
+    const nextHistory = [
+      ...normalizedConfig.priceHistory.filter((entry) => entry.effectiveFrom !== effectiveFrom),
+      { amount: parsedAmount, effectiveFrom },
+    ].sort((first, second) => first.effectiveFrom.localeCompare(second.effectiveFrom));
+
+    onSave(
+      normalizeTicketRestaurantConfig({
+        ...normalizedConfig,
+        importeTicket: nextHistory.at(-1)?.amount ?? parsedAmount,
+        priceHistory: nextHistory,
+      }),
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-xl rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+        <div className="border-b border-metro-border p-3">
+          <h3 className="text-lg font-bold text-metro-text">Precio ticket</h3>
+          <p className="text-xs text-metro-muted">
+            El cálculo usa el último precio cuya fecha de inicio sea anterior o igual al mes calculado.
+          </p>
+        </div>
+        <div className="space-y-3 p-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block text-xs font-semibold text-metro-text">
+              Importe ticket
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                min="0"
+                onChange={(event) => setAmount(event.target.value)}
+                step="0.01"
+                type="number"
+                value={amount}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              Vigente desde
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => setEffectiveFrom(event.target.value)}
+                type="date"
+                value={effectiveFrom}
+              />
+            </label>
+          </div>
+          <div className="rounded-xl border border-metro-border bg-metro-panel p-2">
+            <p className="mb-1 text-xs font-bold text-metro-text">Histórico de precios</p>
+            <div className="max-h-32 overflow-auto text-xs text-metro-muted">
+              {normalizedConfig.priceHistory.map((entry) => (
+                <p key={entry.effectiveFrom}>
+                  {entry.effectiveFrom}: <span className="font-semibold text-metro-text">{formatCurrency(entry.amount)}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-metro-border p-3">
+          <button
+            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onClose}
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canSave}
+            onClick={savePrice}
+            type="button"
+          >
+            Guardar precio
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TicketRulesModal({
+  config,
+  onClose,
+  onSave,
+}: {
+  config: TicketRestaurantConfig;
+  onClose: () => void;
+  onSave: (config: TicketRestaurantConfig) => void;
+}) {
+  const normalizedConfig = normalizeTicketRestaurantConfig(config);
+  const [debtStartDate, setDebtStartDate] = useState(normalizedConfig.rules.debtStartDate);
+  const [noOrderMonths, setNoOrderMonths] = useState<number[]>(normalizedConfig.rules.noOrderMonths);
+  const [nonDiscountableRulesText, setNonDiscountableRulesText] = useState(
+    Object.entries(normalizedConfig.rules.nonDiscountableMotivesByCalendar)
+      .map(([calendar, motives]) => `${calendar}: ${motives.join(', ')}`)
+      .join('\n'),
+  );
+
+  const toggleNoOrderMonth = (month: number) => {
+    setNoOrderMonths((current) =>
+      current.includes(month)
+        ? current.filter((item) => item !== month)
+        : [...current, month].sort((first, second) => first - second),
+    );
+  };
+
+  const parseNonDiscountableRules = (): Record<string, string[]> =>
+    Object.fromEntries(
+      nonDiscountableRulesText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line): [string, string[]] => {
+          const [calendar = '', motives = ''] = line.split(':');
+          return [
+            calendar.trim(),
+            motives
+              .split(',')
+              .map((motivo) => motivo.trim())
+              .filter(Boolean),
+          ];
+        })
+        .filter(([calendar]) => Boolean(calendar)),
+    );
+
+  const saveRules = () => {
+    onSave(
+      normalizeTicketRestaurantConfig({
+        ...normalizedConfig,
+        rules: {
+          debtStartDate,
+          noOrderMonths,
+          nonDiscountableMotivesByCalendar: parseNonDiscountableRules(),
+          applyDebtAtClosedMonth: true,
+        },
+      }),
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+        <div className="border-b border-metro-border p-3">
+          <h3 className="text-lg font-bold text-metro-text">Reglas de cálculo</h3>
+          <p className="text-xs text-metro-muted">
+            Parámetros mínimos del módulo. Evita tocar más reglas salvo cambio real de criterio.
+          </p>
+        </div>
+        <div className="max-h-[70vh] space-y-3 overflow-auto p-3">
+          <label className="block text-xs font-semibold text-metro-text">
+            Fecha inicio cómputo deuda
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => setDebtStartDate(event.target.value)}
+              type="date"
+              value={debtStartDate}
+            />
+          </label>
+
+          <div>
+            <p className="mb-1 text-xs font-semibold text-metro-text">Meses sin pedido de tickets</p>
+            <div className="grid gap-1 sm:grid-cols-4">
+              {MONTH_OPTIONS.map((option) => (
+                <label
+                  className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-2 py-1 text-xs font-semibold text-metro-text"
+                  key={option.value}
+                >
+                  <input
+                    checked={noOrderMonths.includes(option.value)}
+                    className="h-3.5 w-3.5 accent-metro-red"
+                    onChange={() => toggleNoOrderMonth(option.value)}
+                    type="checkbox"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <label className="block text-xs font-semibold text-metro-text">
+            Motivos que no descuentan por calendario
+            <textarea
+              className="mt-1 h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => setNonDiscountableRulesText(event.target.value)}
+              value={nonDiscountableRulesText}
+            />
+            <span className="mt-1 block text-[11px] text-metro-muted">
+              Formato: Calendario: motivo1, motivo2. Ejemplo: Liberados: SIN
+            </span>
+          </label>
+
+          <div className="rounded-xl border border-metro-border bg-metro-panel p-3 text-xs text-metro-muted">
+            <p className="mb-1 font-bold text-metro-text">Cómo calcula el cómputo mensual</p>
+            <p>
+              Tickets a pedir = días con derecho del calendario del mes seleccionado - ausencias del propio mes que descuentan ticket. Si el mes está marcado como sin pedido, el pedido queda a 0.
+            </p>
+            <p className="mb-1 mt-3 font-bold text-metro-text">Cómo calcula el cómputo de cotización</p>
+            <p>
+              La cotización aplica ausencias a mes vencido desde la fecha de inicio de deuda. Descuenta contra los tickets disponibles del mes de cotización y mantiene como deuda pendiente lo que no pueda descontarse.
+            </p>
+            <p className="mt-3 font-semibold text-metro-text">Aplicar deuda a mes vencido: Sí, fijo.</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-metro-border p-3">
+          <button
+            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onClose}
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={saveRules}
+            type="button"
+          >
+            Guardar reglas
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CalculationPanel({
   absences,
   calendars,
@@ -1622,21 +1997,23 @@ function CalculationPanel({
   config,
   mode,
   month,
-  onConfigChange,
   exportPayload,
   onMonthChange,
+  onNextMonth,
+  onPreviousMonth,
   onYearChange,
   year,
 }: {
   absences: TicketRestaurantAbsence[];
   calendars: TicketCalendar[];
   calculation: ReturnType<typeof calculateMonthlyTicketOrder>;
-  config: { importeTicket: number; pedidoMensual: number };
+  config: TicketRestaurantConfig;
   mode: 'monthly' | 'contribution';
   month: number;
-  onConfigChange: (config: { importeTicket: number; pedidoMensual: number }) => void;
   exportPayload: ExportTablePayload<TicketPersonCalculation>;
   onMonthChange: (value: string) => void;
+  onNextMonth: () => void;
+  onPreviousMonth: () => void;
   onYearChange: (value: string) => void;
   year: number;
 }) {
@@ -1653,6 +2030,7 @@ function CalculationPanel({
       validColumnIds,
     });
 
+  const effectiveTicketPrice = getEffectiveTicketPrice(config, year, month);
   const calculationColumns = useMemo<
     Array<DataTableColumn<TicketPersonCalculation, TicketCalculationTableColumnId>>
   >(() => {
@@ -1766,8 +2144,8 @@ function CalculationPanel({
       {
         id: 'importeTicket',
         header: 'Importe ticket',
-        accessor: () => config.importeTicket,
-        render: () => formatCurrency(config.importeTicket),
+        accessor: () => effectiveTicketPrice,
+        render: () => formatCurrency(effectiveTicketPrice),
         width: 115,
         minWidth: 100,
         maxWidth: 165,
@@ -1790,7 +2168,7 @@ function CalculationPanel({
     );
 
     return baseColumns;
-  }, [config.importeTicket, mode]);
+  }, [effectiveTicketPrice, mode]);
 
   return (
     <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
@@ -1806,71 +2184,18 @@ function CalculationPanel({
               : 'Calcula la cotización con ausencias a mes vencido y deuda pendiente anterior.'}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthNavigator
+            ariaLabel="Selector mes cálculo"
+            month={month}
+            onMonthChange={onMonthChange}
+            onNextMonth={onNextMonth}
+            onPreviousMonth={onPreviousMonth}
+            onYearChange={onYearChange}
+            year={year}
+          />
           <ExportPrintButtons payload={exportPayload} />
         </div>
-        <div className="grid gap-2 sm:grid-cols-4">
-          <select
-            aria-label="Selector mes cálculo"
-            className="rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => onMonthChange(event.target.value)}
-            value={month}
-          >
-            {MONTH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <input
-            aria-label="Selector año cálculo"
-            className="rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
-            max="2200"
-            min="1900"
-            onChange={(event) => onYearChange(event.target.value)}
-            type="number"
-            value={year}
-          />
-          <label className="relative block">
-            <span className="absolute -top-2 left-2 bg-metro-surface px-1 text-[10px] font-semibold text-metro-muted">
-              €/ticket
-            </span>
-            <input
-              className="w-full rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              min="0"
-              onChange={(event) =>
-                onConfigChange({ ...config, importeTicket: Number(event.target.value) || 0 })
-              }
-              step="0.01"
-              type="number"
-              value={config.importeTicket}
-            />
-          </label>
-          <label className="relative block">
-            <span className="absolute -top-2 left-2 bg-metro-surface px-1 text-[10px] font-semibold text-metro-muted">
-              Pedido
-            </span>
-            <input
-              className="w-full rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              min="0"
-              onChange={(event) =>
-                onConfigChange({ ...config, pedidoMensual: Number(event.target.value) || 0 })
-              }
-              type="number"
-              value={config.pedidoMensual}
-            />
-          </label>
-        </div>
-      </div>
-      <div className="mb-2 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
-        <CalculationKpi label="Personas" value={calculation.totals.personas} />
-        <CalculationKpi label="Días teóricos" value={calculation.totals.diasTeoricos} />
-        <CalculationKpi label="Ausencias mes" value={calculation.totals.ausenciasMes} />
-        <CalculationKpi label="Deuda entrante" value={calculation.totals.deudaEntrante} />
-        <CalculationKpi label="Descontado" value={calculation.totals.ausenciasAplicadas} />
-        <CalculationKpi label="Deuda pendiente" value={calculation.totals.deudaPendiente} />
-        <CalculationKpi label="Tickets finales" value={calculation.totals.ticketsFinales} />
-        <CalculationKpi label="Importe" value={formatCurrency(calculation.totals.importe)} />
       </div>
       <DataTable
         ariaLabel={
@@ -1893,6 +2218,7 @@ function CalculationPanel({
         <CalculationAbsenceDetailModal
           absences={absences}
           calendars={calendars}
+          config={config}
           mode={mode}
           onClose={() => setSelectedDetailRow(null)}
           row={selectedDetailRow}
@@ -1905,12 +2231,14 @@ function CalculationPanel({
 function CalculationAbsenceDetailModal({
   absences,
   calendars,
+  config,
   mode,
   onClose,
   row,
 }: {
   absences: TicketRestaurantAbsence[];
   calendars: TicketCalendar[];
+  config: TicketRestaurantConfig;
   mode: 'monthly' | 'contribution';
   onClose: () => void;
   row: TicketPersonCalculation;
@@ -1961,7 +2289,7 @@ function CalculationAbsenceDetailModal({
                     <td className="px-2 py-1 text-right">{absence.totalDias}</td>
                     <td className="px-2 py-1">{absence.afectaTicket ? 'Sí' : 'No'}</td>
                     <td className="px-2 py-1 font-semibold">
-                      {absenceDiscountsTicket(absence, calendar) ? 'Sí' : 'No'}
+                      {absenceDiscountsTicket(absence, calendar, config) ? 'Sí' : 'No'}
                     </td>
                   </tr>
                 ))}
@@ -1978,15 +2306,6 @@ function CalculationAbsenceDetailModal({
   );
 }
 
-function CalculationKpi({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">{label}</p>
-      <p className="mt-1 text-lg font-bold text-metro-text">{value}</p>
-    </div>
-  );
-}
-
 function AbsencesTable({
   absences,
   exportPayload,
@@ -1996,6 +2315,8 @@ function AbsencesTable({
   onExportModel,
   onImport,
   onMonthChange,
+  onNextMonth,
+  onPreviousMonth,
   onRemove,
   onYearChange,
   year,
@@ -2008,6 +2329,8 @@ function AbsencesTable({
   onExportModel: () => void;
   onImport: () => void;
   onMonthChange: (value: string) => void;
+  onNextMonth: () => void;
+  onPreviousMonth: () => void;
   onRemove: (id: string) => void;
   onYearChange: (value: string) => void;
   year: number;
@@ -2165,29 +2488,15 @@ function AbsencesTable({
         <div className="text-xs font-semibold text-metro-muted">
           Ausencias del mes seleccionado: <span className="text-metro-red">{absences.length}</span>
         </div>
-        <div className="flex gap-2">
-          <select
-            aria-label="Selector mes ausencias"
-            className="rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => onMonthChange(event.target.value)}
-            value={month}
-          >
-            {MONTH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <input
-            aria-label="Selector año ausencias"
-            className="w-24 rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
-            max="2200"
-            min="1900"
-            onChange={(event) => onYearChange(event.target.value)}
-            type="number"
-            value={year}
-          />
-        </div>
+        <MonthNavigator
+          ariaLabel="Selector mes ausencias"
+          month={month}
+          onMonthChange={onMonthChange}
+          onNextMonth={onNextMonth}
+          onPreviousMonth={onPreviousMonth}
+          onYearChange={onYearChange}
+          year={year}
+        />
       </div>
       <DataTable
         ariaLabel="Ausencias Ticket Restaurante"
