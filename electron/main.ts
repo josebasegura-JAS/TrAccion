@@ -155,6 +155,12 @@ function createWindow(
 
   mainWindow.once('closed', () => clearTimeout(forceShowTimer));
 
+  ipcMain.once('app:boot-visible', () => {
+    if (!mainWindow.isVisible()) {
+      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+    }
+  });
+
   ipcMain.once('app:renderer-ready', () => {
     clearTimeout(forceShowTimer);
     if (!mainWindow.isVisible()) {
