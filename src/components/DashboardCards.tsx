@@ -323,7 +323,7 @@ export function DashboardCards() {
         subtitle: 'abiertas',
         helper: `${criticalTasks.length} críticas`,
         icon: ClipboardList,
-        tone: 'text-red-500 bg-red-50',
+        tone: 'text-red-400 bg-red-500/10 ring-1 ring-red-500/20',
         segments: stateSegmentsFromTasks(tasks.filter((task) => !task.deletedAt)),
       },
       {
@@ -332,7 +332,7 @@ export function DashboardCards() {
         subtitle: 'sesiones pendientes',
         helper: `${committeeTasks.length} puntos por tratar`,
         icon: UsersRound,
-        tone: 'text-orange-500 bg-orange-50',
+        tone: 'text-orange-400 bg-orange-500/10 ring-1 ring-orange-500/20',
         segments: [
           { label: 'Sesiones abiertas', value: openCommitteeSessions.length, className: 'bg-red-500' },
           { label: 'Puntos abiertos', value: committeeTasks.length, className: 'bg-orange-500' },
@@ -349,7 +349,7 @@ export function DashboardCards() {
         subtitle: 'solicitudes',
         helper: `${pendingTelework.length} por validar`,
         icon: Laptop,
-        tone: 'text-blue-500 bg-blue-50',
+        tone: 'text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/20',
         segments: teleworkSegments,
       },
       {
@@ -358,7 +358,7 @@ export function DashboardCards() {
         subtitle: 'personas activas',
         helper: `${activeTicketAbsences.length} ausencias con descuento`,
         icon: Utensils,
-        tone: 'text-emerald-600 bg-emerald-50',
+        tone: 'text-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-500/20',
         segments: ticketSegments,
       },
     ];
@@ -380,30 +380,30 @@ export function DashboardCards() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[2rem] border border-white/70 bg-white p-5 text-slate-950 shadow-card">
+      <section className="rounded-[2rem] border border-metro-border bg-metro-surface/90 p-5 text-metro-text shadow-glow">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950">Buenos días, Joseba</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500 capitalize">
+            <h2 className="text-2xl font-black tracking-tight text-metro-text">Buenos días, Joseba</h2>
+            <p className="mt-1 text-sm font-medium text-metro-muted capitalize">
               {fullDateFormatter.format(today)}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <DashboardHeaderPill label="Tareas abiertas" value={activeTasks.length} />
-            <DashboardHeaderPill label="Críticas" value={criticalTasks.length} tone="text-red-600" />
+            <DashboardHeaderPill label="Críticas" value={criticalTasks.length} tone="text-red-400" />
             <DashboardHeaderPill label="Comité" value={openCommitteeSessions.length} />
             <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} />
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_1.35fr_0.72fr]">
-        <article className="rounded-[1.75rem] border border-white/70 bg-white p-4 text-slate-950 shadow-card">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(18rem,0.95fr)_minmax(24rem,1.25fr)_minmax(16rem,0.75fr)]">
+        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-base font-black">Calendario</h3>
             <div className="flex items-center gap-3">
               <button
-                className="rounded-full p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-full p-2 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
                 onClick={() =>
                   setVisibleMonth(
                     (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1),
@@ -415,7 +415,7 @@ export function DashboardCards() {
               </button>
               <span className="min-w-32 text-center text-sm font-black">{monthLabel}</span>
               <button
-                className="rounded-full p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                className="rounded-full p-2 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
                 onClick={() =>
                   setVisibleMonth(
                     (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1),
@@ -428,7 +428,7 @@ export function DashboardCards() {
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-slate-500">
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-metro-muted">
             {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => (
               <span key={day}>{day}</span>
             ))}
@@ -442,8 +442,8 @@ export function DashboardCards() {
               return (
                 <div
                   className={`min-h-11 rounded-2xl px-1.5 py-1 text-center text-sm font-bold transition ${
-                    date ? 'text-slate-950 hover:bg-slate-50' : 'text-transparent'
-                  } ${isToday ? 'bg-slate-950 text-white shadow-lg shadow-slate-900/20 hover:bg-slate-900' : ''}`}
+                    date ? 'text-metro-secondary hover:bg-metro-panel/70' : 'text-transparent'
+                  } ${isToday ? 'bg-metro-red text-white shadow-lg shadow-red-950/25 hover:bg-metro-dark' : ''}`}
                   key={`${isoDate}-${index}`}
                 >
                   <span>{date?.getDate() ?? '·'}</span>
@@ -461,7 +461,7 @@ export function DashboardCards() {
             })}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-slate-600">
+          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-metro-secondary">
             <CalendarLegend className="bg-red-500" label="Tareas" />
             <CalendarLegend className="bg-orange-500" label="Comité" />
             <CalendarLegend className="bg-blue-500" label="Teletrabajo" />
@@ -470,10 +470,10 @@ export function DashboardCards() {
           </div>
         </article>
 
-        <article className="rounded-[1.75rem] border border-white/70 bg-white p-4 text-slate-950 shadow-card">
-          <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
+          <div className="mb-4 flex items-center justify-between border-b border-metro-border pb-3">
             <h3 className="text-base font-black">Resumen operativo</h3>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+            <span className="rounded-full bg-metro-panel px-3 py-1 text-xs font-black text-metro-secondary">
               Este mes
             </span>
           </div>
@@ -489,25 +489,25 @@ export function DashboardCards() {
               <SummaryLine icon={Laptop} label="Solicitudes teletrabajo" value={pendingTelework.length} />
               <SummaryLine icon={CheckCircle2} label="Actas en seguimiento" value={actaTasks.length} />
             </div>
-            <div className="border-t border-slate-100 pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
-              <p className="mb-4 text-xs font-black uppercase tracking-wide text-slate-500">
+            <div className="border-t border-metro-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+              <p className="mb-4 text-xs font-black uppercase tracking-wide text-metro-muted">
                 Tareas por estado
               </p>
               <div className="space-y-3">
                 {taskSegments.map((segment) => (
                   <div className="grid grid-cols-[5.8rem_1fr_2rem] items-center gap-3" key={segment.label}>
-                    <span className="text-xs font-bold text-slate-600">{segment.label}</span>
-                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                    <span className="text-xs font-bold text-metro-secondary">{segment.label}</span>
+                    <div className="h-3 overflow-hidden rounded-full bg-metro-panel">
                       <div
                         className={`h-full rounded-full ${segment.className}`}
                         style={{ width: `${Math.max(6, (segment.value / maxTaskSegment) * 100)}%` }}
                       />
                     </div>
-                    <span className="text-right text-xs font-black text-slate-950">{segment.value}</span>
+                    <span className="text-right text-xs font-black text-metro-text">{segment.value}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-black">
+              <div className="mt-5 flex items-center justify-between border-t border-metro-border pt-4 text-sm font-black">
                 <span>Total tareas</span>
                 <span>{totalTasks}</span>
               </div>
@@ -515,9 +515,9 @@ export function DashboardCards() {
           </div>
         </article>
 
-        <aside className="rounded-[1.75rem] border border-white/70 bg-white p-4 text-slate-950 shadow-card">
+        <aside className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
           <h3 className="text-base font-black">Hoy</h3>
-          <p className="mt-1 text-sm font-medium capitalize text-slate-500">
+          <p className="mt-1 text-sm font-medium capitalize text-metro-muted">
             {fullDateFormatter.format(today)}
           </p>
           <div className="mt-4 space-y-3">
@@ -555,10 +555,10 @@ export function DashboardCards() {
         </aside>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
           <article
-            className="rounded-[1.5rem] border border-white/70 bg-white p-4 text-slate-950 shadow-card"
+            className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow"
             key={kpi.title}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -568,31 +568,31 @@ export function DashboardCards() {
                 </span>
                 <h3 className="text-sm font-black">{kpi.title}</h3>
               </div>
-              <ChevronRight className="text-slate-400" size={18} />
+              <ChevronRight className="text-metro-muted" size={18} />
             </div>
             <div className="grid grid-cols-[1fr_5.2rem] items-center gap-3">
               <div>
                 <p className="text-4xl font-black tracking-tight">{kpi.value}</p>
-                <p className="text-sm font-medium text-slate-500">{kpi.subtitle}</p>
-                <p className="mt-2 text-xs font-black text-red-500">{kpi.helper}</p>
+                <p className="text-sm font-medium text-metro-muted">{kpi.subtitle}</p>
+                <p className="mt-2 text-xs font-black text-red-400">{kpi.helper}</p>
               </div>
               <div className="relative h-20 w-20 rounded-full p-2" style={miniDonutStyle(kpi.segments)}>
-                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-metro-surface text-center shadow-inner">
                   <span className="text-sm font-black">
                     {kpi.segments.reduce((sum, segment) => sum + segment.value, 0)}
                   </span>
-                  <span className="text-[10px] font-bold text-slate-400">Total</span>
+                  <span className="text-[10px] font-bold text-metro-muted">Total</span>
                 </div>
               </div>
             </div>
-            <div className="mt-4 space-y-2 text-xs font-semibold text-slate-600">
+            <div className="mt-4 space-y-2 text-xs font-semibold text-metro-secondary">
               {kpi.segments.map((segment) => (
                 <div className="flex items-center justify-between gap-3" key={segment.label}>
                   <span className="flex min-w-0 items-center gap-2">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${segment.className}`} />
                     <span className="truncate">{segment.label}</span>
                   </span>
-                  <span className="font-black text-slate-950">{segment.value}</span>
+                  <span className="font-black text-metro-text">{segment.value}</span>
                 </div>
               ))}
             </div>
@@ -600,7 +600,7 @@ export function DashboardCards() {
         ))}
       </section>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_0.85fr_1fr]">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.85fr_1fr]">
         <DashboardList title="Mis tareas críticas" action="Ver todas mis tareas">
           {criticalTasks.slice(0, 5).map((task) => (
             <DashboardListRow
@@ -656,16 +656,16 @@ export function DashboardCards() {
 function DashboardHeaderPill({
   label,
   value,
-  tone = 'text-slate-950',
+  tone = 'text-metro-text',
 }: {
   label: string;
   value: number;
   tone?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+    <div className="rounded-2xl bg-metro-panel/70 px-4 py-3 ring-1 ring-metro-border">
       <p className={`text-xl font-black ${tone}`}>{value}</p>
-      <p className="text-xs font-bold text-slate-500">{label}</p>
+      <p className="text-xs font-bold text-metro-muted">{label}</p>
     </div>
   );
 }
@@ -680,14 +680,14 @@ function CalendarLegend({ className, label }: { className: string; label: string
 
 function SummaryLine({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="rounded-xl bg-white p-2 text-blue-500 shadow-sm">
+        <span className="rounded-xl bg-metro-raised p-2 text-blue-400 shadow-sm">
           <Icon size={17} />
         </span>
-        <span className="truncate text-sm font-bold text-slate-700">{label}</span>
+        <span className="truncate text-sm font-bold text-metro-secondary">{label}</span>
       </div>
-      <span className="text-lg font-black text-slate-950">{value}</span>
+      <span className="text-lg font-black text-metro-text">{value}</span>
     </div>
   );
 }
@@ -702,9 +702,9 @@ function TodayAlert({
   subtitle?: string;
 }) {
   return (
-    <div className={`rounded-2xl border-l-4 bg-slate-50 px-4 py-3 ring-1 ring-slate-100 ${className}`}>
-      <p className="text-sm font-black text-slate-950">{title}</p>
-      <p className="mt-0.5 text-xs font-medium text-slate-500">{subtitle}</p>
+    <div className={`rounded-2xl border-l-4 bg-metro-panel/70 px-4 py-3 ring-1 ring-metro-border ${className}`}>
+      <p className="text-sm font-black text-metro-text">{title}</p>
+      <p className="mt-0.5 text-xs font-medium text-metro-muted">{subtitle}</p>
     </div>
   );
 }
@@ -719,10 +719,10 @@ function DashboardList({
   children: ReactNode;
 }) {
   return (
-    <article className="rounded-[1.5rem] border border-white/70 bg-white p-4 text-slate-950 shadow-card">
+    <article className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
       <h3 className="mb-4 text-base font-black">{title}</h3>
       <div className="space-y-3">{children}</div>
-      <button className="mt-5 text-xs font-black text-red-500 hover:text-red-600" type="button">
+      <button className="mt-5 text-xs font-black text-metro-red hover:text-red-400" type="button">
         {action} <ChevronRight className="inline" size={14} />
       </button>
     </article>
@@ -746,17 +746,17 @@ function DashboardListRow({
     <div className="grid grid-cols-[0.75rem_1fr_auto] items-center gap-3 text-sm">
       <span className={`h-2.5 w-2.5 rounded-full ${tone}`} />
       <div className="min-w-0">
-        <p className="truncate font-black text-slate-950">{label}</p>
-        <p className="truncate text-xs font-medium text-slate-500">{meta}</p>
+        <p className="truncate font-black text-metro-text">{label}</p>
+        <p className="truncate text-xs font-medium text-metro-muted">{meta}</p>
       </div>
       <div className="flex items-center gap-2 text-right text-xs font-black">
-        <span className="rounded-full bg-slate-50 px-2 py-1 text-slate-600">{badge}</span>
-        {date && <span className="text-slate-500">{date}</span>}
+        <span className="rounded-full bg-metro-panel px-2 py-1 text-metro-secondary">{badge}</span>
+        {date && <span className="text-metro-muted">{date}</span>}
       </div>
     </div>
   );
 }
 
 function EmptyDashboardRow({ text }: { text: string }) {
-  return <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">{text}</p>;
+  return <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">{text}</p>;
 }
