@@ -29,6 +29,7 @@ const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
+const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
 
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -44,7 +45,55 @@ function createContextMenu(mainWindow: BrowserWindow): void {
   });
 }
 
-function createWindow() {
+function createSplashWindow(): BrowserWindow {
+  const splashWindow = new BrowserWindow({
+    width: 460,
+    height: 360,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    closable: true,
+    frame: false,
+    show: false,
+    alwaysOnTop: true,
+    title: 'Cargando TrAccion',
+    backgroundColor: '#0F1F2A',
+    icon: appIconPath,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  splashWindow.once('ready-to-show', () => {
+    if (!splashWindow.isDestroyed()) {
+      splashWindow.show();
+    }
+  });
+
+  splashWindow.loadFile(splashHtmlPath).catch(() => {
+    if (!splashWindow.isDestroyed()) {
+      splashWindow.show();
+    }
+  });
+
+  return splashWindow;
+}
+
+function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow): void {
+  if (!mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+  }
+}
+
+function createWindow(splashWindow: BrowserWindow | null = null): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1360,
     height: 860,
@@ -53,6 +102,7 @@ function createWindow() {
     title: 'TrAccion',
     backgroundColor: '#D9EDF2',
     icon: appIconPath,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -62,11 +112,25 @@ function createWindow() {
 
   createContextMenu(mainWindow);
 
+  mainWindow.once('ready-to-show', () => {
+    closeSplashAndShowMain(splashWindow, mainWindow);
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (!mainWindow.isVisible()) {
+      closeSplashAndShowMain(splashWindow, mainWindow);
+    }
+  });
+
   if (isDev) {
-    mainWindow.loadURL(devServerUrl);
+    mainWindow.loadURL(devServerUrl).catch(() => closeSplashAndShowMain(splashWindow, mainWindow));
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow
+      .loadFile(path.join(__dirname, '../dist/index.html'))
+      .catch(() => closeSplashAndShowMain(splashWindow, mainWindow));
   }
+
+  return mainWindow;
 }
 
 interface OutlookDraftPayload {
@@ -559,9 +623,10 @@ function registerIpcHandlers(): void {
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.metro.rrll.traccion');
   Menu.setApplicationMenu(null);
+  const splashWindow = createSplashWindow();
   await initializeSqlitePersistence();
   registerIpcHandlers();
-  createWindow();
+  createWindow(splashWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
