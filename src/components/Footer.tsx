@@ -48,9 +48,9 @@ export function Footer() {
   useEffect(() => subscribeToPersistenceFeedback(setFeedback), []);
 
   return (
-    <footer className="flex h-6 items-center justify-between border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
+    <footer className="flex h-6 shrink-0 items-center justify-between border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
       <span>TrAccion 1.0.{build}</span>
-      <span className={feedbackClassName(feedback.kind)}>{feedbackLabel(feedback)}</span>
+      <span className={`${feedbackClassName(feedback.kind)} font-semibold`}>{feedbackLabel(feedback)}</span>
     </footer>
   );
 }
