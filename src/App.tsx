@@ -7,6 +7,7 @@ import { ActasPage } from './features/actas/components/ActasPage';
 import { ComitePage } from './features/comite/components/ComitePage';
 import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from './features/especiales/components/EspecialesPage';
+import { LicenciasSinSueldoPage } from './features/licencias-sin-sueldo/components/LicenciasSinSueldoPage';
 import { SorteosPage } from './features/sorteos/components/SorteosPage';
 import { PlantillaPage } from './components/PlantillaPage';
 import { ParitariaPage } from './features/paritaria/components/ParitariaPage';
@@ -76,6 +77,7 @@ export function App() {
             />
           )}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
+          {activeView === 'licencias-sin-sueldo' && <LicenciasSinSueldoPage />}
           {activeView === 'sorteos' && <SorteosPage />}
           {activeView === 'vinculograma' && <VinculogramaPage />}
           {activeView === 'especiales' && <EspecialesPage />}

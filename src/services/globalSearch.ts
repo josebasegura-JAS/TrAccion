@@ -29,6 +29,7 @@ const MODULE_ORDER: AppView[] = [
   'actas',
   'paritaria',
   'teletrabajo',
+  'licencias-sin-sueldo',
   'ticket-restaurante',
   'plantilla',
   'vinculograma',
@@ -216,6 +217,20 @@ const searchableModules: SearchableModule[] = [
         ['empleado', 'estado', 'tipoSolicitud', 'periodo', 'puestoNomina', 'puestoOrganizativo', 'observaciones'],
         ['fechaSolicitud', 'updatedAt', 'createdAt'],
         'Solicitud de teletrabajo',
+      ),
+  },
+  {
+    module: 'Licencias sin sueldo',
+    moduleView: 'licencias-sin-sueldo',
+    storageKey: 'traccion.v1.licenciasSinSueldo.records',
+    mapRecord: (record, index) =>
+      makeResult(
+        record,
+        index,
+        ['nombreCompleto', 'numeroEmpleado'],
+        ['numeroEmpleado', 'tipo', 'estado', 'observaciones', 'actualizaciones'],
+        ['fechaSolicitud', 'fechaInicio', 'fechaFin', 'updatedAt', 'createdAt'],
+        'Licencia o permiso no retribuido',
       ),
   },
   {
