@@ -23,7 +23,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
-const appIconPath = path.join(__dirname, '../build/icon/traccion-icon.ico');
+const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
