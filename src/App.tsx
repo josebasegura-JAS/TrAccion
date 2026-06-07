@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AjustesPage } from './components/AjustesPage';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
+import { Footer } from './components/Footer';
 import { ComitePage } from './features/comite/components/ComitePage';
 import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from './features/especiales/components/EspecialesPage';
@@ -43,6 +44,7 @@ export function App() {
           {activeView === 'especiales' && <EspecialesPage />}
           {activeView === 'ajustes' && <AjustesPage />}
         </main>
+        <Footer />
       </div>
     </div>
   );
