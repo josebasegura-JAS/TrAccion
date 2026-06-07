@@ -3,13 +3,17 @@ import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
 import {
+  acquireRecordLock,
   changeSqliteDirectory,
   closeSqlitePersistence,
   createLocalStorageBackup,
+  getRecordLock,
   getSqliteStatus,
+  heartbeatRecordLock,
   initializeSqlitePersistence,
   loadPersistedRecordsSnapshot,
   migrateLocalStorageSnapshot,
+  releaseRecordLock,
   resetSqliteDirectory,
   savePersistedRecord,
 } from './sqlitePersistence.js';
@@ -384,6 +388,26 @@ function assertDocxPath(filePath: string): void {
   }
 }
 
+
+function normalizeRecordLockPayload(payload: unknown): { module: string; recordId: string } | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const candidate = payload as { module?: unknown; recordId?: unknown };
+  if (typeof candidate.module !== 'string' || typeof candidate.recordId !== 'string') {
+    return null;
+  }
+
+  const moduleName = candidate.module.trim();
+  const recordId = candidate.recordId.trim();
+  if (!moduleName || !recordId) {
+    return null;
+  }
+
+  return { module: moduleName, recordId };
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle('database:status', () => getSqliteStatus());
 
@@ -448,6 +472,35 @@ function registerIpcHandlers(): void {
     }
 
     return savePersistedRecord({ key: candidate.key, value: candidate.value });
+  });
+
+
+  ipcMain.handle('recordLock:acquire', (_event, payload: unknown) => {
+    const normalized = normalizeRecordLockPayload(payload);
+    return normalized
+      ? acquireRecordLock(normalized)
+      : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
+  });
+
+  ipcMain.handle('recordLock:heartbeat', (_event, payload: unknown) => {
+    const normalized = normalizeRecordLockPayload(payload);
+    return normalized
+      ? heartbeatRecordLock(normalized)
+      : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
+  });
+
+  ipcMain.handle('recordLock:release', (_event, payload: unknown) => {
+    const normalized = normalizeRecordLockPayload(payload);
+    return normalized
+      ? releaseRecordLock(normalized)
+      : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
+  });
+
+  ipcMain.handle('recordLock:get', (_event, payload: unknown) => {
+    const normalized = normalizeRecordLockPayload(payload);
+    return normalized
+      ? getRecordLock(normalized)
+      : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
   ipcMain.handle('teletrabajo:select-template', async (event) => {

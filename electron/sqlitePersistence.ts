@@ -9,8 +9,9 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 const LOCK_TTL_MS = 30 * 1000;
+const RECORD_LOCK_TTL_MS = 30 * 1000;
 
 export interface PersistedStorageRecord {
   key: string;
@@ -39,6 +40,27 @@ export interface DatabaseLockInfo {
   pid: number;
   createdAt: string;
   updatedAt: string;
+}
+
+
+export interface RecordLockOwnerInfo {
+  ownerId: string;
+  ownerName: string;
+  machineName: string;
+  acquiredAt: string;
+  expiresAt: string;
+}
+
+export interface RecordLockPayload {
+  module: string;
+  recordId: string;
+}
+
+export interface RecordLockResult {
+  ok: boolean;
+  status: 'acquired' | 'released' | 'locked' | 'idle' | 'error';
+  lock: RecordLockOwnerInfo | null;
+  message: string;
 }
 
 export interface DatabaseStatus {
@@ -302,8 +324,32 @@ function migrateToVersion1(db: Database): void {
   }
 }
 
+function migrateToVersion2(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS editing_locks (
+      module TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      owner_name TEXT NOT NULL,
+      machine_name TEXT NOT NULL,
+      acquired_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      PRIMARY KEY (module, record_id)
+    );
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 2) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      2,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
+  migrateToVersion2(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -584,6 +630,247 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
     refreshToken: readRefreshToken(db),
     latestUpdatedAt,
   };
+}
+
+
+interface EditingLockRow {
+  module: string;
+  record_id: string;
+  owner_id: string;
+  owner_name: string;
+  machine_name: string;
+  acquired_at: string;
+  expires_at: string;
+}
+
+function isEditingLockRow(value: unknown): value is EditingLockRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<EditingLockRow>;
+  return (
+    typeof candidate.module === 'string' &&
+    typeof candidate.record_id === 'string' &&
+    typeof candidate.owner_id === 'string' &&
+    typeof candidate.owner_name === 'string' &&
+    typeof candidate.machine_name === 'string' &&
+    typeof candidate.acquired_at === 'string' &&
+    typeof candidate.expires_at === 'string'
+  );
+}
+
+function lockOwnerFromRow(row: EditingLockRow): RecordLockOwnerInfo {
+  return {
+    ownerId: row.owner_id,
+    ownerName: row.owner_name,
+    machineName: row.machine_name,
+    acquiredAt: row.acquired_at,
+    expiresAt: row.expires_at,
+  };
+}
+
+function currentOwnerName(): string {
+  try {
+    return userInfo().username || 'desconocido';
+  } catch {
+    return 'desconocido';
+  }
+}
+
+function validateRecordLockPayload(payload: RecordLockPayload): boolean {
+  return payload.module.trim().length > 0 && payload.recordId.trim().length > 0;
+}
+
+function recordLockError(message: string): RecordLockResult {
+  return { ok: false, status: 'error', lock: null, message };
+}
+
+function ensureRecordLockDatabase(): Database | null {
+  const currentStatus = getSqliteStatus();
+  if (!currentStatus.ready || currentStatus.phase === 'locked') {
+    return null;
+  }
+
+  return requireDatabase();
+}
+
+function deleteExpiredRecordLocks(db: Database, now: string): void {
+  db.prepare('DELETE FROM editing_locks WHERE expires_at <= ?').run(now);
+}
+
+function readRecordLockRow(
+  db: Database,
+  moduleName: string,
+  recordId: string,
+): EditingLockRow | null {
+  const row = db
+    .prepare('SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at FROM editing_locks WHERE module = ? AND record_id = ?')
+    .get(moduleName, recordId);
+  return isEditingLockRow(row) ? row : null;
+}
+
+export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult {
+  if (!validateRecordLockPayload(payload)) {
+    return recordLockError('Identificador de bloqueo inválido.');
+  }
+
+  try {
+    const db = ensureRecordLockDatabase();
+    if (!db) {
+      return recordLockError('SQLite no está disponible para coordinar bloqueos.');
+    }
+
+    const moduleName = payload.module.trim();
+    const recordId = payload.recordId.trim();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
+    deleteExpiredRecordLocks(db, nowIso);
+    const existingLock = readRecordLockRow(db, moduleName, recordId);
+
+    if (existingLock && existingLock.owner_id !== ownerId) {
+      return {
+        ok: false,
+        status: 'locked',
+        lock: lockOwnerFromRow(existingLock),
+        message: `Registro bloqueado por ${existingLock.owner_name}@${existingLock.machine_name}.`,
+      };
+    }
+
+    if (existingLock) {
+      db.prepare(
+        `UPDATE editing_locks
+         SET owner_name = ?, machine_name = ?, expires_at = ?
+         WHERE module = ? AND record_id = ? AND owner_id = ?`,
+      ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
+    } else {
+      db.prepare(
+        `INSERT INTO editing_locks
+         (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
+    }
+
+    const lock = readRecordLockRow(db, moduleName, recordId);
+    return {
+      ok: true,
+      status: 'acquired',
+      lock: lock ? lockOwnerFromRow(lock) : null,
+      message: 'Bloqueo adquirido.',
+    };
+  } catch (error) {
+    return recordLockError(
+      error instanceof Error ? error.message : 'No se ha podido adquirir el bloqueo del registro.',
+    );
+  }
+}
+
+export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResult {
+  if (!validateRecordLockPayload(payload)) {
+    return recordLockError('Identificador de bloqueo inválido.');
+  }
+
+  try {
+    const db = ensureRecordLockDatabase();
+    if (!db) {
+      return recordLockError('SQLite no está disponible para renovar bloqueos.');
+    }
+
+    const moduleName = payload.module.trim();
+    const recordId = payload.recordId.trim();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
+    deleteExpiredRecordLocks(db, nowIso);
+    const existingLock = readRecordLockRow(db, moduleName, recordId);
+
+    if (!existingLock) {
+      return acquireRecordLock(payload);
+    }
+
+    if (existingLock.owner_id !== ownerId) {
+      return {
+        ok: false,
+        status: 'locked',
+        lock: lockOwnerFromRow(existingLock),
+        message: `Registro bloqueado por ${existingLock.owner_name}@${existingLock.machine_name}.`,
+      };
+    }
+
+    db.prepare(
+      `UPDATE editing_locks
+       SET owner_name = ?, machine_name = ?, expires_at = ?
+       WHERE module = ? AND record_id = ? AND owner_id = ?`,
+    ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
+    const lock = readRecordLockRow(db, moduleName, recordId);
+
+    return {
+      ok: true,
+      status: 'acquired',
+      lock: lock ? lockOwnerFromRow(lock) : null,
+      message: 'Bloqueo renovado.',
+    };
+  } catch (error) {
+    return recordLockError(
+      error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo del registro.',
+    );
+  }
+}
+
+export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult {
+  if (!validateRecordLockPayload(payload)) {
+    return recordLockError('Identificador de bloqueo inválido.');
+  }
+
+  try {
+    const db = ensureRecordLockDatabase();
+    if (!db) {
+      return recordLockError('SQLite no está disponible para liberar bloqueos.');
+    }
+
+    db.prepare('DELETE FROM editing_locks WHERE module = ? AND record_id = ? AND owner_id = ?').run(
+      payload.module.trim(),
+      payload.recordId.trim(),
+      ownerId,
+    );
+
+    return { ok: true, status: 'released', lock: null, message: 'Bloqueo liberado.' };
+  } catch (error) {
+    return recordLockError(
+      error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo del registro.',
+    );
+  }
+}
+
+export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
+  if (!validateRecordLockPayload(payload)) {
+    return recordLockError('Identificador de bloqueo inválido.');
+  }
+
+  try {
+    const db = ensureRecordLockDatabase();
+    if (!db) {
+      return recordLockError('SQLite no está disponible para consultar bloqueos.');
+    }
+
+    const nowIso = new Date().toISOString();
+    deleteExpiredRecordLocks(db, nowIso);
+    const existingLock = readRecordLockRow(db, payload.module.trim(), payload.recordId.trim());
+
+    return existingLock
+      ? {
+          ok: existingLock.owner_id === ownerId,
+          status: existingLock.owner_id === ownerId ? 'acquired' : 'locked',
+          lock: lockOwnerFromRow(existingLock),
+          message: 'Bloqueo activo.',
+        }
+      : { ok: true, status: 'idle', lock: null, message: 'Sin bloqueo activo.' };
+  } catch (error) {
+    return recordLockError(
+      error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.',
+    );
+  }
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {

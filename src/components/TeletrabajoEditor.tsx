@@ -16,6 +16,7 @@ import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
+import { useSharedRecordLock } from '../services/useSharedRecordLock';
 
 const plantillaTextFields: Array<{
   field: TeletrabajoTextField;
@@ -114,6 +115,11 @@ export function TeletrabajoEditor({
   const [draft, setDraft] = useState<TeletrabajoDraft>(() => toDraft(solicitud));
   const [wordStatus, setWordStatus] = useState('');
   const [isGeneratingWord, setIsGeneratingWord] = useState(false);
+  const recordLock = useSharedRecordLock({
+    module: 'teletrabajo',
+    recordId: solicitud?.id ?? null,
+    enabled: mode === 'edit' && Boolean(solicitud?.id),
+  });
 
   useEffect(() => {
     setDraft(toDraft(solicitud));
@@ -134,7 +140,8 @@ export function TeletrabajoEditor({
 
   const employeeExists = Boolean(plantillaEmployee);
   const isCreate = mode === 'create';
-  const canSubmit = hasRequiredManualData(draft) && draft.diasTeletrabajo.length > 0;
+  const canSubmit =
+    hasRequiredManualData(draft) && draft.diasTeletrabajo.length > 0 && !recordLock.isReadOnly;
 
   const handleEmpleadoChange = (empleado: string) => {
     const employee = employees.find(
@@ -147,7 +154,7 @@ export function TeletrabajoEditor({
   };
 
   const handleGenerateWord = async () => {
-    if (!canSubmit || isGeneratingWord) {
+    if (!canSubmit || isGeneratingWord || recordLock.isReadOnly) {
       return;
     }
 
@@ -212,11 +219,21 @@ export function TeletrabajoEditor({
           </button>
         </div>
 
+        {recordLock.message && (
+          <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+            recordLock.isReadOnly
+              ? 'border-red-400/40 bg-red-950/20 text-red-100'
+              : 'border-metro-border bg-metro-surface text-metro-muted'
+          }`}>
+            {recordLock.message}
+          </p>
+        )}
+
         <form
           className="flex min-h-0 flex-1 flex-col space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canSubmit) {
+            if (!canSubmit || recordLock.isReadOnly) {
               return;
             }
 
@@ -229,7 +246,10 @@ export function TeletrabajoEditor({
             onDone();
           }}
         >
-          <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+          <fieldset
+            className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 disabled:opacity-70 sm:grid-cols-2"
+            disabled={recordLock.isReadOnly}
+          >
             <div className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
               {draft.empleado.trim().length === 0
                 ? 'Introduce un empleado para buscarlo en Plantilla.'
@@ -429,7 +449,7 @@ export function TeletrabajoEditor({
                 value={draft.observaciones}
               />
             </label>
-          </div>
+          </fieldset>
 
           {wordStatus && (
             <p className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
@@ -447,7 +467,7 @@ export function TeletrabajoEditor({
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmit || isGeneratingWord}
+              disabled={!canSubmit || isGeneratingWord || recordLock.isReadOnly}
               onClick={handleGenerateWord}
               type="button"
             >
@@ -456,7 +476,8 @@ export function TeletrabajoEditor({
             </button>
             {!isCreate && solicitud && (
               <button
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={recordLock.isReadOnly}
                 onClick={() => {
                   removeSolicitud(solicitud.id);
                   onDone();
