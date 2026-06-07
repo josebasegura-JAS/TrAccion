@@ -311,3 +311,23 @@ a {
     transform: rotate(360deg);
   }
 }
+
+.inline-save-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  color: #86efac;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px) scale(0.98);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.inline-save-feedback--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
