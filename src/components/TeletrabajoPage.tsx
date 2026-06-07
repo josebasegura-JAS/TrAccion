@@ -2,7 +2,10 @@ import { FileText, Plus, RotateCcw, Search, SlidersHorizontal, Upload } from 'lu
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
-import { useTableViewPreferences, type TableViewPreferences } from '../shared/table/useTableViewPreferences';
+import {
+  useTableViewPreferences,
+  type TableViewPreferences,
+} from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
@@ -103,7 +106,13 @@ function SelectFilter({
   );
 }
 
-export function TeletrabajoPage() {
+export function TeletrabajoPage({
+  initialSolicitudId = null,
+  navigationNonce,
+}: {
+  initialSolicitudId?: string | null;
+  navigationNonce?: number;
+} = {}) {
   const { filters, importEncuesta, load, remove, selectSolicitud, setFilter, solicitudes } =
     useTeletrabajoStore();
   const employees = useEmployeeStore((state) => state.employees);
@@ -116,6 +125,7 @@ export function TeletrabajoPage() {
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
     load();
@@ -171,26 +181,137 @@ export function TeletrabajoPage() {
       validColumnIds: teletrabajoTableColumnIds,
     });
 
-  const teletrabajoTableColumns = useMemo<Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>>(
+  const teletrabajoTableColumns = useMemo<
+    Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>
+  >(
     () => [
-      { id: 'empleado', header: 'Empleado', accessor: (s) => Number(s.empleado) || s.empleado, render: (s) => s.empleado, width: 105, minWidth: 85, maxWidth: 170, sortable: true, className: 'font-semibold text-metro-text' },
-      { id: 'nombreApellidos', header: 'Nombre y apellidos', accessor: (s) => s.nombreApellidos, render: (s) => s.nombreApellidos, width: 220, minWidth: 160, maxWidth: 420, sortable: true, className: 'text-metro-text' },
-      { id: 'puestoNomina', header: 'Puesto nómina', accessor: (s) => s.puestoNomina, render: (s) => s.puestoNomina, width: 190, minWidth: 140, maxWidth: 360, sortable: true, className: 'text-metro-muted' },
-      { id: 'residencia', header: 'Residencia', accessor: (s) => s.residencia, render: (s) => s.residencia, width: 130, minWidth: 100, maxWidth: 240, sortable: true, className: 'text-metro-muted' },
-      { id: 'tipoSolicitud', header: 'Tipo', accessor: (s) => s.tipoSolicitud, render: (s) => s.tipoSolicitud, width: 110, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
-      { id: 'diasTeletrabajo', header: 'Días', accessor: (s) => s.diasTeletrabajo.join(', '), render: (s) => s.diasTeletrabajo.join(', '), width: 150, minWidth: 110, maxWidth: 240, sortable: true, className: 'text-metro-muted' },
-      { id: 'estado', header: 'Estado', accessor: (s) => s.estado, render: (s) => s.estado, width: 110, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
-      { id: 'periodo', header: 'Periodo', accessor: (s) => s.periodo, render: (s) => s.periodo, width: 110, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
-      { id: 'actions', header: 'Acciones', render: (solicitud) => (
-        <div className="inline-flex items-center justify-end gap-1">
-          {solicitud.estado === 'aprobada' && (
-            <button aria-label="Generar acuerdo Word" className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50" disabled={generatingWordId !== null} onClick={(event) => { event.stopPropagation(); void handleGenerateWord(solicitud); }} title="Generar acuerdo Word" type="button">
-              {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
+      {
+        id: 'empleado',
+        header: 'Empleado',
+        accessor: (s) => Number(s.empleado) || s.empleado,
+        render: (s) => s.empleado,
+        width: 105,
+        minWidth: 85,
+        maxWidth: 170,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'nombreApellidos',
+        header: 'Nombre y apellidos',
+        accessor: (s) => s.nombreApellidos,
+        render: (s) => s.nombreApellidos,
+        width: 220,
+        minWidth: 160,
+        maxWidth: 420,
+        sortable: true,
+        className: 'text-metro-text',
+      },
+      {
+        id: 'puestoNomina',
+        header: 'Puesto nómina',
+        accessor: (s) => s.puestoNomina,
+        render: (s) => s.puestoNomina,
+        width: 190,
+        minWidth: 140,
+        maxWidth: 360,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'residencia',
+        header: 'Residencia',
+        accessor: (s) => s.residencia,
+        render: (s) => s.residencia,
+        width: 130,
+        minWidth: 100,
+        maxWidth: 240,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'tipoSolicitud',
+        header: 'Tipo',
+        accessor: (s) => s.tipoSolicitud,
+        render: (s) => s.tipoSolicitud,
+        width: 110,
+        minWidth: 90,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'diasTeletrabajo',
+        header: 'Días',
+        accessor: (s) => s.diasTeletrabajo.join(', '),
+        render: (s) => s.diasTeletrabajo.join(', '),
+        width: 150,
+        minWidth: 110,
+        maxWidth: 240,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'estado',
+        header: 'Estado',
+        accessor: (s) => s.estado,
+        render: (s) => s.estado,
+        width: 110,
+        minWidth: 90,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'periodo',
+        header: 'Periodo',
+        accessor: (s) => s.periodo,
+        render: (s) => s.periodo,
+        width: 110,
+        minWidth: 90,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        render: (solicitud) => (
+          <div className="inline-flex items-center justify-end gap-1">
+            {solicitud.estado === 'aprobada' && (
+              <button
+                aria-label="Generar acuerdo Word"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={generatingWordId !== null}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleGenerateWord(solicitud);
+                }}
+                title="Generar acuerdo Word"
+                type="button"
+              >
+                {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
+              </button>
+            )}
+            <button
+              className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+              onClick={(event) => {
+                event.stopPropagation();
+                remove(solicitud.id);
+              }}
+              type="button"
+            >
+              Eliminar
             </button>
-          )}
-          <button className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark" onClick={(event) => { event.stopPropagation(); remove(solicitud.id); }} type="button">Eliminar</button>
-        </div>
-      ), width: 100, minWidth: 95, maxWidth: 130, resizable: false, isActionColumn: true, className: 'whitespace-nowrap' },
+          </div>
+        ),
+        width: 100,
+        minWidth: 95,
+        maxWidth: 130,
+        resizable: false,
+        isActionColumn: true,
+        className: 'whitespace-nowrap',
+      },
     ],
     [generatingWordId, handleGenerateWord, remove],
   );
@@ -231,6 +352,28 @@ export function TeletrabajoPage() {
     setEditorMode(null);
     setEditingSolicitudId(null);
   };
+
+  useEffect(() => {
+    if (!initialSolicitudId || navigationNonce === undefined) {
+      return;
+    }
+
+    if (processedNavigationNonceRef.current === navigationNonce) {
+      return;
+    }
+
+    const targetSolicitud = visibleSolicitudes.find(
+      (solicitud) => solicitud.id === initialSolicitudId,
+    );
+    if (!targetSolicitud) {
+      return;
+    }
+
+    selectSolicitud(targetSolicitud.id);
+    setEditingSolicitudId(targetSolicitud.id);
+    setEditorMode('edit');
+    processedNavigationNonceRef.current = navigationNonce;
+  }, [initialSolicitudId, navigationNonce, selectSolicitud, visibleSolicitudes]);
 
   const handleImportEncuesta = async (file: File) => {
     const summary = await importEncuesta(file, employees);

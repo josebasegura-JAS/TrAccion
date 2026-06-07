@@ -4,6 +4,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  ExternalLink,
+  X,
   Laptop,
   ListChecks,
   Utensils,
@@ -15,6 +17,7 @@ import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
+import type { AppView } from './Sidebar';
 
 type CalendarEventType = 'task' | 'committee' | 'telework' | 'tickets' | 'actas';
 
@@ -24,6 +27,13 @@ type CalendarEvent = {
   type: CalendarEventType;
   title: string;
   detail: string;
+  view: AppView;
+  recordId?: string;
+};
+
+type DashboardNavigationTarget = {
+  view: AppView;
+  recordId?: string;
 };
 
 type KpiCard = {
@@ -162,8 +172,13 @@ function miniDonutStyle(segments: { value: number; className: string }[]) {
   return { background: `conic-gradient(${stops})` };
 }
 
-export function DashboardCards() {
+export function DashboardCards({
+  onOpenRecord,
+}: {
+  onOpenRecord?: (target: DashboardNavigationTarget) => void;
+}) {
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
 
@@ -231,6 +246,8 @@ export function DashboardCards() {
         type: 'task' as const,
         title: task.titulo,
         detail: `${taskStateLabels[task.estado]} · prioridad ${task.prioridad}`,
+        view: 'tareas' as const,
+        recordId: task.id,
       }));
 
     const committeeEvents = openCommitteeSessions.map((session) => ({
@@ -239,6 +256,8 @@ export function DashboardCards() {
       type: 'committee' as const,
       title: session.title,
       detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} en orden del día`,
+      view: 'comite' as const,
+      recordId: session.id,
     }));
 
     const teleworkEvents = pendingTelework
@@ -249,6 +268,8 @@ export function DashboardCards() {
         type: 'telework' as const,
         title: solicitud.nombreApellidos,
         detail: 'Solicitud de teletrabajo pendiente',
+        view: 'teletrabajo' as const,
+        recordId: solicitud.id,
       }));
 
     const ticketEvents = activeTicketAbsences.slice(0, 30).map((absence) => ({
@@ -257,6 +278,8 @@ export function DashboardCards() {
       type: 'tickets' as const,
       title: absence.nombreApellidos,
       detail: `${absence.motivo} · afecta ticket`,
+      view: 'ticket-restaurante' as const,
+      recordId: absence.id,
     }));
 
     const actaEvents = actaTasks
@@ -267,6 +290,8 @@ export function DashboardCards() {
         type: 'actas' as const,
         title: task.titulo,
         detail: 'Seguimiento de acta',
+        view: 'tareas' as const,
+        recordId: task.id,
       }));
 
     return [...taskEvents, ...committeeEvents, ...teleworkEvents, ...ticketEvents, ...actaEvents];
@@ -280,6 +305,13 @@ export function DashboardCards() {
       }, {}),
     [calendarEvents],
   );
+
+  const selectedDateEvents = selectedDate ? (eventsByDay[selectedDate] ?? []) : [];
+  const selectedDateLabel = selectedDate
+    ? parseIsoDate(selectedDate)
+      ? fullDateFormatter.format(parseIsoDate(selectedDate) as Date)
+      : selectedDate
+    : '';
 
   const upcomingEvents = useMemo(
     () =>
@@ -297,7 +329,9 @@ export function DashboardCards() {
   }, [visibleMonth]);
 
   const kpis = useMemo<KpiCard[]>(() => {
-    const committeeTasks = activeTasks.filter((task) => task.fase.trim().toLowerCase() === 'comite');
+    const committeeTasks = activeTasks.filter(
+      (task) => task.fase.trim().toLowerCase() === 'comite',
+    );
     const teleworkSegments = [
       { label: 'Por validar', value: pendingTelework.length, className: 'bg-blue-500' },
       {
@@ -313,7 +347,11 @@ export function DashboardCards() {
     ];
     const ticketSegments = [
       { label: 'Personas activas', value: activeTicketPeople.length, className: 'bg-emerald-500' },
-      { label: 'Ausencias con descuento', value: activeTicketAbsences.length, className: 'bg-orange-500' },
+      {
+        label: 'Ausencias con descuento',
+        value: activeTicketAbsences.length,
+        className: 'bg-orange-500',
+      },
     ];
 
     return [
@@ -334,7 +372,11 @@ export function DashboardCards() {
         icon: UsersRound,
         tone: 'text-orange-400 bg-orange-500/10 ring-1 ring-orange-500/20',
         segments: [
-          { label: 'Sesiones abiertas', value: openCommitteeSessions.length, className: 'bg-red-500' },
+          {
+            label: 'Sesiones abiertas',
+            value: openCommitteeSessions.length,
+            className: 'bg-red-500',
+          },
           { label: 'Puntos abiertos', value: committeeTasks.length, className: 'bg-orange-500' },
           {
             label: 'Sesiones cerradas',
@@ -383,14 +425,20 @@ export function DashboardCards() {
       <section className="rounded-[2rem] border border-metro-border bg-metro-surface/90 p-5 text-metro-text shadow-glow">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-metro-text">Buenos días, Joseba</h2>
+            <h2 className="text-2xl font-black tracking-tight text-metro-text">
+              Buenos días, Joseba
+            </h2>
             <p className="mt-1 text-sm font-medium text-metro-muted capitalize">
               {fullDateFormatter.format(today)}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <DashboardHeaderPill label="Tareas abiertas" value={activeTasks.length} />
-            <DashboardHeaderPill label="Críticas" value={criticalTasks.length} tone="text-red-400" />
+            <DashboardHeaderPill
+              label="Críticas"
+              value={criticalTasks.length}
+              tone="text-red-400"
+            />
             <DashboardHeaderPill label="Comité" value={openCommitteeSessions.length} />
             <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} />
           </div>
@@ -440,11 +488,22 @@ export function DashboardCards() {
               const isToday = isoDate === todayIso;
 
               return (
-                <div
+                <button
                   className={`min-h-11 rounded-2xl px-1.5 py-1 text-center text-sm font-bold transition ${
-                    date ? 'text-metro-secondary hover:bg-metro-panel/70' : 'text-transparent'
+                    date
+                      ? events.length > 0
+                        ? 'cursor-pointer text-metro-secondary hover:bg-metro-panel/70 hover:text-metro-text'
+                        : 'text-metro-secondary hover:bg-metro-panel/40'
+                      : 'cursor-default text-transparent'
                   } ${isToday ? 'bg-metro-red text-white shadow-lg shadow-red-950/25 hover:bg-metro-dark' : ''}`}
+                  disabled={!date}
                   key={`${isoDate}-${index}`}
+                  onClick={() => {
+                    if (date) {
+                      setSelectedDate(isoDate);
+                    }
+                  }}
+                  type="button"
                 >
                   <span>{date?.getDate() ?? '·'}</span>
                   <div className="mt-1 flex min-h-2 justify-center gap-0.5">
@@ -455,8 +514,13 @@ export function DashboardCards() {
                         title={event.title}
                       />
                     ))}
+                    {events.length > 4 && (
+                      <span className="text-[9px] leading-none text-metro-muted">
+                        +{events.length - 4}
+                      </span>
+                    )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -480,34 +544,53 @@ export function DashboardCards() {
           <div className="grid gap-5 md:grid-cols-[0.9fr_1.1fr]">
             <div className="space-y-3">
               <SummaryLine icon={ListChecks} label="Tareas abiertas" value={activeTasks.length} />
-              <SummaryLine icon={ClipboardList} label="Tareas críticas" value={criticalTasks.length} />
+              <SummaryLine
+                icon={ClipboardList}
+                label="Tareas críticas"
+                value={criticalTasks.length}
+              />
               <SummaryLine
                 icon={UsersRound}
                 label="Sesiones comité pendientes"
                 value={openCommitteeSessions.length}
               />
-              <SummaryLine icon={Laptop} label="Solicitudes teletrabajo" value={pendingTelework.length} />
-              <SummaryLine icon={CheckCircle2} label="Actas en seguimiento" value={actaTasks.length} />
+              <SummaryLine
+                icon={Laptop}
+                label="Solicitudes teletrabajo"
+                value={pendingTelework.length}
+              />
+              <SummaryLine
+                icon={CheckCircle2}
+                label="Actas en seguimiento"
+                value={actaTasks.length}
+              />
             </div>
-            <div className="border-t border-metro-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
-              <p className="mb-4 text-xs font-black uppercase tracking-wide text-metro-muted">
+            <div className="min-w-0 overflow-hidden border-t border-metro-border pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
+              <p className="mb-3 text-[11px] font-black uppercase tracking-wide text-metro-muted">
                 Tareas por estado
               </p>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {taskSegments.map((segment) => (
-                  <div className="grid grid-cols-[5.8rem_1fr_2rem] items-center gap-3" key={segment.label}>
-                    <span className="text-xs font-bold text-metro-secondary">{segment.label}</span>
-                    <div className="h-3 overflow-hidden rounded-full bg-metro-panel">
+                  <div
+                    className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)_1.5rem] items-center gap-2"
+                    key={segment.label}
+                  >
+                    <span className="truncate text-[11px] font-bold text-metro-secondary">
+                      {segment.label}
+                    </span>
+                    <div className="h-2.5 min-w-0 overflow-hidden rounded-full bg-metro-panel">
                       <div
                         className={`h-full rounded-full ${segment.className}`}
                         style={{ width: `${Math.max(6, (segment.value / maxTaskSegment) * 100)}%` }}
                       />
                     </div>
-                    <span className="text-right text-xs font-black text-metro-text">{segment.value}</span>
+                    <span className="text-right text-[11px] font-black text-metro-text">
+                      {segment.value}
+                    </span>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 flex items-center justify-between border-t border-metro-border pt-4 text-sm font-black">
+              <div className="mt-4 flex items-center justify-between border-t border-metro-border pt-3 text-xs font-black">
                 <span>Total tareas</span>
                 <span>{totalTasks}</span>
               </div>
@@ -521,7 +604,10 @@ export function DashboardCards() {
             {fullDateFormatter.format(today)}
           </p>
           <div className="mt-4 space-y-3">
-            <TodayAlert className="border-red-500" title={`${criticalTasks.length} tareas críticas`} />
+            <TodayAlert
+              className="border-red-500"
+              title={`${criticalTasks.length} tareas críticas`}
+            />
             <TodayAlert
               className="border-orange-500"
               title={
@@ -576,7 +662,10 @@ export function DashboardCards() {
                 <p className="text-sm font-medium text-metro-muted">{kpi.subtitle}</p>
                 <p className="mt-2 text-xs font-black text-red-400">{kpi.helper}</p>
               </div>
-              <div className="relative h-20 w-20 rounded-full p-2" style={miniDonutStyle(kpi.segments)}>
+              <div
+                className="relative h-20 w-20 rounded-full p-2"
+                style={miniDonutStyle(kpi.segments)}
+              >
                 <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-metro-surface text-center shadow-inner">
                   <span className="text-sm font-black">
                     {kpi.segments.reduce((sum, segment) => sum + segment.value, 0)}
@@ -612,7 +701,9 @@ export function DashboardCards() {
               tone="bg-red-500"
             />
           ))}
-          {criticalTasks.length === 0 && <EmptyDashboardRow text="No hay tareas críticas abiertas." />}
+          {criticalTasks.length === 0 && (
+            <EmptyDashboardRow text="No hay tareas críticas abiertas." />
+          )}
         </DashboardList>
 
         <DashboardList title="Próximos hitos" action="Ver calendario completo">
@@ -626,7 +717,9 @@ export function DashboardCards() {
               tone={eventTone[event.type]}
             />
           ))}
-          {upcomingEvents.length === 0 && <EmptyDashboardRow text="No hay hitos próximos con fecha." />}
+          {upcomingEvents.length === 0 && (
+            <EmptyDashboardRow text="No hay hitos próximos con fecha." />
+          )}
         </DashboardList>
 
         <DashboardList title="Actividad reciente" action="Ver toda la actividad">
@@ -649,6 +742,72 @@ export function DashboardCards() {
           )}
         </DashboardList>
       </section>
+
+      {selectedDate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-metro-border bg-metro-surface text-metro-text shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-metro-red">
+                  Calendario
+                </p>
+                <h3 className="mt-1 text-lg font-black capitalize">{selectedDateLabel}</h3>
+                <p className="mt-1 text-sm font-medium text-metro-muted">
+                  {selectedDateEvents.length === 0
+                    ? 'No hay registros asociados a esta fecha.'
+                    : `${selectedDateEvents.length} registro${selectedDateEvents.length === 1 ? '' : 's'} asociado${selectedDateEvents.length === 1 ? '' : 's'}.`}
+                </p>
+              </div>
+              <button
+                className="rounded-full p-2 text-metro-muted transition hover:bg-metro-panel hover:text-metro-text"
+                onClick={() => setSelectedDate(null)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-auto p-4">
+              {selectedDateEvents.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedDateEvents.map((event) => (
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 p-3 ring-1 ring-metro-border"
+                      key={event.id}
+                    >
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-2 text-sm font-black text-metro-text">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${eventTone[event.type]}`}
+                          />
+                          <span className="truncate">{event.title}</span>
+                        </p>
+                        <p className="mt-1 truncate text-xs font-medium text-metro-muted">
+                          {event.detail}
+                        </p>
+                      </div>
+                      <button
+                        className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-black text-metro-secondary transition hover:border-metro-red hover:text-metro-text"
+                        onClick={() => {
+                          onOpenRecord?.({ view: event.view, recordId: event.recordId });
+                          setSelectedDate(null);
+                        }}
+                        type="button"
+                      >
+                        Abrir <ExternalLink size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
+                  Selecciona otro día con puntos de color para ver tareas, sesiones o registros.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -678,7 +837,15 @@ function CalendarLegend({ className, label }: { className: string; label: string
   );
 }
 
-function SummaryLine({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number }) {
+function SummaryLine({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">
       <div className="flex min-w-0 items-center gap-3">
@@ -702,7 +869,9 @@ function TodayAlert({
   subtitle?: string;
 }) {
   return (
-    <div className={`rounded-2xl border-l-4 bg-metro-panel/70 px-4 py-3 ring-1 ring-metro-border ${className}`}>
+    <div
+      className={`rounded-2xl border-l-4 bg-metro-panel/70 px-4 py-3 ring-1 ring-metro-border ${className}`}
+    >
       <p className="text-sm font-black text-metro-text">{title}</p>
       <p className="mt-0.5 text-xs font-medium text-metro-muted">{subtitle}</p>
     </div>
@@ -758,5 +927,9 @@ function DashboardListRow({
 }
 
 function EmptyDashboardRow({ text }: { text: string }) {
-  return <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">{text}</p>;
+  return (
+    <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
+      {text}
+    </p>
+  );
 }

@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Plus, Search, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
 import { getTaskClosedYear } from '../features/tareas/domain/historico';
@@ -151,7 +151,13 @@ function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): Histor
     .map(([year, groupTasks]) => ({ year, tasks: sortHistoricTasks(groupTasks, sortState) }));
 }
 
-export function TareasPage() {
+export function TareasPage({
+  initialTaskId = null,
+  navigationNonce,
+}: {
+  initialTaskId?: string | null;
+  navigationNonce?: number;
+} = {}) {
   const { filters, load, remove, selectTask, setFilter, tasks } = useTaskStore();
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
@@ -163,6 +169,7 @@ export function TareasPage() {
   });
   const [isHistoricOpen, setIsHistoricOpen] = useState(false);
   const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
+  const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
     load();
@@ -343,6 +350,26 @@ export function TareasPage() {
     setEditorMode(null);
     setEditingTaskId(null);
   };
+
+  useEffect(() => {
+    if (!initialTaskId || navigationNonce === undefined) {
+      return;
+    }
+
+    if (processedNavigationNonceRef.current === navigationNonce) {
+      return;
+    }
+
+    const targetTask = visibleTasks.find((task) => task.id === initialTaskId);
+    if (!targetTask) {
+      return;
+    }
+
+    selectTask(targetTask.id);
+    setEditingTaskId(targetTask.id);
+    setEditorMode('edit');
+    processedNavigationNonceRef.current = navigationNonce;
+  }, [initialTaskId, navigationNonce, selectTask, visibleTasks]);
 
   const toggleHistoricSort = (key: HistoricSortKey) => {
     setHistoricSortState((current) => ({
