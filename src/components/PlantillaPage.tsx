@@ -1,4 +1,12 @@
-import { FileUp, Languages, Plus, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import {
+  FileUp,
+  Languages,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
@@ -8,6 +16,12 @@ import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/u
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
+import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { sortDataTableRows } from '../shared/table/tableSorting';
+import {
+  type TableViewPreferences,
+  useTableViewPreferences,
+} from '../shared/table/useTableViewPreferences';
 
 type SortKey =
   | 'empleado'
@@ -17,20 +31,31 @@ type SortKey =
   | 'residencia'
   | 'nivelRetributivo';
 
-type SortDirection = 'asc' | 'desc';
+type EmployeeTableColumnId = SortKey | 'actions';
 
-interface SortState {
-  key: SortKey;
-  direction: SortDirection;
-}
+const PLANTILLA_TABLE_STORAGE_KEY = 'traccion.tableView.plantilla.main';
 
-const sortableColumns: Array<{ key: SortKey; label: string; className: string }> = [
-  { key: 'empleado', label: 'Empleado', className: 'w-[105px]' },
-  { key: 'nombreApellidos', label: 'Nombre y apellidos', className: 'w-[220px]' },
-  { key: 'puestoNomina', label: 'Puesto nómina', className: 'w-[190px]' },
-  { key: 'puestoEus', label: 'Puesto EUS', className: 'w-[190px]' },
-  { key: 'residencia', label: 'Residencia', className: 'w-[120px]' },
-  { key: 'nivelRetributivo', label: 'Nivel', className: 'w-[95px]' },
+const defaultPlantillaTablePreferences: TableViewPreferences<EmployeeTableColumnId> = {
+  sort: { columnId: 'empleado', direction: 'asc' },
+  columnWidths: {
+    empleado: 105,
+    nombreApellidos: 240,
+    puestoNomina: 190,
+    puestoEus: 190,
+    residencia: 120,
+    nivelRetributivo: 95,
+    actions: 92,
+  },
+};
+
+const plantillaTableColumnIds: EmployeeTableColumnId[] = [
+  'empleado',
+  'nombreApellidos',
+  'puestoNomina',
+  'puestoEus',
+  'residencia',
+  'nivelRetributivo',
+  'actions',
 ];
 
 const employeeExportColumns: ExportColumn<Employee>[] = [
@@ -46,19 +71,6 @@ const employeeExportColumns: ExportColumn<Employee>[] = [
   { key: 'nivelRetributivo', header: 'Nivel', value: (employee) => employee.nivelRetributivo },
 ];
 
-function compareEmployeeValues(first: Employee, second: Employee, key: SortKey): number {
-  if (key === 'empleado') {
-    const firstNumber = Number(first.empleado.trim());
-    const secondNumber = Number(second.empleado.trim());
-
-    if (Number.isFinite(firstNumber) && Number.isFinite(secondNumber)) {
-      return firstNumber - secondNumber;
-    }
-  }
-
-  return first[key].localeCompare(second[key], 'es', { numeric: true, sensitivity: 'base' });
-}
-
 export function PlantillaPage() {
   const {
     employees,
@@ -73,7 +85,6 @@ export function PlantillaPage() {
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [isTranslationsModalOpen, setTranslationsModalOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
-  const [sortState, setSortState] = useState<SortState>({ key: 'empleado', direction: 'asc' });
   const [importMessage, setImportMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,18 +100,6 @@ export function PlantillaPage() {
     () => filterEmployees(employees, filters),
     [employees, filters],
   );
-  const sortedEmployees = useMemo(() => {
-    return filteredEmployees
-      .map((employee, index) => ({ employee, index }))
-      .sort((first, second) => {
-        const comparison = compareEmployeeValues(first.employee, second.employee, sortState.key);
-        const directedComparison = sortState.direction === 'asc' ? comparison : -comparison;
-
-        return directedComparison || first.index - second.index;
-      })
-      .map(({ employee }) => employee);
-  }, [filteredEmployees, sortState]);
-
   const editorEmployee =
     editorMode === 'edit'
       ? (visibleEmployees.find((employee) => employee.empleado === editingEmployeeId) ?? null)
@@ -122,13 +121,6 @@ export function PlantillaPage() {
     setEditingEmployeeId(null);
   };
 
-  const toggleSort = (key: SortKey) => {
-    setSortState((current) => ({
-      key,
-      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
-    }));
-  };
-
   const residencias = uniqueSorted(visibleEmployees.map((employee) => employee.residencia));
   const niveles = uniqueSorted(visibleEmployees.map((employee) => employee.nivelRetributivo));
   const emptyPuestoEusCount = visibleEmployees.filter(
@@ -139,6 +131,115 @@ export function PlantillaPage() {
     ['Residencia', filters.residencia],
     ['Nivel retributivo', filters.nivelRetributivo],
   ]);
+
+  const { preferences, setSort, setColumnWidth, resetPreferences } =
+    useTableViewPreferences<EmployeeTableColumnId>({
+      storageKey: PLANTILLA_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultPlantillaTablePreferences,
+      validColumnIds: plantillaTableColumnIds,
+    });
+
+  const employeeTableColumns = useMemo<Array<DataTableColumn<Employee, EmployeeTableColumnId>>>(
+    () => [
+      {
+        id: 'empleado',
+        header: 'Empleado',
+        accessor: (employee) => {
+          const employeeNumber = Number(employee.empleado.trim());
+          return Number.isFinite(employeeNumber) ? employeeNumber : employee.empleado;
+        },
+        render: (employee) => employee.empleado,
+        width: 105,
+        minWidth: 90,
+        maxWidth: 180,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'nombreApellidos',
+        header: 'Nombre y apellidos',
+        accessor: (employee) => employee.nombreApellidos,
+        render: (employee) => employee.nombreApellidos,
+        width: 240,
+        minWidth: 170,
+        maxWidth: 420,
+        sortable: true,
+        className: 'text-metro-text',
+      },
+      {
+        id: 'puestoNomina',
+        header: 'Puesto nómina',
+        accessor: (employee) => employee.puestoNomina,
+        render: (employee) => employee.puestoNomina,
+        width: 190,
+        minWidth: 145,
+        maxWidth: 360,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'puestoEus',
+        header: 'Puesto EUS',
+        accessor: (employee) => employee.puestoEus,
+        render: (employee) => employee.puestoEus || '—',
+        width: 190,
+        minWidth: 145,
+        maxWidth: 360,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'residencia',
+        header: 'Residencia',
+        accessor: (employee) => employee.residencia,
+        render: (employee) => employee.residencia,
+        width: 120,
+        minWidth: 95,
+        maxWidth: 220,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'nivelRetributivo',
+        header: 'Nivel',
+        accessor: (employee) => employee.nivelRetributivo,
+        render: (employee) => employee.nivelRetributivo,
+        width: 95,
+        minWidth: 75,
+        maxWidth: 160,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        render: (employee) => (
+          <button
+            className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={(event) => {
+              event.stopPropagation();
+              remove(employee.empleado);
+            }}
+            type="button"
+          >
+            Eliminar
+          </button>
+        ),
+        width: 92,
+        minWidth: 84,
+        maxWidth: 120,
+        resizable: false,
+        isActionColumn: true,
+        className: 'whitespace-nowrap',
+      },
+    ],
+    [remove],
+  );
+
+  const sortedEmployees = useMemo(
+    () => sortDataTableRows(filteredEmployees, employeeTableColumns, preferences.sort),
+    [employeeTableColumns, filteredEmployees, preferences.sort],
+  );
 
   const handleGlobalJobPositionUpdate = () => {
     const { updated, missing } = updateEmptyEmployeeJobPositionTranslations();
@@ -259,90 +360,32 @@ export function PlantillaPage() {
               }}
             />
           </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-            {filteredEmployees.length} registros
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={resetPreferences}
+              type="button"
+            >
+              <RotateCcw size={14} /> Restablecer vista
+            </button>
+            <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
+              {filteredEmployees.length} registros
+            </span>
+          </div>
         </div>
-        <div className="max-h-[460px] overflow-auto">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-              <tr>
-                {sortableColumns.map((column) => {
-                  const isActive = sortState.key === column.key;
-
-                  return (
-                    <th className={`${column.className} px-3 py-2`} key={column.key}>
-                      <button
-                        className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
-                        onClick={() => toggleSort(column.key)}
-                        type="button"
-                      >
-                        <span>{column.label}</span>
-                        {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
-                      </button>
-                    </th>
-                  );
-                })}
-                <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-metro-border bg-metro-surface">
-              {sortedEmployees.map((employee) => (
-                <tr
-                  className="cursor-pointer hover:bg-metro-red/10"
-                  key={employee.empleado}
-                  onClick={() => openEditor(employee)}
-                >
-                  <td
-                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                    title={employee.empleado}
-                  >
-                    {employee.empleado}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-text"
-                    title={employee.nombreApellidos}
-                  >
-                    {employee.nombreApellidos}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={employee.puestoNomina}
-                  >
-                    {employee.puestoNomina}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={employee.puestoEus || 'Sin traducción'}
-                  >
-                    {employee.puestoEus || '—'}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={employee.residencia}>
-                    {employee.residencia}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={employee.nivelRetributivo}
-                  >
-                    {employee.nivelRetributivo}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <button
-                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        remove(employee.empleado);
-                      }}
-                      type="button"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          ariaLabel="Personas en plantilla"
+          columnWidths={preferences.columnWidths}
+          columns={employeeTableColumns}
+          emptyMessage="No hay personas que coincidan con los filtros."
+          getRowId={(employee) => employee.empleado}
+          onColumnWidthChange={setColumnWidth}
+          onRowClick={openEditor}
+          onSortChange={setSort}
+          rowClassName={() => 'cursor-pointer hover:bg-metro-red/10'}
+          rows={filteredEmployees}
+          sort={preferences.sort}
+        />
       </div>
 
       {editorMode && (
