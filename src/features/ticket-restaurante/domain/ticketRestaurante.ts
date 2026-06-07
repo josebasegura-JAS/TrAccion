@@ -135,9 +135,9 @@ export interface TicketMonthCalculation {
 }
 
 export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
-  importeTicket: 16,
-  pedidoMensual: 0,
-  priceHistory: [{ amount: 16, effectiveFrom: '2026-03-01' }],
+  importeTicket: 14.57,
+  pedidoMensual: 2404407,
+  priceHistory: [{ amount: 14.57, effectiveFrom: '2026-03-01' }],
   rules: {
     debtStartDate: '2026-03-01',
     noOrderMonths: [5, 6, 7, 8, 9, 10],
@@ -370,7 +370,7 @@ export function calculateTicketMonth(
   year: number,
   month: number,
 ): TicketMonthCalculation {
-  return calculateTicketContribution(people, calendars, absences, config, year, month);
+  return calculateMonthlyTicketOrder(people, calendars, absences, config, year, month);
 }
 
 type TicketCalculationMode = 'monthlyOrder' | 'contribution';
@@ -465,8 +465,8 @@ function calculateTicketMonthInternal(
     .map((person) => {
       const calendar = calendarById.get(person.calendarId);
       return mode === 'monthlyOrder'
-        ? calculatePersonMonthlyOrder(person, calendar, absences, effectiveConfig, year, month)
-        : calculatePersonContribution(person, calendar, absences, effectiveConfig, year, month);
+        ? calculatePersonContribution(person, calendar, absences, effectiveConfig, year, month)
+        : calculatePersonMonthlyOrder(person, calendar, absences, effectiveConfig, year, month);
     })
     .sort((first, second) =>
       first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
@@ -521,8 +521,7 @@ function calculatePersonMonthlyOrder(
     ? buildPersonAbsenceTicketDays(person, calendar, absences, monthStart, monthEnd, config.rules)
     : new Set<string>();
   const effectivePrice = getEffectiveTicketPrice(config, year, month);
-  const noOrderMonth = config.rules.noOrderMonths.includes(month);
-  const ticketsFinales = noOrderMonth ? 0 : Math.max(0, ticketDays.length - absenceDays.size);
+  const ticketsFinales = Math.max(0, ticketDays.length - absenceDays.size);
 
   return {
     empleado: person.empleado,
@@ -633,9 +632,7 @@ function calculatePersonContributionDebtStatus(
       .filter((absence) => absence.hasta >= debtStartDate)
       .forEach((absence) => absenceIds.add(absence.id));
 
-    const availableTickets = config.rules.noOrderMonths.includes(cursorMonth)
-      ? 0
-      : buildMonthTicketDays(calendar, cursorYear, cursorMonth).length;
+    const availableTickets = buildMonthTicketDays(calendar, cursorYear, cursorMonth).length;
     const applied = Math.min(availableTickets, debt);
     const pending = debt - applied;
 

@@ -307,17 +307,55 @@ const ticketPersonExportColumns = (
   { key: 'activo', header: 'Estado', value: (person) => (person.activo ? 'Activo' : 'Inactivo') },
 ];
 
+const formatTicketExcelNumber = (value: number): string =>
+  value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const formatTicketExcelDate = (year: number, month: number, day = 1): string =>
+  `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+
+const formatAppliedAbsencesForExport = (
+  row: TicketPersonCalculation,
+  absences: readonly TicketRestaurantAbsence[],
+): string => {
+  const absenceById = new Map(absences.map((absence) => [absence.id, absence]));
+  return row.ausenciaIds
+    .map((id) => absenceById.get(id))
+    .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence))
+    .map(
+      (absence) =>
+        `${absence.motivo} ${formatIsoDateForExport(absence.desde)}-${formatIsoDateForExport(absence.hasta)}`,
+    )
+    .join('; ');
+};
+
+const formatIsoDateForExport = (value: string): string => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
+};
+
 const monthlyCalculationExportColumns = (
-  importeTicket: number,
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+  absences: readonly TicketRestaurantAbsence[],
 ): ExportColumn<TicketPersonCalculation>[] => [
-  { key: 'empleado', header: 'Nº empleado', value: (row) => row.empleado },
-  { key: 'nombreApellidos', header: 'Nombre y apellidos', value: (row) => row.nombreApellidos },
-  { key: 'calendario', header: 'Calendario', value: (row) => row.calendario },
-  { key: 'diasTeoricos', header: 'Días teóricos', value: (row) => row.diasTeoricos },
-  { key: 'ausenciasMes', header: 'Ausencias mes', value: (row) => row.ausenciasMes },
-  { key: 'ticketsFinales', header: 'Tickets a pedir', value: (row) => row.ticketsFinales },
-  { key: 'importeTicket', header: 'Importe ticket', value: () => importeTicket.toFixed(2) },
-  { key: 'total', header: 'Total', value: (row) => row.importe.toFixed(2) },
+  { key: 'nombre', header: 'Nombre', value: (row) => row.nombre },
+  { key: 'apellido1', header: 'Apellido1', value: (row) => row.apellido1 },
+  { key: 'apellido2', header: 'Apellido2', value: (row) => row.apellido2 },
+  { key: 'dni', header: 'DNI', value: (row) => row.dni },
+  { key: 'pedido', header: 'Pedido', value: () => config.pedidoMensual },
+  { key: 'empleado', header: 'Nº Emp', value: (row) => row.empleado },
+  { key: 'numeroTickets', header: 'Numero Tickets', value: (row) => row.ticketsFinales },
+  {
+    key: 'importe',
+    header: 'Importe',
+    value: () => formatTicketExcelNumber(getEffectiveTicketPrice(config, year, month)),
+  },
+  { key: 'total', header: 'Total', value: (row) => formatTicketExcelNumber(row.importe) },
+  { key: 'fecInicio', header: 'Fec Inicio', value: () => formatTicketExcelDate(year, month) },
+  { key: 'fecCad', header: 'Fec Cad', value: () => '01/01/2010' },
+  { key: 'hojaGastos', header: 'Hoja Gastos', value: () => '' },
+  { key: 'ausencias', header: 'Ausencias', value: (row) => formatAppliedAbsencesForExport(row, absences) },
 ];
 
 const contributionCalculationExportColumns = (
@@ -965,8 +1003,8 @@ export function TicketRestaurantePage() {
           month={calculationMonth}
           exportPayload={{
             title: 'Cómputo mensual Ticket Restaurante',
-            filename: `ticket-restaurante-computo-mensual-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
-            columns: monthlyCalculationExportColumns(getEffectiveTicketPrice(config, calculationYear, calculationMonth)),
+            filename: `Computo_${MONTH_OPTIONS[calculationMonth - 1]?.label ?? calculationMonth}_${calculationYear}`,
+            columns: monthlyCalculationExportColumns(config, calculationYear, calculationMonth, absences),
             rows: monthCalculation.rows,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
@@ -1960,11 +1998,11 @@ function TicketRulesModal({
           <div className="rounded-xl border border-metro-border bg-metro-panel p-3 text-xs text-metro-muted">
             <p className="mb-1 font-bold text-metro-text">Cómo calcula el cómputo mensual</p>
             <p>
-              Tickets a pedir = días con derecho del calendario del mes seleccionado - ausencias del propio mes que descuentan ticket. Si el mes está marcado como sin pedido, el pedido queda a 0.
+              Cómputo mensual = lógica antigua: aplica a mes vencido la deuda de ausencias anteriores desde la fecha de inicio. No descuenta ausencias del propio mes; las deja para el siguiente mes con pedido disponible.
             </p>
             <p className="mb-1 mt-3 font-bold text-metro-text">Cómo calcula el cómputo de cotización</p>
             <p>
-              La cotización aplica ausencias a mes vencido desde la fecha de inicio de deuda. Descuenta contra los tickets disponibles del mes de cotización y mantiene como deuda pendiente lo que no pueda descontarse.
+              Cómputo cotización = días con derecho del calendario del mes seleccionado menos ausencias del propio mes que descuentan ticket. No arrastra deuda pendiente.
             </p>
             <p className="mt-3 font-semibold text-metro-text">Aplicar deuda a mes vencido: Sí, fijo.</p>
           </div>
@@ -2087,9 +2125,9 @@ function CalculationPanel({
       },
       {
         id: 'ausencias',
-        header: mode === 'monthly' ? 'Ausencias' : 'Ausencias aplicadas',
-        accessor: (row) => (mode === 'monthly' ? row.ausenciasMes : row.ausenciasAplicadas),
-        render: (row) => (mode === 'monthly' ? row.ausenciasMes : row.ausenciasAplicadas),
+        header: mode === 'monthly' ? 'Ausencias aplicadas' : 'Ausencias mes',
+        accessor: (row) => (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
+        render: (row) => (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
         width: 130,
         minWidth: 105,
         maxWidth: 190,
@@ -2099,7 +2137,7 @@ function CalculationPanel({
       },
     ];
 
-    if (mode === 'contribution') {
+    if (mode === 'monthly') {
       baseColumns.push(
         {
           id: 'deudaEntrante',
@@ -2131,7 +2169,7 @@ function CalculationPanel({
     baseColumns.push(
       {
         id: 'ticketsFinales',
-        header: mode === 'monthly' ? 'Tickets a pedir' : 'Tickets finales',
+        header: mode === 'monthly' ? 'Tickets a pedir' : 'Tickets cotización',
         accessor: (row) => row.ticketsFinales,
         render: (row) => row.ticketsFinales,
         width: 125,
@@ -2180,8 +2218,8 @@ function CalculationPanel({
           </h3>
           <p className="text-xs text-metro-muted">
             {mode === 'monthly'
-              ? 'Calcula los tickets a pedir: días ticket del calendario menos ausencias del propio mes.'
-              : 'Calcula la cotización con ausencias a mes vencido y deuda pendiente anterior.'}
+              ? 'Calcula los tickets a pedir con lógica antigua: deuda de ausencias anteriores aplicada a mes vencido.'
+              : 'Calcula días con derecho del mes menos ausencias del propio mes, sin arrastre de deuda.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

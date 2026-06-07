@@ -153,18 +153,30 @@ function readConfig(): TicketRestaurantConfig {
   }
 
   const candidate = parsed as Partial<TicketRestaurantConfig>;
+  const priceHistory = Array.isArray(candidate.priceHistory)
+    ? candidate.priceHistory
+    : DEFAULT_TICKET_RESTAURANT_CONFIG.priceHistory;
+  const hasLegacyDefaultPrice =
+    candidate.importeTicket === 16 &&
+    (candidate.pedidoMensual === undefined || candidate.pedidoMensual === 0) &&
+    priceHistory.length === 1 &&
+    priceHistory[0]?.amount === 16 &&
+    priceHistory[0]?.effectiveFrom === '2026-03-01';
+
   return normalizeTicketRestaurantConfig({
-    importeTicket:
-      typeof candidate.importeTicket === 'number' && candidate.importeTicket >= 0
+    importeTicket: hasLegacyDefaultPrice
+      ? DEFAULT_TICKET_RESTAURANT_CONFIG.importeTicket
+      : typeof candidate.importeTicket === 'number' && candidate.importeTicket >= 0
         ? candidate.importeTicket
         : DEFAULT_TICKET_RESTAURANT_CONFIG.importeTicket,
-    pedidoMensual:
-      typeof candidate.pedidoMensual === 'number' && candidate.pedidoMensual >= 0
+    pedidoMensual: hasLegacyDefaultPrice
+      ? DEFAULT_TICKET_RESTAURANT_CONFIG.pedidoMensual
+      : typeof candidate.pedidoMensual === 'number' && candidate.pedidoMensual >= 0
         ? candidate.pedidoMensual
         : DEFAULT_TICKET_RESTAURANT_CONFIG.pedidoMensual,
-    priceHistory: Array.isArray(candidate.priceHistory)
-      ? candidate.priceHistory
-      : DEFAULT_TICKET_RESTAURANT_CONFIG.priceHistory,
+    priceHistory: hasLegacyDefaultPrice
+      ? DEFAULT_TICKET_RESTAURANT_CONFIG.priceHistory
+      : priceHistory,
     rules: candidate.rules ?? DEFAULT_TICKET_RESTAURANT_CONFIG.rules,
   });
 }
