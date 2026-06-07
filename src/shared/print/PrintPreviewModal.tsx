@@ -24,7 +24,7 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={`Vista previa de impresión: ${title}`}
