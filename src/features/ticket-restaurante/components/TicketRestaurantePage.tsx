@@ -11,7 +11,7 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildYearCalendar,
   calculateMonthlyTicketOrder,
@@ -462,7 +462,13 @@ function absenceDiscountsTicket(
   return false;
 }
 
-export function TicketRestaurantePage() {
+export function TicketRestaurantePage({
+  initialAbsenceId = null,
+  navigationNonce,
+}: {
+  initialAbsenceId?: string | null;
+  navigationNonce?: number;
+}) {
   const calendars = useTicketRestauranteStore((state) => state.calendars);
   const absences = useTicketRestauranteStore((state) => state.absences);
   const people = useTicketRestauranteStore((state) => state.people);
@@ -503,6 +509,7 @@ export function TicketRestaurantePage() {
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const peopleFileInputRef = useRef<HTMLInputElement | null>(null);
+  const processedNavigationNonceRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     loadTickets();
@@ -788,12 +795,37 @@ export function TicketRestaurantePage() {
     setIsPreviewOpen(false);
   };
 
-  const editAbsence = (absence: TicketRestaurantAbsence) => {
+  const editAbsence = useCallback((absence: TicketRestaurantAbsence) => {
     setEditingAbsenceId(absence.id);
     setPreviewRows([toAbsencePreviewRow(absence)]);
     setImportMessage('Edita la ausencia y confirma para guardar los cambios.');
     setIsPreviewOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!initialAbsenceId || navigationNonce === undefined) {
+      return;
+    }
+
+    if (processedNavigationNonceRef.current === navigationNonce) {
+      return;
+    }
+
+    const targetAbsence = absences.find((absence) => absence.id === initialAbsenceId);
+    if (!targetAbsence) {
+      return;
+    }
+
+    const parsedDate = new Date(`${targetAbsence.desde}T00:00:00`);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      setAbsenceYear(parsedDate.getFullYear());
+      setAbsenceMonth(parsedDate.getMonth() + 1);
+    }
+
+    setActiveSubview('ausencias');
+    editAbsence(targetAbsence);
+    processedNavigationNonceRef.current = navigationNonce;
+  }, [absences, editAbsence, initialAbsenceId, navigationNonce]);
 
   return (
     <section
