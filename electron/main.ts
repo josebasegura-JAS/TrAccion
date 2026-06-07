@@ -19,7 +19,7 @@ import {
   savePersistedRecord,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -474,6 +474,14 @@ function normalizeRecordLockPayload(payload: unknown): { module: string; recordI
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle('app:get-windows-user', () => {
+    try {
+      return userInfo().username || 'Usuario local';
+    } catch {
+      return 'Usuario local';
+    }
+  });
+
   ipcMain.handle('database:status', () => getSqliteStatus());
 
   ipcMain.handle('database:select-directory', async (event) => {
