@@ -344,7 +344,7 @@ function LicenseEditor({
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
