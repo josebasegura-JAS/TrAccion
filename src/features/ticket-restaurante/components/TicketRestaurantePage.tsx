@@ -1863,7 +1863,7 @@ function TicketPriceModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-xl rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <div className="border-b border-metro-border p-3">
           <h3 className="text-lg font-bold text-metro-text">Precio ticket</h3>
@@ -1978,7 +1978,7 @@ function TicketRulesModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <div className="border-b border-metro-border p-3">
           <h3 className="text-lg font-bold text-metro-text">Reglas de cálculo</h3>
@@ -2301,7 +2301,7 @@ function CalculationAbsenceDetailModal({
     .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <div className="flex items-center justify-between border-b border-metro-border p-3">
           <div>
@@ -2587,7 +2587,7 @@ function AbsencePreviewModal({
   rows: TicketRestaurantAbsencePreviewRow[];
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <div className="flex items-center justify-between border-b border-metro-border p-3">
           <div>
