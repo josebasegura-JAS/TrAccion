@@ -69,8 +69,22 @@ type TicketAbsencesTableColumnId =
   | 'afectaTicket'
   | 'actions';
 
+type TicketCalculationTableColumnId =
+  | 'empleado'
+  | 'nombreApellidos'
+  | 'calendario'
+  | 'diasTeoricos'
+  | 'ausencias'
+  | 'deudaEntrante'
+  | 'deudaPendiente'
+  | 'ticketsFinales'
+  | 'importeTicket'
+  | 'total';
+
 const TICKET_PEOPLE_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.people';
 const TICKET_ABSENCES_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.absences';
+const TICKET_MONTHLY_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.monthlyCalculation';
+const TICKET_CONTRIBUTION_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.contributionCalculation';
 
 const defaultTicketPeopleTablePreferences: TableViewPreferences<TicketPeopleTableColumnId> = {
   sort: { columnId: 'empleado', direction: 'asc' },
@@ -122,6 +136,48 @@ const ticketAbsencesTableColumnIds: TicketAbsencesTableColumnId[] = [
   'totalDias',
   'afectaTicket',
   'actions',
+];
+
+const defaultTicketCalculationTablePreferences: TableViewPreferences<
+  TicketCalculationTableColumnId
+> = {
+  sort: { columnId: 'nombreApellidos', direction: 'asc' },
+  columnWidths: {
+    empleado: 110,
+    nombreApellidos: 230,
+    calendario: 160,
+    diasTeoricos: 110,
+    ausencias: 130,
+    deudaEntrante: 120,
+    deudaPendiente: 125,
+    ticketsFinales: 125,
+    importeTicket: 115,
+    total: 110,
+  },
+};
+
+const monthlyCalculationTableColumnIds: TicketCalculationTableColumnId[] = [
+  'empleado',
+  'nombreApellidos',
+  'calendario',
+  'diasTeoricos',
+  'ausencias',
+  'ticketsFinales',
+  'importeTicket',
+  'total',
+];
+
+const contributionCalculationTableColumnIds: TicketCalculationTableColumnId[] = [
+  'empleado',
+  'nombreApellidos',
+  'calendario',
+  'diasTeoricos',
+  'ausencias',
+  'deudaEntrante',
+  'deudaPendiente',
+  'ticketsFinales',
+  'importeTicket',
+  'total',
 ];
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
@@ -251,6 +307,7 @@ const monthlyCalculationExportColumns = (
   { key: 'ausenciasMes', header: 'Ausencias mes', value: (row) => row.ausenciasMes },
   { key: 'ticketsFinales', header: 'Tickets a pedir', value: (row) => row.ticketsFinales },
   { key: 'importeTicket', header: 'Importe ticket', value: () => importeTicket.toFixed(2) },
+  { key: 'total', header: 'Total', value: (row) => row.importe.toFixed(2) },
 ];
 
 const contributionCalculationExportColumns = (
@@ -267,6 +324,7 @@ const contributionCalculationExportColumns = (
   },
   { key: 'ticketsFinales', header: 'Tickets finales', value: (row) => row.ticketsFinales },
   { key: 'importeTicket', header: 'Importe ticket', value: () => importeTicket.toFixed(2) },
+  { key: 'total', header: 'Total', value: (row) => row.importe.toFixed(2) },
 ];
 
 const absenceExportColumns: ExportColumn<TicketRestaurantAbsence>[] = [
@@ -299,6 +357,57 @@ function toAbsencePreviewRow(absence: TicketRestaurantAbsence): TicketRestaurant
     afectaTicket: absence.afectaTicket,
     errors: [],
   };
+}
+
+function formatCurrency(value: number): string {
+  return `${value.toFixed(2)} €`;
+}
+
+function normalizePlainText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function isoWeekday(fecha: string): number {
+  const day = new Date(`${fecha}T00:00:00.000Z`).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function addDays(fecha: string, days: number): string {
+  const date = new Date(`${fecha}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function absenceDiscountsTicket(
+  absence: TicketRestaurantAbsence,
+  calendar: TicketCalendar | null,
+): boolean {
+  if (!calendar || !absence.afectaTicket) {
+    return false;
+  }
+
+  if (
+    normalizePlainText(absence.motivo) === 'sin' &&
+    normalizePlainText(calendar.nombre) === 'liberados'
+  ) {
+    return false;
+  }
+
+  const noTicket = new Set(calendar.diasSinTicket);
+  const ticketIsoWeekdays = new Set(calendar.ticketIsoWeekdays);
+  let cursor = absence.desde;
+  while (cursor <= absence.hasta) {
+    if (ticketIsoWeekdays.has(isoWeekday(cursor)) && !noTicket.has(cursor)) {
+      return true;
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return false;
 }
 
 export function TicketRestaurantePage() {
@@ -801,6 +910,8 @@ export function TicketRestaurantePage() {
         />
       ) : activeSubview === 'computoMensual' ? (
         <CalculationPanel
+          absences={absences}
+          calendars={visibleCalendars}
           calculation={monthCalculation}
           config={config}
           mode="monthly"
@@ -822,6 +933,8 @@ export function TicketRestaurantePage() {
         />
       ) : activeSubview === 'computoCotizacion' ? (
         <CalculationPanel
+          absences={absences}
+          calendars={visibleCalendars}
           calculation={contributionCalculation}
           config={config}
           mode="contribution"
@@ -1503,6 +1616,8 @@ function PeoplePanel({
 }
 
 function CalculationPanel({
+  absences,
+  calendars,
   calculation,
   config,
   mode,
@@ -1513,6 +1628,8 @@ function CalculationPanel({
   onYearChange,
   year,
 }: {
+  absences: TicketRestaurantAbsence[];
+  calendars: TicketCalendar[];
   calculation: ReturnType<typeof calculateMonthlyTicketOrder>;
   config: { importeTicket: number; pedidoMensual: number };
   mode: 'monthly' | 'contribution';
@@ -1523,6 +1640,158 @@ function CalculationPanel({
   onYearChange: (value: string) => void;
   year: number;
 }) {
+  const [selectedDetailRow, setSelectedDetailRow] = useState<TicketPersonCalculation | null>(null);
+  const validColumnIds =
+    mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
+  const { preferences, setSort, setColumnWidth } =
+    useTableViewPreferences<TicketCalculationTableColumnId>({
+      storageKey:
+        mode === 'monthly'
+          ? TICKET_MONTHLY_TABLE_STORAGE_KEY
+          : TICKET_CONTRIBUTION_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultTicketCalculationTablePreferences,
+      validColumnIds,
+    });
+
+  const calculationColumns = useMemo<
+    Array<DataTableColumn<TicketPersonCalculation, TicketCalculationTableColumnId>>
+  >(() => {
+    const baseColumns: Array<
+      DataTableColumn<TicketPersonCalculation, TicketCalculationTableColumnId>
+    > = [
+      {
+        id: 'empleado',
+        header: 'Nº empleado',
+        accessor: (row) => {
+          const employeeNumber = Number(row.empleado.trim());
+          return Number.isFinite(employeeNumber) ? employeeNumber : row.empleado;
+        },
+        render: (row) => row.empleado,
+        width: 110,
+        minWidth: 95,
+        maxWidth: 170,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'nombreApellidos',
+        header: 'Nombre y apellidos',
+        accessor: (row) => row.nombreApellidos,
+        render: (row) => row.nombreApellidos,
+        width: 230,
+        minWidth: 170,
+        maxWidth: 420,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'calendario',
+        header: 'Calendario',
+        accessor: (row) => row.calendario,
+        render: (row) => row.calendario,
+        width: 160,
+        minWidth: 125,
+        maxWidth: 280,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'diasTeoricos',
+        header: 'Días teóricos',
+        accessor: (row) => row.diasTeoricos,
+        render: (row) => row.diasTeoricos,
+        width: 110,
+        minWidth: 95,
+        maxWidth: 155,
+        sortable: true,
+        className: 'text-right text-metro-muted',
+        headerClassName: 'text-right',
+      },
+      {
+        id: 'ausencias',
+        header: mode === 'monthly' ? 'Ausencias' : 'Ausencias aplicadas',
+        accessor: (row) => (mode === 'monthly' ? row.ausenciasMes : row.ausenciasAplicadas),
+        render: (row) => (mode === 'monthly' ? row.ausenciasMes : row.ausenciasAplicadas),
+        width: 130,
+        minWidth: 105,
+        maxWidth: 190,
+        sortable: true,
+        className: 'text-right text-metro-muted',
+        headerClassName: 'text-right',
+      },
+    ];
+
+    if (mode === 'contribution') {
+      baseColumns.push(
+        {
+          id: 'deudaEntrante',
+          header: 'Deuda entrante',
+          accessor: (row) => row.deudaEntrante,
+          render: (row) => row.deudaEntrante,
+          width: 120,
+          minWidth: 105,
+          maxWidth: 175,
+          sortable: true,
+          className: 'text-right text-metro-muted',
+          headerClassName: 'text-right',
+        },
+        {
+          id: 'deudaPendiente',
+          header: 'Deuda pendiente',
+          accessor: (row) => row.deudaPendiente,
+          render: (row) => row.deudaPendiente,
+          width: 125,
+          minWidth: 110,
+          maxWidth: 180,
+          sortable: true,
+          className: 'text-right text-metro-muted',
+          headerClassName: 'text-right',
+        },
+      );
+    }
+
+    baseColumns.push(
+      {
+        id: 'ticketsFinales',
+        header: mode === 'monthly' ? 'Tickets a pedir' : 'Tickets finales',
+        accessor: (row) => row.ticketsFinales,
+        render: (row) => row.ticketsFinales,
+        width: 125,
+        minWidth: 110,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-right font-semibold text-metro-text',
+        headerClassName: 'text-right',
+      },
+      {
+        id: 'importeTicket',
+        header: 'Importe ticket',
+        accessor: () => config.importeTicket,
+        render: () => formatCurrency(config.importeTicket),
+        width: 115,
+        minWidth: 100,
+        maxWidth: 165,
+        sortable: true,
+        className: 'text-right text-metro-muted',
+        headerClassName: 'text-right',
+      },
+      {
+        id: 'total',
+        header: 'Total',
+        accessor: (row) => row.importe,
+        render: (row) => formatCurrency(row.importe),
+        width: 110,
+        minWidth: 95,
+        maxWidth: 160,
+        sortable: true,
+        className: 'text-right font-semibold text-metro-text',
+        headerClassName: 'text-right',
+      },
+    );
+
+    return baseColumns;
+  }, [config.importeTicket, mode]);
+
   return (
     <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
       <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
@@ -1601,62 +1870,109 @@ function CalculationPanel({
         <CalculationKpi label="Descontado" value={calculation.totals.ausenciasAplicadas} />
         <CalculationKpi label="Deuda pendiente" value={calculation.totals.deudaPendiente} />
         <CalculationKpi label="Tickets finales" value={calculation.totals.ticketsFinales} />
-        <CalculationKpi label="Importe" value={`${calculation.totals.importe.toFixed(2)} €`} />
+        <CalculationKpi label="Importe" value={formatCurrency(calculation.totals.importe)} />
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-xs">
-          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
-            <tr>
-              <th className="px-2 py-1">empleado</th>
-              <th className="px-2 py-1">nombre</th>
-              <th className="px-2 py-1">calendario</th>
-              <th className="px-2 py-1 text-right">teóricos</th>
-              {mode === 'monthly' ? (
-                <>
-                  <th className="px-2 py-1 text-right">ausencias</th>
-                  <th className="px-2 py-1 text-right">tickets a pedir</th>
-                  <th className="px-2 py-1 text-right">importe ticket</th>
-                </>
-              ) : (
-                <>
-                  <th className="px-2 py-1 text-right">ausencias aplicadas</th>
-                  <th className="px-2 py-1 text-right">tickets finales</th>
-                  <th className="px-2 py-1 text-right">importe ticket</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
-            {calculation.rows.map((row: TicketPersonCalculation) => (
-              <tr key={row.empleado}>
-                <td className="px-2 py-1 font-semibold">{row.empleado}</td>
-                <td className="px-2 py-1">{row.nombreApellidos}</td>
-                <td className="px-2 py-1">{row.calendario}</td>
-                <td className="px-2 py-1 text-right">{row.diasTeoricos}</td>
-                {mode === 'monthly' ? (
-                  <>
-                    <td className="px-2 py-1 text-right">{row.ausenciasMes}</td>
-                    <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
-                    <td className="px-2 py-1 text-right">{config.importeTicket.toFixed(2)} €</td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-2 py-1 text-right">{row.ausenciasAplicadas}</td>
-                    <td className="px-2 py-1 text-right font-semibold">{row.ticketsFinales}</td>
-                    <td className="px-2 py-1 text-right">{config.importeTicket.toFixed(2)} €</td>
-                  </>
-                )}
-              </tr>
-            ))}
-            {calculation.rows.length === 0 ? (
-              <tr>
-                <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
-                  No hay personas activas para calcular.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+      <DataTable
+        ariaLabel={
+          mode === 'monthly'
+            ? 'Cómputo mensual Ticket Restaurante'
+            : 'Cómputo cotización Ticket Restaurante'
+        }
+        columnWidths={preferences.columnWidths}
+        columns={calculationColumns}
+        emptyMessage="No hay personas activas para calcular."
+        getRowId={(row) => row.empleado}
+        maxHeightClassName="max-h-[460px]"
+        onColumnWidthChange={setColumnWidth}
+        onRowClick={(row) => setSelectedDetailRow(row)}
+        onSortChange={setSort}
+        rows={calculation.rows}
+        sort={preferences.sort}
+      />
+      {selectedDetailRow ? (
+        <CalculationAbsenceDetailModal
+          absences={absences}
+          calendars={calendars}
+          mode={mode}
+          onClose={() => setSelectedDetailRow(null)}
+          row={selectedDetailRow}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function CalculationAbsenceDetailModal({
+  absences,
+  calendars,
+  mode,
+  onClose,
+  row,
+}: {
+  absences: TicketRestaurantAbsence[];
+  calendars: TicketCalendar[];
+  mode: 'monthly' | 'contribution';
+  onClose: () => void;
+  row: TicketPersonCalculation;
+}) {
+  const calendar = calendars.find((item) => item.nombre === row.calendario) ?? null;
+  const detailAbsences = row.ausenciaIds
+    .map((absenceId) => absences.find((absence) => absence.id === absenceId))
+    .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+        <div className="flex items-center justify-between border-b border-metro-border p-3">
+          <div>
+            <h3 className="text-lg font-bold text-metro-text">Detalle de ausencias</h3>
+            <p className="text-xs text-metro-muted">
+              {row.empleado} · {row.nombreApellidos} ·{' '}
+              {mode === 'monthly' ? 'Cómputo mensual' : 'Cómputo cotización'}
+            </p>
+          </div>
+          <button
+            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onClose}
+            type="button"
+          >
+            Cerrar
+          </button>
+        </div>
+        <div className="max-h-[68vh] overflow-auto p-3">
+          {detailAbsences.length > 0 ? (
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+                <tr>
+                  <th className="px-2 py-1">Desde</th>
+                  <th className="px-2 py-1">Hasta</th>
+                  <th className="px-2 py-1">Motivo</th>
+                  <th className="px-2 py-1 text-right">Total días</th>
+                  <th className="px-2 py-1">Afecta ticket</th>
+                  <th className="px-2 py-1">Descuenta ticket</th>
+                </tr>
+              </thead>
+              <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45">
+                {detailAbsences.map((absence) => (
+                  <tr key={absence.id}>
+                    <td className="px-2 py-1">{absence.desde}</td>
+                    <td className="px-2 py-1">{absence.hasta}</td>
+                    <td className="px-2 py-1">{absence.motivo}</td>
+                    <td className="px-2 py-1 text-right">{absence.totalDias}</td>
+                    <td className="px-2 py-1">{absence.afectaTicket ? 'Sí' : 'No'}</td>
+                    <td className="px-2 py-1 font-semibold">
+                      {absenceDiscountsTicket(absence, calendar) ? 'Sí' : 'No'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-6 text-center text-sm font-semibold text-metro-muted">
+              No hay ausencias vinculadas a esta persona en el cómputo seleccionado.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
