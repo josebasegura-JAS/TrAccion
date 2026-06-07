@@ -3,11 +3,13 @@ import { AjustesPage } from './components/AjustesPage';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+import { ActasPage } from './features/actas/components/ActasPage';
 import { ComitePage } from './features/comite/components/ComitePage';
 import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from './features/especiales/components/EspecialesPage';
 import { SorteosPage } from './features/sorteos/components/SorteosPage';
 import { PlantillaPage } from './components/PlantillaPage';
+import { ParitariaPage } from './features/paritaria/components/ParitariaPage';
 import { Sidebar, type AppView } from './components/Sidebar';
 import { TareasPage } from './components/TareasPage';
 import { TeletrabajoPage } from './components/TeletrabajoPage';
@@ -36,6 +38,8 @@ export function App() {
           {activeView === 'plantilla' && <PlantillaPage />}
           {activeView === 'tareas' && <TareasPage />}
           {activeView === 'comite' && <ComitePage />}
+          {activeView === 'actas' && <ActasPage />}
+          {activeView === 'paritaria' && <ParitariaPage />}
           {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}

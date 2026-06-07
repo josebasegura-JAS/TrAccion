@@ -31,6 +31,7 @@ interface TaskStateStore {
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
   closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
+  closeTasksFromSession: (taskIds: string[], moduleLabel: string, sessionLabel: string) => void;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
 
@@ -270,10 +271,13 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
     });
   },
   closeTasksFromCommittee: (taskIds, sessionLabel) => {
+    useTaskStore.getState().closeTasksFromSession(taskIds, 'Comité de Empresa', sessionLabel);
+  },
+  closeTasksFromSession: (taskIds, moduleLabel, sessionLabel) => {
     set((state) => {
       const now = new Date().toISOString();
       const taskIdSet = new Set(taskIds);
-      const seguimiento = buildSeguimiento(`Tratada en Comité de Empresa (${sessionLabel}).`, now);
+      const seguimiento = buildSeguimiento(`Tratada en ${moduleLabel} (${sessionLabel}).`, now);
       const tasks = state.tasks.map((task) => {
         if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
           return task;

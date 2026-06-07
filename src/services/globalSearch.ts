@@ -26,6 +26,8 @@ const UNKNOWN_YEAR = 0;
 const MODULE_ORDER: AppView[] = [
   'tareas',
   'comite',
+  'actas',
+  'paritaria',
   'teletrabajo',
   'ticket-restaurante',
   'plantilla',
@@ -172,6 +174,34 @@ const searchableModules: SearchableModule[] = [
         ['code', 'status', 'notes'],
         ['date', 'closedAt', 'updatedAt', 'createdAt'],
         'Sesión de comité',
+      ),
+  },
+  {
+    module: 'Actas',
+    moduleView: 'actas',
+    storageKey: 'traccion.v1.actas.records',
+    mapRecord: (record, index) =>
+      makeResult(
+        record,
+        index,
+        ['titulo'],
+        ['tipo', 'estado', 'observaciones'],
+        ['fechaSesion', 'fechaCreacion', 'updatedAt', 'createdAt'],
+        'Acta sin título',
+      ),
+  },
+  {
+    module: 'Comisión Paritaria',
+    moduleView: 'paritaria',
+    storageKey: 'traccion.v1.paritaria.sessions',
+    mapRecord: (record, index) =>
+      makeResult(
+        record,
+        index,
+        ['title', 'code'],
+        ['code', 'status', 'notes'],
+        ['date', 'closedAt', 'updatedAt', 'createdAt'],
+        'Sesión de paritaria',
       ),
   },
   {
