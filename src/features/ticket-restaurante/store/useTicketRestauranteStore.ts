@@ -31,6 +31,7 @@ interface TicketRestauranteState {
   config: TicketRestaurantConfig;
   debtLedger: Record<string, number>;
   load: () => void;
+  reloadFromStorage: () => void;
   createCalendar: (draft: TicketCalendarDraft) => string;
   updateCalendar: (id: string, draft: TicketCalendarDraft) => void;
   toggleCalendarActive: (id: string) => void;
@@ -242,6 +243,17 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
   debtLedger: {},
   load: () => {
+    set({
+      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
+        normalizeStoredTicketCalendar,
+      ),
+      absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
+      people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
+      config: readConfig(),
+      debtLedger: readDebtLedger(),
+    });
+  },
+  reloadFromStorage: () => {
     set({
       calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
         normalizeStoredTicketCalendar,

@@ -15,6 +15,7 @@ interface CriteriosRrllStateStore {
   selectedCriterioId: string;
   filters: CriterioRrllFilters;
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: CriterioRrllDraft) => void;
   update: (id: string, draft: CriterioRrllDraft) => void;
   remove: (id: string) => void;
@@ -80,13 +81,21 @@ function createCriterioRrllId(): string {
   return `criterio-rrll-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
+export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) => ({
   criterios: [],
   selectedCriterioId: '',
   filters: EMPTY_CRITERIO_RRLL_FILTERS,
   load: () => {
     const criterios = readCriteriosRrll();
     set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
+  },
+  reloadFromStorage: () => {
+    const criterios = readCriteriosRrll();
+    const currentSelectedId = get().selectedCriterioId;
+    const selectedCriterioId = criterios.some((criterio) => criterio.id === currentSelectedId && !criterio.deletedAt)
+      ? currentSelectedId
+      : firstActiveCriterioId(criterios);
+    set({ criterios, selectedCriterioId });
   },
   create: (draft) => {
     set((state) => {

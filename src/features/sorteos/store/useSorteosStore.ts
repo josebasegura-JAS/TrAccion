@@ -23,6 +23,7 @@ interface SorteosStoreState {
   visibleDrawId: string;
   visibleResult: SorteosDraw | null;
   load: () => void;
+  reloadFromStorage: () => void;
   createDraw: (draft: SorteosDraft, people: SorteosPerson[]) => SorteosValidationResult;
   addExclusion: (person: SorteosPerson) => void;
   removeExclusion: (exclusionId: string) => void;
@@ -120,6 +121,18 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
     const draws = sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw));
     const exclusions = readArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
     set({ draws, exclusions, visibleDrawId: '', visibleResult: null });
+  },
+  reloadFromStorage: () => {
+    const draws = sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw));
+    const exclusions = readArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
+    const currentVisibleDrawId = get().visibleDrawId;
+    const visibleResult = draws.find((draw) => draw.id === currentVisibleDrawId) ?? null;
+    set({
+      draws,
+      exclusions,
+      visibleDrawId: visibleResult ? visibleResult.id : '',
+      visibleResult,
+    });
   },
   createDraw: (draft, people) => {
     const drawId = createId('sorteo');

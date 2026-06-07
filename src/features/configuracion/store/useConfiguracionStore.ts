@@ -17,6 +17,7 @@ interface ConfiguracionState {
 
 interface ConfiguracionStore extends ConfiguracionState {
   load: () => void;
+  reloadFromStorage: () => void;
   setRutaPlantillaTeletrabajo: (ruta: string) => void;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
@@ -91,6 +92,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
   taskPhases: initialConfiguracion.taskPhases,
   load: () => set(readConfiguracion()),
+  reloadFromStorage: () => set(readConfiguracion()),
   setRutaPlantillaTeletrabajo: (ruta) =>
     set((state) => {
       const configuracion = {

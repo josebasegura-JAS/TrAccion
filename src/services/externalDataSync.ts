@@ -1,4 +1,13 @@
 import { useSyncExternalStore } from 'react';
+import { useActasStore } from '../features/actas/store/useActasStore';
+import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
+import { useEspecialesStore } from '../features/especiales/store/useEspecialesStore';
+import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/store/useLicenciasSinSueldoStore';
+import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
+import { useSorteosStore } from '../features/sorteos/store/useSorteosStore';
+import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
+import { useVinculogramaStore } from '../features/vinculograma/store/useVinculogramaStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
@@ -55,7 +64,16 @@ function reloadIntegratedStores(): void {
   useTaskStore.getState().reloadFromStorage();
   useTeletrabajoStore.getState().reloadFromStorage();
   useCommitteeSessionStore.getState().reloadFromStorage();
+  useParitariaSessionStore.getState().reloadFromStorage();
   useEmployeeStore.getState().reloadFromStorage();
+  useActasStore.getState().reloadFromStorage();
+  useLicenciasSinSueldoStore.getState().reloadFromStorage();
+  useTicketRestauranteStore.getState().reloadFromStorage();
+  useSorteosStore.getState().reloadFromStorage();
+  useEspecialesStore.getState().reloadFromStorage();
+  useCriteriosRrllStore.getState().reloadFromStorage();
+  useVinculogramaStore.getState().reloadFromStorage();
+  useConfiguracionStore.getState().reloadFromStorage();
 }
 
 function canPollStatus(status: TraccionDatabaseStatus): boolean {

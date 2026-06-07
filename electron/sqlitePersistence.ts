@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -12,6 +12,7 @@ const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
 const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
 const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
 const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
+const LOCAL_BACKUP_RETENTION_COUNT = 20;
 const CURRENT_SCHEMA_VERSION = 2;
 const LOCK_TTL_MS = 30 * 1000;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
@@ -118,6 +119,35 @@ function getLocalBackupDatabasePath(): string {
 
 function getLocalBackupJsonPath(): string {
   return path.join(getLocalBackupDirectory(), LOCAL_BACKUP_JSON_FILE_NAME);
+}
+
+function backupTimestampForFileName(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+function getRotatedLocalBackupDatabasePath(timestamp: string): string {
+  return path.join(getLocalBackupDirectory(), `traccion-local-backup-${timestamp}.sqlite`);
+}
+
+function getRotatedLocalBackupJsonPath(timestamp: string): string {
+  return path.join(getLocalBackupDirectory(), `traccion-local-backup-${timestamp}.json`);
+}
+
+async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
+  const backupDirectory = getLocalBackupDirectory();
+  const prefix = 'traccion-local-backup-';
+  const suffix = `.${extension}`;
+  const entries = await readdir(backupDirectory).catch(() => []);
+  const rotatedBackups = entries
+    .filter((entry) => entry.startsWith(prefix) && entry.endsWith(suffix))
+    .sort()
+    .reverse();
+
+  await Promise.all(
+    rotatedBackups.slice(LOCAL_BACKUP_RETENTION_COUNT).map((entry) =>
+      unlink(path.join(backupDirectory, entry)).catch(() => undefined),
+    ),
+  );
 }
 
 
@@ -559,6 +589,7 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
   await mkdir(backupDirectory, { recursive: true });
 
   const now = new Date().toISOString();
+  const backupTimestamp = backupTimestampForFileName();
   const records = readAllPersistedRecords(currentDatabase);
   const payload = {
     createdAt: now,
@@ -567,12 +598,17 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
     recordCount: records.length,
     records,
   };
+  const serializedPayload = JSON.stringify(payload, null, 2);
 
-  await writeFile(getLocalBackupJsonPath(), JSON.stringify(payload, null, 2), 'utf8');
+  await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
+  await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+  await pruneRotatedLocalBackups('json');
 
   try {
     currentDatabase.pragma('wal_checkpoint(PASSIVE)');
     await copyFile(currentStatus.path, getLocalBackupDatabasePath());
+    await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
+    await pruneRotatedLocalBackups('sqlite');
   } catch (error) {
     console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
   }

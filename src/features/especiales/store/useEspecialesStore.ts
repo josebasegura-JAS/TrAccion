@@ -15,6 +15,7 @@ const RECIPIENTS_STORAGE_KEY = 'rrll_especiales_destinatarios';
 interface EspecialesState {
   recipients: EspecialRecipient[];
   load: () => void;
+  reloadFromStorage: () => void;
   createRecipient: (draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
   updateRecipient: (id: string, draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
   removeRecipient: (id: string) => void;
@@ -107,6 +108,9 @@ function duplicatedEmail(
 export const useEspecialesStore = create<EspecialesState>((set) => ({
   recipients: [],
   load: () => {
+    set({ recipients: readRecipients() });
+  },
+  reloadFromStorage: () => {
     set({ recipients: readRecipients() });
   },
   createRecipient: (draft) => {

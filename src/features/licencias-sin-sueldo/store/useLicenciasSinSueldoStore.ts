@@ -13,6 +13,7 @@ import {
 interface LicenciasSinSueldoState {
   records: LicenciaSinSueldoRecord[];
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: LicenciaSinSueldoDraft) => string;
   update: (id: string, draft: LicenciaSinSueldoDraft) => void;
   remove: (id: string) => void;
@@ -85,6 +86,9 @@ function createId(): string {
 export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set) => ({
   records: [],
   load: () => {
+    set({ records: readRecords() });
+  },
+  reloadFromStorage: () => {
     set({ records: readRecords() });
   },
   create: (draft) => {

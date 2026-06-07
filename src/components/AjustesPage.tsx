@@ -120,8 +120,8 @@ export function AjustesPage() {
         <div className="mb-4">
           <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
           <p className="mt-1 text-sm text-metro-muted">
-            SQLite sigue siendo un espejo de localStorage. Selecciona una carpeta local o
-            compartida; TrAccion usará dentro el fichero traccion.sqlite sin sobrescribir bases
+            SQLite es la base principal. La app mantiene una caché local y una copia de respaldo en este equipo.
+            Selecciona una carpeta local o compartida; TrAccion usará dentro el fichero traccion.sqlite sin sobrescribir bases
             existentes.
           </p>
         </div>

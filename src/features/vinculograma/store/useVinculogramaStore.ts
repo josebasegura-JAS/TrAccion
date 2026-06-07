@@ -11,6 +11,7 @@ const STORAGE_KEY = 'traccion.v1.vinculograma.records';
 interface VinculogramaState {
   records: Vinculograma[];
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: VinculogramaDraft) => string;
   update: (id: string, draft: VinculogramaDraft) => void;
   remove: (id: string) => void;
@@ -66,6 +67,9 @@ function createId(): string {
 export const useVinculogramaStore = create<VinculogramaState>((set) => ({
   records: [],
   load: () => {
+    set({ records: readRecords() });
+  },
+  reloadFromStorage: () => {
     set({ records: readRecords() });
   },
   create: (draft) => {
