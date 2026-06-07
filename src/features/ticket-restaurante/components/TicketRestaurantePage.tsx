@@ -11,7 +11,7 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildYearCalendar,
   calculateMonthlyTicketOrder,
@@ -2702,26 +2702,3 @@ function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
   return `Ausencias guardadas: ${result.summary.nuevas} nuevas, ${result.summary.sustituidas} sustituidas, ${result.summary.duplicadas} duplicadas ignoradas, ${result.summary.invalidas} inválidas.`;
 }
 
-function SelectBox({
-  children,
-  label,
-  onChange,
-  value,
-}: {
-  children: ReactNode;
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <select
-      aria-label={label}
-      className="w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-      onChange={(event) => onChange(event.target.value)}
-      value={value}
-    >
-      <option value="">{label}</option>
-      {children}
-    </select>
-  );
-}
