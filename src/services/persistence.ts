@@ -22,6 +22,37 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.vinculograma.showExpired',
 ] as const;
 
+
+export type PersistenceFeedbackKind = 'saving' | 'saved' | 'error';
+
+export interface PersistenceFeedback {
+  kind: PersistenceFeedbackKind;
+  updatedAt: string;
+  key?: string;
+  message: string;
+}
+
+const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
+
+function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
+  window.dispatchEvent(new CustomEvent<PersistenceFeedback>(PERSISTENCE_FEEDBACK_EVENT, { detail: feedback }));
+}
+
+export function subscribeToPersistenceFeedback(
+  listener: (feedback: PersistenceFeedback) => void,
+): () => void {
+  const handler = (event: Event) => {
+    listener((event as CustomEvent<PersistenceFeedback>).detail);
+  };
+
+  window.addEventListener(PERSISTENCE_FEEDBACK_EVENT, handler);
+  return () => window.removeEventListener(PERSISTENCE_FEEDBACK_EVENT, handler);
+}
+
+function formatPersistenceTime(date = new Date()): string {
+  return date.toLocaleTimeString('es-ES', { hour12: false });
+}
+
 const SQLITE_MIGRATION_FLAG_KEY = 'traccion.v1.sqlite.localStorageBackupCreated';
 const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetadata';
 
@@ -100,9 +131,54 @@ function mirrorToSqlite(key: string, value: string): void {
     return;
   }
 
-  window.traccion?.saveLocalStorageRecord?.({ key, value }).catch((error: unknown) => {
-    console.warn('No se ha podido sincronizar la persistencia con SQLite.', error);
+  const now = new Date();
+  emitPersistenceFeedback({
+    kind: 'saving',
+    updatedAt: now.toISOString(),
+    key,
+    message: 'Guardando datos...',
   });
+
+  const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
+  if (!saveLocalStorageRecord) {
+    emitPersistenceFeedback({
+      kind: 'error',
+      updatedAt: new Date().toISOString(),
+      key,
+      message: 'Error de guardado: SQLite no disponible.',
+    });
+    return;
+  }
+
+  saveLocalStorageRecord({ key, value })
+    .then((status) => {
+      const statusIsWritable = status.ready && status.phase === 'active';
+      if (!statusIsWritable) {
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key,
+          message: status.message ?? 'Error de guardado: SQLite no está activo.',
+        });
+        return;
+      }
+
+      emitPersistenceFeedback({
+        kind: 'saved',
+        updatedAt: new Date().toISOString(),
+        key,
+        message: `Guardado ${formatPersistenceTime()}`,
+      });
+    })
+    .catch((error: unknown) => {
+      console.warn('No se ha podido sincronizar la persistencia con SQLite.', error);
+      emitPersistenceFeedback({
+        kind: 'error',
+        updatedAt: new Date().toISOString(),
+        key,
+        message: 'Error de guardado.',
+      });
+    });
 }
 
 export function readStorageItem(key: string): string | null {
