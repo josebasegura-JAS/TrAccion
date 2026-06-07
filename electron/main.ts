@@ -11,11 +11,13 @@ import {
   getSqliteStatus,
   heartbeatRecordLock,
   initializeSqlitePersistence,
+  listLocalBackups,
   loadPersistedRecordsSnapshot,
   getPersistedRecordsTokenSnapshot,
   migrateLocalStorageSnapshot,
   releaseRecordLock,
   resetSqliteDirectory,
+  restoreLocalBackup,
   savePersistedRecord,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
@@ -559,6 +561,17 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('database:reset-directory', () => resetSqliteDirectory());
+
+  ipcMain.handle('database:list-local-backups', () => listLocalBackups());
+
+  ipcMain.handle('database:restore-local-backup', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return restoreLocalBackup('');
+    }
+
+    const candidate = payload as { id?: unknown };
+    return restoreLocalBackup(typeof candidate.id === 'string' ? candidate.id : '');
+  });
 
   ipcMain.handle('database:load-persisted-records', () => loadPersistedRecordsSnapshot());
 

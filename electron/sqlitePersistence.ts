@@ -40,6 +40,22 @@ export interface LocalStorageBackupPayload {
   records: PersistedStorageRecord[];
 }
 
+export interface LocalBackupEntry {
+  id: string;
+  fileName: string;
+  kind: 'sqlite' | 'json';
+  path: string;
+  sizeBytes: number;
+  createdAt: string;
+  isLiveCopy: boolean;
+}
+
+export interface RestoreLocalBackupResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  message: string;
+}
+
 export interface DatabaseLockInfo {
   ownerId: string;
   username: string;
@@ -131,6 +147,26 @@ function getRotatedLocalBackupDatabasePath(timestamp: string): string {
 
 function getRotatedLocalBackupJsonPath(timestamp: string): string {
   return path.join(getLocalBackupDirectory(), `traccion-local-backup-${timestamp}.json`);
+}
+
+function isLocalBackupFileName(fileName: string): boolean {
+  return (
+    fileName === LOCAL_BACKUP_DATABASE_FILE_NAME ||
+    fileName === LOCAL_BACKUP_JSON_FILE_NAME ||
+    /^traccion-local-backup-.*\.(sqlite|json)$/.test(fileName)
+  );
+}
+
+function localBackupKindFromFileName(fileName: string): 'sqlite' | 'json' | null {
+  if (fileName.endsWith('.sqlite')) {
+    return 'sqlite';
+  }
+
+  if (fileName.endsWith('.json')) {
+    return 'json';
+  }
+
+  return null;
 }
 
 async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
@@ -706,6 +742,135 @@ export function createLocalStorageBackup(payload: LocalStorageBackupPayload): Da
   enqueueLocalBackup('local-storage-backup');
 
   return currentStatus;
+}
+
+export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
+  const backupDirectory = getLocalBackupDirectory();
+  const entries = await readdir(backupDirectory).catch(() => []);
+  const backups = await Promise.all(
+    entries
+      .filter(isLocalBackupFileName)
+      .map(async (fileName): Promise<LocalBackupEntry | null> => {
+        const kind = localBackupKindFromFileName(fileName);
+        if (!kind) {
+          return null;
+        }
+
+        const filePath = path.join(backupDirectory, fileName);
+        const fileStat = await stat(filePath).catch(() => null);
+        if (!fileStat?.isFile()) {
+          return null;
+        }
+
+        return {
+          id: fileName,
+          fileName,
+          kind,
+          path: filePath,
+          sizeBytes: fileStat.size,
+          createdAt: fileStat.mtime.toISOString(),
+          isLiveCopy:
+            fileName === LOCAL_BACKUP_DATABASE_FILE_NAME || fileName === LOCAL_BACKUP_JSON_FILE_NAME,
+        };
+      }),
+  );
+
+  return backups
+    .filter((entry): entry is LocalBackupEntry => Boolean(entry))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+function parseLocalBackupJson(raw: string): PersistedStorageRecord[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object') {
+    return [];
+  }
+
+  const records = (parsed as Partial<LocalStorageBackupPayload>).records;
+  if (!Array.isArray(records)) {
+    return [];
+  }
+
+  return records.filter(
+    (record): record is PersistedStorageRecord =>
+      Boolean(record) &&
+      typeof (record as Partial<PersistedStorageRecord>).key === 'string' &&
+      typeof (record as Partial<PersistedStorageRecord>).value === 'string',
+  );
+}
+
+export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
+  const safeFileName = path.basename(fileName);
+  const kind = localBackupKindFromFileName(safeFileName);
+  const currentStatus = getSqliteStatus();
+
+  if (!kind || !isLocalBackupFileName(safeFileName)) {
+    return { ok: false, status: currentStatus, message: 'Copia de respaldo no válida.' };
+  }
+
+  const backupPath = path.join(getLocalBackupDirectory(), safeFileName);
+  const backupStat = await stat(backupPath).catch(() => null);
+  if (!backupStat?.isFile()) {
+    return { ok: false, status: currentStatus, message: 'La copia de respaldo no existe.' };
+  }
+
+  if (kind === 'json') {
+    const records = parseLocalBackupJson(await readFile(backupPath, 'utf8'));
+    if (records.length === 0) {
+      return { ok: false, status: currentStatus, message: 'El respaldo JSON no contiene registros recuperables.' };
+    }
+
+    if (currentStatus.ready && currentStatus.phase === 'active') {
+      enqueueLocalBackup(`pre-restore:${safeFileName}`);
+    }
+
+    const nextStatus = migrateLocalStorageSnapshot({ records });
+    return {
+      ok: nextStatus.ready && nextStatus.phase === 'active',
+      status: nextStatus,
+      message:
+        nextStatus.ready && nextStatus.phase === 'active'
+          ? 'Copia JSON restaurada. Reinicia o recarga la app para aplicar la caché recuperada.'
+          : (nextStatus.message ?? 'No se ha podido restaurar el respaldo JSON.'),
+    };
+  }
+
+  const configuredDirectory = await getConfiguredDatabaseDirectory();
+  const targetDatabasePath = getDatabasePathForDirectory(configuredDirectory.directoryPath);
+
+  try {
+    await mkdir(path.dirname(targetDatabasePath), { recursive: true });
+    if (database) {
+      database.pragma('wal_checkpoint(TRUNCATE)');
+    }
+    if (currentStatus.ready) {
+      await backupExistingDatabase(currentStatus.path);
+    } else {
+      await copyFile(targetDatabasePath, `${targetDatabasePath}.backup-${backupTimestampForFileName()}`).catch(
+        () => undefined,
+      );
+    }
+
+    closeDatabase();
+    await unlink(`${targetDatabasePath}-wal`).catch(() => undefined);
+    await unlink(`${targetDatabasePath}-shm`).catch(() => undefined);
+    await copyFile(backupPath, targetDatabasePath);
+    const nextStatus = await activateDatabase(
+      configuredDirectory.directoryPath,
+      configuredDirectory.isDefaultPath,
+      null,
+    );
+    enqueueLocalBackup(`restore:${safeFileName}`);
+
+    return {
+      ok: nextStatus.ready && nextStatus.phase === 'active',
+      status: nextStatus,
+      message: 'Copia SQLite restaurada. Reinicia o recarga la app para aplicar los datos recuperados.',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se ha podido restaurar el respaldo SQLite.';
+    return { ok: false, status: getSqliteStatus(), message };
+  }
 }
 
 export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {

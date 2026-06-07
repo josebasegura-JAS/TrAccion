@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('traccion', {
   databaseStatus: () => ipcRenderer.invoke('database:status'),
   selectDatabaseDirectory: () => ipcRenderer.invoke('database:select-directory'),
   resetDatabaseDirectory: () => ipcRenderer.invoke('database:reset-directory'),
+  listLocalBackups: () => ipcRenderer.invoke('database:list-local-backups'),
+  restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
   backupLocalStorage: (records: { key: string; value: string }[]) =>
