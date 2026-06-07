@@ -15,6 +15,7 @@ import {
   type ActaDraft,
 } from '../domain/acta';
 import { useActasStore } from '../store/useActasStore';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 type ActaColumnId = 'tipo' | 'fechaSesion' | 'fechaCreacion' | 'titulo' | 'estado' | 'alegaciones' | 'acciones';
 
@@ -455,6 +456,7 @@ export function ActasPage() {
               >
                 Guardar acta
               </button>
+              <InlineSaveFeedback />
             </div>
           </div>
         </div>
