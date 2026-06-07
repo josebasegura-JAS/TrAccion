@@ -887,7 +887,7 @@ export function TicketRestaurantePage() {
             onSave={saveCalendar}
             onToggleActive={toggleCalendarActive}
             onYearChange={handleYearChange}
-            selectedCalendar={selectedCalendar}
+            selectedCalendar={selectedCalendar ?? undefined}
             selectedCalendarId={selectedCalendarId}
             setSelectedCalendarId={setSelectedCalendarId}
             setYear={setYear}
@@ -2701,4 +2701,3 @@ function PreviewInput({
 function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
   return `Ausencias guardadas: ${result.summary.nuevas} nuevas, ${result.summary.sustituidas} sustituidas, ${result.summary.duplicadas} duplicadas ignoradas, ${result.summary.invalidas} inválidas.`;
 }
-
