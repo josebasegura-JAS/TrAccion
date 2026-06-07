@@ -3,8 +3,13 @@ import { Search, X } from 'lucide-react';
 import type { AppView } from './Sidebar';
 import { getResultYearLabel, searchTraccion, type GlobalSearchResult } from '../services/globalSearch';
 
+interface GlobalSearchNavigationTarget {
+  view: AppView;
+  recordId?: string;
+}
+
 interface GlobalSearchProps {
-  onNavigate: (view: AppView) => void;
+  onNavigate: (target: GlobalSearchNavigationTarget) => void;
 }
 
 interface GroupedResults {
@@ -79,7 +84,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   };
 
   const handleResultClick = (result: GlobalSearchResult) => {
-    onNavigate(result.moduleView);
+    onNavigate({ view: result.moduleView, recordId: result.recordId });
     setIsOpen(false);
   };
 
@@ -181,7 +186,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             </div>
 
             <div className="border-t border-metro-border px-4 py-2 text-[11px] text-metro-muted">
-              Resultado seleccionado: abre el módulo correspondiente. Registro concreto preparado para una segunda fase.
+              Selecciona un resultado para abrir su módulo y, cuando esté disponible, el registro concreto.
             </div>
           </div>
         </div>

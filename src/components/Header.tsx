@@ -82,7 +82,7 @@ export function Header({
   onViewChange,
 }: {
   activeView: AppView;
-  onViewChange: (view: AppView) => void;
+  onViewChange: (target: { view: AppView; recordId?: string }) => void;
 }) {
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
