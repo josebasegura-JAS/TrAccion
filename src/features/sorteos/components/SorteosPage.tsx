@@ -178,18 +178,26 @@ export function SorteosPage() {
 
   return (
     <section
-      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card"
+      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="sorteos"
     >
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
+          <h2 className="text-xl font-bold text-metro-text">Sorteos</h2>
+          <p className="mt-0.5 text-sm text-metro-muted">Gestión compacta de sorteos, exclusiones e histórico de resultados.</p>
+        </div>
+      </div>
+
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)] xl:items-start">
         <div className="min-w-0 rounded-xl border border-metro-border bg-metro-panel p-3">
           <div className="mb-2 flex items-center gap-2">
             <Gift className="h-4 w-4 shrink-0 text-metro-red" />
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-metro-red">
-                Sorteos
+                Acciones
               </p>
-              <h2 className="truncate text-base font-bold text-metro-text">Crear sorteo</h2>
+              <h3 className="truncate text-base font-bold text-metro-text">Crear sorteo</h3>
             </div>
           </div>
           <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(180px,1fr)_minmax(140px,0.45fr)_minmax(96px,0.3fr)_auto] md:items-end">
