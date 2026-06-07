@@ -11,6 +11,7 @@ const STORAGE_KEY = 'traccion.v1.comite.sessions';
 interface CommitteeSessionStateStore {
   sessions: CommitteeSession[];
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: CommitteeSessionDraft) => string;
   remove: (sessionId: string) => void;
   addTask: (sessionId: string, taskId: string) => void;
@@ -92,6 +93,7 @@ function updateSessionList(
 export const useCommitteeSessionStore = create<CommitteeSessionStateStore>((set) => ({
   sessions: [],
   load: () => set({ sessions: readSessions() }),
+  reloadFromStorage: () => set({ sessions: readSessions() }),
   create: (draft) => {
     const now = new Date().toISOString();
     const session: CommitteeSession = {

@@ -34,12 +34,12 @@ export interface HydrationMetadata {
   strategy: 'sqlite' | 'localStorage';
 }
 
-interface HydrationResult {
+export interface HydrationResult {
   status: 'hydrated-from-sqlite' | 'kept-localStorage' | 'sqlite-unavailable';
   reason: string;
 }
 
-function isPersistedStorageKey(key: string): key is PersistedStorageKey {
+export function isPersistedStorageKey(key: string): key is PersistedStorageKey {
   return PERSISTED_STORAGE_KEYS.includes(key as PersistedStorageKey);
 }
 
@@ -138,6 +138,24 @@ export function writeJsonStorage<T>(key: string, value: T): void {
   writeStorageItem(key, JSON.stringify(value));
 }
 
+
+export function applyPersistedRecordsSnapshotToLocalStorage(
+  snapshot: TraccionPersistedRecordsSnapshot,
+): void {
+  const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
+
+  for (const record of sqliteRecords) {
+    window.localStorage.setItem(record.key, record.value);
+  }
+
+  writeHydrationMetadata({
+    lastUpdatedAt: snapshot.latestUpdatedAt ?? new Date().toISOString(),
+    sqlitePath: snapshot.status.path ?? null,
+    refreshToken: snapshot.refreshToken,
+    strategy: 'sqlite',
+  });
+}
+
 export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> {
   if (!window.traccion?.loadPersistedRecords) {
     return { status: 'sqlite-unavailable', reason: 'IPC SQLite no disponible.' };
@@ -191,16 +209,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       await window.traccion.backupLocalStorage?.(localRecords);
     }
 
-    for (const record of sqliteRecords) {
-      window.localStorage.setItem(record.key, record.value);
-    }
-
-    writeHydrationMetadata({
-      lastUpdatedAt: snapshot.latestUpdatedAt ?? new Date().toISOString(),
-      sqlitePath: snapshot.status.path ?? null,
-      refreshToken: snapshot.refreshToken,
-      strategy: 'sqlite',
-    });
+    applyPersistedRecordsSnapshotToLocalStorage(snapshot);
 
     return {
       status: 'hydrated-from-sqlite',

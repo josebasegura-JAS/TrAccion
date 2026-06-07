@@ -67,11 +67,14 @@ interface TraccionStorageRecordSnapshot extends TraccionStorageRecord {
   updatedAt: string;
 }
 
-interface TraccionPersistedRecordsSnapshot {
+interface TraccionPersistedRecordsTokenSnapshot {
   status: TraccionDatabaseStatus;
-  records: TraccionStorageRecordSnapshot[];
   refreshToken: string | null;
   latestUpdatedAt: string | null;
+}
+
+interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsTokenSnapshot {
+  records: TraccionStorageRecordSnapshot[];
 }
 
 
@@ -100,6 +103,7 @@ interface TraccionApi {
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
+  getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
   backupLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;

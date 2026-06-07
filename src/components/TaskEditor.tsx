@@ -67,6 +67,8 @@ export function TaskEditor({
   const removeTask = useTaskStore((state) => state.remove);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [newUpdateText, setNewUpdateText] = useState('');
+  const [loadedTaskIdentity, setLoadedTaskIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
+  const [loadedTaskUpdatedAt, setLoadedTaskUpdatedAt] = useState(task?.updatedAt ?? null);
   const recordLock = useSharedRecordLock({
     module: 'tareas',
     recordId: task?.id ?? null,
@@ -78,9 +80,14 @@ export function TaskEditor({
   }, [loadConfiguracion]);
 
   useEffect(() => {
-    setDraft(toDraft(task));
-    setNewUpdateText('');
-  }, [task, mode]);
+    const nextIdentity = `${mode}:${task?.id ?? 'new'}`;
+    if (nextIdentity !== loadedTaskIdentity) {
+      setDraft(toDraft(task));
+      setNewUpdateText('');
+      setLoadedTaskIdentity(nextIdentity);
+      setLoadedTaskUpdatedAt(task?.updatedAt ?? null);
+    }
+  }, [loadedTaskIdentity, mode, task]);
 
   const phaseOptions = useMemo(() => {
     const activePhaseNames = taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre);
@@ -88,6 +95,11 @@ export function TaskEditor({
   }, [draft.fase, taskPhases]);
 
   const isCreate = mode === 'create';
+  const hasExternalTaskUpdate =
+    !isCreate &&
+    Boolean(task?.updatedAt) &&
+    Boolean(loadedTaskUpdatedAt) &&
+    task?.updatedAt !== loadedTaskUpdatedAt;
   const canSubmit = draft.titulo.trim().length > 0 && !recordLock.isReadOnly;
 
   return (
@@ -128,6 +140,13 @@ export function TaskEditor({
               : 'border-metro-border bg-metro-surface text-metro-muted'
           }`}>
             {recordLock.message}
+          </p>
+        )}
+
+        {hasExternalTaskUpdate && recordLock.isReadOnly && (
+          <p className="mb-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
+            Esta tarea ha recibido cambios externos. No se han aplicado al formulario abierto para no
+            sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
           </p>
         )}
 

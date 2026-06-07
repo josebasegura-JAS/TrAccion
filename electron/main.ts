@@ -12,6 +12,7 @@ import {
   heartbeatRecordLock,
   initializeSqlitePersistence,
   loadPersistedRecordsSnapshot,
+  getPersistedRecordsTokenSnapshot,
   migrateLocalStorageSnapshot,
   releaseRecordLock,
   resetSqliteDirectory,
@@ -436,6 +437,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle('database:reset-directory', () => resetSqliteDirectory());
 
   ipcMain.handle('database:load-persisted-records', () => loadPersistedRecordsSnapshot());
+
+  ipcMain.handle('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot());
 
   ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
     if (
