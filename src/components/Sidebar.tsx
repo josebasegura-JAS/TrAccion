@@ -62,7 +62,7 @@ type NavigationGroup = {
   items: NavigationItem[];
 };
 
-const navigationGroups: NavigationGroup[] = [
+export const navigationGroups: NavigationGroup[] = [
   {
     id: 'operativa',
     label: 'Operativa diaria',
@@ -102,7 +102,7 @@ const navigationGroups: NavigationGroup[] = [
   },
 ];
 
-const getGroupForView = (view: AppView): NavigationGroupId | null => {
+export const getGroupForView = (view: AppView): NavigationGroupId | null => {
   if (view === 'dashboard' || view === 'ajustes') {
     return null;
   }
@@ -112,6 +112,24 @@ const getGroupForView = (view: AppView): NavigationGroupId | null => {
   );
 
   return group?.id ?? null;
+};
+
+
+export const getNavigationBreadcrumb = (view: AppView): string => {
+  if (view === 'dashboard') {
+    return 'Inicio';
+  }
+
+  if (view === 'ajustes') {
+    return 'Sistema › Ajustes';
+  }
+
+  const group = navigationGroups.find((navigationGroup) =>
+    navigationGroup.items.some((item) => item.view === view),
+  );
+  const item = group?.items.find((navigationItem) => navigationItem.view === view);
+
+  return group && item ? `${group.label} › ${item.label}` : 'TrAccion';
 };
 
 const isNavigationGroupId = (value: string | null): value is NavigationGroupId =>

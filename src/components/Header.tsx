@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { UserRound } from 'lucide-react';
-import type { AppView } from './Sidebar';
+import { getNavigationBreadcrumb, type AppView } from './Sidebar';
 import { GlobalSearch } from './GlobalSearch';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 
-const traccionLogoSrc = '../assets/logo/traccion-logo.png';
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: {
@@ -86,6 +85,7 @@ export function Header({
 }) {
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
+  const breadcrumb = useMemo(() => getNavigationBreadcrumb(activeView), [activeView]);
 
   useEffect(() => {
     let isMounted = true;
@@ -114,9 +114,11 @@ export function Header({
 
   return (
     <header className="flex h-[72px] items-center justify-between border-b border-metro-border bg-metro-topbar/95 px-6 shadow-sm shadow-slate-950/20">
-      <div className="flex min-w-0 items-center gap-4">
-        <img alt="TrAccion" className="h-10 w-auto flex-none object-contain" src={traccionLogoSrc} />
+      <div className="flex min-w-0 items-center">
         <div className="min-w-0">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            {breadcrumb}
+          </p>
           <h1 className="truncate text-xl font-semibold tracking-tight text-metro-text">
             {headerCopy.title}
           </h1>
