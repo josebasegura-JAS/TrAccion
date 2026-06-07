@@ -3,6 +3,7 @@ import { useDatabaseStatus } from '../services/databaseStatus';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../services/persistence';
 import {
+  AlertTriangle,
   CalendarDays,
   FileText,
   Landmark,
@@ -144,6 +145,7 @@ type DatabaseIndicatorViewModel = {
   dotClassName: string;
   textClassName: string;
   icon: 'database' | 'lock';
+  requiresAttention: boolean;
 };
 
 const formatDatabaseTimestamp = (timestamp: string | null | undefined) => {
@@ -173,6 +175,7 @@ const buildDatabaseIndicatorViewModel = (
       dotClassName: 'bg-orange-400 ring-orange-300/25',
       textClassName: 'text-orange-100',
       icon: 'database',
+      requiresAttention: true,
     };
   }
 
@@ -186,6 +189,7 @@ const buildDatabaseIndicatorViewModel = (
       dotClassName: 'bg-slate-400 ring-slate-300/25',
       textClassName: 'text-slate-200',
       icon: 'lock',
+      requiresAttention: true,
     };
   }
 
@@ -199,6 +203,7 @@ const buildDatabaseIndicatorViewModel = (
       dotClassName: 'bg-red-500 ring-red-300/25',
       textClassName: 'text-red-100',
       icon: 'database',
+      requiresAttention: true,
     };
   }
 
@@ -212,6 +217,7 @@ const buildDatabaseIndicatorViewModel = (
       dotClassName: 'bg-emerald-400 ring-emerald-300/25',
       textClassName: 'text-emerald-100',
       icon: 'database',
+      requiresAttention: false,
     };
   }
 
@@ -225,6 +231,7 @@ const buildDatabaseIndicatorViewModel = (
       dotClassName: 'bg-sky-400 ring-sky-300/25',
       textClassName: 'text-sky-100',
       icon: 'database',
+      requiresAttention: false,
     };
   }
 
@@ -238,6 +245,7 @@ const buildDatabaseIndicatorViewModel = (
       dotClassName: 'bg-orange-400 ring-orange-300/25',
       textClassName: 'text-orange-100',
       icon: 'database',
+      requiresAttention: true,
     };
   }
 
@@ -250,6 +258,7 @@ const buildDatabaseIndicatorViewModel = (
     dotClassName: 'bg-red-500 ring-red-300/25',
     textClassName: 'text-red-100',
     icon: 'database',
+    requiresAttention: true,
   };
 };
 
@@ -449,6 +458,13 @@ export function Sidebar({
                   <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />
                 )}
               </span>
+              {databaseIndicator.requiresAttention && (
+                <AlertTriangle
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 text-amber-200 drop-shadow"
+                  strokeWidth={2.6}
+                />
+              )}
               <span className="max-w-full truncate">{databaseIndicator.label}</span>
               <span className="pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
                 <span className="block font-semibold">{databaseIndicator.statusText}</span>
@@ -578,6 +594,13 @@ export function Sidebar({
                   <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />
                 )}
               </span>
+              {databaseIndicator.requiresAttention && (
+                <AlertTriangle
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-amber-200"
+                  strokeWidth={2.5}
+                />
+              )}
               <span className="min-w-0">
                 <span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>
                   {databaseIndicator.label}

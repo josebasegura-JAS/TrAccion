@@ -7,6 +7,7 @@ import {
   type EmployeeField,
 } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
+import { InlineSaveFeedback } from './InlineSaveFeedback';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
   { field: 'empleado', label: 'Empleado', required: true },
@@ -184,6 +185,7 @@ export function EmployeeEditor({
             >
               Guardar
             </button>
+            <InlineSaveFeedback />
             {!isCreate && employee && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"

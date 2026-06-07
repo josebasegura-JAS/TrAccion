@@ -12,6 +12,7 @@ import {
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
+import { InlineSaveFeedback } from './InlineSaveFeedback';
 
 const taskTextFields: Array<{ field: TaskDraftField; label: string; required?: boolean; type?: string }> = [
   { field: 'titulo', label: 'Título', required: true },
@@ -323,6 +324,7 @@ export function TaskEditor({
             >
               Guardar
             </button>
+            <InlineSaveFeedback />
             {!isCreate && task && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
