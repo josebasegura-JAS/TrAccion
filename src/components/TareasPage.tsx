@@ -4,7 +4,6 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { filterTasks } from '../features/tareas/domain/filters';
 import { getTaskClosedYear } from '../features/tareas/domain/historico';
 import {
-  sortTasksByColumn,
   sortTasksByDefault,
   type SortDirection,
   type TaskSortKey,
@@ -21,12 +20,15 @@ import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
+import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { sortDataTableRows } from '../shared/table/tableSorting';
+import {
+  type TableViewPreferences,
+  useTableViewPreferences,
+} from '../shared/table/useTableViewPreferences';
 import { TaskEditor } from './TaskEditor';
 
-interface SortState {
-  key: TaskSortKey;
-  direction: SortDirection;
-}
+type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 
 type HistoricSortKey = 'titulo' | 'closedAt' | 'responsable' | 'prioridad';
 
@@ -40,22 +42,40 @@ interface HistoricYearGroup {
   tasks: Task[];
 }
 
-const sortableColumns: Array<{ key: TaskSortKey; label: string; className: string }> = [
-  { key: 'titulo', label: 'Título', className: 'w-[210px]' },
-  { key: 'tipo', label: 'Tipo', className: 'w-[95px]' },
-  { key: 'fase', label: 'Fase', className: 'w-[125px]' },
-  { key: 'estado', label: 'Estado', className: 'w-[115px]' },
-  { key: 'prioridad', label: 'Prioridad', className: 'w-[105px]' },
-  { key: 'fechaLimite', label: 'Fecha límite', className: 'w-[120px]' },
-  { key: 'responsable', label: 'Responsable', className: 'w-[145px]' },
-  { key: 'sindicato', label: 'Sindicato', className: 'w-[130px]' },
-];
-
 const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
   { key: 'titulo', label: 'Título', className: 'w-[320px]' },
   { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
   { key: 'responsable', label: 'Responsable', className: 'w-[190px]' },
   { key: 'prioridad', label: 'Prioridad', className: 'w-[120px]' },
+];
+
+const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active';
+
+const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnId> = {
+  sort: null,
+  columnWidths: {
+    titulo: 230,
+    tipo: 100,
+    fase: 130,
+    estado: 120,
+    prioridad: 105,
+    fechaLimite: 120,
+    responsable: 150,
+    sindicato: 130,
+    actions: 88,
+  },
+};
+
+const tareasTableColumnIds: ActiveTaskTableColumnId[] = [
+  'titulo',
+  'tipo',
+  'fase',
+  'estado',
+  'prioridad',
+  'fechaLimite',
+  'responsable',
+  'sindicato',
+  'actions',
 ];
 
 const taskExportColumns: ExportColumn<Task>[] = [
@@ -137,7 +157,6 @@ export function TareasPage() {
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [sortState, setSortState] = useState<SortState | null>(null);
   const [historicSortState, setHistoricSortState] = useState<HistoricSortState>({
     key: 'closedAt',
     direction: 'desc',
@@ -156,13 +175,6 @@ export function TareasPage() {
   );
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const filteredTasks = useMemo(() => filterTasks(tasks, filters), [filters, tasks]);
-  const sortedTasks = useMemo(() => {
-    if (!sortState) {
-      return sortTasksByDefault(filteredTasks);
-    }
-
-    return sortTasksByColumn(filteredTasks, sortState.key, sortState.direction);
-  }, [filteredTasks, sortState]);
   const historicTasks = useMemo(
     () => visibleTasks.filter((task) => isTaskClosed(task)),
     [visibleTasks],
@@ -178,6 +190,140 @@ export function TareasPage() {
     ['Estado', filters.estado],
     ['Prioridad', filters.prioridad],
   ]);
+
+  const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActiveTaskTableColumnId>(
+    {
+      storageKey: TAREAS_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultTareasTablePreferences,
+      validColumnIds: tareasTableColumnIds,
+    },
+  );
+
+  const activeTaskRows = useMemo(
+    () => (preferences.sort ? filteredTasks : sortTasksByDefault(filteredTasks)),
+    [filteredTasks, preferences.sort],
+  );
+
+  const activeTaskColumns = useMemo<Array<DataTableColumn<Task, ActiveTaskTableColumnId>>>(
+    () => [
+      {
+        id: 'titulo',
+        header: 'Título',
+        accessor: (task) => task.titulo,
+        render: (task) => task.titulo,
+        width: 230,
+        minWidth: 170,
+        maxWidth: 460,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'tipo',
+        header: 'Tipo',
+        accessor: (task) => task.tipo,
+        render: (task) => task.tipo,
+        width: 100,
+        minWidth: 82,
+        maxWidth: 170,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'fase',
+        header: 'Fase',
+        accessor: (task) => task.fase,
+        render: (task) => task.fase,
+        width: 130,
+        minWidth: 100,
+        maxWidth: 230,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'estado',
+        header: 'Estado',
+        accessor: (task) => task.estado,
+        render: (task) => task.estado,
+        width: 120,
+        minWidth: 95,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'prioridad',
+        header: 'Prioridad',
+        accessor: (task) => PRIORITY_ORDER.get(task.prioridad) ?? TASK_PRIORITIES.length,
+        render: (task) => task.prioridad,
+        width: 105,
+        minWidth: 90,
+        maxWidth: 165,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'fechaLimite',
+        header: 'Fecha límite',
+        accessor: (task) => task.fechaLimite,
+        render: (task) => task.fechaLimite || '—',
+        width: 120,
+        minWidth: 105,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'responsable',
+        header: 'Responsable',
+        accessor: (task) => task.responsable,
+        render: (task) => task.responsable || '—',
+        width: 150,
+        minWidth: 110,
+        maxWidth: 260,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'sindicato',
+        header: 'Sindicato',
+        accessor: (task) => task.sindicato,
+        render: (task) => task.sindicato || '—',
+        width: 130,
+        minWidth: 95,
+        maxWidth: 220,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'actions',
+        header: 'Acción',
+        render: (task) => (
+          <button
+            className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={(event) => {
+              event.stopPropagation();
+              remove(task.id);
+            }}
+            type="button"
+          >
+            Eliminar
+          </button>
+        ),
+        width: 88,
+        minWidth: 82,
+        maxWidth: 120,
+        resizable: false,
+        isActionColumn: true,
+        className: 'whitespace-nowrap',
+      },
+    ],
+    [remove],
+  );
+
+  const sortedTasks = useMemo(
+    () => sortDataTableRows(activeTaskRows, activeTaskColumns, preferences.sort),
+    [activeTaskColumns, activeTaskRows, preferences.sort],
+  );
 
   const editorTask =
     editorMode === 'edit' ? (visibleTasks.find((task) => task.id === editingTaskId) ?? null) : null;
@@ -196,13 +342,6 @@ export function TareasPage() {
   const closeEditor = () => {
     setEditorMode(null);
     setEditingTaskId(null);
-  };
-
-  const toggleSort = (key: TaskSortKey) => {
-    setSortState((current) => ({
-      key,
-      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
-    }));
   };
 
   const toggleHistoricSort = (key: HistoricSortKey) => {
@@ -294,90 +433,19 @@ export function TareasPage() {
             />
           </div>
         </div>
-        <div className="max-h-[460px] overflow-auto">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-              <tr>
-                {sortableColumns.map((column) => {
-                  const isActive = sortState?.key === column.key;
-
-                  return (
-                    <th className={`${column.className} px-3 py-2`} key={column.key}>
-                      <button
-                        className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
-                        onClick={() => toggleSort(column.key)}
-                        type="button"
-                      >
-                        <span>{column.label}</span>
-                        {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
-                      </button>
-                    </th>
-                  );
-                })}
-                <th className="w-[82px] px-3 py-2 text-right">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-metro-border bg-metro-surface">
-              {sortedTasks.length === 0 && (
-                <tr>
-                  <td className="px-3 py-5 text-center text-sm text-metro-muted" colSpan={9}>
-                    No hay tareas activas con los filtros aplicados.
-                  </td>
-                </tr>
-              )}
-              {sortedTasks.map((task) => (
-                <tr
-                  className="cursor-pointer hover:bg-metro-red/10"
-                  key={task.id}
-                  onClick={() => openEditor(task)}
-                >
-                  <td
-                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                    title={task.titulo}
-                  >
-                    {task.titulo}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.tipo}>
-                    {task.tipo}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.fase}>
-                    {task.fase}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.estado}>
-                    {task.estado}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
-                    {task.prioridad}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={task.fechaLimite || '—'}
-                  >
-                    {task.fechaLimite || '—'}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>
-                    {task.responsable || '—'}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={task.sindicato}>
-                    {task.sindicato || '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
-                    <button
-                      className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        remove(task.id);
-                      }}
-                      type="button"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          ariaLabel="Tareas activas"
+          columnWidths={preferences.columnWidths}
+          columns={activeTaskColumns}
+          emptyMessage="No hay tareas activas con los filtros aplicados."
+          getRowId={(task) => task.id}
+          maxHeightClassName="max-h-[460px]"
+          onColumnWidthChange={setColumnWidth}
+          onRowClick={openEditor}
+          onSortChange={setSort}
+          rows={activeTaskRows}
+          sort={preferences.sort}
+        />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-metro-border">

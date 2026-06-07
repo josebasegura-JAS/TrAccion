@@ -148,7 +148,7 @@ export function DataTable<Row, ColumnId extends string>({
   };
 
   return (
-    <div className={`${maxHeightClassName} overflow-auto`}>
+    <div className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}>
       <table
         aria-label={ariaLabel}
         className="w-full table-fixed text-left text-xs"
@@ -159,13 +159,13 @@ export function DataTable<Row, ColumnId extends string>({
             <col key={column.id} style={{ width: column.width }} />
           ))}
         </colgroup>
-        <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+        <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.18)]">
           <tr>
             {visibleColumns.map((column) => {
               const isSorted = sort?.columnId === column.id;
               const canSort = Boolean(column.sortable && column.accessor);
               const ariaSort = isSorted
-                ? sort.direction === 'asc'
+                ? sort?.direction === 'asc'
                   ? 'ascending'
                   : 'descending'
                 : 'none';
@@ -173,7 +173,7 @@ export function DataTable<Row, ColumnId extends string>({
               return (
                 <th
                   aria-sort={canSort ? ariaSort : undefined}
-                  className={`relative px-3 py-2 ${column.headerClassName ?? ''}`}
+                  className={`relative border-r border-metro-border/80 px-3 py-2 last:border-r-0 ${column.headerClassName ?? ''}`}
                   key={column.id}
                   scope="col"
                 >
@@ -189,11 +189,11 @@ export function DataTable<Row, ColumnId extends string>({
                         {column.header}
                       </span>
                       <span aria-hidden="true" className="inline-block w-3 text-metro-red">
-                        {isSorted ? (sort.direction === 'asc' ? '↑' : '↓') : ''}
+                        {isSorted ? (sort?.direction === 'asc' ? '↑' : '↓') : ''}
                       </span>
                       <span className="sr-only">
                         {isSorted
-                          ? `Orden ${sort.direction === 'asc' ? 'ascendente' : 'descendente'}`
+                          ? `Orden ${sort?.direction === 'asc' ? 'ascendente' : 'descendente'}`
                           : 'Sin ordenar'}
                       </span>
                     </button>
@@ -213,7 +213,7 @@ export function DataTable<Row, ColumnId extends string>({
                       style={{ width: RESIZE_HANDLE_WIDTH }}
                       tabIndex={-1}
                     >
-                      <span className="absolute right-1 top-1/2 h-5 -translate-y-1/2 border-r border-metro-border" />
+                      <span className="absolute right-1 top-1/2 h-6 -translate-y-1/2 border-r-2 border-metro-border transition-colors hover:border-metro-red" />
                     </span>
                   )}
                 </th>
@@ -221,7 +221,7 @@ export function DataTable<Row, ColumnId extends string>({
             })}
           </tr>
         </thead>
-        <tbody className="divide-y divide-metro-border bg-metro-surface">
+        <tbody className="bg-metro-surface">
           {sortedRows.length === 0 ? (
             <tr>
               <td
@@ -232,9 +232,9 @@ export function DataTable<Row, ColumnId extends string>({
               </td>
             </tr>
           ) : (
-            sortedRows.map((row) => (
+            sortedRows.map((row, rowIndex) => (
               <tr
-                className={rowClassName?.(row)}
+                className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} border-b border-metro-border/70 transition-colors hover:bg-metro-red/10 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                 key={getRowId(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
@@ -245,7 +245,7 @@ export function DataTable<Row, ColumnId extends string>({
 
                   return (
                     <td
-                      className={`truncate px-3 py-1.5 ${column.isActionColumn ? 'text-right' : ''} ${
+                      className={`truncate border-r border-metro-border/40 px-3 py-1.5 last:border-r-0 ${column.isActionColumn ? 'text-right' : ''} ${
                         column.className ?? ''
                       }`}
                       key={column.id}

@@ -42,6 +42,87 @@ import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
+import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import {
+  type TableViewPreferences,
+  useTableViewPreferences,
+} from '../../../shared/table/useTableViewPreferences';
+
+type TicketPeopleTableColumnId =
+  | 'empleado'
+  | 'nombre'
+  | 'apellido1'
+  | 'apellido2'
+  | 'dni'
+  | 'puesto'
+  | 'calendario'
+  | 'estado'
+  | 'actions';
+
+type TicketAbsencesTableColumnId =
+  | 'empleado'
+  | 'nombreApellidos'
+  | 'desde'
+  | 'hasta'
+  | 'motivo'
+  | 'totalDias'
+  | 'afectaTicket'
+  | 'actions';
+
+const TICKET_PEOPLE_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.people';
+const TICKET_ABSENCES_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.absences';
+
+const defaultTicketPeopleTablePreferences: TableViewPreferences<TicketPeopleTableColumnId> = {
+  sort: { columnId: 'empleado', direction: 'asc' },
+  columnWidths: {
+    empleado: 110,
+    nombre: 150,
+    apellido1: 150,
+    apellido2: 150,
+    dni: 110,
+    puesto: 190,
+    calendario: 160,
+    estado: 90,
+    actions: 104,
+  },
+};
+
+const ticketPeopleTableColumnIds: TicketPeopleTableColumnId[] = [
+  'empleado',
+  'nombre',
+  'apellido1',
+  'apellido2',
+  'dni',
+  'puesto',
+  'calendario',
+  'estado',
+  'actions',
+];
+
+const defaultTicketAbsencesTablePreferences: TableViewPreferences<TicketAbsencesTableColumnId> = {
+  sort: { columnId: 'desde', direction: 'asc' },
+  columnWidths: {
+    empleado: 110,
+    nombreApellidos: 230,
+    desde: 115,
+    hasta: 115,
+    motivo: 190,
+    totalDias: 95,
+    afectaTicket: 105,
+    actions: 82,
+  },
+};
+
+const ticketAbsencesTableColumnIds: TicketAbsencesTableColumnId[] = [
+  'empleado',
+  'nombreApellidos',
+  'desde',
+  'hasta',
+  'motivo',
+  'totalDias',
+  'afectaTicket',
+  'actions',
+];
 
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const MONTH_OPTIONS = [
@@ -1130,6 +1211,146 @@ function PeoplePanel({
   people: TicketPerson[];
 }) {
   const canSave = draft.empleado.trim() && draft.nombre.trim() && draft.calendarId;
+  const { preferences, setSort, setColumnWidth } =
+    useTableViewPreferences<TicketPeopleTableColumnId>({
+      storageKey: TICKET_PEOPLE_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultTicketPeopleTablePreferences,
+      validColumnIds: ticketPeopleTableColumnIds,
+    });
+  const peopleColumns = useMemo<Array<DataTableColumn<TicketPerson, TicketPeopleTableColumnId>>>(
+    () => [
+      {
+        id: 'empleado',
+        header: 'Nº empleado',
+        accessor: (person) => {
+          const employeeNumber = Number(person.empleado.trim());
+          return Number.isFinite(employeeNumber) ? employeeNumber : person.empleado;
+        },
+        render: (person) => person.empleado,
+        width: 110,
+        minWidth: 95,
+        maxWidth: 170,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'nombre',
+        header: 'Nombre',
+        accessor: (person) => person.nombre,
+        render: (person) => person.nombre,
+        width: 150,
+        minWidth: 120,
+        maxWidth: 260,
+        sortable: true,
+        className: 'text-metro-text',
+      },
+      {
+        id: 'apellido1',
+        header: 'Apellido1',
+        accessor: (person) => person.apellido1,
+        render: (person) => person.apellido1,
+        width: 150,
+        minWidth: 120,
+        maxWidth: 260,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'apellido2',
+        header: 'Apellido2',
+        accessor: (person) => person.apellido2,
+        render: (person) => person.apellido2,
+        width: 150,
+        minWidth: 120,
+        maxWidth: 260,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'dni',
+        header: 'DNI',
+        accessor: (person) => person.dni,
+        render: (person) => person.dni,
+        width: 110,
+        minWidth: 90,
+        maxWidth: 160,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'puesto',
+        header: 'Puesto',
+        accessor: (person) => person.puesto,
+        render: (person) => person.puesto,
+        width: 190,
+        minWidth: 140,
+        maxWidth: 360,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'calendario',
+        header: 'Calendario',
+        accessor: (person) =>
+          calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? '',
+        render: (person) =>
+          calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ??
+          'Sin calendario',
+        width: 160,
+        minWidth: 130,
+        maxWidth: 280,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'estado',
+        header: 'Estado',
+        accessor: (person) => (person.activo ? 'Activo' : 'Inactivo'),
+        render: (person) => (person.activo ? 'Activo' : 'Inactivo'),
+        width: 90,
+        minWidth: 80,
+        maxWidth: 130,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        render: (person) => (
+          <div className="flex justify-end gap-1.5">
+            <button
+              className="rounded-md border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit(person);
+              }}
+              type="button"
+            >
+              Editar
+            </button>
+            <button
+              className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (window.confirm(`¿Eliminar la persona con Nº empleado ${person.empleado}?`)) {
+                  onRemove(person.empleado);
+                }
+              }}
+              type="button"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ),
+        width: 104,
+        minWidth: 96,
+        maxWidth: 140,
+        resizable: false,
+        isActionColumn: true,
+      },
+    ],
+    [calendars, onEdit, onRemove],
+  );
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(320px,0.7fr)_minmax(520px,1.3fr)]">
@@ -1263,77 +1484,19 @@ function PeoplePanel({
             </span>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-xs">
-            <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
-              <tr>
-                <th className="px-2 py-1">Nº empleado</th>
-                <th className="px-2 py-1">Nombre</th>
-                <th className="px-2 py-1">Apellido1</th>
-                <th className="px-2 py-1">Apellido2</th>
-                <th className="px-2 py-1">DNI</th>
-                <th className="px-2 py-1">Puesto</th>
-                <th className="px-2 py-1">Calendario</th>
-                <th className="px-2 py-1">estado</th>
-                <th className="px-2 py-1">acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-metro-border text-metro-text">
-              {people.map((person) => (
-                <tr
-                  className="hover:bg-metro-surface"
-                  key={person.empleado}
-                  onDoubleClick={() => onEdit(person)}
-                >
-                  <td className="px-2 py-1 font-semibold">{person.empleado}</td>
-                  <td className="px-2 py-1">{person.nombre}</td>
-                  <td className="px-2 py-1">{person.apellido1}</td>
-                  <td className="px-2 py-1">{person.apellido2}</td>
-                  <td className="px-2 py-1">{person.dni}</td>
-                  <td className="px-2 py-1">{person.puesto}</td>
-                  <td className="px-2 py-1">
-                    {calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ??
-                      'Sin calendario'}
-                  </td>
-                  <td className="px-2 py-1">{person.activo ? 'Activo' : 'Inactivo'}</td>
-                  <td className="px-2 py-1">
-                    <div className="flex gap-1.5">
-                      <button
-                        className="rounded-md border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
-                        onClick={() => onEdit(person)}
-                        type="button"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `¿Eliminar la persona con Nº empleado ${person.empleado}?`,
-                            )
-                          ) {
-                            onRemove(person.empleado);
-                          }
-                        }}
-                        type="button"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {people.length === 0 ? (
-                <tr>
-                  <td className="px-2 py-4 text-center text-metro-muted" colSpan={9}>
-                    Añade personas manualmente para poder calcular tickets.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          ariaLabel="Personas con derecho a ticket"
+          columnWidths={preferences.columnWidths}
+          columns={peopleColumns}
+          emptyMessage="Añade personas manualmente para poder calcular tickets."
+          getRowId={(person) => person.empleado}
+          maxHeightClassName="max-h-[420px]"
+          onColumnWidthChange={setColumnWidth}
+          onRowClick={onEdit}
+          onSortChange={setSort}
+          rows={people}
+          sort={preferences.sort}
+        />
       </div>
     </div>
   );
@@ -1463,7 +1626,7 @@ function CalculationPanel({
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-metro-border text-metro-text">
+          <tbody className="divide-y divide-metro-border text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
             {calculation.rows.map((row: TicketPersonCalculation) => (
               <tr key={row.empleado}>
                 <td className="px-2 py-1 font-semibold">{row.empleado}</td>
@@ -1533,6 +1696,121 @@ function AbsencesTable({
   onYearChange: (value: string) => void;
   year: number;
 }) {
+  const { preferences, setSort, setColumnWidth } =
+    useTableViewPreferences<TicketAbsencesTableColumnId>({
+      storageKey: TICKET_ABSENCES_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultTicketAbsencesTablePreferences,
+      validColumnIds: ticketAbsencesTableColumnIds,
+    });
+  const absenceColumns = useMemo<
+    Array<DataTableColumn<TicketRestaurantAbsence, TicketAbsencesTableColumnId>>
+  >(
+    () => [
+      {
+        id: 'empleado',
+        header: 'Nº empleado',
+        accessor: (absence) => {
+          const employeeNumber = Number(absence.empleado.trim());
+          return Number.isFinite(employeeNumber) ? employeeNumber : absence.empleado;
+        },
+        render: (absence) => absence.empleado,
+        width: 110,
+        minWidth: 95,
+        maxWidth: 170,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'nombreApellidos',
+        header: 'Nombre y apellidos',
+        accessor: (absence) => absence.nombreApellidos,
+        render: (absence) => absence.nombreApellidos,
+        width: 230,
+        minWidth: 170,
+        maxWidth: 420,
+        sortable: true,
+        className: 'text-metro-text',
+      },
+      {
+        id: 'desde',
+        header: 'Desde',
+        accessor: (absence) => absence.desde,
+        render: (absence) => absence.desde,
+        width: 115,
+        minWidth: 95,
+        maxWidth: 170,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'hasta',
+        header: 'Hasta',
+        accessor: (absence) => absence.hasta,
+        render: (absence) => absence.hasta,
+        width: 115,
+        minWidth: 95,
+        maxWidth: 170,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'motivo',
+        header: 'Motivo',
+        accessor: (absence) => absence.motivo,
+        render: (absence) => absence.motivo,
+        width: 190,
+        minWidth: 130,
+        maxWidth: 360,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'totalDias',
+        header: 'Total días',
+        accessor: (absence) => absence.totalDias,
+        render: (absence) => absence.totalDias,
+        width: 95,
+        minWidth: 85,
+        maxWidth: 135,
+        sortable: true,
+        className: 'text-right text-metro-muted',
+      },
+      {
+        id: 'afectaTicket',
+        header: 'Afecta ticket',
+        accessor: (absence) => (absence.afectaTicket ? 'Sí' : 'No'),
+        render: (absence) => (absence.afectaTicket ? 'Sí' : 'No'),
+        width: 105,
+        minWidth: 95,
+        maxWidth: 150,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        render: (absence) => (
+          <button
+            className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove(absence.id);
+            }}
+            type="button"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ),
+        width: 82,
+        minWidth: 74,
+        maxWidth: 110,
+        resizable: false,
+        isActionColumn: true,
+      },
+    ],
+    [onRemove],
+  );
+
   return (
     <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
@@ -1595,51 +1873,19 @@ function AbsencesTable({
           />
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-xs">
-          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
-            <tr>
-              <th className="px-2 py-1">Nº empleado</th>
-              <th className="px-2 py-1">Nombre y apellidos</th>
-              <th className="px-2 py-1">Desde</th>
-              <th className="px-2 py-1">Hasta</th>
-              <th className="px-2 py-1">Motivo</th>
-              <th className="px-2 py-1">Total días</th>
-              <th className="px-2 py-1">Afecta ticket</th>
-              <th className="px-2 py-1">acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-metro-border text-metro-text">
-            {absences.map((absence) => (
-              <tr key={absence.id} onDoubleClick={() => onEdit(absence)}>
-                <td className="px-2 py-1 font-semibold">{absence.empleado}</td>
-                <td className="px-2 py-1">{absence.nombreApellidos}</td>
-                <td className="px-2 py-1">{absence.desde}</td>
-                <td className="px-2 py-1">{absence.hasta}</td>
-                <td className="px-2 py-1">{absence.motivo}</td>
-                <td className="px-2 py-1">{absence.totalDias}</td>
-                <td className="px-2 py-1">{absence.afectaTicket ? 'Sí' : 'No'}</td>
-                <td className="px-2 py-1">
-                  <button
-                    className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
-                    onClick={() => onRemove(absence.id)}
-                    type="button"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {absences.length === 0 ? (
-              <tr>
-                <td className="px-2 py-4 text-center text-metro-muted" colSpan={6}>
-                  No hay ausencias guardadas.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        ariaLabel="Ausencias Ticket Restaurante"
+        columnWidths={preferences.columnWidths}
+        columns={absenceColumns}
+        emptyMessage="No hay ausencias guardadas."
+        getRowId={(absence) => absence.id}
+        maxHeightClassName="max-h-[420px]"
+        onColumnWidthChange={setColumnWidth}
+        onRowClick={onEdit}
+        onSortChange={setSort}
+        rows={absences}
+        sort={preferences.sort}
+      />
     </div>
   );
 }
@@ -1695,7 +1941,7 @@ function AbsencePreviewModal({
                 <th className="px-1 py-1">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-metro-border">
+            <tbody className="divide-y divide-metro-border [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
               {rows.map((row) => (
                 <tr className={row.errors.length > 0 ? 'bg-metro-red/10' : ''} key={row.id}>
                   <PreviewInput field="empleado" onChange={onChange} row={row} />
