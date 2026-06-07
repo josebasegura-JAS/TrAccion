@@ -9,6 +9,9 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
+const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
+const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
+const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
 const CURRENT_SCHEMA_VERSION = 2;
 const LOCK_TTL_MS = 30 * 1000;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
@@ -91,6 +94,7 @@ const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
+let localBackupQueue: Promise<void> = Promise.resolve();
 
 function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
   if (!value || typeof value !== 'object') {
@@ -104,6 +108,18 @@ function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
 function getDefaultDatabaseDirectory(): string {
   return path.join(app.getPath('userData'), 'data');
 }
+function getLocalBackupDirectory(): string {
+  return path.join(app.getPath('userData'), LOCAL_BACKUP_DIRECTORY_NAME);
+}
+
+function getLocalBackupDatabasePath(): string {
+  return path.join(getLocalBackupDirectory(), LOCAL_BACKUP_DATABASE_FILE_NAME);
+}
+
+function getLocalBackupJsonPath(): string {
+  return path.join(getLocalBackupDirectory(), LOCAL_BACKUP_JSON_FILE_NAME);
+}
+
 
 function getPreferencesPath(): string {
   return path.join(app.getPath('userData'), DATABASE_PREFERENCES_FILE_NAME);
@@ -300,7 +316,7 @@ function migrateToVersion1(db: Database): void {
     CREATE TABLE IF NOT EXISTS persisted_records (
       key TEXT PRIMARY KEY,
       value_json TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'localStorage',
+      source TEXT NOT NULL DEFAULT 'sqlite-primary',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -512,6 +528,56 @@ function isMetadataRow(value: unknown): value is MetadataRow {
   return typeof candidate.value === 'string';
 }
 
+function readAllPersistedRecords(db: Database): PersistedStorageRecordSnapshot[] {
+  return db
+    .prepare('SELECT key, value_json, updated_at FROM persisted_records ORDER BY key')
+    .all()
+    .filter(isPersistedRecordRow)
+    .map((row) => ({
+      key: row.key,
+      value: row.value_json,
+      updatedAt: row.updated_at,
+    }));
+}
+
+function enqueueLocalBackup(reason: string): void {
+  localBackupQueue = localBackupQueue
+    .then(() => writeLocalBackupArtifacts(reason))
+    .catch((error: unknown) => {
+      console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
+    });
+}
+
+async function writeLocalBackupArtifacts(reason: string): Promise<void> {
+  const currentDatabase = database;
+  const currentStatus = getSqliteStatus();
+  if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
+    return;
+  }
+
+  const backupDirectory = getLocalBackupDirectory();
+  await mkdir(backupDirectory, { recursive: true });
+
+  const now = new Date().toISOString();
+  const records = readAllPersistedRecords(currentDatabase);
+  const payload = {
+    createdAt: now,
+    sourceDatabasePath: currentStatus.path,
+    reason,
+    recordCount: records.length,
+    records,
+  };
+
+  await writeFile(getLocalBackupJsonPath(), JSON.stringify(payload, null, 2), 'utf8');
+
+  try {
+    currentDatabase.pragma('wal_checkpoint(PASSIVE)');
+    await copyFile(currentStatus.path, getLocalBackupDatabasePath());
+  } catch (error) {
+    console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
+  }
+}
+
 function updateRefreshMetadata(db: Database, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
   db.prepare(
@@ -540,13 +606,14 @@ export function savePersistedRecord(record: PersistedStorageRecord): DatabaseSta
   const db = requireDatabase();
   db.prepare(
     `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-       VALUES (?, ?, 'localStorage', ?, ?)
+       VALUES (?, ?, 'sqlite-primary', ?, ?)
        ON CONFLICT(key) DO UPDATE SET
          value_json = excluded.value_json,
          source = excluded.source,
          updated_at = excluded.updated_at`,
   ).run(record.key, record.value, now, now);
   updateRefreshMetadata(db, now);
+  enqueueLocalBackup(`save:${record.key}`);
 
   return currentStatus;
 }
@@ -568,7 +635,7 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
 
   const upsert = db.prepare(
     `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-     VALUES (?, ?, 'localStorage', ?, ?)
+     VALUES (?, ?, 'sqlite-primary', ?, ?)
      ON CONFLICT(key) DO UPDATE SET
        value_json = excluded.value_json,
        source = excluded.source,
@@ -581,6 +648,7 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
 
   if (records.length > 0) {
     updateRefreshMetadata(db, now);
+    enqueueLocalBackup('migrate-local-storage-snapshot');
   }
 
   return currentStatus;
@@ -596,9 +664,10 @@ export function createLocalStorageBackup(payload: LocalStorageBackupPayload): Da
     (record): record is PersistedStorageRecord =>
       typeof record.key === 'string' && typeof record.value === 'string',
   );
-  requireDatabase()
-    .prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
+  const db = requireDatabase();
+  db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
     .run(new Date().toISOString(), JSON.stringify({ records }));
+  enqueueLocalBackup('local-storage-backup');
 
   return currentStatus;
 }
@@ -610,15 +679,7 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
   }
 
   const db = requireDatabase();
-  const rows = db
-    .prepare('SELECT key, value_json, updated_at FROM persisted_records ORDER BY key')
-    .all()
-    .filter(isPersistedRecordRow);
-  const records = rows.map((row) => ({
-    key: row.key,
-    value: row.value_json,
-    updatedAt: row.updated_at,
-  }));
+  const records = readAllPersistedRecords(db);
   const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
     if (!latest) {
       return record.updatedAt;
