@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, UserRound } from 'lucide-react';
+import { UserRound } from 'lucide-react';
 import type { AppView } from './Sidebar';
+import { GlobalSearch } from './GlobalSearch';
 
 const traccionLogoSrc = '../assets/logo/traccion-logo.png';
 
@@ -59,7 +60,13 @@ const getFallbackUserName = () => {
   return window.localStorage.getItem('traccion.header.username') ?? 'Usuario local';
 };
 
-export function Header({ activeView }: { activeView: AppView }) {
+export function Header({
+  activeView,
+  onViewChange,
+}: {
+  activeView: AppView;
+  onViewChange: (view: AppView) => void;
+}) {
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
 
@@ -101,13 +108,7 @@ export function Header({ activeView }: { activeView: AppView }) {
       </div>
 
       <div className="flex min-w-0 items-center gap-4">
-        <div className="hidden min-w-[18rem] items-center gap-2 rounded-2xl border border-metro-border bg-metro-panel/80 px-4 py-2 text-sm text-metro-muted shadow-inner shadow-slate-950/10 lg:flex xl:min-w-[26rem]">
-          <Search className="flex-none" size={17} />
-          <span className="truncate">Buscar en TrAccion...</span>
-          <kbd className="ml-auto rounded-md border border-metro-border bg-slate-950/25 px-1.5 py-0.5 text-[10px] font-semibold text-metro-muted">
-            Ctrl K
-          </kbd>
-        </div>
+        <GlobalSearch onNavigate={onViewChange} />
 
         <div className="flex items-center gap-3 rounded-2xl border border-metro-border bg-metro-panel/70 px-3 py-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-metro-red/15 text-metro-red ring-1 ring-metro-red/20">
