@@ -7,7 +7,6 @@ import {
   Euro,
   FileUp,
   Pencil,
-  Plus,
   Settings,
   Save,
   Trash2,
@@ -827,117 +826,73 @@ export function TicketRestaurantePage() {
         type="file"
       />
 
-      <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-metro-border bg-metro-panel p-2">
-        <SubviewButton
-          active={activeSubview === 'calendarios'}
-          label="Calendarios"
-          onClick={() => setActiveSubview('calendarios')}
-        />
-        <SubviewButton
-          active={activeSubview === 'personas'}
-          label="Personas"
-          onClick={() => setActiveSubview('personas')}
-        />
-        <SubviewButton
-          active={activeSubview === 'computoMensual'}
-          label="Cómputo mensual"
-          onClick={() => setActiveSubview('computoMensual')}
-        />
-        <SubviewButton
-          active={activeSubview === 'computoCotizacion'}
-          label="Cómputo cotización"
-          onClick={() => setActiveSubview('computoCotizacion')}
-        />
-        <SubviewButton
-          active={activeSubview === 'ausencias'}
-          label="Ausencias"
-          onClick={() => setActiveSubview('ausencias')}
-        />
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-metro-border bg-metro-panel p-2">
-        <button
-          className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-          onClick={() => setIsPriceModalOpen(true)}
-          type="button"
-        >
-          <Euro className="h-3.5 w-3.5 text-metro-red" />
-          Precio ticket
-        </button>
-        <button
-          className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-          onClick={() => setIsRulesModalOpen(true)}
-          type="button"
-        >
-          <Settings className="h-3.5 w-3.5 text-metro-red" />
-          Reglas de cálculo
-        </button>
+      <div className="mb-3 flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <SubviewButton
+            active={activeSubview === 'calendarios'}
+            label="Calendarios"
+            onClick={() => setActiveSubview('calendarios')}
+          />
+          <SubviewButton
+            active={activeSubview === 'personas'}
+            label="Personas"
+            onClick={() => setActiveSubview('personas')}
+          />
+          <SubviewButton
+            active={activeSubview === 'computoMensual'}
+            label="Cómputo mensual"
+            onClick={() => setActiveSubview('computoMensual')}
+          />
+          <SubviewButton
+            active={activeSubview === 'computoCotizacion'}
+            label="Cómputo cotización"
+            onClick={() => setActiveSubview('computoCotizacion')}
+          />
+          <SubviewButton
+            active={activeSubview === 'ausencias'}
+            label="Ausencias"
+            onClick={() => setActiveSubview('ausencias')}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => setIsPriceModalOpen(true)}
+            type="button"
+          >
+            <Euro className="h-3.5 w-3.5 text-metro-red" />
+            Precio ticket
+          </button>
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => setIsRulesModalOpen(true)}
+            type="button"
+          >
+            <Settings className="h-3.5 w-3.5 text-metro-red" />
+            Reglas de cálculo
+          </button>
+        </div>
       </div>
 
       {activeSubview === 'calendarios' ? (
         <>
-          <div className="mb-3 grid gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 xl:grid-cols-[minmax(280px,0.9fr)_minmax(250px,0.75fr)_minmax(320px,1fr)]">
-            <CalendarEditor
-              draft={calendarDraft}
-              editingCalendarId={editingCalendarId}
-              onCancel={resetForm}
-              onChange={setCalendarDraft}
-              onSave={saveCalendar}
-            />
-
-            <div className="rounded-xl border border-metro-border bg-metro-surface p-2.5">
-              <h3 className="mb-2 text-sm font-bold text-metro-text">Selector calendario</h3>
-              <div className="space-y-2">
-                <SelectBox
-                  label="Selector calendario"
-                  onChange={setSelectedCalendarId}
-                  value={selectedCalendarId}
-                >
-                  {visibleCalendars.map((calendar) => (
-                    <option key={calendar.id} value={calendar.id}>
-                      {calendar.nombre}
-                      {calendar.activo ? '' : ' (inactivo)'}
-                    </option>
-                  ))}
-                </SelectBox>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    className="rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!selectedCalendar}
-                    onClick={() => setYear(previousCalendarYear(year))}
-                    type="button"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <input
-                    aria-label="Selector año"
-                    className="w-20 rounded-lg border border-metro-border bg-metro-surface px-2 py-1.5 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
-                    max="2200"
-                    min="1900"
-                    onChange={(event) => handleYearChange(event.target.value)}
-                    type="number"
-                    value={year}
-                  />
-                  <button
-                    className="rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!selectedCalendar}
-                    onClick={() => setYear(nextCalendarYear(year))}
-                    type="button"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <CalendarList
-              calendars={visibleCalendars}
-              onEdit={editCalendar}
-              onRemove={removeCalendarAndPeople}
-              onToggleActive={toggleCalendarActive}
-              selectedCalendarId={selectedCalendarId}
-            />
-          </div>
+          <CalendarToolbar
+            calendars={visibleCalendars}
+            draft={calendarDraft}
+            editingCalendarId={editingCalendarId}
+            onCancel={resetForm}
+            onChange={setCalendarDraft}
+            onEdit={editCalendar}
+            onRemove={removeCalendarAndPeople}
+            onSave={saveCalendar}
+            onToggleActive={toggleCalendarActive}
+            onYearChange={handleYearChange}
+            selectedCalendar={selectedCalendar}
+            selectedCalendarId={selectedCalendarId}
+            setSelectedCalendarId={setSelectedCalendarId}
+            setYear={setYear}
+            year={year}
+          />
 
           <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
             <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -1134,184 +1089,212 @@ function SubviewButton({
   );
 }
 
-function CalendarEditor({
+
+function CalendarToolbar({
+  calendars,
   draft,
   editingCalendarId,
   onCancel,
   onChange,
+  onEdit,
+  onRemove,
   onSave,
+  onToggleActive,
+  onYearChange,
+  selectedCalendar,
+  selectedCalendarId,
+  setSelectedCalendarId,
+  setYear,
+  year,
 }: {
+  calendars: TicketCalendar[];
   draft: TicketCalendarDraft;
   editingCalendarId: string | null;
   onCancel: () => void;
   onChange: (draft: TicketCalendarDraft) => void;
-  onSave: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-metro-border bg-metro-surface p-2.5">
-      <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-metro-text">
-        {editingCalendarId ? (
-          <Pencil className="h-4 w-4 text-metro-red" />
-        ) : (
-          <Plus className="h-4 w-4 text-metro-red" />
-        )}
-        {editingCalendarId ? 'Editar calendario' : 'Crear calendario'}
-      </h3>
-      <div className="space-y-2">
-        <label className="block text-xs font-semibold text-metro-text">
-          Nombre
-          <input
-            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
-            value={draft.nombre}
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs font-semibold text-metro-text">
-          <input
-            checked={draft.activo}
-            className="h-3.5 w-3.5 accent-metro-red"
-            onChange={(event) => onChange({ ...draft, activo: event.target.checked })}
-            type="checkbox"
-          />
-          Activo
-        </label>
-        <div>
-          <p className="mb-1 text-xs font-semibold text-metro-text">Días con derecho a ticket</p>
-          <div className="grid grid-cols-7 gap-1">
-            {WEEK_DAYS.map((label, index) => {
-              const isoDay = index + 1;
-              const selectedDays = draft.ticketIsoWeekdays ?? [1, 2, 3, 4, 5];
-              const checked = selectedDays.includes(isoDay);
-
-              return (
-                <label
-                  className={
-                    checked
-                      ? 'rounded-lg border border-metro-red bg-metro-red/10 px-1 py-1 text-center text-xs font-bold text-metro-text'
-                      : 'rounded-lg border border-metro-border px-1 py-1 text-center text-xs font-bold text-metro-muted'
-                  }
-                  key={label}
-                >
-                  <input
-                    checked={checked}
-                    className="sr-only"
-                    onChange={(event) => {
-                      const currentDays = new Set(selectedDays);
-                      if (event.target.checked) currentDays.add(isoDay);
-                      else currentDays.delete(isoDay);
-                      onChange({
-                        ...draft,
-                        ticketIsoWeekdays: Array.from(currentDays).sort(
-                          (first, second) => first - second,
-                        ),
-                      });
-                    }}
-                    type="checkbox"
-                  />
-                  {label}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!draft.nombre.trim()}
-            onClick={onSave}
-            type="button"
-          >
-            <Save className="h-3.5 w-3.5" />
-            Guardar
-          </button>
-          {editingCalendarId ? (
-            <button
-              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-              onClick={onCancel}
-              type="button"
-            >
-              Cancelar
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CalendarList({
-  calendars,
-  onEdit,
-  onRemove,
-  onToggleActive,
-  selectedCalendarId,
-}: {
-  calendars: TicketCalendar[];
   onEdit: (calendar: TicketCalendar) => void;
   onRemove: (id: string) => void;
+  onSave: () => void;
   onToggleActive: (id: string) => void;
+  onYearChange: (value: string) => void;
+  selectedCalendar: TicketCalendar | undefined;
   selectedCalendarId: string;
+  setSelectedCalendarId: (id: string) => void;
+  setYear: (year: number) => void;
+  year: number;
 }) {
+  const selectedDays = draft.ticketIsoWeekdays ?? [1, 2, 3, 4, 5];
+
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-surface p-2.5">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-metro-text">Acciones calendario</h3>
-        <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
-          {calendars.length}
-        </span>
-      </div>
-      <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-        {calendars.map((calendar) => (
-          <div
-            className={
-              selectedCalendarId === calendar.id
-                ? 'rounded-lg border border-metro-red bg-metro-red/10 p-1.5'
-                : 'rounded-lg border border-metro-border bg-metro-panel p-1.5'
-            }
-            key={calendar.id}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold leading-tight text-metro-text">
-                  {calendar.nombre}
-                </p>
-                <p className="text-xs text-metro-muted">
-                  {calendar.activo ? 'Activo' : 'Inactivo'} · días{' '}
-                  {calendar.ticketIsoWeekdays.join('-')} · {calendar.diasSinTicket.length} días sin
-                  ticket
-                </p>
-              </div>
-              <button
-                className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
-                onClick={() => onRemove(calendar.id)}
-                type="button"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="mt-1.5 flex gap-1.5">
-              <button
-                className="flex-1 rounded-lg bg-metro-red px-2 py-1 text-[11px] font-semibold text-white hover:bg-metro-dark"
-                onClick={() => onEdit(calendar)}
-                type="button"
-              >
-                Editar
-              </button>
-              <button
-                className="flex-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
-                onClick={() => onToggleActive(calendar.id)}
-                type="button"
-              >
-                {calendar.activo ? 'Desactivar' : 'Activar'}
-              </button>
-            </div>
-          </div>
-        ))}
-        {calendars.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-metro-border p-2 text-xs text-metro-muted">
-            Crea un calendario para definir los días sin ticket.
+    <div className="mb-3 rounded-xl border border-metro-border bg-metro-panel p-2">
+      <div className="grid gap-2 xl:grid-cols-[minmax(260px,0.85fr)_minmax(300px,0.9fr)_minmax(420px,1.25fr)]">
+        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-metro-muted">
+            Selector calendario
           </p>
-        ) : null}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              aria-label="Selector calendario"
+              className="h-8 min-w-[190px] flex-1 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => setSelectedCalendarId(event.target.value)}
+              value={selectedCalendarId}
+            >
+              {calendars.map((calendar) => (
+                <option key={calendar.id} value={calendar.id}>
+                  {calendar.nombre}
+                  {calendar.activo ? '' : ' (inactivo)'}
+                </option>
+              ))}
+            </select>
+            <button
+              aria-label="Año anterior"
+              className="h-8 rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!selectedCalendar}
+              onClick={() => setYear(previousCalendarYear(year))}
+              type="button"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <input
+              aria-label="Selector año"
+              className="h-8 w-20 rounded-lg border border-metro-border bg-metro-surface px-2 text-center text-sm font-semibold text-metro-text outline-none focus:border-metro-red"
+              max="2200"
+              min="1900"
+              onChange={(event) => onYearChange(event.target.value)}
+              type="number"
+              value={year}
+            />
+            <button
+              aria-label="Año posterior"
+              className="h-8 rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!selectedCalendar}
+              onClick={() => setYear(nextCalendarYear(year))}
+              type="button"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+              Acciones calendario
+            </p>
+            {selectedCalendar ? (
+              <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-[11px] font-semibold text-metro-red">
+                {selectedCalendar.activo ? 'Activo' : 'Inactivo'} · {selectedCalendar.diasSinTicket.length} días
+              </span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!selectedCalendar}
+              onClick={() => selectedCalendar && onEdit(selectedCalendar)}
+              type="button"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Editar
+            </button>
+            <button
+              className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!selectedCalendar}
+              onClick={() => selectedCalendar && onToggleActive(selectedCalendar.id)}
+              type="button"
+            >
+              {selectedCalendar?.activo ? 'Desactivar' : 'Activar'}
+            </button>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!selectedCalendar}
+              onClick={() => selectedCalendar && onRemove(selectedCalendar.id)}
+              type="button"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Eliminar
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+              {editingCalendarId ? 'Editar calendario' : 'Crear calendario'}
+            </p>
+            {editingCalendarId ? (
+              <button
+                className="text-[11px] font-semibold text-metro-muted hover:text-metro-red"
+                onClick={onCancel}
+                type="button"
+              >
+                Cancelar edición
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <input
+              aria-label="Nombre calendario"
+              className="h-8 min-w-[160px] flex-1 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
+              placeholder="Nombre calendario"
+              value={draft.nombre}
+            />
+            <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-metro-border px-2 text-xs font-semibold text-metro-text">
+              <input
+                checked={draft.activo}
+                className="h-3.5 w-3.5 accent-metro-red"
+                onChange={(event) => onChange({ ...draft, activo: event.target.checked })}
+                type="checkbox"
+              />
+              Activo
+            </label>
+            <div className="flex h-8 items-center gap-1 rounded-lg border border-metro-border px-1.5">
+              {WEEK_DAYS.map((label, index) => {
+                const isoDay = index + 1;
+                const checked = selectedDays.includes(isoDay);
+
+                return (
+                  <label
+                    className={
+                      checked
+                        ? 'rounded-md bg-metro-red px-1.5 py-1 text-[11px] font-bold text-white'
+                        : 'rounded-md px-1.5 py-1 text-[11px] font-bold text-metro-muted'
+                    }
+                    key={label}
+                  >
+                    <input
+                      checked={checked}
+                      className="sr-only"
+                      onChange={(event) => {
+                        const currentDays = new Set(selectedDays);
+                        if (event.target.checked) currentDays.add(isoDay);
+                        else currentDays.delete(isoDay);
+                        onChange({
+                          ...draft,
+                          ticketIsoWeekdays: Array.from(currentDays).sort(
+                            (first, second) => first - second,
+                          ),
+                        });
+                      }}
+                      type="checkbox"
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+            <button
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-metro-red px-3 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!draft.nombre.trim()}
+              onClick={onSave}
+              type="button"
+            >
+              <Save className="h-3.5 w-3.5" />
+              Guardar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1435,6 +1418,24 @@ function PeoplePanel({
   people: TicketPerson[];
 }) {
   const canSave = draft.empleado.trim() && draft.nombre.trim() && draft.calendarId;
+  const [isPersonFormOpen, setIsPersonFormOpen] = useState(Boolean(editingPersonId));
+
+  useEffect(() => {
+    if (editingPersonId) {
+      setIsPersonFormOpen(true);
+    }
+  }, [editingPersonId]);
+
+  const handleSavePerson = () => {
+    onSave();
+    setIsPersonFormOpen(false);
+  };
+
+  const handleCancelPerson = () => {
+    onCancel();
+    setIsPersonFormOpen(false);
+  };
+
   const { preferences, setSort, setColumnWidth } =
     useTableViewPreferences<TicketPeopleTableColumnId>({
       storageKey: TICKET_PEOPLE_TABLE_STORAGE_KEY,
@@ -1577,12 +1578,20 @@ function PeoplePanel({
   );
 
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(320px,0.7fr)_minmax(520px,1.3fr)]">
+    <div className="space-y-3">
       <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
-        <h3 className="mb-2 text-base font-bold text-metro-text">
-          {editingPersonId ? 'Editar persona Ticket' : 'Añadir persona Ticket'}
-        </h3>
-        <div className="space-y-2">
+        <button
+          className="flex w-full items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-left text-sm font-bold text-metro-text hover:border-metro-red"
+          onClick={() => setIsPersonFormOpen((isOpen) => !isOpen)}
+          type="button"
+        >
+          <span>{editingPersonId ? 'Editar persona Ticket' : 'Añadir persona Ticket'}</span>
+          <span className="text-xs font-semibold text-metro-muted">
+            {isPersonFormOpen ? 'Ocultar' : 'Abrir'}
+          </span>
+        </button>
+        {isPersonFormOpen ? (
+        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <label className="block text-xs font-semibold text-metro-text">
             Nº empleado
             <input
@@ -1659,7 +1668,7 @@ function PeoplePanel({
             <button
               className="flex-1 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSave}
-              onClick={onSave}
+              onClick={handleSavePerson}
               type="button"
             >
               Guardar
@@ -1667,7 +1676,7 @@ function PeoplePanel({
             {editingPersonId ? (
               <button
                 className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-                onClick={onCancel}
+                onClick={handleCancelPerson}
                 type="button"
               >
                 Cancelar
@@ -1675,6 +1684,7 @@ function PeoplePanel({
             ) : null}
           </div>
         </div>
+        ) : null}
       </div>
       <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
         <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
