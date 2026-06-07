@@ -1,7 +1,8 @@
 import { Link2, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
@@ -86,6 +87,7 @@ function VinculogramaModal({
   onClose,
   onDelete,
   onSave,
+  recordId,
 }: {
   draft: VinculogramaDraft;
   employees: ReturnType<typeof useEmployeeStore.getState>['employees'];
@@ -95,8 +97,15 @@ function VinculogramaModal({
   onClose: () => void;
   onDelete: () => void;
   onSave: () => void;
+  recordId: string | null;
 }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const recordLock = useSharedRecordLock({
+    module: 'vinculograma',
+    recordId,
+    enabled: mode === 'edit' && Boolean(recordId),
+  });
+  const isReadOnly = recordLock.isReadOnly;
   const suggestions = useMemo(
     () => suggestEmployees(employees, draft.nombreCompleto),
     [draft.nombreCompleto, employees],
@@ -141,7 +150,17 @@ function VinculogramaModal({
           </button>
         </div>
 
-        <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
+        <div className="px-5 py-4">
+          {recordLock.message && (
+            <p className={`mb-4 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              isReadOnly
+                ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                : 'border-metro-border bg-metro-surface text-metro-muted'
+            }`}>
+              {recordLock.message}
+            </p>
+          )}
+          <fieldset disabled={isReadOnly} className="grid gap-4 disabled:opacity-70 md:grid-cols-2">
           <label className={labelClass}>
             Nº empleado
             <input
@@ -206,12 +225,13 @@ function VinculogramaModal({
               value={expiryDate}
             />
           </label>
+          </fieldset>
         </div>
 
         <div className="flex flex-wrap justify-between gap-2 border-t border-metro-border px-5 py-4">
           <div>
             {mode === 'edit' && (
-              <button className={secondaryButtonClass} onClick={onDelete} type="button">
+              <button className={secondaryButtonClass} disabled={isReadOnly} onClick={onDelete} type="button">
                 <Trash2 size={16} /> Eliminar
               </button>
             )}
@@ -220,7 +240,7 @@ function VinculogramaModal({
             <button className={secondaryButtonClass} onClick={onClose} type="button">
               Cancelar
             </button>
-            <button className={buttonClass} onClick={onSave} type="button">
+            <button className={buttonClass} disabled={isReadOnly} onClick={onSave} type="button">
               <Save size={16} /> Guardar
             </button>
           </div>
@@ -398,6 +418,21 @@ export function VinculogramaPage() {
     setDraft(EMPTY_VINCULOGRAMA_DRAFT);
   };
 
+  const acquireMutationLock = useCallback(async (recordId: string) => {
+    const payload = { module: 'vinculograma', recordId };
+    const api = window.traccion;
+    const result = await api?.acquireRecordLock?.(payload);
+    if (result?.status === 'locked') {
+      window.alert(result.message);
+      return false;
+    }
+    return true;
+  }, []);
+
+  const releaseMutationLock = useCallback(async (recordId: string) => {
+    await window.traccion?.releaseRecordLock?.({ module: 'vinculograma', recordId });
+  }, []);
+
   const saveRecord = () => {
     if (!draft.employeeNumber.trim() || !draft.nombreCompleto.trim() || !draft.requestDate.trim()) {
       return;
@@ -411,15 +446,19 @@ export function VinculogramaPage() {
     closeModal();
   };
 
-  const deleteRecord = () => {
+  const deleteRecord = async () => {
     if (editingId) {
       remove(editingId);
     }
     closeModal();
   };
 
-  const deleteTableRecord = (record: Vinculograma) => {
+  const deleteTableRecord = async (record: Vinculograma) => {
+    if (!(await acquireMutationLock(record.id))) {
+      return;
+    }
     remove(record.id);
+    await releaseMutationLock(record.id);
   };
 
   const toggleExpired = () => {
@@ -518,8 +557,9 @@ export function VinculogramaPage() {
           mode={editingId ? 'edit' : 'create'}
           onChange={setDraft}
           onClose={closeModal}
-          onDelete={deleteRecord}
+          onDelete={() => { void deleteRecord(); }}
           onSave={saveRecord}
+          recordId={editingId}
         />
       )}
     </section>
