@@ -122,11 +122,40 @@ function PersistenceErrorBanner() {
 }
 
 function ModuleLoading({ activeView }: { activeView: AppView }) {
+  const title = moduleLoadingLabels[activeView] ?? 'Cargando módulo...';
+
   return (
-    <div className="module-loading" role="status" aria-live="polite">
-      <div className="module-loading__spinner" aria-hidden="true" />
-      <span>{moduleLoadingLabels[activeView] ?? 'Cargando módulo...'}</span>
-    </div>
+    <section className="module-loading-skeleton" role="status" aria-live="polite" aria-label={title}>
+      <div className="module-loading-skeleton__header">
+        <div className="module-loading-skeleton__title" />
+        <div className="module-loading-skeleton__actions">
+          <span />
+          <span />
+        </div>
+      </div>
+      <div className="module-loading-skeleton__filters">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="module-loading-skeleton__table" aria-hidden="true">
+        <div className="module-loading-skeleton__table-head">
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div className="module-loading-skeleton__table-row" key={index}>
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        ))}
+      </div>
+      <span className="sr-only">{title}</span>
+    </section>
   );
 }
 
