@@ -20,6 +20,7 @@ import {
   EMPTY_TICKET_PERSON_DRAFT,
   filterTicketRestaurantAbsencesByMonth,
   getEffectiveTicketPrice,
+  normalizeTicketCalendarName,
   normalizeTicketRestaurantConfig,
   nextCalendarYear,
   previousCalendarYear,
@@ -440,7 +441,7 @@ function absenceDiscountsTicket(
 
   const nonDiscountable = Object.entries(config.rules.nonDiscountableMotivesByCalendar).some(
     ([calendarName, motives]) =>
-      normalizePlainText(calendar.nombre) === normalizePlainText(calendarName) &&
+      normalizeTicketCalendarName(calendar.nombre) === normalizeTicketCalendarName(calendarName) &&
       motives.some((motivo) => normalizePlainText(absence.motivo) === normalizePlainText(motivo)),
   );
 
@@ -1905,20 +1906,11 @@ function TicketRulesModal({
 }) {
   const normalizedConfig = normalizeTicketRestaurantConfig(config);
   const [debtStartDate, setDebtStartDate] = useState(normalizedConfig.rules.debtStartDate);
-  const [noOrderMonths, setNoOrderMonths] = useState<number[]>(normalizedConfig.rules.noOrderMonths);
   const [nonDiscountableRulesText, setNonDiscountableRulesText] = useState(
     Object.entries(normalizedConfig.rules.nonDiscountableMotivesByCalendar)
       .map(([calendar, motives]) => `${calendar}: ${motives.join(', ')}`)
       .join('\n'),
   );
-
-  const toggleNoOrderMonth = (month: number) => {
-    setNoOrderMonths((current) =>
-      current.includes(month)
-        ? current.filter((item) => item !== month)
-        : [...current, month].sort((first, second) => first - second),
-    );
-  };
 
   const parseNonDiscountableRules = (): Record<string, string[]> =>
     Object.fromEntries(
@@ -1945,7 +1937,7 @@ function TicketRulesModal({
         ...normalizedConfig,
         rules: {
           debtStartDate,
-          noOrderMonths,
+          noOrderMonths: [],
           nonDiscountableMotivesByCalendar: parseNonDiscountableRules(),
           applyDebtAtClosedMonth: true,
         },
@@ -1959,7 +1951,7 @@ function TicketRulesModal({
         <div className="border-b border-metro-border p-3">
           <h3 className="text-lg font-bold text-metro-text">Reglas de cálculo</h3>
           <p className="text-xs text-metro-muted">
-            Parámetros mínimos del módulo. Evita tocar más reglas salvo cambio real de criterio.
+            Parámetros mínimos del módulo. Los días sin pedido se gestionan marcando días sin ticket en cada calendario.
           </p>
         </div>
         <div className="max-h-[70vh] space-y-3 overflow-auto p-3">
@@ -1972,26 +1964,6 @@ function TicketRulesModal({
               value={debtStartDate}
             />
           </label>
-
-          <div>
-            <p className="mb-1 text-xs font-semibold text-metro-text">Meses sin pedido de tickets</p>
-            <div className="grid gap-1 sm:grid-cols-4">
-              {MONTH_OPTIONS.map((option) => (
-                <label
-                  className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-2 py-1 text-xs font-semibold text-metro-text"
-                  key={option.value}
-                >
-                  <input
-                    checked={noOrderMonths.includes(option.value)}
-                    className="h-3.5 w-3.5 accent-metro-red"
-                    onChange={() => toggleNoOrderMonth(option.value)}
-                    type="checkbox"
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-          </div>
 
           <label className="block text-xs font-semibold text-metro-text">
             Motivos que no descuentan por calendario
@@ -2008,7 +1980,7 @@ function TicketRulesModal({
           <div className="rounded-xl border border-metro-border bg-metro-panel p-3 text-xs text-metro-muted">
             <p className="mb-1 font-bold text-metro-text">Cómo calcula el cómputo mensual</p>
             <p>
-              Cómputo mensual = lógica antigua: aplica a mes vencido la deuda de ausencias anteriores desde la fecha de inicio. No descuenta ausencias del propio mes; las deja para el siguiente mes con pedido disponible.
+              Cómputo mensual = lógica antigua: aplica a mes vencido la deuda de ausencias anteriores desde la fecha de inicio. No descuenta ausencias del propio mes; las deja para el siguiente mes con días de calendario disponibles.
             </p>
             <p className="mb-1 mt-3 font-bold text-metro-text">Cómo calcula el cómputo de cotización</p>
             <p>
