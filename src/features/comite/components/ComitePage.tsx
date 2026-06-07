@@ -5,7 +5,13 @@ import { useActasStore } from '../../actas/store/useActasStore';
 import { COMITE_SESSION_CONFIG } from '../domain/comite';
 import { useCommitteeSessionStore } from '../store/useCommitteeSessionStore';
 
-export function ComitePage() {
+export function ComitePage({
+  initialSessionId = null,
+  navigationNonce,
+}: {
+  initialSessionId?: string | null;
+  navigationNonce?: number;
+}) {
   const createActaFromSession = useActasStore((state) => state.createFromSession);
 
   const handleClosedSession = (session: ManagedSession, treatedTasks: Task[]) => {
@@ -15,6 +21,8 @@ export function ComitePage() {
   return (
     <SessionManagementPage
       config={COMITE_SESSION_CONFIG}
+      initialSessionId={initialSessionId}
+      navigationNonce={navigationNonce}
       onClosedSession={handleClosedSession}
       useSessionStore={useCommitteeSessionStore}
     />
