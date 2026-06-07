@@ -3,7 +3,8 @@ import { AlertTriangle } from 'lucide-react';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { Sidebar, type AppView } from './components/Sidebar';
+import { Sidebar } from './components/Sidebar';
+import type { AppView } from './navigation/navigation';
 import {
   startExternalDataSyncPolling,
   stopExternalDataSyncPolling,
