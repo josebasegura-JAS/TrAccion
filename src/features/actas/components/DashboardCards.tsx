@@ -12,13 +12,13 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
-import { isTaskClosed, type Task, type TaskState } from '../features/tareas/domain/task';
-import { useTaskStore } from '../features/tareas/store/useTaskStore';
-import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
-import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
-import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
-import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
-import type { AppView } from './Sidebar';
+import { isTaskClosed, type Task, type TaskState } from '../../tareas/domain/task';
+import { useTaskStore } from '../../tareas/store/useTaskStore';
+import { useCommitteeSessionStore } from '../../comite/store/useCommitteeSessionStore';
+import { useParitariaSessionStore } from '../../paritaria/store/useParitariaSessionStore';
+import { useTeletrabajoStore } from '../../teletrabajo/store/useTeletrabajoStore';
+import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
+import type { AppView } from '../../../components/Sidebar';
 
 type CalendarEventType = 'task' | 'committee' | 'paritaria' | 'telework' | 'tickets' | 'actas';
 
