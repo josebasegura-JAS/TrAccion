@@ -18,7 +18,7 @@ import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeS
 import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
-import type { AppView } from './Sidebar';
+import type { AppView } from '../navigation/navigation';
 
 type CalendarEventType = 'task' | 'committee' | 'paritaria' | 'telework' | 'tickets' | 'actas';
 

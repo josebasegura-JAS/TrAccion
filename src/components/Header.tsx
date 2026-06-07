@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { UserRound } from 'lucide-react';
-import { getNavigationBreadcrumb, type AppView } from './Sidebar';
+import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 

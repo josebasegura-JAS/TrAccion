@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
-import type { AppView } from './Sidebar';
+import type { AppView } from '../navigation/navigation';
 import { getResultYearLabel, searchTraccion, type GlobalSearchResult } from '../services/globalSearch';
 
 interface GlobalSearchNavigationTarget {
