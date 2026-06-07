@@ -86,7 +86,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
           <div>

@@ -771,7 +771,7 @@ export function DashboardCards({
       </section>
 
       {selectedDate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-metro-border bg-metro-surface text-metro-text shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
               <div>
