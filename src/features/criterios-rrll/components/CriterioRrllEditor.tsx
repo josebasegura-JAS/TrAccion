@@ -8,6 +8,7 @@ import {
   type CriterioRrllDraftField,
 } from '../domain/criterioRrll';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 const criterioTextFields: Array<{
   field: CriterioRrllDraftField;
@@ -165,6 +166,7 @@ export function CriterioRrllEditor({
             >
               Guardar
             </button>
+            <InlineSaveFeedback />
             {!isCreate && criterio && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
