@@ -15,11 +15,12 @@ import {
 import { isTaskClosed, type Task, type TaskState } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
+import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
 import type { AppView } from './Sidebar';
 
-type CalendarEventType = 'task' | 'committee' | 'telework' | 'tickets' | 'actas';
+type CalendarEventType = 'task' | 'committee' | 'paritaria' | 'telework' | 'tickets' | 'actas';
 
 type CalendarEvent = {
   id: string;
@@ -49,6 +50,7 @@ type KpiCard = {
 const eventTone: Record<CalendarEventType, string> = {
   task: 'bg-red-500',
   committee: 'bg-orange-500',
+  paritaria: 'bg-violet-500',
   telework: 'bg-blue-500',
   tickets: 'bg-emerald-500',
   actas: 'bg-amber-400',
@@ -186,6 +188,8 @@ export function DashboardCards({
   const loadTasks = useTaskStore((state) => state.load);
   const sessions = useCommitteeSessionStore((state) => state.sessions);
   const loadSessions = useCommitteeSessionStore((state) => state.load);
+  const paritariaSessions = useParitariaSessionStore((state) => state.sessions);
+  const loadParitariaSessions = useParitariaSessionStore((state) => state.load);
   const solicitudes = useTeletrabajoStore((state) => state.solicitudes);
   const loadSolicitudes = useTeletrabajoStore((state) => state.load);
   const ticketPeople = useTicketRestauranteStore((state) => state.people);
@@ -197,7 +201,8 @@ export function DashboardCards({
     loadSessions();
     loadSolicitudes();
     loadTickets();
-  }, [loadSessions, loadSolicitudes, loadTasks, loadTickets]);
+    loadParitariaSessions();
+  }, [loadParitariaSessions, loadSessions, loadSolicitudes, loadTasks, loadTickets]);
 
   const openRecord = (target: DashboardNavigationTarget) => {
     onOpenRecord?.(target);
@@ -214,6 +219,10 @@ export function DashboardCards({
   const openCommitteeSessions = useMemo(
     () => sessions.filter((session) => session.status === 'open'),
     [sessions],
+  );
+  const openParitariaSessions = useMemo(
+    () => paritariaSessions.filter((session) => session.status === 'open'),
+    [paritariaSessions],
   );
   const activeTelework = useMemo(
     () => solicitudes.filter((solicitud) => !solicitud.deletedAt),
@@ -264,6 +273,16 @@ export function DashboardCards({
       recordId: session.id,
     }));
 
+    const paritariaEvents = openParitariaSessions.map((session) => ({
+      id: `paritaria-${session.id}`,
+      date: session.date,
+      type: 'paritaria' as const,
+      title: session.title,
+      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} en Comisión Paritaria`,
+      view: 'paritaria' as const,
+      recordId: session.id,
+    }));
+
     const teleworkEvents = pendingTelework
       .filter((solicitud) => solicitud.fechaSolicitud)
       .map((solicitud) => ({
@@ -298,8 +317,8 @@ export function DashboardCards({
         recordId: task.id,
       }));
 
-    return [...taskEvents, ...committeeEvents, ...teleworkEvents, ...ticketEvents, ...actaEvents];
-  }, [activeTasks, actaTasks, activeTicketAbsences, openCommitteeSessions, pendingTelework]);
+    return [...taskEvents, ...committeeEvents, ...paritariaEvents, ...teleworkEvents, ...ticketEvents, ...actaEvents];
+  }, [activeTasks, actaTasks, activeTicketAbsences, openCommitteeSessions, openParitariaSessions, pendingTelework]);
 
   const eventsByDay = useMemo(
     () =>
@@ -532,6 +551,7 @@ export function DashboardCards({
           <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-metro-secondary">
             <CalendarLegend className="bg-red-500" label="Tareas" />
             <CalendarLegend className="bg-orange-500" label="Comité" />
+            <CalendarLegend className="bg-violet-500" label="Paritaria" />
             <CalendarLegend className="bg-blue-500" label="Teletrabajo" />
             <CalendarLegend className="bg-emerald-500" label="Tickets" />
             <CalendarLegend className="bg-amber-400" label="Actas" />
@@ -555,8 +575,8 @@ export function DashboardCards({
               />
               <SummaryLine
                 icon={UsersRound}
-                label="Sesiones comité pendientes"
-                value={openCommitteeSessions.length}
+                label="Sesiones CE/Paritaria"
+                value={openCommitteeSessions.length + openParitariaSessions.length}
               />
               <SummaryLine
                 icon={Laptop}
@@ -615,13 +635,13 @@ export function DashboardCards({
             <TodayAlert
               className="border-orange-500"
               title={
-                upcomingEvents.find((event) => event.type === 'committee')?.title ??
-                'Sin comité próximo'
+                upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria')?.title ??
+                'Sin comité/paritaria próximo'
               }
               subtitle={
-                upcomingEvents.find((event) => event.type === 'committee')
+                upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria')
                   ? `Próximo ${formatDisplayDate(
-                      upcomingEvents.find((event) => event.type === 'committee')?.date ?? '',
+                      upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria')?.date ?? '',
                     )}`
                   : 'No hay sesión abierta con fecha'
               }
