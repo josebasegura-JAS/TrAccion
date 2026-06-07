@@ -8,6 +8,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.licenciasSinSueldo.records',
   'traccion.v1.comite.sessions',
   'traccion.v1.actas.records',
+  'traccion.v1.actas.table',
   'traccion.v1.paritaria.sessions',
   'traccion.v1.ticketRestaurante.calendars',
   'traccion.v1.ticketRestaurante.absences',
@@ -58,6 +59,7 @@ function formatPersistenceTime(date = new Date()): string {
 
 const SQLITE_MIGRATION_FLAG_KEY = 'traccion.v1.sqlite.localStorageBackupCreated';
 const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetadata';
+const SQLITE_PENDING_WRITES_KEY = 'traccion.v1.sqlite.pendingWrites';
 
 type PersistedStorageKey = (typeof PERSISTED_STORAGE_KEYS)[number];
 
@@ -84,6 +86,143 @@ export interface HydrationMetadata {
 export interface HydrationResult {
   status: 'hydrated-from-sqlite' | 'kept-localStorage' | 'sqlite-unavailable';
   reason: string;
+}
+
+interface PendingSqliteWrite {
+  key: string;
+  value: string;
+  updatedAt: string;
+  attempts: number;
+  lastError: string | null;
+}
+
+function isPendingSqliteWrite(value: unknown): value is PendingSqliteWrite {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<PendingSqliteWrite>;
+  return (
+    typeof candidate.key === 'string' &&
+    typeof candidate.value === 'string' &&
+    typeof candidate.updatedAt === 'string' &&
+    typeof candidate.attempts === 'number' &&
+    Number.isFinite(candidate.attempts) &&
+    (typeof candidate.lastError === 'string' || candidate.lastError === null)
+  );
+}
+
+function readPendingSqliteWrites(): PendingSqliteWrite[] {
+  const stored = window.localStorage.getItem(SQLITE_PENDING_WRITES_KEY);
+  if (!stored) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed.filter(isPendingSqliteWrite) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingSqliteWrites(writes: PendingSqliteWrite[]): void {
+  if (writes.length === 0) {
+    window.localStorage.removeItem(SQLITE_PENDING_WRITES_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(SQLITE_PENDING_WRITES_KEY, JSON.stringify(writes));
+}
+
+function upsertPendingSqliteWrite(key: string, value: string, lastError: string): void {
+  if (!isPersistedStorageKey(key)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const writes = readPendingSqliteWrites();
+  const existingIndex = writes.findIndex((write) => write.key === key);
+  const nextWrite: PendingSqliteWrite = {
+    key,
+    value,
+    updatedAt: now,
+    attempts: existingIndex >= 0 ? writes[existingIndex].attempts + 1 : 1,
+    lastError,
+  };
+
+  if (existingIndex >= 0) {
+    writes[existingIndex] = nextWrite;
+  } else {
+    writes.push(nextWrite);
+  }
+
+  writePendingSqliteWrites(writes);
+}
+
+function removePendingSqliteWrite(key: string): void {
+  const writes = readPendingSqliteWrites().filter((write) => write.key !== key);
+  writePendingSqliteWrites(writes);
+}
+
+export function getPendingSqliteWriteCount(): number {
+  return readPendingSqliteWrites().length;
+}
+
+async function saveRecordToSqlite(record: TraccionStorageRecord): Promise<boolean> {
+  const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
+  if (!saveLocalStorageRecord) {
+    throw new Error('SQLite no disponible: IPC de guardado no expuesto.');
+  }
+
+  const status = await saveLocalStorageRecord(record);
+  if (!status.ready || status.phase !== 'active') {
+    throw new Error(
+      status.message ?? 'SQLite no está activo; el cambio queda pendiente de sincronización.',
+    );
+  }
+
+  return true;
+}
+
+export async function flushPendingSqliteWrites(): Promise<number> {
+  const pendingWrites = readPendingSqliteWrites();
+  if (pendingWrites.length === 0) {
+    return 0;
+  }
+
+  let flushedCount = 0;
+  for (const pendingWrite of pendingWrites.sort((left, right) =>
+    Date.parse(left.updatedAt) - Date.parse(right.updatedAt),
+  )) {
+    try {
+      window.localStorage.setItem(pendingWrite.key, pendingWrite.value);
+      await saveRecordToSqlite({ key: pendingWrite.key, value: pendingWrite.value });
+      removePendingSqliteWrite(pendingWrite.key);
+      flushedCount += 1;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No se ha podido sincronizar un cambio pendiente.';
+      upsertPendingSqliteWrite(pendingWrite.key, pendingWrite.value, message);
+      emitPersistenceFeedback({
+        kind: 'error',
+        updatedAt: new Date().toISOString(),
+        key: pendingWrite.key,
+        message: `SQLite pendiente: ${message}`,
+      });
+      break;
+    }
+  }
+
+  if (flushedCount > 0) {
+    emitPersistenceFeedback({
+      kind: 'saved',
+      updatedAt: new Date().toISOString(),
+      message: `Sincronizados ${flushedCount} cambios pendientes en SQLite ${formatPersistenceTime()}`,
+    });
+  }
+
+  return flushedCount;
 }
 
 export function isPersistedStorageKey(key: string): key is PersistedStorageKey {
@@ -162,32 +301,9 @@ function mirrorToSqlite(key: string, value: string): void {
     message: 'Guardando en SQLite...',
   });
 
-  const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
-  if (!saveLocalStorageRecord) {
-    emitPersistenceFeedback({
-      kind: 'error',
-      updatedAt: new Date().toISOString(),
-      key,
-      message: 'SQLite no disponible: cambio mantenido solo como caché local pendiente de respaldo.',
-    });
-    return;
-  }
-
-  saveLocalStorageRecord({ key, value })
-    .then((status) => {
-      const statusIsWritable = status.ready && status.phase === 'active';
-      if (!statusIsWritable) {
-        emitPersistenceFeedback({
-          kind: 'error',
-          updatedAt: new Date().toISOString(),
-          key,
-          message:
-            status.message ??
-            'SQLite no está activo: cambio mantenido solo como caché local pendiente de respaldo.',
-        });
-        return;
-      }
-
+  saveRecordToSqlite({ key, value })
+    .then(() => {
+      removePendingSqliteWrite(key);
       emitPersistenceFeedback({
         kind: 'saved',
         updatedAt: new Date().toISOString(),
@@ -196,15 +312,21 @@ function mirrorToSqlite(key: string, value: string): void {
       });
     })
     .catch((error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Error de guardado SQLite: cambio mantenido como caché local pendiente.';
       console.warn('No se ha podido guardar en SQLite.', error);
+      upsertPendingSqliteWrite(key, value, message);
       emitPersistenceFeedback({
         kind: 'error',
         updatedAt: new Date().toISOString(),
         key,
-        message: 'Error de guardado SQLite: cambio mantenido solo como caché local.',
+        message: `${message} Cambio pendiente de sincronizar.`,
       });
     });
 }
+
 
 export function readStorageItem(key: string): string | null {
   return window.localStorage.getItem(key);
@@ -242,10 +364,20 @@ export function writeJsonStorage<T>(key: string, value: T): void {
 
 export function applyPersistedRecordsSnapshotToLocalStorage(
   snapshot: TraccionPersistedRecordsSnapshot,
+  options: { preservePendingWrites?: boolean } = {},
 ): void {
+  const pendingKeys = new Set(
+    options.preservePendingWrites === false
+      ? []
+      : readPendingSqliteWrites().map((pendingWrite) => pendingWrite.key),
+  );
   const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
 
   for (const record of sqliteRecords) {
+    if (pendingKeys.has(record.key)) {
+      continue;
+    }
+
     window.localStorage.setItem(record.key, record.value);
   }
 
@@ -277,11 +409,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     if (sqliteRecords.length === 0) {
       if (localRecords.length > 0) {
         await window.traccion.backupLocalStorage?.(localRecords);
-        bootstrapSqlitePersistence(true);
+        await window.traccion.migrateLocalStorage?.(localRecords);
+        await flushPendingSqliteWrites();
       }
       return {
         status: 'kept-localStorage',
-        reason: 'SQLite está vacío; se mantiene localStorage.',
+        reason: 'SQLite está vacío; se mantiene caché local y se respalda en SQLite.',
       };
     }
 
@@ -294,6 +427,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     }
 
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    await flushPendingSqliteWrites();
 
     return {
       status: 'hydrated-from-sqlite',

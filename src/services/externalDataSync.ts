@@ -5,6 +5,7 @@ import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import {
   applyPersistedRecordsSnapshotToLocalStorage,
+  flushPendingSqliteWrites,
   readHydrationMetadata,
 } from './persistence';
 
@@ -102,7 +103,19 @@ async function pollOnce(): Promise<void> {
     }
 
     if (!tokenChanged(tokenSnapshot.refreshToken)) {
+      const flushedCount = await flushPendingSqliteWrites();
       lastSeenRefreshToken = tokenSnapshot.refreshToken;
+      if (flushedCount > 0) {
+        setState({
+          status: 'applied',
+          message: `Cambios locales pendientes sincronizados (${flushedCount}).`,
+          lastCheckedAt: checkedAt,
+          lastAppliedAt: new Date().toISOString(),
+          lastError: null,
+        });
+        return;
+      }
+
       setState({
         status: 'synced',
         message: 'Datos actualizados.',
@@ -124,6 +137,7 @@ async function pollOnce(): Promise<void> {
     }
 
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    await flushPendingSqliteWrites();
     lastSeenRefreshToken = snapshot.refreshToken;
     reloadIntegratedStores();
     const appliedAt = new Date().toISOString();
