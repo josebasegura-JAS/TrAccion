@@ -4,9 +4,11 @@ import {
   buildTicketRestaurantAbsence,
   buildTicketPerson,
   buildYearCalendar,
+  calculateTicketContribution,
   calculateTicketMonth,
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
+  normalizeTicketCalendarName,
   previousCalendarYear,
   toggleDiaSinTicket,
   visibleTicketCalendars,
@@ -60,6 +62,15 @@ describe('ticket restaurante calendar domain', () => {
       fecha: '2027-01-01',
       diaMes: 1,
     });
+  });
+
+
+
+  it('normaliza alias históricos de calendarios', () => {
+    expect(normalizeTicketCalendarName('SSCC')).toBe(normalizeTicketCalendarName('Servicios Centrales'));
+    expect(normalizeTicketCalendarName('Ariz')).toBe(normalizeTicketCalendarName('Ingeniería Ariz'));
+    expect(normalizeTicketCalendarName('Sopela')).toBe(normalizeTicketCalendarName('Instalaciones Sopela'));
+    expect(normalizeTicketCalendarName('Liberado')).toBe(normalizeTicketCalendarName('Liberados'));
   });
 
   it('excluye calendarios borrados', () => {
@@ -203,6 +214,61 @@ describe('ticket restaurante calculation domain', () => {
       ausenciasAplicadas: 5,
       deudaPendiente: 0,
     });
+  });
+
+  it('resuelve solapes por día usando la ausencia más reciente antes de decidir si descuenta', () => {
+    const calendar = buildCalendar({ nombre: 'Liberados' });
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const olderDiscountableAbsence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-03-02',
+        hasta: '2026-03-04',
+        motivo: 'IT',
+        totalDias: 3,
+        afectaTicket: true,
+      },
+      '2026-03-01T00:00:00.000Z',
+      'absence-old',
+    );
+    const newerNonDiscountableAbsence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-03-03',
+        hasta: '2026-03-03',
+        motivo: 'SIN',
+        totalDias: 1,
+        afectaTicket: true,
+      },
+      '2026-03-05T00:00:00.000Z',
+      'absence-new',
+    );
+
+    const calculation = calculateTicketContribution(
+      [person],
+      [calendar],
+      [olderDiscountableAbsence, newerNonDiscountableAbsence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      3,
+    );
+
+    expect(calculation.rows[0]).toMatchObject({
+      ausenciasMes: 2,
+      ausenciasAplicadas: 2,
+    });
+    expect(calculation.rows[0]?.ausenciaIds).toEqual(['absence-old']);
   });
 });
 

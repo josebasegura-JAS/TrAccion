@@ -1,5 +1,10 @@
 import type { Employee } from '../../plantilla/domain/employee';
-import { splitTicketPersonFullName, type TicketCalendar, type TicketPersonDraft } from './ticketRestaurante';
+import {
+  normalizeTicketCalendarName,
+  splitTicketPersonFullName,
+  type TicketCalendar,
+  type TicketPersonDraft,
+} from './ticketRestaurante';
 
 interface ZipEntry {
   name: string;
@@ -74,7 +79,7 @@ export function rowsToTicketPeopleDrafts(
   const calendarIdByName = new Map(
     calendars
       .filter((calendar) => !calendar.deletedAt)
-      .map((calendar) => [normalizeCalendarName(calendar.nombre), calendar.id]),
+      .map((calendar) => [normalizeTicketCalendarName(calendar.nombre), calendar.id]),
   );
   const draftsByEmpleado = new Map<string, TicketPeopleImportDraft>();
   const missingEmployees = new Set<string>();
@@ -111,7 +116,7 @@ export function rowsToTicketPeopleDrafts(
       dni: employee.dni || employee.nif || '',
       nombreApellidos: employee.nombreApellidos,
       puesto: employee.puestoNomina || employee.puestoOrganizativo,
-      calendarId: calendarIdByName.get(normalizeCalendarName(calendarName)) ?? '',
+      calendarId: calendarIdByName.get(normalizeTicketCalendarName(calendarName)) ?? '',
       calendarName,
       activo: true,
     });
@@ -128,10 +133,7 @@ export function rowsToTicketPeopleDrafts(
 }
 
 export function normalizeCalendarName(value: string): string {
-  return cleanText(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+  return normalizeTicketCalendarName(cleanText(value));
 }
 
 function normalizeHeader(header: string): string {
