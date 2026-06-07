@@ -37,6 +37,7 @@ export type AppView =
   | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
+  | 'licencias-sin-sueldo'
   | 'sorteos'
   | 'vinculograma'
   | 'especiales'
@@ -80,6 +81,7 @@ const navigationGroups: NavigationGroup[] = [
     items: [
       { label: 'Plantilla', icon: UsersRound, view: 'plantilla' },
       { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' },
+      { label: 'Licencias sin sueldo', icon: CalendarDays, view: 'licencias-sin-sueldo' },
       { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
     ],
   },

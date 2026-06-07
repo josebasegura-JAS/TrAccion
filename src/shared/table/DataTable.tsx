@@ -29,6 +29,7 @@ interface DataTableProps<Row, ColumnId extends string> {
   onColumnWidthChange: (columnId: ColumnId, width: number) => void;
   emptyMessage: string;
   onRowClick?: (row: Row) => void;
+  onRowDoubleClick?: (row: Row) => void;
   rowClassName?: (row: Row) => string;
   ariaLabel: string;
   maxHeightClassName?: string;
@@ -67,6 +68,7 @@ export function DataTable<Row, ColumnId extends string>({
   onColumnWidthChange,
   emptyMessage,
   onRowClick,
+  onRowDoubleClick,
   rowClassName,
   ariaLabel,
   maxHeightClassName = 'max-h-[460px]',
@@ -234,9 +236,10 @@ export function DataTable<Row, ColumnId extends string>({
           ) : (
             sortedRows.map((row, rowIndex) => (
               <tr
-                className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                 key={getRowId(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
               >
                 {visibleColumns.map((column) => {
                   const cellContent = column.render
