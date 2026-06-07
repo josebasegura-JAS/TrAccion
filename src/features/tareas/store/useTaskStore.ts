@@ -25,6 +25,7 @@ interface TaskStateStore {
   selectedTaskId: string;
   filters: TaskFilters;
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: TaskDraft, seguimientoText?: string) => void;
   update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   remove: (id: string) => void;
@@ -204,6 +205,15 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   load: () => {
     const tasks = readTasks();
     set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
+  },
+  reloadFromStorage: () => {
+    const tasks = readTasks();
+    set((state) => ({
+      tasks,
+      selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
+        ? state.selectedTaskId
+        : firstActiveTaskId(tasks),
+    }));
   },
   create: (draft, seguimientoText) => {
     set((state) => {

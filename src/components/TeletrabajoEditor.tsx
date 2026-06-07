@@ -114,6 +114,12 @@ export function TeletrabajoEditor({
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [draft, setDraft] = useState<TeletrabajoDraft>(() => toDraft(solicitud));
   const [wordStatus, setWordStatus] = useState('');
+  const [loadedSolicitudIdentity, setLoadedSolicitudIdentity] = useState(
+    () => `${mode}:${solicitud?.id ?? 'new'}`,
+  );
+  const [loadedSolicitudUpdatedAt, setLoadedSolicitudUpdatedAt] = useState(
+    solicitud?.updatedAt ?? null,
+  );
   const [isGeneratingWord, setIsGeneratingWord] = useState(false);
   const recordLock = useSharedRecordLock({
     module: 'teletrabajo',
@@ -122,9 +128,14 @@ export function TeletrabajoEditor({
   });
 
   useEffect(() => {
-    setDraft(toDraft(solicitud));
-    setWordStatus('');
-  }, [solicitud, mode]);
+    const nextIdentity = `${mode}:${solicitud?.id ?? 'new'}`;
+    if (nextIdentity !== loadedSolicitudIdentity) {
+      setDraft(toDraft(solicitud));
+      setWordStatus('');
+      setLoadedSolicitudIdentity(nextIdentity);
+      setLoadedSolicitudUpdatedAt(solicitud?.updatedAt ?? null);
+    }
+  }, [loadedSolicitudIdentity, mode, solicitud]);
 
   const plantillaEmployee = useMemo(() => {
     const empleado = draft.empleado.trim();
@@ -140,6 +151,11 @@ export function TeletrabajoEditor({
 
   const employeeExists = Boolean(plantillaEmployee);
   const isCreate = mode === 'create';
+  const hasExternalSolicitudUpdate =
+    !isCreate &&
+    Boolean(solicitud?.updatedAt) &&
+    Boolean(loadedSolicitudUpdatedAt) &&
+    solicitud?.updatedAt !== loadedSolicitudUpdatedAt;
   const canSubmit =
     hasRequiredManualData(draft) && draft.diasTeletrabajo.length > 0 && !recordLock.isReadOnly;
 
@@ -450,6 +466,13 @@ export function TeletrabajoEditor({
               />
             </label>
           </fieldset>
+
+          {hasExternalSolicitudUpdate && recordLock.isReadOnly && (
+            <p className="rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
+              Esta solicitud ha recibido cambios externos. No se han aplicado al formulario abierto
+              para no sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
+            </p>
+          )}
 
           {wordStatus && (
             <p className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">

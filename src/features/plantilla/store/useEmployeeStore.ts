@@ -17,6 +17,7 @@ interface EmployeeState {
   filters: EmployeeFilters;
   jobPositionTranslations: JobPositionTranslation[];
   load: () => void;
+  reloadFromStorage: () => void;
   save: () => void;
   create: (draft: EmployeeDraft) => void;
   update: (empleado: string, draft: EmployeeDraft) => void;
@@ -157,6 +158,17 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     const employees = readEmployees();
     const jobPositionTranslations = readJobPositionTranslations();
     set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+  },
+  reloadFromStorage: () => {
+    const employees = readEmployees();
+    const jobPositionTranslations = readJobPositionTranslations();
+    set((state) => ({
+      employees,
+      jobPositionTranslations,
+      selectedEmployeeId: employees.some((employee) => employee.empleado === state.selectedEmployeeId)
+        ? state.selectedEmployeeId
+        : firstVisibleEmployeeId(employees),
+    }));
   },
   save: () => persistEmployees(get().employees),
   create: (draft) => {

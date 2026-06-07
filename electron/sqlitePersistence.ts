@@ -22,11 +22,14 @@ export interface PersistedStorageRecordSnapshot extends PersistedStorageRecord {
   updatedAt: string;
 }
 
-export interface PersistedRecordsSnapshot {
+export interface PersistedRecordsTokenSnapshot {
   status: DatabaseStatus;
-  records: PersistedStorageRecordSnapshot[];
   refreshToken: string | null;
   latestUpdatedAt: string | null;
+}
+
+export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot {
+  records: PersistedStorageRecordSnapshot[];
 }
 
 export interface LocalStorageBackupPayload {
@@ -627,6 +630,30 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
   return {
     status: currentStatus,
     records,
+    refreshToken: readRefreshToken(db),
+    latestUpdatedAt,
+  };
+}
+
+export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapshot {
+  const currentStatus = getSqliteStatus();
+  if (!currentStatus.ready || currentStatus.phase === 'locked') {
+    return { status: currentStatus, refreshToken: null, latestUpdatedAt: null };
+  }
+
+  const db = requireDatabase();
+  const latestRow = db
+    .prepare('SELECT updated_at FROM persisted_records ORDER BY updated_at DESC LIMIT 1')
+    .get();
+  const latestUpdatedAt =
+    latestRow &&
+    typeof latestRow === 'object' &&
+    typeof (latestRow as { updated_at?: unknown }).updated_at === 'string'
+      ? (latestRow as { updated_at: string }).updated_at
+      : null;
+
+  return {
+    status: currentStatus,
     refreshToken: readRefreshToken(db),
     latestUpdatedAt,
   };

@@ -19,6 +19,7 @@ interface TeletrabajoStateStore {
   selectedSolicitudId: string;
   filters: TeletrabajoFilters;
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: TeletrabajoDraft) => void;
   update: (id: string, draft: TeletrabajoDraft) => void;
   importEncuesta: (file: File, employees: readonly Employee[]) => Promise<ImportEncuestaSummary>;
@@ -128,6 +129,15 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   load: () => {
     const solicitudes = readSolicitudes();
     set({ solicitudes, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) });
+  },
+  reloadFromStorage: () => {
+    const solicitudes = readSolicitudes();
+    set((state) => ({
+      solicitudes,
+      selectedSolicitudId: solicitudes.some((solicitud) => solicitud.id === state.selectedSolicitudId)
+        ? state.selectedSolicitudId
+        : firstVisibleSolicitudId(solicitudes),
+    }));
   },
   create: (draft) => {
     set((state) => {

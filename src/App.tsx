@@ -12,6 +12,7 @@ import { TareasPage } from './components/TareasPage';
 import { TeletrabajoPage } from './components/TeletrabajoPage';
 import { TicketRestaurantePage } from './features/ticket-restaurante/components/TicketRestaurantePage';
 import { VinculogramaPage } from './features/vinculograma/components/VinculogramaPage';
+import { startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
 import { bootstrapSqlitePersistence } from './services/persistence';
 
 export function App() {
@@ -19,6 +20,9 @@ export function App() {
 
   useEffect(() => {
     bootstrapSqlitePersistence();
+    startExternalDataSyncPolling();
+
+    return () => stopExternalDataSyncPolling();
   }, []);
 
   return (

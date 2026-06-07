@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
+import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../services/persistence';
 import {
   CalendarDays,
@@ -111,6 +112,7 @@ type DatabaseIndicatorViewModel = {
   statusText: string;
   routeText: string;
   lastSyncText: string;
+  syncStatusText: string;
   dotClassName: string;
   textClassName: string;
   icon: 'database' | 'lock';
@@ -127,6 +129,7 @@ const formatDatabaseTimestamp = (timestamp: string | null | undefined) => {
 
 const buildDatabaseIndicatorViewModel = (
   databaseStatus: TraccionDatabaseStatus | null,
+  syncStatusText: string,
 ): DatabaseIndicatorViewModel => {
   const hydrationMetadata = typeof window === 'undefined' ? null : readHydrationMetadata();
   const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'localStorage local';
@@ -138,6 +141,7 @@ const buildDatabaseIndicatorViewModel = (
       statusText: 'fallback localStorage',
       routeText,
       lastSyncText,
+      syncStatusText,
       dotClassName: 'bg-orange-400 ring-orange-300/25',
       textClassName: 'text-orange-100',
       icon: 'database',
@@ -150,6 +154,7 @@ const buildDatabaseIndicatorViewModel = (
       statusText: databaseStatus.message ?? 'base bloqueada',
       routeText,
       lastSyncText,
+      syncStatusText,
       dotClassName: 'bg-slate-400 ring-slate-300/25',
       textClassName: 'text-slate-200',
       icon: 'lock',
@@ -162,6 +167,7 @@ const buildDatabaseIndicatorViewModel = (
       statusText: databaseStatus.message ?? 'error o ruta no accesible',
       routeText,
       lastSyncText,
+      syncStatusText,
       dotClassName: 'bg-red-500 ring-red-300/25',
       textClassName: 'text-red-100',
       icon: 'database',
@@ -174,6 +180,7 @@ const buildDatabaseIndicatorViewModel = (
       statusText: 'SQLite activa en ruta compartida/personalizada',
       routeText,
       lastSyncText,
+      syncStatusText,
       dotClassName: 'bg-emerald-400 ring-emerald-300/25',
       textClassName: 'text-emerald-100',
       icon: 'database',
@@ -186,6 +193,7 @@ const buildDatabaseIndicatorViewModel = (
       statusText: 'SQLite activa en ruta local por defecto',
       routeText,
       lastSyncText,
+      syncStatusText,
       dotClassName: 'bg-sky-400 ring-sky-300/25',
       textClassName: 'text-sky-100',
       icon: 'database',
@@ -198,6 +206,7 @@ const buildDatabaseIndicatorViewModel = (
       statusText: databaseStatus.message ?? 'fallback localStorage',
       routeText,
       lastSyncText,
+      syncStatusText,
       dotClassName: 'bg-orange-400 ring-orange-300/25',
       textClassName: 'text-orange-100',
       icon: 'database',
@@ -209,6 +218,7 @@ const buildDatabaseIndicatorViewModel = (
     statusText: databaseStatus.message ?? 'ruta no accesible',
     routeText,
     lastSyncText,
+    syncStatusText,
     dotClassName: 'bg-red-500 ring-red-300/25',
     textClassName: 'text-red-100',
     icon: 'database',
@@ -252,8 +262,12 @@ export function Sidebar({
   );
   const shouldShowPanel = isPanelOpen || isPinned;
   const databaseStatus = useDatabaseStatus();
-  const databaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus);
-  const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}\nEstado: ${databaseIndicator.statusText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}`;
+  const externalDataSyncStatus = useExternalDataSyncStatus();
+  const syncStatusText = `${externalDataSyncStatus.message} Última comprobación: ${formatDatabaseTimestamp(
+    externalDataSyncStatus.lastCheckedAt,
+  )}. Últimos cambios aplicados: ${formatDatabaseTimestamp(externalDataSyncStatus.lastAppliedAt)}.`;
+  const databaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus, syncStatusText);
+  const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}\nEstado: ${databaseIndicator.statusText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}\n${databaseIndicator.syncStatusText}`;
 
   useEffect(() => {
     writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned));
@@ -542,6 +556,9 @@ export function Sidebar({
                 </span>
                 <span className="block truncate text-[0.68rem] text-slate-400">
                   {databaseIndicator.statusText}
+                </span>
+                <span className="block truncate text-[0.68rem] text-slate-500">
+                  {externalDataSyncStatus.message}
                 </span>
               </span>
             </button>
