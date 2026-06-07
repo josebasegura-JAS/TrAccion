@@ -25,6 +25,7 @@ import {
   type LicenciaSinSueldoTipo,
 } from '../domain/licenciaSinSueldo';
 import { useLicenciasSinSueldoStore } from '../store/useLicenciasSinSueldoStore';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 type EditorMode = 'create' | 'edit';
 type LicenciasTableColumnId = 'numeroEmpleado' | 'nombreCompleto' | 'tipo' | 'fechaSolicitud' | 'fechaInicio' | 'fechaFin' | 'estado' | 'actions';
@@ -340,7 +341,7 @@ function LicenseEditor({
           <div>{mode === 'edit' && <button className={secondaryButtonClass} disabled={isReadOnly} onClick={onDelete} type="button"><Trash2 size={16} /> Eliminar</button>}</div>
           <div className="flex flex-wrap gap-2">
             <button className={secondaryButtonClass} onClick={onClose} type="button">Cancelar</button>
-            <button className={buttonClass} disabled={isReadOnly} onClick={handleSave} type="button"><Save size={16} /> Guardar</button>
+            <button className={buttonClass} disabled={isReadOnly} onClick={handleSave} type="button"><Save size={16} /> Guardar</button><InlineSaveFeedback />
           </div>
         </div>
       </div>
