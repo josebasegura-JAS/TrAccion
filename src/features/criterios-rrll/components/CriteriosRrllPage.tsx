@@ -10,6 +10,7 @@ import {
   type CriterioRrllEstado,
 } from '../domain/criterioRrll';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
+import { ActiveFilterChips, type ActiveFilterChip } from '../../../shared/filters/ActiveFilterChips';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
@@ -120,6 +121,19 @@ export function CriteriosRrllPage() {
     ['Búsqueda', filters.search],
     ['Estado', filters.estado],
   ]);
+  const activeFilterChips: ActiveFilterChip[] = [
+    filters.search.trim()
+      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      : null,
+    filters.estado
+      ? { key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') }
+      : null,
+  ].filter((filter): filter is ActiveFilterChip => filter !== null);
+
+  const clearActiveFilters = () => {
+    setFilter('search', '');
+    setFilter('estado', '');
+  };
 
   const openEditor = (criterio: CriterioRrll) => {
     selectCriterio(criterio.id);
@@ -179,6 +193,12 @@ export function CriteriosRrllPage() {
           value={filters.estado}
         />
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div className="mb-3">
+          <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
