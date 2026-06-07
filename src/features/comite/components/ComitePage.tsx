@@ -21,7 +21,8 @@ import { useCommitteeSessionStore } from '../store/useCommitteeSessionStore';
 import type { Task } from '../../tareas/domain/task';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
-import type { ExportColumn } from '../../../shared/export/types';
+import type { ExportColumn, ExportTablePayload } from '../../../shared/export/types';
+import { sanitizeFilenamePart } from '../../../shared/export/tableExport';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 
 const sessionExportColumns: ExportColumn<CommitteeSession>[] = [
@@ -32,6 +33,28 @@ const sessionExportColumns: ExportColumn<CommitteeSession>[] = [
   { key: 'notes', header: 'Notas', value: (session) => session.notes || null },
   { key: 'items', header: 'Puntos', value: (session) => session.items.length },
   { key: 'closedAt', header: 'Cerrada', value: (session) => session.closedAt || null },
+];
+
+type CommitteeSessionPointRow = {
+  order: number;
+  title: string;
+  status: string;
+  origin: string;
+  union: string;
+  responsible: string;
+  dueDate: string;
+  description: string;
+};
+
+const sessionPointExportColumns: ExportColumn<CommitteeSessionPointRow>[] = [
+  { key: 'order', header: 'Orden', value: (row) => row.order },
+  { key: 'title', header: 'Punto / tarea', value: (row) => row.title },
+  { key: 'status', header: 'Situación', value: (row) => row.status },
+  { key: 'origin', header: 'Origen', value: (row) => row.origin || null },
+  { key: 'union', header: 'Sindicato', value: (row) => row.union || null },
+  { key: 'responsible', header: 'Responsable', value: (row) => row.responsible || null },
+  { key: 'dueDate', header: 'Fecha límite', value: (row) => row.dueDate || null },
+  { key: 'description', header: 'Descripción', value: (row) => row.description || null },
 ];
 
 function sortSessions(sessions: CommitteeSession[]): CommitteeSession[] {
@@ -64,6 +87,75 @@ function describeTask(task: Task | undefined): string {
     .join(' · ');
 }
 
+function getTaskDescription(task: Task | undefined): string {
+  if (!task) {
+    return 'La tarea ya no existe o fue eliminada.';
+  }
+
+  return task.descripcion || task.observaciones || '';
+}
+
+function getSessionPointStatus(session: CommitteeSession, taskId: string): string {
+  if (session.status === 'open') {
+    return 'Pendiente de tratar';
+  }
+
+  if (session.treatedTaskIds.includes(taskId)) {
+    return 'Tratada';
+  }
+
+  if (session.untreatedTaskIds.includes(taskId)) {
+    return 'No tratada';
+  }
+
+  return 'Sin clasificar';
+}
+
+function buildSessionPointRows(
+  session: CommitteeSession,
+  tasksById: Map<string, Task>,
+): CommitteeSessionPointRow[] {
+  return session.items.map((taskId, index) => {
+    const task = tasksById.get(taskId);
+
+    return {
+      order: index + 1,
+      title: getTaskTitle(tasksById, taskId),
+      status: getSessionPointStatus(session, taskId),
+      origin: task?.origen ?? '',
+      union: task?.sindicato ?? '',
+      responsible: task?.responsable ?? '',
+      dueDate: task?.fechaLimite ?? '',
+      description: getTaskDescription(task),
+    };
+  });
+}
+
+function buildSessionExportPayload(
+  session: CommitteeSession,
+  tasksById: Map<string, Task>,
+): ExportTablePayload<CommitteeSessionPointRow> {
+  const label = committeeSessionLabel(session);
+  const filenameParts = ['comite', session.date, session.code, session.title]
+    .map((part) => sanitizeFilenamePart(part))
+    .filter(Boolean)
+    .join('-');
+  const filterLabel = buildFilterLabel([
+    ['Sesión', label],
+    ['Título', session.title],
+    ['Estado', session.status === 'closed' ? 'Cerrada' : 'Abierta'],
+    ['Notas', session.notes],
+  ]);
+
+  return {
+    title: `Comité de Empresa · ${label}`,
+    filename: filenameParts || 'comite-sesion',
+    columns: sessionPointExportColumns,
+    rows: buildSessionPointRows(session, tasksById),
+    filterLabel,
+  };
+}
+
 export function ComitePage() {
   const { sessions, load, create, remove, addTask, removeTask, moveTask, closeSession } =
     useCommitteeSessionStore();
@@ -71,6 +163,7 @@ export function ComitePage() {
   const [draft, setDraft] = useState<CommitteeSessionDraft>(EMPTY_COMMITTEE_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<'open' | 'history'>('open');
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [treatedTaskIds, setTreatedTaskIds] = useState<Record<string, boolean>>({});
 
@@ -110,10 +203,11 @@ export function ComitePage() {
       return;
     }
 
-    create(draft);
+    const createdSessionId = create(draft);
     setDraft(EMPTY_COMMITTEE_SESSION_DRAFT);
     setIsCreateOpen(false);
     setOpenPanel('open');
+    setExpandedSessionId(createdSessionId);
   };
 
   const openCloseModal = (session: CommitteeSession) => {
@@ -132,6 +226,7 @@ export function ComitePage() {
     closeTasksFromCommittee(treatedIds, committeeSessionLabel(closingSession));
     setClosingSessionId(null);
     setTreatedTaskIds({});
+    setExpandedSessionId(null);
     setOpenPanel('history');
   };
 
@@ -236,10 +331,12 @@ export function ComitePage() {
                 <SessionCard
                   addTask={addTask}
                   availableTasks={availableCommitteeTasks}
+                  isExpanded={expandedSessionId === session.id}
                   key={session.id}
                   moveTask={moveTask}
                   onClose={openCloseModal}
                   onRemove={remove}
+                  onToggle={() => setExpandedSessionId((current) => (current === session.id ? null : session.id))}
                   removeTask={removeTask}
                   session={session}
                   tasksById={tasksById}
@@ -347,35 +444,44 @@ function SessionCard({
   session,
   tasksById,
   availableTasks,
+  isExpanded,
   addTask,
   removeTask,
   moveTask,
   onClose,
   onRemove,
+  onToggle,
 }: {
   session: CommitteeSession;
   tasksById: Map<string, Task>;
   availableTasks: Task[];
+  isExpanded: boolean;
   addTask: (sessionId: string, taskId: string) => void;
   removeTask: (sessionId: string, taskId: string) => void;
   moveTask: (sessionId: string, taskId: string, direction: 'up' | 'down') => void;
   onClose: (session: CommitteeSession) => void;
   onRemove: (sessionId: string) => void;
+  onToggle: () => void;
 }) {
   const unassignedTasks = availableTasks.filter((task) => !session.items.includes(task.id));
+  const sessionExportPayload = buildSessionExportPayload(session, tasksById);
 
   return (
-    <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h3 className="text-base font-bold text-metro-text">{session.title}</h3>
+    <article className="rounded-xl border border-metro-border bg-metro-panel">
+      <div className="flex flex-col gap-2 p-3 lg:flex-row lg:items-start lg:justify-between">
+        <button className="min-w-0 flex-1 text-left" onClick={onToggle} type="button">
+          <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
+            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <span className="truncate">{session.title}</span>
+          </h3>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-metro-muted">
             <CalendarDays size={14} /> Código: {session.code} · Fecha:{' '}
             {formatCommitteeSessionDate(session.date)} · Puntos actuales: {session.items.length}
           </p>
-          {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
-        </div>
+          {session.notes && <p className="mt-2 line-clamp-2 text-sm text-metro-muted">{session.notes}</p>}
+        </button>
         <div className="flex shrink-0 flex-wrap gap-2">
+          <ExportPrintButtons payload={sessionExportPayload} />
           <button
             className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
             onClick={() => onClose(session)}
@@ -393,81 +499,85 @@ function SessionCard({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_190px]">
-        <select
-          className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-          onChange={(event) => {
-            if (event.target.value) {
-              addTask(session.id, event.target.value);
-              event.target.value = '';
-            }
-          }}
-          value=""
-        >
-          <option value="">Añadir tarea en fase comité...</option>
-          {unassignedTasks.map((task) => (
-            <option key={task.id} value={task.id}>
-              {task.titulo}
-            </option>
-          ))}
-        </select>
-        <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
-          {unassignedTasks.length} tareas disponibles
-        </span>
-      </div>
-
-      <div className="mt-3 space-y-2">
-        {session.items.length === 0 && (
-          <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
-            Sin tareas en el orden del día.
-          </p>
-        )}
-        {session.items.map((taskId, index) => {
-          const task = tasksById.get(taskId);
-
-          return (
-            <div
-              className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
-              key={taskId}
+      {isExpanded && (
+        <div className="border-t border-metro-border p-3 pt-3">
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_190px]">
+            <select
+              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => {
+                if (event.target.value) {
+                  addTask(session.id, event.target.value);
+                  event.target.value = '';
+                }
+              }}
+              value=""
             >
-              <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-metro-text" title={getTaskTitle(tasksById, taskId)}>
-                  {getTaskTitle(tasksById, taskId)}
-                </p>
-                <p className="truncate text-xs text-metro-muted" title={describeTask(task)}>
-                  {describeTask(task)}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <button
-                  className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                  disabled={index === 0}
-                  onClick={() => moveTask(session.id, taskId, 'up')}
-                  type="button"
+              <option value="">Añadir tarea en fase comité...</option>
+              {unassignedTasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.titulo}
+                </option>
+              ))}
+            </select>
+            <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
+              {unassignedTasks.length} tareas disponibles
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {session.items.length === 0 && (
+              <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
+                Sin tareas en el orden del día.
+              </p>
+            )}
+            {session.items.map((taskId, index) => {
+              const task = tasksById.get(taskId);
+
+              return (
+                <div
+                  className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
+                  key={taskId}
                 >
-                  ↑
-                </button>
-                <button
-                  className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                  disabled={index === session.items.length - 1}
-                  onClick={() => moveTask(session.id, taskId, 'down')}
-                  type="button"
-                >
-                  ↓
-                </button>
-                <button
-                  className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200"
-                  onClick={() => removeTask(session.id, taskId)}
-                  type="button"
-                >
-                  Quitar
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-metro-text" title={getTaskTitle(tasksById, taskId)}>
+                      {getTaskTitle(tasksById, taskId)}
+                    </p>
+                    <p className="truncate text-xs text-metro-muted" title={describeTask(task)}>
+                      {describeTask(task)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
+                      disabled={index === 0}
+                      onClick={() => moveTask(session.id, taskId, 'up')}
+                      type="button"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
+                      disabled={index === session.items.length - 1}
+                      onClick={() => moveTask(session.id, taskId, 'down')}
+                      type="button"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200"
+                      onClick={() => removeTask(session.id, taskId)}
+                      type="button"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -479,15 +589,25 @@ function HistoricSessionCard({
   session: CommitteeSession;
   tasksById: Map<string, Task>;
 }) {
+  const sessionExportPayload = buildSessionExportPayload(session, tasksById);
+
   return (
     <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
-      <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
-        <CheckCircle2 size={17} className="text-metro-red" /> {session.title}
-      </h3>
-      <p className="mt-1 text-xs text-metro-muted">
-        {committeeSessionLabel(session)} · Cerrada: {session.closedAt ? new Date(session.closedAt).toLocaleString('es-ES') : '—'}
-      </p>
-      {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
+            <CheckCircle2 size={17} className="text-metro-red" /> {session.title}
+          </h3>
+          <p className="mt-1 text-xs text-metro-muted">
+            {committeeSessionLabel(session)} · Cerrada:{' '}
+            {session.closedAt ? new Date(session.closedAt).toLocaleString('es-ES') : '—'}
+          </p>
+          {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <ExportPrintButtons payload={sessionExportPayload} />
+        </div>
+      </div>
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
         <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
           <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted">

@@ -212,7 +212,6 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               sort={preferences.sort}
             />
           </div>
-          </div>
         </div>
       </section>
     </div>
