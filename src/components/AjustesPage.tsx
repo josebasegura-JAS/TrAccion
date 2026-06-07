@@ -1,5 +1,5 @@
 import { Database, FolderOpen, Plus, RotateCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
@@ -17,6 +17,9 @@ export function AjustesPage() {
   const [status, setStatus] = useState('');
   const databaseStatus = useDatabaseStatus();
   const [databaseActionStatus, setDatabaseActionStatus] = useState('');
+  const [localBackups, setLocalBackups] = useState<TraccionLocalBackupEntry[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
   const [newTaskPhase, setNewTaskPhase] = useState('');
 
   useEffect(() => {
@@ -28,6 +31,79 @@ export function AjustesPage() {
       document.getElementById('base-de-datos')?.scrollIntoView({ block: 'start' });
     }
   }, []);
+
+  const refreshLocalBackups = useCallback(async () => {
+    if (!window.traccion?.listLocalBackups) {
+      setLocalBackups([]);
+      return;
+    }
+
+    setIsLoadingBackups(true);
+    try {
+      setLocalBackups(await window.traccion.listLocalBackups());
+    } catch (error) {
+      console.warn('No se han podido listar las copias de respaldo.', error);
+      setDatabaseActionStatus('No se han podido listar las copias de respaldo locales.');
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLocalBackups();
+  }, [refreshLocalBackups]);
+
+  const handleRestoreLocalBackup = async (backup: TraccionLocalBackupEntry) => {
+    if (!window.traccion?.restoreLocalBackup) {
+      setDatabaseActionStatus('La restauración de copias solo está disponible en escritorio.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Vas a restaurar la copia local ${backup.fileName}. TrAccion creará una copia previa de la base activa antes de restaurar. ¿Continuar?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsRestoringBackup(true);
+    setDatabaseActionStatus('Restaurando copia local...');
+    try {
+      const result = await window.traccion.restoreLocalBackup(backup.id);
+      publishDatabaseStatus(result.status);
+      setDatabaseActionStatus(result.message);
+      await refreshLocalBackups();
+      if (result.ok) {
+        window.setTimeout(() => window.location.reload(), 900);
+      }
+    } catch (error) {
+      console.warn('No se ha podido restaurar la copia local.', error);
+      setDatabaseActionStatus('No se ha podido restaurar la copia local seleccionada.');
+    } finally {
+      setIsRestoringBackup(false);
+    }
+  };
+
+  const formatBackupSize = (sizeBytes: number) => {
+    if (sizeBytes < 1024) {
+      return `${sizeBytes} B`;
+    }
+
+    if (sizeBytes < 1024 * 1024) {
+      return `${(sizeBytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatBackupDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    return date.toLocaleString('es-ES');
+  };
 
   const handleAddTaskPhase = () => {
     addTaskPhase(newTaskPhase);
@@ -44,6 +120,7 @@ export function AjustesPage() {
 
     const nextStatus = await window.traccion.selectDatabaseDirectory();
     publishDatabaseStatus(nextStatus);
+    void refreshLocalBackups();
     setDatabaseActionStatus(
       nextStatus.ready
         ? 'Ruta SQLite actualizada. Se usará traccion.sqlite dentro de la carpeta elegida.'
@@ -63,6 +140,7 @@ export function AjustesPage() {
 
     const nextStatus = await window.traccion.resetDatabaseDirectory();
     publishDatabaseStatus(nextStatus);
+    void refreshLocalBackups();
     setDatabaseActionStatus(
       nextStatus.ready
         ? 'Ruta SQLite por defecto restaurada.'
@@ -176,6 +254,62 @@ export function AjustesPage() {
             <RotateCcw size={16} />
             Restaurar ruta por defecto
           </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isLoadingBackups}
+            onClick={() => void refreshLocalBackups()}
+            type="button"
+          >
+            <Database size={16} />
+            Actualizar copias
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+                Copias locales de respaldo
+              </p>
+              <p className="mt-1 text-xs text-metro-muted">
+                Restaurar una copia crea antes un backup de la base activa y recarga TrAccion para aplicar los datos.
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-metro-muted">
+              {isLoadingBackups ? 'Cargando...' : `${localBackups.length} copias`}
+            </span>
+          </div>
+
+          {localBackups.length === 0 ? (
+            <p className="text-xs text-metro-muted">No hay copias locales disponibles todavía.</p>
+          ) : (
+            <div className="max-h-64 space-y-2 overflow-auto pr-1">
+              {localBackups.map((backup) => (
+                <div
+                  className="grid gap-2 rounded-lg border border-metro-border bg-metro-panel p-2 text-xs text-metro-text md:grid-cols-[minmax(0,1fr)_auto]"
+                  key={backup.id}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{backup.fileName}</p>
+                    <p className="mt-1 text-metro-muted">
+                      {backup.kind.toUpperCase()} · {formatBackupSize(backup.sizeBytes)} ·{' '}
+                      {formatBackupDate(backup.createdAt)}
+                      {backup.isLiveCopy ? ' · copia viva' : ''}
+                    </p>
+                  </div>
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isRestoringBackup}
+                    onClick={() => void handleRestoreLocalBackup(backup)}
+                    type="button"
+                  >
+                    <RotateCcw size={14} />
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
