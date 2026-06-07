@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -7,7 +8,11 @@ import {
   startExternalDataSyncPolling,
   stopExternalDataSyncPolling,
 } from './services/externalDataSync';
-import { bootstrapSqlitePersistence } from './services/persistence';
+import {
+  bootstrapSqlitePersistence,
+  subscribeToPersistenceFeedback,
+  type PersistenceFeedback,
+} from './services/persistence';
 
 const AjustesPage = lazy(() =>
   import('./components/AjustesPage').then((module) => ({ default: module.AjustesPage })),
@@ -89,6 +94,33 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   ajustes: 'Cargando Ajustes...',
 };
 
+function PersistenceErrorBanner() {
+  const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
+
+  useEffect(() => {
+    return subscribeToPersistenceFeedback((nextFeedback) => {
+      setFeedback(nextFeedback.kind === 'error' ? nextFeedback : null);
+    });
+  }, []);
+
+  if (!feedback) {
+    return null;
+  }
+
+  return (
+    <section className="persistence-error-banner" role="alert" aria-live="assertive">
+      <AlertTriangle size={20} aria-hidden="true" />
+      <div>
+        <strong>Error de guardado</strong>
+        <p>
+          {feedback.message ||
+            'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function ModuleLoading({ activeView }: { activeView: AppView }) {
   return (
     <div className="module-loading" role="status" aria-live="polite">
@@ -126,6 +158,7 @@ export function App() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-metro-app/95">
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
+          <PersistenceErrorBanner />
           {activeView === 'dashboard' && (
             <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
           )}
