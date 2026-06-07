@@ -62,7 +62,14 @@ export function App() {
               }
             />
           )}
-          {activeView === 'comite' && <ComitePage />}
+          {activeView === 'comite' && (
+            <ComitePage
+              initialSessionId={navigationTarget?.view === 'comite' ? navigationTarget.recordId : null}
+              navigationNonce={
+                navigationTarget?.view === 'comite' ? navigationTarget.nonce : undefined
+              }
+            />
+          )}
           {activeView === 'actas' && <ActasPage />}
           {activeView === 'paritaria' && <ParitariaPage />}
           {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
@@ -76,7 +83,18 @@ export function App() {
               }
             />
           )}
-          {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
+          {activeView === 'ticket-restaurante' && (
+            <TicketRestaurantePage
+              initialAbsenceId={
+                navigationTarget?.view === 'ticket-restaurante' ? navigationTarget.recordId : null
+              }
+              navigationNonce={
+                navigationTarget?.view === 'ticket-restaurante'
+                  ? navigationTarget.nonce
+                  : undefined
+              }
+            />
+          )}
           {activeView === 'licencias-sin-sueldo' && <LicenciasSinSueldoPage />}
           {activeView === 'sorteos' && <SorteosPage />}
           {activeView === 'vinculograma' && <VinculogramaPage />}
