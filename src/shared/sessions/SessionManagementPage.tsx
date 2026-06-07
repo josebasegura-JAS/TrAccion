@@ -7,7 +7,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
@@ -60,6 +60,8 @@ const sessionPointExportColumns: ExportColumn<SessionPointRow>[] = [
 interface SessionManagementPageProps {
   config: SessionModuleConfig;
   useSessionStore: UseBoundStore<StoreApi<ManagedSessionStateStore>>;
+  initialSessionId?: string | null;
+  navigationNonce?: number;
   onClosedSession?: (session: ManagedSession, treatedTasks: Task[]) => void;
 }
 
@@ -160,7 +162,13 @@ function buildSessionExportPayload(
   };
 }
 
-export function SessionManagementPage({ config, useSessionStore, onClosedSession }: SessionManagementPageProps) {
+export function SessionManagementPage({
+  config,
+  initialSessionId = null,
+  navigationNonce,
+  useSessionStore,
+  onClosedSession,
+}: SessionManagementPageProps) {
   const { sessions, load, create, remove, addTask, removeTask, moveTask, closeSession } = useSessionStore();
   const { tasks, load: loadTasks, closeTasksFromSession } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
@@ -169,6 +177,7 @@ export function SessionManagementPage({ config, useSessionStore, onClosedSession
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [treatedTaskIds, setTreatedTaskIds] = useState<Record<string, boolean>>({});
+  const processedNavigationNonceRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     load();
@@ -198,6 +207,25 @@ export function SessionManagementPage({ config, useSessionStore, onClosedSession
     ? sessions.find((session) => session.id === closingSessionId) ?? null
     : null;
   const sessionFilterLabel = buildFilterLabel([['Módulo', config.title]]);
+
+  useEffect(() => {
+    if (!initialSessionId || navigationNonce === undefined) {
+      return;
+    }
+
+    if (processedNavigationNonceRef.current === navigationNonce) {
+      return;
+    }
+
+    const targetSession = sessions.find((session) => session.id === initialSessionId);
+    if (!targetSession) {
+      return;
+    }
+
+    setOpenPanel(targetSession.status === 'closed' ? 'history' : 'open');
+    setExpandedSessionId(targetSession.id);
+    processedNavigationNonceRef.current = navigationNonce;
+  }, [initialSessionId, navigationNonce, sessions]);
 
   const updateDraft = <K extends keyof ManagedSessionDraft>(key: K, value: ManagedSessionDraft[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
