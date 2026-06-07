@@ -1,5 +1,5 @@
 import { FileText, Plus, RotateCcw, Search, SlidersHorizontal, Upload } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import { useTableViewPreferences, type TableViewPreferences } from '../shared/table/useTableViewPreferences';
@@ -122,6 +122,40 @@ export function TeletrabajoPage() {
     loadEmployees();
   }, [load, loadEmployees]);
 
+  const handleGenerateWord = useCallback(
+    async (solicitud: TeletrabajoSolicitud) => {
+      if (solicitud.estado !== 'aprobada' || generatingWordId) {
+        return;
+      }
+
+      const employee =
+        employees.find(
+          (candidate) =>
+            !candidate.deletedAt && candidate.empleado.trim() === solicitud.empleado.trim(),
+        ) ?? null;
+
+      setGeneratingWordId(solicitud.id);
+      setWordStatus('');
+
+      try {
+        const result = await generateTeletrabajoWord(
+          solicitud,
+          employee,
+          rutaPlantillaTeletrabajo,
+          jobPositionTranslations,
+        );
+        await saveDocxWithDialog(result.blob, result.fileName);
+        setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
+        setWordStatus(message);
+      } finally {
+        setGeneratingWordId(null);
+      }
+    },
+    [employees, generatingWordId, jobPositionTranslations, rutaPlantillaTeletrabajo],
+  );
+
   const visibleSolicitudes = useMemo(
     () => solicitudes.filter((solicitud) => !solicitud.deletedAt),
     [solicitudes],
@@ -158,7 +192,7 @@ export function TeletrabajoPage() {
         </div>
       ), width: 100, minWidth: 95, maxWidth: 130, resizable: false, isActionColumn: true, className: 'whitespace-nowrap' },
     ],
-    [generatingWordId, remove],
+    [generatingWordId, handleGenerateWord, remove],
   );
 
   const sortedSolicitudes = useMemo(
@@ -203,37 +237,6 @@ export function TeletrabajoPage() {
     setImportSummary(
       `${summary.imported} registros importados · ${summary.updated} registros actualizados · ${summary.ignored} filas ignoradas`,
     );
-  };
-
-  const handleGenerateWord = async (solicitud: TeletrabajoSolicitud) => {
-    if (solicitud.estado !== 'aprobada' || generatingWordId) {
-      return;
-    }
-
-    const employee =
-      employees.find(
-        (candidate) =>
-          !candidate.deletedAt && candidate.empleado.trim() === solicitud.empleado.trim(),
-      ) ?? null;
-
-    setGeneratingWordId(solicitud.id);
-    setWordStatus('');
-
-    try {
-      const result = await generateTeletrabajoWord(
-        solicitud,
-        employee,
-        rutaPlantillaTeletrabajo,
-        jobPositionTranslations,
-      );
-      await saveDocxWithDialog(result.blob, result.fileName);
-      setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
-      setWordStatus(message);
-    } finally {
-      setGeneratingWordId(null);
-    }
   };
 
   return (
