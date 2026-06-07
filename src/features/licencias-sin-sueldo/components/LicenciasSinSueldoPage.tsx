@@ -344,7 +344,7 @@ function LicenseEditor({
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -526,11 +526,15 @@ export function LicenciasSinSueldoPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-metro-border bg-metro-panel p-4">
+    <section
+      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      id="licencias-sin-sueldo"
+    >
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-metro-text">Licencias sin sueldo y permisos no retribuidos</h1>
-          <p className="text-sm text-metro-muted">Seguimiento por aprobación, firma, vigencia e histórico.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
+          <h2 className="text-xl font-bold text-metro-text">Licencias sin sueldo y permisos no retribuidos</h2>
+          <p className="mt-0.5 text-sm text-metro-muted">Seguimiento por aprobación, firma, vigencia e histórico.</p>
         </div>
         <button className={buttonClass} onClick={() => setEditor({ mode: 'create', record: null })} type="button"><Plus size={16} /> Nueva solicitud</button>
       </div>
@@ -599,6 +603,6 @@ export function LicenciasSinSueldoPage() {
           record={editor.record}
         />
       )}
-    </div>
+    </section>
   );
 }
