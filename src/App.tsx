@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AjustesPage } from './components/AjustesPage';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
+import { ComitePage } from './features/comite/components/ComitePage';
 import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from './features/especiales/components/EspecialesPage';
 import { SorteosPage } from './features/sorteos/components/SorteosPage';
@@ -49,6 +50,7 @@ export function App() {
           )}
           {activeView === 'plantilla' && <PlantillaPage />}
           {activeView === 'tareas' && <TareasPage />}
+          {activeView === 'comite' && <ComitePage />}
           {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
           {activeView === 'teletrabajo' && <TeletrabajoPage />}
           {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}

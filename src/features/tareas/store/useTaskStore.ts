@@ -29,6 +29,7 @@ interface TaskStateStore {
   update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
+  closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
 
@@ -254,6 +255,29 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       const tasks = state.tasks.map((task) =>
         task.id === id ? { ...task, deletedAt: now, updatedAt: now } : task,
       );
+      persistTasks(tasks);
+      return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
+    });
+  },
+  closeTasksFromCommittee: (taskIds, sessionLabel) => {
+    set((state) => {
+      const now = new Date().toISOString();
+      const taskIdSet = new Set(taskIds);
+      const seguimiento = buildSeguimiento(`Tratada en Comité de Empresa (${sessionLabel}).`, now);
+      const tasks = state.tasks.map((task) => {
+        if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
+          return task;
+        }
+
+        return {
+          ...task,
+          estado: 'cerrada' as const,
+          fase: CLOSED_TASK_PHASE,
+          seguimiento: [...seguimiento, ...task.seguimiento],
+          closedAt: task.closedAt ?? now,
+          updatedAt: now,
+        };
+      });
       persistTasks(tasks);
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });

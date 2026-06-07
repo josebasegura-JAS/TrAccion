@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
 import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../services/persistence';
 import {
+  CalendarDays,
   ClipboardList,
   Database,
   Gift,
@@ -28,6 +29,7 @@ export type AppView =
   | 'dashboard'
   | 'plantilla'
   | 'tareas'
+  | 'comite'
   | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
@@ -59,7 +61,10 @@ const navigationGroups: NavigationGroup[] = [
     label: 'Operativa diaria',
     description: 'Seguimiento diario del trabajo operativo.',
     icon: ClipboardList,
-    items: [{ label: 'Tareas', icon: ClipboardList, view: 'tareas' }],
+    items: [
+      { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
+      { label: 'Comité de Empresa', icon: CalendarDays, view: 'comite' },
+    ],
   },
   {
     id: 'personas',
