@@ -328,7 +328,7 @@ export function ActasPage() {
       />
 
       {isEditorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="max-h-[88vh] w-full max-w-4xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
             <h3 className="text-lg font-bold text-metro-text">{editingActaId ? 'Editar acta' : 'Nueva acta'}</h3>
             <div className="mt-3 grid gap-2 xl:grid-cols-[160px_180px_minmax(220px,1fr)]">
