@@ -1,10 +1,25 @@
-import { FileUp, Languages, RefreshCw, Search, X } from 'lucide-react';
+import { FileUp, Languages, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { sortDataTableRows } from '../shared/table/tableSorting';
+import { useTableViewPreferences, type TableViewPreferences } from '../shared/table/useTableViewPreferences';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 
 interface JobPositionTranslationsModalProps {
   onClose: () => void;
 }
+
+type JobPositionTranslation = ReturnType<typeof useEmployeeStore.getState>['jobPositionTranslations'][number];
+type JobPositionTranslationColumnId = 'puestoCastellano' | 'puestoEuskera';
+const JOB_POSITION_TRANSLATIONS_TABLE_STORAGE_KEY = 'traccion.tableView.plantilla.jobPositionTranslations';
+const jobPositionTranslationColumnIds: readonly JobPositionTranslationColumnId[] = [
+  'puestoCastellano',
+  'puestoEuskera',
+];
+const defaultJobPositionTranslationTablePreferences: TableViewPreferences<JobPositionTranslationColumnId> = {
+  sort: null,
+  columnWidths: {},
+};
 
 export function JobPositionTranslationsModal({ onClose }: JobPositionTranslationsModalProps) {
   const {
@@ -29,6 +44,46 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
       return haystack.includes(normalizedSearch);
     });
   }, [jobPositionTranslations, search]);
+
+  const { preferences, setSort, setColumnWidth, resetPreferences } =
+    useTableViewPreferences<JobPositionTranslationColumnId>({
+      storageKey: JOB_POSITION_TRANSLATIONS_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultJobPositionTranslationTablePreferences,
+      validColumnIds: jobPositionTranslationColumnIds,
+    });
+
+  const translationColumns = useMemo<Array<DataTableColumn<JobPositionTranslation, JobPositionTranslationColumnId>>>(
+    () => [
+      {
+        id: 'puestoCastellano',
+        header: 'Puesto',
+        accessor: (translation) => translation.puestoCastellano,
+        render: (translation) => translation.puestoCastellano,
+        width: 360,
+        minWidth: 180,
+        maxWidth: 640,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'puestoEuskera',
+        header: 'Lanpostua',
+        accessor: (translation) => translation.puestoEuskera,
+        render: (translation) => translation.puestoEuskera,
+        width: 360,
+        minWidth: 180,
+        maxWidth: 640,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+    ],
+    [],
+  );
+
+  const sortedTranslations = useMemo(
+    () => sortDataTableRows(filteredTranslations, translationColumns, preferences.sort),
+    [filteredTranslations, preferences.sort, translationColumns],
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -132,38 +187,31 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
             <div className="flex items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
               <span>Equivalencias importadas</span>
               <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-                {filteredTranslations.length} registros
+                {sortedTranslations.length} registros
               </span>
             </div>
-            <div className="max-h-[52vh] overflow-auto">
-              <table className="w-full table-fixed text-left text-xs">
-                <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-                  <tr>
-                    <th className="w-1/2 px-3 py-2">Puesto</th>
-                    <th className="w-1/2 px-3 py-2">Lanpostua</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-metro-border bg-metro-surface">
-                  {filteredTranslations.map((translation) => (
-                    <tr key={translation.puestoCastellano} className="hover:bg-metro-red/10">
-                      <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={translation.puestoCastellano}>
-                        {translation.puestoCastellano}
-                      </td>
-                      <td className="truncate px-3 py-1.5 text-metro-muted" title={translation.puestoEuskera}>
-                        {translation.puestoEuskera}
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredTranslations.length === 0 && (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-sm text-metro-muted" colSpan={2}>
-                        No hay puestos traducidos importados.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="flex justify-end px-3 py-2">
+              <button
+                className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={resetPreferences}
+                type="button"
+              >
+                <RotateCcw size={14} /> Restablecer vista
+              </button>
             </div>
+            <DataTable
+              ariaLabel="Traducciones de puestos"
+              columnWidths={preferences.columnWidths}
+              columns={translationColumns}
+              emptyMessage="No hay puestos traducidos importados."
+              getRowId={(translation) => translation.puestoCastellano}
+              maxHeightClassName="max-h-[52vh]"
+              onColumnWidthChange={setColumnWidth}
+              onSortChange={setSort}
+              rows={sortedTranslations}
+              sort={preferences.sort}
+            />
+          </div>
           </div>
         </div>
       </section>

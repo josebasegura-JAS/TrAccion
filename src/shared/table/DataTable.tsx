@@ -173,7 +173,7 @@ export function DataTable<Row, ColumnId extends string>({
               return (
                 <th
                   aria-sort={canSort ? ariaSort : undefined}
-                  className={`relative border-r border-metro-border/80 px-3 py-2 last:border-r-0 ${column.headerClassName ?? ''}`}
+                  className={`relative px-3 py-2 ${column.headerClassName ?? ''}`}
                   key={column.id}
                   scope="col"
                 >
@@ -213,7 +213,7 @@ export function DataTable<Row, ColumnId extends string>({
                       style={{ width: RESIZE_HANDLE_WIDTH }}
                       tabIndex={-1}
                     >
-                      <span className="absolute right-1 top-1/2 h-6 -translate-y-1/2 border-r-2 border-metro-border transition-colors hover:border-metro-red" />
+                      <span className="absolute right-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-transparent transition-colors hover:bg-metro-red/70" />
                     </span>
                   )}
                 </th>
@@ -234,7 +234,7 @@ export function DataTable<Row, ColumnId extends string>({
           ) : (
             sortedRows.map((row, rowIndex) => (
               <tr
-                className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} border-b border-metro-border/70 transition-colors hover:bg-metro-red/10 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                 key={getRowId(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
@@ -245,7 +245,7 @@ export function DataTable<Row, ColumnId extends string>({
 
                   return (
                     <td
-                      className={`truncate border-r border-metro-border/40 px-3 py-1.5 last:border-r-0 ${column.isActionColumn ? 'text-right' : ''} ${
+                      className={`truncate px-3 py-1.5 ${column.isActionColumn ? 'text-right' : ''} ${
                         column.className ?? ''
                       }`}
                       key={column.id}

@@ -1,5 +1,7 @@
-import { Link2, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Link2, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
@@ -16,6 +18,21 @@ import {
 import { useVinculogramaStore } from '../store/useVinculogramaStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
+
+
+type VinculogramaTableColumnId = 'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'status' | 'actions';
+const VINCULOGRAMA_TABLE_STORAGE_KEY = 'traccion.tableView.vinculograma.main';
+const vinculogramaTableColumnIds: readonly VinculogramaTableColumnId[] = [
+  'employeeNumber',
+  'nombreCompleto',
+  'linkedPerson',
+  'status',
+  'actions',
+];
+const defaultVinculogramaTablePreferences: TableViewPreferences<VinculogramaTableColumnId> = {
+  sort: null,
+  columnWidths: {},
+};
 
 const EXPIRED_VISIBILITY_KEY = 'traccion.v1.vinculograma.showExpired';
 const inputClass =
@@ -226,74 +243,119 @@ function VinculogramaTable({
   onDelete: (record: Vinculograma) => void;
   onEdit: (record: Vinculograma) => void;
 }) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-metro-border">
-      <table className="w-full table-fixed text-left text-xs">
-        <thead className="bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-          <tr>
-            <th className="w-[120px] px-3 py-2">Nº empleado</th>
-            <th className="px-3 py-2">Nombre</th>
-            <th className="px-3 py-2">Persona vinculada</th>
-            <th className="w-[180px] px-3 py-2">Estado / Fecha vigencia</th>
-            <th className="w-[110px] px-3 py-2 text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-metro-border bg-metro-surface">
-          {records.length === 0 && (
-            <tr>
-              <td className="px-3 py-6 text-center text-sm text-metro-muted" colSpan={5}>
-                {emptyText}
-              </td>
-            </tr>
-          )}
-          {records.map((record) => {
-            const status = getVinculogramaStatus(record.expiryDate, today);
-            const statusClass =
-              status === 'Vigente'
-                ? 'bg-metro-success/10 text-emerald-200'
-                : 'bg-metro-warning/10 text-amber-200';
+  const { preferences, setSort, setColumnWidth, resetPreferences } =
+    useTableViewPreferences<VinculogramaTableColumnId>({
+      storageKey: VINCULOGRAMA_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultVinculogramaTablePreferences,
+      validColumnIds: vinculogramaTableColumnIds,
+    });
 
-            return (
-              <tr
-                className="cursor-pointer hover:bg-metro-red/10"
-                key={record.id}
-                onClick={() => onEdit(record)}
-                onDoubleClick={() => onEdit(record)}
-              >
-                <td
-                  className="truncate px-3 py-2 font-semibold text-metro-text"
-                  title={record.employeeNumber}
-                >
-                  {record.employeeNumber}
-                </td>
-                <td className="truncate px-3 py-2 text-metro-text" title={record.nombreCompleto}>
-                  {record.nombreCompleto}
-                </td>
-                <td className="truncate px-3 py-2 text-metro-muted" title={record.linkedPerson}>
-                  {record.linkedPerson}
-                </td>
-                <td className="px-3 py-2">
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusClass}`}>
-                    {status} · {record.expiryDate}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right">
-                  <button
-                    className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDelete(record);
-                    }}
-                    type="button"
-                  >
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+  const columns = useMemo<Array<DataTableColumn<Vinculograma, VinculogramaTableColumnId>>>(
+    () => [
+      {
+        id: 'employeeNumber',
+        header: 'Nº empleado',
+        accessor: (record) => Number(record.employeeNumber) || record.employeeNumber,
+        render: (record) => record.employeeNumber,
+        width: 120,
+        minWidth: 95,
+        maxWidth: 180,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'nombreCompleto',
+        header: 'Nombre',
+        accessor: (record) => record.nombreCompleto,
+        render: (record) => record.nombreCompleto,
+        width: 230,
+        minWidth: 160,
+        maxWidth: 420,
+        sortable: true,
+        className: 'text-metro-text',
+      },
+      {
+        id: 'linkedPerson',
+        header: 'Persona vinculada',
+        accessor: (record) => record.linkedPerson,
+        render: (record) => record.linkedPerson,
+        width: 230,
+        minWidth: 160,
+        maxWidth: 420,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'status',
+        header: 'Estado / Fecha vigencia',
+        accessor: (record) => `${getVinculogramaStatus(record.expiryDate, today)} ${record.expiryDate}`,
+        render: (record) => {
+          const status = getVinculogramaStatus(record.expiryDate, today);
+          const statusClass =
+            status === 'Vigente'
+              ? 'bg-metro-success/10 text-emerald-200'
+              : 'bg-metro-warning/10 text-amber-200';
+
+          return (
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusClass}`}>
+              {status} · {record.expiryDate}
+            </span>
+          );
+        },
+        width: 180,
+        minWidth: 145,
+        maxWidth: 260,
+        sortable: true,
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        render: (record) => (
+          <button
+            className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(record);
+            }}
+            type="button"
+          >
+            Eliminar
+          </button>
+        ),
+        width: 110,
+        minWidth: 95,
+        maxWidth: 130,
+        resizable: false,
+        isActionColumn: true,
+        className: 'whitespace-nowrap',
+      },
+    ],
+    [onDelete, today],
+  );
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <button
+          className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+          onClick={resetPreferences}
+          type="button"
+        >
+          <RotateCcw size={14} /> Restablecer vista
+        </button>
+      </div>
+      <DataTable
+        ariaLabel="Vinculograma"
+        columnWidths={preferences.columnWidths}
+        columns={columns}
+        emptyMessage={emptyText}
+        getRowId={(record) => record.id}
+        onColumnWidthChange={setColumnWidth}
+        onRowClick={onEdit}
+        onSortChange={setSort}
+        rows={records}
+        sort={preferences.sort}
+      />
     </div>
   );
 }

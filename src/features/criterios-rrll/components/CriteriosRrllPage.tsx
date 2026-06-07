@@ -1,12 +1,9 @@
-import { Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { Plus, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { sortDataTableRows } from '../../../shared/table/tableSorting';
+import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { filterCriteriosRrll } from '../domain/filters';
-import {
-  sortCriteriosRrllByColumn,
-  sortCriteriosRrllByDefault,
-  type CriterioRrllSortKey,
-  type SortDirection,
-} from '../domain/sort';
 import {
   CRITERIO_RRLL_ESTADOS,
   type CriterioRrll,
@@ -18,17 +15,21 @@ import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 
-interface SortState {
-  key: CriterioRrllSortKey;
-  direction: SortDirection;
-}
+type CriterioTableColumnId = 'tema' | 'estado' | 'fecha' | 'responsable' | 'criterio' | 'actions';
 
-const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; className: string }> = [
-  { key: 'tema', label: 'Tema', className: 'w-[220px]' },
-  { key: 'estado', label: 'Estado', className: 'w-[120px]' },
-  { key: 'fecha', label: 'Fecha', className: 'w-[115px]' },
-  { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
+const CRITERIOS_TABLE_STORAGE_KEY = 'traccion.tableView.criteriosRrll.main';
+const criterioTableColumnIds: readonly CriterioTableColumnId[] = [
+  'tema',
+  'estado',
+  'fecha',
+  'responsable',
+  'criterio',
+  'actions',
 ];
+const defaultCriterioTablePreferences: TableViewPreferences<CriterioTableColumnId> = {
+  sort: null,
+  columnWidths: {},
+};
 
 const criterioExportColumns: ExportColumn<CriterioRrll>[] = [
   { key: 'tema', header: 'Tema', value: (criterio) => criterio.tema },
@@ -72,7 +73,6 @@ export function CriteriosRrllPage() {
   const { criterios, filters, load, remove, selectCriterio, setFilter } = useCriteriosRrllStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingCriterioId, setEditingCriterioId] = useState<string | null>(null);
-  const [sortState, setSortState] = useState<SortState | null>(null);
 
   useEffect(() => {
     load();
@@ -86,13 +86,31 @@ export function CriteriosRrllPage() {
     () => filterCriteriosRrll(criterios, filters),
     [criterios, filters],
   );
-  const sortedCriterios = useMemo(() => {
-    if (!sortState) {
-      return sortCriteriosRrllByDefault(filteredCriterios);
-    }
+  const { preferences, setSort, setColumnWidth, resetPreferences } =
+    useTableViewPreferences<CriterioTableColumnId>({
+      storageKey: CRITERIOS_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultCriterioTablePreferences,
+      validColumnIds: criterioTableColumnIds,
+    });
 
-    return sortCriteriosRrllByColumn(filteredCriterios, sortState.key, sortState.direction);
-  }, [filteredCriterios, sortState]);
+  const criterioTableColumns = useMemo<Array<DataTableColumn<CriterioRrll, CriterioTableColumnId>>>(
+    () => [
+      { id: 'tema', header: 'Tema', accessor: (c) => c.tema, render: (c) => c.tema, width: 220, minWidth: 150, maxWidth: 360, sortable: true, className: 'font-semibold text-metro-text' },
+      { id: 'estado', header: 'Estado', accessor: (c) => c.estado, render: (c) => c.estado, width: 120, minWidth: 95, maxWidth: 190, sortable: true, className: 'text-metro-muted' },
+      { id: 'fecha', header: 'Fecha', accessor: (c) => c.fecha, render: (c) => c.fecha || '—', width: 115, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
+      { id: 'responsable', header: 'Responsable', accessor: (c) => c.responsable, render: (c) => c.responsable, width: 150, minWidth: 115, maxWidth: 260, sortable: true, className: 'text-metro-muted' },
+      { id: 'criterio', header: 'Criterio', accessor: (c) => c.criterio, render: (c) => c.criterio, width: 300, minWidth: 190, maxWidth: 520, sortable: true, className: 'text-metro-muted' },
+      { id: 'actions', header: 'Acciones', render: (criterio) => (
+        <button className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark" onClick={(event) => { event.stopPropagation(); remove(criterio.id); }} type="button">Eliminar</button>
+      ), width: 100, minWidth: 90, maxWidth: 120, resizable: false, isActionColumn: true, className: 'whitespace-nowrap' },
+    ],
+    [remove],
+  );
+
+  const sortedCriterios = useMemo(
+    () => sortDataTableRows(filteredCriterios, criterioTableColumns, preferences.sort),
+    [criterioTableColumns, filteredCriterios, preferences.sort],
+  );
 
   const editorCriterio =
     editorMode === 'edit'
@@ -117,13 +135,6 @@ export function CriteriosRrllPage() {
   const closeEditor = () => {
     setEditorMode(null);
     setEditingCriterioId(null);
-  };
-
-  const toggleSort = (key: CriterioRrllSortKey) => {
-    setSortState((current) => ({
-      key,
-      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
-    }));
   };
 
   return (
@@ -187,83 +198,27 @@ export function CriteriosRrllPage() {
             {filteredCriterios.length} registros
           </span>
         </div>
-        <div className="max-h-[460px] overflow-auto">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-              <tr>
-                {sortableColumns.map((column) => {
-                  const isActive = sortState?.key === column.key;
-
-                  return (
-                    <th className={`${column.className} px-3 py-2`} key={column.key}>
-                      <button
-                        className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
-                        onClick={() => toggleSort(column.key)}
-                        type="button"
-                      >
-                        <span>{column.label}</span>
-                        {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
-                      </button>
-                    </th>
-                  );
-                })}
-                <th className="w-[300px] px-3 py-2">Criterio</th>
-                <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-metro-border bg-metro-surface">
-              {sortedCriterios.map((criterio) => (
-                <tr
-                  className="cursor-pointer hover:bg-metro-red/10"
-                  key={criterio.id}
-                  onClick={() => openEditor(criterio)}
-                >
-                  <td
-                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                    title={criterio.tema}
-                  >
-                    {criterio.tema}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.estado}>
-                    {criterio.estado}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={criterio.fecha || '—'}
-                  >
-                    {criterio.fecha || '—'}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={criterio.responsable}
-                  >
-                    {criterio.responsable}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.criterio}>
-                    {criterio.criterio}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <button
-                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        remove(criterio.id);
-                      }}
-                      type="button"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {sortedCriterios.length === 0 && (
-            <p className="border-t border-metro-border bg-metro-surface px-3 py-3 text-sm text-metro-muted">
-              No hay criterios para los filtros seleccionados.
-            </p>
-          )}
+        <div className="flex flex-wrap justify-end pb-2">
+          <button
+            className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={resetPreferences}
+            type="button"
+          >
+            <RotateCcw size={14} /> Restablecer vista
+          </button>
         </div>
+        <DataTable
+          ariaLabel="Criterios RRLL"
+          columnWidths={preferences.columnWidths}
+          columns={criterioTableColumns}
+          emptyMessage="No hay criterios para los filtros seleccionados."
+          getRowId={(criterio) => criterio.id}
+          onColumnWidthChange={setColumnWidth}
+          onRowClick={openEditor}
+          onSortChange={setSort}
+          rows={filteredCriterios}
+          sort={preferences.sort}
+        />
       </div>
 
       {editorMode && (

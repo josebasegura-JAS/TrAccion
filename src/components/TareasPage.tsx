@@ -506,10 +506,10 @@ export function TareasPage() {
                             })}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-metro-border bg-metro-surface">
+                        <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
                           {group.tasks.map((task) => (
                             <tr
-                              className="cursor-pointer hover:bg-metro-red/10"
+                              className="cursor-pointer"
                               key={task.id}
                               onClick={() => openEditor(task)}
                             >

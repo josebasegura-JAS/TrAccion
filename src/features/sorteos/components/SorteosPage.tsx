@@ -76,7 +76,7 @@ function WinnersTable({ draw }: { draw: SorteosDraw }) {
             <th className="px-3 py-2 font-semibold">Fecha</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-metro-border">
+        <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
           {draw.winners.map((winner: SorteosWinner) => (
             <tr
               className="hover:bg-metro-panel/70"
@@ -376,7 +376,7 @@ export function SorteosPage() {
                         <th className="px-3 py-2">Acción</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-metro-border">
+                    <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
                       {exclusions.map((exclusion) => (
                         <tr key={exclusion.id}>
                           <td className="px-3 py-2 text-metro-text">{exclusion.empleado}</td>
@@ -501,7 +501,7 @@ export function SorteosPage() {
                     <th className="px-3 py-2">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-metro-border">
+                <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
                   {draws.map((draw) => (
                     <tr key={draw.id}>
                       <td className="px-3 py-2 font-semibold text-metro-text">{draw.title}</td>

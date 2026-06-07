@@ -1,5 +1,8 @@
-import { FileText, Plus, Search, SlidersHorizontal, Upload } from 'lucide-react';
+import { FileText, Plus, RotateCcw, Search, SlidersHorizontal, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { sortDataTableRows } from '../shared/table/tableSorting';
+import { useTableViewPreferences, type TableViewPreferences } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
@@ -8,12 +11,7 @@ import {
   TELETRABAJO_TIPOS_SOLICITUD,
   type TeletrabajoSolicitud,
 } from '../features/teletrabajo/domain/solicitud';
-import {
-  sortTeletrabajoByColumn,
-  sortTeletrabajoByDefault,
-  type SortDirection,
-  type TeletrabajoSortKey,
-} from '../features/teletrabajo/domain/sort';
+
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
@@ -22,21 +20,33 @@ import { buildFilterLabel } from '../shared/export/filterLabel';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 
-interface SortState {
-  key: TeletrabajoSortKey;
-  direction: SortDirection;
-}
+type TeletrabajoTableColumnId =
+  | 'empleado'
+  | 'nombreApellidos'
+  | 'puestoNomina'
+  | 'residencia'
+  | 'tipoSolicitud'
+  | 'diasTeletrabajo'
+  | 'estado'
+  | 'periodo'
+  | 'actions';
 
-const sortableColumns: Array<{ key: TeletrabajoSortKey; label: string; className: string }> = [
-  { key: 'empleado', label: 'Empleado', className: 'w-[105px]' },
-  { key: 'nombreApellidos', label: 'Nombre y apellidos', className: 'w-[220px]' },
-  { key: 'puestoNomina', label: 'Puesto nómina', className: 'w-[190px]' },
-  { key: 'residencia', label: 'Residencia', className: 'w-[130px]' },
-  { key: 'tipoSolicitud', label: 'Tipo', className: 'w-[110px]' },
-  { key: 'diasTeletrabajo', label: 'Días', className: 'w-[150px]' },
-  { key: 'estado', label: 'Estado', className: 'w-[110px]' },
-  { key: 'periodo', label: 'Periodo', className: 'w-[110px]' },
+const TELETRABAJO_TABLE_STORAGE_KEY = 'traccion.tableView.teletrabajo.solicitudes';
+const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
+  'empleado',
+  'nombreApellidos',
+  'puestoNomina',
+  'residencia',
+  'tipoSolicitud',
+  'diasTeletrabajo',
+  'estado',
+  'periodo',
+  'actions',
 ];
+const defaultTeletrabajoTablePreferences: TableViewPreferences<TeletrabajoTableColumnId> = {
+  sort: null,
+  columnWidths: {},
+};
 
 const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
   { key: 'empleado', header: 'Empleado', value: (solicitud) => solicitud.empleado },
@@ -101,7 +111,6 @@ export function TeletrabajoPage() {
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
-  const [sortState, setSortState] = useState<SortState | null>(null);
   const [importSummary, setImportSummary] = useState<string>('');
   const [wordStatus, setWordStatus] = useState<string>('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
@@ -121,13 +130,41 @@ export function TeletrabajoPage() {
     () => filterTeletrabajoSolicitudes(solicitudes, filters),
     [filters, solicitudes],
   );
-  const sortedSolicitudes = useMemo(() => {
-    if (!sortState) {
-      return sortTeletrabajoByDefault(filteredSolicitudes);
-    }
+  const { preferences, setSort, setColumnWidth, resetPreferences } =
+    useTableViewPreferences<TeletrabajoTableColumnId>({
+      storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
+      defaultPreferences: defaultTeletrabajoTablePreferences,
+      validColumnIds: teletrabajoTableColumnIds,
+    });
 
-    return sortTeletrabajoByColumn(filteredSolicitudes, sortState.key, sortState.direction);
-  }, [filteredSolicitudes, sortState]);
+  const teletrabajoTableColumns = useMemo<Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>>(
+    () => [
+      { id: 'empleado', header: 'Empleado', accessor: (s) => Number(s.empleado) || s.empleado, render: (s) => s.empleado, width: 105, minWidth: 85, maxWidth: 170, sortable: true, className: 'font-semibold text-metro-text' },
+      { id: 'nombreApellidos', header: 'Nombre y apellidos', accessor: (s) => s.nombreApellidos, render: (s) => s.nombreApellidos, width: 220, minWidth: 160, maxWidth: 420, sortable: true, className: 'text-metro-text' },
+      { id: 'puestoNomina', header: 'Puesto nómina', accessor: (s) => s.puestoNomina, render: (s) => s.puestoNomina, width: 190, minWidth: 140, maxWidth: 360, sortable: true, className: 'text-metro-muted' },
+      { id: 'residencia', header: 'Residencia', accessor: (s) => s.residencia, render: (s) => s.residencia, width: 130, minWidth: 100, maxWidth: 240, sortable: true, className: 'text-metro-muted' },
+      { id: 'tipoSolicitud', header: 'Tipo', accessor: (s) => s.tipoSolicitud, render: (s) => s.tipoSolicitud, width: 110, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
+      { id: 'diasTeletrabajo', header: 'Días', accessor: (s) => s.diasTeletrabajo.join(', '), render: (s) => s.diasTeletrabajo.join(', '), width: 150, minWidth: 110, maxWidth: 240, sortable: true, className: 'text-metro-muted' },
+      { id: 'estado', header: 'Estado', accessor: (s) => s.estado, render: (s) => s.estado, width: 110, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
+      { id: 'periodo', header: 'Periodo', accessor: (s) => s.periodo, render: (s) => s.periodo, width: 110, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
+      { id: 'actions', header: 'Acciones', render: (solicitud) => (
+        <div className="inline-flex items-center justify-end gap-1">
+          {solicitud.estado === 'aprobada' && (
+            <button aria-label="Generar acuerdo Word" className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50" disabled={generatingWordId !== null} onClick={(event) => { event.stopPropagation(); void handleGenerateWord(solicitud); }} title="Generar acuerdo Word" type="button">
+              {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
+            </button>
+          )}
+          <button className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark" onClick={(event) => { event.stopPropagation(); remove(solicitud.id); }} type="button">Eliminar</button>
+        </div>
+      ), width: 100, minWidth: 95, maxWidth: 130, resizable: false, isActionColumn: true, className: 'whitespace-nowrap' },
+    ],
+    [generatingWordId, remove],
+  );
+
+  const sortedSolicitudes = useMemo(
+    () => sortDataTableRows(filteredSolicitudes, teletrabajoTableColumns, preferences.sort),
+    [filteredSolicitudes, preferences.sort, teletrabajoTableColumns],
+  );
 
   const editorSolicitud =
     editorMode === 'edit'
@@ -159,13 +196,6 @@ export function TeletrabajoPage() {
   const closeEditor = () => {
     setEditorMode(null);
     setEditingSolicitudId(null);
-  };
-
-  const toggleSort = (key: TeletrabajoSortKey) => {
-    setSortState((current) => ({
-      key,
-      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
-    }));
   };
 
   const handleImportEncuesta = async (file: File) => {
@@ -311,121 +341,27 @@ export function TeletrabajoPage() {
             {filteredSolicitudes.length} registros
           </span>
         </div>
-        <div className="max-h-[460px] overflow-auto">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-              <tr>
-                {sortableColumns.map((column) => {
-                  const isActive = sortState?.key === column.key;
-
-                  return (
-                    <th className={`${column.className} px-3 py-2`} key={column.key}>
-                      <button
-                        className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
-                        onClick={() => toggleSort(column.key)}
-                        type="button"
-                      >
-                        <span>{column.label}</span>
-                        {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
-                      </button>
-                    </th>
-                  );
-                })}
-                <th className="w-[100px] px-3 py-2 text-right font-bold uppercase tracking-wide">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-metro-border bg-metro-surface">
-              {sortedSolicitudes.map((solicitud) => (
-                <tr
-                  className="cursor-pointer hover:bg-metro-red/10"
-                  key={solicitud.id}
-                  onClick={() => openEditor(solicitud)}
-                >
-                  <td
-                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                    title={solicitud.empleado}
-                  >
-                    {solicitud.empleado}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-text"
-                    title={solicitud.nombreApellidos}
-                  >
-                    {solicitud.nombreApellidos}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={solicitud.puestoNomina}
-                  >
-                    {solicitud.puestoNomina}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={solicitud.residencia}
-                  >
-                    {solicitud.residencia}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={solicitud.tipoSolicitud}
-                  >
-                    {solicitud.tipoSolicitud}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={solicitud.diasTeletrabajo.join(', ')}
-                  >
-                    {solicitud.diasTeletrabajo.join(', ')}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={solicitud.estado}>
-                    {solicitud.estado}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={solicitud.periodo}>
-                    {solicitud.periodo}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <div className="inline-flex items-center justify-end gap-1">
-                      {solicitud.estado === 'aprobada' && (
-                        <button
-                          aria-label="Generar acuerdo Word"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={generatingWordId !== null}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleGenerateWord(solicitud);
-                          }}
-                          title="Generar acuerdo Word"
-                          type="button"
-                        >
-                          {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
-                        </button>
-                      )}
-                      <button
-                        className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          remove(solicitud.id);
-                        }}
-                        type="button"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {sortedSolicitudes.length === 0 && (
-                <tr>
-                  <td className="px-3 py-6 text-center text-sm text-metro-muted" colSpan={9}>
-                    No hay solicitudes de teletrabajo para los criterios seleccionados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap justify-end pb-2">
+          <button
+            className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={resetPreferences}
+            type="button"
+          >
+            <RotateCcw size={14} /> Restablecer vista
+          </button>
         </div>
+        <DataTable
+          ariaLabel="Solicitudes de teletrabajo"
+          columnWidths={preferences.columnWidths}
+          columns={teletrabajoTableColumns}
+          emptyMessage="No hay solicitudes de teletrabajo para los criterios seleccionados."
+          getRowId={(solicitud) => solicitud.id}
+          onColumnWidthChange={setColumnWidth}
+          onRowClick={openEditor}
+          onSortChange={setSort}
+          rows={filteredSolicitudes}
+          sort={preferences.sort}
+        />
       </div>
 
       {editorMode && (

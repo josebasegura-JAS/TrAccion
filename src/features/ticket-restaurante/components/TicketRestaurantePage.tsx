@@ -1626,7 +1626,7 @@ function CalculationPanel({
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-metro-border text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+          <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
             {calculation.rows.map((row: TicketPersonCalculation) => (
               <tr key={row.empleado}>
                 <td className="px-2 py-1 font-semibold">{row.empleado}</td>
@@ -1941,7 +1941,7 @@ function AbsencePreviewModal({
                 <th className="px-1 py-1">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-metro-border [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+            <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
               {rows.map((row) => (
                 <tr className={row.errors.length > 0 ? 'bg-metro-red/10' : ''} key={row.id}>
                   <PreviewInput field="empleado" onChange={onChange} row={row} />
