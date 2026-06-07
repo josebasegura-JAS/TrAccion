@@ -10,7 +10,7 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
 const CURRENT_SCHEMA_VERSION = 1;
-const LOCK_TTL_MS = 2 * 60 * 1000;
+const LOCK_TTL_MS = 30 * 1000;
 
 export interface PersistedStorageRecord {
   key: string;
@@ -66,9 +66,6 @@ const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
-let activeLockPath: string | null = null;
-let activeLock: DatabaseLockInfo | null = null;
-let lockHeartbeat: NodeJS.Timeout | null = null;
 
 function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
   if (!value || typeof value !== 'object') {
@@ -186,12 +183,6 @@ async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void
   await writeFile(lockPath, JSON.stringify(lock, null, 2), { encoding: 'utf8', flag: 'wx' });
 }
 
-async function refreshLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  const nextLock = { ...lock, updatedAt: new Date().toISOString() };
-  await writeFile(lockPath, JSON.stringify(nextLock, null, 2), 'utf8');
-  activeLock = nextLock;
-}
-
 async function removeLock(lockPath: string, expectedOwnerId: string): Promise<void> {
   const lock = await readLock(lockPath);
   if (lock?.ownerId === expectedOwnerId) {
@@ -233,37 +224,10 @@ async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
   return lock;
 }
 
-function startLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): void {
-  if (lockHeartbeat) {
-    clearInterval(lockHeartbeat);
-  }
-
-  activeLockPath = lockPath;
-  activeLock = lock;
-  lockHeartbeat = setInterval(
-    () => {
-      if (!activeLock) {
-        return;
-      }
-      refreshLock(lockPath, activeLock).catch(() => undefined);
-    },
-    Math.floor(LOCK_TTL_MS / 3),
-  );
+async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
+  await removeLock(lockPath, lock.ownerId);
 }
 
-async function releaseActiveLock(): Promise<void> {
-  if (lockHeartbeat) {
-    clearInterval(lockHeartbeat);
-    lockHeartbeat = null;
-  }
-
-  if (activeLockPath && activeLock) {
-    await removeLock(activeLockPath, activeLock.ownerId);
-  }
-
-  activeLockPath = null;
-  activeLock = null;
-}
 
 async function backupExistingDatabase(databasePath: string): Promise<void> {
   try {
@@ -394,7 +358,6 @@ async function activateDatabase(
     await backupExistingDatabase(databasePath);
     const db = openDatabase(databasePath);
     database = db;
-    startLockHeartbeat(lockPath, lock);
     status = {
       ready: true,
       engine: 'better-sqlite3',
@@ -403,11 +366,11 @@ async function activateDatabase(
       schemaVersion: CURRENT_SCHEMA_VERSION,
       isDefaultPath,
       lockPath,
-      lock,
     };
+    await releaseLock(lockPath, lock);
     return status;
   } catch (error) {
-    await removeLock(lockPath, lock.ownerId);
+    await releaseLock(lockPath, lock);
     throw error;
   }
 }
@@ -640,7 +603,6 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
     }
 
     closeDatabase();
-    await releaseActiveLock();
 
     try {
       const nextStatus = await activateDatabase(
@@ -691,7 +653,6 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
       await backupExistingDatabase(previousStatus.path);
     }
     closeDatabase();
-    await releaseActiveLock();
     const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
     await writeDatabasePreferences({ customDirectoryPath: null });
     return nextStatus;
@@ -720,5 +681,4 @@ function errorMessage(error: unknown): string {
 
 export async function closeSqlitePersistence(): Promise<void> {
   closeDatabase();
-  await releaseActiveLock();
 }
