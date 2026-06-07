@@ -74,6 +74,27 @@ interface TraccionPersistedRecordsSnapshot {
   latestUpdatedAt: string | null;
 }
 
+
+interface TraccionRecordLockOwnerInfo {
+  ownerId: string;
+  ownerName: string;
+  machineName: string;
+  acquiredAt: string;
+  expiresAt: string;
+}
+
+interface TraccionRecordLockPayload {
+  module: string;
+  recordId: string;
+}
+
+interface TraccionRecordLockResult {
+  ok: boolean;
+  status: 'acquired' | 'released' | 'locked' | 'idle' | 'error';
+  lock: TraccionRecordLockOwnerInfo | null;
+  message: string;
+}
+
 interface TraccionApi {
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
@@ -82,6 +103,10 @@ interface TraccionApi {
   backupLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;
+  acquireRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  getRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
   openTeletrabajoWord?: (

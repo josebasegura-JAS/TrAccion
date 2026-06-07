@@ -11,6 +11,7 @@ import {
   type TaskDraftField,
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
+import { useSharedRecordLock } from '../services/useSharedRecordLock';
 
 const taskTextFields: Array<{ field: TaskDraftField; label: string; required?: boolean; type?: string }> = [
   { field: 'titulo', label: 'Título', required: true },
@@ -66,6 +67,11 @@ export function TaskEditor({
   const removeTask = useTaskStore((state) => state.remove);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [newUpdateText, setNewUpdateText] = useState('');
+  const recordLock = useSharedRecordLock({
+    module: 'tareas',
+    recordId: task?.id ?? null,
+    enabled: mode === 'edit' && Boolean(task?.id),
+  });
 
   useEffect(() => {
     loadConfiguracion();
@@ -82,7 +88,7 @@ export function TaskEditor({
   }, [draft.fase, taskPhases]);
 
   const isCreate = mode === 'create';
-  const canSubmit = draft.titulo.trim().length > 0;
+  const canSubmit = draft.titulo.trim().length > 0 && !recordLock.isReadOnly;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-[1px]">
@@ -115,11 +121,21 @@ export function TaskEditor({
           </button>
         </div>
 
+        {recordLock.message && (
+          <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+            recordLock.isReadOnly
+              ? 'border-red-400/40 bg-red-950/20 text-red-100'
+              : 'border-metro-border bg-metro-surface text-metro-muted'
+          }`}>
+            {recordLock.message}
+          </p>
+        )}
+
         <form
           className="flex min-h-0 flex-1 flex-col space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canSubmit) {
+            if (!canSubmit || recordLock.isReadOnly) {
               return;
             }
 
@@ -132,7 +148,10 @@ export function TaskEditor({
             onDone();
           }}
         >
-          <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+          <fieldset
+            className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 disabled:opacity-70 sm:grid-cols-2"
+            disabled={recordLock.isReadOnly}
+          >
             <label className="text-xs font-semibold text-metro-muted">
               Tipo
               <select
@@ -275,7 +294,7 @@ export function TaskEditor({
                 value={draft.observaciones}
               />
             </label>
-          </div>
+          </fieldset>
 
           <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
             <button
@@ -287,7 +306,8 @@ export function TaskEditor({
             </button>
             {!isCreate && task && (
               <button
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={recordLock.isReadOnly}
                 onClick={() => {
                   removeTask(task.id);
                   onDone();

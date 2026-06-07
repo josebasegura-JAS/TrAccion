@@ -16,6 +16,14 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('database:migrate-local-storage', { records }),
   saveLocalStorageRecord: (record: { key: string; value: string }) =>
     ipcRenderer.invoke('database:save-local-storage-record', record),
+  acquireRecordLock: (payload: { module: string; recordId: string }) =>
+    ipcRenderer.invoke('recordLock:acquire', payload),
+  heartbeatRecordLock: (payload: { module: string; recordId: string }) =>
+    ipcRenderer.invoke('recordLock:heartbeat', payload),
+  releaseRecordLock: (payload: { module: string; recordId: string }) =>
+    ipcRenderer.invoke('recordLock:release', payload),
+  getRecordLock: (payload: { module: string; recordId: string }) =>
+    ipcRenderer.invoke('recordLock:get', payload),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   openTeletrabajoWord: (buffer: ArrayBuffer, fileName: string) =>
