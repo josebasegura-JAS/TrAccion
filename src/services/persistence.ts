@@ -61,6 +61,19 @@ const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetadata';
 
 type PersistedStorageKey = (typeof PERSISTED_STORAGE_KEYS)[number];
 
+const PERSISTED_STORAGE_PREFIXES = [
+  'traccion.tableView.',
+  'traccion.header.',
+] as const;
+
+function shouldPersistDynamicKey(key: string): boolean {
+  if (key.startsWith('traccion.v1.sqlite.')) {
+    return false;
+  }
+
+  return PERSISTED_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
 export interface HydrationMetadata {
   lastUpdatedAt: string;
   sqlitePath: string | null;
@@ -74,7 +87,7 @@ export interface HydrationResult {
 }
 
 export function isPersistedStorageKey(key: string): key is PersistedStorageKey {
-  return PERSISTED_STORAGE_KEYS.includes(key as PersistedStorageKey);
+  return PERSISTED_STORAGE_KEYS.includes(key as PersistedStorageKey) || shouldPersistDynamicKey(key);
 }
 
 function isHydrationMetadata(value: unknown): value is HydrationMetadata {
@@ -110,23 +123,30 @@ function writeHydrationMetadata(metadata: HydrationMetadata): void {
 }
 
 function currentLocalRecords(): TraccionStorageRecord[] {
-  return PERSISTED_STORAGE_KEYS.flatMap((key) => {
-    const value = window.localStorage.getItem(key);
-    return value === null ? [] : [{ key, value }];
-  });
-}
+  const records: TraccionStorageRecord[] = [];
+  const seenKeys = new Set<string>();
 
-function hasNewerSqliteSnapshot(
-  sqliteUpdatedAt: string | null,
-  localMetadata: HydrationMetadata | null,
-): boolean {
-  if (!sqliteUpdatedAt || !localMetadata) {
-    return false;
+  for (const key of PERSISTED_STORAGE_KEYS) {
+    const value = window.localStorage.getItem(key);
+    if (value !== null) {
+      records.push({ key, value });
+      seenKeys.add(key);
+    }
   }
 
-  const sqliteTime = Date.parse(sqliteUpdatedAt);
-  const localTime = Date.parse(localMetadata.lastUpdatedAt);
-  return !Number.isNaN(sqliteTime) && !Number.isNaN(localTime) && sqliteTime > localTime;
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || seenKeys.has(key) || !isPersistedStorageKey(key)) {
+      continue;
+    }
+
+    const value = window.localStorage.getItem(key);
+    if (value !== null) {
+      records.push({ key, value });
+    }
+  }
+
+  return records;
 }
 
 function mirrorToSqlite(key: string, value: string): void {
@@ -139,7 +159,7 @@ function mirrorToSqlite(key: string, value: string): void {
     kind: 'saving',
     updatedAt: now.toISOString(),
     key,
-    message: 'Guardando datos...',
+    message: 'Guardando en SQLite...',
   });
 
   const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
@@ -148,7 +168,7 @@ function mirrorToSqlite(key: string, value: string): void {
       kind: 'error',
       updatedAt: new Date().toISOString(),
       key,
-      message: 'Error de guardado: SQLite no disponible.',
+      message: 'SQLite no disponible: cambio mantenido solo como caché local pendiente de respaldo.',
     });
     return;
   }
@@ -161,7 +181,9 @@ function mirrorToSqlite(key: string, value: string): void {
           kind: 'error',
           updatedAt: new Date().toISOString(),
           key,
-          message: status.message ?? 'Error de guardado: SQLite no está activo.',
+          message:
+            status.message ??
+            'SQLite no está activo: cambio mantenido solo como caché local pendiente de respaldo.',
         });
         return;
       }
@@ -170,16 +192,16 @@ function mirrorToSqlite(key: string, value: string): void {
         kind: 'saved',
         updatedAt: new Date().toISOString(),
         key,
-        message: `Guardado ${formatPersistenceTime()}`,
+        message: `Guardado en SQLite ${formatPersistenceTime()}`,
       });
     })
     .catch((error: unknown) => {
-      console.warn('No se ha podido sincronizar la persistencia con SQLite.', error);
+      console.warn('No se ha podido guardar en SQLite.', error);
       emitPersistenceFeedback({
         kind: 'error',
         updatedAt: new Date().toISOString(),
         key,
-        message: 'Error de guardado.',
+        message: 'Error de guardado SQLite: cambio mantenido solo como caché local.',
       });
     });
 }
@@ -255,7 +277,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     if (sqliteRecords.length === 0) {
       if (localRecords.length > 0) {
         await window.traccion.backupLocalStorage?.(localRecords);
-        bootstrapSqlitePersistence();
+        bootstrapSqlitePersistence(true);
       }
       return {
         status: 'kept-localStorage',
@@ -263,27 +285,10 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       };
     }
 
-    const localMetadata = readHydrationMetadata();
     const hasLocalRecords = localRecords.length > 0;
-    // Regla anti-pérdida: una SQLite compartida/personalizada se considera fuente de arranque;
-    // en la ruta local por defecto solo gana si su updated_at supera la metadata local.
-    // Si no existe metadata comparable, se mantiene localStorage y se respalda en SQLite.
-    const shouldHydrateFromSqlite =
-      !hasLocalRecords ||
-      snapshot.status.isDefaultPath === false ||
-      hasNewerSqliteSnapshot(snapshot.latestUpdatedAt, localMetadata);
 
-    if (!shouldHydrateFromSqlite) {
-      if (hasLocalRecords) {
-        await window.traccion.backupLocalStorage?.(localRecords);
-      }
-      return {
-        status: 'kept-localStorage',
-        reason:
-          'SQLite no usa ruta compartida y no consta más reciente que localStorage; no se sobrescribe.',
-      };
-    }
-
+    // SQLite es la fuente principal de arranque. Si contiene datos, se aplica siempre
+    // sobre la caché local, guardando antes un backup del estado local para poder recuperar.
     if (hasLocalRecords) {
       await window.traccion.backupLocalStorage?.(localRecords);
     }
@@ -294,8 +299,8 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       status: 'hydrated-from-sqlite',
       reason:
         snapshot.status.isDefaultPath === false
-          ? 'Ruta SQLite personalizada.'
-          : 'SQLite más reciente.',
+          ? 'SQLite parametrizada aplicada como fuente principal.'
+          : 'SQLite local aplicada como fuente principal.',
     };
   } catch (error) {
     console.warn('No se ha podido rehidratar localStorage desde SQLite.', error);
@@ -306,12 +311,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
   }
 }
 
-export function bootstrapSqlitePersistence(): void {
+export function bootstrapSqlitePersistence(force = false): void {
   if (!window.traccion?.migrateLocalStorage) {
     return;
   }
 
-  if (window.localStorage.getItem(SQLITE_MIGRATION_FLAG_KEY) === 'true') {
+  if (!force && window.localStorage.getItem(SQLITE_MIGRATION_FLAG_KEY) === 'true') {
     return;
   }
 
