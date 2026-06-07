@@ -19,6 +19,7 @@ import {
 import { useVinculogramaStore } from '../store/useVinculogramaStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 
 type VinculogramaTableColumnId = 'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'status' | 'actions';
@@ -243,6 +244,7 @@ function VinculogramaModal({
             <button className={buttonClass} disabled={isReadOnly} onClick={onSave} type="button">
               <Save size={16} /> Guardar
             </button>
+            <InlineSaveFeedback />
           </div>
         </div>
       </div>
