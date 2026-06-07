@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'unsafe-inline'" />
+    <title>Cargando TrAccion</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #0f1f2a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 30% 18%, rgba(214, 35, 53, 0.22), transparent 31%),
+          linear-gradient(145deg, #132836 0%, #0d1a24 56%, #081119 100%);
+        color: #f7fbfd;
+        display: grid;
+        place-items: center;
+        user-select: none;
+      }
+
+      .splash-card {
+        width: 390px;
+        min-height: 292px;
+        padding: 28px 32px 24px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 28px;
+        background: rgba(12, 24, 34, 0.82);
+        box-shadow: 0 28px 65px rgba(0, 0, 0, 0.34);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+      }
+
+      .logo {
+        width: 168px;
+        height: 168px;
+        border-radius: 34px;
+        object-fit: cover;
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+      }
+
+      .title {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .subtitle {
+        margin: -6px 0 0;
+        color: rgba(247, 251, 253, 0.72);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .loading-row {
+        width: 100%;
+        margin-top: 8px;
+      }
+
+      .loading-text {
+        margin: 0 0 8px;
+        color: rgba(247, 251, 253, 0.82);
+        font-size: 13px;
+        text-align: center;
+      }
+
+      .progress {
+        position: relative;
+        height: 5px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .progress::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 42%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #8f1724, #d62335, #ff6c78);
+        animation: load 1.25s ease-in-out infinite;
+      }
+
+      @keyframes load {
+        0% { transform: translateX(-105%); }
+        100% { transform: translateX(245%); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="splash-card" aria-label="TrAccion se está iniciando">
+      <img class="logo" src="./traccion-splash.png" alt="TrAccion" />
+      <h1 class="title">TrAccion</h1>
+      <p class="subtitle">Relaciones Laborales</p>
+      <div class="loading-row" aria-hidden="true">
+        <p class="loading-text">Inicializando sistema...</p>
+        <div class="progress"></div>
+      </div>
+    </main>
+  </body>
+</html>
