@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_TICKET_RESTAURANT_CONFIG,
   buildTicketRestaurantAbsence,
   buildTicketPerson,
   buildYearCalendar,
@@ -149,12 +150,21 @@ describe('ticket restaurante calculation domain', () => {
       timestamp,
       'absence-1',
     );
+    const config = {
+      ...DEFAULT_TICKET_RESTAURANT_CONFIG,
+      importeTicket: 16,
+      pedidoMensual: 0,
+      rules: {
+        ...DEFAULT_TICKET_RESTAURANT_CONFIG.rules,
+        noOrderMonths: [],
+      },
+    };
 
     const march = calculateTicketMonth(
       [person],
       [calendar],
       [absence],
-      { importeTicket: 16, pedidoMensual: 0 },
+      config,
       2026,
       3,
     );
@@ -162,7 +172,7 @@ describe('ticket restaurante calculation domain', () => {
       [person],
       [calendar],
       [absence],
-      { importeTicket: 16, pedidoMensual: 0 },
+      config,
       2026,
       4,
     );
@@ -170,7 +180,7 @@ describe('ticket restaurante calculation domain', () => {
       [person],
       [calendar],
       [absence],
-      { importeTicket: 16, pedidoMensual: 0 },
+      config,
       2026,
       5,
     );
