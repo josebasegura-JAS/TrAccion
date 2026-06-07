@@ -199,6 +199,10 @@ export function DashboardCards({
     loadTickets();
   }, [loadSessions, loadSolicitudes, loadTasks, loadTickets]);
 
+  const openRecord = (target: DashboardNavigationTarget) => {
+    onOpenRecord?.(target);
+  };
+
   const activeTasks = useMemo(
     () => tasks.filter((task) => !task.deletedAt && !isTaskClosed(task)),
     [tasks],
@@ -690,7 +694,7 @@ export function DashboardCards({
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.85fr_1fr]">
-        <DashboardList title="Mis tareas críticas" action="Ver todas mis tareas">
+        <DashboardList title="Mis tareas críticas" action="Ver todas mis tareas" onActionClick={() => openRecord({ view: 'tareas' })}>
           {criticalTasks.slice(0, 5).map((task) => (
             <DashboardListRow
               badge={task.prioridad === 'critica' ? 'Crítica' : 'Alta'}
@@ -699,6 +703,7 @@ export function DashboardCards({
               label={task.titulo}
               meta={task.fase || 'Tareas'}
               tone="bg-red-500"
+              onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
             />
           ))}
           {criticalTasks.length === 0 && (
@@ -706,7 +711,7 @@ export function DashboardCards({
           )}
         </DashboardList>
 
-        <DashboardList title="Próximos hitos" action="Ver calendario completo">
+        <DashboardList title="Próximos hitos" action="Ver calendario completo" onActionClick={() => setSelectedDate(todayIso)}>
           {upcomingEvents.slice(0, 5).map((event) => (
             <DashboardListRow
               badge={formatDisplayDate(event.date)}
@@ -715,6 +720,7 @@ export function DashboardCards({
               label={event.title}
               meta={event.detail}
               tone={eventTone[event.type]}
+              onClick={() => openRecord({ view: event.view, recordId: event.recordId })}
             />
           ))}
           {upcomingEvents.length === 0 && (
@@ -722,7 +728,7 @@ export function DashboardCards({
           )}
         </DashboardList>
 
-        <DashboardList title="Actividad reciente" action="Ver toda la actividad">
+        <DashboardList title="Actividad reciente" action="Ver toda la actividad" onActionClick={() => openRecord({ view: 'tareas' })}>
           {tasks
             .filter((task) => !task.deletedAt)
             .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
@@ -735,6 +741,7 @@ export function DashboardCards({
                 label={`Tarea actualizada: ${task.titulo}`}
                 meta={taskStateLabels[task.estado]}
                 tone="bg-slate-400"
+                onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
               />
             ))}
           {tasks.filter((task) => !task.deletedAt).length === 0 && (
@@ -789,7 +796,7 @@ export function DashboardCards({
                       <button
                         className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-black text-metro-secondary transition hover:border-metro-red hover:text-metro-text"
                         onClick={() => {
-                          onOpenRecord?.({ view: event.view, recordId: event.recordId });
+                          openRecord({ view: event.view, recordId: event.recordId });
                           setSelectedDate(null);
                         }}
                         type="button"
@@ -882,16 +889,22 @@ function DashboardList({
   title,
   action,
   children,
+  onActionClick,
 }: {
   title: string;
   action: string;
   children: ReactNode;
+  onActionClick?: () => void;
 }) {
   return (
     <article className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
       <h3 className="mb-4 text-base font-black">{title}</h3>
       <div className="space-y-3">{children}</div>
-      <button className="mt-5 text-xs font-black text-metro-red hover:text-red-400" type="button">
+      <button
+        className="mt-5 text-xs font-black text-metro-red hover:text-red-400"
+        onClick={onActionClick}
+        type="button"
+      >
         {action} <ChevronRight className="inline" size={14} />
       </button>
     </article>
@@ -904,15 +917,20 @@ function DashboardListRow({
   label,
   meta,
   tone,
+  onClick,
 }: {
   badge: string;
   date: string;
   label: string;
   meta: string;
   tone: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="grid grid-cols-[0.75rem_1fr_auto] items-center gap-3 text-sm">
+  const rowClassName = `grid w-full grid-cols-[0.75rem_1fr_auto] items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm transition ${
+    onClick ? 'cursor-pointer hover:bg-white/5 focus:bg-white/5 focus:outline-none' : ''
+  }`;
+  const content = (
+    <>
       <span className={`h-2.5 w-2.5 rounded-full ${tone}`} />
       <div className="min-w-0">
         <p className="truncate font-black text-metro-text">{label}</p>
@@ -922,8 +940,18 @@ function DashboardListRow({
         <span className="rounded-full bg-metro-panel px-2 py-1 text-metro-secondary">{badge}</span>
         {date && <span className="text-metro-muted">{date}</span>}
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button className={rowClassName} onClick={onClick} type="button">
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={rowClassName}>{content}</div>;
 }
 
 function EmptyDashboardRow({ text }: { text: string }) {
