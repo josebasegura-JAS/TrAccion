@@ -22,6 +22,14 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Comité de Empresa',
     subtitle: 'Sesiones, puntos del orden del día y tareas tratadas.',
   },
+  actas: {
+    title: 'Actas',
+    subtitle: 'Actas de Comité y Paritaria, estados y alegaciones sindicales.',
+  },
+  paritaria: {
+    title: 'Comisión Paritaria',
+    subtitle: 'Sesiones, puntos del orden del día y tareas tratadas.',
+  },
   'criterios-rrll': {
     title: 'Criterios RRLL',
     subtitle: 'Criterios internos, consultas y referencias de aplicación.',

@@ -4,6 +4,7 @@ import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../services/persistence';
 import {
   CalendarDays,
+  FileText,
   ClipboardList,
   Database,
   Gift,
@@ -31,6 +32,8 @@ export type AppView =
   | 'plantilla'
   | 'tareas'
   | 'comite'
+  | 'actas'
+  | 'paritaria'
   | 'criterios-rrll'
   | 'teletrabajo'
   | 'ticket-restaurante'
@@ -65,6 +68,8 @@ const navigationGroups: NavigationGroup[] = [
     items: [
       { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
       { label: 'Comité de Empresa', icon: CalendarDays, view: 'comite' },
+      { label: 'Actas', icon: FileText, view: 'actas' },
+      { label: 'Comisión Paritaria', icon: CalendarDays, view: 'paritaria' },
     ],
   },
   {
