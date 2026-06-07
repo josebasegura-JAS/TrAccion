@@ -1,9 +1,10 @@
 import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   EMPTY_LICENCIA_SIN_SUELDO_DRAFT,
@@ -145,6 +146,12 @@ function LicenseEditor({
   const [errors, setErrors] = useState<string[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [newUpdate, setNewUpdate] = useState('');
+  const recordLock = useSharedRecordLock({
+    module: 'licencias-sin-sueldo',
+    recordId: record?.id ?? null,
+    enabled: mode === 'edit' && Boolean(record?.id),
+  });
+  const isReadOnly = recordLock.isReadOnly;
 
   const suggestions = useMemo(
     () => suggestEmployees(employees, employeeSearch).filter((suggestion) => suggestion.empleado !== draft.numeroEmpleado),
@@ -194,6 +201,7 @@ function LicenseEditor({
   };
 
   const handleSave = () => {
+    if (isReadOnly) return;
     const normalizedDraft = normalizeDraftForTipo(draft);
     const result = validateLicenciaSinSueldoDraft(normalizedDraft);
     if (!result.ok) {
@@ -219,6 +227,16 @@ function LicenseEditor({
         </div>
 
         <div className="max-h-[70vh] space-y-4 overflow-auto px-5 py-4">
+          {recordLock.message && (
+            <p className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+              isReadOnly
+                ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                : 'border-metro-border bg-metro-surface text-metro-muted'
+            }`}>
+              {recordLock.message}
+            </p>
+          )}
+
           {errors.length > 0 && (
             <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-100">
               <ul className="list-disc space-y-1 pl-5">
@@ -227,6 +245,7 @@ function LicenseEditor({
             </div>
           )}
 
+          <fieldset disabled={isReadOnly} className="space-y-4 disabled:opacity-70">
           {mode === 'edit' && draft.estado !== 'historico' && (
             <div className="flex flex-wrap gap-2 rounded-xl border border-metro-border bg-slate-950/10 p-3">
               <span className="w-full text-xs font-semibold uppercase tracking-wide text-metro-muted">Flujo</span>
@@ -314,13 +333,14 @@ function LicenseEditor({
               )}
             </div>
           </section>
+          </fieldset>
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t border-metro-border px-5 py-4">
-          <div>{mode === 'edit' && <button className={secondaryButtonClass} onClick={onDelete} type="button"><Trash2 size={16} /> Eliminar</button>}</div>
+          <div>{mode === 'edit' && <button className={secondaryButtonClass} disabled={isReadOnly} onClick={onDelete} type="button"><Trash2 size={16} /> Eliminar</button>}</div>
           <div className="flex flex-wrap gap-2">
             <button className={secondaryButtonClass} onClick={onClose} type="button">Cancelar</button>
-            <button className={buttonClass} onClick={handleSave} type="button"><Save size={16} /> Guardar</button>
+            <button className={buttonClass} disabled={isReadOnly} onClick={handleSave} type="button"><Save size={16} /> Guardar</button>
           </div>
         </div>
       </div>
@@ -450,6 +470,21 @@ export function LicenciasSinSueldoPage() {
   const historicalYears = useMemo(() => Array.from(new Set(effectiveRecords.filter((record) => record.estado === 'historico').map(getHistoricalYear))).sort((first, second) => second - first), [effectiveRecords]);
   const groupedHistory = useMemo(() => historicalYears.map((year) => ({ year, records: blocks.historico.filter((record) => getHistoricalYear(record) === year) })), [blocks.historico, historicalYears]);
 
+  const acquireMutationLock = useCallback(async (record: LicenciaSinSueldoRecord) => {
+    const payload = { module: 'licencias-sin-sueldo', recordId: record.id };
+    const api = window.traccion;
+    const result = await api?.acquireRecordLock?.(payload);
+    if (result?.status === 'locked') {
+      window.alert(result.message);
+      return false;
+    }
+    return true;
+  }, []);
+
+  const releaseMutationLock = useCallback(async (record: LicenciaSinSueldoRecord) => {
+    await window.traccion?.releaseRecordLock?.({ module: 'licencias-sin-sueldo', recordId: record.id });
+  }, []);
+
   const saveDraft = (draft: LicenciaSinSueldoDraft) => {
     if (!editor) return;
     if (editor.mode === 'create') {
@@ -460,16 +495,25 @@ export function LicenciasSinSueldoPage() {
     setEditor(null);
   };
 
-  const deleteRecord = (record: LicenciaSinSueldoRecord) => {
-    if (window.confirm(`¿Eliminar la solicitud de ${record.nombreCompleto}?`)) {
-      remove(record.id);
-      setEditor(null);
+  const deleteRecord = async (record: LicenciaSinSueldoRecord) => {
+    if (!window.confirm(`¿Eliminar la solicitud de ${record.nombreCompleto}?`)) {
+      return;
     }
+    if (!(await acquireMutationLock(record))) {
+      return;
+    }
+    remove(record.id);
+    await releaseMutationLock(record);
+    setEditor(null);
   };
 
-  const advanceRecord = (record: LicenciaSinSueldoRecord) => {
+  const advanceRecord = async (record: LicenciaSinSueldoRecord) => {
+    if (!(await acquireMutationLock(record))) {
+      return;
+    }
     const nextEstado = record.estado === 'pendiente_aprobacion' ? 'pendiente_firma' : record.estado === 'pendiente_firma' ? 'vigente' : record.estado;
     update(record.id, { ...toDraft(record), estado: nextEstado });
+    await releaseMutationLock(record);
   };
 
   const toggleYear = (year: number) => {
@@ -550,7 +594,7 @@ export function LicenciasSinSueldoPage() {
           employees={employees}
           mode={editor.mode}
           onClose={() => setEditor(null)}
-          onDelete={() => editor.record && deleteRecord(editor.record)}
+          onDelete={() => { if (editor.record) void deleteRecord(editor.record); }}
           onSave={saveDraft}
           record={editor.record}
         />
