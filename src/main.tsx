@@ -1,7 +1,16 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppBootScreen } from './components/AppBootScreen';
 import { hydrateLocalStorageFromSqlite } from './services/persistence';
 import './styles.css';
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
 
 function notifyRendererReady(): void {
   window.requestAnimationFrame(() => {
@@ -11,10 +20,24 @@ function notifyRendererReady(): void {
   });
 }
 
+function notifyBootVisible(): void {
+  window.traccion?.notifyBootVisible?.();
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+
+function renderBootScreen(message?: string): void {
+  root.render(
+    <React.StrictMode>
+      <AppBootScreen message={message} />
+    </React.StrictMode>,
+  );
+}
+
 async function renderApp(): Promise<void> {
   const { App } = await import('./App');
 
-  ReactDOM.createRoot(document.getElementById('root')!).render(
+  root.render(
     <React.StrictMode>
       <App />
     </React.StrictMode>,
@@ -24,7 +47,11 @@ async function renderApp(): Promise<void> {
 }
 
 async function startApp(): Promise<void> {
+  renderBootScreen('Inicializando base de datos...');
+  await waitForNextPaint();
+  notifyBootVisible();
   await hydrateLocalStorageFromSqlite();
+  renderBootScreen('Preparando módulos...');
   await renderApp();
 }
 
@@ -33,6 +60,7 @@ startApp().catch((error: unknown) => {
     'No se ha podido completar el arranque hidratado; se renderiza con localStorage.',
     error,
   );
+  renderBootScreen('Preparando arranque alternativo...');
   renderApp().catch((renderError: unknown) => {
     console.error('No se ha podido arrancar TrAccion.', renderError);
     window.traccion?.notifyRendererReady?.();

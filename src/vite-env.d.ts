@@ -99,6 +99,7 @@ interface TraccionRecordLockResult {
 }
 
 interface TraccionApi {
+  notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
