@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { UserRound } from 'lucide-react';
 import type { AppView } from './Sidebar';
 import { GlobalSearch } from './GlobalSearch';
+import { readStorageItem, writeStorageItem } from '../services/persistence';
 
 const traccionLogoSrc = '../assets/logo/traccion-logo.png';
 
@@ -69,7 +70,7 @@ const getFallbackUserName = () => {
     return 'Usuario local';
   }
 
-  return window.localStorage.getItem('traccion.header.username') ?? 'Usuario local';
+  return readStorageItem('traccion.header.username') ?? 'Usuario local';
 };
 
 export function Header({
@@ -94,7 +95,7 @@ export function Header({
         }
 
         setWindowsUserName(normalizedUserName);
-        window.localStorage.setItem('traccion.header.username', normalizedUserName);
+        writeStorageItem('traccion.header.username', normalizedUserName);
       })
       .catch(() => {
         if (isMounted) {
