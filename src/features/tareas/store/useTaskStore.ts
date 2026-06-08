@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
   DEFAULT_TASK_PHASE,
@@ -20,6 +21,65 @@ import {
 const STORAGE_KEY = 'traccion.v1.tareas.tasks';
 const LEGACY_PETICIONES_STORAGE_KEY = 'traccion.v1.peticiones.peticiones';
 const PETICIONES_MIGRATION_FLAG_KEY = 'traccion.v1.tareas.peticionesMigrated';
+
+
+const TASK_AUDIT_LABELS = {
+  titulo: 'Título',
+  descripcion: 'Descripción',
+  tipo: 'Tipo',
+  fase: 'Fase',
+  estado: 'Estado',
+  prioridad: 'Prioridad',
+  fechaLimite: 'Fecha límite',
+  responsable: 'Responsable',
+  origen: 'Detalle origen',
+  sindicato: 'Origen',
+  observaciones: 'Observaciones',
+  mail: 'Email',
+} satisfies Partial<Record<keyof TaskDraft, string>>;
+
+const TASK_AUDIT_FIELDS: Array<keyof TaskDraft> = [
+  'titulo',
+  'descripcion',
+  'tipo',
+  'fase',
+  'estado',
+  'prioridad',
+  'fechaLimite',
+  'responsable',
+  'origen',
+  'sindicato',
+  'observaciones',
+  'mail',
+];
+
+function pickTaskAuditSnapshot(task: Task | TaskDraft): Record<string, unknown> {
+  return TASK_AUDIT_FIELDS.reduce<Record<string, unknown>>((snapshot, field) => {
+    snapshot[field] = task[field];
+    return snapshot;
+  }, {});
+}
+
+function registerTaskUpdateAudit(previousTask: Task, draft: TaskDraft): void {
+  const changes = buildAuditChanges(
+    pickTaskAuditSnapshot(previousTask),
+    pickTaskAuditSnapshot(draft),
+    TASK_AUDIT_LABELS,
+    TASK_AUDIT_FIELDS,
+  );
+
+  if (changes.length === 0) {
+    return;
+  }
+
+  addAuditEvent({
+    module: 'tareas',
+    entityId: previousTask.id,
+    action: changes.some((change) => change.field === 'estado') ? 'status_changed' : 'updated',
+    summary: buildUpdateSummary(changes),
+    changes,
+  });
+}
 
 const SESSION_TASK_REFERENCES = [
   {
@@ -482,6 +542,13 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         deletedAt: null,
         closedAt: isTaskClosed(draft) ? now : null,
       };
+      addAuditEvent({
+        module: 'tareas',
+        entityId: task.id,
+        action: 'created',
+        summary: 'Registro creado',
+        changes: [],
+      });
       const tasks = [...state.tasks, task];
       persistTasks(tasks);
       return {
@@ -555,6 +622,8 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           return task;
         }
 
+        registerTaskUpdateAudit(task, draft);
+
         return {
           ...task,
           ...draft,
@@ -574,9 +643,20 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   remove: (id) => {
     set((state) => {
       const now = new Date().toISOString();
-      const tasks = state.tasks.map((task) =>
-        task.id === id ? { ...task, deletedAt: now, updatedAt: now } : task,
-      );
+      const tasks = state.tasks.map((task) => {
+        if (task.id !== id) {
+          return task;
+        }
+
+        addAuditEvent({
+          module: 'tareas',
+          entityId: task.id,
+          action: 'deleted',
+          summary: 'Registro eliminado',
+          changes: [],
+        });
+        return { ...task, deletedAt: now, updatedAt: now };
+      });
       persistTasks(tasks);
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
@@ -593,6 +673,17 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
           return task;
         }
+
+        addAuditEvent({
+          module: 'tareas',
+          entityId: task.id,
+          action: 'status_changed',
+          summary: `Estado cambiado: ${task.estado} → cerrada`,
+          changes: [
+            { field: 'estado', label: 'Estado', before: task.estado, after: 'cerrada' },
+            { field: 'fase', label: 'Fase', before: task.fase, after: CLOSED_TASK_PHASE },
+          ],
+        });
 
         return {
           ...task,
