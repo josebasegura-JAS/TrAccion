@@ -53,6 +53,9 @@ interface HistoricYearGroup {
   tasks: Task[];
 }
 
+const HISTORIC_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+const DEFAULT_HISTORIC_PAGE_SIZE = 50;
+
 const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
   { key: 'titulo', label: 'Título', className: 'w-[320px]' },
   { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
@@ -152,19 +155,171 @@ function sortHistoricTasks(tasks: Task[], sortState: HistoricSortState): Task[] 
     .map(({ task }) => task);
 }
 
-function groupHistoricTasks(tasks: Task[], sortState: HistoricSortState): HistoricYearGroup[] {
+function groupHistoricTasks(tasks: Task[]): HistoricYearGroup[] {
   const groups = new Map<string, Task[]>();
 
   tasks.forEach((task) => {
     const year = getTaskClosedYear(task);
-    groups.set(year, [...(groups.get(year) ?? []), task]);
+    const yearTasks = groups.get(year);
+
+    if (yearTasks) {
+      yearTasks.push(task);
+      return;
+    }
+
+    groups.set(year, [task]);
   });
 
   return Array.from(groups.entries())
     .sort(([firstYear], [secondYear]) =>
       secondYear.localeCompare(firstYear, 'es', { numeric: true }),
     )
-    .map(([year, groupTasks]) => ({ year, tasks: sortHistoricTasks(groupTasks, sortState) }));
+    .map(([year, groupTasks]) => ({ year, tasks: groupTasks }));
+}
+
+
+function HistoricYearSection({
+  group,
+  isOpen,
+  onOpenChange,
+  onOpenTask,
+  onPageChange,
+  onPageSizeChange,
+  onSortChange,
+  page,
+  pageSize,
+  sortState,
+}: {
+  group: HistoricYearGroup;
+  isOpen: boolean;
+  onOpenChange: (year: string) => void;
+  onOpenTask: (task: Task) => void;
+  onPageChange: (year: string, page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onSortChange: (key: HistoricSortKey) => void;
+  page: number;
+  pageSize: number;
+  sortState: HistoricSortState;
+}) {
+  const sortedTasks = useMemo(() => {
+    if (!isOpen) {
+      return [];
+    }
+
+    return sortHistoricTasks(group.tasks, sortState);
+  }, [group.tasks, isOpen, sortState]);
+
+  const totalPages = Math.max(1, Math.ceil(group.tasks.length / pageSize));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const firstRow = (safePage - 1) * pageSize;
+  const visibleTasks = sortedTasks.slice(firstRow, firstRow + pageSize);
+  const firstVisible = group.tasks.length === 0 ? 0 : firstRow + 1;
+  const lastVisible = Math.min(firstRow + pageSize, group.tasks.length);
+
+  return (
+    <div className="border-b border-metro-border last:border-b-0">
+      <button
+        className="flex w-full items-center gap-2 bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
+        onClick={() => onOpenChange(group.year)}
+        type="button"
+      >
+        {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        {group.year} ({group.tasks.length})
+      </button>
+      {isOpen && (
+        <div className="border-t border-metro-border bg-metro-surface">
+          <div className="flex flex-col gap-2 border-b border-metro-border px-3 py-2 text-xs text-metro-muted md:flex-row md:items-center md:justify-between">
+            <span>
+              Mostrando {firstVisible}-{lastVisible} de {group.tasks.length}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2">
+                Mostrar
+                <select
+                  className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1 text-metro-text outline-none"
+                  onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                  value={pageSize}
+                >
+                  {HISTORIC_PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={safePage <= 1}
+                onClick={() => onPageChange(group.year, safePage - 1)}
+                type="button"
+              >
+                ← Anterior
+              </button>
+              <span className="font-semibold text-metro-text">
+                Página {safePage} de {totalPages}
+              </span>
+              <button
+                className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={safePage >= totalPages}
+                onClick={() => onPageChange(group.year, safePage + 1)}
+                type="button"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
+          <div className="max-h-[320px] overflow-auto">
+            <table className="w-full table-fixed text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+                <tr>
+                  {historicColumns.map((column) => {
+                    const isActive = sortState.key === column.key;
+
+                    return (
+                      <th className={`${column.className} px-3 py-2`} key={column.key}>
+                        <button
+                          className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
+                          onClick={() => onSortChange(column.key)}
+                          type="button"
+                        >
+                          <span>{column.label}</span>
+                          {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
+                        </button>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+                {visibleTasks.map((task) => (
+                  <tr className="cursor-pointer" key={task.id} onClick={() => onOpenTask(task)}>
+                    <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>
+                      {task.titulo}
+                    </td>
+                    <td
+                      className="truncate px-3 py-1.5 text-metro-muted"
+                      title={formatDateTime(task.closedAt)}
+                    >
+                      {formatDateTime(task.closedAt)}
+                    </td>
+                    <td
+                      className="truncate px-3 py-1.5 text-metro-muted"
+                      title={task.responsable}
+                    >
+                      {task.responsable || '—'}
+                    </td>
+                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
+                      {task.prioridad}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function TareasPage({
@@ -186,6 +341,8 @@ export function TareasPage({
   });
   const [isHistoricOpen, setIsHistoricOpen] = useState(false);
   const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
+  const [historicPages, setHistoricPages] = useState<Record<string, number>>({});
+  const [historicPageSize, setHistoricPageSize] = useState<number>(DEFAULT_HISTORIC_PAGE_SIZE);
   const [isOriginsModalOpen, setIsOriginsModalOpen] = useState(false);
   const processedNavigationNonceRef = useRef<number | null>(null);
 
@@ -217,10 +374,7 @@ export function TareasPage({
     () => visibleTasks.filter((task) => isTaskClosed(task)),
     [visibleTasks],
   );
-  const historicGroups = useMemo(
-    () => groupHistoricTasks(historicTasks, historicSortState),
-    [historicTasks, historicSortState],
-  );
+  const historicGroups = useMemo(() => groupHistoricTasks(historicTasks), [historicTasks]);
   const activeTasksFilterLabel = buildFilterLabel([
     ['Búsqueda', filters.search],
     ['Tipo', filters.tipo],
@@ -457,10 +611,20 @@ export function TareasPage({
       key,
       direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
     }));
+    setHistoricPages({});
   };
 
   const toggleHistoricYear = (year: string) => {
     setOpenYears((current) => ({ ...current, [year]: !current[year] }));
+  };
+
+  const setHistoricPage = (year: string, page: number) => {
+    setHistoricPages((current) => ({ ...current, [year]: page }));
+  };
+
+  const updateHistoricPageSize = (pageSize: number) => {
+    setHistoricPageSize(pageSize);
+    setHistoricPages({});
   };
 
   return (
@@ -592,86 +756,21 @@ export function TareasPage({
             {historicGroups.length === 0 && (
               <p className="px-3 py-3 text-sm text-metro-muted">No hay tareas cerradas.</p>
             )}
-            {historicGroups.map((group) => {
-              const isYearOpen = openYears[group.year] ?? false;
-
-              return (
-                <div className="border-b border-metro-border last:border-b-0" key={group.year}>
-                  <button
-                    className="flex w-full items-center gap-2 bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
-                    onClick={() => toggleHistoricYear(group.year)}
-                    type="button"
-                  >
-                    {isYearOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    {group.year} ({group.tasks.length})
-                  </button>
-                  {isYearOpen && (
-                    <div className="max-h-[320px] overflow-auto">
-                      <table className="w-full table-fixed text-left text-xs">
-                        <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-                          <tr>
-                            {historicColumns.map((column) => {
-                              const isActive = historicSortState.key === column.key;
-
-                              return (
-                                <th className={`${column.className} px-3 py-2`} key={column.key}>
-                                  <button
-                                    className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
-                                    onClick={() => toggleHistoricSort(column.key)}
-                                    type="button"
-                                  >
-                                    <span>{column.label}</span>
-                                    {isActive && (
-                                      <span>
-                                        {historicSortState.direction === 'asc' ? '↑' : '↓'}
-                                      </span>
-                                    )}
-                                  </button>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
-                          {group.tasks.map((task) => (
-                            <tr
-                              className="cursor-pointer"
-                              key={task.id}
-                              onClick={() => openEditor(task)}
-                            >
-                              <td
-                                className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                                title={task.titulo}
-                              >
-                                {task.titulo}
-                              </td>
-                              <td
-                                className="truncate px-3 py-1.5 text-metro-muted"
-                                title={formatDateTime(task.closedAt)}
-                              >
-                                {formatDateTime(task.closedAt)}
-                              </td>
-                              <td
-                                className="truncate px-3 py-1.5 text-metro-muted"
-                                title={task.responsable}
-                              >
-                                {task.responsable || '—'}
-                              </td>
-                              <td
-                                className="truncate px-3 py-1.5 text-metro-muted"
-                                title={task.prioridad}
-                              >
-                                {task.prioridad}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {historicGroups.map((group) => (
+              <HistoricYearSection
+                group={group}
+                isOpen={openYears[group.year] ?? false}
+                key={group.year}
+                onOpenChange={toggleHistoricYear}
+                onOpenTask={openEditor}
+                onPageChange={setHistoricPage}
+                onPageSizeChange={updateHistoricPageSize}
+                onSortChange={toggleHistoricSort}
+                page={historicPages[group.year] ?? 1}
+                pageSize={historicPageSize}
+                sortState={historicSortState}
+              />
+            ))}
           </div>
         )}
       </div>
