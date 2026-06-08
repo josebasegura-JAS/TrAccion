@@ -18,6 +18,7 @@ import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 
 const plantillaTextFields: Array<{
   field: TeletrabajoTextField;
@@ -490,6 +491,13 @@ export function TeletrabajoEditor({
               Guardar
             </button>
             <InlineSaveFeedback />
+            {!isCreate && solicitud && (
+              <AuditHistoryButton
+                entityId={solicitud.id}
+                entityTitle={solicitud.nombreApellidos || 'Solicitud sin nombre'}
+                module="teletrabajo"
+              />
+            )}
             <button
               className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSubmit || isGeneratingWord || recordLock.isReadOnly}

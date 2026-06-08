@@ -15,6 +15,7 @@ import { parseOutlookMsg } from '../features/especiales/domain/especiales';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -711,6 +712,13 @@ export function TaskEditor({
               Guardar
             </button>
             <InlineSaveFeedback />
+            {!isCreate && task && (
+              <AuditHistoryButton
+                entityId={task.id}
+                entityTitle={task.titulo || 'Tarea sin título'}
+                module="tareas"
+              />
+            )}
             {!isCreate && task && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
