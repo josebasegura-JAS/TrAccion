@@ -29,7 +29,7 @@ interface MutableImportedSession {
 }
 
 const CODE_PATTERN = /^(?:(?:\d{2}\/\d{2}|\d{2})[-\s]*)?(?:PE|CP|CE)[-.\s]*(?:AR|DC)?[-.\s]*\w{1,4}|^X{5,}$/i;
-const DATE_PATTERN = /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/;
+const DATE_PATTERN = /(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/;
 const YEAR_PATTERN = /^(20\d{2}|19\d{2})$/;
 const BULLET_PATTERN = /^[·•\-–—*]\s*/;
 
