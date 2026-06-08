@@ -12,7 +12,9 @@ const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
 const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
 const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
 const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
-const LOCAL_BACKUP_RETENTION_COUNT = 20;
+const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 10;
+const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
+const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 2;
 const LOCK_TTL_MS = 30 * 1000;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
@@ -112,6 +114,8 @@ const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
 let localBackupQueue: Promise<void> = Promise.resolve();
+let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingLocalBackupReason: string | null = null;
 
 function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
   if (!value || typeof value !== 'object') {
@@ -180,10 +184,47 @@ async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json'): Promise<v
     .reverse();
 
   await Promise.all(
-    rotatedBackups.slice(LOCAL_BACKUP_RETENTION_COUNT).map((entry) =>
+    rotatedBackups.slice(LOCAL_ROTATED_BACKUP_RETENTION_COUNT).map((entry) =>
       unlink(path.join(backupDirectory, entry)).catch(() => undefined),
     ),
   );
+}
+
+
+async function getLatestRotatedLocalBackupTime(): Promise<number | null> {
+  const backupDirectory = getLocalBackupDirectory();
+  const entries = await readdir(backupDirectory).catch(() => []);
+  const rotatedSqliteBackups = entries.filter(
+    (entry) => entry.startsWith('traccion-local-backup-') && entry.endsWith('.sqlite'),
+  );
+
+  const backupStats = await Promise.all(
+    rotatedSqliteBackups.map(async (entry) => {
+      const fileStat = await stat(path.join(backupDirectory, entry)).catch(() => null);
+      return fileStat?.isFile() ? fileStat.mtime.getTime() : null;
+    }),
+  );
+
+  const timestamps = backupStats.filter((value): value is number => typeof value === 'number');
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return Math.max(...timestamps);
+}
+
+async function shouldCreateRotatedLocalBackup(reason: string): Promise<boolean> {
+  const reasons = reason
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (reasons.length === 0 || reasons.some((item) => !item.startsWith('save:'))) {
+    return true;
+  }
+
+  const latestBackupTime = await getLatestRotatedLocalBackupTime();
+  return latestBackupTime === null || Date.now() - latestBackupTime >= LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS;
 }
 
 
@@ -607,11 +648,23 @@ function readAllPersistedRecords(db: Database): PersistedStorageRecordSnapshot[]
 }
 
 function enqueueLocalBackup(reason: string): void {
-  localBackupQueue = localBackupQueue
-    .then(() => writeLocalBackupArtifacts(reason))
-    .catch((error: unknown) => {
-      console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
-    });
+  pendingLocalBackupReason = pendingLocalBackupReason ? `${pendingLocalBackupReason}, ${reason}` : reason;
+
+  if (localBackupTimer) {
+    clearTimeout(localBackupTimer);
+  }
+
+  localBackupTimer = setTimeout(() => {
+    const reasonToWrite = pendingLocalBackupReason ?? reason;
+    pendingLocalBackupReason = null;
+    localBackupTimer = null;
+
+    localBackupQueue = localBackupQueue
+      .then(() => writeLocalBackupArtifacts(reasonToWrite))
+      .catch((error: unknown) => {
+        console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
+      });
+  }, LOCAL_LIVE_BACKUP_DEBOUNCE_MS);
 }
 
 async function writeLocalBackupArtifacts(reason: string): Promise<void> {
@@ -636,14 +689,20 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
   };
   const serializedPayload = JSON.stringify(payload, null, 2);
 
+  const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
+
   await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
-  await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+  if (shouldRotateBackup) {
+    await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+  }
   await pruneRotatedLocalBackups('json');
 
   try {
     currentDatabase.pragma('wal_checkpoint(PASSIVE)');
     await copyFile(currentStatus.path, getLocalBackupDatabasePath());
-    await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
+    if (shouldRotateBackup) {
+      await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
+    }
     await pruneRotatedLocalBackups('sqlite');
   } catch (error) {
     console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
@@ -745,6 +804,9 @@ export function createLocalStorageBackup(payload: LocalStorageBackupPayload): Da
 }
 
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
+  await pruneRotatedLocalBackups('json');
+  await pruneRotatedLocalBackups('sqlite');
+
   const backupDirectory = getLocalBackupDirectory();
   const entries = await readdir(backupDirectory).catch(() => []);
   const backups = await Promise.all(
