@@ -79,6 +79,35 @@ function sortOpenSessions(sessions: ManagedSession[]): ManagedSession[] {
   );
 }
 
+
+function getSessionHistoryYear(session: ManagedSession): string {
+  const year = session.date.match(/^(\d{4})/)?.[1];
+  return year ?? 'Sin año';
+}
+
+function groupClosedSessionsByYear(sessions: ManagedSession[]): Array<{ year: string; sessions: ManagedSession[] }> {
+  const groups = new Map<string, ManagedSession[]>();
+
+  sessions.forEach((session) => {
+    const year = getSessionHistoryYear(session);
+    groups.set(year, [...(groups.get(year) ?? []), session]);
+  });
+
+  return Array.from(groups.entries())
+    .sort(([firstYear], [secondYear]) => secondYear.localeCompare(firstYear, 'es', { numeric: true }))
+    .map(([year, yearSessions]) => ({
+      year,
+      sessions: yearSessions.sort(
+        (first, second) =>
+          String(second.date || '').localeCompare(String(first.date || '')) ||
+          String(second.code || '').localeCompare(String(first.code || ''), 'es', {
+            numeric: true,
+            sensitivity: 'base',
+          }),
+      ),
+    }));
+}
+
 function getTaskTitle(tasksById: Map<string, Task>, taskId: string): string {
   return tasksById.get(taskId)?.titulo ?? 'Tarea no encontrada';
 }
@@ -178,6 +207,7 @@ export function SessionManagementPage({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<'open' | 'history'>('open');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [openHistoryYears, setOpenHistoryYears] = useState<Record<string, boolean>>({});
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [treatedTaskIds, setTreatedTaskIds] = useState<Record<string, boolean>>({});
   const [importPreview, setImportPreview] = useState<SessionImportPreview | null>(null);
@@ -196,12 +226,10 @@ export function SessionManagementPage({
     [sessions],
   );
   const closedSessions = useMemo(
-    () =>
-      [...sessions]
-        .filter((session) => session.status === 'closed')
-        .sort((first, second) => String(second.closedAt || '').localeCompare(String(first.closedAt || ''))),
+    () => sessions.filter((session) => session.status === 'closed'),
     [sessions],
   );
+  const closedSessionGroups = useMemo(() => groupClosedSessionsByYear(closedSessions), [closedSessions]);
   const availableTasks = useMemo(
     () =>
       tasks
@@ -348,7 +376,20 @@ export function SessionManagementPage({
       );
     });
     const importableTaskKeys = new Set(importableSessions.flatMap((session) => session.taskExternalKeys));
-    const importableTasks = relevantImportTasks.filter((task) => importableTaskKeys.has(task.externalKey));
+    const closedAtByTaskExternalKey = new Map(
+      importableSessions.flatMap((session) =>
+        session.taskExternalKeys.map((externalKey) => [
+          externalKey,
+          session.draft.date ? `${session.draft.date}T00:00:00.000Z` : null,
+        ] as const),
+      ),
+    );
+    const importableTasks = relevantImportTasks
+      .filter((task) => importableTaskKeys.has(task.externalKey))
+      .map((task) => ({
+        ...task,
+        closedAt: closedAtByTaskExternalKey.get(task.externalKey) ?? null,
+      }));
     const taskIdsByExternalKey = createManyFromImport(importableTasks);
     const importedSessionCount = importSessions(
       importableSessions.map((session) => ({
@@ -362,11 +403,11 @@ export function SessionManagementPage({
     );
 
     loadTasks();
-    setOpenPanel('open');
+    setOpenPanel('history');
     setImportPreview(null);
     window.alert(
       importedSessionCount > 0
-        ? `Importación completada: ${importedSessionCount} sesiones y ${relevantImportTasks.length} puntos procesados.`
+        ? `Importación completada: ${importedSessionCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
         : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
     );
   };
@@ -495,15 +536,40 @@ export function SessionManagementPage({
           onToggle={() => setOpenPanel(openPanel === 'history' ? 'open' : 'history')}
         >
           {closedSessions.length === 0 && <p className="text-sm text-metro-muted">No hay sesiones cerradas.</p>}
-          {closedSessions.map((session) => (
-            <HistoricSessionCard
-              config={config}
-              key={session.id}
-              onRemove={remove}
-              session={session}
-              tasksById={tasksById}
-            />
-          ))}
+          {closedSessionGroups.map((group) => {
+            const isYearOpen = openHistoryYears[group.year] ?? false;
+
+            return (
+              <div className="overflow-hidden rounded-xl border border-metro-border" key={group.year}>
+                <button
+                  className="flex w-full items-center justify-between bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
+                  onClick={() => setOpenHistoryYears((current) => ({ ...current, [group.year]: !isYearOpen }))}
+                  type="button"
+                >
+                  <span className="flex items-center gap-2">
+                    {isYearOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    {group.year}
+                  </span>
+                  <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
+                    {group.sessions.length}
+                  </span>
+                </button>
+                {isYearOpen && (
+                  <div className="space-y-3 border-t border-metro-border bg-metro-surface p-3">
+                    {group.sessions.map((session) => (
+                      <HistoricSessionCard
+                        config={config}
+                        key={session.id}
+                        onRemove={remove}
+                        session={session}
+                        tasksById={tasksById}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </SessionPanel>
       </div>
 

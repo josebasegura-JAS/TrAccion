@@ -93,14 +93,14 @@ function toTaskDraft(title: string, phase: string, session: MutableImportedSessi
     titulo: title,
     descripcion: title,
     tipo: 'sindical',
-    fase: phase,
-    estado: 'pendiente',
+    fase: 'cerrada',
+    estado: 'cerrada',
     prioridad: 'media',
     fechaLimite: '',
     responsable: '',
     origen: session.kind === 'paritaria' ? 'Comisión Paritaria' : 'Comité de Empresa',
     sindicato: '',
-    observaciones: `Importado de ${session.draft.code}${session.draft.date ? ` · ${session.draft.date}` : ''} · punto ${order}.`,
+    observaciones: `Importado de ${session.draft.code}${session.draft.date ? ` · ${session.draft.date}` : ''} · punto ${order}. Histórico ${phase}.`,
   };
 }
 

@@ -98,13 +98,14 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             state.sessions.some(
               (session) =>
                 session.code.trim().toLowerCase() === normalizedCode &&
-                session.date === draft.date &&
-                session.status === 'open',
+                session.date === draft.date,
             );
 
           if (isDuplicate) {
             return;
           }
+
+          const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
 
           importedSessions.push({
             id: createSessionId(config.moduleId),
@@ -112,13 +113,13 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
             code: draft.code.trim(),
             title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
             notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
-            status: 'open',
+            status: 'closed',
             items: taskIds,
-            treatedTaskIds: [],
+            treatedTaskIds: taskIds,
             untreatedTaskIds: [],
-            createdAt: now,
+            createdAt: closedAt,
             updatedAt: now,
-            closedAt: null,
+            closedAt,
           });
         });
 

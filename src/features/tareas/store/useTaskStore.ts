@@ -27,7 +27,7 @@ interface TaskStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: TaskDraft, seguimientoText?: string) => void;
-  createManyFromImport: (drafts: Array<{ externalKey: string; draft: TaskDraft }>) => Record<string, string>;
+  createManyFromImport: (drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>) => Record<string, string>;
   update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
@@ -248,7 +248,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       );
       const importedTasks: Task[] = [];
 
-      drafts.forEach(({ externalKey, draft }) => {
+      drafts.forEach(({ externalKey, draft, closedAt }) => {
         if (existingImportKeys.has(externalKey)) {
           const existingTask = state.tasks.find((task) => task.observaciones.includes(`ImportKey:${externalKey}`));
           if (existingTask) {
@@ -262,10 +262,10 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           ...draft,
           observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
           seguimiento: buildSeguimiento('Tarea importada desde resumen histórico de Comité/Paritaria.', now),
-          createdAt: now,
+          createdAt: closedAt ?? now,
           updatedAt: now,
           deletedAt: null,
-          closedAt: null,
+          closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
         };
         createdIds[externalKey] = task.id;
         importedTasks.push(task);
