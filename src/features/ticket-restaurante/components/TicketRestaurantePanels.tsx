@@ -25,10 +25,7 @@ import {
   type TicketRestaurantAbsence,
   type TicketRestaurantConfig,
 } from '../domain/ticketRestaurante';
-import type {
-  TicketRestaurantAbsencePreviewRow,
-  TicketRestaurantAbsenceSaveResult,
-} from '../domain/importAbsences';
+import type { TicketRestaurantAbsencePreviewRow } from '../domain/importAbsences';
 import type { ExportTablePayload } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
@@ -1897,6 +1894,3 @@ function PreviewInput({
   );
 }
 
-function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
-  return `Ausencias guardadas: ${result.summary.nuevas} nuevas, ${result.summary.sustituidas} sustituidas, ${result.summary.duplicadas} duplicadas ignoradas, ${result.summary.invalidas} inválidas.`;
-}

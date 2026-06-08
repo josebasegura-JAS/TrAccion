@@ -9,10 +9,6 @@ import {
   EMPTY_TICKET_PERSON_DRAFT,
   filterTicketRestaurantAbsencesByMonth,
   getEffectiveTicketPrice,
-  normalizeTicketCalendarName,
-  
-  
-  
   visibleTicketCalendars,
   type TicketCalendar,
   type TicketCalendarDraft,
@@ -285,68 +281,12 @@ function toAbsencePreviewRow(absence: TicketRestaurantAbsence): TicketRestaurant
   };
 }
 
-function formatCurrency(value: number): string {
-  return `${value.toFixed(2)} €`;
-}
-
-function normalizePlainText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-function isoWeekday(fecha: string): number {
-  const day = new Date(`${fecha}T00:00:00.000Z`).getUTCDay();
-  return day === 0 ? 7 : day;
-}
-
-function addDays(fecha: string, days: number): string {
-  const date = new Date(`${fecha}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 function normalizeTicketEmployeeNumberForMatch(value: string): string {
   return value
     .trim()
     .replace(/^0+(?=\d)/, '')
     .replace(/\.0$/, '');
 }
-
-function absenceDiscountsTicket(
-  absence: TicketRestaurantAbsence,
-  calendar: TicketCalendar | null,
-  config: TicketRestaurantConfig,
-): boolean {
-  if (!calendar || !absence.afectaTicket) {
-    return false;
-  }
-
-  const nonDiscountable = Object.entries(config.rules.nonDiscountableMotivesByCalendar).some(
-    ([calendarName, motives]) =>
-      normalizeTicketCalendarName(calendar.nombre) === normalizeTicketCalendarName(calendarName) &&
-      motives.some((motivo) => normalizePlainText(absence.motivo) === normalizePlainText(motivo)),
-  );
-
-  if (nonDiscountable) {
-    return false;
-  }
-
-  const noTicket = new Set(calendar.diasSinTicket);
-  const ticketIsoWeekdays = new Set(calendar.ticketIsoWeekdays);
-  let cursor = absence.desde;
-  while (cursor <= absence.hasta) {
-    if (ticketIsoWeekdays.has(isoWeekday(cursor)) && !noTicket.has(cursor)) {
-      return true;
-    }
-    cursor = addDays(cursor, 1);
-  }
-
-  return false;
-}
-
 
 function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
   const parts = [
