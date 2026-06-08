@@ -17,6 +17,15 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Python for native dependencies
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure node-gyp Python
+        shell: pwsh
+        run: npm config set python $env:pythonLocation\python.exe
+
       - name: Install dependencies
         run: npm install
 
