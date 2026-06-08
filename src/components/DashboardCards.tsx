@@ -317,8 +317,22 @@ export function DashboardCards({
         recordId: task.id,
       }));
 
-    return [...taskEvents, ...committeeEvents, ...paritariaEvents, ...teleworkEvents, ...ticketEvents, ...actaEvents];
-  }, [activeTasks, actaTasks, activeTicketAbsences, openCommitteeSessions, openParitariaSessions, pendingTelework]);
+    return [
+      ...taskEvents,
+      ...committeeEvents,
+      ...paritariaEvents,
+      ...teleworkEvents,
+      ...ticketEvents,
+      ...actaEvents,
+    ];
+  }, [
+    activeTasks,
+    actaTasks,
+    activeTicketAbsences,
+    openCommitteeSessions,
+    openParitariaSessions,
+    pendingTelework,
+  ]);
 
   const eventsByDay = useMemo(
     () =>
@@ -445,17 +459,17 @@ export function DashboardCards({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-[2rem] border border-metro-border bg-metro-surface/90 p-5 text-metro-text shadow-glow">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-metro-text">
+            <h2 className="text-xl font-black tracking-tight text-metro-text">
               Buenos días, Joseba
             </h2>
-            <p className="mt-1 text-sm font-medium text-metro-muted capitalize">
-              {fullDateFormatter.format(today)}
+            <p className="mt-0.5 text-xs font-semibold text-metro-muted">
+              Vista ejecutiva de Relaciones Laborales
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
             <DashboardHeaderPill label="Tareas abiertas" value={activeTasks.length} />
             <DashboardHeaderPill
               label="Críticas"
@@ -468,13 +482,105 @@ export function DashboardCards({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(18rem,0.95fr)_minmax(24rem,1.25fr)_minmax(16rem,0.75fr)]">
-        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
-          <div className="mb-4 flex items-center justify-between">
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        {kpis.map((kpi) => (
+          <article
+            className="rounded-[1.25rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow"
+            key={kpi.title}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-xl p-1.5 ${kpi.tone}`}>
+                  <kpi.icon size={18} />
+                </span>
+                <h3 className="text-sm font-black">{kpi.title}</h3>
+              </div>
+              <ChevronRight className="text-metro-muted" size={18} />
+            </div>
+            <div className="grid grid-cols-[1fr_4.3rem] items-center gap-2">
+              <div>
+                <p className="text-3xl font-black tracking-tight">{kpi.value}</p>
+                <p className="text-sm font-medium text-metro-muted">{kpi.subtitle}</p>
+                <p className="mt-2 text-xs font-black text-red-400">{kpi.helper}</p>
+              </div>
+              <div
+                className="relative h-16 w-16 rounded-full p-1.5"
+                style={miniDonutStyle(kpi.segments)}
+              >
+                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-metro-surface text-center shadow-inner">
+                  <span className="text-sm font-black">
+                    {kpi.segments.reduce((sum, segment) => sum + segment.value, 0)}
+                  </span>
+                  <span className="text-[10px] font-bold text-metro-muted">Total</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1.5 text-xs font-semibold text-metro-secondary">
+              {kpi.segments.map((segment) => (
+                <div className="flex items-center justify-between gap-3" key={segment.label}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${segment.className}`} />
+                    <span className="truncate">{segment.label}</span>
+                  </span>
+                  <span className="font-black text-metro-text">{segment.value}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.72fr_1.05fr_0.9fr]">
+        <aside className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
+          <h3 className="text-base font-black">Hoy</h3>
+          <div className="mt-3 space-y-2">
+            <TodayAlert
+              className="border-red-500"
+              title={`${criticalTasks.length} tareas críticas`}
+            />
+            <TodayAlert
+              className="border-orange-500"
+              title={
+                upcomingEvents.find(
+                  (event) => event.type === 'committee' || event.type === 'paritaria',
+                )?.title ?? 'Sin comité/paritaria próximo'
+              }
+              subtitle={
+                upcomingEvents.find(
+                  (event) => event.type === 'committee' || event.type === 'paritaria',
+                )
+                  ? `Próximo ${formatDisplayDate(
+                      upcomingEvents.find(
+                        (event) => event.type === 'committee' || event.type === 'paritaria',
+                      )?.date ?? '',
+                    )}`
+                  : 'No hay sesión abierta con fecha'
+              }
+            />
+            <TodayAlert
+              className="border-blue-500"
+              title={`${pendingTelework.length} teletrabajos`}
+              subtitle="Pendientes de validar"
+            />
+            <TodayAlert
+              className="border-emerald-500"
+              title="Cálculo tickets"
+              subtitle={`${activeTicketPeople.length} personas activas`}
+            />
+            <TodayAlert
+              className="border-amber-400"
+              title={`${actaTasks.length} actas en seguimiento`}
+              subtitle="Requieren revisión si vencen"
+            />
+          </div>
+        </aside>
+
+        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
+          <div className="mb-3 flex items-center justify-between">
             <h3 className="text-base font-black">Calendario</h3>
             <div className="flex items-center gap-3">
               <button
-                className="rounded-full p-2 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
+                className="rounded-full p-1.5 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
                 onClick={() =>
                   setVisibleMonth(
                     (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1),
@@ -482,11 +588,11 @@ export function DashboardCards({
                 }
                 type="button"
               >
-                <ChevronLeft size={18} />
+                <ChevronLeft size={16} />
               </button>
               <span className="min-w-32 text-center text-sm font-black">{monthLabel}</span>
               <button
-                className="rounded-full p-2 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
+                className="rounded-full p-1.5 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
                 onClick={() =>
                   setVisibleMonth(
                     (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1),
@@ -494,7 +600,7 @@ export function DashboardCards({
                 }
                 type="button"
               >
-                <ChevronRight size={18} />
+                <ChevronRight size={16} />
               </button>
             </div>
           </div>
@@ -512,7 +618,7 @@ export function DashboardCards({
 
               return (
                 <button
-                  className={`min-h-11 rounded-2xl px-1.5 py-1 text-center text-sm font-bold transition ${
+                  className={`min-h-9 rounded-xl px-1 py-0.5 text-center text-xs font-bold transition ${
                     date
                       ? events.length > 0
                         ? 'cursor-pointer text-metro-secondary hover:bg-metro-panel/70 hover:text-metro-text'
@@ -548,7 +654,7 @@ export function DashboardCards({
             })}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-metro-secondary">
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-metro-secondary">
             <CalendarLegend className="bg-red-500" label="Tareas" />
             <CalendarLegend className="bg-orange-500" label="Comité" />
             <CalendarLegend className="bg-violet-500" label="Paritaria" />
@@ -558,15 +664,15 @@ export function DashboardCards({
           </div>
         </article>
 
-        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
-          <div className="mb-4 flex items-center justify-between border-b border-metro-border pb-3">
+        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
+          <div className="mb-3 flex items-center justify-between border-b border-metro-border pb-2">
             <h3 className="text-base font-black">Resumen operativo</h3>
             <span className="rounded-full bg-metro-panel px-3 py-1 text-xs font-black text-metro-secondary">
               Este mes
             </span>
           </div>
-          <div className="grid gap-5 md:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-[0.95fr_1.05fr]">
+            <div className="space-y-2">
               <SummaryLine icon={ListChecks} label="Tareas abiertas" value={activeTasks.length} />
               <SummaryLine
                 icon={ClipboardList}
@@ -590,7 +696,7 @@ export function DashboardCards({
               />
             </div>
             <div className="min-w-0 overflow-hidden border-t border-metro-border pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
-              <p className="mb-3 text-[11px] font-black uppercase tracking-wide text-metro-muted">
+              <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-metro-muted">
                 Tareas por estado
               </p>
               <div className="space-y-2">
@@ -614,107 +720,21 @@ export function DashboardCards({
                   </div>
                 ))}
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-metro-border pt-3 text-xs font-black">
+              <div className="mt-3 flex items-center justify-between border-t border-metro-border pt-2 text-xs font-black">
                 <span>Total tareas</span>
                 <span>{totalTasks}</span>
               </div>
             </div>
           </div>
         </article>
-
-        <aside className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
-          <h3 className="text-base font-black">Hoy</h3>
-          <p className="mt-1 text-sm font-medium capitalize text-metro-muted">
-            {fullDateFormatter.format(today)}
-          </p>
-          <div className="mt-4 space-y-3">
-            <TodayAlert
-              className="border-red-500"
-              title={`${criticalTasks.length} tareas críticas`}
-            />
-            <TodayAlert
-              className="border-orange-500"
-              title={
-                upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria')?.title ??
-                'Sin comité/paritaria próximo'
-              }
-              subtitle={
-                upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria')
-                  ? `Próximo ${formatDisplayDate(
-                      upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria')?.date ?? '',
-                    )}`
-                  : 'No hay sesión abierta con fecha'
-              }
-            />
-            <TodayAlert
-              className="border-blue-500"
-              title={`${pendingTelework.length} teletrabajos`}
-              subtitle="Pendientes de validar"
-            />
-            <TodayAlert
-              className="border-emerald-500"
-              title="Cálculo tickets"
-              subtitle={`${activeTicketPeople.length} personas activas`}
-            />
-            <TodayAlert
-              className="border-amber-400"
-              title={`${actaTasks.length} actas en seguimiento`}
-              subtitle="Requieren revisión si vencen"
-            />
-          </div>
-        </aside>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <article
-            className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow"
-            key={kpi.title}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`rounded-2xl p-2 ${kpi.tone}`}>
-                  <kpi.icon size={21} />
-                </span>
-                <h3 className="text-sm font-black">{kpi.title}</h3>
-              </div>
-              <ChevronRight className="text-metro-muted" size={18} />
-            </div>
-            <div className="grid grid-cols-[1fr_5.2rem] items-center gap-3">
-              <div>
-                <p className="text-4xl font-black tracking-tight">{kpi.value}</p>
-                <p className="text-sm font-medium text-metro-muted">{kpi.subtitle}</p>
-                <p className="mt-2 text-xs font-black text-red-400">{kpi.helper}</p>
-              </div>
-              <div
-                className="relative h-20 w-20 rounded-full p-2"
-                style={miniDonutStyle(kpi.segments)}
-              >
-                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-metro-surface text-center shadow-inner">
-                  <span className="text-sm font-black">
-                    {kpi.segments.reduce((sum, segment) => sum + segment.value, 0)}
-                  </span>
-                  <span className="text-[10px] font-bold text-metro-muted">Total</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2 text-xs font-semibold text-metro-secondary">
-              {kpi.segments.map((segment) => (
-                <div className="flex items-center justify-between gap-3" key={segment.label}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${segment.className}`} />
-                    <span className="truncate">{segment.label}</span>
-                  </span>
-                  <span className="font-black text-metro-text">{segment.value}</span>
-                </div>
-              ))}
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.85fr_1fr]">
-        <DashboardList title="Mis tareas críticas" action="Ver todas mis tareas" onActionClick={() => openRecord({ view: 'tareas' })}>
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_0.85fr_1fr]">
+        <DashboardList
+          title="Mis tareas críticas"
+          action="Ver todas mis tareas"
+          onActionClick={() => openRecord({ view: 'tareas' })}
+        >
           {criticalTasks.slice(0, 5).map((task) => (
             <DashboardListRow
               badge={task.prioridad === 'critica' ? 'Crítica' : 'Alta'}
@@ -731,7 +751,11 @@ export function DashboardCards({
           )}
         </DashboardList>
 
-        <DashboardList title="Próximos hitos" action="Ver calendario completo" onActionClick={() => setSelectedDate(todayIso)}>
+        <DashboardList
+          title="Próximos hitos"
+          action="Ver calendario completo"
+          onActionClick={() => setSelectedDate(todayIso)}
+        >
           {upcomingEvents.slice(0, 5).map((event) => (
             <DashboardListRow
               badge={formatDisplayDate(event.date)}
@@ -748,7 +772,11 @@ export function DashboardCards({
           )}
         </DashboardList>
 
-        <DashboardList title="Actividad reciente" action="Ver toda la actividad" onActionClick={() => openRecord({ view: 'tareas' })}>
+        <DashboardList
+          title="Actividad reciente"
+          action="Ver toda la actividad"
+          onActionClick={() => openRecord({ view: 'tareas' })}
+        >
           {tasks
             .filter((task) => !task.deletedAt)
             .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
@@ -849,9 +877,9 @@ function DashboardHeaderPill({
   tone?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-metro-panel/70 px-4 py-3 ring-1 ring-metro-border">
-      <p className={`text-xl font-black ${tone}`}>{value}</p>
-      <p className="text-xs font-bold text-metro-muted">{label}</p>
+    <div className="rounded-xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">
+      <p className={`text-lg font-black ${tone}`}>{value}</p>
+      <p className="text-[11px] font-bold text-metro-muted">{label}</p>
     </div>
   );
 }
@@ -874,14 +902,14 @@ function SummaryLine({
   value: number;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-metro-panel/70 px-3 py-1.5 ring-1 ring-metro-border">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="rounded-xl bg-metro-raised p-2 text-blue-400 shadow-sm">
-          <Icon size={17} />
+        <span className="rounded-lg bg-metro-raised p-1.5 text-blue-400 shadow-sm">
+          <Icon size={15} />
         </span>
         <span className="truncate text-sm font-bold text-metro-secondary">{label}</span>
       </div>
-      <span className="text-lg font-black text-metro-text">{value}</span>
+      <span className="text-base font-black text-metro-text">{value}</span>
     </div>
   );
 }
@@ -897,7 +925,7 @@ function TodayAlert({
 }) {
   return (
     <div
-      className={`rounded-2xl border-l-4 bg-metro-panel/70 px-4 py-3 ring-1 ring-metro-border ${className}`}
+      className={`rounded-xl border-l-4 bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border ${className}`}
     >
       <p className="text-sm font-black text-metro-text">{title}</p>
       <p className="mt-0.5 text-xs font-medium text-metro-muted">{subtitle}</p>
@@ -917,11 +945,11 @@ function DashboardList({
   onActionClick?: () => void;
 }) {
   return (
-    <article className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-4 text-metro-text shadow-glow">
-      <h3 className="mb-4 text-base font-black">{title}</h3>
-      <div className="space-y-3">{children}</div>
+    <article className="rounded-[1.25rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
+      <h3 className="mb-3 text-base font-black">{title}</h3>
+      <div className="space-y-2">{children}</div>
       <button
-        className="mt-5 text-xs font-black text-metro-red hover:text-red-400"
+        className="mt-3 text-xs font-black text-metro-red hover:text-red-400"
         onClick={onActionClick}
         type="button"
       >
@@ -946,7 +974,7 @@ function DashboardListRow({
   tone: string;
   onClick?: () => void;
 }) {
-  const rowClassName = `grid w-full grid-cols-[0.75rem_1fr_auto] items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm transition ${
+  const rowClassName = `grid w-full grid-cols-[0.75rem_1fr_auto] items-center gap-2 rounded-xl px-2 py-1 text-left text-sm transition ${
     onClick ? 'cursor-pointer hover:bg-white/5 focus:bg-white/5 focus:outline-none' : ''
   }`;
   const content = (
