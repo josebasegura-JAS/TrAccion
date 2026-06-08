@@ -23,11 +23,26 @@ const taskTextFields: Array<{
   label: string;
   required?: boolean;
   type?: string;
+  className: string;
 }> = [
-  { field: 'titulo', label: 'Título', required: true },
-  { field: 'responsable', label: 'Responsable' },
-  { field: 'origen', label: 'Detalle origen / solicitante' },
-  { field: 'fechaLimite', label: 'Fecha límite', type: 'date' },
+  {
+    field: 'titulo',
+    label: 'Título',
+    required: true,
+    className: 'sm:col-span-3 lg:col-span-6',
+  },
+  { field: 'responsable', label: 'Responsable', className: 'sm:col-span-3 lg:col-span-6' },
+  {
+    field: 'origen',
+    label: 'Detalle origen / solicitante',
+    className: 'sm:col-span-4 lg:col-span-4',
+  },
+  {
+    field: 'fechaLimite',
+    label: 'Fecha límite',
+    type: 'date',
+    className: 'sm:col-span-2 lg:col-span-2',
+  },
 ];
 
 function getPathBaseName(filePath: string): string {
@@ -295,7 +310,7 @@ export function TaskEditor({
       ...current,
       mail: formatMailFromMsg(parsedMailData),
     }));
-    setMailStatus('Texto del mensaje copiado al campo Mail.');
+    setMailStatus('Texto del mensaje copiado al campo Email.');
     setMailStatusIsError(false);
   };
 
@@ -321,7 +336,7 @@ export function TaskEditor({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <aside
         aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(820px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
+        className="flex max-h-[calc(100vh-1rem)] w-[min(1040px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
         role="dialog"
       >
         <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
@@ -375,7 +390,7 @@ export function TaskEditor({
         )}
 
         <form
-          className="flex min-h-0 flex-1 flex-col space-y-3"
+          className="flex min-h-0 flex-1 flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSubmit || recordLock.isReadOnly) {
@@ -392,10 +407,10 @@ export function TaskEditor({
           }}
         >
           <fieldset
-            className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 disabled:opacity-70 sm:grid-cols-2"
+            className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto pr-1 disabled:opacity-70 sm:grid-cols-6 lg:grid-cols-12"
             disabled={recordLock.isReadOnly}
           >
-            <label className="text-xs font-semibold text-metro-muted">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Tipo
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -414,7 +429,7 @@ export function TaskEditor({
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold text-metro-muted">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Fase
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -430,8 +445,8 @@ export function TaskEditor({
                 ))}
               </select>
             </label>
-            {taskTextFields.map(({ field, label, required, type }) => (
-              <label className="text-xs font-semibold text-metro-muted" key={field}>
+            {taskTextFields.map(({ field, label, required, type, className }) => (
+              <label className={`text-xs font-semibold text-metro-muted ${className}`} key={field}>
                 {label}
                 <input
                   className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -444,7 +459,7 @@ export function TaskEditor({
                 />
               </label>
             ))}
-            <label className="text-xs font-semibold text-metro-muted">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Origen
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -461,7 +476,7 @@ export function TaskEditor({
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold text-metro-muted">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Estado
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -480,7 +495,7 @@ export function TaskEditor({
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold text-metro-muted">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Prioridad
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -499,7 +514,7 @@ export function TaskEditor({
                 ))}
               </select>
             </label>
-            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-6 lg:col-span-12">
               Descripción
               <textarea
                 className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -510,7 +525,7 @@ export function TaskEditor({
               />
             </label>
 
-            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-2">
+            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-6 lg:col-span-12">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-metro-text">Documentos vinculados</h4>
                 <button
@@ -583,14 +598,14 @@ export function TaskEditor({
               )}
             </section>
 
-            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-2">
+            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-6 lg:col-span-12">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h4 className="inline-flex items-center gap-2 text-sm font-bold text-metro-text">
                   <Mail size={15} />
-                  Mail
+                  Email
                 </h4>
                 <label className="cursor-pointer rounded-lg border border-metro-border bg-metro-surface px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red">
-                  Seleccionar .msg
+                  Seleccionar mensaje .msg
                   <input
                     accept=".msg"
                     className="sr-only"
@@ -600,7 +615,7 @@ export function TaskEditor({
                 </label>
               </div>
               <div
-                className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-2"
+                className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-3"
                 onDragOver={(event) => {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = 'copy';
@@ -612,12 +627,16 @@ export function TaskEditor({
                   );
                 }}
               >
+                <p className="mb-2 text-xs font-semibold text-metro-muted">
+                  Arrastra aquí un mensaje .msg de Outlook. Se copiarán el asunto y el cuerpo
+                  al campo Email.
+                </p>
                 <textarea
-                  className="min-h-28 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  className="min-h-32 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, mail: event.target.value }))
                   }
-                  placeholder="Arrastra aquí un .msg o pega el texto del correo..."
+                  placeholder="Asunto y cuerpo del email vinculado..."
                   value={draft.mail}
                 />
               </div>
@@ -632,7 +651,7 @@ export function TaskEditor({
               )}
             </section>
 
-            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-2">
+            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-6 lg:col-span-12">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-metro-text">Seguimiento</h4>
                 {!isCreate && task && (
@@ -671,7 +690,7 @@ export function TaskEditor({
                 </div>
               )}
             </section>
-            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-6 lg:col-span-12">
               Observaciones
               <textarea
                 className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
