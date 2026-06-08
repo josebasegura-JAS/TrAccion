@@ -496,7 +496,13 @@ export function SessionManagementPage({
         >
           {closedSessions.length === 0 && <p className="text-sm text-metro-muted">No hay sesiones cerradas.</p>}
           {closedSessions.map((session) => (
-            <HistoricSessionCard config={config} key={session.id} session={session} tasksById={tasksById} />
+            <HistoricSessionCard
+              config={config}
+              key={session.id}
+              onRemove={remove}
+              session={session}
+              tasksById={tasksById}
+            />
           ))}
         </SessionPanel>
       </div>
@@ -837,10 +843,12 @@ function SessionCard({
 
 function HistoricSessionCard({
   config,
+  onRemove,
   session,
   tasksById,
 }: {
   config: SessionModuleConfig;
+  onRemove: (sessionId: string) => void;
   session: ManagedSession;
   tasksById: Map<string, Task>;
 }) {
@@ -861,6 +869,21 @@ function HistoricSessionCard({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ExportPrintButtons payload={sessionExportPayload} />
+          <button
+            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10"
+            onClick={() => {
+              const confirmed = window.confirm(
+                '¿Eliminar definitivamente esta sesión histórica?\n\nEsta acción no puede deshacerse.',
+              );
+
+              if (confirmed) {
+                onRemove(session.id);
+              }
+            }}
+            type="button"
+          >
+            <Trash2 size={14} /> Eliminar
+          </button>
         </div>
       </div>
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
