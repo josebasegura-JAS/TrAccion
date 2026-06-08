@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   buildLicenciaSinSueldoRecord,
   isLicenciaSinSueldoEstado,
@@ -9,6 +10,62 @@ import {
   type LicenciaSinSueldoDraft,
   type LicenciaSinSueldoRecord,
 } from '../domain/licenciaSinSueldo';
+
+
+const LICENCIAS_AUDIT_LABELS = {
+  numeroEmpleado: 'Nº empleado',
+  nombreCompleto: 'Nombre completo',
+  tipo: 'Tipo',
+  fechaSolicitud: 'Fecha solicitud',
+  fechaInicio: 'Fecha inicio',
+  fechaFin: 'Fecha fin',
+  estado: 'Estado',
+  observaciones: 'Observaciones',
+} satisfies Partial<Record<keyof LicenciaSinSueldoDraft, string>>;
+
+const LICENCIAS_AUDIT_FIELDS: Array<keyof LicenciaSinSueldoDraft> = [
+  'numeroEmpleado',
+  'nombreCompleto',
+  'tipo',
+  'fechaSolicitud',
+  'fechaInicio',
+  'fechaFin',
+  'estado',
+  'observaciones',
+];
+
+function pickLicenciaAuditSnapshot(
+  record: LicenciaSinSueldoRecord | LicenciaSinSueldoDraft,
+): Record<string, unknown> {
+  return LICENCIAS_AUDIT_FIELDS.reduce<Record<string, unknown>>((snapshot, field) => {
+    snapshot[field] = record[field];
+    return snapshot;
+  }, {});
+}
+
+function registerLicenciaUpdateAudit(
+  previousRecord: LicenciaSinSueldoRecord,
+  draft: LicenciaSinSueldoDraft,
+): void {
+  const changes = buildAuditChanges(
+    pickLicenciaAuditSnapshot(previousRecord),
+    pickLicenciaAuditSnapshot(draft),
+    LICENCIAS_AUDIT_LABELS,
+    LICENCIAS_AUDIT_FIELDS,
+  );
+
+  if (changes.length === 0) {
+    return;
+  }
+
+  addAuditEvent({
+    module: 'licencias-sin-sueldo',
+    entityId: previousRecord.id,
+    action: changes.some((change) => change.field === 'estado') ? 'status_changed' : 'updated',
+    summary: buildUpdateSummary(changes),
+    changes,
+  });
+}
 
 interface LicenciasSinSueldoState {
   records: LicenciaSinSueldoRecord[];
@@ -94,7 +151,15 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set) 
   create: (draft) => {
     const id = createId();
     set((state) => {
-      const records = [...state.records, buildLicenciaSinSueldoRecord(draft, nowIso(), id)];
+      const record = buildLicenciaSinSueldoRecord(draft, nowIso(), id);
+      addAuditEvent({
+        module: 'licencias-sin-sueldo',
+        entityId: record.id,
+        action: 'created',
+        summary: 'Registro creado',
+        changes: [],
+      });
+      const records = [...state.records, record];
       persistRecords(records);
       return { records };
     });
@@ -103,9 +168,14 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set) 
   update: (id, draft) => {
     set((state) => {
       const updatedAt = nowIso();
-      const records = state.records.map((record) =>
-        record.id === id ? buildLicenciaSinSueldoRecord(draft, updatedAt, id, record) : record,
-      );
+      const records = state.records.map((record) => {
+        if (record.id !== id) {
+          return record;
+        }
+
+        registerLicenciaUpdateAudit(record, draft);
+        return buildLicenciaSinSueldoRecord(draft, updatedAt, id, record);
+      });
       persistRecords(records);
       return { records };
     });
@@ -113,9 +183,20 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set) 
   remove: (id) => {
     set((state) => {
       const updatedAt = nowIso();
-      const records = state.records.map((record) =>
-        record.id === id ? { ...record, updatedAt, deletedAt: updatedAt } : record,
-      );
+      const records = state.records.map((record) => {
+        if (record.id !== id) {
+          return record;
+        }
+
+        addAuditEvent({
+          module: 'licencias-sin-sueldo',
+          entityId: record.id,
+          action: 'deleted',
+          summary: 'Registro eliminado',
+          changes: [],
+        });
+        return { ...record, updatedAt, deletedAt: updatedAt };
+      });
       persistRecords(records);
       return { records };
     });
