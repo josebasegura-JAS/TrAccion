@@ -17,16 +17,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Python for native dependencies
+      - name: Setup Python for node-gyp
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Configure node-gyp Python
-        shell: pwsh
-        run: npm config set python $env:pythonLocation\python.exe
-
       - name: Install dependencies
+        env:
+          PYTHON: python
+          npm_config_python: python
         run: npm install
 
       - name: Lint
