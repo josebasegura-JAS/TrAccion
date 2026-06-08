@@ -1,5 +1,6 @@
-import { ChevronDown, ChevronRight, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search, Settings, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrigins';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
 import { getTaskClosedYear } from '../features/tareas/domain/historico';
@@ -62,7 +63,7 @@ const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnI
     prioridad: 105,
     fechaLimite: 120,
     responsable: 150,
-    sindicato: 130,
+    sindicato: 145,
     actions: 88,
   },
 };
@@ -87,7 +88,7 @@ const taskExportColumns: ExportColumn<Task>[] = [
   { key: 'prioridad', header: 'Prioridad', value: (task) => task.prioridad },
   { key: 'fechaLimite', header: 'Fecha límite', value: (task) => task.fechaLimite || null },
   { key: 'responsable', header: 'Responsable', value: (task) => task.responsable || null },
-  { key: 'sindicato', header: 'Sindicato', value: (task) => task.sindicato || null },
+  { key: 'sindicato', header: 'Origen', value: (task) => task.sindicato || null },
 ];
 
 function formatDateTime(value: string | null): string {
@@ -161,6 +162,7 @@ export function TareasPage({
 } = {}) {
   const { filters, load, remove, selectTask, setFilter, tasks } = useTaskStore();
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
+  const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -170,6 +172,7 @@ export function TareasPage({
   });
   const [isHistoricOpen, setIsHistoricOpen] = useState(false);
   const [openYears, setOpenYears] = useState<Record<string, boolean>>({});
+  const [isOriginsModalOpen, setIsOriginsModalOpen] = useState(false);
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -181,6 +184,17 @@ export function TareasPage({
     () => taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre),
     [taskPhases],
   );
+  const originFilterOptions = useMemo(() => {
+    const values = new Set(taskOrigins.filter((origin) => origin.active).map((origin) => origin.nombre));
+    tasks.forEach((task) => {
+      if (task.sindicato.trim()) {
+        values.add(task.sindicato.trim());
+      }
+    });
+    return Array.from(values).sort((first, second) =>
+      first.localeCompare(second, 'es', { sensitivity: 'base' }),
+    );
+  }, [taskOrigins, tasks]);
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const filteredTasks = useMemo(() => filterTasks(tasks, filters), [filters, tasks]);
   const historicTasks = useMemo(
@@ -197,6 +211,7 @@ export function TareasPage({
     ['Fase', filters.fase],
     ['Estado', filters.estado],
     ['Prioridad', filters.prioridad],
+    ['Origen', filters.origen],
   ]);
   const activeFilterChips: ActiveFilterChip[] = [
     filters.search.trim()
@@ -214,6 +229,9 @@ export function TareasPage({
     filters.prioridad
       ? { key: 'prioridad', label: 'Prioridad', value: filters.prioridad, onClear: () => setFilter('prioridad', '') }
       : null,
+    filters.origen
+      ? { key: 'origen', label: 'Origen', value: filters.origen, onClear: () => setFilter('origen', '') }
+      : null,
   ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
   const clearActiveFilters = () => {
@@ -222,6 +240,7 @@ export function TareasPage({
     setFilter('fase', '');
     setFilter('estado', '');
     setFilter('prioridad', '');
+    setFilter('origen', '');
   };
 
   const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActiveTaskTableColumnId>(
@@ -318,10 +337,10 @@ export function TareasPage({
       },
       {
         id: 'sindicato',
-        header: 'Sindicato',
+        header: 'Origen',
         accessor: (task) => task.sindicato,
         render: (task) => task.sindicato || '—',
-        width: 130,
+        width: 145,
         minWidth: 95,
         maxWidth: 220,
         sortable: true,
@@ -423,6 +442,13 @@ export function TareasPage({
         </div>
         <div className="flex flex-wrap gap-2">
           <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => setIsOriginsModalOpen(true)}
+            type="button"
+          >
+            <Settings size={16} /> Orígenes
+          </button>
+          <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}
             type="button"
@@ -449,7 +475,7 @@ export function TareasPage({
               }}
             />
           </div>
-          <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(210px,1.3fr)_repeat(4,minmax(112px,0.7fr))]">
+          <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(210px,1.3fr)_repeat(5,minmax(112px,0.7fr))]">
             <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-1.5 text-sm text-metro-muted">
               <Search size={16} />
               <input
@@ -483,6 +509,12 @@ export function TareasPage({
               onChange={(value) => setFilter('prioridad', value as typeof filters.prioridad)}
               options={TASK_PRIORITIES}
               value={filters.prioridad}
+            />
+            <SelectFilter
+              label="Origen"
+              onChange={(value) => setFilter('origen', value)}
+              options={originFilterOptions}
+              value={filters.origen}
             />
           </div>
         </div>
@@ -608,6 +640,7 @@ export function TareasPage({
         )}
       </div>
 
+      {isOriginsModalOpen && <TaskOriginsModal onClose={() => setIsOriginsModalOpen(false)} />}
       {editorMode && <TaskEditor mode={editorMode} onDone={closeEditor} task={editorTask} />}
     </section>
   );
@@ -637,6 +670,181 @@ function SelectFilter({
           {option}
         </option>
       ))}
+    </select>
+  );
+}
+
+
+function TaskOriginsModal({ onClose }: { onClose: () => void }) {
+  const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
+  const addTaskOrigin = useConfiguracionStore((state) => state.addTaskOrigin);
+  const updateTaskOrigin = useConfiguracionStore((state) => state.updateTaskOrigin);
+  const toggleTaskOrigin = useConfiguracionStore((state) => state.toggleTaskOrigin);
+  const [newOriginName, setNewOriginName] = useState('');
+  const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('sindicato');
+
+  const sortedOrigins = useMemo(
+    () => [...taskOrigins].sort((first, second) => first.nombre.localeCompare(second.nombre, 'es')),
+    [taskOrigins],
+  );
+
+  const submitNewOrigin = () => {
+    if (!newOriginName.trim()) {
+      return;
+    }
+
+    addTaskOrigin(newOriginName, newOriginType);
+    setNewOriginName('');
+    setNewOriginType('sindicato');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <aside
+        aria-modal="true"
+        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
+        role="dialog"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
+              Mantenimiento
+            </p>
+            <h3 className="mt-1 text-base font-bold text-metro-text">Orígenes de tareas</h3>
+            <p className="text-xs text-metro-muted">
+              Alta, edición y activación de sindicatos, áreas internas u otros orígenes.
+            </p>
+          </div>
+          <button
+            aria-label="Cerrar mantenimiento de orígenes"
+            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-3 md:grid-cols-[minmax(220px,1fr)_160px_110px]">
+          <input
+            className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => setNewOriginName(event.target.value)}
+            placeholder="Nuevo origen"
+            type="text"
+            value={newOriginName}
+          />
+          <OriginTypeSelect onChange={setNewOriginType} value={newOriginType} />
+          <button
+            className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!newOriginName.trim()}
+            onClick={submitNewOrigin}
+            type="button"
+          >
+            Añadir
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-metro-border">
+          <table className="w-full table-fixed text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+              <tr>
+                <th className="w-[38%] px-3 py-2">Nombre</th>
+                <th className="w-[24%] px-3 py-2">Tipo</th>
+                <th className="w-[18%] px-3 py-2">Estado</th>
+                <th className="w-[20%] px-3 py-2 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45">
+              {sortedOrigins.map((origin) => (
+                <TaskOriginRow
+                  key={origin.id}
+                  origin={origin}
+                  onToggle={toggleTaskOrigin}
+                  onUpdate={updateTaskOrigin}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function TaskOriginRow({
+  origin,
+  onToggle,
+  onUpdate,
+}: {
+  origin: TaskOriginConfig;
+  onToggle: (id: string) => void;
+  onUpdate: (id: string, nombre: string, tipo: TaskOriginConfig['tipo']) => void;
+}) {
+  const [name, setName] = useState(origin.nombre);
+  const [type, setType] = useState<TaskOriginConfig['tipo']>(origin.tipo);
+  const hasChanges = name.trim() !== origin.nombre || type !== origin.tipo;
+
+  useEffect(() => {
+    setName(origin.nombre);
+    setType(origin.tipo);
+  }, [origin.nombre, origin.tipo]);
+
+  return (
+    <tr className="align-top">
+      <td className="px-3 py-2">
+        <input
+          className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+          onChange={(event) => setName(event.target.value)}
+          value={name}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <OriginTypeSelect onChange={setType} value={type} />
+      </td>
+      <td className="px-3 py-2">
+        <span className={`rounded-full px-2 py-1 text-xs font-bold ${
+          origin.active ? 'bg-emerald-500/15 text-emerald-100' : 'bg-slate-500/20 text-metro-muted'
+        }`}>
+          {origin.active ? 'Activo' : 'Inactivo'}
+        </span>
+      </td>
+      <td className="space-x-2 px-3 py-2 text-right">
+        <button
+          className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!hasChanges || !name.trim()}
+          onClick={() => onUpdate(origin.id, name, type)}
+          type="button"
+        >
+          Guardar
+        </button>
+        <button
+          className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+          onClick={() => onToggle(origin.id)}
+          type="button"
+        >
+          {origin.active ? 'Desactivar' : 'Activar'}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function OriginTypeSelect({
+  value,
+  onChange,
+}: {
+  value: TaskOriginConfig['tipo'];
+  onChange: (value: TaskOriginConfig['tipo']) => void;
+}) {
+  return (
+    <select
+      className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+      onChange={(event) => onChange(event.target.value as TaskOriginConfig['tipo'])}
+      value={value}
+    >
+      <option value="sindicato">Sindicato</option>
+      <option value="empresa">Empresa</option>
+      <option value="otro">Otro</option>
     </select>
   );
 }

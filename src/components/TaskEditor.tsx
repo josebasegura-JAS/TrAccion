@@ -17,8 +17,7 @@ import { InlineSaveFeedback } from './InlineSaveFeedback';
 const taskTextFields: Array<{ field: TaskDraftField; label: string; required?: boolean; type?: string }> = [
   { field: 'titulo', label: 'Título', required: true },
   { field: 'responsable', label: 'Responsable' },
-  { field: 'origen', label: 'Origen' },
-  { field: 'sindicato', label: 'Sindicato' },
+  { field: 'origen', label: 'Detalle origen / solicitante' },
   { field: 'fechaLimite', label: 'Fecha límite', type: 'date' },
 ];
 
@@ -62,6 +61,7 @@ export function TaskEditor({
   onDone: () => void;
 }) {
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
+  const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const createTask = useTaskStore((state) => state.create);
   const updateTask = useTaskStore((state) => state.update);
@@ -94,6 +94,13 @@ export function TaskEditor({
     const activePhaseNames = taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre);
     return activePhaseNames.includes(draft.fase) ? activePhaseNames : [draft.fase, ...activePhaseNames];
   }, [draft.fase, taskPhases]);
+
+  const originOptions = useMemo(() => {
+    const activeOriginNames = taskOrigins.filter((origin) => origin.active).map((origin) => origin.nombre);
+    return draft.sindicato && !activeOriginNames.includes(draft.sindicato)
+      ? [draft.sindicato, ...activeOriginNames]
+      : activeOriginNames;
+  }, [draft.sindicato, taskOrigins]);
 
   const isCreate = mode === 'create';
   const hasExternalTaskUpdate =
@@ -205,9 +212,6 @@ export function TaskEditor({
             {taskTextFields.map(({ field, label, required, type }) => (
               <label className="text-xs font-semibold text-metro-muted" key={field}>
                 {label}
-                {field === 'sindicato' && draft.tipo === 'sindical' && (
-                  <span className="ml-1 text-metro-red">visible para tarea sindical</span>
-                )}
                 <input
                   className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                   onChange={(event) =>
@@ -219,6 +223,21 @@ export function TaskEditor({
                 />
               </label>
             ))}
+            <label className="text-xs font-semibold text-metro-muted">
+              Origen
+              <select
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => setDraft((current) => ({ ...current, sindicato: event.target.value }))}
+                value={draft.sindicato}
+              >
+                <option value="">Sin origen</option>
+                {originOptions.map((origin) => (
+                  <option key={origin} value={origin}>
+                    {origin}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="text-xs font-semibold text-metro-muted">
               Estado
               <select

@@ -115,7 +115,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                 ref={inputRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por persona, tarea, sindicato, fecha, módulo..."
+                placeholder="Buscar por persona, tarea, origen, fecha, módulo..."
                 className="min-w-0 flex-1 bg-transparent text-sm font-medium text-metro-text outline-none placeholder:text-metro-muted"
               />
               <button
