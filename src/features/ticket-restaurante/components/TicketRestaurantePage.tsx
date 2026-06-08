@@ -540,6 +540,15 @@ export function TicketRestaurantePage({
         ),
     [people],
   );
+  const activeTicketEmployeeNumbers = useMemo(
+    () =>
+      new Set(
+        people
+          .filter((person) => person.activo && !person.deletedAt)
+          .map((person) => person.empleado),
+      ),
+    [people],
+  );
   const monthCalculation = useMemo(
     () =>
       calculateMonthlyTicketOrder(
@@ -709,9 +718,25 @@ export function TicketRestaurantePage({
       return;
     }
 
+    const rowsWithTicketRight = rows.filter((row) => activeTicketEmployeeNumbers.has(row.empleado));
+    const ignoredWithoutTicketRight = rows.length - rowsWithTicketRight.length;
+
+    if (rowsWithTicketRight.length === 0) {
+      setImportMessage(
+        ignoredWithoutTicketRight > 0
+          ? `No se ha importado ninguna ausencia. ${ignoredWithoutTicketRight} fila(s) pertenecen a personas sin derecho activo a Ticket Restaurante.`
+          : 'No se han detectado ausencias importables.',
+      );
+      return;
+    }
+
     setEditingAbsenceId(null);
-    setPreviewRows(rows);
-    setImportMessage('');
+    setPreviewRows(rowsWithTicketRight);
+    setImportMessage(
+      ignoredWithoutTicketRight > 0
+        ? `Filas ignoradas por persona sin derecho activo a Ticket Restaurante: ${ignoredWithoutTicketRight}.`
+        : '',
+    );
     setIsPreviewOpen(true);
   };
 
