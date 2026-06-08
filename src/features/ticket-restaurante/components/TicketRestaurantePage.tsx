@@ -430,6 +430,11 @@ function addDays(fecha: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+
+function normalizeTicketEmployeeNumberForMatch(value: string): string {
+  return value.trim().replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
+}
+
 function absenceDiscountsTicket(
   absence: TicketRestaurantAbsence,
   calendar: TicketCalendar | null,
@@ -545,7 +550,7 @@ export function TicketRestaurantePage({
       new Set(
         people
           .filter((person) => person.activo && !person.deletedAt)
-          .map((person) => person.empleado),
+          .map((person) => normalizeTicketEmployeeNumberForMatch(person.empleado)),
       ),
     [people],
   );
@@ -708,36 +713,70 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const rows = await importTicketRestaurantAbsencesFromFile(file);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setImportMessage(`Procesando ${file.name}...`);
 
-    if (rows.length === 0) {
-      setImportMessage('No se han detectado ausencias con formato limpio o ZERKOS.');
-      return;
-    }
+    try {
+      const rows = await importTicketRestaurantAbsencesFromFile(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
 
-    const rowsWithTicketRight = rows.filter((row) => activeTicketEmployeeNumbers.has(row.empleado));
-    const ignoredWithoutTicketRight = rows.length - rowsWithTicketRight.length;
+      if (rows.length === 0) {
+        setPreviewRows([]);
+        setEditingAbsenceId(null);
+        setIsPreviewOpen(false);
+        setImportMessage(
+          'No se han detectado ausencias importables. El fichero debe tener formato limpio o ZERKOS.',
+        );
+        return;
+      }
 
-    if (rowsWithTicketRight.length === 0) {
-      setImportMessage(
-        ignoredWithoutTicketRight > 0
-          ? `No se ha importado ninguna ausencia. ${ignoredWithoutTicketRight} fila(s) pertenecen a personas sin derecho activo a Ticket Restaurante.`
-          : 'No se han detectado ausencias importables.',
+      const rowsWithTicketRight = rows.filter((row) =>
+        activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumberForMatch(row.empleado)),
       );
-      return;
-    }
+      const ignoredWithoutTicketRight = rows.length - rowsWithTicketRight.length;
+      const rowsWithErrors = rowsWithTicketRight.filter((row) => row.errors.length > 0).length;
 
-    setEditingAbsenceId(null);
-    setPreviewRows(rowsWithTicketRight);
-    setImportMessage(
-      ignoredWithoutTicketRight > 0
-        ? `Filas ignoradas por persona sin derecho activo a Ticket Restaurante: ${ignoredWithoutTicketRight}.`
-        : '',
-    );
-    setIsPreviewOpen(true);
+      if (rowsWithTicketRight.length === 0) {
+        setPreviewRows([]);
+        setEditingAbsenceId(null);
+        setIsPreviewOpen(false);
+        setImportMessage(
+          ignoredWithoutTicketRight > 0
+            ? `No se ha importado ninguna ausencia. ${ignoredWithoutTicketRight} fila(s) pertenecen a personas sin derecho activo a Ticket Restaurante.`
+            : 'No se han detectado ausencias importables.',
+        );
+        return;
+      }
+
+      setEditingAbsenceId(null);
+      setPreviewRows(rowsWithTicketRight);
+      setImportMessage(
+        [
+          `Ausencias detectadas: ${rows.length}.`,
+          `A revisar: ${rowsWithTicketRight.length}.`,
+          ignoredWithoutTicketRight > 0
+            ? `Ignoradas por persona sin derecho activo: ${ignoredWithoutTicketRight}.`
+            : '',
+          rowsWithErrors > 0 ? `Con errores pendientes de corregir: ${rowsWithErrors}.` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+      setIsPreviewOpen(true);
+    } catch (error) {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setPreviewRows([]);
+      setEditingAbsenceId(null);
+      setIsPreviewOpen(false);
+      setImportMessage(
+        error instanceof Error
+          ? `No se ha podido importar el fichero: ${error.message}`
+          : 'No se ha podido importar el fichero por un error no identificado.',
+      );
+    }
   };
 
   const handlePeopleImportFile = async (file: File | null) => {
