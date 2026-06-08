@@ -241,7 +241,8 @@ export function TaskEditor({
     setMailStatus('Leyendo mensaje Outlook...');
     setMailStatusIsError(false);
     const parsed = await parseOutlookMsg(file);
-    if (!parsed.ok || !parsed.data) {
+    const parsedMailData = parsed.data;
+    if (!parsed.ok || !parsedMailData) {
       setMailStatus(parsed.message || 'No se ha podido leer el mensaje Outlook.');
       setMailStatusIsError(true);
       return;
@@ -249,7 +250,7 @@ export function TaskEditor({
 
     setDraft((current) => ({
       ...current,
-      mail: formatMailFromMsg(parsed.data),
+      mail: formatMailFromMsg(parsedMailData),
     }));
     setMailStatus('Texto del mensaje copiado al campo Mail.');
     setMailStatusIsError(false);
