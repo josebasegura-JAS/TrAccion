@@ -7,12 +7,19 @@ import {
   normalizeTaskPhaseName,
   type TaskPhaseConfig,
 } from '../domain/taskPhases';
+import {
+  createTaskOriginIdFromName,
+  DEFAULT_TASK_ORIGINS,
+  normalizeTaskOriginName,
+  type TaskOriginConfig,
+} from '../domain/taskOrigins';
 
 const STORAGE_KEY = 'traccion.v1.configuracion';
 
 interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
   taskPhases: TaskPhaseConfig[];
+  taskOrigins: TaskOriginConfig[];
 }
 
 interface ConfiguracionStore extends ConfiguracionState {
@@ -22,6 +29,25 @@ interface ConfiguracionStore extends ConfiguracionState {
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
+  addTaskOrigin: (nombre: string, tipo: TaskOriginConfig['tipo']) => void;
+  updateTaskOrigin: (id: string, nombre: string, tipo: TaskOriginConfig['tipo']) => void;
+  toggleTaskOrigin: (id: string) => void;
+}
+
+function isTaskOriginConfig(value: unknown): value is TaskOriginConfig {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof TaskOriginConfig, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.nombre === 'string' &&
+    (candidate.tipo === 'sindicato' || candidate.tipo === 'empresa' || candidate.tipo === 'otro') &&
+    typeof candidate.active === 'boolean' &&
+    typeof candidate.createdAt === 'string' &&
+    typeof candidate.updatedAt === 'string'
+  );
 }
 
 function isTaskPhaseConfig(value: unknown): value is TaskPhaseConfig {
@@ -56,6 +82,23 @@ function normalizeTaskPhases(value: unknown): TaskPhaseConfig[] {
   return [...phases, ...missingDefaultPhases];
 }
 
+function normalizeTaskOrigins(value: unknown): TaskOriginConfig[] {
+  if (!Array.isArray(value)) {
+    return DEFAULT_TASK_ORIGINS;
+  }
+
+  const origins = value.filter(isTaskOriginConfig).map((origin) => ({
+    ...origin,
+    nombre: normalizeTaskOriginName(origin.nombre),
+  }));
+
+  const missingDefaultOrigins = DEFAULT_TASK_ORIGINS.filter(
+    (defaultOrigin) => !origins.some((origin) => origin.id === defaultOrigin.id),
+  );
+
+  return [...origins, ...missingDefaultOrigins];
+}
+
 function isConfiguracionState(value: unknown): value is ConfiguracionState {
   if (!value || typeof value !== 'object') {
     return false;
@@ -68,17 +111,18 @@ function isConfiguracionState(value: unknown): value is ConfiguracionState {
 function readConfiguracion(): ConfiguracionState {
   const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
-    return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES };
+    return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
   }
 
   const parsed: unknown = JSON.parse(stored);
   if (!isConfiguracionState(parsed)) {
-    return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES };
+    return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
   }
 
   return {
     rutaPlantillaTeletrabajo: normalizeTemplatePath(parsed.rutaPlantillaTeletrabajo),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
+    taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
   };
 }
 
@@ -91,6 +135,7 @@ const initialConfiguracion = readConfiguracion();
 export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
   taskPhases: initialConfiguracion.taskPhases,
+  taskOrigins: initialConfiguracion.taskOrigins,
   load: () => set(readConfiguracion()),
   reloadFromStorage: () => set(readConfiguracion()),
   setRutaPlantillaTeletrabajo: (ruta) =>
@@ -145,6 +190,55 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
         ...state,
         taskPhases: state.taskPhases.map((phase) =>
           phase.id === id ? { ...phase, active: !phase.active, updatedAt: now } : phase,
+        ),
+      };
+      persistConfiguracion(configuracion);
+      return configuracion;
+    }),
+  addTaskOrigin: (nombre, tipo) =>
+    set((state) => {
+      const normalizedName = normalizeTaskOriginName(nombre);
+      if (!normalizedName) {
+        return state;
+      }
+
+      const now = new Date().toISOString();
+      const origin: TaskOriginConfig = {
+        id: `${createTaskOriginIdFromName(normalizedName)}-${Date.now().toString(36)}`,
+        nombre: normalizedName,
+        tipo,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const configuracion = { ...state, taskOrigins: [...state.taskOrigins, origin] };
+      persistConfiguracion(configuracion);
+      return configuracion;
+    }),
+  updateTaskOrigin: (id, nombre, tipo) =>
+    set((state) => {
+      const normalizedName = normalizeTaskOriginName(nombre);
+      if (!normalizedName) {
+        return state;
+      }
+
+      const now = new Date().toISOString();
+      const configuracion = {
+        ...state,
+        taskOrigins: state.taskOrigins.map((origin) =>
+          origin.id === id ? { ...origin, nombre: normalizedName, tipo, updatedAt: now } : origin,
+        ),
+      };
+      persistConfiguracion(configuracion);
+      return configuracion;
+    }),
+  toggleTaskOrigin: (id) =>
+    set((state) => {
+      const now = new Date().toISOString();
+      const configuracion = {
+        ...state,
+        taskOrigins: state.taskOrigins.map((origin) =>
+          origin.id === id ? { ...origin, active: !origin.active, updatedAt: now } : origin,
         ),
       };
       persistConfiguracion(configuracion);
