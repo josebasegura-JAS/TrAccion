@@ -1,5 +1,4 @@
 import {
-  FileUp,
   Languages,
   Plus,
   RefreshCw,
@@ -9,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
+import { ActionButton } from './ui/ActionButton';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
@@ -317,13 +317,9 @@ export function PlantillaPage() {
           >
             <RefreshCw size={16} /> Actualizar puestos global
           </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            <FileUp size={16} /> Importar
-          </button>
+          <ActionButton onClick={() => fileInputRef.current?.click()} variant="import">
+            Importar
+          </ActionButton>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}

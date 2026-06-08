@@ -1,4 +1,4 @@
-import { FileText, Plus, RotateCcw, Search, SlidersHorizontal, Upload } from 'lucide-react';
+import { FileText, Plus, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -7,6 +7,7 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
+import { ActionButton } from './ui/ActionButton';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
 import {
@@ -403,13 +404,9 @@ export function TeletrabajoPage({
             ref={fileInputRef}
             type="file"
           />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:bg-metro-surface"
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            <Upload size={16} /> Importar encuesta
-          </button>
+          <ActionButton onClick={() => fileInputRef.current?.click()} variant="import">
+            Importar encuesta
+          </ActionButton>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}

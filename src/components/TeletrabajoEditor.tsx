@@ -1,4 +1,4 @@
-import { FileText, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
@@ -18,6 +18,7 @@ import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { ActionButton } from './ui/ActionButton';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 
 const plantillaTextFields: Array<{
@@ -483,13 +484,9 @@ export function TeletrabajoEditor({
           )}
 
           <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
-            <button
-              className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmit}
-              type="submit"
-            >
+            <ActionButton disabled={!canSubmit} size="sm" type="submit" variant="save">
               Guardar
-            </button>
+            </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && solicitud && (
               <AuditHistoryButton
@@ -498,15 +495,14 @@ export function TeletrabajoEditor({
                 module="teletrabajo"
               />
             )}
-            <button
-              className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            <ActionButton
               disabled={!canSubmit || isGeneratingWord || recordLock.isReadOnly}
               onClick={handleGenerateWord}
-              type="button"
+              size="sm"
+              variant="word"
             >
-              <FileText size={15} />
               {isGeneratingWord ? 'Generando…' : 'Generar Word'}
-            </button>
+            </ActionButton>
             {!isCreate && solicitud && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
