@@ -11,6 +11,7 @@ import {
 } from '../domain/criterioRrll';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../../../shared/filters/ActiveFilterChips';
+import { SelectFilter } from '../../../shared/filters/SelectFilter';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
@@ -40,35 +41,6 @@ const criterioExportColumns: ExportColumn<CriterioRrll>[] = [
   { key: 'criterio', header: 'Criterio', value: (criterio) => criterio.criterio },
 ];
 
-function SelectFilter({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  options: readonly string[];
-  value: string;
-}) {
-  return (
-    <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-      <span className="shrink-0 text-xs font-bold uppercase tracking-wide">{label}</span>
-      <select
-        className="w-full bg-transparent text-metro-text outline-none"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        <option value="">Todos</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 export function CriteriosRrllPage() {
   const { criterios, filters, load, remove, selectCriterio, setFilter } = useCriteriosRrllStore();
@@ -187,6 +159,7 @@ export function CriteriosRrllPage() {
           />
         </label>
         <SelectFilter
+          showLabel
           label="Estado"
           onChange={(value) => setFilter('estado', value as '' | CriterioRrllEstado)}
           options={CRITERIO_RRLL_ESTADOS}
