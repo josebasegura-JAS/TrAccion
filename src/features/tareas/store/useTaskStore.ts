@@ -188,10 +188,6 @@ function readStoredArray(storageKey: string): unknown[] {
   return Array.isArray(parsed) ? parsed : [];
 }
 
-function readCurrentTasks(): Task[] {
-  return readStoredArray(STORAGE_KEY).filter(isTask).map(normalizeTask);
-}
-
 function readMigratedPeticiones(): Task[] {
   if (readStorageItem(PETICIONES_MIGRATION_FLAG_KEY) === 'true') {
     return [];
@@ -204,12 +200,19 @@ function readMigratedPeticiones(): Task[] {
 }
 
 function readTasks(): Task[] {
-  const currentTasks = readCurrentTasks();
+  const rawCurrentTasks = readStoredArray(STORAGE_KEY).filter(isTask);
+  const currentTasks = rawCurrentTasks.map(normalizeTask);
   const migratedTasks = readMigratedPeticiones().filter(
     (migratedTask) => !currentTasks.some((task) => task.id === migratedTask.id),
   );
+  const currentTasksChanged = currentTasks.some(
+    (task, index) => JSON.stringify(task) !== JSON.stringify(rawCurrentTasks[index]),
+  );
 
   if (migratedTasks.length === 0) {
+    if (currentTasksChanged) {
+      persistTasks(currentTasks);
+    }
     return currentTasks;
   }
 
@@ -220,7 +223,7 @@ function readTasks(): Task[] {
 }
 
 function persistTasks(tasks: Task[]): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(tasks));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
 }
 
 function firstActiveTaskId(tasks: Task[]): string {
@@ -291,17 +294,23 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           .filter((value): value is string => Boolean(value)),
       );
       const importedTasks: Task[] = [];
+      const tasksWithNormalizedExistingImports = state.tasks.map((task) => normalizeTask(task));
+      const changedExistingTasks = tasksWithNormalizedExistingImports.some(
+        (task, index) => JSON.stringify(task) !== JSON.stringify(state.tasks[index]),
+      );
 
       drafts.forEach(({ externalKey, draft, closedAt }) => {
         if (existingImportKeys.has(externalKey)) {
-          const existingTask = state.tasks.find((task) => task.observaciones.includes(`ImportKey:${externalKey}`));
+          const existingTask = tasksWithNormalizedExistingImports.find((task) =>
+            task.observaciones.includes(`ImportKey:${externalKey}`),
+          );
           if (existingTask) {
             createdIds[externalKey] = existingTask.id;
           }
           return;
         }
 
-        const task: Task = {
+        const task: Task = normalizeTask({
           id: createTaskId(),
           ...draft,
           observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
@@ -310,18 +319,18 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           updatedAt: now,
           deletedAt: null,
           closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
-        };
+        });
         createdIds[externalKey] = task.id;
         importedTasks.push(task);
       });
 
-      if (importedTasks.length === 0) {
+      if (importedTasks.length === 0 && !changedExistingTasks) {
         return state;
       }
 
-      const tasks = [...state.tasks, ...importedTasks];
+      const tasks = [...tasksWithNormalizedExistingImports, ...importedTasks];
       persistTasks(tasks);
-      return { tasks, selectedTaskId: state.selectedTaskId || firstActiveTaskId(tasks) };
+      return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
 
     return createdIds;
