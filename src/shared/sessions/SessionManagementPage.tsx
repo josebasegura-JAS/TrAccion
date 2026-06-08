@@ -7,7 +7,6 @@ import {
   Plus,
   Search,
   Trash2,
-  Upload,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
@@ -17,6 +16,7 @@ import { useSharedRecordLock } from '../../services/useSharedRecordLock';
 import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
+import { ActionButton } from '../../components/ui/ActionButton';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import type { ManagedSessionStateStore } from './createSessionStore';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
@@ -514,13 +514,9 @@ export function SessionManagementPage({
             ref={fileInputRef}
             type="file"
           />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={openImporter}
-            type="button"
-          >
-            <Upload size={16} /> Importar Word
-          </button>
+          <ActionButton onClick={openImporter} variant="word">
+            Importar Word
+          </ActionButton>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={() => setIsCreateOpen((current) => !current)}
