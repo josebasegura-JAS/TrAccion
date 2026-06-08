@@ -1,5 +1,5 @@
-import { Download, Printer } from 'lucide-react';
 import { useState } from 'react';
+import { ActionButton } from '../../components/ui/ActionButton';
 import { exportTableToExcel } from '../export/tableExport';
 import type { ExportTablePayload } from '../export/types';
 import { buildPrintableTableHtml } from './buildPrintableTableHtml';
@@ -13,24 +13,22 @@ export function ExportPrintButtons<T>({ payload }: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   return (
     <>
-      <button
-        className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+      <ActionButton
         disabled={payload.rows.length === 0}
         onClick={() => exportTableToExcel({ ...payload, generatedAt: new Date() })}
-        type="button"
+        variant="excel"
       >
-        <Download size={16} /> Exportar Excel
-      </button>
-      <button
-        className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+        Exportar Excel
+      </ActionButton>
+      <ActionButton
         disabled={payload.rows.length === 0}
         onClick={() =>
           setPreviewHtml(buildPrintableTableHtml({ ...payload, generatedAt: new Date() }))
         }
-        type="button"
+        variant="print"
       >
-        <Printer size={16} /> Imprimir
-      </button>
+        Imprimir
+      </ActionButton>
       {previewHtml && (
         <PrintPreviewModal
           html={previewHtml}
