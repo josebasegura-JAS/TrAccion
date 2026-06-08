@@ -18,7 +18,10 @@ export interface PersistenceFeedback {
 
 const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
 
+let latestPersistenceFeedback: PersistenceFeedback | null = null;
+
 function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
+  latestPersistenceFeedback = feedback;
   window.dispatchEvent(
     new CustomEvent<PersistenceFeedback>(PERSISTENCE_FEEDBACK_EVENT, { detail: feedback }),
   );
@@ -32,6 +35,9 @@ export function subscribeToPersistenceFeedback(
   };
 
   window.addEventListener(PERSISTENCE_FEEDBACK_EVENT, handler);
+  if (latestPersistenceFeedback) {
+    listener(latestPersistenceFeedback);
+  }
   return () => window.removeEventListener(PERSISTENCE_FEEDBACK_EVENT, handler);
 }
 
@@ -410,6 +416,19 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       reason: 'Error leyendo SQLite; se mantiene localStorage.',
     };
   }
+}
+
+
+export function reportStartupHydrationResult(result: HydrationResult): void {
+  if (result.status !== 'sqlite-unavailable') {
+    return;
+  }
+
+  emitPersistenceFeedback({
+    kind: 'error',
+    updatedAt: new Date().toISOString(),
+    message: `Arranque sin SQLite activo: ${result.reason} Los cambios pueden quedar solo en caché local hasta recuperar la persistencia.`,
+  });
 }
 
 export function bootstrapSqlitePersistence(force = false): void {
