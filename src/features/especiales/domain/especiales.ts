@@ -467,14 +467,15 @@ function parseOutlookMsgWithBrowserFallback(
 ): Pick<ParsedMsgData, 'subject' | 'body' | 'htmlBody' | 'senderName' | 'senderEmail' | 'date'> {
   const rawUtf16Text = decodeArrayBuffer(buffer, 'utf-16le');
   const rawLatin1Text = decodeArrayBuffer(buffer, 'iso-8859-1');
+  const subject = decodeMimeWords(extractMsgSubject(rawUtf16Text, rawLatin1Text, fileName));
 
   return {
-    subject: decodeMimeWords(extractMsgSubject(rawUtf16Text, rawLatin1Text, fileName)),
-    body: decodeMimeWords(rawUtf16Text || rawLatin1Text),
+    subject,
+    body: extractReadableMsgBody(`${rawUtf16Text}\n${rawLatin1Text}`, subject),
     htmlBody: '',
-    senderName: '',
+    senderName: extractMsgSenderName(`${rawUtf16Text}\n${rawLatin1Text}`),
     senderEmail: extractFirstEmail(`${rawUtf16Text}\n${rawLatin1Text}`),
-    date: '',
+    date: extractMsgDate(`${rawUtf16Text}\n${rawLatin1Text}`),
   };
 }
 
@@ -488,11 +489,12 @@ function buildParsedMsgResult(
   const rawUtf16Text = decodeArrayBuffer(buffer, 'utf-16le');
   const rawLatin1Text = decodeArrayBuffer(buffer, 'iso-8859-1');
   const subject = decodeMimeWords(parsed.subject || extractMsgSubject(rawUtf16Text, rawLatin1Text, fileName));
-  const body = decodeMimeWords(parsed.body || rawUtf16Text || rawLatin1Text);
   const htmlBody = parsed.htmlBody || '';
   const htmlText = stripHtmlToText(htmlBody);
-  const safeDetectionSources = [body, htmlText, rawUtf16Text, rawLatin1Text, subject].filter(Boolean);
-  const textForDetection = `${subject}\n${body}\n${htmlText}`;
+  const body = extractReadableMsgBody(decodeMimeWords(parsed.body || htmlText), subject);
+  const rawReadableText = extractReadableMsgBody(`${rawUtf16Text}\n${rawLatin1Text}`, subject);
+  const safeDetectionSources = [body, htmlText, rawReadableText, subject].filter(Boolean);
+  const textForDetection = `${subject}\n${body}\n${htmlText}\n${rawReadableText}`;
   const auto = detectAutoFields(textForDetection, subject, safeDetectionSources);
 
   if (rawIntranetParagraph && !auto.intranetParagraph) {
@@ -564,6 +566,62 @@ function extractMsgSubject(utf16Text: string, latin1Text: string, fileName: stri
 
 function extractFirstEmail(value: string): string {
   return value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '';
+}
+
+
+function extractMsgSenderName(value: string): string {
+  const match = value.match(/(?:^|\n|\r)(?:from|de)\s*[:=]\s*([^\r\n<]{3,120})/i);
+  return match?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function extractMsgDate(value: string): string {
+  const match = value.match(/(?:^|\n|\r)(?:sent|fecha)\s*[:=]\s*([^\r\n]{4,80})/i);
+  return match?.[1]?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function isReadableMsgLine(line: string): boolean {
+  const text = line.replace(/\0/g, ' ').replace(/\s+/g, ' ').trim();
+  if (text.length < 3 || text.length > 500) {
+    return false;
+  }
+  if (/(__substg|Root Entry|þÿ|ÿÿ|\u0001|\u0002|\u0003|\u0004|\u0005|\u0006|\u0007|\u0008|\u000b|\u000c)/i.test(text)) {
+    return false;
+  }
+  const printable = (text.match(/[\p{L}\p{N}\s.,;:¿?¡!@<>()\[\]\\/\-_'"áéíóúÁÉÍÓÚñÑüÜ€%]/gu) || []).length;
+  const lettersOrNumbers = (text.match(/[\p{L}\p{N}]/gu) || []).length;
+  const suspicious = (text.match(/[�\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g) || []).length;
+  if (suspicious > 0) {
+    return false;
+  }
+  return printable / text.length >= 0.8 && lettersOrNumbers >= Math.max(2, Math.floor(text.length * 0.25));
+}
+
+function extractReadableMsgBody(value: string, subject = ''): string {
+  const normalized = value
+    .replace(/\0/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+  const subjectKey = normalizePlainText(subject);
+  const acceptedLines: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine.replace(/\s+/g, ' ').trim();
+    if (!isReadableMsgLine(line)) {
+      continue;
+    }
+    const lineKey = normalizePlainText(line);
+    if (!lineKey || seen.has(lineKey) || (subjectKey && lineKey === subjectKey)) {
+      continue;
+    }
+    seen.add(lineKey);
+    acceptedLines.push(line);
+    if (acceptedLines.join('\n').length > 6000) {
+      break;
+    }
+  }
+
+  return acceptedLines.join('\n').trim();
 }
 
 function isCleanIntranetCandidate(value: string): boolean {

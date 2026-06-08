@@ -48,6 +48,56 @@ function readMsgTextPayload(buffer: Buffer): string {
   return `${latin1}\n${utf16}`.replace(/\0/g, ' ');
 }
 
+function normalizePlainText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function isReadableMsgLine(line: string): boolean {
+  const text = line.replace(/\0/g, ' ').replace(/\s+/g, ' ').trim();
+  if (text.length < 3 || text.length > 500) {
+    return false;
+  }
+  if (/(__substg|Root Entry|þÿ|ÿÿ|\u0001|\u0002|\u0003|\u0004|\u0005|\u0006|\u0007|\u0008|\u000b|\u000c)/i.test(text)) {
+    return false;
+  }
+  const printable = (text.match(/[\p{L}\p{N}\s.,;:¿?¡!@<>()\[\]\\/\-_'"áéíóúÁÉÍÓÚñÑüÜ€%]/gu) || []).length;
+  const lettersOrNumbers = (text.match(/[\p{L}\p{N}]/gu) || []).length;
+  const suspicious = (text.match(/[�\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g) || []).length;
+  if (suspicious > 0) {
+    return false;
+  }
+  return printable / text.length >= 0.8 && lettersOrNumbers >= Math.max(2, Math.floor(text.length * 0.25));
+}
+
+function extractReadableMsgBody(value: string, subject = ''): string {
+  const normalized = value.replace(/\0/g, ' ').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const subjectKey = normalizePlainText(subject);
+  const acceptedLines: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine.replace(/\s+/g, ' ').trim();
+    if (!isReadableMsgLine(line)) {
+      continue;
+    }
+    const lineKey = normalizePlainText(line);
+    if (!lineKey || seen.has(lineKey) || (subjectKey && lineKey === subjectKey)) {
+      continue;
+    }
+    seen.add(lineKey);
+    acceptedLines.push(line);
+    if (acceptedLines.join('\n').length > 6000) {
+      break;
+    }
+  }
+
+  return acceptedLines.join('\n').trim();
+}
+
 async function loadMsgReader(): Promise<MsgReaderConstructor> {
   const moduleValue = (await import('@kenjiuno/msgreader')) as MsgReaderModule;
   const defaultValue = moduleValue.default;
@@ -68,12 +118,13 @@ function parseWithFallback(buffer: Buffer): ParsedOutlookMsgResult {
   const senderName = (text.match(/(?:from|de)\s*[:=]\s*([^\r\n<]{3,120})/i) || [])[1] || '';
   const senderEmail = (text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) || [])[0] || '';
   const date = (text.match(/(?:sent|fecha)\s*[:=]\s*([^\r\n]{4,80})/i) || [])[1] || '';
-  const body = text.slice(0, 10_000);
+  const cleanSubject = subject.trim();
+  const body = extractReadableMsgBody(text, cleanSubject);
 
   return {
-    ok: Boolean(subject || body),
+    ok: Boolean(cleanSubject || body),
     data: {
-      subject: subject.trim(),
+      subject: cleanSubject,
       body,
       htmlBody: '',
       senderName: senderName.trim(),
@@ -92,7 +143,7 @@ export async function parseOutlookMsgBuffer(buffer: Buffer): Promise<ParsedOutlo
       ok: true,
       data: {
         subject: stringify(data.subject),
-        body: stringify(data.body),
+        body: extractReadableMsgBody(stringify(data.body), stringify(data.subject)),
         htmlBody: stringify(data.bodyHTML) || stringify(data.html),
         senderName: stringify(data.senderName),
         senderEmail: stringify(data.senderEmail),
