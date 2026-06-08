@@ -407,7 +407,7 @@ export function TaskEditor({
           }}
         >
           <fieldset
-            className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto pr-1 disabled:opacity-70 sm:grid-cols-6 lg:grid-cols-12"
+            className="grid min-h-0 max-h-[calc(100vh-14rem)] grid-cols-1 gap-2 overflow-y-auto overscroll-contain pr-2 disabled:opacity-70 sm:grid-cols-6 lg:grid-cols-12"
             disabled={recordLock.isReadOnly}
           >
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
@@ -702,7 +702,7 @@ export function TaskEditor({
             </label>
           </fieldset>
 
-          <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
+          <div className="shrink-0 flex flex-wrap gap-2 border-t border-metro-border pt-3">
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSubmit}
