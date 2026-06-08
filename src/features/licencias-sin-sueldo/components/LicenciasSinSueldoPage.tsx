@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -344,6 +345,14 @@ function LicenseEditor({
           <div>{mode === 'edit' && <button className={secondaryButtonClass} disabled={isReadOnly} onClick={onDelete} type="button"><Trash2 size={16} /> Eliminar</button>}</div>
           <div className="flex flex-wrap gap-2">
             <button className={secondaryButtonClass} onClick={onClose} type="button">Cancelar</button>
+            {mode === 'edit' && record && (
+              <AuditHistoryButton
+                className={secondaryButtonClass}
+                entityId={record.id}
+                entityTitle={record.nombreCompleto || 'Licencia sin nombre'}
+                module="licencias-sin-sueldo"
+              />
+            )}
             <button className={buttonClass} disabled={isReadOnly} onClick={handleSave} type="button"><Save size={16} /> Guardar</button><InlineSaveFeedback />
           </div>
         </div>
