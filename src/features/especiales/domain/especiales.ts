@@ -584,16 +584,47 @@ function isReadableMsgLine(line: string): boolean {
   if (text.length < 3 || text.length > 500) {
     return false;
   }
-  if (/(__substg|Root Entry|þÿ|ÿÿ|\u0001|\u0002|\u0003|\u0004|\u0005|\u0006|\u0007|\u0008|\u000b|\u000c)/i.test(text)) {
+  if (hasMsgStructuralNoise(text) || hasForbiddenControlCharacter(text)) {
     return false;
   }
-  const printable = (text.match(/[\p{L}\p{N}\s.,;:¿?¡!@<>()\[\]\\/\-_'"áéíóúÁÉÍÓÚñÑüÜ€%]/gu) || []).length;
-  const lettersOrNumbers = (text.match(/[\p{L}\p{N}]/gu) || []).length;
-  const suspicious = (text.match(/[�\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g) || []).length;
-  if (suspicious > 0) {
-    return false;
-  }
+  const printable = countReadableMsgCharacters(text);
+  const lettersOrNumbers = countLettersOrNumbers(text);
   return printable / text.length >= 0.8 && lettersOrNumbers >= Math.max(2, Math.floor(text.length * 0.25));
+}
+
+function countReadableMsgCharacters(text: string): number {
+  let count = 0;
+  for (const char of text) {
+    if (isLetterOrNumber(char) || isAllowedMsgPunctuation(char)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function countLettersOrNumbers(text: string): number {
+  let count = 0;
+  for (const char of text) {
+    if (isLetterOrNumber(char)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function isLetterOrNumber(char: string): boolean {
+  return /[\p{L}\p{N}]/u.test(char);
+}
+
+function isAllowedMsgPunctuation(char: string): boolean {
+  return " \t.,;:¿?¡!@<>()[]\\/-_'\"áéíóúÁÉÍÓÚñÑüÜ€%".includes(char);
+}
+
+function hasMsgStructuralNoise(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower.includes('__substg') || lower.includes('root entry') || lower.includes('þÿ') || lower.includes('ÿÿ');
 }
 
 function extractReadableMsgBody(value: string, subject = ''): string {
