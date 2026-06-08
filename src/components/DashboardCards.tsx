@@ -51,7 +51,7 @@ type DashboardNavigationTarget = {
 
 type KpiCard = {
   title: string;
-  value: number;
+  value: number | string;
   subtitle: string;
   helper: string;
   icon: LucideIcon;
@@ -206,17 +206,14 @@ export function DashboardCards({
   const loadParitariaSessions = useParitariaSessionStore((state) => state.load);
   const solicitudes = useTeletrabajoStore((state) => state.solicitudes);
   const loadSolicitudes = useTeletrabajoStore((state) => state.load);
-  const ticketPeople = useTicketRestauranteStore((state) => state.people);
-  const ticketAbsences = useTicketRestauranteStore((state) => state.absences);
-  const loadTickets = useTicketRestauranteStore((state) => state.load);
+  const [ticketSummary, setTicketSummary] = useState({ loaded: false, people: 0, absences: 0 });
 
   useEffect(() => {
     loadTasks();
     loadSessions();
     loadSolicitudes();
-    loadTickets();
     loadParitariaSessions();
-  }, [loadParitariaSessions, loadSessions, loadSolicitudes, loadTasks, loadTickets]);
+  }, [loadParitariaSessions, loadSessions, loadSolicitudes, loadTasks]);
 
   const openRecord = (target: DashboardNavigationTarget) => {
     onOpenRecord?.(target);
@@ -257,14 +254,20 @@ export function DashboardCards({
     () => activeTelework.filter((solicitud) => solicitud.estado === 'pendiente'),
     [activeTelework],
   );
-  const activeTicketPeople = useMemo(
-    () => ticketPeople.filter((person) => person.activo && !person.deletedAt),
-    [ticketPeople],
-  );
-  const activeTicketAbsences = useMemo(
-    () => ticketAbsences.filter((absence) => !absence.deletedAt && absence.afectaTicket),
-    [ticketAbsences],
-  );
+  const getActiveTicketData = () => {
+    const ticketStore = useTicketRestauranteStore.getState();
+    ticketStore.load();
+
+    const currentTicketStore = useTicketRestauranteStore.getState();
+    const people = currentTicketStore.people.filter((person) => person.activo && !person.deletedAt);
+    const absences = currentTicketStore.absences.filter(
+      (absence) => !absence.deletedAt && absence.afectaTicket,
+    );
+
+    setTicketSummary({ loaded: true, people: people.length, absences: absences.length });
+
+    return { people, absences };
+  };
   const actaTasks = useMemo(
     () =>
       activeTasks.filter((task) =>
@@ -326,8 +329,8 @@ export function DashboardCards({
       recordId: solicitud.id,
     }));
 
-  const ticketAbsencePopupItems = (): DashboardPopupItem[] =>
-    activeTicketAbsences.map((absence) => ({
+  const buildTicketAbsencePopupItems = (absences: ReturnType<typeof getActiveTicketData>['absences']): DashboardPopupItem[] =>
+    absences.map((absence) => ({
       id: `ticket-${absence.id}`,
       date: absence.desde,
       type: 'tickets' as const,
@@ -337,14 +340,30 @@ export function DashboardCards({
       recordId: absence.id,
     }));
 
-  const ticketPeoplePopupItems = (): DashboardPopupItem[] =>
-    activeTicketPeople.map((person) => ({
+  const buildTicketPeoplePopupItems = (people: ReturnType<typeof getActiveTicketData>['people']): DashboardPopupItem[] =>
+    people.map((person) => ({
       id: `ticket-person-${person.empleado}`,
       type: 'tickets' as const,
       title: person.nombreApellidos || person.empleado,
       detail: `${person.empleado} · ${person.puesto || 'sin puesto'}`,
       view: 'ticket-restaurante' as const,
     }));
+
+  const showTicketPopup = (mode: 'all' | 'people' = 'all') => {
+    const { people, absences } = getActiveTicketData();
+    const items =
+      mode === 'people'
+        ? buildTicketPeoplePopupItems(people)
+        : [...buildTicketAbsencePopupItems(absences), ...buildTicketPeoplePopupItems(people)];
+
+    openPopup({
+      eyebrow: 'Dashboard',
+      title: mode === 'people' ? 'Personas activas en Ticket Restaurante' : 'Ticket Restaurante',
+      subtitle: `${people.length} persona${people.length === 1 ? '' : 's'} · ${absences.length} ausencia${absences.length === 1 ? '' : 's'} con descuento`,
+      emptyText: 'No hay registros de Ticket Restaurante.',
+      items,
+    });
+  };
 
   const showTaskPopup = (title: string, items: readonly Task[], emptyText = 'No hay tareas que mostrar.') => {
     openPopup({
@@ -401,16 +420,6 @@ export function DashboardCards({
         recordId: solicitud.id,
       }));
 
-    const ticketEvents = activeTicketAbsences.slice(0, 30).map((absence) => ({
-      id: `ticket-${absence.id}`,
-      date: absence.desde,
-      type: 'tickets' as const,
-      title: absence.nombreApellidos,
-      detail: `${absence.motivo} · afecta ticket`,
-      view: 'ticket-restaurante' as const,
-      recordId: absence.id,
-    }));
-
     const actaEvents = actaTasks
       .filter((task) => task.fechaLimite)
       .map((task) => ({
@@ -428,13 +437,11 @@ export function DashboardCards({
       ...committeeEvents,
       ...paritariaEvents,
       ...teleworkEvents,
-      ...ticketEvents,
       ...actaEvents,
     ];
   }, [
     activeTasks,
     actaTasks,
-    activeTicketAbsences,
     openCommitteeSessions,
     openParitariaSessions,
     pendingTelework,
@@ -486,10 +493,10 @@ export function DashboardCards({
       },
     ];
     const ticketSegments = [
-      { label: 'Personas activas', value: activeTicketPeople.length, className: 'bg-emerald-500' },
+      { label: 'Personas activas', value: ticketSummary.loaded ? ticketSummary.people : 0, className: 'bg-emerald-500' },
       {
         label: 'Ausencias con descuento',
-        value: activeTicketAbsences.length,
+        value: ticketSummary.loaded ? ticketSummary.absences : 0,
         className: 'bg-orange-500',
       },
     ];
@@ -536,9 +543,9 @@ export function DashboardCards({
       },
       {
         title: 'Tickets',
-        value: activeTicketPeople.length,
-        subtitle: 'personas activas',
-        helper: `${activeTicketAbsences.length} ausencias con descuento`,
+        value: ticketSummary.loaded ? ticketSummary.people : '—',
+        subtitle: ticketSummary.loaded ? 'personas activas' : 'carga bajo demanda',
+        helper: ticketSummary.loaded ? `${ticketSummary.absences} ausencias con descuento` : 'clic para consultar',
         icon: Utensils,
         tone: 'text-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-500/20',
         segments: ticketSegments,
@@ -547,14 +554,13 @@ export function DashboardCards({
   }, [
     activeTasks.length,
     activeTelework,
-    activeTicketAbsences,
-    activeTicketPeople,
     committeeTasks.length,
     criticalTasks.length,
     openCommitteeSessions.length,
     pendingTelework.length,
     sessions,
     allVisibleTasks,
+    ticketSummary,
   ]);
 
   const totalTasks = allVisibleTasks.length;
@@ -600,7 +606,7 @@ export function DashboardCards({
               } else if (kpi.title === 'Teletrabajo') {
                 openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes de teletrabajo', subtitle: `${activeTelework.length} solicitud${activeTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes de teletrabajo.', items: teleworkPopupItems(activeTelework) });
               } else if (kpi.title === 'Tickets') {
-                openPopup({ eyebrow: 'Dashboard', title: 'Ticket Restaurante', subtitle: `${activeTicketPeople.length} personas · ${activeTicketAbsences.length} ausencias`, emptyText: 'No hay registros de Ticket Restaurante.', items: [...ticketAbsencePopupItems(), ...ticketPeoplePopupItems()] });
+                showTicketPopup();
               }
             }}
             type="button"
@@ -686,8 +692,8 @@ export function DashboardCards({
             <TodayAlert
               className="border-emerald-500"
               title="Cálculo tickets"
-              subtitle={`${activeTicketPeople.length} personas activas`}
-              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Personas activas en Ticket Restaurante', subtitle: `${activeTicketPeople.length} persona${activeTicketPeople.length === 1 ? '' : 's'}`, emptyText: 'No hay personas activas.', items: ticketPeoplePopupItems() })}
+              subtitle={ticketSummary.loaded ? `${ticketSummary.people} personas activas` : 'Pulsa para cargar'}
+              onClick={() => showTicketPopup('people')}
             />
             <TodayAlert
               className="border-amber-400"
@@ -782,7 +788,6 @@ export function DashboardCards({
             <CalendarLegend className="bg-orange-500" label="Comité" />
             <CalendarLegend className="bg-violet-500" label="Paritaria" />
             <CalendarLegend className="bg-blue-500" label="Teletrabajo" />
-            <CalendarLegend className="bg-emerald-500" label="Tickets" />
             <CalendarLegend className="bg-amber-400" label="Actas" />
           </div>
         </article>
