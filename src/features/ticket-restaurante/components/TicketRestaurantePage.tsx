@@ -10,9 +10,9 @@ import {
   filterTicketRestaurantAbsencesByMonth,
   getEffectiveTicketPrice,
   normalizeTicketCalendarName,
-  normalizeTicketRestaurantConfig,
-  nextCalendarYear,
-  previousCalendarYear,
+  
+  
+  
   visibleTicketCalendars,
   type TicketCalendar,
   type TicketCalendarDraft,
