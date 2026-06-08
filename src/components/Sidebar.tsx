@@ -277,7 +277,7 @@ export function Sidebar({
                 size={21}
                 strokeWidth={2.1}
               />
-              <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
                 Inicio
               </span>
             </button>
@@ -308,7 +308,7 @@ export function Sidebar({
                     size={21}
                     strokeWidth={2.1}
                   />
-                  <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+                  <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
                     {group.label}
                   </span>
                 </button>
@@ -342,7 +342,7 @@ export function Sidebar({
                 />
               )}
               <span className="max-w-full truncate">{databaseIndicator.label}</span>
-              <span className="pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+              <span className="pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}">
                 <span className="block font-semibold">{databaseIndicator.statusText}</span>
                 <span className="mt-1 block break-all text-slate-300">
                   {databaseIndicator.routeText}
@@ -371,7 +371,7 @@ export function Sidebar({
                 size={21}
                 strokeWidth={2.1}
               />
-              <span className="pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition group-hover/rail:translate-x-1 group-hover/rail:opacity-100">
+              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
                 Ajustes
               </span>
             </button>
