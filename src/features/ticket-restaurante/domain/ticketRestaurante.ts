@@ -200,9 +200,11 @@ const CANONICAL_TICKET_CALENDAR_NAMES: Record<string, string> = {
 
 export function normalizeTicketCalendarName(value: string): string {
   const normalized = normalizePlainText(value);
-  return CANONICAL_TICKET_CALENDAR_NAMES[normalized.replace(/\s+/g, '')] ??
+  return (
+    CANONICAL_TICKET_CALENDAR_NAMES[normalized.replace(/\s+/g, '')] ??
     CANONICAL_TICKET_CALENDAR_NAMES[normalized] ??
-    normalized;
+    normalized
+  );
 }
 
 const MONTH_NAMES = [
@@ -231,7 +233,7 @@ export function normalizeTicketIsoWeekdays(days: readonly number[] | undefined):
     new Set(
       (days ?? [1, 2, 3, 4, 5])
         .map((day) => Number(day))
-        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 7),
+        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 5),
     ),
   ).sort((first, second) => first - second);
 
@@ -400,6 +402,66 @@ export function calculateTicketMonth(
 
 type TicketCalculationMode = 'monthlyOrderWithDebt' | 'monthlyContribution';
 
+export interface TicketAbsenceMonthImpact {
+  calendario: string;
+  diasTicketMes: number;
+  descuentaTicket: boolean;
+}
+
+export function calculateTicketAbsenceMonthImpact(
+  absence: TicketRestaurantAbsence,
+  people: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+): TicketAbsenceMonthImpact {
+  const person = people.find(
+    (item) => !item.deletedAt && item.activo && item.empleado === absence.empleado,
+  );
+  const calendar = person
+    ? calendars.find((item) => !item.deletedAt && item.activo && item.id === person.calendarId)
+    : undefined;
+
+  if (
+    !person ||
+    !calendar ||
+    !absence.afectaTicket ||
+    absence.desde < TICKET_RESTAURANT_MIN_ABSENCE_DATE
+  ) {
+    return {
+      calendario: calendar?.nombre ?? 'Sin calendario',
+      diasTicketMes: 0,
+      descuentaTicket: false,
+    };
+  }
+
+  const monthStart = toIsoDate(year, month, 1);
+  const monthEnd = toIsoDate(year, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
+  if (absence.desde > monthEnd || absence.hasta < monthStart) {
+    return { calendario: calendar.nombre, diasTicketMes: 0, descuentaTicket: false };
+  }
+
+  const descuentaTicket = !absenceIsNonDiscountableByCalendar(absence, calendar, config.rules);
+  if (!descuentaTicket) {
+    return { calendario: calendar.nombre, diasTicketMes: 0, descuentaTicket: false };
+  }
+
+  const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
+  const noTicket = new Set(calendar.diasSinTicket);
+  let diasTicketMes = 0;
+  forEachIsoDate(
+    maxIsoDate(absence.desde, monthStart),
+    minIsoDate(absence.hasta, monthEnd),
+    (fecha) => {
+      if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) {
+        diasTicketMes += 1;
+      }
+    },
+  );
+
+  return { calendario: calendar.nombre, diasTicketMes, descuentaTicket: diasTicketMes > 0 };
+}
 
 export function getEffectiveTicketPrice(
   config: TicketRestaurantConfig,
@@ -434,7 +496,12 @@ export function normalizeTicketPriceHistory(
     return normalized;
   }
 
-  return [{ amount: roundCurrency(fallbackAmount), effectiveFrom: DEFAULT_TICKET_RESTAURANT_CONFIG.priceHistory[0].effectiveFrom }];
+  return [
+    {
+      amount: roundCurrency(fallbackAmount),
+      effectiveFrom: DEFAULT_TICKET_RESTAURANT_CONFIG.priceHistory[0].effectiveFrom,
+    },
+  ];
 }
 
 export function normalizeTicketCalculationRules(
@@ -484,8 +551,22 @@ function calculateTicketMonthInternal(
     .map((person) => {
       const calendar = calendarById.get(person.calendarId);
       return mode === 'monthlyOrderWithDebt'
-        ? calculatePersonMonthlyOrderWithDebt(person, calendar, absences, effectiveConfig, year, month)
-        : calculatePersonMonthlyContribution(person, calendar, absences, effectiveConfig, year, month);
+        ? calculatePersonMonthlyOrderWithDebt(
+            person,
+            calendar,
+            absences,
+            effectiveConfig,
+            year,
+            month,
+          )
+        : calculatePersonMonthlyContribution(
+            person,
+            calendar,
+            absences,
+            effectiveConfig,
+            year,
+            month,
+          );
     })
     .sort((first, second) =>
       first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
@@ -692,7 +773,11 @@ function addMonths(year: number, month: number, offset: number): { year: number;
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
 }
 
-export function buildMonthTicketDays(calendar: TicketCalendar, year: number, month: number): string[] {
+export function buildMonthTicketDays(
+  calendar: TicketCalendar,
+  year: number,
+  month: number,
+): string[] {
   const noTicket = new Set(calendar.diasSinTicket);
   const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -737,7 +822,9 @@ function getAppliedAbsenceIdsForTicketDays(
 
   return Array.from(
     new Set(
-      Array.from(buildEffectiveAbsenceByTicketDay(person, calendar, absences, monthStart, monthEnd).values())
+      Array.from(
+        buildEffectiveAbsenceByTicketDay(person, calendar, absences, monthStart, monthEnd).values(),
+      )
         .filter((absence) => !absenceIsNonDiscountableByCalendar(absence, calendar, rules))
         .map((absence) => absence.id),
     ),
@@ -815,7 +902,9 @@ function absenceIsNonDiscountableByCalendar(
   );
 }
 
-export function normalizeTicketRestaurantConfig(config: TicketRestaurantConfig): TicketRestaurantConfig {
+export function normalizeTicketRestaurantConfig(
+  config: TicketRestaurantConfig,
+): TicketRestaurantConfig {
   const importeTicket =
     typeof config.importeTicket === 'number' && config.importeTicket >= 0
       ? roundCurrency(config.importeTicket)
@@ -934,7 +1023,11 @@ export function filterTicketRestaurantAbsencesByMonth(
   );
 }
 
-export function countTicketCalendarDays(calendar: TicketCalendar, year: number, month: number): number {
+export function countTicketCalendarDays(
+  calendar: TicketCalendar,
+  year: number,
+  month: number,
+): number {
   return buildMonthTicketDays(calendar, year, month).length;
 }
 

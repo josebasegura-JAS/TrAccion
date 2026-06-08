@@ -4,11 +4,13 @@ import {
   buildTicketRestaurantAbsence,
   buildTicketPerson,
   buildYearCalendar,
+  calculateTicketAbsenceMonthImpact,
   calculateTicketContribution,
   calculateTicketMonth,
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
   normalizeTicketCalendarName,
+  normalizeTicketIsoWeekdays,
   previousCalendarYear,
   toggleDiaSinTicket,
   visibleTicketCalendars,
@@ -24,6 +26,7 @@ function buildCalendar(overrides: Partial<TicketCalendar> = {}): TicketCalendar 
     nombre: 'Calendario base',
     activo: true,
     diasSinTicket: [],
+    ticketIsoWeekdays: [1, 2, 3, 4, 5],
     createdAt: timestamp,
     updatedAt: timestamp,
     deletedAt: null,
@@ -64,12 +67,16 @@ describe('ticket restaurante calendar domain', () => {
     });
   });
 
-
-
   it('normaliza alias históricos de calendarios', () => {
-    expect(normalizeTicketCalendarName('SSCC')).toBe(normalizeTicketCalendarName('Servicios Centrales'));
-    expect(normalizeTicketCalendarName('Ariz')).toBe(normalizeTicketCalendarName('Ingeniería Ariz'));
-    expect(normalizeTicketCalendarName('Sopela')).toBe(normalizeTicketCalendarName('Instalaciones Sopela'));
+    expect(normalizeTicketCalendarName('SSCC')).toBe(
+      normalizeTicketCalendarName('Servicios Centrales'),
+    );
+    expect(normalizeTicketCalendarName('Ariz')).toBe(
+      normalizeTicketCalendarName('Ingeniería Ariz'),
+    );
+    expect(normalizeTicketCalendarName('Sopela')).toBe(
+      normalizeTicketCalendarName('Instalaciones Sopela'),
+    );
     expect(normalizeTicketCalendarName('Liberado')).toBe(normalizeTicketCalendarName('Liberados'));
   });
 
@@ -130,6 +137,10 @@ const realZerkosRows = [
   ['Página', '1'],
 ];
 
+it('nunca considera sábado o domingo como día con ticket aunque el calendario los tenga marcados', () => {
+  expect(normalizeTicketIsoWeekdays([1, 2, 3, 4, 5, 6, 7])).toEqual([1, 2, 3, 4, 5]);
+});
+
 describe('ticket restaurante calculation domain', () => {
   it('arrastra deuda desde marzo cuando no hay tickets suficientes en meses anteriores', () => {
     const calendar = buildCalendar({
@@ -171,30 +182,9 @@ describe('ticket restaurante calculation domain', () => {
       },
     };
 
-    const march = calculateTicketMonth(
-      [person],
-      [calendar],
-      [absence],
-      config,
-      2026,
-      3,
-    );
-    const april = calculateTicketMonth(
-      [person],
-      [calendar],
-      [absence],
-      config,
-      2026,
-      4,
-    );
-    const may = calculateTicketMonth(
-      [person],
-      [calendar],
-      [absence],
-      config,
-      2026,
-      5,
-    );
+    const march = calculateTicketMonth([person], [calendar], [absence], config, 2026, 3);
+    const april = calculateTicketMonth([person], [calendar], [absence], config, 2026, 4);
+    const may = calculateTicketMonth([person], [calendar], [absence], config, 2026, 5);
 
     expect(march.rows[0]).toMatchObject({
       deudaEntrante: 0,
@@ -215,7 +205,6 @@ describe('ticket restaurante calculation domain', () => {
       deudaPendiente: 0,
     });
   });
-
 
   it('ignora ausencias con fecha de inicio anterior al 1 de marzo de 2026', () => {
     const calendar = buildCalendar();
@@ -314,6 +303,47 @@ describe('ticket restaurante calculation domain', () => {
     });
     expect(calculation.rows[0]?.ausenciaIds).toEqual(['absence-old']);
   });
+});
+
+it('calcula el impacto de una ausencia solo sobre días ticket del calendario en el mes', () => {
+  const calendar = buildCalendar({
+    diasSinTicket: ['2026-05-11'],
+    ticketIsoWeekdays: [1, 2, 3, 4, 5],
+  });
+  const person = buildTicketPerson(
+    {
+      empleado: '123',
+      nombreApellidos: 'Ana Metro',
+      puesto: 'SSCC',
+      calendarId: calendar.id,
+      activo: true,
+    },
+    timestamp,
+  );
+  const absence = buildTicketRestaurantAbsence(
+    {
+      empleado: '123',
+      nombreApellidos: 'Ana Metro',
+      desde: '2026-05-08',
+      hasta: '2026-05-12',
+      motivo: 'IT',
+      totalDias: 5,
+      afectaTicket: true,
+    },
+    timestamp,
+    'absence-weekend-and-no-ticket',
+  );
+
+  expect(
+    calculateTicketAbsenceMonthImpact(
+      absence,
+      [person],
+      [calendar],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      5,
+    ),
+  ).toMatchObject({ diasTicketMes: 2, descuentaTicket: true });
 });
 
 describe('ticket restaurante absence importer domain', () => {

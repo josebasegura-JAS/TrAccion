@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildYearCalendar,
   calculateMonthlyTicketOrder,
+  calculateTicketAbsenceMonthImpact,
   calculateTicketContribution,
   EMPTY_TICKET_CALENDAR_DRAFT,
   EMPTY_TICKET_PERSON_DRAFT,
@@ -70,7 +71,9 @@ type TicketAbsencesTableColumnId =
   | 'desde'
   | 'hasta'
   | 'motivo'
+  | 'calendario'
   | 'totalDias'
+  | 'diasTicketMes'
   | 'afectaTicket'
   | 'actions';
 
@@ -89,7 +92,8 @@ type TicketCalculationTableColumnId =
 const TICKET_PEOPLE_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.people';
 const TICKET_ABSENCES_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.absences';
 const TICKET_MONTHLY_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.monthlyCalculation';
-const TICKET_CONTRIBUTION_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.contributionCalculation';
+const TICKET_CONTRIBUTION_TABLE_STORAGE_KEY =
+  'traccion.tableView.ticketRestaurante.contributionCalculation';
 
 const defaultTicketPeopleTablePreferences: TableViewPreferences<TicketPeopleTableColumnId> = {
   sort: { columnId: 'empleado', direction: 'asc' },
@@ -125,8 +129,10 @@ const defaultTicketAbsencesTablePreferences: TableViewPreferences<TicketAbsences
     nombreApellidos: 230,
     desde: 115,
     hasta: 115,
-    motivo: 190,
+    motivo: 170,
+    calendario: 145,
     totalDias: 95,
+    diasTicketMes: 110,
     afectaTicket: 105,
     actions: 82,
   },
@@ -138,28 +144,35 @@ const ticketAbsencesTableColumnIds: TicketAbsencesTableColumnId[] = [
   'desde',
   'hasta',
   'motivo',
+  'calendario',
   'totalDias',
+  'diasTicketMes',
   'afectaTicket',
   'actions',
 ];
 
-const defaultTicketCalculationTablePreferences: TableViewPreferences<
-  TicketCalculationTableColumnId
-> = {
-  sort: { columnId: 'nombreApellidos', direction: 'asc' },
-  columnWidths: {
-    empleado: 110,
-    nombreApellidos: 230,
-    calendario: 160,
-    diasTeoricos: 110,
-    ausencias: 130,
-    deudaEntrante: 120,
-    deudaPendiente: 125,
-    ticketsFinales: 125,
-    importeTicket: 115,
-    total: 110,
-  },
+type TicketAbsenceDisplayRow = TicketRestaurantAbsence & {
+  calendario: string;
+  diasTicketMes: number;
+  descuentaTicket: boolean;
 };
+
+const defaultTicketCalculationTablePreferences: TableViewPreferences<TicketCalculationTableColumnId> =
+  {
+    sort: { columnId: 'nombreApellidos', direction: 'asc' },
+    columnWidths: {
+      empleado: 110,
+      nombreApellidos: 230,
+      calendario: 160,
+      diasTeoricos: 110,
+      ausencias: 130,
+      deudaEntrante: 120,
+      deudaPendiente: 125,
+      ticketsFinales: 125,
+      importeTicket: 115,
+      total: 110,
+    },
+  };
 
 const monthlyCalculationTableColumnIds: TicketCalculationTableColumnId[] = [
   'empleado',
@@ -209,7 +222,11 @@ function currentMonth(): number {
   return new Date().getMonth() + 1;
 }
 
-function addYearMonth(year: number, month: number, offset: number): { year: number; month: number } {
+function addYearMonth(
+  year: number,
+  month: number,
+  offset: number,
+): { year: number; month: number } {
   const date = new Date(Date.UTC(year, month - 1 + offset, 1));
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
 }
@@ -355,7 +372,11 @@ const monthlyCalculationExportColumns = (
   { key: 'fecInicio', header: 'Fec Inicio', value: () => formatTicketExcelDate(year, month) },
   { key: 'fecCad', header: 'Fec Cad', value: () => '01/01/2010' },
   { key: 'hojaGastos', header: 'Hoja Gastos', value: () => '' },
-  { key: 'ausencias', header: 'Ausencias', value: (row) => formatAppliedAbsencesForExport(row, absences) },
+  {
+    key: 'ausencias',
+    header: 'Ausencias',
+    value: (row) => formatAppliedAbsencesForExport(row, absences),
+  },
 ];
 
 const contributionCalculationExportColumns = (
@@ -375,7 +396,7 @@ const contributionCalculationExportColumns = (
   { key: 'total', header: 'Total', value: (row) => row.importe.toFixed(2) },
 ];
 
-const absenceExportColumns: ExportColumn<TicketRestaurantAbsence>[] = [
+const absenceExportColumns: ExportColumn<TicketAbsenceDisplayRow>[] = [
   { key: 'empleado', header: 'Nº empleado', value: (absence) => absence.empleado },
   {
     key: 'nombreApellidos',
@@ -385,7 +406,9 @@ const absenceExportColumns: ExportColumn<TicketRestaurantAbsence>[] = [
   { key: 'desde', header: 'Desde', value: (absence) => absence.desde },
   { key: 'hasta', header: 'Hasta', value: (absence) => absence.hasta },
   { key: 'motivo', header: 'Motivo', value: (absence) => absence.motivo },
-  { key: 'totalDias', header: 'Total días', value: (absence) => absence.totalDias },
+  { key: 'calendario', header: 'Calendario', value: (absence) => absence.calendario },
+  { key: 'totalDias', header: 'Días naturales', value: (absence) => absence.totalDias },
+  { key: 'diasTicketMes', header: 'Días ticket mes', value: (absence) => absence.diasTicketMes },
   {
     key: 'afectaTicket',
     header: 'Afecta ticket',
@@ -430,9 +453,11 @@ function addDays(fecha: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-
 function normalizeTicketEmployeeNumberForMatch(value: string): string {
-  return value.trim().replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
+  return value
+    .trim()
+    .replace(/^0+(?=\d)/, '')
+    .replace(/\.0$/, '');
 }
 
 function absenceDiscountsTicket(
@@ -579,9 +604,20 @@ export function TicketRestaurantePage({
     [absences, calendars, calculationMonth, calculationYear, config, people],
   );
 
-  const visibleAbsences = useMemo(
-    () => filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth),
-    [absenceMonth, absenceYear, absences],
+  const visibleAbsences = useMemo<TicketAbsenceDisplayRow[]>(
+    () =>
+      filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth).map((absence) => ({
+        ...absence,
+        ...calculateTicketAbsenceMonthImpact(
+          absence,
+          people,
+          visibleCalendars,
+          config,
+          absenceYear,
+          absenceMonth,
+        ),
+      })),
+    [absenceMonth, absenceYear, absences, config, people, visibleCalendars],
   );
 
   useEffect(() => {
@@ -1056,7 +1092,12 @@ export function TicketRestaurantePage({
           exportPayload={{
             title: 'Cómputo mensual Ticket Restaurante',
             filename: `Computo_${MONTH_OPTIONS[calculationMonth - 1]?.label ?? calculationMonth}_${calculationYear}`,
-            columns: monthlyCalculationExportColumns(config, calculationYear, calculationMonth, absences),
+            columns: monthlyCalculationExportColumns(
+              config,
+              calculationYear,
+              calculationMonth,
+              absences,
+            ),
             rows: monthCalculation.rows,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
@@ -1080,7 +1121,9 @@ export function TicketRestaurantePage({
           exportPayload={{
             title: 'Cómputo cotización Ticket Restaurante',
             filename: `ticket-restaurante-computo-cotizacion-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
-            columns: contributionCalculationExportColumns(getEffectiveTicketPrice(config, calculationYear, calculationMonth)),
+            columns: contributionCalculationExportColumns(
+              getEffectiveTicketPrice(config, calculationYear, calculationMonth),
+            ),
             rows: contributionCalculation.rows,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
@@ -1186,7 +1229,6 @@ function SubviewButton({
   );
 }
 
-
 function CalendarToolbar({
   calendars,
   draft,
@@ -1280,7 +1322,8 @@ function CalendarToolbar({
             </p>
             {selectedCalendar ? (
               <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-[11px] font-semibold text-metro-red">
-                {selectedCalendar.activo ? 'Activo' : 'Inactivo'} · {selectedCalendar.diasSinTicket.length} días
+                {selectedCalendar.activo ? 'Activo' : 'Inactivo'} ·{' '}
+                {selectedCalendar.diasSinTicket.length} días
               </span>
             ) : null}
           </div>
@@ -1688,99 +1731,99 @@ function PeoplePanel({
           </span>
         </button>
         {isPersonFormOpen ? (
-        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          <label className="block text-xs font-semibold text-metro-text">
-            Nº empleado
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, empleado: event.target.value })}
-              value={draft.empleado}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-metro-text">
-            Nombre
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
-              value={draft.nombre}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-metro-text">
-            Apellido 1
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, apellido1: event.target.value })}
-              value={draft.apellido1}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-metro-text">
-            Apellido 2
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, apellido2: event.target.value })}
-              value={draft.apellido2}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-metro-text">
-            DNI
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, dni: event.target.value })}
-              value={draft.dni}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-metro-text">
-            Puesto
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, puesto: event.target.value })}
-              value={draft.puesto}
-            />
-          </label>
-          <label className="block text-xs font-semibold text-metro-text">
-            Calendario
-            <select
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => onChange({ ...draft, calendarId: event.target.value })}
-              value={draft.calendarId}
-            >
-              <option value="">Seleccionar calendario</option>
-              {calendars.map((calendar) => (
-                <option key={calendar.id} value={calendar.id}>
-                  {calendar.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-xs font-semibold text-metro-text">
-            <input
-              checked={draft.activo}
-              className="h-3.5 w-3.5 accent-metro-red"
-              onChange={(event) => onChange({ ...draft, activo: event.target.checked })}
-              type="checkbox"
-            />
-            Activo
-          </label>
-          <div className="flex gap-2">
-            <button
-              className="flex-1 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSave}
-              onClick={handleSavePerson}
-              type="button"
-            >
-              Guardar
-            </button>
-            {editingPersonId ? (
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <label className="block text-xs font-semibold text-metro-text">
+              Nº empleado
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, empleado: event.target.value })}
+                value={draft.empleado}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              Nombre
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
+                value={draft.nombre}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              Apellido 1
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, apellido1: event.target.value })}
+                value={draft.apellido1}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              Apellido 2
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, apellido2: event.target.value })}
+                value={draft.apellido2}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              DNI
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, dni: event.target.value })}
+                value={draft.dni}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              Puesto
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, puesto: event.target.value })}
+                value={draft.puesto}
+              />
+            </label>
+            <label className="block text-xs font-semibold text-metro-text">
+              Calendario
+              <select
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => onChange({ ...draft, calendarId: event.target.value })}
+                value={draft.calendarId}
+              >
+                <option value="">Seleccionar calendario</option>
+                {calendars.map((calendar) => (
+                  <option key={calendar.id} value={calendar.id}>
+                    {calendar.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-semibold text-metro-text">
+              <input
+                checked={draft.activo}
+                className="h-3.5 w-3.5 accent-metro-red"
+                onChange={(event) => onChange({ ...draft, activo: event.target.checked })}
+                type="checkbox"
+              />
+              Activo
+            </label>
+            <div className="flex gap-2">
               <button
-                className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-                onClick={handleCancelPerson}
+                className="flex-1 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canSave}
+                onClick={handleSavePerson}
                 type="button"
               >
-                Cancelar
+                Guardar
               </button>
-            ) : null}
+              {editingPersonId ? (
+                <button
+                  className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+                  onClick={handleCancelPerson}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
         ) : null}
       </div>
       <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
@@ -1832,7 +1875,6 @@ function PeoplePanel({
     </div>
   );
 }
-
 
 function MonthNavigator({
   ariaLabel,
@@ -1905,10 +1947,13 @@ function TicketPriceModal({
 }) {
   const normalizedConfig = normalizeTicketRestaurantConfig(config);
   const latestPrice = normalizedConfig.priceHistory.at(-1) ?? normalizedConfig.priceHistory[0];
-  const [amount, setAmount] = useState(String(latestPrice?.amount ?? normalizedConfig.importeTicket));
+  const [amount, setAmount] = useState(
+    String(latestPrice?.amount ?? normalizedConfig.importeTicket),
+  );
   const [effectiveFrom, setEffectiveFrom] = useState(latestPrice?.effectiveFrom ?? '2026-03-01');
   const parsedAmount = Number(amount.replace(',', '.'));
-  const canSave = Number.isFinite(parsedAmount) && parsedAmount >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom);
+  const canSave =
+    Number.isFinite(parsedAmount) && parsedAmount >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom);
 
   const savePrice = () => {
     if (!canSave) return;
@@ -1932,7 +1977,8 @@ function TicketPriceModal({
         <div className="border-b border-metro-border p-3">
           <h3 className="text-lg font-bold text-metro-text">Precio ticket</h3>
           <p className="text-xs text-metro-muted">
-            El cálculo usa el último precio cuya fecha de inicio sea anterior o igual al mes calculado.
+            El cálculo usa el último precio cuya fecha de inicio sea anterior o igual al mes
+            calculado.
           </p>
         </div>
         <div className="space-y-3 p-3">
@@ -1963,7 +2009,10 @@ function TicketPriceModal({
             <div className="max-h-32 overflow-auto text-xs text-metro-muted">
               {normalizedConfig.priceHistory.map((entry) => (
                 <p key={entry.effectiveFrom}>
-                  {entry.effectiveFrom}: <span className="font-semibold text-metro-text">{formatCurrency(entry.amount)}</span>
+                  {entry.effectiveFrom}:{' '}
+                  <span className="font-semibold text-metro-text">
+                    {formatCurrency(entry.amount)}
+                  </span>
                 </p>
               ))}
             </div>
@@ -2047,7 +2096,8 @@ function TicketRulesModal({
         <div className="border-b border-metro-border p-3">
           <h3 className="text-lg font-bold text-metro-text">Reglas de cálculo</h3>
           <p className="text-xs text-metro-muted">
-            Parámetros mínimos del módulo. Los días sin pedido se gestionan marcando días sin ticket en cada calendario.
+            Parámetros mínimos del módulo. Los días sin pedido se gestionan marcando días sin ticket
+            en cada calendario.
           </p>
         </div>
         <div className="max-h-[70vh] space-y-3 overflow-auto p-3">
@@ -2076,13 +2126,20 @@ function TicketRulesModal({
           <div className="rounded-xl border border-metro-border bg-metro-panel p-3 text-xs text-metro-muted">
             <p className="mb-1 font-bold text-metro-text">Cómo calcula el cómputo mensual</p>
             <p>
-              Cómputo mensual = lógica antigua: aplica a mes vencido la deuda de ausencias anteriores desde la fecha de inicio. No descuenta ausencias del propio mes; las deja para el siguiente mes con días de calendario disponibles.
+              Cómputo mensual = lógica antigua: aplica a mes vencido la deuda de ausencias
+              anteriores desde la fecha de inicio. No descuenta ausencias del propio mes; las deja
+              para el siguiente mes con días de calendario disponibles.
             </p>
-            <p className="mb-1 mt-3 font-bold text-metro-text">Cómo calcula el cómputo de cotización</p>
+            <p className="mb-1 mt-3 font-bold text-metro-text">
+              Cómo calcula el cómputo de cotización
+            </p>
             <p>
-              Cómputo cotización = días con derecho del calendario del mes seleccionado menos ausencias del propio mes que descuentan ticket. No arrastra deuda pendiente.
+              Cómputo cotización = días con derecho del calendario del mes seleccionado menos
+              ausencias del propio mes que descuentan ticket. No arrastra deuda pendiente.
             </p>
-            <p className="mt-3 font-semibold text-metro-text">Aplicar deuda a mes vencido: Sí, fijo.</p>
+            <p className="mt-3 font-semibold text-metro-text">
+              Aplicar deuda a mes vencido: Sí, fijo.
+            </p>
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-metro-border p-3">
@@ -2437,8 +2494,8 @@ function AbsencesTable({
   onYearChange,
   year,
 }: {
-  absences: TicketRestaurantAbsence[];
-  exportPayload: ExportTablePayload<TicketRestaurantAbsence>;
+  absences: TicketAbsenceDisplayRow[];
+  exportPayload: ExportTablePayload<TicketAbsenceDisplayRow>;
   importMessage: string;
   month: number;
   onEdit: (absence: TicketRestaurantAbsence) => void;
@@ -2458,7 +2515,7 @@ function AbsencesTable({
       validColumnIds: ticketAbsencesTableColumnIds,
     });
   const absenceColumns = useMemo<
-    Array<DataTableColumn<TicketRestaurantAbsence, TicketAbsencesTableColumnId>>
+    Array<DataTableColumn<TicketAbsenceDisplayRow, TicketAbsencesTableColumnId>>
   >(
     () => [
       {
@@ -2513,15 +2570,26 @@ function AbsencesTable({
         header: 'Motivo',
         accessor: (absence) => absence.motivo,
         render: (absence) => absence.motivo,
-        width: 190,
+        width: 170,
         minWidth: 130,
-        maxWidth: 360,
+        maxWidth: 320,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'calendario',
+        header: 'Calendario',
+        accessor: (absence) => absence.calendario,
+        render: (absence) => absence.calendario,
+        width: 145,
+        minWidth: 120,
+        maxWidth: 240,
         sortable: true,
         className: 'text-metro-muted',
       },
       {
         id: 'totalDias',
-        header: 'Total días',
+        header: 'Días naturales',
         accessor: (absence) => absence.totalDias,
         render: (absence) => absence.totalDias,
         width: 95,
@@ -2529,6 +2597,17 @@ function AbsencesTable({
         maxWidth: 135,
         sortable: true,
         className: 'text-right text-metro-muted',
+      },
+      {
+        id: 'diasTicketMes',
+        header: 'Días ticket mes',
+        accessor: (absence) => absence.diasTicketMes,
+        render: (absence) => absence.diasTicketMes,
+        width: 110,
+        minWidth: 95,
+        maxWidth: 150,
+        sortable: true,
+        className: 'text-right font-semibold text-metro-text',
       },
       {
         id: 'afectaTicket',
@@ -2572,7 +2651,8 @@ function AbsencesTable({
         <div>
           <h3 className="text-base font-bold text-metro-text">Ausencias</h3>
           <p className="text-xs text-metro-muted">
-            Importa, revisa y filtra ausencias por mes antes de aplicarlas al Ticket Restaurante.
+            Importa, revisa y filtra ausencias por mes. Días ticket mes ya descuenta calendario,
+            fines de semana y días sin ticket.
           </p>
         </div>
         <div className="flex flex-col items-start gap-1.5 lg:items-end">
