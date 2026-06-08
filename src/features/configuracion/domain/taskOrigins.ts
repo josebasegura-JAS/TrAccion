@@ -9,7 +9,7 @@ export interface TaskOriginConfig {
 
 const DEFAULT_TIMESTAMP = '2026-01-01T00:00:00.000Z';
 
-export const DEFAULT_TASK_ORIGINS: TaskOriginConfig[] = [
+const DEFAULT_UNION_ORIGIN_NAMES = [
   'ELA',
   'CCOO',
   'LAB',
@@ -19,14 +19,9 @@ export const DEFAULT_TASK_ORIGINS: TaskOriginConfig[] = [
   'CIM',
   'UGT',
   'ESK',
-].map((nombre) => ({
-  id: createTaskOriginIdFromName(nombre),
-  nombre,
-  tipo: 'sindicato' as const,
-  active: true,
-  createdAt: DEFAULT_TIMESTAMP,
-  updatedAt: DEFAULT_TIMESTAMP,
-})).concat([
+];
+
+const DEFAULT_COMPANY_AND_OTHER_ORIGINS: TaskOriginConfig[] = [
   {
     id: 'operaciones',
     nombre: 'Operaciones',
@@ -99,7 +94,19 @@ export const DEFAULT_TASK_ORIGINS: TaskOriginConfig[] = [
     createdAt: DEFAULT_TIMESTAMP,
     updatedAt: DEFAULT_TIMESTAMP,
   },
-]);
+];
+
+export const DEFAULT_TASK_ORIGINS: TaskOriginConfig[] = [
+  ...DEFAULT_UNION_ORIGIN_NAMES.map<TaskOriginConfig>((nombre) => ({
+    id: createTaskOriginIdFromName(nombre),
+    nombre,
+    tipo: 'sindicato',
+    active: true,
+    createdAt: DEFAULT_TIMESTAMP,
+    updatedAt: DEFAULT_TIMESTAMP,
+  })),
+  ...DEFAULT_COMPANY_AND_OTHER_ORIGINS,
+];
 
 export function normalizeTaskOriginName(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
