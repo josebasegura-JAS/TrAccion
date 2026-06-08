@@ -511,18 +511,18 @@ function isOverlappingSameReason(
   );
 }
 
-function normalizeEmployeeNumber(value: string): string {
+function normalizeEmployeeNumber(value: unknown): string {
   return cleanText(value)
     .replace(/^0+(?=\d)/, '')
     .replace(/\.0$/, '');
 }
 
-function cleanText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
+function cleanText(value: unknown): string {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function normalizeHeader(header: string): string {
-  return header
+function normalizeHeader(header: unknown): string {
+  return cleanText(header)
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -534,7 +534,7 @@ function normalizeHeader(header: string): string {
     .trim();
 }
 
-function normalizeDate(value: string): string {
+function normalizeDate(value: unknown): string {
   const text = cleanText(value);
   if (!text) {
     return '';
@@ -563,7 +563,7 @@ function normalizeDate(value: string): string {
   return '';
 }
 
-function normalizeTotalDays(value: string): string {
+function normalizeTotalDays(value: unknown): string {
   const text = cleanText(value).replace(',', '.');
   if (!text) {
     return '';
@@ -746,7 +746,7 @@ function parseSheetRows(xml: string, sharedStrings: readonly string[]): TabularR
       values[columnIndex] = readCellValue(cell, sharedStrings);
     });
 
-    return values.map((value) => value ?? '');
+    return Array.from({ length: values.length }, (_, index) => values[index] ?? '');
   });
 }
 
