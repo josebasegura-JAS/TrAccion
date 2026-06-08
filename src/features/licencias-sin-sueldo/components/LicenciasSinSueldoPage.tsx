@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, FileText, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
@@ -353,7 +354,7 @@ function LicenseEditor({
                 module="licencias-sin-sueldo"
               />
             )}
-            <button className={buttonClass} disabled={isReadOnly} onClick={handleSave} type="button"><Save size={16} /> Guardar</button><InlineSaveFeedback />
+            <ActionButton disabled={isReadOnly} onClick={handleSave} size="sm" variant="save">Guardar</ActionButton><InlineSaveFeedback />
           </div>
         </div>
       </div>
@@ -402,17 +403,16 @@ function LicenciasTable({
         <div className="flex justify-end gap-2">
           {record.estado === 'pendiente_aprobacion' && <button className="text-xs font-semibold text-metro-red hover:text-metro-text" onClick={(event) => { event.stopPropagation(); onAdvance(record); }} type="button">Aprobar</button>}
           {record.estado === 'pendiente_firma' && record.tipo === 'Licencia sin sueldo' && (
-            <button
+            <ActionButton
               aria-label="Generar Word concesión"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
               disabled={generatingWordId !== null}
               onClick={(event) => { event.stopPropagation(); onGenerateWord(record); }}
+              size="sm"
               title="Generar Word concesión"
-              type="button"
+              variant="word"
             >
-              <FileText size={13} />
               {generatingWordId === record.id ? 'Generando…' : 'Word'}
-            </button>
+            </ActionButton>
           )}
           {record.estado === 'pendiente_firma' && <button className="text-xs font-semibold text-metro-red hover:text-metro-text" onClick={(event) => { event.stopPropagation(); onAdvance(record); }} type="button">Firma recibida</button>}
           <button className="text-xs font-semibold text-metro-muted hover:text-metro-red" onClick={(event) => { event.stopPropagation(); onDelete(record); }} type="button">Eliminar</button>
