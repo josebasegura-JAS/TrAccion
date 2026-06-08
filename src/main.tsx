@@ -1,7 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
-import { hydrateLocalStorageFromSqlite } from './services/persistence';
+import {
+  hydrateLocalStorageFromSqlite,
+  reportStartupHydrationResult,
+} from './services/persistence';
 import './styles.css';
 
 function waitForNextPaint(): Promise<void> {
@@ -50,7 +53,8 @@ async function startApp(): Promise<void> {
   renderBootScreen('Inicializando base de datos...');
   await waitForNextPaint();
   notifyBootVisible();
-  await hydrateLocalStorageFromSqlite();
+  const hydrationResult = await hydrateLocalStorageFromSqlite();
+  reportStartupHydrationResult(hydrationResult);
   renderBootScreen('Preparando módulos...');
   await renderApp();
 }

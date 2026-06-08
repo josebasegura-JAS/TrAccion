@@ -78,6 +78,43 @@ type NavigationTarget = {
   nonce: number;
 };
 
+const ACTIVE_VIEW_STORAGE_KEY = 'traccion.v1.ui.activeView';
+
+const restorableViews = new Set<AppView>([
+  'dashboard',
+  'plantilla',
+  'tareas',
+  'comite',
+  'actas',
+  'paritaria',
+  'criterios-rrll',
+  'teletrabajo',
+  'ticket-restaurante',
+  'presupuestos',
+  'licencias-sin-sueldo',
+  'sorteos',
+  'vinculograma',
+  'especiales',
+  'ajustes',
+]);
+
+function readInitialActiveView(): AppView {
+  try {
+    const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+    return restorableViews.has(storedView as AppView) ? (storedView as AppView) : 'dashboard';
+  } catch {
+    return 'dashboard';
+  }
+}
+
+function persistActiveView(view: AppView): void {
+  try {
+    window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
+  } catch {
+    // La navegación no debe bloquear la app si localStorage no está disponible.
+  }
+}
+
 const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   plantilla: 'Cargando Plantilla...',
   tareas: 'Cargando Tareas...',
@@ -161,7 +198,7 @@ function ModuleLoading({ activeView }: { activeView: AppView }) {
 }
 
 export function App() {
-  const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [activeView, setActiveView] = useState<AppView>(() => readInitialActiveView());
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
 
   useEffect(() => {
@@ -170,6 +207,10 @@ export function App() {
 
     return () => stopExternalDataSyncPolling();
   }, []);
+
+  useEffect(() => {
+    persistActiveView(activeView);
+  }, [activeView]);
 
   const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string }) => {
     setNavigationTarget({ ...target, nonce: Date.now() });
