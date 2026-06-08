@@ -65,6 +65,11 @@ export function managedSessionLabel(session: Pick<ManagedSession, 'code' | 'date
   return `${session.code || 'Sin código'} · ${formatManagedSessionDate(session.date)}`;
 }
 
+function isHistoricalSessionDate(date: string): boolean {
+  const year = Number(date.match(/^(\d{4})/)?.[1] ?? 0);
+  return year > 0 && year < 2026;
+}
+
 export function normalizeManagedSession(session: ManagedSession, fallbackTitle: string): ManagedSession {
   const createdAt = session.createdAt ?? new Date().toISOString();
   const updatedAt = session.updatedAt ?? createdAt;
@@ -77,6 +82,8 @@ export function normalizeManagedSession(session: ManagedSession, fallbackTitle: 
   const untreatedTaskIds = Array.isArray(session.untreatedTaskIds)
     ? session.untreatedTaskIds.filter((item): item is string => typeof item === 'string')
     : [];
+  const shouldForceHistory = isHistoricalSessionDate(session.date);
+  const closedAt = session.closedAt ?? (shouldForceHistory ? `${session.date}T00:00:00.000Z` : null);
 
   return {
     id: session.id,
@@ -84,13 +91,13 @@ export function normalizeManagedSession(session: ManagedSession, fallbackTitle: 
     code: session.code,
     title: session.title || `${fallbackTitle} ${session.date || ''}`.trim(),
     notes: session.notes ?? EMPTY_MANAGED_SESSION_DRAFT.notes,
-    status: session.status === 'closed' ? 'closed' : 'open',
+    status: session.status === 'closed' || shouldForceHistory ? 'closed' : 'open',
     items,
-    treatedTaskIds,
-    untreatedTaskIds,
+    treatedTaskIds: shouldForceHistory ? items : treatedTaskIds,
+    untreatedTaskIds: shouldForceHistory ? [] : untreatedTaskIds,
     createdAt,
     updatedAt,
-    closedAt: session.closedAt ?? null,
+    closedAt,
   };
 }
 

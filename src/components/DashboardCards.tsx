@@ -183,6 +183,7 @@ export function DashboardCards({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
+  const todayLabel = fullDateFormatter.format(today);
 
   const tasks = useTaskStore((state) => state.tasks);
   const loadTasks = useTaskStore((state) => state.load);
@@ -530,10 +531,11 @@ export function DashboardCards({
         ))}
       </section>
 
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.72fr_1.05fr_0.9fr]">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[0.72fr_1.05fr_0.9fr]">
         <aside className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
           <h3 className="text-base font-black">Hoy</h3>
-          <div className="mt-3 space-y-2">
+          <p className="mt-0.5 text-xs font-semibold capitalize text-metro-muted">{todayLabel}</p>
+          <div className="mt-2 space-y-2">
             <TodayAlert
               className="border-red-500"
               title={`${criticalTasks.length} tareas críticas`}

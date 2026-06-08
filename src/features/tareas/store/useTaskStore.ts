@@ -87,6 +87,37 @@ function isLegacyPeticion(value: unknown): value is LegacyPeticionForTaskMigrati
   );
 }
 
+function getHistoricalImportDate(task: Task): string {
+  const directDate = task.createdAt.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? task.fechaLimite;
+  const notesDate = task.observaciones.match(/\b(20\d{2}-\d{2}-\d{2}|19\d{2}-\d{2}-\d{2})\b/)?.[1] ?? '';
+  return directDate || notesDate;
+}
+
+function isHistoricalSessionImportTask(task: Task): boolean {
+  const phase = task.fase.trim().toLowerCase();
+  const origin = task.origen.trim().toLowerCase();
+  const notes = task.observaciones.trim().toLowerCase();
+  const looksLikeSessionImport =
+    phase === 'comite' ||
+    phase === 'paritaria' ||
+    origin.includes('comité de empresa') ||
+    origin.includes('comite de empresa') ||
+    origin.includes('comisión paritaria') ||
+    origin.includes('comision paritaria') ||
+    notes.includes('importado de') ||
+    notes.includes('resumen histórico de comité/paritaria') ||
+    notes.includes('resumen historico de comite/paritaria') ||
+    notes.includes('importkey:comite:') ||
+    notes.includes('importkey:paritaria:');
+
+  if (!looksLikeSessionImport) {
+    return false;
+  }
+
+  const year = Number(getHistoricalImportDate(task).match(/^(\d{4})/)?.[1] ?? 0);
+  return year > 0 && year < 2026;
+}
+
 function normalizeSeguimiento(task: Task): TaskSeguimientoEntry[] {
   if (Array.isArray(task.seguimiento)) {
     return task.seguimiento
@@ -110,8 +141,7 @@ function normalizeTask(task: Task): Task {
   const estado = (TASK_STATES as readonly string[]).includes(task.estado)
     ? task.estado
     : EMPTY_TASK_DRAFT.estado;
-
-  return {
+  const normalizedTask = {
     id: task.id,
     titulo: task.titulo,
     descripcion: task.descripcion,
@@ -131,6 +161,20 @@ function normalizeTask(task: Task): Task {
     updatedAt,
     deletedAt: task.deletedAt ?? null,
     closedAt: task.closedAt ?? (estado === 'cerrada' || fase === CLOSED_TASK_PHASE ? updatedAt : null),
+  } satisfies Task;
+
+  if (!isHistoricalSessionImportTask(normalizedTask)) {
+    return normalizedTask;
+  }
+
+  const historicalDate = getHistoricalImportDate(normalizedTask);
+  const closedAt = normalizedTask.closedAt ?? (historicalDate ? `${historicalDate}T00:00:00.000Z` : updatedAt);
+
+  return {
+    ...normalizedTask,
+    fase: CLOSED_TASK_PHASE,
+    estado: 'cerrada',
+    closedAt,
   };
 }
 
