@@ -117,6 +117,7 @@ export interface TicketPersonCalculation {
   ticketsFinales: number;
   importe: number;
   ausenciaIds: string[];
+  ausenciaDiasDescontados: Record<string, number>;
 }
 
 export interface TicketMonthCalculation {
@@ -648,6 +649,14 @@ function calculatePersonMonthlyContribution(
       monthEnd,
       config.rules,
     ),
+    ausenciaDiasDescontados: getAppliedAbsenceDiscountedDaysById(
+      person,
+      calendar,
+      absences,
+      monthStart,
+      monthEnd,
+      config.rules,
+    ),
   };
 }
 
@@ -663,7 +672,13 @@ function calculatePersonMonthlyOrderWithDebt(
   const effectivePrice = getEffectiveTicketPrice(config, year, month);
   const debtStatus = calendar
     ? calculatePersonContributionDebtStatus(person, calendar, absences, config, year, month)
-    : { deudaEntrante: 0, ausenciasAplicadas: 0, deudaPendiente: 0, ausenciaIds: [] };
+    : {
+        deudaEntrante: 0,
+        ausenciasAplicadas: 0,
+        deudaPendiente: 0,
+        ausenciaIds: [],
+        ausenciaDiasDescontados: {},
+      };
   const ticketsFinales = Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
 
   return {
@@ -684,6 +699,7 @@ function calculatePersonMonthlyOrderWithDebt(
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
     ausenciaIds: debtStatus.ausenciaIds,
+    ausenciaDiasDescontados: debtStatus.ausenciaDiasDescontados,
   };
 }
 
@@ -692,6 +708,7 @@ interface MonthlyOrderDebtStatus {
   ausenciasAplicadas: number;
   deudaPendiente: number;
   ausenciaIds: string[];
+  ausenciaDiasDescontados: Record<string, number>;
 }
 
 function calculatePersonContributionDebtStatus(
@@ -708,11 +725,18 @@ function calculatePersonContributionDebtStatus(
   const firstContribution = addMonths(debtStart.year, debtStart.month, 1);
   const firstContributionMonthStart = toIsoDate(firstContribution.year, firstContribution.month, 1);
   if (targetMonthStart < firstContributionMonthStart) {
-    return { deudaEntrante: 0, ausenciasAplicadas: 0, deudaPendiente: 0, ausenciaIds: [] };
+    return {
+      deudaEntrante: 0,
+      ausenciasAplicadas: 0,
+      deudaPendiente: 0,
+      ausenciaIds: [],
+      ausenciaDiasDescontados: {},
+    };
   }
 
   let debt = 0;
   const absenceIds = new Set<string>();
+  const absenceDaysById = new Map<string, number>();
   let cursorYear = firstContribution.year;
   let cursorMonth = firstContribution.month;
 
@@ -741,6 +765,18 @@ function calculatePersonContributionDebtStatus(
       previousMonthEnd,
       config.rules,
     ).forEach((absenceId) => absenceIds.add(absenceId));
+    Object.entries(
+      getAppliedAbsenceDiscountedDaysById(
+        person,
+        calendar,
+        absences,
+        maxIsoDate(previousMonthStart, debtStartDate),
+        previousMonthEnd,
+        config.rules,
+      ),
+    ).forEach(([absenceId, days]) => {
+      absenceDaysById.set(absenceId, (absenceDaysById.get(absenceId) ?? 0) + days);
+    });
 
     const availableTickets = buildMonthTicketDays(calendar, cursorYear, cursorMonth).length;
     const applied = Math.min(availableTickets, debt);
@@ -752,6 +788,7 @@ function calculatePersonContributionDebtStatus(
         ausenciasAplicadas: applied,
         deudaPendiente: pending,
         ausenciaIds: Array.from(absenceIds),
+        ausenciaDiasDescontados: Object.fromEntries(absenceDaysById),
       };
     }
 
@@ -761,7 +798,13 @@ function calculatePersonContributionDebtStatus(
     cursorMonth = nextMonth.month;
   }
 
-  return { deudaEntrante: 0, ausenciasAplicadas: 0, deudaPendiente: 0, ausenciaIds: [] };
+  return {
+      deudaEntrante: 0,
+      ausenciasAplicadas: 0,
+      deudaPendiente: 0,
+      ausenciaIds: [],
+      ausenciaDiasDescontados: {},
+    };
 }
 
 function parseIsoYearMonth(fecha: string): { year: number; month: number } {
@@ -829,6 +872,32 @@ function getAppliedAbsenceIdsForTicketDays(
         .map((absence) => absence.id),
     ),
   );
+}
+
+
+function getAppliedAbsenceDiscountedDaysById(
+  person: TicketPerson,
+  calendar: TicketCalendar | undefined,
+  absences: readonly TicketRestaurantAbsence[],
+  monthStart: string,
+  monthEnd: string,
+  rules: TicketCalculationRules,
+): Record<string, number> {
+  if (!calendar) {
+    return {};
+  }
+
+  const discountedDaysByAbsenceId = new Map<string, number>();
+  Array.from(buildEffectiveAbsenceByTicketDay(person, calendar, absences, monthStart, monthEnd).values())
+    .filter((absence) => !absenceIsNonDiscountableByCalendar(absence, calendar, rules))
+    .forEach((absence) => {
+      discountedDaysByAbsenceId.set(
+        absence.id,
+        (discountedDaysByAbsenceId.get(absence.id) ?? 0) + 1,
+      );
+    });
+
+  return Object.fromEntries(discountedDaysByAbsenceId);
 }
 
 function buildEffectiveAbsenceByTicketDay(

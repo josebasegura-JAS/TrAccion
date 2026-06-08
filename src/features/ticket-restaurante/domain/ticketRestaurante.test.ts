@@ -346,6 +346,52 @@ it('calcula el impacto de una ausencia solo sobre días ticket del calendario en
   ).toMatchObject({ diasTicketMes: 2, descuentaTicket: true });
 });
 
+it('en cotización descuenta una ausencia larga solo en días ticket del calendario de la persona', () => {
+  const calendar = buildCalendar({
+    nombre: 'Ingeniería Ariz',
+    diasSinTicket: ['2026-05-13', '2026-05-20'],
+    ticketIsoWeekdays: [1, 2, 3, 4, 5],
+  });
+  const person = buildTicketPerson(
+    {
+      empleado: '456',
+      nombreApellidos: 'Hidalgo, Ana Isabel',
+      puesto: 'Ingeniería Ariz',
+      calendarId: calendar.id,
+      activo: true,
+    },
+    timestamp,
+  );
+  const absence = buildTicketRestaurantAbsence(
+    {
+      empleado: '456',
+      nombreApellidos: 'Hidalgo, Ana Isabel',
+      desde: '2026-05-11',
+      hasta: '2026-05-22',
+      motivo: 'ENF',
+      totalDias: 12,
+      afectaTicket: true,
+    },
+    timestamp,
+    'absence-ana-hidalgo-enf',
+  );
+
+  const calculation = calculateTicketContribution(
+    [person],
+    [calendar],
+    [absence],
+    DEFAULT_TICKET_RESTAURANT_CONFIG,
+    2026,
+    5,
+  );
+
+  expect(calculation.rows[0]).toMatchObject({
+    ausenciasMes: 8,
+    ausenciasAplicadas: 8,
+    ausenciaDiasDescontados: { 'absence-ana-hidalgo-enf': 8 },
+  });
+});
+
 describe('ticket restaurante absence importer domain', () => {
   const cleanRows = [
     ['Informe'],

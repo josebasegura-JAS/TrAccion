@@ -340,7 +340,7 @@ const formatAppliedAbsencesForExport = (
     .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence))
     .map(
       (absence) =>
-        `${absence.motivo} ${formatIsoDateForExport(absence.desde)}-${formatIsoDateForExport(absence.hasta)}`,
+        `${absence.motivo} ${formatIsoDateForExport(absence.desde)}-${formatIsoDateForExport(absence.hasta)} (${row.ausenciaDiasDescontados[absence.id] ?? 0} días ticket)`,
     )
     .join('; ');
 };
@@ -2448,7 +2448,8 @@ function CalculationAbsenceDetailModal({
                   <th className="px-2 py-1">Desde</th>
                   <th className="px-2 py-1">Hasta</th>
                   <th className="px-2 py-1">Motivo</th>
-                  <th className="px-2 py-1 text-right">Total días</th>
+                  <th className="px-2 py-1 text-right">Días naturales</th>
+                  <th className="px-2 py-1 text-right">Días ticket</th>
                   <th className="px-2 py-1">Afecta ticket</th>
                   <th className="px-2 py-1">Descuenta ticket</th>
                 </tr>
@@ -2460,6 +2461,9 @@ function CalculationAbsenceDetailModal({
                     <td className="px-2 py-1">{absence.hasta}</td>
                     <td className="px-2 py-1">{absence.motivo}</td>
                     <td className="px-2 py-1 text-right">{absence.totalDias}</td>
+                    <td className="px-2 py-1 text-right font-semibold">
+                      {row.ausenciaDiasDescontados[absence.id] ?? 0}
+                    </td>
                     <td className="px-2 py-1">{absence.afectaTicket ? 'Sí' : 'No'}</td>
                     <td className="px-2 py-1 font-semibold">
                       {absenceDiscountsTicket(absence, calendar, config) ? 'Sí' : 'No'}
