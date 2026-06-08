@@ -18,6 +18,7 @@ const STORAGE_KEY = 'traccion.v1.configuracion';
 
 interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
+  rutaPlantillaLicenciaSinSueldo: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
 }
@@ -26,6 +27,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   load: () => void;
   reloadFromStorage: () => void;
   setRutaPlantillaTeletrabajo: (ruta: string) => void;
+  setRutaPlantillaLicenciaSinSueldo: (ruta: string) => void;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -111,16 +113,21 @@ function isConfiguracionState(value: unknown): value is ConfiguracionState {
 function readConfiguracion(): ConfiguracionState {
   const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
-    return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
+    return { rutaPlantillaTeletrabajo: '', rutaPlantillaLicenciaSinSueldo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
   }
 
   const parsed: unknown = JSON.parse(stored);
   if (!isConfiguracionState(parsed)) {
-    return { rutaPlantillaTeletrabajo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
+    return { rutaPlantillaTeletrabajo: '', rutaPlantillaLicenciaSinSueldo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
   }
 
   return {
     rutaPlantillaTeletrabajo: normalizeTemplatePath(parsed.rutaPlantillaTeletrabajo),
+    rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(
+      typeof (parsed as { rutaPlantillaLicenciaSinSueldo?: unknown }).rutaPlantillaLicenciaSinSueldo === 'string'
+        ? (parsed as { rutaPlantillaLicenciaSinSueldo: string }).rutaPlantillaLicenciaSinSueldo
+        : '',
+    ),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
   };
@@ -134,6 +141,7 @@ const initialConfiguracion = readConfiguracion();
 
 export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
+  rutaPlantillaLicenciaSinSueldo: initialConfiguracion.rutaPlantillaLicenciaSinSueldo,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
   load: () => set(readConfiguracion()),
@@ -143,6 +151,15 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
       const configuracion = {
         ...state,
         rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta),
+      };
+      persistConfiguracion(configuracion);
+      return configuracion;
+    }),
+  setRutaPlantillaLicenciaSinSueldo: (ruta) =>
+    set((state) => {
+      const configuracion = {
+        ...state,
+        rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta),
       };
       persistConfiguracion(configuracion);
       return configuracion;

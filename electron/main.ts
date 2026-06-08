@@ -775,6 +775,33 @@ function registerIpcHandlers(): void {
     );
   });
 
+  ipcMain.handle('licencias-sin-sueldo:select-template', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar plantilla de Licencia sin sueldo',
+      properties: ['openFile'],
+      filters: [{ name: 'Documento Word', extensions: ['docx'] }],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle('licencias-sin-sueldo:read-template', async (_event, filePath: string) => {
+    assertDocxPath(filePath);
+    const fileBuffer = await readFile(filePath);
+    return fileBuffer.buffer.slice(
+      fileBuffer.byteOffset,
+      fileBuffer.byteOffset + fileBuffer.byteLength,
+    );
+  });
+
   ipcMain.handle('teletrabajo:open-word', async (_event, payload: unknown) =>
     openTeletrabajoWord(payload),
   );

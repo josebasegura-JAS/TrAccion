@@ -1,10 +1,13 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, FileText, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
+import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   EMPTY_LICENCIA_SIN_SUELDO_DRAFT,
@@ -24,8 +27,8 @@ import {
   type LicenciaSinSueldoRecord,
   type LicenciaSinSueldoTipo,
 } from '../domain/licenciaSinSueldo';
+import { generateLicenciaSinSueldoWord } from '../domain/word';
 import { useLicenciasSinSueldoStore } from '../store/useLicenciasSinSueldoStore';
-import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 type EditorMode = 'create' | 'edit';
 type LicenciasTableColumnId = 'numeroEmpleado' | 'nombreCompleto' | 'tipo' | 'fechaSolicitud' | 'fechaInicio' | 'fechaFin' | 'estado' | 'actions';
@@ -357,6 +360,8 @@ function LicenciasTable({
   onAdvance,
   onDelete,
   onEdit,
+  onGenerateWord,
+  generatingWordId,
 }: {
   blockId: BlockId;
   emptyText: string;
@@ -365,6 +370,8 @@ function LicenciasTable({
   onAdvance: (record: LicenciaSinSueldoRecord) => void;
   onDelete: (record: LicenciaSinSueldoRecord) => void;
   onEdit: (record: LicenciaSinSueldoRecord) => void;
+  onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
+  generatingWordId: string | null;
 }) {
   const { preferences, setSort, setColumnWidth, resetPreferences } = useTableViewPreferences<LicenciasTableColumnId>({
     storageKey: `traccion.tableView.licenciasSinSueldo.${blockId}`,
@@ -385,12 +392,25 @@ function LicenciasTable({
       render: (record) => (
         <div className="flex justify-end gap-2">
           {record.estado === 'pendiente_aprobacion' && <button className="text-xs font-semibold text-metro-red hover:text-metro-text" onClick={(event) => { event.stopPropagation(); onAdvance(record); }} type="button">Aprobar</button>}
+          {record.estado === 'pendiente_firma' && record.tipo === 'Licencia sin sueldo' && (
+            <button
+              aria-label="Generar Word concesión"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={generatingWordId !== null}
+              onClick={(event) => { event.stopPropagation(); onGenerateWord(record); }}
+              title="Generar Word concesión"
+              type="button"
+            >
+              <FileText size={13} />
+              {generatingWordId === record.id ? 'Generando…' : 'Word'}
+            </button>
+          )}
           {record.estado === 'pendiente_firma' && <button className="text-xs font-semibold text-metro-red hover:text-metro-text" onClick={(event) => { event.stopPropagation(); onAdvance(record); }} type="button">Firma recibida</button>}
           <button className="text-xs font-semibold text-metro-muted hover:text-metro-red" onClick={(event) => { event.stopPropagation(); onDelete(record); }} type="button">Eliminar</button>
         </div>
       ),
     },
-  ], [onAdvance, onDelete]);
+  ], [generatingWordId, onAdvance, onDelete, onGenerateWord]);
 
   return (
     <div className="space-y-2">
@@ -435,12 +455,18 @@ function Block({ children, count, icon, title }: { children: ReactNode; count: n
 
 export function LicenciasSinSueldoPage() {
   const { employees, load: loadEmployees } = useEmployeeStore();
+  const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
+  const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
+    (state) => state.rutaPlantillaLicenciaSinSueldo,
+  );
   const { records, load, create, update, remove } = useLicenciasSinSueldoStore();
   const [editor, setEditor] = useState<{ mode: EditorMode; record: LicenciaSinSueldoRecord | null } | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'todos' | LicenciaSinSueldoTipo>('todos');
   const [yearFilter, setYearFilter] = useState<'todos' | string>('todos');
   const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+  const [wordStatus, setWordStatus] = useState('');
+  const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
 
   useEffect(() => {
     loadEmployees();
@@ -517,6 +543,38 @@ export function LicenciasSinSueldoPage() {
     await releaseMutationLock(record);
   };
 
+  const generateWord = useCallback(
+    async (record: LicenciaSinSueldoRecord) => {
+      if (record.estado !== 'pendiente_firma' || record.tipo !== 'Licencia sin sueldo' || generatingWordId) {
+        return;
+      }
+
+      const plantillaEmployee =
+        employees.find(
+          (employee) => !employee.deletedAt && employee.empleado.trim() === record.numeroEmpleado.trim(),
+        ) ?? null;
+
+      setGeneratingWordId(record.id);
+      setWordStatus('');
+      try {
+        const result = await generateLicenciaSinSueldoWord(
+          record,
+          plantillaEmployee,
+          rutaPlantillaLicenciaSinSueldo,
+          jobPositionTranslations,
+        );
+        await saveDocxWithDialog(result.blob, result.fileName);
+        setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
+        setWordStatus(message);
+      } finally {
+        setGeneratingWordId(null);
+      }
+    },
+    [employees, generatingWordId, jobPositionTranslations, rutaPlantillaLicenciaSinSueldo],
+  );
+
   const toggleYear = (year: number) => {
     setCollapsedYears((current) => {
       const next = new Set(current);
@@ -561,16 +619,22 @@ export function LicenciasSinSueldoPage() {
         </label>
       </div>
 
+      {wordStatus && (
+        <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">
+          {wordStatus}
+        </p>
+      )}
+
       <Block count={blocks.pendienteAprobacion.length} icon={<Clock size={18} />} title="Pendientes de aprobar">
-        <LicenciasTable blockId="pendiente_aprobacion" emptyText="No hay solicitudes pendientes de aprobar." onAdvance={advanceRecord} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} records={blocks.pendienteAprobacion} title="Licencias sin sueldo - Pendientes de aprobar" />
+        <LicenciasTable blockId="pendiente_aprobacion" emptyText="No hay solicitudes pendientes de aprobar." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.pendienteAprobacion} title="Licencias sin sueldo - Pendientes de aprobar" />
       </Block>
 
       <Block count={blocks.pendienteFirma.length} icon={<FileSignature size={18} />} title="Pendientes de firma">
-        <LicenciasTable blockId="pendiente_firma" emptyText="No hay solicitudes pendientes de firma." onAdvance={advanceRecord} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} records={blocks.pendienteFirma} title="Licencias sin sueldo - Pendientes de firma" />
+        <LicenciasTable blockId="pendiente_firma" emptyText="No hay solicitudes pendientes de firma." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.pendienteFirma} title="Licencias sin sueldo - Pendientes de firma" />
       </Block>
 
       <Block count={blocks.vigente.length} icon={<CheckCircle2 size={18} />} title="Vigentes">
-        <LicenciasTable blockId="vigente" emptyText="No hay solicitudes vigentes." onAdvance={advanceRecord} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} records={blocks.vigente} title="Licencias sin sueldo - Vigentes" />
+        <LicenciasTable blockId="vigente" emptyText="No hay solicitudes vigentes." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.vigente} title="Licencias sin sueldo - Vigentes" />
       </Block>
 
       <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm shadow-slate-950/20">
@@ -587,7 +651,7 @@ export function LicenciasSinSueldoPage() {
                 <span className="text-xs text-metro-muted">{yearRecords.length} registros</span>
               </button>
               {!collapsedYears.has(year) && (
-                <LicenciasTable blockId={`historico-${year}`} emptyText="Sin históricos para este año con los filtros actuales." onAdvance={advanceRecord} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} records={yearRecords} title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`} />
+                <LicenciasTable blockId={`historico-${year}`} emptyText="Sin históricos para este año con los filtros actuales." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={yearRecords} title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`} />
               )}
             </div>
           ))}

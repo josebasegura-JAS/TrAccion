@@ -139,6 +139,8 @@ interface TraccionApi {
   getRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
+  selectLicenciaSinSueldoTemplate?: () => Promise<string | null>;
+  readLicenciaSinSueldoTemplate?: (path: string) => Promise<ArrayBuffer>;
   openTeletrabajoWord?: (
     buffer: ArrayBuffer,
     fileName: string,

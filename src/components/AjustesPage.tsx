@@ -6,6 +6,9 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 
 export function AjustesPage() {
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
+  const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
+    (state) => state.rutaPlantillaLicenciaSinSueldo,
+  );
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const addTaskPhase = useConfiguracionStore((state) => state.addTaskPhase);
   const updateTaskPhase = useConfiguracionStore((state) => state.updateTaskPhase);
@@ -14,7 +17,11 @@ export function AjustesPage() {
   const setRutaPlantillaTeletrabajo = useConfiguracionStore(
     (state) => state.setRutaPlantillaTeletrabajo,
   );
+  const setRutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
+    (state) => state.setRutaPlantillaLicenciaSinSueldo,
+  );
   const [status, setStatus] = useState('');
+  const [licenciaTemplateStatus, setLicenciaTemplateStatus] = useState('');
   const databaseStatus = useDatabaseStatus();
   const [databaseActionStatus, setDatabaseActionStatus] = useState('');
   const [localBackups, setLocalBackups] = useState<TraccionLocalBackupEntry[]>([]);
@@ -180,6 +187,33 @@ export function AjustesPage() {
     setStatus('Ruta de plantilla guardada.');
   };
 
+  const handleSelectLicenciaSinSueldoTemplate = async () => {
+    setLicenciaTemplateStatus('');
+
+    const api = window.traccion;
+    if (!api || (!api.selectLicenciaSinSueldoTemplate && !api.selectTeletrabajoTemplate)) {
+      setLicenciaTemplateStatus(
+        'El selector de plantillas solo está disponible en la aplicación de escritorio.',
+      );
+      return;
+    }
+
+    const selectedPath = api.selectLicenciaSinSueldoTemplate
+      ? await api.selectLicenciaSinSueldoTemplate()
+      : await api.selectTeletrabajoTemplate();
+    if (!selectedPath) {
+      return;
+    }
+
+    if (!isDocxPath(selectedPath)) {
+      setLicenciaTemplateStatus('La ruta seleccionada debe apuntar a un archivo DOCX.');
+      return;
+    }
+
+    setRutaPlantillaLicenciaSinSueldo(selectedPath);
+    setLicenciaTemplateStatus('Ruta de plantilla de licencia sin sueldo guardada.');
+  };
+
   return (
     <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
       <div className="mb-5">
@@ -342,6 +376,40 @@ export function AjustesPage() {
             Seleccionar plantilla
           </button>
           {status && <p className="text-xs font-semibold text-metro-muted">{status}</p>}
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-metro-text">Plantilla Licencia sin sueldo</h3>
+          <p className="mt-1 text-sm text-metro-muted">
+            Guarda la ruta externa del DOCX usado para generar la concesión en pendientes de firma.
+          </p>
+        </div>
+
+        <label className="block text-xs font-semibold text-metro-muted">
+          Ruta plantilla DOCX
+          <input
+            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => setRutaPlantillaLicenciaSinSueldo(event.target.value)}
+            placeholder="C:\\RRLL\\Plantillas\\Concesión licencia sin sueldo.docx"
+            type="text"
+            value={rutaPlantillaLicenciaSinSueldo}
+          />
+        </label>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+            onClick={handleSelectLicenciaSinSueldoTemplate}
+            type="button"
+          >
+            <FolderOpen size={16} />
+            Seleccionar plantilla
+          </button>
+          {licenciaTemplateStatus && (
+            <p className="text-xs font-semibold text-metro-muted">{licenciaTemplateStatus}</p>
+          )}
         </div>
       </div>
 

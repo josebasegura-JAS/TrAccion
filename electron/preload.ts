@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('recordLock:get', payload),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
+  selectLicenciaSinSueldoTemplate: () =>
+    ipcRenderer.invoke('licencias-sin-sueldo:select-template'),
+  readLicenciaSinSueldoTemplate: (path: string) =>
+    ipcRenderer.invoke('licencias-sin-sueldo:read-template', path),
   openTeletrabajoWord: (buffer: ArrayBuffer, fileName: string) =>
     ipcRenderer.invoke('teletrabajo:open-word', { buffer, fileName }),
   createOutlookDraft,
