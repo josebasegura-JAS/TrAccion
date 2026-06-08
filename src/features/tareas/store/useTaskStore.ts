@@ -21,6 +21,41 @@ const STORAGE_KEY = 'traccion.v1.tareas.tasks';
 const LEGACY_PETICIONES_STORAGE_KEY = 'traccion.v1.peticiones.peticiones';
 const PETICIONES_MIGRATION_FLAG_KEY = 'traccion.v1.tareas.peticionesMigrated';
 
+const SESSION_TASK_REFERENCES = [
+  {
+    storageKey: 'traccion.v1.comite.sessions',
+    module: 'comite',
+    moduleLabel: 'Comité de Empresa',
+  },
+  {
+    storageKey: 'traccion.v1.paritaria.sessions',
+    module: 'paritaria',
+    moduleLabel: 'Comisión Paritaria',
+  },
+] as const;
+
+type SessionTaskReference = {
+  taskId: string;
+  module: string;
+  moduleLabel: string;
+  sessionLabel: string;
+  sessionDocumentCode: string;
+  sessionDate: string;
+  closedAt: string;
+};
+
+type StoredManagedSessionForTaskSync = {
+  id: string;
+  date: string;
+  code: string;
+  title: string;
+  status: 'open' | 'closed';
+  items: string[];
+  treatedTaskIds: string[];
+  untreatedTaskIds: string[];
+  closedAt: string | null;
+};
+
 interface TaskStateStore {
   tasks: Task[];
   selectedTaskId: string;
@@ -28,7 +63,9 @@ interface TaskStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: TaskDraft, seguimientoText?: string) => void;
-  createManyFromImport: (drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>) => Record<string, string>;
+  createManyFromImport: (
+    drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
+  ) => Record<string, string>;
   update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
@@ -46,7 +83,10 @@ function isTaskSeguimientoEntry(value: unknown): value is TaskSeguimientoEntry {
   return typeof candidate.fechaHora === 'string' && typeof candidate.texto === 'string';
 }
 
-function hasStringProperty<K extends string>(value: unknown, property: K): value is Record<K, string> {
+function hasStringProperty<K extends string>(
+  value: unknown,
+  property: K,
+): value is Record<K, string> {
   return (
     value !== null &&
     typeof value === 'object' &&
@@ -88,9 +128,143 @@ function isLegacyPeticion(value: unknown): value is LegacyPeticionForTaskMigrati
   );
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isStoredManagedSessionForTaskSync(
+  value: unknown,
+): value is StoredManagedSessionForTaskSync {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof StoredManagedSessionForTaskSync, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.date === 'string' &&
+    typeof candidate.code === 'string' &&
+    typeof candidate.title === 'string' &&
+    (candidate.status === 'open' || candidate.status === 'closed') &&
+    isStringArray(candidate.items) &&
+    (candidate.treatedTaskIds === undefined || isStringArray(candidate.treatedTaskIds)) &&
+    (candidate.untreatedTaskIds === undefined || isStringArray(candidate.untreatedTaskIds)) &&
+    (candidate.closedAt === null ||
+      candidate.closedAt === undefined ||
+      typeof candidate.closedAt === 'string')
+  );
+}
+
+function isHistoricalSessionDate(date: string): boolean {
+  const year = Number(date.match(/^(\d{4})/)?.[1] ?? 0);
+  return year > 0 && year < 2026;
+}
+
+function formatSessionDateForTask(date: string): string {
+  if (!date) {
+    return 'Sin fecha';
+  }
+
+  const parsedDate = new Date(`${date}T00:00:00`);
+  return Number.isNaN(parsedDate.getTime()) ? date : parsedDate.toLocaleDateString('es-ES');
+}
+
+function buildSessionLabelForTask(
+  session: Pick<StoredManagedSessionForTaskSync, 'code' | 'date'>,
+): string {
+  return `${session.code || 'Sin código'} · ${formatSessionDateForTask(session.date)}`;
+}
+
+function readClosedSessionTaskReferences(): Map<string, SessionTaskReference> {
+  const references = new Map<string, SessionTaskReference>();
+
+  SESSION_TASK_REFERENCES.forEach((source) => {
+    const storedSessions = readStoredArray(source.storageKey).filter(
+      isStoredManagedSessionForTaskSync,
+    );
+
+    storedSessions.forEach((session) => {
+      const forceHistorical = isHistoricalSessionDate(session.date);
+      const isClosedSession = session.status === 'closed' || forceHistorical;
+      if (!isClosedSession) {
+        return;
+      }
+
+      const untreatedTaskIds = new Set(session.untreatedTaskIds ?? []);
+      const treatedTaskIds =
+        forceHistorical || (session.treatedTaskIds ?? []).length === 0
+          ? session.items
+          : (session.treatedTaskIds ?? []);
+      const closedAt =
+        session.closedAt ??
+        (session.date ? `${session.date}T00:00:00.000Z` : new Date().toISOString());
+
+      treatedTaskIds.forEach((taskId) => {
+        if (!taskId || untreatedTaskIds.has(taskId)) {
+          return;
+        }
+
+        references.set(taskId, {
+          taskId,
+          module: source.module,
+          moduleLabel: source.moduleLabel,
+          sessionLabel: buildSessionLabelForTask(session),
+          sessionDocumentCode: session.code.trim(),
+          sessionDate: session.date,
+          closedAt,
+        });
+      });
+    });
+  });
+
+  return references;
+}
+
+function reconcileTasksWithClosedSessions(tasks: Task[]): Task[] {
+  const references = readClosedSessionTaskReferences();
+  if (references.size === 0) {
+    return tasks;
+  }
+
+  const reconciledAt = new Date().toISOString();
+  return tasks.map((task) => {
+    const reference = references.get(task.id);
+    if (!reference || task.deletedAt) {
+      return task;
+    }
+
+    const trackingText = `Tratada en ${reference.moduleLabel} (${reference.sessionLabel}).`;
+    const alreadyTracked = task.seguimiento.some((entry) => entry.texto === trackingText);
+    const alreadyClosed = isTaskClosed(task);
+    const nextTask: Task = {
+      ...task,
+      sessionDocumentCode: task.sessionDocumentCode || reference.sessionDocumentCode,
+      sessionModule: task.sessionModule || reference.module,
+      sessionDate: task.sessionDate || reference.sessionDate,
+      estado: alreadyClosed ? task.estado : 'cerrada',
+      fase: alreadyClosed ? task.fase : CLOSED_TASK_PHASE,
+      closedAt: task.closedAt ?? reference.closedAt,
+      updatedAt:
+        alreadyClosed &&
+        task.sessionDocumentCode === (task.sessionDocumentCode || reference.sessionDocumentCode) &&
+        task.sessionModule === (task.sessionModule || reference.module) &&
+        task.sessionDate === (task.sessionDate || reference.sessionDate) &&
+        alreadyTracked
+          ? task.updatedAt
+          : reconciledAt,
+      seguimiento: alreadyTracked
+        ? task.seguimiento
+        : [{ fechaHora: reference.closedAt, texto: trackingText }, ...task.seguimiento],
+    };
+
+    return nextTask;
+  });
+}
+
 function getHistoricalImportDate(task: Task): string {
   const directDate = task.createdAt.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? task.fechaLimite;
-  const notesDate = task.observaciones.match(/\b(20\d{2}-\d{2}-\d{2}|19\d{2}-\d{2}-\d{2})\b/)?.[1] ?? '';
+  const notesDate =
+    task.observaciones.match(/\b(20\d{2}-\d{2}-\d{2}|19\d{2}-\d{2}-\d{2})\b/)?.[1] ?? '';
   return directDate || notesDate;
 }
 
@@ -118,7 +292,6 @@ function isHistoricalSessionImportTask(task: Task): boolean {
   const year = Number(getHistoricalImportDate(task).match(/^(\d{4})/)?.[1] ?? 0);
   return year > 0 && year < 2026;
 }
-
 
 function isTaskDocumentLink(value: unknown): value is TaskDocumentLink {
   if (!value || typeof value !== 'object') {
@@ -156,7 +329,9 @@ function normalizeSeguimiento(task: Task): TaskSeguimientoEntry[] {
 
 function normalizeTask(task: Task): Task {
   const updatedAt = task.updatedAt ?? task.createdAt;
-  const tipo = (TASK_TYPES as readonly string[]).includes(task.tipo) ? task.tipo : EMPTY_TASK_DRAFT.tipo;
+  const tipo = (TASK_TYPES as readonly string[]).includes(task.tipo)
+    ? task.tipo
+    : EMPTY_TASK_DRAFT.tipo;
   const fase = typeof task.fase === 'string' && task.fase.trim() ? task.fase : DEFAULT_TASK_PHASE;
   const estado = (TASK_STATES as readonly string[]).includes(task.estado)
     ? task.estado
@@ -178,11 +353,16 @@ function normalizeTask(task: Task): Task {
     observaciones: task.observaciones ?? EMPTY_TASK_DRAFT.observaciones,
     mail: typeof task.mail === 'string' ? task.mail : EMPTY_TASK_DRAFT.mail,
     documentLinks: normalizeDocumentLinks(task),
+    sessionDocumentCode:
+      typeof task.sessionDocumentCode === 'string' ? task.sessionDocumentCode : '',
+    sessionModule: typeof task.sessionModule === 'string' ? task.sessionModule : '',
+    sessionDate: typeof task.sessionDate === 'string' ? task.sessionDate : '',
     seguimiento: normalizeSeguimiento(task),
     createdAt: task.createdAt,
     updatedAt,
     deletedAt: task.deletedAt ?? null,
-    closedAt: task.closedAt ?? (estado === 'cerrada' || fase === CLOSED_TASK_PHASE ? updatedAt : null),
+    closedAt:
+      task.closedAt ?? (estado === 'cerrada' || fase === CLOSED_TASK_PHASE ? updatedAt : null),
   } satisfies Task;
 
   if (!isHistoricalSessionImportTask(normalizedTask)) {
@@ -190,7 +370,8 @@ function normalizeTask(task: Task): Task {
   }
 
   const historicalDate = getHistoricalImportDate(normalizedTask);
-  const closedAt = normalizedTask.closedAt ?? (historicalDate ? `${historicalDate}T00:00:00.000Z` : updatedAt);
+  const closedAt =
+    normalizedTask.closedAt ?? (historicalDate ? `${historicalDate}T00:00:00.000Z` : updatedAt);
 
   return {
     ...normalizedTask,
@@ -223,7 +404,7 @@ function readMigratedPeticiones(): Task[] {
 
 function readTasks(): Task[] {
   const rawCurrentTasks = readStoredArray(STORAGE_KEY).filter(isTask);
-  const currentTasks = rawCurrentTasks.map(normalizeTask);
+  const currentTasks = reconcileTasksWithClosedSessions(rawCurrentTasks.map(normalizeTask));
   const migratedTasks = readMigratedPeticiones().filter(
     (migratedTask) => !currentTasks.some((task) => task.id === migratedTask.id),
   );
@@ -238,7 +419,7 @@ function readTasks(): Task[] {
     return currentTasks;
   }
 
-  const tasks = [...currentTasks, ...migratedTasks];
+  const tasks = reconcileTasksWithClosedSessions([...currentTasks, ...migratedTasks]);
   persistTasks(tasks);
   writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
   return tasks;
@@ -292,6 +473,9 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       const task: Task = {
         id: createTaskId(),
         ...draft,
+        sessionDocumentCode: '',
+        sessionModule: '',
+        sessionDate: '',
         seguimiento: buildSeguimiento(seguimientoText, now),
         createdAt: now,
         updatedAt: now,
@@ -335,8 +519,14 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         const task: Task = normalizeTask({
           id: createTaskId(),
           ...draft,
+          sessionDocumentCode: '',
+          sessionModule: '',
+          sessionDate: '',
           observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
-          seguimiento: buildSeguimiento('Tarea importada desde resumen histórico de Comité/Paritaria.', now),
+          seguimiento: buildSeguimiento(
+            'Tarea importada desde resumen histórico de Comité/Paritaria.',
+            now,
+          ),
           createdAt: closedAt ?? now,
           updatedAt: now,
           deletedAt: null,

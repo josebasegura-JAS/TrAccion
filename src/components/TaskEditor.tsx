@@ -18,13 +18,17 @@ import { InlineSaveFeedback } from './InlineSaveFeedback';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
-const taskTextFields: Array<{ field: TaskTextDraftField; label: string; required?: boolean; type?: string }> = [
+const taskTextFields: Array<{
+  field: TaskTextDraftField;
+  label: string;
+  required?: boolean;
+  type?: string;
+}> = [
   { field: 'titulo', label: 'Título', required: true },
   { field: 'responsable', label: 'Responsable' },
   { field: 'origen', label: 'Detalle origen / solicitante' },
   { field: 'fechaLimite', label: 'Fecha límite', type: 'date' },
 ];
-
 
 function getPathBaseName(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).pop() ?? filePath;
@@ -57,7 +61,13 @@ function mergeDocumentLinks(
   return [...currentLinks, ...dedupedNextLinks];
 }
 
-function formatMailFromMsg(data: { subject: string; senderName: string; senderEmail: string; date: string; body: string }): string {
+function formatMailFromMsg(data: {
+  subject: string;
+  senderName: string;
+  senderEmail: string;
+  date: string;
+  body: string;
+}): string {
   const header = [
     data.subject ? `Asunto: ${data.subject}` : '',
     data.senderName || data.senderEmail
@@ -67,6 +77,27 @@ function formatMailFromMsg(data: { subject: string; senderName: string; senderEm
   ].filter(Boolean);
 
   return [...header, data.body].filter(Boolean).join('\n');
+}
+
+function formatSessionModuleLabel(sessionModule: string): string {
+  if (sessionModule === 'comite') {
+    return 'Comité de Empresa';
+  }
+
+  if (sessionModule === 'paritaria') {
+    return 'Comisión Paritaria';
+  }
+
+  return sessionModule || 'Sesión';
+}
+
+function formatTaskSessionDate(sessionDate: string): string {
+  if (!sessionDate) {
+    return '';
+  }
+
+  const parsedDate = new Date(`${sessionDate}T00:00:00`);
+  return Number.isNaN(parsedDate.getTime()) ? sessionDate : parsedDate.toLocaleDateString('es-ES');
 }
 
 function formatUpdateDate(fechaHora: string): string {
@@ -123,7 +154,9 @@ export function TaskEditor({
   const [documentStatusIsError, setDocumentStatusIsError] = useState(false);
   const [mailStatus, setMailStatus] = useState('');
   const [mailStatusIsError, setMailStatusIsError] = useState(false);
-  const [loadedTaskIdentity, setLoadedTaskIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
+  const [loadedTaskIdentity, setLoadedTaskIdentity] = useState(
+    () => `${mode}:${task?.id ?? 'new'}`,
+  );
   const [loadedTaskUpdatedAt, setLoadedTaskUpdatedAt] = useState(task?.updatedAt ?? null);
   const recordLock = useSharedRecordLock({
     module: 'tareas',
@@ -149,17 +182,22 @@ export function TaskEditor({
   }, [loadedTaskIdentity, mode, task]);
 
   const phaseOptions = useMemo(() => {
-    const activePhaseNames = taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre);
-    return activePhaseNames.includes(draft.fase) ? activePhaseNames : [draft.fase, ...activePhaseNames];
+    const activePhaseNames = taskPhases
+      .filter((phase) => phase.active)
+      .map((phase) => phase.nombre);
+    return activePhaseNames.includes(draft.fase)
+      ? activePhaseNames
+      : [draft.fase, ...activePhaseNames];
   }, [draft.fase, taskPhases]);
 
   const originOptions = useMemo(() => {
-    const activeOriginNames = taskOrigins.filter((origin) => origin.active).map((origin) => origin.nombre);
+    const activeOriginNames = taskOrigins
+      .filter((origin) => origin.active)
+      .map((origin) => origin.nombre);
     return draft.sindicato && !activeOriginNames.includes(draft.sindicato)
       ? [draft.sindicato, ...activeOriginNames]
       : activeOriginNames;
   }, [draft.sindicato, taskOrigins]);
-
 
   const handleAddManualDocumentPath = () => {
     const trimmedPath = manualDocumentPath.trim();
@@ -171,7 +209,9 @@ export function TaskEditor({
 
     setDraft((current) => ({
       ...current,
-      documentLinks: mergeDocumentLinks(current.documentLinks, [buildTaskDocumentLink(trimmedPath)]),
+      documentLinks: mergeDocumentLinks(current.documentLinks, [
+        buildTaskDocumentLink(trimmedPath),
+      ]),
     }));
     setManualDocumentPath('');
     setDocumentStatus('Ruta vinculada a la tarea.');
@@ -194,7 +234,10 @@ export function TaskEditor({
 
       setDraft((current) => ({
         ...current,
-        documentLinks: mergeDocumentLinks(current.documentLinks, selectedPaths.map(buildTaskDocumentLink)),
+        documentLinks: mergeDocumentLinks(
+          current.documentLinks,
+          selectedPaths.map(buildTaskDocumentLink),
+        ),
       }));
       setDocumentStatus(`${selectedPaths.length} vínculo(s) añadido(s).`);
       setDocumentStatusIsError(false);
@@ -262,6 +305,16 @@ export function TaskEditor({
     Boolean(task?.updatedAt) &&
     Boolean(loadedTaskUpdatedAt) &&
     task?.updatedAt !== loadedTaskUpdatedAt;
+  const linkedSessionText = task?.sessionDocumentCode
+    ? [
+        formatSessionModuleLabel(task.sessionModule),
+        task.sessionDocumentCode,
+        formatTaskSessionDate(task.sessionDate),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
   const canSubmit = draft.titulo.trim().length > 0 && !recordLock.isReadOnly;
 
   return (
@@ -296,20 +349,29 @@ export function TaskEditor({
         </div>
 
         {recordLock.message && (
-          <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
-            recordLock.isReadOnly
-              ? 'border-red-400/40 bg-red-950/20 text-red-100'
-              : 'border-metro-border bg-metro-surface text-metro-muted'
-          }`}>
+          <p
+            className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              recordLock.isReadOnly
+                ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                : 'border-metro-border bg-metro-surface text-metro-muted'
+            }`}
+          >
             {recordLock.message}
           </p>
         )}
 
         {hasExternalTaskUpdate && recordLock.isReadOnly && (
           <p className="mb-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
-            Esta tarea ha recibido cambios externos. No se han aplicado al formulario abierto para no
-            sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
+            Esta tarea ha recibido cambios externos. No se han aplicado al formulario abierto para
+            no sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
           </p>
+        )}
+
+        {linkedSessionText && (
+          <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
+            Código documental de sesión:{' '}
+            <span className="text-metro-text">{linkedSessionText}</span>
+          </div>
         )}
 
         <form
@@ -338,7 +400,10 @@ export function TaskEditor({
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) =>
-                  setDraft((current) => ({ ...current, tipo: event.target.value as TaskDraft['tipo'] }))
+                  setDraft((current) => ({
+                    ...current,
+                    tipo: event.target.value as TaskDraft['tipo'],
+                  }))
                 }
                 value={draft.tipo}
               >
@@ -353,7 +418,9 @@ export function TaskEditor({
               Fase
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => setDraft((current) => ({ ...current, fase: event.target.value }))}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, fase: event.target.value }))
+                }
                 value={draft.fase}
               >
                 {phaseOptions.map((fase) => (
@@ -381,7 +448,9 @@ export function TaskEditor({
               Origen
               <select
                 className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => setDraft((current) => ({ ...current, sindicato: event.target.value }))}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, sindicato: event.target.value }))
+                }
                 value={draft.sindicato}
               >
                 <option value="">Sin origen</option>
@@ -538,12 +607,16 @@ export function TaskEditor({
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  void handleImportMailFile(Array.from(event.dataTransfer.files).find((file) => /\.msg$/i.test(file.name)));
+                  void handleImportMailFile(
+                    Array.from(event.dataTransfer.files).find((file) => /\.msg$/i.test(file.name)),
+                  );
                 }}
               >
                 <textarea
                   className="min-h-28 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => setDraft((current) => ({ ...current, mail: event.target.value }))}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, mail: event.target.value }))
+                  }
                   placeholder="Arrastra aquí un .msg o pega el texto del correo..."
                   value={draft.mail}
                 />
@@ -584,7 +657,10 @@ export function TaskEditor({
                       className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
                       key={`${seguimiento.fechaHora}-${seguimiento.texto}`}
                     >
-                      <time className="text-xs font-bold text-metro-text" dateTime={seguimiento.fechaHora}>
+                      <time
+                        className="text-xs font-bold text-metro-text"
+                        dateTime={seguimiento.fechaHora}
+                      >
                         {formatUpdateDate(seguimiento.fechaHora)}
                       </time>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-metro-muted">

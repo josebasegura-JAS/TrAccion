@@ -1,4 +1,12 @@
-import { ChevronDown, ChevronRight, Plus, Search, Settings, SlidersHorizontal, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrigins';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
@@ -90,6 +98,11 @@ const taskExportColumns: ExportColumn<Task>[] = [
   { key: 'fechaLimite', header: 'Fecha límite', value: (task) => task.fechaLimite || null },
   { key: 'responsable', header: 'Responsable', value: (task) => task.responsable || null },
   { key: 'sindicato', header: 'Origen', value: (task) => task.sindicato || null },
+  {
+    key: 'sessionDocumentCode',
+    header: 'Código sesión',
+    value: (task) => task.sessionDocumentCode || null,
+  },
 ];
 
 function formatDateTime(value: string | null): string {
@@ -186,7 +199,9 @@ export function TareasPage({
     [taskPhases],
   );
   const originFilterOptions = useMemo(() => {
-    const values = new Set(taskOrigins.filter((origin) => origin.active).map((origin) => origin.nombre));
+    const values = new Set(
+      taskOrigins.filter((origin) => origin.active).map((origin) => origin.nombre),
+    );
     tasks.forEach((task) => {
       if (task.sindicato.trim()) {
         values.add(task.sindicato.trim());
@@ -216,7 +231,12 @@ export function TareasPage({
   ]);
   const activeFilterChips: ActiveFilterChip[] = [
     filters.search.trim()
-      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      ? {
+          key: 'search',
+          label: 'Búsqueda',
+          value: filters.search.trim(),
+          onClear: () => setFilter('search', ''),
+        }
       : null,
     filters.tipo
       ? { key: 'tipo', label: 'Tipo', value: filters.tipo, onClear: () => setFilter('tipo', '') }
@@ -225,13 +245,28 @@ export function TareasPage({
       ? { key: 'fase', label: 'Fase', value: filters.fase, onClear: () => setFilter('fase', '') }
       : null,
     filters.estado
-      ? { key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') }
+      ? {
+          key: 'estado',
+          label: 'Estado',
+          value: filters.estado,
+          onClear: () => setFilter('estado', ''),
+        }
       : null,
     filters.prioridad
-      ? { key: 'prioridad', label: 'Prioridad', value: filters.prioridad, onClear: () => setFilter('prioridad', '') }
+      ? {
+          key: 'prioridad',
+          label: 'Prioridad',
+          value: filters.prioridad,
+          onClear: () => setFilter('prioridad', ''),
+        }
       : null,
     filters.origen
-      ? { key: 'origen', label: 'Origen', value: filters.origen, onClear: () => setFilter('origen', '') }
+      ? {
+          key: 'origen',
+          label: 'Origen',
+          value: filters.origen,
+          onClear: () => setFilter('origen', ''),
+        }
       : null,
   ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
@@ -647,8 +682,6 @@ export function TareasPage({
   );
 }
 
-
-
 function TaskOriginsModal({ onClose }: { onClose: () => void }) {
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const addTaskOrigin = useConfiguracionStore((state) => state.addTaskOrigin);
@@ -776,9 +809,13 @@ function TaskOriginRow({
         <OriginTypeSelect onChange={setType} value={type} />
       </td>
       <td className="px-3 py-2">
-        <span className={`rounded-full px-2 py-1 text-xs font-bold ${
-          origin.active ? 'bg-emerald-500/15 text-emerald-100' : 'bg-slate-500/20 text-metro-muted'
-        }`}>
+        <span
+          className={`rounded-full px-2 py-1 text-xs font-bold ${
+            origin.active
+              ? 'bg-emerald-500/15 text-emerald-100'
+              : 'bg-slate-500/20 text-metro-muted'
+          }`}
+        >
           {origin.active ? 'Activo' : 'Inactivo'}
         </span>
       </td>

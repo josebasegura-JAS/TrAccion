@@ -6,6 +6,7 @@ import { useTaskStore } from './useTaskStore';
 const TASKS_KEY = 'traccion.v1.tareas.tasks';
 const LEGACY_PETICIONES_KEY = 'traccion.v1.peticiones.peticiones';
 const PETICIONES_MIGRATION_FLAG_KEY = 'traccion.v1.tareas.peticionesMigrated';
+const COMITE_SESSIONS_KEY = 'traccion.v1.comite.sessions';
 
 function draft(overrides: Partial<TaskDraft> = {}): TaskDraft {
   return {
@@ -62,14 +63,18 @@ describe('useTaskStore', () => {
   });
 
   it('createManyFromImport deduplica por ImportKey y devuelve el id ya existente', () => {
-    const firstIds = useTaskStore.getState().createManyFromImport([
-      { externalKey: 'comite:2025-01-01:1', draft: draft({ titulo: 'Punto importado' }) },
-    ]);
+    const firstIds = useTaskStore
+      .getState()
+      .createManyFromImport([
+        { externalKey: 'comite:2025-01-01:1', draft: draft({ titulo: 'Punto importado' }) },
+      ]);
     const firstTaskId = firstIds['comite:2025-01-01:1'];
 
-    const secondIds = useTaskStore.getState().createManyFromImport([
-      { externalKey: 'comite:2025-01-01:1', draft: draft({ titulo: 'Duplicado' }) },
-    ]);
+    const secondIds = useTaskStore
+      .getState()
+      .createManyFromImport([
+        { externalKey: 'comite:2025-01-01:1', draft: draft({ titulo: 'Duplicado' }) },
+      ]);
 
     expect(useTaskStore.getState().tasks).toHaveLength(1);
     expect(secondIds['comite:2025-01-01:1']).toBe(firstTaskId);
@@ -95,9 +100,51 @@ describe('useTaskStore', () => {
     expect(task.closedAt).toBe('2025-05-21T00:00:00.000Z');
   });
 
+  it('load reconcilia tareas abiertas vinculadas a sesiones cerradas de comité', () => {
+    useTaskStore.getState().create(draft({ titulo: 'Punto CE pendiente', fase: 'comite' }));
+    const [task] = useTaskStore.getState().tasks;
+
+    window.localStorage.setItem(
+      COMITE_SESSIONS_KEY,
+      JSON.stringify([
+        {
+          id: 'ce-session-1',
+          date: '2025-05-21',
+          code: 'CE-2025-05',
+          title: 'Comité de Empresa CE-2025-05',
+          notes: '',
+          status: 'closed',
+          items: [task.id],
+          treatedTaskIds: [task.id],
+          untreatedTaskIds: [],
+          createdAt: '2025-05-21T00:00:00.000Z',
+          updatedAt: '2026-06-08T10:00:00.000Z',
+          closedAt: '2025-05-21T00:00:00.000Z',
+        },
+      ]),
+    );
+
+    useTaskStore.getState().load();
+
+    const [reconciledTask] = useTaskStore.getState().tasks;
+    expect(reconciledTask).toMatchObject({
+      estado: 'cerrada',
+      fase: CLOSED_TASK_PHASE,
+      closedAt: '2025-05-21T00:00:00.000Z',
+      sessionDocumentCode: 'CE-2025-05',
+      sessionModule: 'comite',
+      sessionDate: '2025-05-21',
+    });
+    expect(reconciledTask.seguimiento[0].texto).toBe(
+      'Tratada en Comité de Empresa (CE-2025-05 · 21/5/2025).',
+    );
+  });
+
   it('closeTasksFromSession cierra solo tareas abiertas y añade seguimiento de sesión', () => {
     useTaskStore.getState().create(draft({ titulo: 'Abierta' }));
-    useTaskStore.getState().create(draft({ titulo: 'Ya cerrada', estado: 'cerrada', fase: CLOSED_TASK_PHASE }));
+    useTaskStore
+      .getState()
+      .create(draft({ titulo: 'Ya cerrada', estado: 'cerrada', fase: CLOSED_TASK_PHASE }));
     const [openTask, closedTask] = useTaskStore.getState().tasks;
 
     useTaskStore

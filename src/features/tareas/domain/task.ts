@@ -36,6 +36,9 @@ export interface Task {
   observaciones: string;
   mail: string;
   documentLinks: TaskDocumentLink[];
+  sessionDocumentCode: string;
+  sessionModule: string;
+  sessionDate: string;
   seguimiento: TaskSeguimientoEntry[];
   createdAt: string;
   updatedAt: string;
@@ -128,6 +131,9 @@ export function migratePeticionToTask(peticion: LegacyPeticionForTaskMigration):
     observaciones: peticion.observaciones ?? '',
     mail: '',
     documentLinks: [],
+    sessionDocumentCode: '',
+    sessionModule: '',
+    sessionDate: '',
     seguimiento: Array.isArray(peticion.seguimiento) ? peticion.seguimiento : [],
     createdAt: peticion.createdAt,
     updatedAt,

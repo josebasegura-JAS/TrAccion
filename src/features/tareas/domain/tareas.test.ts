@@ -20,6 +20,9 @@ function buildTask(overrides: Partial<Task>): Task {
     observaciones: '',
     mail: '',
     documentLinks: [],
+    sessionDocumentCode: '',
+    sessionModule: '',
+    sessionDate: '',
     seguimiento: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -53,17 +56,17 @@ describe('tareas domain', () => {
   it('permite tareas de tipo interna', () => {
     const source = [buildTask({ id: 'interna', tipo: 'interna' })];
 
-    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, tipo: 'interna' }).map((task) => task.id)).toEqual([
-      'interna',
-    ]);
+    expect(
+      filterTasks(source, { ...EMPTY_TASK_FILTERS, tipo: 'interna' }).map((task) => task.id),
+    ).toEqual(['interna']);
   });
 
   it('permite tareas de tipo sindical', () => {
     const source = [buildTask({ id: 'sindical', tipo: 'sindical', sindicato: 'UGT' })];
 
-    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, tipo: 'sindical' }).map((task) => task.id)).toEqual([
-      'sindical',
-    ]);
+    expect(
+      filterTasks(source, { ...EMPTY_TASK_FILTERS, tipo: 'sindical' }).map((task) => task.id),
+    ).toEqual(['sindical']);
   });
 
   it('filtra por fase configurable', () => {
@@ -72,18 +75,48 @@ describe('tareas domain', () => {
       buildTask({ id: 'paritaria', fase: 'paritaria' }),
     ];
 
-    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, fase: 'paritaria' }).map((task) => task.id)).toEqual([
-      'paritaria',
-    ]);
+    expect(
+      filterTasks(source, { ...EMPTY_TASK_FILTERS, fase: 'paritaria' }).map((task) => task.id),
+    ).toEqual(['paritaria']);
   });
 
   it('filtra por tipo, fase, estado y prioridad', () => {
     const source = [
-      buildTask({ id: 'match', tipo: 'sindical', fase: 'peticion', estado: 'bloqueada', prioridad: 'alta' }),
-      buildTask({ id: 'otro-tipo', tipo: 'interna', fase: 'peticion', estado: 'bloqueada', prioridad: 'alta' }),
-      buildTask({ id: 'otra-fase', tipo: 'sindical', fase: 'comite', estado: 'bloqueada', prioridad: 'alta' }),
-      buildTask({ id: 'otro-estado', tipo: 'sindical', fase: 'peticion', estado: 'resuelta', prioridad: 'alta' }),
-      buildTask({ id: 'otra-prioridad', tipo: 'sindical', fase: 'peticion', estado: 'bloqueada', prioridad: 'baja' }),
+      buildTask({
+        id: 'match',
+        tipo: 'sindical',
+        fase: 'peticion',
+        estado: 'bloqueada',
+        prioridad: 'alta',
+      }),
+      buildTask({
+        id: 'otro-tipo',
+        tipo: 'interna',
+        fase: 'peticion',
+        estado: 'bloqueada',
+        prioridad: 'alta',
+      }),
+      buildTask({
+        id: 'otra-fase',
+        tipo: 'sindical',
+        fase: 'comite',
+        estado: 'bloqueada',
+        prioridad: 'alta',
+      }),
+      buildTask({
+        id: 'otro-estado',
+        tipo: 'sindical',
+        fase: 'peticion',
+        estado: 'resuelta',
+        prioridad: 'alta',
+      }),
+      buildTask({
+        id: 'otra-prioridad',
+        tipo: 'sindical',
+        fase: 'peticion',
+        estado: 'bloqueada',
+        prioridad: 'baja',
+      }),
     ];
     const filters: TaskFilters = {
       ...EMPTY_TASK_FILTERS,
@@ -105,12 +138,9 @@ describe('tareas domain', () => {
       buildTask({ id: 'sin-coincidencia', responsable: 'Acta responsable' }),
     ];
 
-    expect(filterTasks(source, { ...EMPTY_TASK_FILTERS, search: 'acta' }).map((task) => task.id)).toEqual([
-      'titulo',
-      'descripcion',
-      'sindicato',
-      'origen',
-    ]);
+    expect(
+      filterTasks(source, { ...EMPTY_TASK_FILTERS, search: 'acta' }).map((task) => task.id),
+    ).toEqual(['titulo', 'descripcion', 'sindicato', 'origen']);
   });
 
   it('excluye cerradas por estado de la vista activa', () => {
@@ -123,15 +153,28 @@ describe('tareas domain', () => {
   });
 
   it('excluye cerradas por fase de la vista activa', () => {
-    const source = [buildTask({ id: 'visible' }), buildTask({ id: 'cerrada-fase', fase: 'cerrada' })];
+    const source = [
+      buildTask({ id: 'visible' }),
+      buildTask({ id: 'cerrada-fase', fase: 'cerrada' }),
+    ];
 
     expect(filterTasks(source, EMPTY_TASK_FILTERS).map((task) => task.id)).toEqual(['visible']);
   });
 
   it('agrupa el histórico por año con tareas internas y sindicales cerradas', () => {
     const source = [
-      buildTask({ id: 'interna-2026', tipo: 'interna', estado: 'cerrada', closedAt: '2026-02-01T00:00:00.000Z' }),
-      buildTask({ id: 'sindical-2025', tipo: 'sindical', fase: 'cerrada', closedAt: '2025-02-01T00:00:00.000Z' }),
+      buildTask({
+        id: 'interna-2026',
+        tipo: 'interna',
+        estado: 'cerrada',
+        closedAt: '2026-02-01T00:00:00.000Z',
+      }),
+      buildTask({
+        id: 'sindical-2025',
+        tipo: 'sindical',
+        fase: 'cerrada',
+        closedAt: '2025-02-01T00:00:00.000Z',
+      }),
       buildTask({ id: 'activa', tipo: 'sindical', fase: 'peticion' }),
     ];
 
