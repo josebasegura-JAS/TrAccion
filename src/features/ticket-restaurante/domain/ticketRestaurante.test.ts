@@ -216,6 +216,50 @@ describe('ticket restaurante calculation domain', () => {
     });
   });
 
+
+  it('ignora ausencias con fecha de inicio anterior al 1 de marzo de 2026', () => {
+    const calendar = buildCalendar();
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const previousAbsence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-02-20',
+        hasta: '2026-03-10',
+        motivo: 'IT',
+        totalDias: 19,
+        afectaTicket: true,
+      },
+      timestamp,
+      'absence-before-minimum',
+    );
+
+    const april = calculateTicketMonth(
+      [person],
+      [calendar],
+      [previousAbsence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      4,
+    );
+
+    expect(april.rows[0]).toMatchObject({
+      deudaEntrante: 0,
+      ausenciasAplicadas: 0,
+      deudaPendiente: 0,
+    });
+    expect(filterTicketRestaurantAbsencesByMonth([previousAbsence], 2026, 3)).toEqual([]);
+  });
+
   it('resuelve solapes por día usando la ausencia más reciente antes de decidir si descuenta', () => {
     const calendar = buildCalendar({ nombre: 'Liberados' });
     const person = buildTicketPerson(

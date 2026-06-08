@@ -135,6 +135,8 @@ export interface TicketMonthCalculation {
   };
 }
 
+export const TICKET_RESTAURANT_MIN_ABSENCE_DATE = '2026-03-01';
+
 export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   importeTicket: 14.57,
   pedidoMensual: 2404407,
@@ -850,6 +852,7 @@ function getPersonMonthAbsences(
     (absence) =>
       !absence.deletedAt &&
       absence.afectaTicket &&
+      absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
       absence.empleado === empleado &&
       absence.desde <= monthEnd &&
       absence.hasta >= monthStart,
@@ -909,7 +912,9 @@ export function buildTicketRestaurantAbsence(
 export function visibleTicketRestaurantAbsences(
   absences: TicketRestaurantAbsence[],
 ): TicketRestaurantAbsence[] {
-  return absences.filter((absence) => !absence.deletedAt);
+  return absences.filter(
+    (absence) => !absence.deletedAt && absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE,
+  );
 }
 
 export function filterTicketRestaurantAbsencesByMonth(
@@ -921,7 +926,11 @@ export function filterTicketRestaurantAbsencesByMonth(
   const monthEnd = toIsoDate(year, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
 
   return absences.filter(
-    (absence) => !absence.deletedAt && absence.desde <= monthEnd && absence.hasta >= monthStart,
+    (absence) =>
+      !absence.deletedAt &&
+      absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
+      absence.desde <= monthEnd &&
+      absence.hasta >= monthStart,
   );
 }
 

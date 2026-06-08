@@ -1,4 +1,5 @@
 import {
+  TICKET_RESTAURANT_MIN_ABSENCE_DATE,
   buildTicketRestaurantAbsence,
   isIsoDate,
   type TicketRestaurantAbsence,
@@ -49,7 +50,6 @@ interface ZipEntry {
 type TabularRow = string[];
 type RawAbsenceRow = Partial<Record<TicketRestaurantAbsenceField, string>>;
 
-const TICKET_RESTAURANT_MIN_ABSENCE_DATE = '2026-03-01';
 const CLEAN_REQUIRED_FIELDS: TicketRestaurantAbsenceField[] = [
   'empleado',
   'nombreApellidos',
@@ -145,7 +145,8 @@ export function parseTicketRestaurantCleanAbsenceRows(
       .slice(headerIndex + 1)
       .map((row) => readCleanRow(row, fieldByColumn))
       .filter(hasAnyValue)
-      .map((row, index) => normalizeTicketRestaurantAbsenceRow(row, `preview-clean-${index + 1}`)),
+      .map((row, index) => normalizeTicketRestaurantAbsenceRow(row, `preview-clean-${index + 1}`))
+      .filter(isOnOrAfterMinimumAbsenceDate),
   );
 }
 
@@ -195,7 +196,7 @@ export function parseTicketRestaurantZerkosAbsenceRows(
     );
   });
 
-  return deduplicatePreviewRows(parsedRows);
+  return deduplicatePreviewRows(parsedRows.filter(isOnOrAfterMinimumAbsenceDate));
 }
 
 export function normalizeTicketRestaurantAbsenceRow(
@@ -302,6 +303,10 @@ export function saveTicketRestaurantAbsencePreviewRows(
   });
 
   return { absences: result, summary, errors: [] };
+}
+
+function isOnOrAfterMinimumAbsenceDate(row: TicketRestaurantAbsencePreviewRow): boolean {
+  return !isIsoDate(row.desde) || row.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE;
 }
 
 function validateTicketRestaurantAbsencePreviewRow(
