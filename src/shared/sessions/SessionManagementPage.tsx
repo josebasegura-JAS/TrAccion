@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   Plus,
+  Search,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -79,6 +80,69 @@ function sortOpenSessions(sessions: ManagedSession[]): ManagedSession[] {
   );
 }
 
+function normalizeSessionSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getSessionSearchHaystack(session: ManagedSession, tasksById: Map<string, Task>, config: SessionModuleConfig): string {
+  const taskValues = session.items.flatMap((taskId) => {
+    const task = tasksById.get(taskId);
+    if (!task) {
+      return [taskId];
+    }
+
+    return [
+      task.id,
+      task.titulo,
+      task.descripcion,
+      task.observaciones,
+      task.origen,
+      task.sindicato,
+      task.responsable,
+      task.estado,
+      task.prioridad,
+      task.fechaLimite,
+      task.mail,
+      ...task.documentLinks.flatMap((link) => [link.nombre, link.ruta]),
+      ...task.seguimiento.map((entry) => `${entry.fechaHora} ${entry.texto}`),
+    ];
+  });
+
+  return normalizeSessionSearch([
+    config.title,
+    config.shortTitle,
+    session.id,
+    session.code,
+    session.date,
+    session.title,
+    session.notes,
+    session.status,
+    session.closedAt ?? '',
+    ...session.treatedTaskIds,
+    ...session.untreatedTaskIds,
+    ...taskValues,
+  ].join(' '));
+}
+
+function matchesSessionSearch(
+  session: ManagedSession,
+  tasksById: Map<string, Task>,
+  config: SessionModuleConfig,
+  search: string,
+): boolean {
+  const terms = normalizeSessionSearch(search).split(' ').filter(Boolean);
+  if (terms.length === 0) {
+    return true;
+  }
+
+  const haystack = getSessionSearchHaystack(session, tasksById, config);
+  return terms.every((term) => haystack.includes(term));
+}
 
 function getSessionHistoryYear(session: ManagedSession): string {
   const year = session.date.match(/^(\d{4})/)?.[1];
@@ -212,6 +276,7 @@ export function SessionManagementPage({
   const [treatedTaskIds, setTreatedTaskIds] = useState<Record<string, boolean>>({});
   const [importPreview, setImportPreview] = useState<SessionImportPreview | null>(null);
   const [importError, setImportError] = useState('');
+  const [sessionSearch, setSessionSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
 
@@ -229,7 +294,17 @@ export function SessionManagementPage({
     () => sessions.filter((session) => session.status === 'closed'),
     [sessions],
   );
-  const closedSessionGroups = useMemo(() => groupClosedSessionsByYear(closedSessions), [closedSessions]);
+  const hasSessionSearch = sessionSearch.trim().length >= 2;
+  const effectiveSessionSearch = hasSessionSearch ? sessionSearch : '';
+  const filteredOpenSessions = useMemo(
+    () => openSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch)),
+    [config, effectiveSessionSearch, openSessions, tasksById],
+  );
+  const filteredClosedSessions = useMemo(
+    () => closedSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch)),
+    [closedSessions, config, effectiveSessionSearch, tasksById],
+  );
+  const closedSessionGroups = useMemo(() => groupClosedSessionsByYear(filteredClosedSessions), [filteredClosedSessions]);
   const availableTasks = useMemo(
     () =>
       tasks
@@ -240,7 +315,7 @@ export function SessionManagementPage({
   const closingSession = closingSessionId
     ? sessions.find((session) => session.id === closingSessionId) ?? null
     : null;
-  const sessionFilterLabel = buildFilterLabel([['Módulo', config.title]]);
+  const sessionFilterLabel = buildFilterLabel([['Módulo', config.title], ['Búsqueda', sessionSearch]]);
   const moduleImportKind = config.moduleId === 'paritaria' ? 'paritaria' : 'comite';
   const relevantImportSessions = useMemo(
     () => importPreview?.sessions.filter((session) => session.kind === moduleImportKind) ?? [],
@@ -503,15 +578,47 @@ export function SessionManagementPage({
         </div>
       )}
 
+      <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel/80 p-3">
+        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted" htmlFor={`${config.moduleId}-session-search`}>
+          <Search size={14} className="text-metro-red" /> Buscar en {config.shortTitle}
+        </label>
+        <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-center">
+          <input
+            className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            id={`${config.moduleId}-session-search`}
+            onChange={(event) => setSessionSearch(event.target.value)}
+            placeholder="Buscar por sesión, fecha, código, punto, sindicato, responsable, descripción..."
+            type="search"
+            value={sessionSearch}
+          />
+          <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
+            {filteredOpenSessions.length + filteredClosedSessions.length} de {sessions.length} sesiones
+          </span>
+          {sessionSearch && (
+            <button
+              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={() => setSessionSearch('')}
+              type="button"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(310px,0.85fr)]">
         <SessionPanel
-          count={openSessions.length}
-          isOpen={openPanel === 'open'}
+          count={filteredOpenSessions.length}
+          isOpen={hasSessionSearch || openPanel === 'open'}
           label="Sesiones abiertas"
           onToggle={() => setOpenPanel(openPanel === 'open' ? 'history' : 'open')}
         >
-          {openSessions.length === 0 && <p className="text-sm text-metro-muted">No hay sesiones abiertas.</p>}
-          {openSessions.map((session) => (
+          {filteredOpenSessions.length === 0 && (
+            <p className="text-sm text-metro-muted">
+              {hasSessionSearch ? 'No hay sesiones abiertas que coincidan con la búsqueda.' : 'No hay sesiones abiertas.'}
+            </p>
+          )}
+          {filteredOpenSessions.map((session) => (
             <SessionCard
               addTask={addTask}
               availableTasks={availableTasks}
@@ -530,14 +637,18 @@ export function SessionManagementPage({
         </SessionPanel>
 
         <SessionPanel
-          count={closedSessions.length}
-          isOpen={openPanel === 'history'}
+          count={filteredClosedSessions.length}
+          isOpen={hasSessionSearch || openPanel === 'history'}
           label="Histórico de sesiones"
           onToggle={() => setOpenPanel(openPanel === 'history' ? 'open' : 'history')}
         >
-          {closedSessions.length === 0 && <p className="text-sm text-metro-muted">No hay sesiones cerradas.</p>}
+          {filteredClosedSessions.length === 0 && (
+            <p className="text-sm text-metro-muted">
+              {hasSessionSearch ? 'No hay sesiones cerradas que coincidan con la búsqueda.' : 'No hay sesiones cerradas.'}
+            </p>
+          )}
           {closedSessionGroups.map((group) => {
-            const isYearOpen = openHistoryYears[group.year] ?? false;
+            const isYearOpen = hasSessionSearch || (openHistoryYears[group.year] ?? false);
 
             return (
               <div className="overflow-hidden rounded-xl border border-metro-border" key={group.year}>

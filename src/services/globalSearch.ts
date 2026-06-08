@@ -98,6 +98,111 @@ function isDeleted(record: UnknownRecord): boolean {
   return Boolean(asString(record.deletedAt).trim());
 }
 
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+type LinkedSessionMatch = { module: string; moduleView: AppView; session: UnknownRecord };
+
+function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
+  const lookup = new Map<string, LinkedSessionMatch>();
+  const sessionModules = [
+    {
+      module: 'Comité de Empresa',
+      moduleView: 'comite' as AppView,
+      storageKey: 'traccion.v1.comite.sessions',
+    },
+    {
+      module: 'Comisión Paritaria',
+      moduleView: 'paritaria' as AppView,
+      storageKey: 'traccion.v1.paritaria.sessions',
+    },
+  ];
+
+  for (const sessionModule of sessionModules) {
+    for (const session of readArray(sessionModule.storageKey)) {
+      for (const taskId of asStringArray(session.items)) {
+        if (!lookup.has(taskId)) {
+          lookup.set(taskId, { module: sessionModule.module, moduleView: sessionModule.moduleView, session });
+        }
+      }
+    }
+  }
+
+  return lookup;
+}
+
+function makeSessionResultFromLinkedTask(
+  task: UnknownRecord,
+  taskIndex: number,
+  linkedSessionLookup: Map<string, LinkedSessionMatch>,
+): GlobalSearchResult | null {
+  if (isDeleted(task)) {
+    return null;
+  }
+
+  const taskId = firstText(task, ['id']);
+  if (!taskId) {
+    return null;
+  }
+
+  const linkedSession = linkedSessionLookup.get(taskId) ?? null;
+  if (!linkedSession) {
+    return null;
+  }
+
+  const sessionResult = makeResult(
+    linkedSession.session,
+    taskIndex,
+    ['title', 'code'],
+    ['code', 'status', 'notes'],
+    ['date', 'closedAt', 'updatedAt', 'createdAt'],
+    linkedSession.moduleView === 'comite' ? 'Sesión de comité' : 'Sesión de paritaria',
+  );
+
+  if (!sessionResult) {
+    return null;
+  }
+
+  const taskTitle = firstText(task, ['titulo']) || 'Punto sin título';
+  const taskDetail = firstText(task, ['descripcion', 'observaciones', 'origen', 'sindicato', 'responsable']);
+  const result: GlobalSearchResult = {
+    ...sessionResult,
+    id: `${linkedSession.moduleView}-${sessionResult.recordId}-task-${taskId}`,
+    module: linkedSession.module,
+    moduleView: linkedSession.moduleView,
+    subtitle: [`Contiene punto: ${taskTitle}`, taskDetail].filter(Boolean).join(' · '),
+    haystack: normalizeText([
+      linkedSession.module,
+      sessionResult.title,
+      sessionResult.subtitle,
+      sessionResult.date,
+      sessionResult.year,
+      ...Object.values(linkedSession.session).flatMap(extractPrimitiveValues),
+      ...Object.values(task).flatMap(extractPrimitiveValues),
+    ].join(' ')),
+  };
+
+  return result;
+}
+
+function uniqueResults(results: GlobalSearchResult[]): GlobalSearchResult[] {
+  const seen = new Set<string>();
+  const unique: GlobalSearchResult[] = [];
+
+  for (const result of results) {
+    const key = `${result.moduleView}:${result.recordId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(result);
+  }
+
+  return unique;
+}
+
 function extractPrimitiveValues(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap(extractPrimitiveValues);
@@ -229,24 +334,30 @@ export function searchTraccion(query: string): GlobalSearchResult[] {
 
   const terms = normalizedQuery.split(' ').filter(Boolean);
 
-  return searchableModules
-    .flatMap((searchableModule) =>
-      readArray(searchableModule.storageKey).flatMap((record, index) => {
-        const mapped = searchableModule.mapRecord(record, index);
-        if (!mapped) {
-          return [];
-        }
+  const linkedSessionLookup = buildLinkedSessionLookup();
+  const rawResults = searchableModules.flatMap((searchableModule) =>
+    readArray(searchableModule.storageKey).flatMap((record, index) => {
+      const mapped = searchableModule.mapRecord(record, index);
+      if (!mapped) {
+        return [];
+      }
 
-        const result: GlobalSearchResult = {
-          ...mapped,
-          module: searchableModule.module,
-          moduleView: searchableModule.moduleView,
-          haystack: buildHaystack(searchableModule.module, mapped, record),
-        };
+      const standardResult: GlobalSearchResult = {
+        ...mapped,
+        module: searchableModule.module,
+        moduleView: searchableModule.moduleView,
+        haystack: buildHaystack(searchableModule.module, mapped, record),
+      };
 
-        return terms.every((term) => result.haystack.includes(term)) ? [result] : [];
-      }),
-    )
+      const result = searchableModule.moduleView === 'tareas'
+        ? makeSessionResultFromLinkedTask(record, index, linkedSessionLookup) ?? standardResult
+        : standardResult;
+
+      return terms.every((term) => result.haystack.includes(term)) ? [result] : [];
+    }),
+  );
+
+  return uniqueResults(rawResults)
     .sort((first, second) => {
       if (first.year !== second.year) {
         return second.year - first.year;
