@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('teletrabajo:open-word', { buffer, fileName }),
   createOutlookDraft,
   parseOutlookMsg,
+  extractDocxText: (payload: ArrayBuffer) => ipcRenderer.invoke('docx:extract-text', payload),
 });
 
 // Compatibilidad con el módulo Especiales de RRLL Dashboard y con builds intermedias.

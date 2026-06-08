@@ -27,6 +27,7 @@ interface TaskStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: TaskDraft, seguimientoText?: string) => void;
+  createManyFromImport: (drafts: Array<{ externalKey: string; draft: TaskDraft }>) => Record<string, string>;
   update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
@@ -235,6 +236,51 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         selectedTaskId: isTaskClosed(task) ? firstActiveTaskId(tasks) : task.id,
       };
     });
+  },
+  createManyFromImport: (drafts) => {
+    const createdIds: Record<string, string> = {};
+    set((state) => {
+      const now = new Date().toISOString();
+      const existingImportKeys = new Set(
+        state.tasks
+          .map((task) => task.observaciones.match(/ImportKey:([^\s]+)/)?.[1])
+          .filter((value): value is string => Boolean(value)),
+      );
+      const importedTasks: Task[] = [];
+
+      drafts.forEach(({ externalKey, draft }) => {
+        if (existingImportKeys.has(externalKey)) {
+          const existingTask = state.tasks.find((task) => task.observaciones.includes(`ImportKey:${externalKey}`));
+          if (existingTask) {
+            createdIds[externalKey] = existingTask.id;
+          }
+          return;
+        }
+
+        const task: Task = {
+          id: createTaskId(),
+          ...draft,
+          observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
+          seguimiento: buildSeguimiento('Tarea importada desde resumen histórico de Comité/Paritaria.', now),
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          closedAt: null,
+        };
+        createdIds[externalKey] = task.id;
+        importedTasks.push(task);
+      });
+
+      if (importedTasks.length === 0) {
+        return state;
+      }
+
+      const tasks = [...state.tasks, ...importedTasks];
+      persistTasks(tasks);
+      return { tasks, selectedTaskId: state.selectedTaskId || firstActiveTaskId(tasks) };
+    });
+
+    return createdIds;
   },
   update: (id, draft, seguimientoText) => {
     set((state) => {

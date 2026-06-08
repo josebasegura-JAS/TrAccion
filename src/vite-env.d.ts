@@ -37,6 +37,12 @@ interface TeletrabajoOpenWordResult {
   message: string;
 }
 
+interface TraccionDocxTextResult {
+  ok: boolean;
+  text?: string;
+  message?: string;
+}
+
 interface TraccionDatabaseLockInfo {
   ownerId: string;
   username: string;
@@ -139,6 +145,7 @@ interface TraccionApi {
   ) => Promise<TeletrabajoOpenWordResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
   parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
+  extractDocxText?: (payload: ArrayBuffer) => Promise<TraccionDocxTextResult>;
 }
 
 interface RrllMsgApi {

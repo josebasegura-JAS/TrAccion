@@ -14,6 +14,7 @@ export interface ManagedSessionStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: ManagedSessionDraft) => string;
+  importSessions: (drafts: Array<{ externalKey: string; draft: ManagedSessionDraft; taskIds: string[] }>) => number;
   remove: (sessionId: string) => void;
   addTask: (sessionId: string, taskId: string) => void;
   removeTask: (sessionId: string, taskId: string) => void;
@@ -78,6 +79,60 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       });
 
       return session.id;
+    },
+    importSessions: (drafts) => {
+      let importedCount = 0;
+      set((state) => {
+        const now = new Date().toISOString();
+        const existingKeys = new Set(
+          state.sessions
+            .map((session) => session.notes.match(/ImportKey:([^\s]+)/)?.[1])
+            .filter((value): value is string => Boolean(value)),
+        );
+        const importedSessions: ManagedSession[] = [];
+
+        drafts.forEach(({ externalKey, draft, taskIds }) => {
+          const normalizedCode = draft.code.trim().toLowerCase();
+          const isDuplicate =
+            existingKeys.has(externalKey) ||
+            state.sessions.some(
+              (session) =>
+                session.code.trim().toLowerCase() === normalizedCode &&
+                session.date === draft.date &&
+                session.status === 'open',
+            );
+
+          if (isDuplicate) {
+            return;
+          }
+
+          importedSessions.push({
+            id: createSessionId(config.moduleId),
+            date: draft.date,
+            code: draft.code.trim(),
+            title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
+            notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
+            status: 'open',
+            items: taskIds,
+            treatedTaskIds: [],
+            untreatedTaskIds: [],
+            createdAt: now,
+            updatedAt: now,
+            closedAt: null,
+          });
+        });
+
+        if (importedSessions.length === 0) {
+          return state;
+        }
+
+        importedCount = importedSessions.length;
+        const sessions = [...importedSessions, ...state.sessions];
+        persistSessions(config.storageKey, sessions);
+        return { sessions };
+      });
+
+      return importedCount;
     },
     remove: (sessionId) => {
       set((state) => {

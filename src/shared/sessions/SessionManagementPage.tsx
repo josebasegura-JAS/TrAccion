@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Plus,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
@@ -17,6 +18,7 @@ import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import type { ManagedSessionStateStore } from './createSessionStore';
+import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
 import {
   EMPTY_MANAGED_SESSION_DRAFT,
   isTaskInSessionPhase,
@@ -170,14 +172,17 @@ export function SessionManagementPage({
   useSessionStore,
   onClosedSession,
 }: SessionManagementPageProps) {
-  const { sessions, load, create, remove, addTask, removeTask, moveTask, closeSession } = useSessionStore();
-  const { tasks, load: loadTasks, closeTasksFromSession } = useTaskStore();
+  const { sessions, load, create, importSessions, remove, addTask, removeTask, moveTask, closeSession } = useSessionStore();
+  const { tasks, load: loadTasks, closeTasksFromSession, createManyFromImport } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [openPanel, setOpenPanel] = useState<'open' | 'history'>('open');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [treatedTaskIds, setTreatedTaskIds] = useState<Record<string, boolean>>({});
+  const [importPreview, setImportPreview] = useState<SessionImportPreview | null>(null);
+  const [importError, setImportError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -208,6 +213,19 @@ export function SessionManagementPage({
     ? sessions.find((session) => session.id === closingSessionId) ?? null
     : null;
   const sessionFilterLabel = buildFilterLabel([['Módulo', config.title]]);
+  const moduleImportKind = config.moduleId === 'paritaria' ? 'paritaria' : 'comite';
+  const relevantImportSessions = useMemo(
+    () => importPreview?.sessions.filter((session) => session.kind === moduleImportKind) ?? [],
+    [importPreview, moduleImportKind],
+  );
+  const relevantTaskExternalKeys = useMemo(
+    () => new Set(relevantImportSessions.flatMap((session) => session.taskExternalKeys)),
+    [relevantImportSessions],
+  );
+  const relevantImportTasks = useMemo(
+    () => importPreview?.tasks.filter((task) => relevantTaskExternalKeys.has(task.externalKey)) ?? [],
+    [importPreview, relevantTaskExternalKeys],
+  );
 
   useEffect(() => {
     if (!initialSessionId || navigationNonce === undefined) {
@@ -271,6 +289,88 @@ export function SessionManagementPage({
     setOpenPanel('history');
   };
 
+  const openImporter = () => {
+    setImportError('');
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (file: File | undefined) => {
+    if (!file) {
+      return;
+    }
+
+    setImportError('');
+    try {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      let text = '';
+
+      if (extension === 'docx') {
+        const extractor = window.traccion?.extractDocxText;
+        if (!extractor) {
+          throw new Error('El lector de Word no está disponible en esta ejecución.');
+        }
+        const result = await extractor(await file.arrayBuffer());
+        if (!result.ok || !result.text) {
+          throw new Error(result.message || 'No se ha podido leer el documento Word.');
+        }
+        text = result.text;
+      } else {
+        text = await file.text();
+      }
+
+      const preview = parseSessionImportText(text);
+      setImportPreview(preview);
+      const matchingSessions = preview.sessions.filter((session) => session.kind === moduleImportKind);
+      if (matchingSessions.length === 0) {
+        setImportError(`El documento se ha leído, pero no se han detectado sesiones para ${config.title}.`);
+      }
+    } catch (error) {
+      setImportPreview(null);
+      setImportError(error instanceof Error ? error.message : 'No se ha podido importar el documento.');
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const confirmImport = () => {
+    if (!importPreview || relevantImportSessions.length === 0) {
+      return;
+    }
+
+    const importableSessions = relevantImportSessions.filter((session) => {
+      const normalizedCode = session.draft.code.trim().toLowerCase();
+      return !sessions.some(
+        (existingSession) =>
+          existingSession.code.trim().toLowerCase() === normalizedCode &&
+          existingSession.date === session.draft.date,
+      );
+    });
+    const importableTaskKeys = new Set(importableSessions.flatMap((session) => session.taskExternalKeys));
+    const importableTasks = relevantImportTasks.filter((task) => importableTaskKeys.has(task.externalKey));
+    const taskIdsByExternalKey = createManyFromImport(importableTasks);
+    const importedSessionCount = importSessions(
+      importableSessions.map((session) => ({
+        externalKey: session.externalKey,
+        draft: session.draft,
+        taskIds: session.taskExternalKeys.flatMap((externalKey) => {
+          const taskId = taskIdsByExternalKey[externalKey];
+          return taskId ? [taskId] : [];
+        }),
+      })),
+    );
+
+    loadTasks();
+    setOpenPanel('open');
+    setImportPreview(null);
+    window.alert(
+      importedSessionCount > 0
+        ? `Importación completada: ${importedSessionCount} sesiones y ${relevantImportTasks.length} puntos procesados.`
+        : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
+    );
+  };
+
   return (
     <section className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card" id={config.moduleId}>
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -291,6 +391,20 @@ export function SessionManagementPage({
               filterLabel: sessionFilterLabel,
             }}
           />
+          <input
+            accept=".docx,.txt"
+            className="hidden"
+            onChange={(event) => handleImportFile(event.target.files?.[0])}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={openImporter}
+            type="button"
+          >
+            <Upload size={16} /> Importar Word
+          </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={() => setIsCreateOpen((current) => !current)}
@@ -387,6 +501,69 @@ export function SessionManagementPage({
         </SessionPanel>
       </div>
 
+      {importError && (
+        <div className="mt-3 rounded-xl border border-red-500/40 bg-red-950/20 px-3 py-2 text-sm font-semibold text-red-100">
+          {importError}
+        </div>
+      )}
+
+      {importPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[86vh] w-full max-w-4xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-metro-text">Previsualización de importación · {config.title}</h3>
+            <p className="mt-1 text-sm text-metro-muted">
+              Se importarán solo las sesiones compatibles con este módulo. Las sesiones con el mismo código y fecha se omiten.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <ImportMetric label="Sesiones detectadas" value={relevantImportSessions.length} />
+              <ImportMetric label="Puntos detectados" value={relevantImportTasks.length} />
+              <ImportMetric label="Líneas ignoradas" value={importPreview.ignoredLines.length} />
+            </div>
+            <div className="mt-3 max-h-[380px] overflow-auto rounded-xl border border-metro-border">
+              <table className="w-full table-fixed text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+                  <tr>
+                    <th className="w-[130px] px-3 py-2">Fecha</th>
+                    <th className="w-[160px] px-3 py-2">Código</th>
+                    <th className="px-3 py-2">Título</th>
+                    <th className="w-[90px] px-3 py-2 text-right">Puntos</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45">
+                  {relevantImportSessions.map((session) => (
+                    <tr key={session.externalKey}>
+                      <td className="px-3 py-2 text-metro-muted">{session.draft.date || '—'}</td>
+                      <td className="px-3 py-2 font-semibold text-metro-text">{session.draft.code}</td>
+                      <td className="truncate px-3 py-2 text-metro-muted" title={session.draft.title}>
+                        {session.draft.title}
+                      </td>
+                      <td className="px-3 py-2 text-right font-bold text-metro-text">{session.taskExternalKeys.length}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setImportPreview(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={relevantImportSessions.length === 0}
+                onClick={confirmImport}
+                type="button"
+              >
+                Confirmar importación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {closingSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
@@ -451,6 +628,15 @@ export function SessionManagementPage({
         </div>
       )}
     </section>
+  );
+}
+
+function ImportMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+      <p className="mt-1 text-xl font-black text-metro-text">{value}</p>
+    </div>
   );
 }
 
