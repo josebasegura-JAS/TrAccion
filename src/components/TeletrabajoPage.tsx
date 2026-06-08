@@ -21,6 +21,7 @@ import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
+import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 
@@ -77,35 +78,6 @@ function uniqueSorted(values: string[]): string[] {
   );
 }
 
-function SelectFilter({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  options: readonly string[];
-  value: string;
-}) {
-  return (
-    <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-      <span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide">{label}</span>
-      <select
-        className="w-full bg-transparent text-metro-text outline-none"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        <option value="">Todos</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 export function TeletrabajoPage({
   initialSolicitudId = null,
@@ -472,18 +444,21 @@ export function TeletrabajoPage({
           />
         </label>
         <SelectFilter
+          showLabel
           label="Estado"
           onChange={(value) => setFilter('estado', value as typeof filters.estado)}
           options={TELETRABAJO_ESTADOS}
           value={filters.estado}
         />
         <SelectFilter
+          showLabel
           label="Tipo"
           onChange={(value) => setFilter('tipoSolicitud', value as typeof filters.tipoSolicitud)}
           options={TELETRABAJO_TIPOS_SOLICITUD}
           value={filters.tipoSolicitud}
         />
         <SelectFilter
+          showLabel
           label="Periodo"
           onChange={(value) => setFilter('periodo', value)}
           options={periodos}

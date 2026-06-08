@@ -20,6 +20,7 @@ import {
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
+import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
@@ -646,33 +647,6 @@ export function TareasPage({
   );
 }
 
-function SelectFilter({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: readonly string[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select
-      aria-label={label}
-      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-      onChange={(event) => onChange(event.target.value)}
-      value={value}
-    >
-      <option value="">{label}</option>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 
 function TaskOriginsModal({ onClose }: { onClose: () => void }) {
