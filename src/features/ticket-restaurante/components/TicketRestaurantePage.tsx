@@ -289,14 +289,17 @@ function normalizeTicketEmployeeNumberForMatch(value: string): string {
 }
 
 function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
+  const { nuevas, sustituidas, duplicadas, invalidas } = result.summary;
   const parts = [
-    `${result.inserted} nuevas`,
-    `${result.updated} actualizadas`,
-    `${result.skippedDuplicates} duplicadas omitidas`,
+    `${nuevas} nuevas`,
+    `${sustituidas} sustituidas`,
+    `${duplicadas} duplicadas omitidas`,
   ];
-  if (result.skippedBeforeCutoff > 0) {
-    parts.push(`${result.skippedBeforeCutoff} anteriores a marzo 2026 omitidas`);
+
+  if (invalidas > 0) {
+    parts.push(`${invalidas} inválidas`);
   }
+
   return `Ausencias guardadas: ${parts.join(', ')}.`;
 }
 
