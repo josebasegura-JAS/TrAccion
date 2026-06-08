@@ -14,6 +14,13 @@ export interface TaskSeguimientoEntry {
   texto: string;
 }
 
+export interface TaskDocumentLink {
+  id: string;
+  nombre: string;
+  ruta: string;
+  createdAt: string;
+}
+
 export interface Task {
   id: string;
   titulo: string;
@@ -27,6 +34,8 @@ export interface Task {
   origen: string;
   sindicato: string;
   observaciones: string;
+  mail: string;
+  documentLinks: TaskDocumentLink[];
   seguimiento: TaskSeguimientoEntry[];
   createdAt: string;
   updatedAt: string;
@@ -47,6 +56,8 @@ export type TaskDraft = Pick<
   | 'origen'
   | 'sindicato'
   | 'observaciones'
+  | 'mail'
+  | 'documentLinks'
 >;
 
 export type TaskDraftField = keyof TaskDraft;
@@ -85,6 +96,8 @@ export const EMPTY_TASK_DRAFT: TaskDraft = {
   origen: '',
   sindicato: '',
   observaciones: '',
+  mail: '',
+  documentLinks: [],
 };
 
 export function isTaskClosed(task: Pick<Task, 'estado' | 'fase'>): boolean {
@@ -113,6 +126,8 @@ export function migratePeticionToTask(peticion: LegacyPeticionForTaskMigration):
     origen: peticion.solicitante ?? '',
     sindicato: peticion.sindicato ?? '',
     observaciones: peticion.observaciones ?? '',
+    mail: '',
+    documentLinks: [],
     seguimiento: Array.isArray(peticion.seguimiento) ? peticion.seguimiento : [],
     createdAt: peticion.createdAt,
     updatedAt,

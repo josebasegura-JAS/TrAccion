@@ -37,6 +37,11 @@ interface TeletrabajoOpenWordResult {
   message: string;
 }
 
+interface TraccionOpenPathResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TraccionDocxTextResult {
   ok: boolean;
   text?: string;
@@ -137,6 +142,8 @@ interface TraccionApi {
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   getRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  selectTaskDocument?: () => Promise<string[] | null>;
+  openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
   selectLicenciaSinSueldoTemplate?: () => Promise<string | null>;

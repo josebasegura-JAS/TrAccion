@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('recordLock:release', payload),
   getRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:get', payload),
+  selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
+  openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   selectLicenciaSinSueldoTemplate: () =>

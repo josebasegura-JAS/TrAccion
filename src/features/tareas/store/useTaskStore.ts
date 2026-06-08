@@ -12,6 +12,7 @@ import {
   TASK_TYPES,
   type LegacyPeticionForTaskMigration,
   type Task,
+  type TaskDocumentLink,
   type TaskDraft,
   type TaskSeguimientoEntry,
 } from '../domain/task';
@@ -118,6 +119,25 @@ function isHistoricalSessionImportTask(task: Task): boolean {
   return year > 0 && year < 2026;
 }
 
+
+function isTaskDocumentLink(value: unknown): value is TaskDocumentLink {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof TaskDocumentLink, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.nombre === 'string' &&
+    typeof candidate.ruta === 'string' &&
+    typeof candidate.createdAt === 'string'
+  );
+}
+
+function normalizeDocumentLinks(task: Task): TaskDocumentLink[] {
+  return Array.isArray(task.documentLinks) ? task.documentLinks.filter(isTaskDocumentLink) : [];
+}
+
 function normalizeSeguimiento(task: Task): TaskSeguimientoEntry[] {
   if (Array.isArray(task.seguimiento)) {
     return task.seguimiento
@@ -156,6 +176,8 @@ function normalizeTask(task: Task): Task {
       (hasStringProperty(task, 'origenSindicato') ? task.origenSindicato : EMPTY_TASK_DRAFT.origen),
     sindicato: task.sindicato ?? EMPTY_TASK_DRAFT.sindicato,
     observaciones: task.observaciones ?? EMPTY_TASK_DRAFT.observaciones,
+    mail: typeof task.mail === 'string' ? task.mail : EMPTY_TASK_DRAFT.mail,
+    documentLinks: normalizeDocumentLinks(task),
     seguimiento: normalizeSeguimiento(task),
     createdAt: task.createdAt,
     updatedAt,

@@ -1,4 +1,4 @@
-import type { TaskDraft } from '../../features/tareas/domain/task';
+import { EMPTY_TASK_DRAFT, type TaskDraft } from '../../features/tareas/domain/task';
 import type { ManagedSessionDraft } from './session';
 
 export type SessionImportKind = 'comite' | 'paritaria';
@@ -90,6 +90,7 @@ function buildSessionTitle(kind: SessionImportKind, code: string, date: string):
 
 function toTaskDraft(title: string, phase: string, session: MutableImportedSession, order: number): TaskDraft {
   return {
+    ...EMPTY_TASK_DRAFT,
     titulo: title,
     descripcion: title,
     tipo: 'sindical',

@@ -20,6 +20,8 @@ function draft(overrides: Partial<TaskDraft> = {}): TaskDraft {
     origen: 'Interno',
     sindicato: '',
     observaciones: '',
+    mail: '',
+    documentLinks: [],
     ...overrides,
   };
 }

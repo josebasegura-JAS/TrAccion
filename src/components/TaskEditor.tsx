@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Eye, FilePlus, Mail, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import {
@@ -9,17 +9,65 @@ import {
   type Task,
   type TaskDraft,
   type TaskDraftField,
+  type TaskDocumentLink,
 } from '../features/tareas/domain/task';
+import { parseOutlookMsg } from '../features/especiales/domain/especiales';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 
-const taskTextFields: Array<{ field: TaskDraftField; label: string; required?: boolean; type?: string }> = [
+type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
+
+const taskTextFields: Array<{ field: TaskTextDraftField; label: string; required?: boolean; type?: string }> = [
   { field: 'titulo', label: 'Título', required: true },
   { field: 'responsable', label: 'Responsable' },
   { field: 'origen', label: 'Detalle origen / solicitante' },
   { field: 'fechaLimite', label: 'Fecha límite', type: 'date' },
 ];
+
+
+function getPathBaseName(filePath: string): string {
+  return filePath.split(/[\\/]/).filter(Boolean).pop() ?? filePath;
+}
+
+function buildTaskDocumentLink(filePath: string): TaskDocumentLink {
+  const trimmedPath = filePath.trim();
+  return {
+    id: `task-doc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    nombre: getPathBaseName(trimmedPath),
+    ruta: trimmedPath,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function mergeDocumentLinks(
+  currentLinks: TaskDocumentLink[],
+  nextLinks: TaskDocumentLink[],
+): TaskDocumentLink[] {
+  const seenRoutes = new Set(currentLinks.map((link) => link.ruta.trim().toLowerCase()));
+  const dedupedNextLinks = nextLinks.filter((link) => {
+    const routeKey = link.ruta.trim().toLowerCase();
+    if (!routeKey || seenRoutes.has(routeKey)) {
+      return false;
+    }
+    seenRoutes.add(routeKey);
+    return true;
+  });
+
+  return [...currentLinks, ...dedupedNextLinks];
+}
+
+function formatMailFromMsg(data: { subject: string; senderName: string; senderEmail: string; date: string; body: string }): string {
+  const header = [
+    data.subject ? `Asunto: ${data.subject}` : '',
+    data.senderName || data.senderEmail
+      ? `De: ${[data.senderName, data.senderEmail ? `<${data.senderEmail}>` : ''].filter(Boolean).join(' ')}`
+      : '',
+    data.date ? `Fecha: ${data.date}` : '',
+  ].filter(Boolean);
+
+  return [...header, data.body].filter(Boolean).join('\n');
+}
 
 function formatUpdateDate(fechaHora: string): string {
   return new Intl.DateTimeFormat('es-ES', {
@@ -48,6 +96,8 @@ function toDraft(task: Task | null): TaskDraft {
     origen: task.origen,
     sindicato: task.sindicato,
     observaciones: task.observaciones,
+    mail: task.mail ?? '',
+    documentLinks: Array.isArray(task.documentLinks) ? task.documentLinks : [],
   };
 }
 
@@ -68,6 +118,11 @@ export function TaskEditor({
   const removeTask = useTaskStore((state) => state.remove);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [newUpdateText, setNewUpdateText] = useState('');
+  const [manualDocumentPath, setManualDocumentPath] = useState('');
+  const [documentStatus, setDocumentStatus] = useState('');
+  const [documentStatusIsError, setDocumentStatusIsError] = useState(false);
+  const [mailStatus, setMailStatus] = useState('');
+  const [mailStatusIsError, setMailStatusIsError] = useState(false);
   const [loadedTaskIdentity, setLoadedTaskIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
   const [loadedTaskUpdatedAt, setLoadedTaskUpdatedAt] = useState(task?.updatedAt ?? null);
   const recordLock = useSharedRecordLock({
@@ -85,6 +140,9 @@ export function TaskEditor({
     if (nextIdentity !== loadedTaskIdentity) {
       setDraft(toDraft(task));
       setNewUpdateText('');
+      setManualDocumentPath('');
+      setDocumentStatus('');
+      setMailStatus('');
       setLoadedTaskIdentity(nextIdentity);
       setLoadedTaskUpdatedAt(task?.updatedAt ?? null);
     }
@@ -101,6 +159,101 @@ export function TaskEditor({
       ? [draft.sindicato, ...activeOriginNames]
       : activeOriginNames;
   }, [draft.sindicato, taskOrigins]);
+
+
+  const handleAddManualDocumentPath = () => {
+    const trimmedPath = manualDocumentPath.trim();
+    if (!trimmedPath) {
+      setDocumentStatus('Indica una ruta de documento antes de añadirla.');
+      setDocumentStatusIsError(true);
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      documentLinks: mergeDocumentLinks(current.documentLinks, [buildTaskDocumentLink(trimmedPath)]),
+    }));
+    setManualDocumentPath('');
+    setDocumentStatus('Ruta vinculada a la tarea.');
+    setDocumentStatusIsError(false);
+  };
+
+  const handleSelectDocumentPath = async () => {
+    const selector = window.traccion?.selectTaskDocument;
+    if (!selector) {
+      setDocumentStatus('Selector de documentos no disponible. Pega la ruta manualmente.');
+      setDocumentStatusIsError(true);
+      return;
+    }
+
+    try {
+      const selectedPaths = await selector();
+      if (!selectedPaths?.length) {
+        return;
+      }
+
+      setDraft((current) => ({
+        ...current,
+        documentLinks: mergeDocumentLinks(current.documentLinks, selectedPaths.map(buildTaskDocumentLink)),
+      }));
+      setDocumentStatus(`${selectedPaths.length} vínculo(s) añadido(s).`);
+      setDocumentStatusIsError(false);
+    } catch (error) {
+      setDocumentStatus(
+        error instanceof Error ? error.message : 'No se ha podido seleccionar el documento.',
+      );
+      setDocumentStatusIsError(true);
+    }
+  };
+
+  const handleOpenDocumentPath = async (filePath: string) => {
+    const opener = window.traccion?.openTaskDocument;
+    if (!opener) {
+      setDocumentStatus('Apertura de documentos no disponible en este entorno.');
+      setDocumentStatusIsError(true);
+      return;
+    }
+
+    const result = await opener(filePath);
+    setDocumentStatus(result.message);
+    setDocumentStatusIsError(!result.ok);
+  };
+
+  const handleRemoveDocumentLink = (linkId: string) => {
+    setDraft((current) => ({
+      ...current,
+      documentLinks: current.documentLinks.filter((link) => link.id !== linkId),
+    }));
+    setDocumentStatus('Vínculo eliminado. Guarda la tarea para persistir el cambio.');
+    setDocumentStatusIsError(false);
+  };
+
+  const handleImportMailFile = async (file: File | undefined) => {
+    if (!file) {
+      return;
+    }
+    if (!/\.msg$/i.test(file.name)) {
+      setMailStatus('Selecciona o arrastra un archivo .msg de Outlook.');
+      setMailStatusIsError(true);
+      return;
+    }
+
+    setMailStatus('Leyendo mensaje Outlook...');
+    setMailStatusIsError(false);
+    const parsed = await parseOutlookMsg(file);
+    if (!parsed.ok || !parsed.data) {
+      setMailStatus(parsed.message || 'No se ha podido leer el mensaje Outlook.');
+      setMailStatusIsError(true);
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      mail: formatMailFromMsg(parsed.data),
+    }));
+    setMailStatus('Texto del mensaje copiado al campo Mail.');
+    setMailStatusIsError(false);
+  };
 
   const isCreate = mode === 'create';
   const hasExternalTaskUpdate =
@@ -286,6 +439,124 @@ export function TaskEditor({
                 value={draft.descripcion}
               />
             </label>
+
+            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-2">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-bold text-metro-text">Documentos vinculados</h4>
+                <button
+                  className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-surface px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => void handleSelectDocumentPath()}
+                  type="button"
+                >
+                  <FilePlus size={14} />
+                  Seleccionar documento
+                </button>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => setManualDocumentPath(event.target.value)}
+                  placeholder="Pegar ruta de red o local..."
+                  value={manualDocumentPath}
+                />
+                <button
+                  className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-semibold text-metro-text hover:border-metro-red"
+                  onClick={handleAddManualDocumentPath}
+                  type="button"
+                >
+                  Añadir ruta
+                </button>
+              </div>
+              {draft.documentLinks.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {draft.documentLinks.map((link) => (
+                    <article
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2"
+                      key={link.id}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-metro-text">{link.nombre}</p>
+                        <p className="truncate text-xs text-metro-muted" title={link.ruta}>
+                          {link.ruta}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          aria-label={`Abrir ${link.nombre}`}
+                          className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                          onClick={() => void handleOpenDocumentPath(link.ruta)}
+                          type="button"
+                        >
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          aria-label={`Eliminar vínculo ${link.nombre}`}
+                          className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                          onClick={() => handleRemoveDocumentLink(link.id)}
+                          type="button"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              {documentStatus && (
+                <p
+                  className={`mt-2 text-xs font-semibold ${
+                    documentStatusIsError ? 'text-metro-red' : 'text-metro-muted'
+                  }`}
+                >
+                  {documentStatus}
+                </p>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-2">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="inline-flex items-center gap-2 text-sm font-bold text-metro-text">
+                  <Mail size={15} />
+                  Mail
+                </h4>
+                <label className="cursor-pointer rounded-lg border border-metro-border bg-metro-surface px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red">
+                  Seleccionar .msg
+                  <input
+                    accept=".msg"
+                    className="sr-only"
+                    onChange={(event) => void handleImportMailFile(event.target.files?.[0])}
+                    type="file"
+                  />
+                </label>
+              </div>
+              <div
+                className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-2"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'copy';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  void handleImportMailFile(Array.from(event.dataTransfer.files).find((file) => /\.msg$/i.test(file.name)));
+                }}
+              >
+                <textarea
+                  className="min-h-28 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => setDraft((current) => ({ ...current, mail: event.target.value }))}
+                  placeholder="Arrastra aquí un .msg o pega el texto del correo..."
+                  value={draft.mail}
+                />
+              </div>
+              {mailStatus && (
+                <p
+                  className={`mt-2 text-xs font-semibold ${
+                    mailStatusIsError ? 'text-metro-red' : 'text-metro-muted'
+                  }`}
+                >
+                  {mailStatus}
+                </p>
+              )}
+            </section>
 
             <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-2">
               <div className="mb-2 flex items-center justify-between gap-2">

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
-import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
+import type { IpcMainInvokeEvent, MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
@@ -632,6 +632,33 @@ function normalizeRecordLockPayload(payload: unknown): { module: string; recordI
   return { module: moduleName, recordId };
 }
 
+
+async function selectTaskDocumentPaths(event: IpcMainInvokeEvent): Promise<string[] | null> {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  const options: OpenDialogOptions = {
+    title: 'Seleccionar documento para vincular a la tarea',
+    properties: ['openFile', 'multiSelections'],
+  };
+  const result = browserWindow
+    ? await dialog.showOpenDialog(browserWindow, options)
+    : await dialog.showOpenDialog(options);
+
+  return result.canceled ? null : result.filePaths;
+}
+
+async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; message: string }> {
+  if (typeof filePath !== 'string' || !filePath.trim()) {
+    return { ok: false, message: 'Ruta de documento no válida.' };
+  }
+
+  const openError = await shell.openPath(filePath.trim());
+  if (openError) {
+    return { ok: false, message: openError };
+  }
+
+  return { ok: true, message: 'Documento abierto.' };
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle('app:get-windows-user', () => {
     try {
@@ -747,6 +774,10 @@ function registerIpcHandlers(): void {
       ? getRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
+
+  ipcMain.handle('tasks:select-document', (event) => selectTaskDocumentPaths(event));
+
+  ipcMain.handle('tasks:open-document', (_event, filePath: unknown) => openTaskDocumentPath(filePath));
 
   ipcMain.handle('teletrabajo:select-template', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
