@@ -22,14 +22,26 @@ import type { AppView } from '../navigation/navigation';
 
 type CalendarEventType = 'task' | 'committee' | 'paritaria' | 'telework' | 'tickets' | 'actas';
 
-type CalendarEvent = {
+type DashboardPopupItem = {
   id: string;
-  date: string;
+  date?: string;
   type: CalendarEventType;
   title: string;
   detail: string;
   view: AppView;
   recordId?: string;
+};
+
+type CalendarEvent = DashboardPopupItem & {
+  date: string;
+};
+
+type DashboardPopup = {
+  eyebrow: string;
+  title: string;
+  subtitle?: string;
+  emptyText: string;
+  items: DashboardPopupItem[];
 };
 
 type DashboardNavigationTarget = {
@@ -181,6 +193,7 @@ export function DashboardCards({
 }) {
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dashboardPopup, setDashboardPopup] = useState<DashboardPopup | null>(null);
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
   const todayLabel = fullDateFormatter.format(today);
@@ -207,6 +220,17 @@ export function DashboardCards({
 
   const openRecord = (target: DashboardNavigationTarget) => {
     onOpenRecord?.(target);
+  };
+
+
+  const openPopup = (popup: DashboardPopup) => {
+    setDashboardPopup(popup);
+  };
+
+  const openPopupRecord = (item: DashboardPopupItem) => {
+    openRecord({ view: item.view, recordId: item.recordId });
+    setSelectedDate(null);
+    setDashboardPopup(null);
   };
 
   const activeTasks = useMemo(
@@ -250,6 +274,87 @@ export function DashboardCards({
       ),
     [activeTasks],
   );
+
+
+  const allVisibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
+  const committeeTasks = useMemo(
+    () => activeTasks.filter((task) => task.fase.trim().toLowerCase() === 'comite'),
+    [activeTasks],
+  );
+
+
+  const taskPopupItems = (items: readonly Task[], type: CalendarEventType = 'task'): DashboardPopupItem[] =>
+    items.map((task) => ({
+      id: `${type}-${task.id}`,
+      date: task.fechaLimite || task.updatedAt.slice(0, 10),
+      type,
+      title: task.titulo,
+      detail: `${task.fase || 'Tareas'} · ${taskStateLabels[task.estado]} · prioridad ${task.prioridad}`,
+      view: 'tareas' as const,
+      recordId: task.id,
+    }));
+
+  const committeePopupItems = (): DashboardPopupItem[] => [
+    ...openCommitteeSessions.map((session) => ({
+      id: `committee-${session.id}`,
+      date: session.date,
+      type: 'committee' as const,
+      title: session.title,
+      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} · ${session.code || 'sin código'}`,
+      view: 'comite' as const,
+      recordId: session.id,
+    })),
+    ...openParitariaSessions.map((session) => ({
+      id: `paritaria-${session.id}`,
+      date: session.date,
+      type: 'paritaria' as const,
+      title: session.title,
+      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} · ${session.code || 'sin código'}`,
+      view: 'paritaria' as const,
+      recordId: session.id,
+    })),
+  ];
+
+  const teleworkPopupItems = (items = pendingTelework): DashboardPopupItem[] =>
+    items.map((solicitud) => ({
+      id: `telework-${solicitud.id}`,
+      date: solicitud.fechaSolicitud,
+      type: 'telework' as const,
+      title: solicitud.nombreApellidos || solicitud.empleado,
+      detail: `${solicitud.estado} · ${solicitud.tipoSolicitud} · ${solicitud.diasTeletrabajo.join(', ') || 'sin días'}`,
+      view: 'teletrabajo' as const,
+      recordId: solicitud.id,
+    }));
+
+  const ticketAbsencePopupItems = (): DashboardPopupItem[] =>
+    activeTicketAbsences.map((absence) => ({
+      id: `ticket-${absence.id}`,
+      date: absence.desde,
+      type: 'tickets' as const,
+      title: absence.nombreApellidos || absence.empleado,
+      detail: `${absence.motivo} · ${formatDisplayDate(absence.desde)}-${formatDisplayDate(absence.hasta)} · ${absence.totalDias} día${absence.totalDias === 1 ? '' : 's'}`,
+      view: 'ticket-restaurante' as const,
+      recordId: absence.id,
+    }));
+
+  const ticketPeoplePopupItems = (): DashboardPopupItem[] =>
+    activeTicketPeople.map((person) => ({
+      id: `ticket-person-${person.empleado}`,
+      type: 'tickets' as const,
+      title: person.nombreApellidos || person.empleado,
+      detail: `${person.empleado} · ${person.puesto || 'sin puesto'}`,
+      view: 'ticket-restaurante' as const,
+    }));
+
+  const showTaskPopup = (title: string, items: readonly Task[], emptyText = 'No hay tareas que mostrar.') => {
+    openPopup({
+      eyebrow: 'Dashboard',
+      title,
+      subtitle: `${items.length} registro${items.length === 1 ? '' : 's'}`,
+      emptyText,
+      items: taskPopupItems(items),
+    });
+  };
 
   const calendarEvents = useMemo<CalendarEvent[]>(() => {
     const taskEvents = activeTasks
@@ -367,9 +472,6 @@ export function DashboardCards({
   }, [visibleMonth]);
 
   const kpis = useMemo<KpiCard[]>(() => {
-    const committeeTasks = activeTasks.filter(
-      (task) => task.fase.trim().toLowerCase() === 'comite',
-    );
     const teleworkSegments = [
       { label: 'Por validar', value: pendingTelework.length, className: 'bg-blue-500' },
       {
@@ -400,7 +502,7 @@ export function DashboardCards({
         helper: `${criticalTasks.length} críticas`,
         icon: ClipboardList,
         tone: 'text-red-400 bg-red-500/10 ring-1 ring-red-500/20',
-        segments: stateSegmentsFromTasks(tasks.filter((task) => !task.deletedAt)),
+        segments: stateSegmentsFromTasks(allVisibleTasks),
       },
       {
         title: 'Comité',
@@ -443,19 +545,20 @@ export function DashboardCards({
       },
     ];
   }, [
-    activeTasks,
+    activeTasks.length,
     activeTelework,
     activeTicketAbsences,
     activeTicketPeople,
+    committeeTasks.length,
     criticalTasks.length,
     openCommitteeSessions.length,
     pendingTelework.length,
     sessions,
-    tasks,
+    allVisibleTasks,
   ]);
 
-  const totalTasks = tasks.filter((task) => !task.deletedAt).length;
-  const taskSegments = stateSegmentsFromTasks(tasks.filter((task) => !task.deletedAt));
+  const totalTasks = allVisibleTasks.length;
+  const taskSegments = stateSegmentsFromTasks(allVisibleTasks);
   const maxTaskSegment = Math.max(...taskSegments.map((segment) => segment.value), 1);
 
   return (
@@ -471,23 +574,36 @@ export function DashboardCards({
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            <DashboardHeaderPill label="Tareas abiertas" value={activeTasks.length} />
+            <DashboardHeaderPill label="Tareas abiertas" value={activeTasks.length} onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
             <DashboardHeaderPill
               label="Críticas"
               value={criticalTasks.length}
               tone="text-red-400"
+              onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
             />
-            <DashboardHeaderPill label="Comité" value={openCommitteeSessions.length} />
-            <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} />
+            <DashboardHeaderPill label="Comité" value={openCommitteeSessions.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Sesiones de Comité', subtitle: `${openCommitteeSessions.length} sesión${openCommitteeSessions.length === 1 ? '' : 'es'} abierta${openCommitteeSessions.length === 1 ? '' : 's'}`, emptyText: 'No hay sesiones de Comité abiertas.', items: committeePopupItems().filter((item) => item.type === 'committee') })} />
+            <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })} />
           </div>
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
-          <article
-            className="rounded-[1.25rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow"
+          <button
+            className="rounded-[1.25rem] border border-metro-border bg-metro-surface/90 p-3 text-left text-metro-text shadow-glow transition hover:border-metro-red hover:bg-metro-panel/60 focus:outline-none focus:ring-2 focus:ring-metro-red/40"
             key={kpi.title}
+            onClick={() => {
+              if (kpi.title === 'Tareas') {
+                showTaskPopup('Tareas abiertas', activeTasks);
+              } else if (kpi.title === 'Comité') {
+                openPopup({ eyebrow: 'Dashboard', title: 'Comité y puntos abiertos', subtitle: `${openCommitteeSessions.length} sesiones · ${committeeTasks.length} puntos`, emptyText: 'No hay sesiones ni puntos abiertos.', items: [...committeePopupItems().filter((item) => item.type === 'committee'), ...taskPopupItems(committeeTasks)] });
+              } else if (kpi.title === 'Teletrabajo') {
+                openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes de teletrabajo', subtitle: `${activeTelework.length} solicitud${activeTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes de teletrabajo.', items: teleworkPopupItems(activeTelework) });
+              } else if (kpi.title === 'Tickets') {
+                openPopup({ eyebrow: 'Dashboard', title: 'Ticket Restaurante', subtitle: `${activeTicketPeople.length} personas · ${activeTicketAbsences.length} ausencias`, emptyText: 'No hay registros de Ticket Restaurante.', items: [...ticketAbsencePopupItems(), ...ticketPeoplePopupItems()] });
+              }
+            }}
+            type="button"
           >
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -527,7 +643,7 @@ export function DashboardCards({
                 </div>
               ))}
             </div>
-          </article>
+          </button>
         ))}
       </section>
 
@@ -539,9 +655,11 @@ export function DashboardCards({
             <TodayAlert
               className="border-red-500"
               title={`${criticalTasks.length} tareas críticas`}
+              onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
             />
             <TodayAlert
               className="border-orange-500"
+              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Próximo Comité/Paritaria', subtitle: 'Sesiones abiertas con fecha', emptyText: 'No hay sesiones abiertas con fecha.', items: committeePopupItems() })}
               title={
                 upcomingEvents.find(
                   (event) => event.type === 'committee' || event.type === 'paritaria',
@@ -563,16 +681,19 @@ export function DashboardCards({
               className="border-blue-500"
               title={`${pendingTelework.length} teletrabajos`}
               subtitle="Pendientes de validar"
+              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
             />
             <TodayAlert
               className="border-emerald-500"
               title="Cálculo tickets"
               subtitle={`${activeTicketPeople.length} personas activas`}
+              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Personas activas en Ticket Restaurante', subtitle: `${activeTicketPeople.length} persona${activeTicketPeople.length === 1 ? '' : 's'}`, emptyText: 'No hay personas activas.', items: ticketPeoplePopupItems() })}
             />
             <TodayAlert
               className="border-amber-400"
               title={`${actaTasks.length} actas en seguimiento`}
               subtitle="Requieren revisión si vencen"
+              onClick={() => showTaskPopup('Actas en seguimiento', actaTasks, 'No hay actas en seguimiento.')}
             />
           </div>
         </aside>
@@ -675,26 +796,30 @@ export function DashboardCards({
           </div>
           <div className="grid gap-3 md:grid-cols-[0.95fr_1.05fr]">
             <div className="space-y-2">
-              <SummaryLine icon={ListChecks} label="Tareas abiertas" value={activeTasks.length} />
+              <SummaryLine icon={ListChecks} label="Tareas abiertas" value={activeTasks.length} onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
               <SummaryLine
                 icon={ClipboardList}
                 label="Tareas críticas"
                 value={criticalTasks.length}
+                onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
               />
               <SummaryLine
                 icon={UsersRound}
                 label="Sesiones CE/Paritaria"
                 value={openCommitteeSessions.length + openParitariaSessions.length}
+                onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Sesiones CE/Paritaria', subtitle: `${openCommitteeSessions.length + openParitariaSessions.length} sesión${openCommitteeSessions.length + openParitariaSessions.length === 1 ? '' : 'es'}`, emptyText: 'No hay sesiones abiertas.', items: committeePopupItems() })}
               />
               <SummaryLine
                 icon={Laptop}
                 label="Solicitudes teletrabajo"
                 value={pendingTelework.length}
+                onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes teletrabajo pendientes', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
               />
               <SummaryLine
                 icon={CheckCircle2}
                 label="Actas en seguimiento"
                 value={actaTasks.length}
+                onClick={() => showTaskPopup('Actas en seguimiento', actaTasks, 'No hay actas en seguimiento.')}
               />
             </div>
             <div className="min-w-0 overflow-hidden border-t border-metro-border pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
@@ -703,9 +828,11 @@ export function DashboardCards({
               </p>
               <div className="space-y-2">
                 {taskSegments.map((segment) => (
-                  <div
-                    className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)_1.5rem] items-center gap-2"
+                  <button
+                    className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)_1.5rem] items-center gap-2 rounded-lg text-left transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/30"
                     key={segment.label}
+                    onClick={() => showTaskPopup(`Tareas ${segment.label.toLowerCase()}`, allVisibleTasks.filter((task) => taskStateLabels[task.estado] === segment.label))}
+                    type="button"
                   >
                     <span className="truncate text-[11px] font-bold text-metro-secondary">
                       {segment.label}
@@ -719,7 +846,7 @@ export function DashboardCards({
                     <span className="text-right text-[11px] font-black text-metro-text">
                       {segment.value}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-metro-border pt-2 text-xs font-black">
@@ -801,70 +928,118 @@ export function DashboardCards({
       </section>
 
       {selectedDate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-metro-border bg-metro-surface text-metro-text shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-metro-red">
-                  Calendario
-                </p>
-                <h3 className="mt-1 text-lg font-black capitalize">{selectedDateLabel}</h3>
-                <p className="mt-1 text-sm font-medium text-metro-muted">
-                  {selectedDateEvents.length === 0
-                    ? 'No hay registros asociados a esta fecha.'
-                    : `${selectedDateEvents.length} registro${selectedDateEvents.length === 1 ? '' : 's'} asociado${selectedDateEvents.length === 1 ? '' : 's'}.`}
-                </p>
-              </div>
-              <button
-                className="rounded-full p-2 text-metro-muted transition hover:bg-metro-panel hover:text-metro-text"
-                onClick={() => setSelectedDate(null)}
-                type="button"
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <DashboardRecordsModal
+          emptyText="Selecciona otro día con puntos de color para ver tareas, sesiones o registros."
+          eyebrow="Calendario"
+          items={selectedDateEvents}
+          onClose={() => setSelectedDate(null)}
+          onOpenItem={openPopupRecord}
+          subtitle={
+            selectedDateEvents.length === 0
+              ? 'No hay registros asociados a esta fecha.'
+              : `${selectedDateEvents.length} registro${selectedDateEvents.length === 1 ? '' : 's'} asociado${selectedDateEvents.length === 1 ? '' : 's'}.`
+          }
+          title={selectedDateLabel}
+        />
+      )}
 
-            <div className="max-h-[60vh] overflow-auto p-4">
-              {selectedDateEvents.length > 0 ? (
-                <div className="space-y-3">
-                  {selectedDateEvents.map((event) => (
-                    <div
-                      className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 p-3 ring-1 ring-metro-border"
-                      key={event.id}
-                    >
-                      <div className="min-w-0">
-                        <p className="flex items-center gap-2 text-sm font-black text-metro-text">
-                          <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${eventTone[event.type]}`}
-                          />
-                          <span className="truncate">{event.title}</span>
-                        </p>
-                        <p className="mt-1 truncate text-xs font-medium text-metro-muted">
-                          {event.detail}
-                        </p>
-                      </div>
-                      <button
-                        className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-black text-metro-secondary transition hover:border-metro-red hover:text-metro-text"
-                        onClick={() => {
-                          openRecord({ view: event.view, recordId: event.recordId });
-                          setSelectedDate(null);
-                        }}
-                        type="button"
-                      >
-                        Abrir <ExternalLink size={13} />
-                      </button>
-                    </div>
-                  ))}
+      {dashboardPopup && (
+        <DashboardRecordsModal
+          emptyText={dashboardPopup.emptyText}
+          eyebrow={dashboardPopup.eyebrow}
+          items={dashboardPopup.items}
+          onClose={() => setDashboardPopup(null)}
+          onOpenItem={openPopupRecord}
+          subtitle={dashboardPopup.subtitle}
+          title={dashboardPopup.title}
+        />
+      )}
+    </div>
+  );
+}
+
+
+function DashboardRecordsModal({
+  emptyText,
+  eyebrow,
+  items,
+  onClose,
+  onOpenItem,
+  subtitle,
+  title,
+}: {
+  emptyText: string;
+  eyebrow: string;
+  items: DashboardPopupItem[];
+  onClose: () => void;
+  onOpenItem: (item: DashboardPopupItem) => void;
+  subtitle?: string;
+  title: string;
+}) {
+  const visibleItems = items.slice(0, 250);
+  const hiddenCount = Math.max(0, items.length - visibleItems.length);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-metro-border bg-metro-surface text-metro-text shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-metro-red">
+              {eyebrow}
+            </p>
+            <h3 className="mt-1 text-lg font-black capitalize">{title}</h3>
+            {subtitle && <p className="mt-1 text-sm font-medium text-metro-muted">{subtitle}</p>}
+          </div>
+          <button
+            className="rounded-full p-2 text-metro-muted transition hover:bg-metro-panel hover:text-metro-text"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="max-h-[60vh] overflow-auto p-4">
+          {visibleItems.length > 0 ? (
+            <div className="space-y-3">
+              {visibleItems.map((item) => (
+                <div
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 p-3 ring-1 ring-metro-border"
+                  key={item.id}
+                >
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-sm font-black text-metro-text">
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${eventTone[item.type]}`}
+                      />
+                      <span className="truncate">{item.title}</span>
+                    </p>
+                    <p className="mt-1 truncate text-xs font-medium text-metro-muted">
+                      {item.date ? `${formatDisplayDate(item.date)} · ${item.detail}` : item.detail}
+                    </p>
+                  </div>
+                  <button
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-black text-metro-secondary transition hover:border-metro-red hover:text-metro-text"
+                    onClick={() => onOpenItem(item)}
+                    type="button"
+                  >
+                    Abrir <ExternalLink size={13} />
+                  </button>
                 </div>
-              ) : (
+              ))}
+              {hiddenCount > 0 && (
                 <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
-                  Selecciona otro día con puntos de color para ver tareas, sesiones o registros.
+                  Se muestran los primeros 250 registros. Afina desde el módulo para ver los {hiddenCount} restantes.
                 </p>
               )}
             </div>
-          </div>
+          ) : (
+            <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
+              {emptyText}
+            </p>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -873,17 +1048,33 @@ function DashboardHeaderPill({
   label,
   value,
   tone = 'text-metro-text',
+  onClick,
 }: {
   label: string;
   value: number;
   tone?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="rounded-xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">
+  const content = (
+    <>
       <p className={`text-lg font-black ${tone}`}>{value}</p>
       <p className="text-[11px] font-bold text-metro-muted">{label}</p>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        className="rounded-xl bg-metro-panel/70 px-3 py-2 text-left ring-1 ring-metro-border transition hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-metro-red/40"
+        onClick={onClick}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="rounded-xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">{content}</div>;
 }
 
 function CalendarLegend({ className, label }: { className: string; label: string }) {
@@ -898,13 +1089,19 @@ function SummaryLine({
   icon: Icon,
   label,
   value,
+  onClick,
 }: {
   icon: LucideIcon;
   label: string;
   value: number;
+  onClick?: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-metro-panel/70 px-3 py-1.5 ring-1 ring-metro-border">
+    <button
+      className="flex w-full items-center justify-between gap-3 rounded-xl bg-metro-panel/70 px-3 py-1.5 text-left ring-1 ring-metro-border transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/40"
+      onClick={onClick}
+      type="button"
+    >
       <div className="flex min-w-0 items-center gap-3">
         <span className="rounded-lg bg-metro-raised p-1.5 text-blue-400 shadow-sm">
           <Icon size={15} />
@@ -912,7 +1109,7 @@ function SummaryLine({
         <span className="truncate text-sm font-bold text-metro-secondary">{label}</span>
       </div>
       <span className="text-base font-black text-metro-text">{value}</span>
-    </div>
+    </button>
   );
 }
 
@@ -920,18 +1117,22 @@ function TodayAlert({
   className,
   title,
   subtitle = 'Requiere atención',
+  onClick,
 }: {
   className: string;
   title: string;
   subtitle?: string;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className={`rounded-xl border-l-4 bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border ${className}`}
+    <button
+      className={`w-full rounded-xl border-l-4 bg-metro-panel/70 px-3 py-2 text-left ring-1 ring-metro-border transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/40 ${className}`}
+      onClick={onClick}
+      type="button"
     >
       <p className="text-sm font-black text-metro-text">{title}</p>
       <p className="mt-0.5 text-xs font-medium text-metro-muted">{subtitle}</p>
-    </div>
+    </button>
   );
 }
 
