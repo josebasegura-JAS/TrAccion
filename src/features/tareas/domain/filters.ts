@@ -6,6 +6,7 @@ export interface TaskFilters {
   fase: string;
   estado: '' | TaskState;
   prioridad: '' | TaskPriority;
+  origen: string;
 }
 
 export const EMPTY_TASK_FILTERS: TaskFilters = {
@@ -14,6 +15,7 @@ export const EMPTY_TASK_FILTERS: TaskFilters = {
   fase: '',
   estado: '',
   prioridad: '',
+  origen: '',
 };
 
 export function filterTasks(tasks: Task[], filters: TaskFilters): Task[] {
@@ -34,7 +36,8 @@ export function filterTasks(tasks: Task[], filters: TaskFilters): Task[] {
       (!filters.tipo || task.tipo === filters.tipo) &&
       (!filters.fase || task.fase === filters.fase) &&
       (!filters.estado || task.estado === filters.estado) &&
-      (!filters.prioridad || task.prioridad === filters.prioridad)
+      (!filters.prioridad || task.prioridad === filters.prioridad) &&
+      (!filters.origen || task.sindicato === filters.origen)
     );
   });
 }
