@@ -4,12 +4,12 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
-  FileUp,
   Pencil,
   Save,
   Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import {
   calculateMonthlyTicketOrder,
   getEffectiveTicketPrice,
@@ -890,14 +890,9 @@ export function PeoplePanel({
               Modelo personas
             </button>
 
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-              onClick={onImport}
-              type="button"
-            >
-              <FileUp className="h-3.5 w-3.5" />
+            <ActionButton onClick={onImport} size="sm" variant="import">
               Importar personas
-            </button>
+            </ActionButton>
             <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
               {people.length}
             </span>
@@ -1715,14 +1710,9 @@ export function AbsencesTable({
               <FileDown className="h-3.5 w-3.5" />
               Modelo ausencias
             </button>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-              onClick={onImport}
-              type="button"
-            >
-              <FileUp className="h-3.5 w-3.5" />
+            <ActionButton onClick={onImport} size="sm" variant="import">
               Importar ausencias
-            </button>
+            </ActionButton>
           </div>
           {importMessage ? (
             <p className="max-w-sm text-xs text-metro-muted">{importMessage}</p>
