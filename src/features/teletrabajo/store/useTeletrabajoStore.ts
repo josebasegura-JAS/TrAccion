@@ -3,6 +3,7 @@ import type { Employee } from '../../plantilla/domain/employee';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
 import { importEncuestaFromFile, type ImportEncuestaSummary } from '../domain/importEncuesta';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   EMPTY_TELETRABAJO_DRAFT,
   TELETRABAJO_ESTADOS,
@@ -13,6 +14,83 @@ import {
 } from '../domain/solicitud';
 
 const STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
+
+const TELETRABAJO_AUDIT_LABELS = {
+  empleado: 'Empleado',
+  nombreApellidos: 'Nombre y apellidos',
+  puestoNomina: 'Puesto nómina',
+  puestoOrganizativo: 'Puesto organizativo',
+  residencia: 'Residencia',
+  dni: 'DNI',
+  direccionTeletrabajo: 'Dirección teletrabajo',
+  estado: 'Estado',
+  tipoSolicitud: 'Tipo solicitud',
+  diasTeletrabajo: 'Días de teletrabajo',
+  fechaSolicitud: 'Fecha solicitud',
+  fechaOrdenador: 'Fecha ordenador',
+  fechaCascos: 'Fecha cascos',
+  periodo: 'Periodo',
+  observaciones: 'Observaciones',
+  validacionSeguridadInformatica: 'Validación Seguridad Informática',
+  validacionPrevencion: 'Validación Prevención',
+  validacionJefatura: 'Validación Jefatura',
+} satisfies Partial<Record<keyof TeletrabajoDraft, string>>;
+
+const TELETRABAJO_AUDIT_FIELDS: Array<keyof TeletrabajoDraft> = [
+  'empleado',
+  'nombreApellidos',
+  'puestoNomina',
+  'puestoOrganizativo',
+  'residencia',
+  'dni',
+  'direccionTeletrabajo',
+  'estado',
+  'tipoSolicitud',
+  'diasTeletrabajo',
+  'fechaSolicitud',
+  'fechaOrdenador',
+  'fechaCascos',
+  'periodo',
+  'observaciones',
+  'validacionSeguridadInformatica',
+  'validacionPrevencion',
+  'validacionJefatura',
+];
+
+function pickTeletrabajoAuditSnapshot(
+  solicitud: TeletrabajoSolicitud | TeletrabajoDraft,
+): Record<string, unknown> {
+  return TELETRABAJO_AUDIT_FIELDS.reduce<Record<string, unknown>>((snapshot, field) => {
+    snapshot[field] = solicitud[field];
+    return snapshot;
+  }, {});
+}
+
+function registerTeletrabajoUpdateAudit(
+  previousSolicitud: TeletrabajoSolicitud,
+  draft: TeletrabajoDraft,
+): void {
+  const normalizedDraft = normalizeDraft(draft);
+  const changes = buildAuditChanges(
+    pickTeletrabajoAuditSnapshot(previousSolicitud),
+    pickTeletrabajoAuditSnapshot(normalizedDraft),
+    TELETRABAJO_AUDIT_LABELS,
+    TELETRABAJO_AUDIT_FIELDS,
+  );
+
+  if (changes.length === 0) {
+    return;
+  }
+
+  addAuditEvent({
+    module: 'teletrabajo',
+    entityId: previousSolicitud.id,
+    action: changes.some((change) => change.field === 'estado') ? 'status_changed' : 'updated',
+    summary: buildUpdateSummary(changes),
+    changes,
+  });
+}
+
 
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
@@ -149,6 +227,13 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         updatedAt: now,
         deletedAt: null,
       };
+      addAuditEvent({
+        module: 'teletrabajo',
+        entityId: solicitud.id,
+        action: 'created',
+        summary: 'Registro creado',
+        changes: [],
+      });
       const solicitudes = [...state.solicitudes, solicitud];
       persistSolicitudes(solicitudes);
       return { solicitudes, selectedSolicitudId: solicitud.id };
@@ -157,11 +242,15 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   update: (id, draft) => {
     set((state) => {
       const now = new Date().toISOString();
-      const solicitudes = state.solicitudes.map((solicitud) =>
-        solicitud.id === id
-          ? { ...solicitud, ...normalizeDraft(draft), updatedAt: now }
-          : solicitud,
-      );
+      const normalizedDraft = normalizeDraft(draft);
+      const solicitudes = state.solicitudes.map((solicitud) => {
+        if (solicitud.id !== id) {
+          return solicitud;
+        }
+
+        registerTeletrabajoUpdateAudit(solicitud, normalizedDraft);
+        return { ...solicitud, ...normalizedDraft, updatedAt: now };
+      });
       persistSolicitudes(solicitudes);
       return { solicitudes, selectedSolicitudId: id };
     });
@@ -180,9 +269,20 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   remove: (id) => {
     set((state) => {
       const now = new Date().toISOString();
-      const solicitudes = state.solicitudes.map((solicitud) =>
-        solicitud.id === id ? { ...solicitud, deletedAt: now, updatedAt: now } : solicitud,
-      );
+      const solicitudes = state.solicitudes.map((solicitud) => {
+        if (solicitud.id !== id) {
+          return solicitud;
+        }
+
+        addAuditEvent({
+          module: 'teletrabajo',
+          entityId: solicitud.id,
+          action: 'deleted',
+          summary: 'Registro eliminado',
+          changes: [],
+        });
+        return { ...solicitud, deletedAt: now, updatedAt: now };
+      });
       persistSolicitudes(solicitudes);
       return { solicitudes, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) };
     });
