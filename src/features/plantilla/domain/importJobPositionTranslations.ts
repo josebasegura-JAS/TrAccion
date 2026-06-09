@@ -67,7 +67,7 @@ function normalizeHeader(header: string): string {
     .trim();
 }
 
-async function parseXlsxRows(buffer: ArrayBuffer): Promise<TabularRow[]> {
+export async function parseXlsxRows(buffer: ArrayBuffer): Promise<string[][]> {
   const entries = readZipEntries(buffer);
   const decoder = new TextDecoder();
   const workbookXml = await readZipText(buffer, entries, 'xl/workbook.xml', decoder);

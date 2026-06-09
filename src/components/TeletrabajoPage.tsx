@@ -1,4 +1,4 @@
-import { FileText, Plus, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
+import { BriefcaseBusiness, FileText, Plus, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -7,6 +7,7 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
+import { TeletrabajoPuestosModal } from './TeletrabajoPuestosModal';
 import { ActionButton } from './ui/ActionButton';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
@@ -95,6 +96,7 @@ export function TeletrabajoPage({
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string>('');
+  const [isPuestosModalOpen, setIsPuestosModalOpen] = useState(false);
   const [wordStatus, setWordStatus] = useState<string>('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
@@ -408,6 +410,13 @@ export function TeletrabajoPage({
             Importar encuesta
           </ActionButton>
           <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => setIsPuestosModalOpen(true)}
+            type="button"
+          >
+            <BriefcaseBusiness size={16} /> Puestos Teletrabajo
+          </button>
+          <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}
             type="button"
@@ -509,6 +518,10 @@ export function TeletrabajoPage({
           sort={preferences.sort}
         />
       </div>
+
+      {isPuestosModalOpen && (
+        <TeletrabajoPuestosModal onClose={() => setIsPuestosModalOpen(false)} />
+      )}
 
       {editorMode && (
         <TeletrabajoEditor mode={editorMode} onDone={closeEditor} solicitud={editorSolicitud} />

@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import type { Employee } from '../../plantilla/domain/employee';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
 import { importEncuestaFromFile, type ImportEncuestaSummary } from '../domain/importEncuesta';
+import {
+  importTeletrabajoPuestosFromFile,
+  normalizeTeletrabajoPuesto,
+  normalizeTeletrabajoPuestoDraft,
+  type TeletrabajoPuesto,
+  type TeletrabajoPuestoDraft,
+} from '../domain/puestosTeletrabajo';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
@@ -14,6 +21,7 @@ import {
 } from '../domain/solicitud';
 
 const STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
+const PUESTOS_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos';
 
 const TELETRABAJO_AUDIT_LABELS = {
   empleado: 'Empleado',
@@ -94,6 +102,7 @@ function registerTeletrabajoUpdateAudit(
 
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
+  puestosTeletrabajo: TeletrabajoPuesto[];
   selectedSolicitudId: string;
   filters: TeletrabajoFilters;
   load: () => void;
@@ -101,6 +110,10 @@ interface TeletrabajoStateStore {
   create: (draft: TeletrabajoDraft) => void;
   update: (id: string, draft: TeletrabajoDraft) => void;
   importEncuesta: (file: File, employees: readonly Employee[]) => Promise<ImportEncuestaSummary>;
+  createPuestoTeletrabajo: (draft: TeletrabajoPuestoDraft) => void;
+  updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
+  removePuestoTeletrabajo: (id: string) => void;
+  importPuestosTeletrabajo: (file: File) => Promise<number>;
   remove: (id: string) => void;
   selectSolicitud: (solicitudId: string) => void;
   setFilter: <K extends keyof TeletrabajoFilters>(key: K, value: TeletrabajoFilters[K]) => void;
@@ -173,6 +186,83 @@ function persistSolicitudes(solicitudes: TeletrabajoSolicitud[]): void {
   writeStorageItem(STORAGE_KEY, JSON.stringify(solicitudes));
 }
 
+function isTeletrabajoPuesto(value: unknown): value is TeletrabajoPuesto {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof TeletrabajoPuesto, unknown>>;
+  return typeof candidate.id === 'string' && typeof candidate.puesto === 'string';
+}
+
+function normalizePuestoTeletrabajo(puesto: TeletrabajoPuesto): TeletrabajoPuesto {
+  const createdAt = puesto.createdAt ?? new Date().toISOString();
+  return {
+    id: puesto.id,
+    ...normalizeTeletrabajoPuestoDraft({
+      puesto: puesto.puesto,
+      maxSolicitudes: puesto.maxSolicitudes,
+      observaciones: puesto.observaciones ?? '',
+    }),
+    createdAt,
+    updatedAt: puesto.updatedAt ?? createdAt,
+    deletedAt: puesto.deletedAt ?? null,
+  };
+}
+
+function readPuestosTeletrabajo(): TeletrabajoPuesto[] {
+  const stored = readStorageItem(PUESTOS_STORAGE_KEY);
+  if (!stored) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(stored);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed.filter(isTeletrabajoPuesto).map(normalizePuestoTeletrabajo);
+}
+
+function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): void {
+  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
+}
+
+function createPuestoTeletrabajoId(): string {
+  return `teletrabajo-puesto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function upsertPuestosTeletrabajo(
+  current: TeletrabajoPuesto[],
+  drafts: TeletrabajoPuestoDraft[],
+): TeletrabajoPuesto[] {
+  const now = new Date().toISOString();
+  const puestosByKey = new Map(
+    current.map((puesto) => [normalizeTeletrabajoPuesto(puesto.puesto), puesto]),
+  );
+
+  drafts.forEach((draft) => {
+    const normalizedDraft = normalizeTeletrabajoPuestoDraft(draft);
+    if (!normalizedDraft.puesto) {
+      return;
+    }
+
+    const key = normalizeTeletrabajoPuesto(normalizedDraft.puesto);
+    const previous = puestosByKey.get(key);
+    puestosByKey.set(key, {
+      id: previous?.id ?? createPuestoTeletrabajoId(),
+      ...normalizedDraft,
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+      deletedAt: null,
+    });
+  });
+
+  return Array.from(puestosByKey.values()).sort((first, second) =>
+    first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
+  );
+}
+
 function firstVisibleSolicitudId(solicitudes: TeletrabajoSolicitud[]): string {
   return solicitudes.find((solicitud) => !solicitud.deletedAt)?.id ?? '';
 }
@@ -202,16 +292,20 @@ function normalizeDraft(draft: TeletrabajoDraft): TeletrabajoDraft {
 
 export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => ({
   solicitudes: [],
+  puestosTeletrabajo: [],
   selectedSolicitudId: '',
   filters: EMPTY_TELETRABAJO_FILTERS,
   load: () => {
     const solicitudes = readSolicitudes();
-    set({ solicitudes, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) });
+    const puestosTeletrabajo = readPuestosTeletrabajo();
+    set({ solicitudes, puestosTeletrabajo, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) });
   },
   reloadFromStorage: () => {
     const solicitudes = readSolicitudes();
+    const puestosTeletrabajo = readPuestosTeletrabajo();
     set((state) => ({
       solicitudes,
+      puestosTeletrabajo,
       selectedSolicitudId: solicitudes.some((solicitud) => solicitud.id === state.selectedSolicitudId)
         ? state.selectedSolicitudId
         : firstVisibleSolicitudId(solicitudes),
@@ -265,6 +359,47 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       };
     });
     return result.summary;
+  },
+  createPuestoTeletrabajo: (draft) => {
+    set((state) => {
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, [draft]);
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      return { puestosTeletrabajo };
+    });
+  },
+  updatePuestoTeletrabajo: (id, draft) => {
+    set((state) => {
+      const normalizedDraft = normalizeTeletrabajoPuestoDraft(draft);
+      const now = new Date().toISOString();
+      const puestosTeletrabajo = state.puestosTeletrabajo
+        .map((puesto) =>
+          puesto.id === id ? { ...puesto, ...normalizedDraft, updatedAt: now } : puesto,
+        )
+        .sort((first, second) =>
+          first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
+        );
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      return { puestosTeletrabajo };
+    });
+  },
+  removePuestoTeletrabajo: (id) => {
+    set((state) => {
+      const now = new Date().toISOString();
+      const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
+        puesto.id === id ? { ...puesto, deletedAt: now, updatedAt: now } : puesto,
+      );
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      return { puestosTeletrabajo };
+    });
+  },
+  importPuestosTeletrabajo: async (file) => {
+    const drafts = await importTeletrabajoPuestosFromFile(file);
+    set((state) => {
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, drafts);
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      return { puestosTeletrabajo };
+    });
+    return drafts.length;
   },
   remove: (id) => {
     set((state) => {
