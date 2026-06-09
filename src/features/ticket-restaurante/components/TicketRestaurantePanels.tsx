@@ -1567,6 +1567,11 @@ function HojaGastoDetailSection({ rows }: { rows: TicketPersonCalculation['hojaG
   );
 }
 
+function formatDisplayDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
+}
+
 function formatMonthOrigin(value: string): string {
   if (!/^\d{4}-\d{2}$/.test(value)) return value;
   return `${value.slice(5, 7)}/${value.slice(0, 4)}`;

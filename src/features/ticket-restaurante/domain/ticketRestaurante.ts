@@ -154,6 +154,7 @@ export interface TicketMonthCalculation {
   totals: {
     personas: number;
     diasTeoricos: number;
+    diasSinTicket: number;
     ausenciasMes: number;
     hojasGastoMes: number;
     deudaEntrante: number;
@@ -633,6 +634,7 @@ function calculateTicketMonthInternal(
         diasTeoricos: 0,
         diasSinTicket: 0,
         ausenciasMes: 0,
+        hojasGastoMes: 0,
         deudaEntrante: 0,
         ausenciasAplicadas: 0,
         deudaPendiente: 0,
