@@ -3,6 +3,7 @@ export interface TaskOriginConfig {
   nombre: string;
   tipo: 'sindicato' | 'empresa' | 'otro';
   active: boolean;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

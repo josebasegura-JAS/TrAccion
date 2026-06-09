@@ -34,6 +34,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   addTaskOrigin: (nombre: string, tipo: TaskOriginConfig['tipo']) => void;
   updateTaskOrigin: (id: string, nombre: string, tipo: TaskOriginConfig['tipo']) => void;
   toggleTaskOrigin: (id: string) => void;
+  deleteTaskOrigin: (id: string) => void;
 }
 
 function isTaskOriginConfig(value: unknown): value is TaskOriginConfig {
@@ -47,6 +48,7 @@ function isTaskOriginConfig(value: unknown): value is TaskOriginConfig {
     typeof candidate.nombre === 'string' &&
     (candidate.tipo === 'sindicato' || candidate.tipo === 'empresa' || candidate.tipo === 'otro') &&
     typeof candidate.active === 'boolean' &&
+    (candidate.deletedAt === undefined || typeof candidate.deletedAt === 'string') &&
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string'
   );
@@ -256,6 +258,20 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
         ...state,
         taskOrigins: state.taskOrigins.map((origin) =>
           origin.id === id ? { ...origin, active: !origin.active, updatedAt: now } : origin,
+        ),
+      };
+      persistConfiguracion(configuracion);
+      return configuracion;
+    }),
+  deleteTaskOrigin: (id) =>
+    set((state) => {
+      const now = new Date().toISOString();
+      const configuracion = {
+        ...state,
+        taskOrigins: state.taskOrigins.map((origin) =>
+          origin.id === id
+            ? { ...origin, active: false, deletedAt: now, updatedAt: now }
+            : origin,
         ),
       };
       persistConfiguracion(configuracion);

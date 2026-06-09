@@ -355,19 +355,14 @@ export function TareasPage({
     () => taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre),
     [taskPhases],
   );
-  const originFilterOptions = useMemo(() => {
-    const values = new Set(
-      taskOrigins.filter((origin) => origin.active).map((origin) => origin.nombre),
-    );
-    tasks.forEach((task) => {
-      if (task.sindicato.trim()) {
-        values.add(task.sindicato.trim());
-      }
-    });
-    return Array.from(values).sort((first, second) =>
-      first.localeCompare(second, 'es', { sensitivity: 'base' }),
-    );
-  }, [taskOrigins, tasks]);
+  const originFilterOptions = useMemo(
+    () =>
+      taskOrigins
+        .filter((origin) => origin.active && !origin.deletedAt)
+        .map((origin) => origin.nombre)
+        .sort((first, second) => first.localeCompare(second, 'es', { sensitivity: 'base' })),
+    [taskOrigins],
+  );
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const filteredTasks = useMemo(() => filterTasks(tasks, filters), [filters, tasks]);
   const historicTasks = useMemo(
@@ -791,11 +786,15 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
   const addTaskOrigin = useConfiguracionStore((state) => state.addTaskOrigin);
   const updateTaskOrigin = useConfiguracionStore((state) => state.updateTaskOrigin);
   const toggleTaskOrigin = useConfiguracionStore((state) => state.toggleTaskOrigin);
+  const deleteTaskOrigin = useConfiguracionStore((state) => state.deleteTaskOrigin);
   const [newOriginName, setNewOriginName] = useState('');
   const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('sindicato');
 
   const sortedOrigins = useMemo(
-    () => [...taskOrigins].sort((first, second) => first.nombre.localeCompare(second.nombre, 'es')),
+    () =>
+      taskOrigins
+        .filter((origin) => !origin.deletedAt)
+        .sort((first, second) => first.nombre.localeCompare(second.nombre, 'es')),
     [taskOrigins],
   );
 
@@ -861,8 +860,8 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
               <tr>
                 <th className="w-[38%] px-3 py-2">Nombre</th>
                 <th className="w-[24%] px-3 py-2">Tipo</th>
-                <th className="w-[18%] px-3 py-2">Estado</th>
-                <th className="w-[20%] px-3 py-2 text-right">Acción</th>
+                <th className="w-[16%] px-3 py-2">Estado</th>
+                <th className="w-[26%] px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45">
@@ -870,6 +869,7 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
                 <TaskOriginRow
                   key={origin.id}
                   origin={origin}
+                  onDelete={deleteTaskOrigin}
                   onToggle={toggleTaskOrigin}
                   onUpdate={updateTaskOrigin}
                 />
@@ -884,16 +884,24 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
 
 function TaskOriginRow({
   origin,
+  onDelete,
   onToggle,
   onUpdate,
 }: {
   origin: TaskOriginConfig;
+  onDelete: (id: string) => void;
   onToggle: (id: string) => void;
   onUpdate: (id: string, nombre: string, tipo: TaskOriginConfig['tipo']) => void;
 }) {
   const [name, setName] = useState(origin.nombre);
   const [type, setType] = useState<TaskOriginConfig['tipo']>(origin.tipo);
   const hasChanges = name.trim() !== origin.nombre || type !== origin.tipo;
+
+  const handleDelete = () => {
+    if (window.confirm(`¿Eliminar el origen ${origin.nombre}? Dejará de aparecer en filtros y altas.`)) {
+      onDelete(origin.id);
+    }
+  };
 
   useEffect(() => {
     setName(origin.nombre);
@@ -923,7 +931,8 @@ function TaskOriginRow({
           {origin.active ? 'Activo' : 'Inactivo'}
         </span>
       </td>
-      <td className="space-x-2 px-3 py-2 text-right">
+      <td className="px-3 py-2">
+        <div className="flex flex-wrap justify-end gap-2">
         <button
           className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!hasChanges || !name.trim()}
@@ -939,6 +948,14 @@ function TaskOriginRow({
         >
           {origin.active ? 'Desactivar' : 'Activar'}
         </button>
+        <button
+          className="rounded-lg border border-red-500/40 px-2 py-1 font-semibold text-red-200 hover:border-red-400 hover:text-white"
+          onClick={handleDelete}
+          type="button"
+        >
+          Eliminar
+        </button>
+        </div>
       </td>
     </tr>
   );
