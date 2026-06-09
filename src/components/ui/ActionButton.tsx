@@ -94,7 +94,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 export function ActionButton({
   children,
   className,
-  iconOnly = false,
+  iconOnly = true,
   size = 'md',
   title,
   type = 'button',
@@ -114,6 +114,7 @@ export function ActionButton({
         iconOnly && 'aspect-square px-0',
         className,
       )}
+      aria-label={accessibleTitle}
       title={accessibleTitle}
       type={type}
       {...props}
