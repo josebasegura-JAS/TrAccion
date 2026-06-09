@@ -249,7 +249,7 @@ export function TeletrabajoEditor({
         )}
 
         <form
-          className="flex min-h-0 flex-1 flex-col space-y-3"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSubmit || recordLock.isReadOnly) {
@@ -265,10 +265,11 @@ export function TeletrabajoEditor({
             onDone();
           }}
         >
-          <fieldset
-            className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 disabled:opacity-70 sm:grid-cols-2"
-            disabled={recordLock.isReadOnly}
-          >
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <fieldset
+              className="grid gap-2 disabled:opacity-70 sm:grid-cols-2"
+              disabled={recordLock.isReadOnly}
+            >
             <div className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
               {draft.empleado.trim().length === 0
                 ? 'Introduce un empleado para buscarlo en Plantilla.'
@@ -468,22 +469,23 @@ export function TeletrabajoEditor({
                 value={draft.observaciones}
               />
             </label>
-          </fieldset>
+            </fieldset>
 
-          {hasExternalSolicitudUpdate && recordLock.isReadOnly && (
-            <p className="rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
+            {hasExternalSolicitudUpdate && recordLock.isReadOnly && (
+              <p className="mt-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
               Esta solicitud ha recibido cambios externos. No se han aplicado al formulario abierto
               para no sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
-            </p>
-          )}
+              </p>
+            )}
 
-          {wordStatus && (
-            <p className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
+            {wordStatus && (
+              <p className="mt-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
               {wordStatus}
-            </p>
-          )}
+              </p>
+            )}
+          </div>
 
-          <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
+          <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-t border-metro-border bg-metro-panel pt-3">
             <ActionButton disabled={!canSubmit} size="sm" type="submit" variant="save">
               Guardar
             </ActionButton>
