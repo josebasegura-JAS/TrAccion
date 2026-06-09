@@ -114,6 +114,7 @@ interface TeletrabajoStateStore {
   updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
   removePuestoTeletrabajo: (id: string) => void;
   importPuestosTeletrabajo: (file: File) => Promise<number>;
+  importPuestosTeletrabajoDrafts: (drafts: readonly TeletrabajoPuestoDraft[]) => number;
   remove: (id: string) => void;
   selectSolicitud: (solicitudId: string) => void;
   setFilter: <K extends keyof TeletrabajoFilters>(key: K, value: TeletrabajoFilters[K]) => void;
@@ -400,6 +401,15 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       return { puestosTeletrabajo };
     });
     return drafts.length;
+  },
+  importPuestosTeletrabajoDrafts: (drafts) => {
+    const normalizedDrafts = drafts.map((draft) => normalizeTeletrabajoPuestoDraft(draft));
+    set((state) => {
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, normalizedDrafts);
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      return { puestosTeletrabajo };
+    });
+    return normalizedDrafts.filter((draft) => draft.puesto.trim()).length;
   },
   remove: (id) => {
     set((state) => {

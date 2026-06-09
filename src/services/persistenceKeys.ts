@@ -7,6 +7,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.auditTrail.events',
   'traccion.v1.teletrabajo.solicitudes',
   'traccion.v1.teletrabajo.puestos',
+  'traccion.v1.teletrabajo.puestos.translationAliases',
   'traccion.v1.licenciasSinSueldo.records',
   'traccion.v1.comite.sessions',
   'traccion.v1.actas.records',
