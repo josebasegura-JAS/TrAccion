@@ -116,7 +116,7 @@ function buildSolicitudesByPuestoCount(
       return;
     }
 
-    const key = buildPuestoPeriodoKey(solicitud.puestoOrganizativo, solicitud.periodo);
+    const key = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
     if (!key) {
       return;
     }
@@ -125,15 +125,6 @@ function buildSolicitudesByPuestoCount(
   });
 
   return counts;
-}
-
-function buildPuestoPeriodoKey(puestoOrganizativo: string, periodo: string): string {
-  const puestoKey = normalizeTeletrabajoPuesto(puestoOrganizativo);
-  if (!puestoKey) {
-    return '';
-  }
-
-  return `${puestoKey}::${normalizeTeletrabajoPuesto(periodo)}`;
 }
 
 function getTeletrabajoSemaforo(
@@ -157,10 +148,7 @@ function getTeletrabajoSemaforo(
     };
   }
 
-  const solicitudesDelPuesto =
-    solicitudesByPuestoCount.get(
-      buildPuestoPeriodoKey(solicitud.puestoOrganizativo, solicitud.periodo),
-    ) ?? 0;
+  const solicitudesDelPuesto = solicitudesByPuestoCount.get(puestoKey) ?? 0;
   if (puesto.maxSolicitudes > 0 && solicitudesDelPuesto > puesto.maxSolicitudes) {
     return {
       status: 'review',

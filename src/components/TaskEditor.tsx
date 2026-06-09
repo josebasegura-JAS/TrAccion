@@ -208,7 +208,7 @@ export function TaskEditor({
 
   const originOptions = useMemo(() => {
     const activeOriginNames = taskOrigins
-      .filter((origin) => origin.active && !origin.deletedAt)
+      .filter((origin) => origin.active)
       .map((origin) => origin.nombre);
     return draft.sindicato && !activeOriginNames.includes(draft.sindicato)
       ? [draft.sindicato, ...activeOriginNames]
