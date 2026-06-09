@@ -1,4 +1,4 @@
-import { Eye, FileText, FolderOpen, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, Eye, FileText, FolderOpen, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -108,6 +108,42 @@ function createEmptyAlegacion(sindicato = ''): ActaAlegacion {
   return { sindicato, presentada: false, fecha: '', observacion: '' };
 }
 
+
+function formatDate(value: string): string {
+  if (!value) {
+    return '—';
+  }
+
+  try {
+    return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short' }).format(new Date(`${value}T00:00:00`));
+  } catch {
+    return value;
+  }
+}
+
+function getTodayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysToIsoDate(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getAutomaticDeadlineForState(state: ActaDraft['estado'], changedAt = getTodayIsoDate()): string | null {
+  if (state === 'Enviada a Dirección') {
+    return addDaysToIsoDate(changedAt, 7);
+  }
+  if (state === 'Pendiente de alegaciones') {
+    return addDaysToIsoDate(changedAt, 21);
+  }
+  if (state === 'Pendiente de firma') {
+    return addDaysToIsoDate(changedAt, 14);
+  }
+  return null;
+}
+
 function formatDateTime(value: string): string {
   if (!value) {
     return '—';
@@ -156,6 +192,7 @@ export function ActasPage() {
   const [newUpdateText, setNewUpdateText] = useState('');
   const [pathStatus, setPathStatus] = useState('');
   const [pathStatusIsError, setPathStatusIsError] = useState(false);
+  const [deadlineWasAutoUpdated, setDeadlineWasAutoUpdated] = useState(false);
   const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
     defaultPreferences: {
@@ -343,10 +380,14 @@ export function ActasPage() {
     setNewUpdateText('');
     setPathStatus('');
     setPathStatusIsError(false);
+    setDeadlineWasAutoUpdated(false);
     setIsEditorOpen(true);
   };
 
   const updateDraft = <K extends keyof ActaDraft>(key: K, value: ActaDraft[K]) => {
+    if (key === 'fechaLimite') {
+      setDeadlineWasAutoUpdated(false);
+    }
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
@@ -395,16 +436,23 @@ export function ActasPage() {
     setDraft(EMPTY_ACTA_DRAFT);
   };
 
+  const applyStateChange = (nextState: ActaDraft['estado']) => {
+    const automaticDeadline = getAutomaticDeadlineForState(nextState);
+    setDraft((current) => ({
+      ...current,
+      estado: nextState,
+      fechaLimite: automaticDeadline ?? current.fechaLimite,
+    }));
+    setDeadlineWasAutoUpdated(Boolean(automaticDeadline));
+  };
+
   const advanceState = () => {
     const nextState = getNextState(draft.estado);
     if (!nextState) {
       return;
     }
 
-    setDraft((current) => ({
-      ...current,
-      estado: nextState,
-    }));
+    applyStateChange(nextState);
   };
 
   const selectActaPath = async () => {
@@ -455,6 +503,8 @@ export function ActasPage() {
     }
   };
 
+  const editingActa = editingActaId ? actas.find((acta) => acta.id === editingActaId) : null;
+  const displayedCreationDate = editingActa?.fechaCreacion ?? getTodayIsoDate();
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
 
   return (
@@ -588,43 +638,70 @@ export function ActasPage() {
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-              <div className="grid gap-2 xl:grid-cols-[160px_180px_180px_minmax(220px,1fr)]">
-                <select
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateDraft('tipo', event.target.value === 'Paritaria' ? 'Paritaria' : 'Comité')}
-                  value={draft.tipo}
-                >
-                  {ACTA_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateDraft('fechaSesion', event.target.value)}
-                  type="date"
-                  value={draft.fechaSesion}
-                />
-                <input
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateDraft('fechaLimite', event.target.value)}
-                  title="Fecha límite"
-                  type="date"
-                  value={draft.fechaLimite}
-                />
-                <input
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateDraft('titulo', event.target.value)}
-                  placeholder="Título"
-                  value={draft.titulo}
-                />
+              <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
+                <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+                  Tipo
+                  <select
+                    className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateDraft('tipo', event.target.value === 'Paritaria' ? 'Paritaria' : 'Comité')}
+                    value={draft.tipo}
+                  >
+                    {ACTA_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+                  Fecha sesión
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateDraft('fechaSesion', event.target.value)}
+                    type="date"
+                    value={draft.fechaSesion}
+                  />
+                </label>
+                <div className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+                  Fecha creación
+                  <div className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text">
+                    {formatDate(displayedCreationDate)}
+                  </div>
+                </div>
+                <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+                  Fecha límite
+                  <span className="relative block">
+                    <input
+                      className="w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 pr-9 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                      onChange={(event) => updateDraft('fechaLimite', event.target.value)}
+                      title="Fecha límite"
+                      type="date"
+                      value={draft.fechaLimite}
+                    />
+                    {deadlineWasAutoUpdated && (
+                      <CalendarClock
+                        aria-label="Fecha límite recalculada automáticamente"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-metro-red"
+                        size={16}
+                      />
+                    )}
+                  </span>
+                </label>
+                <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+                  Título
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateDraft('titulo', event.target.value)}
+                    placeholder="Título"
+                    value={draft.titulo}
+                  />
+                </label>
               </div>
 
               <div className="grid gap-2 xl:grid-cols-[260px_minmax(220px,1fr)]">
                 <select
                   className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateDraft('estado', event.target.value as ActaDraft['estado'])}
+                  onChange={(event) => applyStateChange(event.target.value as ActaDraft['estado'])}
                   value={draft.estado}
                 >
                   {ACTA_STATES.map((state) => (
@@ -816,7 +893,7 @@ export function ActasPage() {
               {canAttachFinalActa && draft.estado !== 'Cerrada' && (
                 <button
                   className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                  onClick={() => updateDraft('estado', 'Cerrada')}
+                  onClick={() => applyStateChange('Cerrada')}
                   type="button"
                 >
                   Cerrar acta
