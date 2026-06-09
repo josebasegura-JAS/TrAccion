@@ -1,4 +1,4 @@
-import { CalendarDays, Euro, Settings } from 'lucide-react';
+import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildYearCalendar,
@@ -25,6 +25,13 @@ import {
   type TicketRestaurantAbsencePreviewRow,
   type TicketRestaurantAbsenceSaveResult,
 } from '../domain/importAbsences';
+import {
+  importTicketManutencionesFromFile,
+  validateTicketManutencionPreviewRows,
+  type TicketManutencion,
+  type TicketManutencionDraft,
+  type TicketManutencionPreviewRow,
+} from '../domain/importManutenciones';
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -81,7 +88,8 @@ type TicketRestauranteSubview =
   | 'personas'
   | 'computoMensual'
   | 'computoCotizacion'
-  | 'ausencias';
+  | 'ausencias'
+  | 'manutenciones';
 
 type TicketAbsenceDisplayRow = TicketRestaurantAbsence & {
   calendario: string;
@@ -127,6 +135,14 @@ const PEOPLE_EXPORT_HEADERS = [
   'Puesto',
   'Calendario',
 ];
+const MANUTENCIONES_MODEL_HEADERS = [
+  'Nº empleado',
+  'Nombre y apellidos',
+  'Fecha gasto',
+  'Origen',
+  'Afecta a ticket',
+];
+
 const ABSENCE_MODEL_HEADERS = [
   'Nº empleado',
   'Nombre y apellidos',
@@ -303,6 +319,225 @@ function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
   return `Ausencias guardadas: ${parts.join(', ')}.`;
 }
 
+
+function formatManutencionDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
+}
+
+function normalizeTicketEmployeeSearch(value: string): string {
+  return value.trim().replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
+}
+
+function ManutencionesPanel({
+  importMessage,
+  manualEmployee,
+  manualDate,
+  manutenciones,
+  onAddManual,
+  onExportModel,
+  onImport,
+  onManualDateChange,
+  onManualEmployeeChange,
+  onPreviewChange,
+  onRemove,
+  onSavePreview,
+  previewRows,
+  ticketPeople,
+}: {
+  importMessage: string;
+  manualEmployee: string;
+  manualDate: string;
+  manutenciones: TicketManutencion[];
+  onAddManual: () => void;
+  onExportModel: () => void;
+  onImport: () => void;
+  onManualDateChange: (value: string) => void;
+  onManualEmployeeChange: (value: string) => void;
+  onPreviewChange: (rows: TicketManutencionPreviewRow[]) => void;
+  onRemove: (id: string) => void;
+  onSavePreview: () => void;
+  previewRows: TicketManutencionPreviewRow[];
+  ticketPeople: TicketPerson[];
+}) {
+  const manualPerson = ticketPeople.find(
+    (person) => normalizeTicketEmployeeSearch(person.empleado) === normalizeTicketEmployeeSearch(manualEmployee),
+  );
+  const rowsToImport = previewRows.filter((row) => row.importar).length;
+
+  const updatePreviewRow = (
+    rowId: string,
+    patch: Partial<Pick<TicketManutencionPreviewRow, 'importar' | 'afectaTicket'>>,
+  ) => {
+    onPreviewChange(previewRows.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
+  };
+
+  return (
+    <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="text-base font-bold text-metro-text">Manutenciones</h3>
+          <p className="text-xs text-metro-muted">
+            Importa notas de gasto y deja preparada la revisión. Esta primera fase no descuenta tickets.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            onClick={onExportModel}
+            type="button"
+          >
+            Modelo
+          </button>
+          <button
+            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+            onClick={onImport}
+            type="button"
+          >
+            Importar desde Excel
+          </button>
+        </div>
+      </div>
+
+      {importMessage ? <p className="mb-2 text-xs font-semibold text-metro-muted">{importMessage}</p> : null}
+
+      <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">Alta manual</p>
+        <div className="grid gap-2 lg:grid-cols-[140px_190px_1fr_auto] lg:items-center">
+          <input
+            className="h-8 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => onManualEmployeeChange(event.target.value)}
+            placeholder="Nº empleado"
+            value={manualEmployee}
+          />
+          <input
+            className="h-8 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => onManualDateChange(event.target.value)}
+            type="date"
+            value={manualDate}
+          />
+          <div className="text-xs font-semibold text-metro-muted">
+            {manualPerson ? manualPerson.nombreApellidos : 'Introduce una persona con derecho a ticket'}
+          </div>
+          <button
+            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!manualPerson || !manualDate}
+            onClick={onAddManual}
+            type="button"
+          >
+            Añadir
+          </button>
+        </div>
+      </div>
+
+      {previewRows.length > 0 ? (
+        <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
+          <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">Preview</p>
+              <p className="text-xs text-metro-muted">{rowsToImport} registros marcados para importar.</p>
+            </div>
+            <button
+              className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={rowsToImport === 0 || previewRows.some((row) => row.errors.length > 0)}
+              onClick={onSavePreview}
+              type="button"
+            >
+              Guardar importación
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-metro-muted">
+                <tr>
+                  <th className="px-2 py-1">Importar</th>
+                  <th className="px-2 py-1">Afecta a ticket</th>
+                  <th className="px-2 py-1">Nº empleado</th>
+                  <th className="px-2 py-1">Nombre</th>
+                  <th className="px-2 py-1">Fecha gasto</th>
+                  <th className="px-2 py-1">Origen</th>
+                  <th className="px-2 py-1">Errores</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row) => (
+                  <tr className="border-t border-metro-border" key={row.id}>
+                    <td className="px-2 py-1">
+                      <input
+                        checked={row.importar}
+                        className="h-4 w-4 accent-metro-red"
+                        onChange={(event) => updatePreviewRow(row.id, { importar: event.target.checked })}
+                        type="checkbox"
+                      />
+                    </td>
+                    <td className="px-2 py-1">
+                      <input
+                        checked={row.afectaTicket}
+                        className="h-4 w-4 accent-metro-red"
+                        onChange={(event) => updatePreviewRow(row.id, { afectaTicket: event.target.checked })}
+                        type="checkbox"
+                      />
+                    </td>
+                    <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
+                    <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
+                    <td className="px-2 py-1 text-metro-text">{formatManutencionDate(row.fechaGasto)}</td>
+                    <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
+                    <td className="px-2 py-1 text-metro-red">{row.errors.join(' ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-surface">
+        <table className="min-w-full text-left text-xs">
+          <thead className="bg-metro-panel text-metro-muted">
+            <tr>
+              <th className="px-2 py-2">Nº empleado</th>
+              <th className="px-2 py-2">Nombre</th>
+              <th className="px-2 py-2">Fecha gasto</th>
+              <th className="px-2 py-2">Origen</th>
+              <th className="px-2 py-2">Afecta a ticket</th>
+              <th className="px-2 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {manutenciones.length === 0 ? (
+              <tr>
+                <td className="px-2 py-6 text-center text-sm text-metro-muted" colSpan={6}>
+                  No hay manutenciones cargadas.
+                </td>
+              </tr>
+            ) : (
+              manutenciones.map((row) => (
+                <tr className="border-t border-metro-border" key={row.id}>
+                  <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
+                  <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
+                  <td className="px-2 py-1 text-metro-text">{formatManutencionDate(row.fechaGasto)}</td>
+                  <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
+                  <td className="px-2 py-1 text-metro-text">{row.afectaTicket ? 'Sí' : 'No'}</td>
+                  <td className="px-2 py-1">
+                    <button
+                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
+                      onClick={() => onRemove(row.id)}
+                      type="button"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function TicketRestaurantePage({
   initialAbsenceId = null,
   navigationNonce,
@@ -314,6 +549,7 @@ export function TicketRestaurantePage({
   const absences = useTicketRestauranteStore((state) => state.absences);
   const people = useTicketRestauranteStore((state) => state.people);
   const config = useTicketRestauranteStore((state) => state.config);
+  const manutenciones = useTicketRestauranteStore((state) => state.manutenciones);
   const loadTickets = useTicketRestauranteStore((state) => state.load);
   const createCalendar = useTicketRestauranteStore((state) => state.createCalendar);
   const updateCalendar = useTicketRestauranteStore((state) => state.updateCalendar);
@@ -325,11 +561,13 @@ export function TicketRestaurantePage({
   const upsertPerson = useTicketRestauranteStore((state) => state.upsertPerson);
   const removePerson = useTicketRestauranteStore((state) => state.removePerson);
   const updateConfig = useTicketRestauranteStore((state) => state.updateConfig);
+  const saveManutenciones = useTicketRestauranteStore((state) => state.saveManutenciones);
+  const removeManutencion = useTicketRestauranteStore((state) => state.removeManutencion);
   const importPeople = useTicketRestauranteStore((state) => state.importPeople);
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
-  const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview>('calendarios');
+  const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
   const [year, setYear] = useState(currentYear());
   const [absenceYear, setAbsenceYear] = useState(currentYear());
   const [calculationYear, setCalculationYear] = useState(currentYear());
@@ -344,12 +582,17 @@ export function TicketRestaurantePage({
   const [previewRows, setPreviewRows] = useState<TicketRestaurantAbsencePreviewRow[]>([]);
   const [importMessage, setImportMessage] = useState('');
   const [peopleImportMessage, setPeopleImportMessage] = useState('');
+  const [manutencionImportMessage, setManutencionImportMessage] = useState('');
+  const [manutencionPreviewRows, setManutencionPreviewRows] = useState<TicketManutencionPreviewRow[]>([]);
+  const [manualManutencionEmployee, setManualManutencionEmployee] = useState('');
+  const [manualManutencionDate, setManualManutencionDate] = useState('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const peopleFileInputRef = useRef<HTMLInputElement | null>(null);
+  const manutencionesFileInputRef = useRef<HTMLInputElement | null>(null);
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -381,6 +624,21 @@ export function TicketRestaurantePage({
         ),
     [people],
   );
+  const visibleManutenciones = useMemo(
+    () =>
+      [...manutenciones]
+        .filter((row) => !row.deletedAt)
+        .sort((first, second) =>
+          first.fechaGasto === second.fechaGasto
+            ? first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+                numeric: true,
+                sensitivity: 'base',
+              })
+            : second.fechaGasto.localeCompare(first.fechaGasto),
+        ),
+    [manutenciones],
+  );
+
   const activeTicketEmployeeNumbers = useMemo(
     () =>
       new Set(
@@ -713,6 +971,87 @@ export function TicketRestaurantePage({
     setIsPreviewOpen(true);
   }, []);
 
+  const handleManutencionesImportFile = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    setManutencionImportMessage(`Procesando ${file.name}...`);
+
+    try {
+      const rows = await importTicketManutencionesFromFile(file, visiblePeople);
+      const validatedRows = validateTicketManutencionPreviewRows(rows);
+      setManutencionPreviewRows(validatedRows);
+      setManutencionImportMessage(
+        validatedRows.length > 0
+          ? `Detectadas ${validatedRows.length} manutenciones con derecho a ticket.`
+          : 'No se han detectado manutenciones de personas con derecho a ticket.',
+      );
+    } catch (error) {
+      setManutencionImportMessage(
+        error instanceof Error ? error.message : 'No se pudo importar el fichero de manutenciones.',
+      );
+    } finally {
+      if (manutencionesFileInputRef.current) {
+        manutencionesFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const addManualManutencionPreviewRow = () => {
+    const person = visiblePeople.find(
+      (candidate) =>
+        normalizeTicketEmployeeSearch(candidate.empleado) ===
+        normalizeTicketEmployeeSearch(manualManutencionEmployee),
+    );
+
+    if (!person || !manualManutencionDate) {
+      return;
+    }
+
+    setManutencionPreviewRows((currentRows) =>
+      validateTicketManutencionPreviewRows([
+        ...currentRows,
+        {
+          id: `manutencion-manual-${person.empleado}-${manualManutencionDate}-${Date.now()}`,
+          empleado: person.empleado,
+          nombreApellidos: person.nombreApellidos,
+          fechaGasto: manualManutencionDate,
+          origen: 'Manual',
+          importar: true,
+          afectaTicket: true,
+          errors: [],
+        },
+      ]),
+    );
+    setManualManutencionEmployee('');
+    setManualManutencionDate('');
+  };
+
+  const saveManutencionPreview = () => {
+    const validatedRows = validateTicketManutencionPreviewRows(manutencionPreviewRows);
+    setManutencionPreviewRows(validatedRows);
+
+    if (validatedRows.some((row) => row.errors.length > 0)) {
+      setManutencionImportMessage('Hay filas con errores. Corrígelas antes de guardar.');
+      return;
+    }
+
+    const drafts: TicketManutencionDraft[] = validatedRows
+      .filter((row) => row.importar)
+      .map((row) => ({
+        empleado: row.empleado,
+        nombreApellidos: row.nombreApellidos,
+        fechaGasto: row.fechaGasto,
+        origen: row.origen,
+        afectaTicket: row.afectaTicket,
+      }));
+
+    saveManutenciones(drafts);
+    setManutencionPreviewRows([]);
+    setManutencionImportMessage(`Manutenciones guardadas: ${drafts.length}.`);
+  };
+
   useEffect(() => {
     if (!initialAbsenceId || navigationNonce === undefined) {
       return;
@@ -769,6 +1108,13 @@ export function TicketRestaurantePage({
         ref={peopleFileInputRef}
         type="file"
       />
+      <input
+        accept=".xlsx,.csv,.tsv"
+        className="hidden"
+        onChange={(event) => void handleManutencionesImportFile(event.target.files?.[0] ?? null)}
+        ref={manutencionesFileInputRef}
+        type="file"
+      />
 
       <div className="mb-3 flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
@@ -796,6 +1142,11 @@ export function TicketRestaurantePage({
             active={activeSubview === 'ausencias'}
             label="Ausencias"
             onClick={() => setActiveSubview('ausencias')}
+          />
+          <SubviewButton
+            active={activeSubview === 'manutenciones'}
+            label="Manutenciones"
+            onClick={() => setActiveSubview('manutenciones')}
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -947,7 +1298,7 @@ export function TicketRestaurantePage({
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
         />
-      ) : (
+      ) : activeSubview === 'ausencias' ? (
         <AbsencesTable
           absences={visibleAbsences}
           exportPayload={{
@@ -974,6 +1325,32 @@ export function TicketRestaurantePage({
           onYearChange={handleAbsenceYearChange}
           year={absenceYear}
         />
+      ) : activeSubview === 'manutenciones' ? (
+        <ManutencionesPanel
+          importMessage={manutencionImportMessage}
+          manualDate={manualManutencionDate}
+          manualEmployee={manualManutencionEmployee}
+          manutenciones={visibleManutenciones}
+          onAddManual={addManualManutencionPreviewRow}
+          onExportModel={() =>
+            exportCsv('modelo-manutenciones-ticket-restaurante.csv', MANUTENCIONES_MODEL_HEADERS, [])
+          }
+          onImport={() => manutencionesFileInputRef.current?.click()}
+          onManualDateChange={setManualManutencionDate}
+          onManualEmployeeChange={setManualManutencionEmployee}
+          onPreviewChange={(rows) => setManutencionPreviewRows(validateTicketManutencionPreviewRows(rows))}
+          onRemove={removeManutencion}
+          onSavePreview={saveManutencionPreview}
+          previewRows={manutencionPreviewRows}
+          ticketPeople={visiblePeople}
+        />
+      ) : (
+        <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-8 text-center">
+          <p className="text-base font-bold text-metro-text">Selecciona una sección</p>
+          <p className="mt-1 text-sm text-metro-muted">
+            El contenido de Ticket Restaurante se carga al pulsar en Calendarios, Personas, Cómputos, Ausencias o Manutenciones.
+          </p>
+        </div>
       )}
 
       {isPriceModalOpen ? (

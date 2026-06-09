@@ -17,12 +17,18 @@ import {
   type TicketRestaurantConfig,
 } from '../domain/ticketRestaurante';
 import { normalizeCalendarName, type TicketPeopleImportDraft } from '../domain/importPeople';
+import {
+  buildTicketManutencion,
+  type TicketManutencion,
+  type TicketManutencionDraft,
+} from '../domain/importManutenciones';
 
 const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
 const PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
 const CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
 const DEBT_LEDGER_STORAGE_KEY = 'traccion.v1.ticketRestaurante.debtLedger';
+const MANUTENCIONES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.manutenciones';
 
 interface TicketRestauranteState {
   calendars: TicketCalendar[];
@@ -30,6 +36,7 @@ interface TicketRestauranteState {
   people: TicketPerson[];
   config: TicketRestaurantConfig;
   debtLedger: Record<string, number>;
+  manutenciones: TicketManutencion[];
   load: () => void;
   reloadFromStorage: () => void;
   createCalendar: (draft: TicketCalendarDraft) => string;
@@ -46,6 +53,8 @@ interface TicketRestauranteState {
   };
   removePerson: (empleado: string) => void;
   updateConfig: (config: TicketRestaurantConfig) => void;
+  saveManutenciones: (drafts: TicketManutencionDraft[]) => void;
+  removeManutencion: (id: string) => void;
 }
 
 function isTicketCalendar(value: unknown): value is TicketCalendar {
@@ -98,6 +107,26 @@ function isTicketRestaurantAbsence(value: unknown): value is TicketRestaurantAbs
     typeof candidate.hasta === 'string' &&
     typeof candidate.motivo === 'string' &&
     typeof candidate.totalDias === 'number' &&
+    typeof candidate.afectaTicket === 'boolean' &&
+    typeof candidate.createdAt === 'string' &&
+    typeof candidate.updatedAt === 'string' &&
+    (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
+  );
+}
+
+
+function isTicketManutencion(value: unknown): value is TicketManutencion {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<TicketManutencion>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.empleado === 'string' &&
+    typeof candidate.nombreApellidos === 'string' &&
+    typeof candidate.fechaGasto === 'string' &&
+    typeof candidate.origen === 'string' &&
     typeof candidate.afectaTicket === 'boolean' &&
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string' &&
@@ -242,6 +271,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
   people: [],
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
   debtLedger: {},
+  manutenciones: [],
   load: () => {
     set({
       calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
@@ -251,6 +281,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
       debtLedger: readDebtLedger(),
+      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion),
     });
   },
   reloadFromStorage: () => {
@@ -262,6 +293,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
       debtLedger: readDebtLedger(),
+      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion),
     });
   },
   createCalendar: (draft) => {
@@ -475,6 +507,41 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       persist(CONFIG_STORAGE_KEY, config);
       persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
       return { config, debtLedger };
+    });
+  },
+  saveManutenciones: (drafts) => {
+    set((state) => {
+      const now = nowIso();
+      const result = state.manutenciones.filter((row) => !row.deletedAt).map((row) => ({ ...row }));
+      const existingKeys = new Set(result.map((row) => `${row.empleado}|${row.fechaGasto}`));
+
+      drafts.forEach((draft) => {
+        const key = `${draft.empleado}|${draft.fechaGasto}`;
+        if (existingKeys.has(key)) {
+          return;
+        }
+        existingKeys.add(key);
+        result.push(
+          buildTicketManutencion(
+            draft,
+            now,
+            `ticket-manutencion-${draft.empleado}-${draft.fechaGasto}-${result.length + 1}`,
+          ),
+        );
+      });
+
+      persist(MANUTENCIONES_STORAGE_KEY, result);
+      return { manutenciones: result };
+    });
+  },
+  removeManutencion: (id) => {
+    set((state) => {
+      const updatedAt = nowIso();
+      const manutenciones = state.manutenciones.map((row) =>
+        row.id === id ? { ...row, updatedAt, deletedAt: updatedAt } : row,
+      );
+      persist(MANUTENCIONES_STORAGE_KEY, manutenciones);
+      return { manutenciones };
     });
   },
 }));

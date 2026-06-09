@@ -16,6 +16,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.ticketRestaurante.people',
   'traccion.v1.ticketRestaurante.config',
   'traccion.v1.ticketRestaurante.debtLedger',
+  'traccion.v1.ticketRestaurante.manutenciones',
   'traccion.v1.presupuestos.scenarios',
   'traccion.v1.presupuestos.manualItems',
   'traccion.v1.presupuestos.ticketGroups',
