@@ -20,6 +20,12 @@ export interface ActaAlegacion {
   observacion: string;
 }
 
+export interface ActaUpdateEntry {
+  id: string;
+  fecha: string;
+  texto: string;
+}
+
 export interface Acta {
   id: string;
   titulo: string;
@@ -27,8 +33,12 @@ export interface Acta {
   fechaSesion: string;
   fechaCreacion: string;
   estado: ActaState;
+  fechaLimite: string;
   observaciones: string;
   alegaciones: ActaAlegacion[];
+  actualizaciones: ActaUpdateEntry[];
+  actaPath: string;
+  closedAt: string | null;
   createdAt: string;
   updatedAt: string;
   sourceSessionId: string | null;
@@ -36,7 +46,15 @@ export interface Acta {
 
 export type ActaDraft = Pick<
   Acta,
-  'titulo' | 'tipo' | 'fechaSesion' | 'estado' | 'observaciones' | 'alegaciones'
+  | 'titulo'
+  | 'tipo'
+  | 'fechaSesion'
+  | 'estado'
+  | 'fechaLimite'
+  | 'observaciones'
+  | 'alegaciones'
+  | 'actualizaciones'
+  | 'actaPath'
 >;
 
 export const EMPTY_ACTA_DRAFT: ActaDraft = {
@@ -44,8 +62,11 @@ export const EMPTY_ACTA_DRAFT: ActaDraft = {
   tipo: 'Comité',
   fechaSesion: '',
   estado: 'Pendiente de redactar',
+  fechaLimite: '',
   observaciones: '',
   alegaciones: [],
+  actualizaciones: [],
+  actaPath: '',
 };
 
 export interface CreateActaFromSessionInput {

@@ -9,6 +9,7 @@ import {
   type Acta,
   type ActaAlegacion,
   type ActaDraft,
+  type ActaUpdateEntry,
   type CreateActaFromSessionInput,
 } from '../domain/acta';
 
@@ -20,6 +21,8 @@ interface ActasStateStore {
   reloadFromStorage: () => void;
   create: (draft: ActaDraft) => string;
   update: (actaId: string, draft: ActaDraft) => void;
+  addUpdate: (actaId: string, text: string) => void;
+  closeActa: (actaId: string) => void;
   remove: (actaId: string) => void;
   createFromSession: (input: CreateActaFromSessionInput) => string;
 }
@@ -46,6 +49,20 @@ function isActaAlegacion(value: unknown): value is ActaAlegacion {
   );
 }
 
+
+function isActaUpdateEntry(value: unknown): value is ActaUpdateEntry {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof ActaUpdateEntry, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.fecha === 'string' &&
+    typeof candidate.texto === 'string'
+  );
+}
+
 function isActa(value: unknown): value is Acta {
   if (!value || typeof value !== 'object') {
     return false;
@@ -65,6 +82,9 @@ function normalizeActa(acta: Acta): Acta {
   const updatedAt = acta.updatedAt ?? createdAt;
   const estado = isActaState(acta.estado) ? acta.estado : ACTA_STATES[0];
   const alegaciones = Array.isArray(acta.alegaciones) ? acta.alegaciones.filter(isActaAlegacion) : [];
+  const actualizaciones = Array.isArray(acta.actualizaciones)
+    ? acta.actualizaciones.filter(isActaUpdateEntry)
+    : [];
 
   return {
     id: acta.id,
@@ -73,8 +93,12 @@ function normalizeActa(acta: Acta): Acta {
     fechaSesion: acta.fechaSesion,
     fechaCreacion: acta.fechaCreacion ?? createdAt.slice(0, 10),
     estado,
+    fechaLimite: typeof acta.fechaLimite === 'string' ? acta.fechaLimite : '',
     observaciones: acta.observaciones ?? '',
     alegaciones,
+    actualizaciones,
+    actaPath: typeof acta.actaPath === 'string' ? acta.actaPath : '',
+    closedAt: typeof acta.closedAt === 'string' ? acta.closedAt : null,
     createdAt,
     updatedAt,
     sourceSessionId: typeof acta.sourceSessionId === 'string' ? acta.sourceSessionId : null,
@@ -100,8 +124,12 @@ function buildActaFromDraft(draft: ActaDraft, sourceSessionId: string | null): A
     fechaSesion: draft.fechaSesion,
     fechaCreacion: now.slice(0, 10),
     estado: draft.estado,
+    fechaLimite: draft.fechaLimite,
     observaciones: draft.observaciones.trim(),
     alegaciones: draft.alegaciones,
+    actualizaciones: draft.actualizaciones,
+    actaPath: draft.actaPath.trim(),
+    closedAt: draft.estado === 'Cerrada' ? now : null,
     createdAt: now,
     updatedAt: now,
     sourceSessionId,
@@ -132,8 +160,57 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
               tipo: draft.tipo,
               fechaSesion: draft.fechaSesion,
               estado: draft.estado,
+              fechaLimite: draft.fechaLimite,
               observaciones: draft.observaciones.trim(),
               alegaciones: draft.alegaciones,
+              actualizaciones: draft.actualizaciones,
+              actaPath: draft.actaPath.trim(),
+              closedAt: draft.estado === 'Cerrada' ? acta.closedAt ?? now : null,
+              updatedAt: now,
+            }
+          : acta,
+      );
+      persistActas(actas);
+      return { actas };
+    });
+  },
+  addUpdate: (actaId, text) => {
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return;
+    }
+
+    set((state) => {
+      const now = new Date().toISOString();
+      const actas = state.actas.map((acta) =>
+        acta.id === actaId
+          ? {
+              ...acta,
+              actualizaciones: [
+                {
+                  id: `acta-update-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+                  fecha: now,
+                  texto: trimmedText,
+                },
+                ...acta.actualizaciones,
+              ],
+              updatedAt: now,
+            }
+          : acta,
+      );
+      persistActas(actas);
+      return { actas };
+    });
+  },
+  closeActa: (actaId) => {
+    set((state) => {
+      const now = new Date().toISOString();
+      const actas = state.actas.map((acta) =>
+        acta.id === actaId
+          ? {
+              ...acta,
+              estado: 'Cerrada',
+              closedAt: acta.closedAt ?? now,
               updatedAt: now,
             }
           : acta,

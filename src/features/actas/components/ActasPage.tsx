@@ -1,4 +1,4 @@
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { Eye, FileText, FolderOpen, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -17,7 +17,16 @@ import {
 import { useActasStore } from '../store/useActasStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
-type ActaColumnId = 'tipo' | 'fechaSesion' | 'fechaCreacion' | 'titulo' | 'estado' | 'alegaciones' | 'acciones';
+type ActaColumnId =
+  | 'tipo'
+  | 'fechaSesion'
+  | 'fechaCreacion'
+  | 'titulo'
+  | 'estado'
+  | 'fechaLimite'
+  | 'actaPath'
+  | 'alegaciones'
+  | 'acciones';
 
 const validColumnIds: ActaColumnId[] = [
   'tipo',
@@ -25,6 +34,8 @@ const validColumnIds: ActaColumnId[] = [
   'fechaCreacion',
   'titulo',
   'estado',
+  'fechaLimite',
+  'actaPath',
   'alegaciones',
   'acciones',
 ];
@@ -35,7 +46,15 @@ const actaExportColumns: ExportColumn<Acta>[] = [
   { key: 'fechaCreacion', header: 'Fecha creación', value: (acta) => acta.fechaCreacion || null },
   { key: 'titulo', header: 'Título', value: (acta) => acta.titulo },
   { key: 'estado', header: 'Estado', value: (acta) => acta.estado },
+  { key: 'fechaLimite', header: 'Fecha límite', value: (acta) => acta.fechaLimite || null },
+  { key: 'actaPath', header: 'Ruta acta', value: (acta) => acta.actaPath || null },
   { key: 'observaciones', header: 'Observaciones', value: (acta) => acta.observaciones || null },
+  {
+    key: 'actualizaciones',
+    header: 'Actualizaciones',
+    value: (acta) =>
+      acta.actualizaciones.map((entry) => `${entry.fecha}: ${entry.texto}`).join('\n') || null,
+  },
   {
     key: 'alegaciones',
     header: 'Alegaciones',
@@ -51,7 +70,11 @@ const actaExportColumns: ExportColumn<Acta>[] = [
 ];
 
 function getActaYear(acta: Acta): string {
-  return acta.fechaSesion.slice(0, 4) || 'Sin año';
+  return acta.fechaSesion.slice(0, 4) || acta.fechaCreacion.slice(0, 4) || 'Sin año';
+}
+
+function getClosedYear(acta: Acta): string {
+  return (acta.closedAt ?? acta.fechaSesion ?? acta.fechaCreacion).slice(0, 4) || 'Sin año';
 }
 
 function matchesSearch(acta: Acta, search: string): boolean {
@@ -60,7 +83,22 @@ function matchesSearch(acta: Acta, search: string): boolean {
     return true;
   }
 
-  return [acta.titulo, acta.tipo, acta.estado, acta.observaciones, acta.fechaSesion]
+  return [
+    acta.titulo,
+    acta.tipo,
+    acta.estado,
+    acta.fechaSesion,
+    acta.fechaLimite,
+    acta.observaciones,
+    acta.actaPath,
+    ...acta.actualizaciones.map((entry) => entry.texto),
+    ...acta.alegaciones.flatMap((alegacion) => [
+      alegacion.sindicato,
+      alegacion.fecha,
+      alegacion.observacion,
+      alegacion.presentada ? 'presentada' : 'no presentada',
+    ]),
+  ]
     .join(' ')
     .toLowerCase()
     .includes(normalizedSearch);
@@ -68,6 +106,42 @@ function matchesSearch(acta: Acta, search: string): boolean {
 
 function createEmptyAlegacion(sindicato = ''): ActaAlegacion {
   return { sindicato, presentada: false, fecha: '', observacion: '' };
+}
+
+function formatDateTime(value: string): string {
+  if (!value) {
+    return '—';
+  }
+
+  try {
+    return new Intl.DateTimeFormat('es-ES', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function getNextState(state: ActaDraft['estado']): ActaDraft['estado'] | null {
+  if (state === 'Pendiente de redactar') {
+    return 'Enviada a Dirección';
+  }
+  if (state === 'Enviada a Dirección') {
+    return 'Pendiente de alegaciones';
+  }
+  if (state === 'Pendiente de alegaciones') {
+    return 'Pendiente de firma';
+  }
+  if (state === 'Pendiente de firma') {
+    return 'Cerrada';
+  }
+  return null;
+}
+
+function getNextStateLabel(state: ActaDraft['estado']): string {
+  const nextState = getNextState(state);
+  return nextState ? `Pasar a ${nextState}` : 'Acta cerrada';
 }
 
 export function ActasPage() {
@@ -79,6 +153,9 @@ export function ActasPage() {
   const [search, setSearch] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
+  const [newUpdateText, setNewUpdateText] = useState('');
+  const [pathStatus, setPathStatus] = useState('');
+  const [pathStatusIsError, setPathStatusIsError] = useState(false);
   const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
     defaultPreferences: {
@@ -126,6 +203,21 @@ export function ActasPage() {
     [actas, search, stateFilter, yearFilter],
   );
 
+  const openActas = useMemo(
+    () => filteredActas.filter((acta) => acta.estado !== 'Cerrada'),
+    [filteredActas],
+  );
+
+  const closedActasByYear = useMemo(() => {
+    const groups = new Map<string, Acta[]>();
+    for (const acta of filteredActas.filter((item) => item.estado === 'Cerrada')) {
+      const year = getClosedYear(acta);
+      groups.set(year, [...(groups.get(year) ?? []), acta]);
+    }
+
+    return [...groups.entries()].sort(([first], [second]) => second.localeCompare(first));
+  }, [filteredActas]);
+
   const filterLabel = buildFilterLabel([
     ['Búsqueda', search],
     ['Estado', stateFilter],
@@ -134,7 +226,15 @@ export function ActasPage() {
 
   const columns = useMemo<Array<DataTableColumn<Acta, ActaColumnId>>>(
     () => [
-      { id: 'tipo', header: 'Tipo', accessor: (acta) => acta.tipo, render: (acta) => acta.tipo, width: 120, sortable: true, resizable: true },
+      {
+        id: 'tipo',
+        header: 'Tipo',
+        accessor: (acta) => acta.tipo,
+        render: (acta) => acta.tipo,
+        width: 120,
+        sortable: true,
+        resizable: true,
+      },
       {
         id: 'fechaSesion',
         header: 'Fecha sesión',
@@ -172,6 +272,24 @@ export function ActasPage() {
         resizable: true,
       },
       {
+        id: 'fechaLimite',
+        header: 'Fecha límite',
+        accessor: (acta) => acta.fechaLimite,
+        render: (acta) => acta.fechaLimite || '—',
+        width: 130,
+        sortable: true,
+        resizable: true,
+      },
+      {
+        id: 'actaPath',
+        header: 'Acta',
+        accessor: (acta) => acta.actaPath,
+        render: (acta) => (acta.actaPath ? 'Vinculada' : '—'),
+        width: 110,
+        sortable: true,
+        resizable: true,
+      },
+      {
         id: 'alegaciones',
         header: 'Alegaciones',
         accessor: (acta) => acta.alegaciones.length,
@@ -190,13 +308,14 @@ export function ActasPage() {
               event.stopPropagation();
               remove(acta.id);
             }}
+            title="Eliminar acta"
             type="button"
           >
-            <Trash2 size={13} /> Eliminar
+            <Trash2 size={13} />
           </button>
         ),
-        width: 120,
-        minWidth: 110,
+        width: 80,
+        minWidth: 70,
         isActionColumn: true,
       },
     ],
@@ -210,14 +329,20 @@ export function ActasPage() {
         tipo: acta.tipo,
         fechaSesion: acta.fechaSesion,
         estado: acta.estado,
+        fechaLimite: acta.fechaLimite,
         observaciones: acta.observaciones,
         alegaciones: acta.alegaciones,
+        actualizaciones: acta.actualizaciones,
+        actaPath: acta.actaPath,
       });
       setEditingActaId(acta.id);
     } else {
       setDraft(EMPTY_ACTA_DRAFT);
       setEditingActaId(null);
     }
+    setNewUpdateText('');
+    setPathStatus('');
+    setPathStatusIsError(false);
     setIsEditorOpen(true);
   };
 
@@ -232,6 +357,26 @@ export function ActasPage() {
         currentIndex === index ? { ...alegacion, [key]: value } : alegacion,
       ),
     }));
+  };
+
+  const addDraftUpdate = () => {
+    const trimmedText = newUpdateText.trim();
+    if (!trimmedText) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      actualizaciones: [
+        {
+          id: `acta-update-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          fecha: new Date().toISOString(),
+          texto: trimmedText,
+        },
+        ...current.actualizaciones,
+      ],
+    }));
+    setNewUpdateText('');
   };
 
   const saveActa = () => {
@@ -250,6 +395,68 @@ export function ActasPage() {
     setDraft(EMPTY_ACTA_DRAFT);
   };
 
+  const advanceState = () => {
+    const nextState = getNextState(draft.estado);
+    if (!nextState) {
+      return;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      estado: nextState,
+    }));
+  };
+
+  const selectActaPath = async () => {
+    const selector = window.traccion?.selectTaskDocument;
+    if (!selector) {
+      setPathStatus('Selector de documentos no disponible. Pega la ruta manualmente.');
+      setPathStatusIsError(true);
+      return;
+    }
+
+    try {
+      const selectedPaths = await selector();
+      if (!selectedPaths?.length) {
+        return;
+      }
+
+      updateDraft('actaPath', selectedPaths[0]);
+      setPathStatus('Ruta de acta vinculada.');
+      setPathStatusIsError(false);
+    } catch (error) {
+      setPathStatus(error instanceof Error ? error.message : 'No se ha podido seleccionar el acta.');
+      setPathStatusIsError(true);
+    }
+  };
+
+  const openActaPath = async () => {
+    const trimmedPath = draft.actaPath.trim();
+    if (!trimmedPath) {
+      setPathStatus('No hay ruta de acta vinculada.');
+      setPathStatusIsError(true);
+      return;
+    }
+
+    const opener = window.traccion?.openTaskDocument;
+    if (!opener) {
+      setPathStatus('Previsualización no disponible en este entorno.');
+      setPathStatusIsError(true);
+      return;
+    }
+
+    try {
+      const result = await opener(trimmedPath);
+      setPathStatus(result.message || (result.ok ? 'Acta abierta.' : 'No se ha podido abrir el acta.'));
+      setPathStatusIsError(!result.ok);
+    } catch (error) {
+      setPathStatus(error instanceof Error ? error.message : 'No se ha podido abrir el acta.');
+      setPathStatusIsError(true);
+    }
+  };
+
+  const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
+
   return (
     <section className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card" id="actas">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -259,7 +466,7 @@ export function ActasPage() {
             <FileText size={24} /> Actas
           </h2>
           <p className="mt-0.5 text-base text-metro-muted">
-            Registro de actas de Comité y Comisión Paritaria con alegaciones por sindicato.
+            Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e histórico.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -275,9 +482,10 @@ export function ActasPage() {
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={() => openEditor()}
+            title="Nueva acta"
             type="button"
           >
-            <Plus size={16} /> Nueva acta
+            <Plus size={16} />
           </button>
         </div>
       </div>
@@ -286,7 +494,7 @@ export function ActasPage() {
         <input
           className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por título, tipo, estado u observaciones..."
+          placeholder="Buscar por título, estado, actualización, alegación o ruta..."
           value={search}
         />
         <select
@@ -315,133 +523,289 @@ export function ActasPage() {
         </select>
       </div>
 
-      <DataTable
-        ariaLabel="Actas"
-        columnWidths={preferences.columnWidths}
-        columns={columns}
-        emptyMessage="No hay actas con los filtros actuales."
-        getRowId={(acta) => acta.id}
-        onColumnWidthChange={setColumnWidth}
-        onRowClick={openEditor}
-        onSortChange={setSort}
-        rows={filteredActas}
-        sort={preferences.sort}
-      />
+      <div className="rounded-xl border border-metro-border bg-metro-panel/40 p-3">
+        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-metro-muted">Actas abiertas</h3>
+        <DataTable
+          ariaLabel="Actas abiertas"
+          columnWidths={preferences.columnWidths}
+          columns={columns}
+          emptyMessage="No hay actas abiertas con los filtros actuales."
+          getRowId={(acta) => acta.id}
+          onColumnWidthChange={setColumnWidth}
+          onRowClick={openEditor}
+          onSortChange={setSort}
+          rows={openActas}
+          sort={preferences.sort}
+        />
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/40 p-3">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Histórico de actas</h3>
+        {closedActasByYear.length === 0 && (
+          <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
+            No hay actas cerradas con los filtros actuales.
+          </p>
+        )}
+        {closedActasByYear.map(([year, rows]) => (
+          <details className="rounded-xl border border-metro-border bg-metro-surface p-3" key={year} open={Boolean(search || yearFilter)}>
+            <summary className="cursor-pointer text-sm font-bold text-metro-text">
+              {year} · {rows.length} acta{rows.length === 1 ? '' : 's'}
+            </summary>
+            <div className="mt-3">
+              <DataTable
+                ariaLabel={`Actas históricas ${year}`}
+                columnWidths={preferences.columnWidths}
+                columns={columns}
+                emptyMessage="No hay actas cerradas."
+                getRowId={(acta) => acta.id}
+                onColumnWidthChange={setColumnWidth}
+                onRowClick={openEditor}
+                onSortChange={setSort}
+                rows={rows}
+                sort={preferences.sort}
+              />
+            </div>
+          </details>
+        ))}
+      </div>
 
       {isEditorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[88vh] w-full max-w-4xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">{editingActaId ? 'Editar acta' : 'Nueva acta'}</h3>
-            <div className="mt-3 grid gap-2 xl:grid-cols-[160px_180px_minmax(220px,1fr)]">
-              <select
-                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => updateDraft('tipo', event.target.value === 'Paritaria' ? 'Paritaria' : 'Comité')}
-                value={draft.tipo}
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
+            <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-metro-text">{editingActaId ? 'Editar acta' : 'Nueva acta'}</h3>
+                <p className="text-xs text-metro-muted">Estado actual: {draft.estado}</p>
+              </div>
+              <button
+                className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setIsEditorOpen(false)}
+                title="Cerrar"
+                type="button"
               >
-                {ACTA_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => updateDraft('fechaSesion', event.target.value)}
-                type="date"
-                value={draft.fechaSesion}
-              />
-              <input
-                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => updateDraft('titulo', event.target.value)}
-                placeholder="Título"
-                value={draft.titulo}
-              />
+                <X size={16} />
+              </button>
             </div>
-            <select
-              className="mt-2 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => updateDraft('estado', event.target.value as ActaDraft['estado'])}
-              value={draft.estado}
-            >
-              {ACTA_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </select>
-            <textarea
-              className="mt-2 min-h-[120px] w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => updateDraft('observaciones', event.target.value)}
-              placeholder="Observaciones"
-              value={draft.observaciones}
-            />
 
-            <div className="mt-4 rounded-xl border border-metro-border bg-metro-panel p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Alegaciones</h4>
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="grid gap-2 xl:grid-cols-[160px_180px_180px_minmax(220px,1fr)]">
+                <select
+                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => updateDraft('tipo', event.target.value === 'Paritaria' ? 'Paritaria' : 'Comité')}
+                  value={draft.tipo}
+                >
+                  {ACTA_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => updateDraft('fechaSesion', event.target.value)}
+                  type="date"
+                  value={draft.fechaSesion}
+                />
+                <input
+                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => updateDraft('fechaLimite', event.target.value)}
+                  title="Fecha límite"
+                  type="date"
+                  value={draft.fechaLimite}
+                />
+                <input
+                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => updateDraft('titulo', event.target.value)}
+                  placeholder="Título"
+                  value={draft.titulo}
+                />
+              </div>
+
+              <div className="grid gap-2 xl:grid-cols-[260px_minmax(220px,1fr)]">
+                <select
+                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => updateDraft('estado', event.target.value as ActaDraft['estado'])}
+                  value={draft.estado}
+                >
+                  {ACTA_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
                 <button
-                  className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                  onClick={() => updateDraft('alegaciones', [...draft.alegaciones, createEmptyAlegacion()])}
+                  className="rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!getNextState(draft.estado)}
+                  onClick={advanceState}
                   type="button"
                 >
-                  Añadir sindicato
+                  {getNextStateLabel(draft.estado)}
                 </button>
               </div>
-              <div className="mt-3 space-y-2">
-                {draft.alegaciones.length === 0 && (
-                  <p className="text-sm text-metro-muted">Sin alegaciones configuradas.</p>
-                )}
-                {draft.alegaciones.map((alegacion, index) => (
-                  <div className="grid gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 xl:grid-cols-[180px_110px_150px_minmax(220px,1fr)_80px]" key={`${alegacion.sindicato}-${index}`}>
-                    <input
-                      className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-                      list="actas-sindicatos"
-                      onChange={(event) => updateAlegacion(index, 'sindicato', event.target.value)}
-                      placeholder="Sindicato"
-                      value={alegacion.sindicato}
-                    />
-                    <label className="flex items-center gap-2 text-sm text-metro-muted">
-                      <input
-                        checked={alegacion.presentada}
-                        onChange={(event) => updateAlegacion(index, 'presentada', event.target.checked)}
-                        type="checkbox"
-                      />
-                      Presentada
-                    </label>
-                    <input
-                      className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-                      onChange={(event) => updateAlegacion(index, 'fecha', event.target.value)}
-                      type="date"
-                      value={alegacion.fecha}
-                    />
-                    <input
-                      className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-                      onChange={(event) => updateAlegacion(index, 'observacion', event.target.value)}
-                      placeholder="Observación"
-                      value={alegacion.observacion}
-                    />
-                    <button
-                      className="rounded-lg border border-red-500/40 px-2 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/10"
-                      onClick={() =>
-                        updateDraft(
-                          'alegaciones',
-                          draft.alegaciones.filter((_, currentIndex) => currentIndex !== index),
-                        )
+
+              <textarea
+                className="min-h-[120px] w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateDraft('observaciones', event.target.value)}
+                placeholder="Observaciones"
+                value={draft.observaciones}
+              />
+
+              <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Actualizaciones</h4>
+                  <span className="text-xs text-metro-muted">{draft.actualizaciones.length} registro(s)</span>
+                </div>
+                <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_140px]">
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => setNewUpdateText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addDraftUpdate();
                       }
-                      type="button"
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                ))}
+                    }}
+                    placeholder="Nueva actualización..."
+                    value={newUpdateText}
+                  />
+                  <button
+                    className="rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                    onClick={addDraftUpdate}
+                    type="button"
+                  >
+                    Añadir
+                  </button>
+                </div>
+                <div className="mt-3 max-h-36 space-y-2 overflow-y-auto pr-1">
+                  {draft.actualizaciones.length === 0 && (
+                    <p className="text-sm text-metro-muted">Sin actualizaciones.</p>
+                  )}
+                  {draft.actualizaciones.map((entry) => (
+                    <div className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2" key={entry.id}>
+                      <p className="text-xs font-semibold text-metro-muted">{formatDateTime(entry.fecha)}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-metro-text">{entry.texto}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <datalist id="actas-sindicatos">
-                {sindicatoOptions.map((sindicato) => (
-                  <option key={sindicato} value={sindicato} />
-                ))}
-              </datalist>
+
+              <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Alegaciones</h4>
+                  <button
+                    className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                    onClick={() => updateDraft('alegaciones', [...draft.alegaciones, createEmptyAlegacion()])}
+                    type="button"
+                  >
+                    Añadir sindicato
+                  </button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {draft.alegaciones.length === 0 && (
+                    <p className="text-sm text-metro-muted">Sin alegaciones configuradas.</p>
+                  )}
+                  {draft.alegaciones.map((alegacion, index) => (
+                    <div
+                      className="grid gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 xl:grid-cols-[180px_110px_150px_minmax(220px,1fr)_80px]"
+                      key={`${alegacion.sindicato}-${index}`}
+                    >
+                      <input
+                        className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                        list="actas-sindicatos"
+                        onChange={(event) => updateAlegacion(index, 'sindicato', event.target.value)}
+                        placeholder="Sindicato"
+                        value={alegacion.sindicato}
+                      />
+                      <label className="flex items-center gap-2 text-sm text-metro-muted">
+                        <input
+                          checked={alegacion.presentada}
+                          onChange={(event) => updateAlegacion(index, 'presentada', event.target.checked)}
+                          type="checkbox"
+                        />
+                        Presentada
+                      </label>
+                      <input
+                        className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                        onChange={(event) => updateAlegacion(index, 'fecha', event.target.value)}
+                        type="date"
+                        value={alegacion.fecha}
+                      />
+                      <input
+                        className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                        onChange={(event) => updateAlegacion(index, 'observacion', event.target.value)}
+                        placeholder="Observación"
+                        value={alegacion.observacion}
+                      />
+                      <button
+                        className="rounded-lg border border-red-500/40 px-2 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/10"
+                        onClick={() =>
+                          updateDraft(
+                            'alegaciones',
+                            draft.alegaciones.filter((_, currentIndex) => currentIndex !== index),
+                          )
+                        }
+                        type="button"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <datalist id="actas-sindicatos">
+                  {sindicatoOptions.map((sindicato) => (
+                    <option key={sindicato} value={sindicato} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Acta firmada</h4>
+                    <p className="text-xs text-metro-muted">
+                      Se habilita en estado Pendiente de firma para vincular la ruta de red del acta.
+                    </p>
+                  </div>
+                  {!canAttachFinalActa && (
+                    <span className="rounded-full border border-metro-border px-2 py-1 text-xs text-metro-muted">
+                      Disponible al pasar a firma
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px_120px]">
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!canAttachFinalActa}
+                    onChange={(event) => updateDraft('actaPath', event.target.value)}
+                    placeholder="Ruta de red del acta firmada..."
+                    value={draft.actaPath}
+                  />
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canAttachFinalActa}
+                    onClick={selectActaPath}
+                    type="button"
+                  >
+                    <FolderOpen size={15} /> Ruta
+                  </button>
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canAttachFinalActa || !draft.actaPath.trim()}
+                    onClick={openActaPath}
+                    type="button"
+                  >
+                    <Eye size={15} /> Ver
+                  </button>
+                </div>
+                {pathStatus && (
+                  <p className={`mt-2 text-xs ${pathStatusIsError ? 'text-red-200' : 'text-metro-muted'}`}>
+                    {pathStatus}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
               <button
                 className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
                 onClick={() => setIsEditorOpen(false)}
@@ -449,6 +813,15 @@ export function ActasPage() {
               >
                 Cancelar
               </button>
+              {canAttachFinalActa && draft.estado !== 'Cerrada' && (
+                <button
+                  className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                  onClick={() => updateDraft('estado', 'Cerrada')}
+                  type="button"
+                >
+                  Cerrar acta
+                </button>
+              )}
               <button
                 className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
                 onClick={saveActa}
