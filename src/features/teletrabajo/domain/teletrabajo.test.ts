@@ -210,7 +210,7 @@ describe('importador de encuesta de teletrabajo', () => {
       [],
     );
 
-    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 1 });
+    expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 1 });
     expect(result.solicitudes[0]).toMatchObject({
       empleado: '200',
       nombreApellidos: 'Persona Sí',
@@ -254,7 +254,7 @@ describe('importador de encuesta de teletrabajo', () => {
       [],
     );
 
-    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 3 });
+    expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 3 });
     expect(result.solicitudes[0]).toMatchObject({
       empleado: '678',
       nombreApellidos: 'Persona Si',
@@ -275,7 +275,7 @@ describe('importador de encuesta de teletrabajo', () => {
       [],
     );
 
-    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 1 });
+    expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 1 });
     expect(result.solicitudes.map((solicitud) => solicitud.empleado)).toEqual(['202']);
   });
 
@@ -392,13 +392,13 @@ describe('importador de encuesta de teletrabajo', () => {
       { now: new Date('2026-06-05T00:00:00.000Z') },
     );
 
-    expect(result.summary).toEqual({ imported: 0, updated: 1, ignored: 0 });
+    expect(result.summary).toEqual({ imported: 0, updated: 0, reactivated: 1, ignored: 0 });
     expect(result.solicitudes).toHaveLength(1);
     expect(result.solicitudes[0]).toMatchObject({
       id: 'existente',
       observaciones: 'Nueva observación martes',
       diasTeletrabajo: ['martes'],
-      deletedAt: '2026-02-01T00:00:00.000Z',
+      deletedAt: null,
     });
   });
 

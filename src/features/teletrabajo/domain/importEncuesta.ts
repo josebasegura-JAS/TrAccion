@@ -33,6 +33,7 @@ type EncuestaField =
 export interface ImportEncuestaSummary {
   imported: number;
   updated: number;
+  reactivated: number;
   ignored: number;
 }
 
@@ -370,6 +371,7 @@ function upsertEncuestaSolicitudes(
   );
   let imported = 0;
   let updated = 0;
+  let reactivated = 0;
 
   draftsResult.drafts.forEach((draft) => {
     const key = getSolicitudKey(draft.empleado, draft.periodo);
@@ -397,9 +399,14 @@ function upsertEncuestaSolicitudes(
       fechaSolicitud: draft.fechaSolicitud || previous.fechaSolicitud,
       createdAt: previous.createdAt,
       updatedAt: now,
-      deletedAt: previous.deletedAt,
+      deletedAt: null,
     };
-    updated += 1;
+
+    if (previous.deletedAt) {
+      reactivated += 1;
+    } else {
+      updated += 1;
+    }
   });
 
   return {
@@ -407,6 +414,7 @@ function upsertEncuestaSolicitudes(
     summary: {
       imported,
       updated,
+      reactivated,
       ignored: draftsResult.ignored,
     },
     diagnostics: {

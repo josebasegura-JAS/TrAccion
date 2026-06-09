@@ -148,11 +148,13 @@ function persistStoredPuestoAliases(aliases: Record<string, string>): void {
 function buildImportSummaryMessage(summary: {
   imported: number;
   updated: number;
+  reactivated: number;
   ignored: number;
   missingEmployees: number;
 }): string {
   const parts = [
     `${summary.imported} registros importados`,
+    `${summary.reactivated} registros reactivados`,
     `${summary.updated} registros actualizados`,
     `${summary.ignored} filas ignoradas`,
   ];
@@ -647,7 +649,7 @@ export function TeletrabajoPage({
         return;
       }
 
-      if (result.summary.imported === 0 && result.summary.updated === 0) {
+      if (result.summary.imported === 0 && result.summary.updated === 0 && result.summary.reactivated === 0) {
         setImportSummary(
           `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
         );
@@ -711,7 +713,7 @@ export function TeletrabajoPage({
         return;
       }
 
-      if (result.summary.imported === 0 && result.summary.updated === 0) {
+      if (result.summary.imported === 0 && result.summary.updated === 0 && result.summary.reactivated === 0) {
         setPendingEncuestaImport(null);
         setImportSummary(
           `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
