@@ -1,5 +1,9 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import {
+  normalizeJobPosition,
+  type JobPositionTranslation,
+} from '../../plantilla/domain/jobPositionTranslation';
+import {
   EMPTY_TELETRABAJO_DRAFT,
   type TeletrabajoDia,
   type TeletrabajoDraft,
@@ -32,14 +36,22 @@ export interface ImportEncuestaSummary {
   ignored: number;
 }
 
+export interface ImportEncuestaDiagnostics {
+  missingEmployees: number;
+  unresolvedPuestos: string[];
+}
+
 export interface ImportEncuestaResult {
   solicitudes: TeletrabajoSolicitud[];
   summary: ImportEncuestaSummary;
+  diagnostics: ImportEncuestaDiagnostics;
 }
 
-interface EncuestaParseOptions {
+export interface EncuestaParseOptions {
   defaultPeriodo?: string;
   now?: Date;
+  jobPositionTranslations?: readonly JobPositionTranslation[];
+  puestoAliases?: Readonly<Record<string, string>>;
 }
 
 const HEADER_ALIASES: ReadonlyArray<readonly [EncuestaField, readonly string[]]> = [
@@ -145,7 +157,7 @@ export function importEncuestaRows(
 ): ImportEncuestaResult {
   const now = options.now ?? new Date();
   const defaultPeriodo = options.defaultPeriodo ?? detectPeriodo(rows) ?? '2026-2027';
-  const drafts = rowsToTeletrabajoDrafts(rows, employees, defaultPeriodo);
+  const drafts = rowsToTeletrabajoDrafts(rows, employees, defaultPeriodo, options);
   return upsertEncuestaSolicitudes(currentSolicitudes, drafts, now);
 }
 
@@ -153,10 +165,16 @@ export function rowsToTeletrabajoDrafts(
   rows: readonly TabularRow[],
   employees: readonly Employee[],
   defaultPeriodo = '2026-2027',
-): { drafts: TeletrabajoDraft[]; ignored: number } {
+  options: Pick<EncuestaParseOptions, 'jobPositionTranslations' | 'puestoAliases'> = {},
+): {
+  drafts: TeletrabajoDraft[];
+  ignored: number;
+  missingEmployees: number;
+  unresolvedPuestos: string[];
+} {
   const headerIndex = findEncuestaHeaderIndex(rows);
   if (headerIndex < 0) {
-    return { drafts: [], ignored: 0 };
+    return { drafts: [], ignored: 0, missingEmployees: 0, unresolvedPuestos: [] };
   }
 
   const headers = rows[headerIndex] ?? [];
@@ -166,7 +184,9 @@ export function rowsToTeletrabajoDrafts(
     employees.map((employee): [string, Employee] => [employee.empleado.trim(), employee]),
   );
   const drafts: TeletrabajoDraft[] = [];
+  const unresolvedPuestosByKey = new Map<string, string>();
   let ignored = 0;
+  let missingEmployees = 0;
 
   dataRows.forEach((row) => {
     const raw = readEncuestaRow(row, fieldByColumn);
@@ -179,12 +199,24 @@ export function rowsToTeletrabajoDrafts(
 
     const aportaciones = raw.observaciones.trim();
     const employee = employeesByEmpleado.get(empleado);
+    if (!employee) {
+      missingEmployees += 1;
+    }
+
+    const resolvedPuesto = resolveTeletrabajoPuestoFromEmployee(employee, options);
+    if (resolvedPuesto.requiresResolution) {
+      unresolvedPuestosByKey.set(
+        normalizeTeletrabajoPuestoKey(resolvedPuesto.rawPuesto),
+        resolvedPuesto.rawPuesto,
+      );
+    }
+
     drafts.push({
       ...EMPTY_TELETRABAJO_DRAFT,
       empleado,
       nombreApellidos: employee?.nombreApellidos ?? raw.nombreApellidos.trim(),
       puestoNomina: employee?.puestoNomina ?? '',
-      puestoOrganizativo: employee?.puestoOrganizativo ?? '',
+      puestoOrganizativo: resolvedPuesto.puesto,
       residencia: employee?.residencia ?? '',
       dni: employee?.dni ?? '',
       direccionTeletrabajo: employee?.direccionTeletrabajo ?? '',
@@ -201,7 +233,74 @@ export function rowsToTeletrabajoDrafts(
     });
   });
 
-  return { drafts, ignored };
+  return {
+    drafts,
+    ignored,
+    missingEmployees,
+    unresolvedPuestos: Array.from(unresolvedPuestosByKey.values()).sort((first, second) =>
+      first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' }),
+    ),
+  };
+}
+
+function resolveTeletrabajoPuestoFromEmployee(
+  employee: Employee | undefined,
+  options: Pick<EncuestaParseOptions, 'jobPositionTranslations' | 'puestoAliases'>,
+): { puesto: string; rawPuesto: string; requiresResolution: boolean } {
+  if (!employee) {
+    return { puesto: '', rawPuesto: '', requiresResolution: false };
+  }
+
+  const rawPuesto =
+    employee.puestoOrganizativo.trim() || employee.puestoNomina.trim() || employee.puestoEus.trim();
+  if (!rawPuesto) {
+    return { puesto: '', rawPuesto: '', requiresResolution: false };
+  }
+
+  const translations = options.jobPositionTranslations ?? [];
+  const aliases = options.puestoAliases ?? {};
+  const alias = aliases[normalizeTeletrabajoPuestoKey(rawPuesto)]?.trim();
+  if (alias) {
+    return { puesto: alias, rawPuesto, requiresResolution: false };
+  }
+
+  if (translations.length === 0) {
+    return { puesto: rawPuesto, rawPuesto, requiresResolution: false };
+  }
+
+  const translationsByKey = new Map<string, string>();
+  translations.forEach((translation) => {
+    const puestoCastellano = translation.puestoCastellano.trim();
+    const puestoEuskera = translation.puestoEuskera.trim();
+    if (puestoCastellano) {
+      translationsByKey.set(normalizeJobPosition(puestoCastellano), puestoCastellano);
+    }
+    if (puestoEuskera && puestoCastellano) {
+      translationsByKey.set(normalizeJobPosition(puestoEuskera), puestoCastellano);
+    }
+  });
+
+  const candidates = [employee.puestoOrganizativo, employee.puestoNomina, employee.puestoEus]
+    .map((puesto) => puesto.trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const translated = translationsByKey.get(normalizeJobPosition(candidate));
+    if (translated) {
+      return { puesto: translated, rawPuesto, requiresResolution: false };
+    }
+  }
+
+  return { puesto: rawPuesto, rawPuesto, requiresResolution: true };
+}
+
+function normalizeTeletrabajoPuestoKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function resolveEncuestaField(header: string): EncuestaField | null {
@@ -253,7 +352,12 @@ function readEncuestaRow(
 
 function upsertEncuestaSolicitudes(
   currentSolicitudes: readonly TeletrabajoSolicitud[],
-  draftsResult: { drafts: TeletrabajoDraft[]; ignored: number },
+  draftsResult: {
+    drafts: TeletrabajoDraft[];
+    ignored: number;
+    missingEmployees: number;
+    unresolvedPuestos: string[];
+  },
   nowDate: Date,
 ): ImportEncuestaResult {
   const now = nowDate.toISOString();
@@ -298,7 +402,18 @@ function upsertEncuestaSolicitudes(
     updated += 1;
   });
 
-  return { solicitudes, summary: { imported, updated, ignored: draftsResult.ignored } };
+  return {
+    solicitudes,
+    summary: {
+      imported,
+      updated,
+      ignored: draftsResult.ignored,
+    },
+    diagnostics: {
+      missingEmployees: draftsResult.missingEmployees,
+      unresolvedPuestos: draftsResult.unresolvedPuestos,
+    },
+  };
 }
 
 function getSolicitudKey(empleado: string, periodo: string): string {

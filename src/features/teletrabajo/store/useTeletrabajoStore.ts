@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import type { Employee } from '../../plantilla/domain/employee';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
-import { importEncuestaFromFile, type ImportEncuestaSummary } from '../domain/importEncuesta';
+import {
+  importEncuestaFromFile,
+  type EncuestaParseOptions,
+  type ImportEncuestaResult,
+} from '../domain/importEncuesta';
 import {
   importTeletrabajoPuestosFromFile,
   normalizeTeletrabajoPuesto,
@@ -10,7 +14,11 @@ import {
   type TeletrabajoPuestoDraft,
 } from '../domain/puestosTeletrabajo';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
+import {
+  addAuditEvent,
+  buildAuditChanges,
+  buildUpdateSummary,
+} from '../../../shared/audit/auditTrail';
 import {
   EMPTY_TELETRABAJO_DRAFT,
   TELETRABAJO_ESTADOS,
@@ -99,7 +107,6 @@ function registerTeletrabajoUpdateAudit(
   });
 }
 
-
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
   puestosTeletrabajo: TeletrabajoPuesto[];
@@ -109,7 +116,11 @@ interface TeletrabajoStateStore {
   reloadFromStorage: () => void;
   create: (draft: TeletrabajoDraft) => void;
   update: (id: string, draft: TeletrabajoDraft) => void;
-  importEncuesta: (file: File, employees: readonly Employee[]) => Promise<ImportEncuestaSummary>;
+  importEncuesta: (
+    file: File,
+    employees: readonly Employee[],
+    options?: EncuestaParseOptions,
+  ) => Promise<ImportEncuestaResult>;
   createPuestoTeletrabajo: (draft: TeletrabajoPuestoDraft) => void;
   updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
   removePuestoTeletrabajo: (id: string) => void;
@@ -299,7 +310,11 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   load: () => {
     const solicitudes = readSolicitudes();
     const puestosTeletrabajo = readPuestosTeletrabajo();
-    set({ solicitudes, puestosTeletrabajo, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) });
+    set({
+      solicitudes,
+      puestosTeletrabajo,
+      selectedSolicitudId: firstVisibleSolicitudId(solicitudes),
+    });
   },
   reloadFromStorage: () => {
     const solicitudes = readSolicitudes();
@@ -307,7 +322,9 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     set((state) => ({
       solicitudes,
       puestosTeletrabajo,
-      selectedSolicitudId: solicitudes.some((solicitud) => solicitud.id === state.selectedSolicitudId)
+      selectedSolicitudId: solicitudes.some(
+        (solicitud) => solicitud.id === state.selectedSolicitudId,
+      )
         ? state.selectedSolicitudId
         : firstVisibleSolicitudId(solicitudes),
     }));
@@ -350,8 +367,13 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       return { solicitudes, selectedSolicitudId: id };
     });
   },
-  importEncuesta: async (file, employees) => {
-    const result = await importEncuestaFromFile(file, employees, get().solicitudes);
+  importEncuesta: async (file, employees, options = {}) => {
+    const result = await importEncuestaFromFile(file, employees, get().solicitudes, options);
+
+    if (result.diagnostics.unresolvedPuestos.length > 0) {
+      return result;
+    }
+
     set(() => {
       persistSolicitudes(result.solicitudes);
       return {
@@ -359,7 +381,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
       };
     });
-    return result.summary;
+    return result;
   },
   createPuestoTeletrabajo: (draft) => {
     set((state) => {
@@ -405,7 +427,10 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   importPuestosTeletrabajoDrafts: (drafts) => {
     const normalizedDrafts = drafts.map((draft) => normalizeTeletrabajoPuestoDraft(draft));
     set((state) => {
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, normalizedDrafts);
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(
+        state.puestosTeletrabajo,
+        normalizedDrafts,
+      );
       persistPuestosTeletrabajo(puestosTeletrabajo);
       return { puestosTeletrabajo };
     });

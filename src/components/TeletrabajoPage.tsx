@@ -1,4 +1,14 @@
-import { AlertTriangle, BriefcaseBusiness, CheckCircle2, FileText, Plus, RotateCcw, Search, SlidersHorizontal, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  BriefcaseBusiness,
+  CheckCircle2,
+  FileText,
+  Plus,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  XCircle,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -9,6 +19,7 @@ import {
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { TeletrabajoPuestosModal } from './TeletrabajoPuestosModal';
 import { ActionButton } from './ui/ActionButton';
+import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
 import {
@@ -30,6 +41,7 @@ import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/Acti
 import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
+import { readStorageItem, writeStorageItem } from '../services/persistence';
 
 type TeletrabajoTableColumnId =
   | 'empleado'
@@ -44,6 +56,8 @@ type TeletrabajoTableColumnId =
   | 'actions';
 
 const TELETRABAJO_TABLE_STORAGE_KEY = 'traccion.tableView.teletrabajo.solicitudes';
+const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY =
+  'traccion.v1.teletrabajo.puestos.translationAliases';
 const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
   'empleado',
   'nombreApellidos',
@@ -96,6 +110,58 @@ type TeletrabajoSemaforoStatus = 'ok' | 'review' | 'blocked';
 interface TeletrabajoSemaforo {
   status: TeletrabajoSemaforoStatus;
   title: string;
+}
+
+interface PendingEncuestaImport {
+  file: File;
+  unknownPuestos: string[];
+  mapping: Record<string, string>;
+}
+
+function readStoredPuestoAliases(): Record<string, string> {
+  try {
+    const stored = readStorageItem(TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY);
+    if (!stored) {
+      return {};
+    }
+
+    const parsed: unknown = JSON.parse(stored);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.entries(parsed).reduce<Record<string, string>>((aliases, [key, value]) => {
+      if (typeof value === 'string' && value.trim()) {
+        aliases[key] = value;
+      }
+      return aliases;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+function persistStoredPuestoAliases(aliases: Record<string, string>): void {
+  writeStorageItem(TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY, JSON.stringify(aliases));
+}
+
+function buildImportSummaryMessage(summary: {
+  imported: number;
+  updated: number;
+  ignored: number;
+  missingEmployees: number;
+}): string {
+  const parts = [
+    `${summary.imported} registros importados`,
+    `${summary.updated} registros actualizados`,
+    `${summary.ignored} filas ignoradas`,
+  ];
+
+  if (summary.missingEmployees > 0) {
+    parts.push(`${summary.missingEmployees} empleados no encontrados en Plantilla`);
+  }
+
+  return parts.join(' · ');
 }
 
 function buildPuestosByKey(puestos: readonly TeletrabajoPuesto[]): Map<string, TeletrabajoPuesto> {
@@ -164,7 +230,6 @@ function getTeletrabajoSemaforo(
   };
 }
 
-
 export function TeletrabajoPage({
   initialSolicitudId = null,
   navigationNonce,
@@ -188,6 +253,9 @@ export function TeletrabajoPage({
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string>('');
+  const [pendingEncuestaImport, setPendingEncuestaImport] = useState<PendingEncuestaImport | null>(
+    null,
+  );
   const [isPuestosModalOpen, setIsPuestosModalOpen] = useState(false);
   const [wordStatus, setWordStatus] = useState<string>('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
@@ -199,6 +267,29 @@ export function TeletrabajoPage({
     load();
     loadEmployees();
   }, [load, loadEmployees]);
+
+  const masterPuestos = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          jobPositionTranslations
+            .map((translation) => translation.puestoCastellano.trim())
+            .filter(Boolean)
+            .map((puesto): [string, string] => [normalizeJobPosition(puesto), puesto]),
+        ).values(),
+      ).sort((first, second) =>
+        first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' }),
+      ),
+    [jobPositionTranslations],
+  );
+
+  const masterPuestosByKey = useMemo(
+    () =>
+      new Map(
+        masterPuestos.map((puesto): [string, string] => [normalizeJobPosition(puesto), puesto]),
+      ),
+    [masterPuestos],
+  );
 
   const handleGenerateWord = useCallback(
     async (solicitud: TeletrabajoSolicitud) => {
@@ -297,16 +388,20 @@ export function TeletrabajoPage({
         accessor: (s) => getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount).status,
         render: (s) => {
           const semaforo = getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount);
-          const className = semaforo.status === 'ok'
-            ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-            : semaforo.status === 'review'
-              ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
-              : 'border-red-400/40 bg-red-500/15 text-red-200';
-          const icon = semaforo.status === 'ok'
-            ? <CheckCircle2 size={15} />
-            : semaforo.status === 'review'
-              ? <AlertTriangle size={15} />
-              : <XCircle size={15} />;
+          const className =
+            semaforo.status === 'ok'
+              ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+              : semaforo.status === 'review'
+                ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                : 'border-red-400/40 bg-red-500/15 text-red-200';
+          const icon =
+            semaforo.status === 'ok' ? (
+              <CheckCircle2 size={15} />
+            ) : semaforo.status === 'review' ? (
+              <AlertTriangle size={15} />
+            ) : (
+              <XCircle size={15} />
+            );
 
           return (
             <span
@@ -444,16 +539,36 @@ export function TeletrabajoPage({
   ]);
   const activeFilterChips: ActiveFilterChip[] = [
     filters.search.trim()
-      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      ? {
+          key: 'search',
+          label: 'Búsqueda',
+          value: filters.search.trim(),
+          onClear: () => setFilter('search', ''),
+        }
       : null,
     filters.estado
-      ? { key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') }
+      ? {
+          key: 'estado',
+          label: 'Estado',
+          value: filters.estado,
+          onClear: () => setFilter('estado', ''),
+        }
       : null,
     filters.tipoSolicitud
-      ? { key: 'tipoSolicitud', label: 'Tipo', value: filters.tipoSolicitud, onClear: () => setFilter('tipoSolicitud', '') }
+      ? {
+          key: 'tipoSolicitud',
+          label: 'Tipo',
+          value: filters.tipoSolicitud,
+          onClear: () => setFilter('tipoSolicitud', ''),
+        }
       : null,
     filters.periodo
-      ? { key: 'periodo', label: 'Periodo', value: filters.periodo, onClear: () => setFilter('periodo', '') }
+      ? {
+          key: 'periodo',
+          label: 'Periodo',
+          value: filters.periodo,
+          onClear: () => setFilter('periodo', ''),
+        }
       : null,
   ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
@@ -503,10 +618,118 @@ export function TeletrabajoPage({
   }, [initialSolicitudId, navigationNonce, selectSolicitud, visibleSolicitudes]);
 
   const handleImportEncuesta = async (file: File) => {
-    const summary = await importEncuesta(file, employees);
-    setImportSummary(
-      `${summary.imported} registros importados · ${summary.updated} registros actualizados · ${summary.ignored} filas ignoradas`,
-    );
+    try {
+      setPendingEncuestaImport(null);
+
+      if (jobPositionTranslations.length === 0) {
+        setImportSummary(
+          'No se pudo importar la encuesta: antes debes tener cargada la tabla de Traducción de puestos en Plantilla.',
+        );
+        return;
+      }
+
+      setImportSummary('Importando encuesta...');
+
+      const result = await importEncuesta(file, employees, {
+        jobPositionTranslations,
+        puestoAliases: readStoredPuestoAliases(),
+      });
+
+      if (result.diagnostics.unresolvedPuestos.length > 0) {
+        setPendingEncuestaImport({
+          file,
+          unknownPuestos: result.diagnostics.unresolvedPuestos,
+          mapping: {},
+        });
+        setImportSummary(
+          `Importación pendiente: ${result.diagnostics.unresolvedPuestos.length} puesto${result.diagnostics.unresolvedPuestos.length === 1 ? '' : 's'} sin correspondencia. Asigna el puesto correcto para continuar.`,
+        );
+        return;
+      }
+
+      if (result.summary.imported === 0 && result.summary.updated === 0) {
+        setImportSummary(
+          `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
+        );
+        return;
+      }
+
+      setImportSummary(
+        `Importación completada correctamente: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}.`,
+      );
+    } catch (error) {
+      setPendingEncuestaImport(null);
+      setImportSummary(
+        error instanceof Error
+          ? `No se pudo importar la encuesta: ${error.message}`
+          : 'No se pudo importar la encuesta.',
+      );
+    }
+  };
+
+  const handleResolvePendingEncuestaImport = async () => {
+    if (!pendingEncuestaImport) {
+      return;
+    }
+
+    const missing = pendingEncuestaImport.unknownPuestos.filter((puesto) => {
+      const selected = pendingEncuestaImport.mapping[normalizeJobPosition(puesto)] ?? '';
+      return !selected.trim() || !masterPuestosByKey.has(normalizeJobPosition(selected));
+    });
+
+    if (missing.length > 0) {
+      setImportSummary(
+        'Asigna un puesto válido a todos los puestos no reconocidos antes de continuar.',
+      );
+      return;
+    }
+
+    try {
+      const aliases = readStoredPuestoAliases();
+      pendingEncuestaImport.unknownPuestos.forEach((puesto) => {
+        const selected = pendingEncuestaImport.mapping[normalizeJobPosition(puesto)] ?? '';
+        if (selected.trim()) {
+          aliases[normalizeJobPosition(puesto)] = selected.trim();
+        }
+      });
+      persistStoredPuestoAliases(aliases);
+
+      const result = await importEncuesta(pendingEncuestaImport.file, employees, {
+        jobPositionTranslations,
+        puestoAliases: aliases,
+      });
+
+      if (result.diagnostics.unresolvedPuestos.length > 0) {
+        setPendingEncuestaImport({
+          file: pendingEncuestaImport.file,
+          unknownPuestos: result.diagnostics.unresolvedPuestos,
+          mapping: {},
+        });
+        setImportSummary(
+          'Quedan puestos sin correspondencia. Revisa las asignaciones e inténtalo de nuevo.',
+        );
+        return;
+      }
+
+      if (result.summary.imported === 0 && result.summary.updated === 0) {
+        setPendingEncuestaImport(null);
+        setImportSummary(
+          `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
+        );
+        return;
+      }
+
+      setPendingEncuestaImport(null);
+      setImportSummary(
+        `Importación completada correctamente: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}.`,
+      );
+    } catch (error) {
+      setImportSummary(
+        error instanceof Error
+          ? `No se pudo completar la importación: ${error.message}`
+          : 'No se pudo completar la importación.',
+      );
+    }
   };
 
   return (
@@ -648,6 +871,103 @@ export function TeletrabajoPage({
           sort={preferences.sort}
         />
       </div>
+
+      {pendingEncuestaImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <section className="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+            <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+                  Importar encuesta
+                </p>
+                <h3 className="text-xl font-bold text-metro-text">
+                  Resolver puestos no reconocidos
+                </h3>
+                <p className="mt-1 text-sm text-metro-muted">
+                  Asigna cada puesto de Plantilla al puesto correcto de la tabla de Traducción de
+                  puestos.
+                </p>
+              </div>
+              <button
+                aria-label="Cancelar resolución de puestos"
+                className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setPendingEncuestaImport(null)}
+                type="button"
+              >
+                <XCircle size={18} />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                <span>
+                  Hay {pendingEncuestaImport.unknownPuestos.length} puesto
+                  {pendingEncuestaImport.unknownPuestos.length === 1 ? '' : 's'} que no cuadran con
+                  la tabla maestra.
+                </span>
+              </div>
+              <div className="space-y-2">
+                {pendingEncuestaImport.unknownPuestos.map((puesto) => {
+                  const key = normalizeJobPosition(puesto);
+                  return (
+                    <div
+                      className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.2fr)] lg:items-center"
+                      key={key}
+                    >
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                          Puesto en Plantilla
+                        </p>
+                        <p className="font-semibold text-metro-text">{puesto}</p>
+                      </div>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                        Puesto correcto
+                        <select
+                          className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                          onChange={(event) =>
+                            setPendingEncuestaImport((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    mapping: { ...current.mapping, [key]: event.target.value },
+                                  }
+                                : current,
+                            )
+                          }
+                          value={pendingEncuestaImport.mapping[key] ?? ''}
+                        >
+                          <option value="">Selecciona puesto...</option>
+                          {masterPuestos.map((candidate) => (
+                            <option key={candidate} value={candidate}>
+                              {candidate}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
+              <button
+                className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                onClick={() => setPendingEncuestaImport(null)}
+                type="button"
+              >
+                Cancelar importación
+              </button>
+              <button
+                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+                onClick={() => void handleResolvePendingEncuestaImport()}
+                type="button"
+              >
+                Confirmar e importar
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {isPuestosModalOpen && (
         <TeletrabajoPuestosModal onClose={() => setIsPuestosModalOpen(false)} />
