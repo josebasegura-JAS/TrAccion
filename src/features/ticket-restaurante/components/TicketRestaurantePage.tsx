@@ -325,6 +325,28 @@ function formatManutencionDate(value: string): string {
   return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
 }
 
+function formatManutencionMonth(year: number, month: number): string {
+  return `${MONTH_OPTIONS.find((option) => option.value === month)?.label ?? month} ${year}`;
+}
+
+function toManutencionDetailAbsences(manutenciones: readonly TicketManutencion[]): TicketRestaurantAbsence[] {
+  return manutenciones
+    .filter((row) => !row.deletedAt)
+    .map((row) => ({
+      id: row.id,
+      empleado: row.empleado,
+      nombreApellidos: row.nombreApellidos,
+      desde: row.fechaGasto,
+      hasta: row.fechaGasto,
+      motivo: 'Nota de gasto',
+      totalDias: 1,
+      afectaTicket: row.afectaTicket,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      deletedAt: row.deletedAt,
+    }));
+}
+
 function normalizeTicketEmployeeSearch(value: string): string {
   return value.trim().replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
 }
@@ -378,7 +400,7 @@ function ManutencionesPanel({
         <div>
           <h3 className="text-base font-bold text-metro-text">Manutenciones</h3>
           <p className="text-xs text-metro-muted">
-            Importa notas de gasto y deja preparada la revisión. Esta primera fase no descuenta tickets.
+            Importa notas de gasto y deja preparada la revisión. Las notas marcadas como afectantes descontarán tickets en el mes imputado.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -498,6 +520,7 @@ function ManutencionesPanel({
               <th className="px-2 py-2">Nº empleado</th>
               <th className="px-2 py-2">Nombre</th>
               <th className="px-2 py-2">Fecha gasto</th>
+              <th className="px-2 py-2">Mes imputado</th>
               <th className="px-2 py-2">Origen</th>
               <th className="px-2 py-2">Afecta a ticket</th>
               <th className="px-2 py-2">Acciones</th>
@@ -506,7 +529,7 @@ function ManutencionesPanel({
           <tbody>
             {manutenciones.length === 0 ? (
               <tr>
-                <td className="px-2 py-6 text-center text-sm text-metro-muted" colSpan={6}>
+                <td className="px-2 py-6 text-center text-sm text-metro-muted" colSpan={7}>
                   No hay manutenciones cargadas.
                 </td>
               </tr>
@@ -516,6 +539,7 @@ function ManutencionesPanel({
                   <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
                   <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
                   <td className="px-2 py-1 text-metro-text">{formatManutencionDate(row.fechaGasto)}</td>
+                  <td className="px-2 py-1 text-metro-muted">{formatManutencionMonth(row.imputacionYear, row.imputacionMonth)}</td>
                   <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
                   <td className="px-2 py-1 text-metro-text">{row.afectaTicket ? 'Sí' : 'No'}</td>
                   <td className="px-2 py-1">
@@ -586,6 +610,9 @@ export function TicketRestaurantePage({
   const [manutencionPreviewRows, setManutencionPreviewRows] = useState<TicketManutencionPreviewRow[]>([]);
   const [manualManutencionEmployee, setManualManutencionEmployee] = useState('');
   const [manualManutencionDate, setManualManutencionDate] = useState('');
+  const [isManutencionMonthModalOpen, setIsManutencionMonthModalOpen] = useState(false);
+  const [manutencionImputationYear, setManutencionImputationYear] = useState(currentYear());
+  const [manutencionImputationMonth, setManutencionImputationMonth] = useState(currentMonth());
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
@@ -648,6 +675,11 @@ export function TicketRestaurantePage({
       ),
     [people],
   );
+  const calculationAbsences = useMemo(
+    () => [...absences, ...toManutencionDetailAbsences(manutenciones)],
+    [absences, manutenciones],
+  );
+
   const monthCalculation = useMemo(
     () =>
       calculateMonthlyTicketOrder(
@@ -657,8 +689,9 @@ export function TicketRestaurantePage({
         config,
         calculationYear,
         calculationMonth,
+        manutenciones,
       ),
-    [absences, calendars, calculationMonth, calculationYear, config, people],
+    [absences, calendars, calculationMonth, calculationYear, config, manutenciones, people],
   );
   const contributionCalculation = useMemo(
     () =>
@@ -669,8 +702,9 @@ export function TicketRestaurantePage({
         config,
         calculationYear,
         calculationMonth,
+        manutenciones,
       ),
-    [absences, calendars, calculationMonth, calculationYear, config, people],
+    [absences, calendars, calculationMonth, calculationYear, config, manutenciones, people],
   );
 
   const visibleAbsences = useMemo<TicketAbsenceDisplayRow[]>(
@@ -1037,19 +1071,42 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const drafts: TicketManutencionDraft[] = validatedRows
-      .filter((row) => row.importar)
+    if (!validatedRows.some((row) => row.importar)) {
+      setManutencionImportMessage('No hay filas marcadas para importar.');
+      return;
+    }
+
+    setIsManutencionMonthModalOpen(true);
+  };
+
+  const confirmSaveManutencionPreview = () => {
+    const drafts: TicketManutencionDraft[] = manutencionPreviewRows
+      .filter((row) => row.importar && row.errors.length === 0)
       .map((row) => ({
         empleado: row.empleado,
         nombreApellidos: row.nombreApellidos,
         fechaGasto: row.fechaGasto,
         origen: row.origen,
         afectaTicket: row.afectaTicket,
+        imputacionYear: manutencionImputationYear,
+        imputacionMonth: manutencionImputationMonth,
       }));
 
     saveManutenciones(drafts);
     setManutencionPreviewRows([]);
-    setManutencionImportMessage(`Manutenciones guardadas: ${drafts.length}.`);
+    setIsManutencionMonthModalOpen(false);
+    setManutencionImportMessage(
+      `Manutenciones guardadas: ${drafts.length}. Imputación: ${formatManutencionMonth(
+        manutencionImputationYear,
+        manutencionImputationMonth,
+      )}.`,
+    );
+  };
+
+  const moveManutencionImputationMonth = (offset: number) => {
+    const next = addYearMonth(manutencionImputationYear, manutencionImputationMonth, offset);
+    setManutencionImputationYear(next.year);
+    setManutencionImputationMonth(next.month);
   };
 
   useEffect(() => {
@@ -1245,7 +1302,7 @@ export function TicketRestaurantePage({
         />
       ) : activeSubview === 'computoMensual' ? (
         <CalculationPanel
-          absences={absences}
+          absences={calculationAbsences}
           calendars={visibleCalendars}
           calculation={monthCalculation}
           config={config}
@@ -1258,7 +1315,7 @@ export function TicketRestaurantePage({
               config,
               calculationYear,
               calculationMonth,
-              absences,
+              calculationAbsences,
             ),
             rows: monthCalculation.rows,
             filterLabel: buildFilterLabel([
@@ -1274,7 +1331,7 @@ export function TicketRestaurantePage({
         />
       ) : activeSubview === 'computoCotizacion' ? (
         <CalculationPanel
-          absences={absences}
+          absences={calculationAbsences}
           calendars={visibleCalendars}
           calculation={contributionCalculation}
           config={config}
@@ -1352,6 +1409,54 @@ export function TicketRestaurantePage({
           </p>
         </div>
       )}
+
+      {isManutencionMonthModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+            <div className="border-b border-metro-border p-4">
+              <h3 className="text-lg font-bold text-metro-text">¿A qué mes lo imputamos?</h3>
+              <p className="text-xs text-metro-muted">
+                Las notas de gasto marcadas como afectantes descontarán tickets en este mes.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 p-5">
+              <button
+                className="rounded-lg border border-metro-border px-3 py-2 text-sm font-bold text-metro-text hover:border-metro-red"
+                onClick={() => moveManutencionImputationMonth(-1)}
+                type="button"
+              >
+                ←
+              </button>
+              <div className="min-w-44 rounded-xl border border-metro-border bg-metro-panel px-4 py-3 text-center text-base font-bold text-metro-text">
+                {formatManutencionMonth(manutencionImputationYear, manutencionImputationMonth)}
+              </div>
+              <button
+                className="rounded-lg border border-metro-border px-3 py-2 text-sm font-bold text-metro-text hover:border-metro-red"
+                onClick={() => moveManutencionImputationMonth(1)}
+                type="button"
+              >
+                →
+              </button>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-metro-border p-4">
+              <button
+                className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+                onClick={() => setIsManutencionMonthModalOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
+                onClick={confirmSaveManutencionPreview}
+                type="button"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isPriceModalOpen ? (
         <TicketPriceModal

@@ -40,6 +40,17 @@ export interface TicketRestaurantAbsenceDraft {
   afectaTicket: boolean;
 }
 
+export interface TicketManutencionImpact {
+  id: string;
+  empleado: string;
+  nombreApellidos: string;
+  fechaGasto: string;
+  afectaTicket: boolean;
+  imputacionYear: number;
+  imputacionMonth: number;
+  deletedAt: string | null;
+}
+
 export interface TicketPerson {
   empleado: string;
   nombre: string;
@@ -359,6 +370,7 @@ export function calculateMonthlyTicketOrder(
   config: TicketRestaurantConfig,
   year: number,
   month: number,
+  manutenciones: readonly TicketManutencionImpact[] = [],
 ): TicketMonthCalculation {
   return calculateTicketMonthInternal(
     people,
@@ -368,6 +380,7 @@ export function calculateMonthlyTicketOrder(
     year,
     month,
     'monthlyOrderWithDebt',
+    manutenciones,
   );
 }
 
@@ -378,6 +391,7 @@ export function calculateTicketContribution(
   config: TicketRestaurantConfig,
   year: number,
   month: number,
+  manutenciones: readonly TicketManutencionImpact[] = [],
 ): TicketMonthCalculation {
   return calculateTicketMonthInternal(
     people,
@@ -387,6 +401,7 @@ export function calculateTicketContribution(
     year,
     month,
     'monthlyContribution',
+    manutenciones,
   );
 }
 
@@ -541,6 +556,7 @@ function calculateTicketMonthInternal(
   year: number,
   month: number,
   mode: TicketCalculationMode,
+  manutenciones: readonly TicketManutencionImpact[] = [],
 ): TicketMonthCalculation {
   const effectiveConfig = normalizeTicketRestaurantConfig(config);
   const calendarById = new Map(
@@ -559,6 +575,7 @@ function calculateTicketMonthInternal(
             effectiveConfig,
             year,
             month,
+            manutenciones,
           )
         : calculatePersonMonthlyContribution(
             person,
@@ -567,6 +584,7 @@ function calculateTicketMonthInternal(
             effectiveConfig,
             year,
             month,
+            manutenciones,
           );
     })
     .sort((first, second) =>
@@ -614,6 +632,7 @@ function calculatePersonMonthlyContribution(
   config: TicketRestaurantConfig,
   year: number,
   month: number,
+  manutenciones: readonly TicketManutencionImpact[] = [],
 ): TicketPersonCalculation {
   const monthStart = toIsoDate(year, month, 1);
   const monthEnd = toIsoDate(year, month, new Date(Date.UTC(year, month, 0)).getUTCDate());
@@ -621,8 +640,12 @@ function calculatePersonMonthlyContribution(
   const absenceDays = calendar
     ? buildPersonAbsenceTicketDays(person, calendar, absences, monthStart, monthEnd, config.rules)
     : new Set<string>();
+  const manutencionDays = calendar
+    ? buildPersonManutencionTicketDays(person, calendar, manutenciones, year, month)
+    : new Set<string>();
   const effectivePrice = getEffectiveTicketPrice(config, year, month);
-  const ticketsFinales = Math.max(0, ticketDays.length - absenceDays.size);
+  const discountDays = new Set([...absenceDays, ...manutencionDays]);
+  const ticketsFinales = Math.max(0, ticketDays.length - discountDays.size);
 
   return {
     empleado: person.empleado,
@@ -635,28 +658,20 @@ function calculatePersonMonthlyContribution(
     calendario: calendar?.nombre ?? 'Sin calendario',
     diasTeoricos: ticketDays.length,
     diasSinTicket: calendar ? countMonthNoTicketDays(calendar, year, month) : 0,
-    ausenciasMes: absenceDays.size,
+    ausenciasMes: discountDays.size,
     deudaEntrante: 0,
-    ausenciasAplicadas: absenceDays.size,
+    ausenciasAplicadas: discountDays.size,
     deudaPendiente: 0,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
-    ausenciaIds: getAppliedAbsenceIdsForTicketDays(
-      person,
-      calendar,
-      absences,
-      monthStart,
-      monthEnd,
-      config.rules,
-    ),
-    ausenciaDiasDescontados: getAppliedAbsenceDiscountedDaysById(
-      person,
-      calendar,
-      absences,
-      monthStart,
-      monthEnd,
-      config.rules,
-    ),
+    ausenciaIds: [
+      ...getAppliedAbsenceIdsForTicketDays(person, calendar, absences, monthStart, monthEnd, config.rules),
+      ...getAppliedManutencionIdsForImputedMonth(person, calendar, manutenciones, year, month),
+    ],
+    ausenciaDiasDescontados: {
+      ...getAppliedAbsenceDiscountedDaysById(person, calendar, absences, monthStart, monthEnd, config.rules),
+      ...getAppliedManutencionDiscountedDaysById(person, calendar, manutenciones, year, month),
+    },
   };
 }
 
@@ -667,9 +682,19 @@ function calculatePersonMonthlyOrderWithDebt(
   config: TicketRestaurantConfig,
   year: number,
   month: number,
+  manutenciones: readonly TicketManutencionImpact[] = [],
 ): TicketPersonCalculation {
   const ticketDays = calendar ? buildMonthTicketDays(calendar, year, month) : [];
   const effectivePrice = getEffectiveTicketPrice(config, year, month);
+  const manutencionDays = calendar
+    ? buildPersonManutencionTicketDays(person, calendar, manutenciones, year, month)
+    : new Set<string>();
+  const manutencionIds = calendar
+    ? getAppliedManutencionIdsForImputedMonth(person, calendar, manutenciones, year, month)
+    : [];
+  const manutencionDaysById = calendar
+    ? getAppliedManutencionDiscountedDaysById(person, calendar, manutenciones, year, month)
+    : {};
   const debtStatus = calendar
     ? calculatePersonContributionDebtStatus(person, calendar, absences, config, year, month)
     : {
@@ -679,7 +704,8 @@ function calculatePersonMonthlyOrderWithDebt(
         ausenciaIds: [],
         ausenciaDiasDescontados: {},
       };
-  const ticketsFinales = Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
+  const totalApplied = Math.min(ticketDays.length, debtStatus.ausenciasAplicadas + manutencionDays.size);
+  const ticketsFinales = Math.max(0, ticketDays.length - totalApplied);
 
   return {
     empleado: person.empleado,
@@ -694,12 +720,12 @@ function calculatePersonMonthlyOrderWithDebt(
     diasSinTicket: calendar ? countMonthNoTicketDays(calendar, year, month) : 0,
     ausenciasMes: 0,
     deudaEntrante: debtStatus.deudaEntrante,
-    ausenciasAplicadas: debtStatus.ausenciasAplicadas,
+    ausenciasAplicadas: totalApplied,
     deudaPendiente: debtStatus.deudaPendiente,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
-    ausenciaIds: debtStatus.ausenciaIds,
-    ausenciaDiasDescontados: debtStatus.ausenciaDiasDescontados,
+    ausenciaIds: [...debtStatus.ausenciaIds, ...manutencionIds],
+    ausenciaDiasDescontados: { ...debtStatus.ausenciaDiasDescontados, ...manutencionDaysById },
   };
 }
 
@@ -814,6 +840,73 @@ function parseIsoYearMonth(fecha: string): { year: number; month: number } {
 function addMonths(year: number, month: number, offset: number): { year: number; month: number } {
   const date = new Date(Date.UTC(year, month - 1 + offset, 1));
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}
+
+
+function buildPersonManutencionTicketDays(
+  person: TicketPerson,
+  calendar: TicketCalendar,
+  manutenciones: readonly TicketManutencionImpact[],
+  year: number,
+  month: number,
+): Set<string> {
+  const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
+  const noTicket = new Set(calendar.diasSinTicket);
+  return new Set(
+    manutenciones
+      .filter(
+        (row) =>
+          !row.deletedAt &&
+          row.afectaTicket &&
+          row.empleado === person.empleado &&
+          row.imputacionYear === year &&
+          row.imputacionMonth === month &&
+          calendarHasTicketRightOnDate(calendar, row.fechaGasto, ticketIsoWeekdays, noTicket),
+      )
+      .map((row) => row.fechaGasto),
+  );
+}
+
+function getAppliedManutencionIdsForImputedMonth(
+  person: TicketPerson,
+  calendar: TicketCalendar | undefined,
+  manutenciones: readonly TicketManutencionImpact[],
+  year: number,
+  month: number,
+): string[] {
+  if (!calendar) return [];
+  const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
+  const noTicket = new Set(calendar.diasSinTicket);
+  const seenDates = new Set<string>();
+  const ids: string[] = [];
+  manutenciones.forEach((row) => {
+    if (
+      row.deletedAt ||
+      !row.afectaTicket ||
+      row.empleado !== person.empleado ||
+      row.imputacionYear !== year ||
+      row.imputacionMonth !== month ||
+      seenDates.has(row.fechaGasto) ||
+      !calendarHasTicketRightOnDate(calendar, row.fechaGasto, ticketIsoWeekdays, noTicket)
+    ) {
+      return;
+    }
+    seenDates.add(row.fechaGasto);
+    ids.push(row.id);
+  });
+  return ids;
+}
+
+function getAppliedManutencionDiscountedDaysById(
+  person: TicketPerson,
+  calendar: TicketCalendar | undefined,
+  manutenciones: readonly TicketManutencionImpact[],
+  year: number,
+  month: number,
+): Record<string, number> {
+  return Object.fromEntries(
+    getAppliedManutencionIdsForImputedMonth(person, calendar, manutenciones, year, month).map((id) => [id, 1]),
+  );
 }
 
 export function buildMonthTicketDays(

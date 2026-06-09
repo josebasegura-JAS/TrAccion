@@ -17,6 +17,8 @@ export interface TicketManutencionDraft {
   fechaGasto: string;
   origen: 'Pagador' | 'Repartido entre' | 'Manual';
   afectaTicket: boolean;
+  imputacionYear: number;
+  imputacionMonth: number;
 }
 
 export interface TicketManutencion extends TicketManutencionDraft {
@@ -103,6 +105,8 @@ export function buildTicketManutencion(
     fechaGasto: draft.fechaGasto,
     origen: draft.origen,
     afectaTicket: draft.afectaTicket,
+    imputacionYear: draft.imputacionYear,
+    imputacionMonth: draft.imputacionMonth,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     deletedAt: null,

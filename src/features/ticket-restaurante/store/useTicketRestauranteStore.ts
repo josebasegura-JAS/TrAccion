@@ -128,6 +128,8 @@ function isTicketManutencion(value: unknown): value is TicketManutencion {
     typeof candidate.fechaGasto === 'string' &&
     typeof candidate.origen === 'string' &&
     typeof candidate.afectaTicket === 'boolean' &&
+    (typeof candidate.imputacionYear === 'number' || typeof candidate.imputacionYear === 'undefined') &&
+    (typeof candidate.imputacionMonth === 'number' || typeof candidate.imputacionMonth === 'undefined') &&
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string' &&
     (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
@@ -152,6 +154,22 @@ function normalizeStoredTicketCalendar(calendar: TicketCalendar): TicketCalendar
   return {
     ...calendar,
     ticketIsoWeekdays: normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays),
+  };
+}
+
+
+function normalizeStoredTicketManutencion(row: TicketManutencion): TicketManutencion {
+  const now = new Date();
+  return {
+    ...row,
+    imputacionYear:
+      typeof row.imputacionYear === 'number' && Number.isInteger(row.imputacionYear)
+        ? row.imputacionYear
+        : now.getFullYear(),
+    imputacionMonth:
+      typeof row.imputacionMonth === 'number' && row.imputacionMonth >= 1 && row.imputacionMonth <= 12
+        ? row.imputacionMonth
+        : now.getMonth() + 1,
   };
 }
 
@@ -281,7 +299,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
       debtLedger: readDebtLedger(),
-      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion),
+      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+        normalizeStoredTicketManutencion,
+      ),
     });
   },
   reloadFromStorage: () => {
@@ -293,7 +313,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
       people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
       config: readConfig(),
       debtLedger: readDebtLedger(),
-      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion),
+      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+        normalizeStoredTicketManutencion,
+      ),
     });
   },
   createCalendar: (draft) => {
@@ -513,10 +535,10 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
     set((state) => {
       const now = nowIso();
       const result = state.manutenciones.filter((row) => !row.deletedAt).map((row) => ({ ...row }));
-      const existingKeys = new Set(result.map((row) => `${row.empleado}|${row.fechaGasto}`));
+      const existingKeys = new Set(result.map((row) => `${row.empleado}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`));
 
       drafts.forEach((draft) => {
-        const key = `${draft.empleado}|${draft.fechaGasto}`;
+        const key = `${draft.empleado}|${draft.fechaGasto}|${draft.imputacionYear}|${draft.imputacionMonth}`;
         if (existingKeys.has(key)) {
           return;
         }
