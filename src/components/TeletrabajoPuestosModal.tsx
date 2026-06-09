@@ -89,8 +89,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             </p>
             <h3 className="text-xl font-bold text-metro-text">Puestos Teletrabajo</h3>
             <p className="mt-1 text-sm text-metro-muted">
-              Mantén la lista de puestos que pueden solicitar teletrabajo. La lógica de semáforo se
-              conectará en la siguiente iteración.
+              Importa o mantén los puestos organizativos teletrabajables y su presencialidad mínima.
             </p>
           </div>
           <button
@@ -160,10 +159,10 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                   />
                 </label>
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
-                  Máximo
+                  Presencialidad mínima
                   <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                    min={1}
+                    min={0}
                     onChange={(event) => updateDraft('maxSolicitudes', Number(event.target.value))}
                     type="number"
                     value={draft.maxSolicitudes}
@@ -204,7 +203,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="overflow-hidden rounded-xl border border-metro-border">
             <div className="flex items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
-              <span>Puestos con posibilidad de teletrabajo</span>
+              <span>Puestos organizativos con posibilidad de teletrabajo</span>
               <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
                 {filteredPuestos.length} registros
               </span>
@@ -213,7 +212,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               <thead className="bg-metro-surface text-left text-xs uppercase tracking-wide text-metro-muted">
                 <tr>
                   <th className="px-3 py-2">Puesto</th>
-                  <th className="w-28 px-3 py-2">Máximo</th>
+                  <th className="w-44 px-3 py-2">Presencialidad mínima</th>
                   <th className="px-3 py-2">Observaciones</th>
                   <th className="w-24 px-3 py-2 text-right">Acciones</th>
                 </tr>
@@ -222,7 +221,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 {filteredPuestos.map((puesto) => (
                   <tr key={puesto.id} className="text-metro-text">
                     <td className="px-3 py-2 font-semibold">{puesto.puesto}</td>
-                    <td className="px-3 py-2 text-metro-muted">{puesto.maxSolicitudes}</td>
+                    <td className="px-3 py-2 text-metro-muted">{puesto.maxSolicitudes || '—'}</td>
                     <td className="px-3 py-2 text-metro-muted">{puesto.observaciones || '—'}</td>
                     <td className="px-3 py-2 text-right">
                       <button

@@ -16,13 +16,28 @@ export interface TeletrabajoPuestoDraft {
   observaciones: string;
 }
 
-const PUESTO_HEADERS = new Set(['puesto', 'puesto teletrabajo', 'puesto teletrabajable']);
-const MAX_HEADERS = new Set(['maximo', 'maximo solicitudes', 'max solicitudes', 'limite', 'limite solicitudes']);
+const PUESTO_HEADERS = new Set([
+  'puesto',
+  'puesto organizativo',
+  'puesto teletrabajo',
+  'puesto teletrabajable',
+]);
+const MAX_HEADERS = new Set([
+  'maximo',
+  'maximo solicitudes',
+  'max solicitudes',
+  'limite',
+  'limite solicitudes',
+  'presencialidad minima',
+  'presencialidad minima de personas por puesto',
+  'presencialidad minima de personas por puesto para el normal funcionamiento de la unidad puestos 2 o mas personas',
+]);
+const TELETRABAJO_HEADERS = new Set(['teletrabajo s/n', 'teletrabajo', 'teletrabajable']);
 const OBSERVACIONES_HEADERS = new Set(['observaciones', 'observacion', 'notas', 'nota']);
 
 export const EMPTY_TELETRABAJO_PUESTO_DRAFT: TeletrabajoPuestoDraft = {
   puesto: '',
-  maxSolicitudes: 1,
+  maxSolicitudes: 0,
   observaciones: '',
 };
 
@@ -40,9 +55,7 @@ export function normalizeTeletrabajoPuestoDraft(
 ): TeletrabajoPuestoDraft {
   return {
     puesto: draft.puesto.trim(),
-    maxSolicitudes: Number.isFinite(draft.maxSolicitudes)
-      ? Math.max(1, Math.floor(draft.maxSolicitudes))
-      : 1,
+    maxSolicitudes: normalizePresencialidadMinima(draft.maxSolicitudes),
     observaciones: draft.observaciones.trim(),
   };
 }
@@ -67,10 +80,13 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
   const normalizedHeaders = headers.map(normalizeHeader);
   const puestoIndex = normalizedHeaders.findIndex((header) => PUESTO_HEADERS.has(header));
   const maxIndex = normalizedHeaders.findIndex((header) => MAX_HEADERS.has(header));
+  const teletrabajoIndex = normalizedHeaders.findIndex((header) => TELETRABAJO_HEADERS.has(header));
   const observacionesIndex = normalizedHeaders.findIndex((header) => OBSERVACIONES_HEADERS.has(header));
 
   if (puestoIndex < 0) {
-    throw new Error('El fichero debe tener una columna Puesto. Opcionalmente puede incluir Máximo y Observaciones.');
+    throw new Error(
+      'El fichero debe tener una columna Puesto Organizativo. Opcionalmente puede incluir Presencialidad mínima y Observaciones.',
+    );
   }
 
   const draftsByPuesto = new Map<string, TeletrabajoPuestoDraft>();
@@ -81,7 +97,11 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
       return;
     }
 
-    const maxSolicitudes = maxIndex >= 0 ? Number(row[maxIndex]) : 1;
+    if (teletrabajoIndex >= 0 && !isTeletrabajableValue(row[teletrabajoIndex] ?? '')) {
+      return;
+    }
+
+    const maxSolicitudes = maxIndex >= 0 ? parsePresencialidadMinima(row[maxIndex]) : 0;
     const observaciones = observacionesIndex >= 0 ? row[observacionesIndex]?.trim() ?? '' : '';
     draftsByPuesto.set(normalizeTeletrabajoPuesto(puesto),
       normalizeTeletrabajoPuestoDraft({ puesto, maxSolicitudes, observaciones }),
@@ -91,6 +111,26 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
   return Array.from(draftsByPuesto.values()).sort((first, second) =>
     first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
   );
+}
+
+
+function normalizePresencialidadMinima(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function parsePresencialidadMinima(value: string | undefined): number {
+  const normalized = (value ?? '').trim();
+  if (!normalized || normalized === '-') {
+    return 0;
+  }
+
+  const parsed = Number(normalized.replace(',', '.'));
+  return normalizePresencialidadMinima(parsed);
+}
+
+function isTeletrabajableValue(value: string): boolean {
+  const normalized = normalizeTeletrabajoPuesto(value);
+  return normalized === 's' || normalized === 'si' || normalized === 'sí' || normalized === 'yes';
 }
 
 function normalizeHeader(value: string): string {
