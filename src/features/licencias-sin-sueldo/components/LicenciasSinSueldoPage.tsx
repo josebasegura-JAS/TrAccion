@@ -634,13 +634,19 @@ export function LicenciasSinSueldoPage() {
         </p>
       )}
 
-      <Block count={blocks.pendienteAprobacion.length} icon={<Clock size={18} />} title="Pendientes de aprobar">
-        <LicenciasTable blockId="pendiente_aprobacion" emptyText="No hay solicitudes pendientes de aprobar." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.pendienteAprobacion} title="Licencias sin sueldo - Pendientes de aprobar" />
-      </Block>
+      <div className="grid gap-3 xl:grid-cols-2">
+        <div className="min-w-0">
+          <Block count={blocks.pendienteAprobacion.length} icon={<Clock size={18} />} title="Pendientes de aprobar">
+            <LicenciasTable blockId="pendiente_aprobacion" emptyText="No hay solicitudes pendientes de aprobar." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.pendienteAprobacion} title="Licencias sin sueldo - Pendientes de aprobar" />
+          </Block>
+        </div>
 
-      <Block count={blocks.pendienteFirma.length} icon={<FileSignature size={18} />} title="Pendientes de firma">
-        <LicenciasTable blockId="pendiente_firma" emptyText="No hay solicitudes pendientes de firma." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.pendienteFirma} title="Licencias sin sueldo - Pendientes de firma" />
-      </Block>
+        <div className="min-w-0">
+          <Block count={blocks.pendienteFirma.length} icon={<FileSignature size={18} />} title="Pendientes de firma">
+            <LicenciasTable blockId="pendiente_firma" emptyText="No hay solicitudes pendientes de firma." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.pendienteFirma} title="Licencias sin sueldo - Pendientes de firma" />
+          </Block>
+        </div>
+      </div>
 
       <Block count={blocks.vigente.length} icon={<CheckCircle2 size={18} />} title="Vigentes">
         <LicenciasTable blockId="vigente" emptyText="No hay solicitudes vigentes." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={blocks.vigente} title="Licencias sin sueldo - Vigentes" />
