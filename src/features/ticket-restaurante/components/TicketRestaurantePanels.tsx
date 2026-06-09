@@ -14,7 +14,6 @@ import {
   calculateMonthlyTicketOrder,
   getEffectiveTicketPrice,
   nextCalendarYear,
-  normalizeTicketCalendarName,
   normalizeTicketRestaurantConfig,
   previousCalendarYear,
   type CalendarDay,
@@ -63,6 +62,7 @@ type TicketCalculationTableColumnId =
   | 'nombreApellidos'
   | 'calendario'
   | 'diasTeoricos'
+  | 'hojaGastos'
   | 'ausencias'
   | 'deudaEntrante'
   | 'deudaPendiente'
@@ -146,6 +146,7 @@ const defaultTicketCalculationTablePreferences: TableViewPreferences<TicketCalcu
       nombreApellidos: 230,
       calendario: 160,
       diasTeoricos: 110,
+      hojaGastos: 115,
       ausencias: 130,
       deudaEntrante: 120,
       deudaPendiente: 125,
@@ -160,7 +161,10 @@ const monthlyCalculationTableColumnIds: TicketCalculationTableColumnId[] = [
   'nombreApellidos',
   'calendario',
   'diasTeoricos',
+  'hojaGastos',
   'ausencias',
+  'deudaEntrante',
+  'deudaPendiente',
   'ticketsFinales',
   'importeTicket',
   'total',
@@ -197,125 +201,6 @@ const MONTH_OPTIONS = [
 
 function formatCurrency(value: number): string {
   return `${value.toFixed(2)} €`;
-}
-
-function normalizePlainText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-function isoWeekday(fecha: string): number {
-  const day = new Date(`${fecha}T00:00:00.000Z`).getUTCDay();
-  return day === 0 ? 7 : day;
-}
-
-function addDays(fecha: string, days: number): string {
-  const date = new Date(`${fecha}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function absenceDiscountsTicket(
-  absence: TicketRestaurantAbsence,
-  calendar: TicketCalendar | null,
-  config: TicketRestaurantConfig,
-): boolean {
-  if (!calendar || !absence.afectaTicket) {
-    return false;
-  }
-
-  const nonDiscountable = Object.entries(config.rules.nonDiscountableMotivesByCalendar).some(
-    ([calendarName, motives]) =>
-      normalizeTicketCalendarName(calendar.nombre) === normalizeTicketCalendarName(calendarName) &&
-      motives.some((motivo) => normalizePlainText(absence.motivo) === normalizePlainText(motivo)),
-  );
-
-  if (nonDiscountable) {
-    return false;
-  }
-
-  const noTicket = new Set(calendar.diasSinTicket);
-  const ticketIsoWeekdays = new Set(calendar.ticketIsoWeekdays);
-  let cursor = absence.desde;
-  while (cursor <= absence.hasta) {
-    if (ticketIsoWeekdays.has(isoWeekday(cursor)) && !noTicket.has(cursor)) {
-      return true;
-    }
-    cursor = addDays(cursor, 1);
-  }
-
-  return false;
-}
-
-
-type DailyAbsenceDetailRow = {
-  id: string;
-  fecha: string;
-  motivo: string;
-  afectaTicket: boolean;
-  descuentaTicket: boolean;
-  observacion: string;
-};
-
-function formatDisplayDate(fecha: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-    return fecha;
-  }
-  return `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}/${fecha.slice(0, 4)}`;
-}
-
-function buildDailyAbsenceDetailRows(
-  absences: readonly TicketRestaurantAbsence[],
-  calendar: TicketCalendar | null,
-  config: TicketRestaurantConfig,
-  year: number,
-  month: number,
-): DailyAbsenceDetailRow[] {
-  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-  const monthEndDate = new Date(Date.UTC(year, month, 0));
-  const monthEnd = monthEndDate.toISOString().slice(0, 10);
-  const rows: DailyAbsenceDetailRow[] = [];
-
-  absences.forEach((absence) => {
-    let cursor = absence.desde < monthStart ? monthStart : absence.desde;
-    const end = absence.hasta > monthEnd ? monthEnd : absence.hasta;
-    if (cursor > end) {
-      return;
-    }
-
-    const discountsByMotive = absenceDiscountsTicket(absence, calendar, config);
-    const noTicket = new Set(calendar?.diasSinTicket ?? []);
-    const ticketIsoWeekdays = new Set(calendar?.ticketIsoWeekdays ?? []);
-
-    while (cursor <= end) {
-      const hasTicketByCalendar = Boolean(
-        calendar && ticketIsoWeekdays.has(isoWeekday(cursor)) && !noTicket.has(cursor),
-      );
-      const descuentaTicket = absence.afectaTicket && discountsByMotive && hasTicketByCalendar;
-      rows.push({
-        id: `${absence.id}-${cursor}`,
-        fecha: cursor,
-        motivo: absence.motivo,
-        afectaTicket: absence.afectaTicket,
-        descuentaTicket,
-        observacion: descuentaTicket
-          ? 'Afecta al ticket'
-          : !absence.afectaTicket
-            ? 'Motivo sin impacto en ticket'
-            : !calendar
-              ? 'Sin calendario asignado'
-              : !hasTicketByCalendar
-                ? 'Sin impacto en ticket por calendario'
-                : 'Motivo no descontable en este calendario',
-      });
-      cursor = addDays(cursor, 1);
-    }
-  });
-
-  return rows.sort((first, second) => first.fecha.localeCompare(second.fecha));
 }
 
 export function SubviewButton({
@@ -1367,6 +1252,18 @@ export function CalculationPanel({
         headerClassName: 'text-right',
       },
       {
+        id: 'hojaGastos',
+        header: 'Hoja gastos',
+        accessor: (row) => row.hojasGastoMes,
+        render: (row) => row.hojasGastoMes,
+        width: 115,
+        minWidth: 100,
+        maxWidth: 170,
+        sortable: true,
+        className: 'text-right text-metro-muted',
+        headerClassName: 'text-right',
+      },
+      {
         id: 'ausencias',
         header: mode === 'monthly' ? 'Ausencias aplicadas' : 'Ausencias mes',
         accessor: (row) => (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
@@ -1512,9 +1409,6 @@ export function CalculationPanel({
 }
 
 export function CalculationAbsenceDetailModal({
-  absences,
-  calendars,
-  config,
   mode,
   month,
   onClose,
@@ -1530,22 +1424,22 @@ export function CalculationAbsenceDetailModal({
   row: TicketPersonCalculation;
   year: number;
 }) {
-  const calendar = calendars.find((item) => item.nombre === row.calendario) ?? null;
-  const detailAbsences = row.ausenciaIds
-    .map((absenceId) => absences.find((absence) => absence.id === absenceId))
-    .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence));
-  const dailyRows = buildDailyAbsenceDetailRows(detailAbsences, calendar, config, year, month);
-  const totalTicketDays = dailyRows.filter((detail) => detail.descuentaTicket).length;
+  const appliedDebtRows = row.deudaAplicadaDetalle ?? [];
+  const pendingDebtRows = row.deudaPendienteDetalle ?? [];
+  const hojaGastoRows = row.hojaGastoDetalle ?? [];
+  const hasDetail =
+    appliedDebtRows.length > 0 || pendingDebtRows.length > 0 || hojaGastoRows.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+      <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <div className="flex items-center justify-between border-b border-metro-border p-3">
           <div>
-            <h3 className="text-lg font-bold text-metro-text">Detalle de ausencias</h3>
+            <h3 className="text-lg font-bold text-metro-text">Detalle del cómputo</h3>
             <p className="text-xs text-metro-muted">
               {row.empleado} · {row.nombreApellidos} ·{' '}
-              {mode === 'monthly' ? 'Cómputo mensual' : 'Cómputo cotización'}
+              {mode === 'monthly' ? 'Cómputo mensual' : 'Cómputo cotización'} · {year}-
+              {String(month).padStart(2, '0')}
             </p>
           </div>
           <button
@@ -1556,48 +1450,126 @@ export function CalculationAbsenceDetailModal({
             Cerrar
           </button>
         </div>
-        <div className="max-h-[68vh] overflow-auto p-3">
-          {dailyRows.length > 0 ? (
+        <div className="max-h-[68vh] space-y-3 overflow-auto p-3">
+          <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+            <DetailStat label="Calendario" value={row.calendario} />
+            <DetailStat label="Días teóricos" value={row.diasTeoricos} />
+            <DetailStat label="Hoja gastos" value={row.hojasGastoMes} />
+            <DetailStat label="Deuda entrante" value={row.deudaEntrante} />
+            <DetailStat label="Aplicado" value={row.ausenciasAplicadas} />
+            <DetailStat label="Deuda pendiente" value={row.deudaPendiente} />
+          </div>
+
+          {hasDetail ? (
             <>
-              <p className="mb-3 text-xs font-semibold text-metro-muted">
-                {row.nombreApellidos} · {year}-{String(month).padStart(2, '0')} · Ausencias aplicadas: {totalTicketDays}
-              </p>
-              <table className="min-w-full text-left text-xs">
-                <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
-                  <tr>
-                    <th className="px-2 py-1">Desde</th>
-                    <th className="px-2 py-1">Hasta</th>
-                    <th className="px-2 py-1">Motivo</th>
-                    <th className="px-2 py-1 text-right">Días ausencia</th>
-                    <th className="px-2 py-1 text-right">Días que afectan a ticket</th>
-                    <th className="px-2 py-1">Observación</th>
-                  </tr>
-                </thead>
-                <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45">
-                  {dailyRows.map((detail) => (
-                    <tr key={detail.id}>
-                      <td className="px-2 py-1 font-semibold">{formatDisplayDate(detail.fecha)}</td>
-                      <td className="px-2 py-1">{formatDisplayDate(detail.fecha)}</td>
-                      <td className="px-2 py-1">{detail.motivo}</td>
-                      <td className="px-2 py-1 text-right">1</td>
-                      <td className="px-2 py-1 text-right font-semibold">
-                        {detail.descuentaTicket ? 1 : 0}
-                      </td>
-                      <td className="px-2 py-1">{detail.observacion}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <DetailSection
+                emptyMessage="No hay días de ausencia/deuda aplicados en este mes."
+                rows={appliedDebtRows}
+                title={mode === 'monthly' ? 'Deuda aplicada este mes' : 'Ausencias del mes'}
+              />
+              <DetailSection
+                emptyMessage="No queda deuda pendiente tras este mes."
+                rows={pendingDebtRows}
+                title="Deuda pendiente"
+              />
+              <HojaGastoDetailSection rows={hojaGastoRows} />
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-6 text-center text-sm font-semibold text-metro-muted">
-              No hay ausencias vinculadas a esta persona en el cómputo seleccionado.
+              No hay ausencias, deuda ni hojas de gasto vinculadas a esta persona en el cómputo
+              seleccionado.
             </div>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function DetailStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-metro-border bg-metro-panel p-2">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+      <p className="mt-1 text-sm font-bold text-metro-text">{value}</p>
+    </div>
+  );
+}
+
+function DetailSection({
+  emptyMessage,
+  rows,
+  title,
+}: {
+  emptyMessage: string;
+  rows: TicketPersonCalculation['deudaAplicadaDetalle'];
+  title: string;
+}) {
+  return (
+    <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
+      <h4 className="mb-2 text-sm font-bold text-metro-text">{title}</h4>
+      {rows.length > 0 ? (
+        <table className="min-w-full text-left text-xs">
+          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+            <tr>
+              <th className="px-2 py-1">Fecha</th>
+              <th className="px-2 py-1">Origen</th>
+              <th className="px-2 py-1">Motivo</th>
+              <th className="px-2 py-1 text-right">Días ticket</th>
+            </tr>
+          </thead>
+          <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-surface/60">
+            {rows.map((detail) => (
+              <tr key={`${detail.id}-${detail.fecha}-${title}`}>
+                <td className="px-2 py-1 font-semibold">{formatDisplayDate(detail.fecha)}</td>
+                <td className="px-2 py-1">{formatMonthOrigin(detail.mesOrigen)}</td>
+                <td className="px-2 py-1">{detail.motivo}</td>
+                <td className="px-2 py-1 text-right font-semibold">1</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="rounded-lg border border-dashed border-metro-border bg-metro-surface p-3 text-xs font-semibold text-metro-muted">
+          {emptyMessage}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function HojaGastoDetailSection({ rows }: { rows: TicketPersonCalculation['hojaGastoDetalle'] }) {
+  return (
+    <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
+      <h4 className="mb-2 text-sm font-bold text-metro-text">Hojas de gasto</h4>
+      {rows.length > 0 ? (
+        <table className="min-w-full text-left text-xs">
+          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+            <tr>
+              <th className="px-2 py-1">Fecha</th>
+              <th className="px-2 py-1 text-right">Días ticket</th>
+            </tr>
+          </thead>
+          <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-surface/60">
+            {rows.map((detail) => (
+              <tr key={detail.id}>
+                <td className="px-2 py-1 font-semibold">{formatDisplayDate(detail.fecha)}</td>
+                <td className="px-2 py-1 text-right font-semibold">1</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="rounded-lg border border-dashed border-metro-border bg-metro-surface p-3 text-xs font-semibold text-metro-muted">
+          No hay hojas de gasto aplicadas en este mes.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function formatMonthOrigin(value: string): string {
+  if (!/^\d{4}-\d{2}$/.test(value)) return value;
+  return `${value.slice(5, 7)}/${value.slice(0, 4)}`;
 }
 
 export function AbsencesTable({
@@ -1961,4 +1933,3 @@ function PreviewInput({
     </td>
   );
 }
-

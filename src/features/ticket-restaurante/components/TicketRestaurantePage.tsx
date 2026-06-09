@@ -239,7 +239,7 @@ const monthlyCalculationExportColumns = (
   { key: 'total', header: 'Total', value: (row) => formatTicketExcelNumber(row.importe) },
   { key: 'fecInicio', header: 'Fec Inicio', value: () => formatTicketExcelDate(year, month) },
   { key: 'fecCad', header: 'Fec Cad', value: () => '01/01/2010' },
-  { key: 'hojaGastos', header: 'Hoja Gastos', value: () => '' },
+  { key: 'hojaGastos', header: 'Hoja Gastos', value: (row) => row.hojasGastoMes },
   {
     key: 'ausencias',
     header: 'Ausencias',
@@ -320,7 +320,6 @@ function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
   return `Ausencias guardadas: ${parts.join(', ')}.`;
 }
 
-
 function formatManutencionDate(value: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
@@ -330,7 +329,9 @@ function formatManutencionMonth(year: number, month: number): string {
   return `${MONTH_OPTIONS.find((option) => option.value === month)?.label ?? month} ${year}`;
 }
 
-function toManutencionDetailAbsences(manutenciones: readonly TicketManutencion[]): TicketRestaurantAbsence[] {
+function toManutencionDetailAbsences(
+  manutenciones: readonly TicketManutencion[],
+): TicketRestaurantAbsence[] {
   return manutenciones
     .filter((row) => !row.deletedAt)
     .map((row) => ({
@@ -349,7 +350,10 @@ function toManutencionDetailAbsences(manutenciones: readonly TicketManutencion[]
 }
 
 function normalizeTicketEmployeeSearch(value: string): string {
-  return value.trim().replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
+  return value
+    .trim()
+    .replace(/^0+(?=\d)/, '')
+    .replace(/\.0$/, '');
 }
 
 function ManutencionesPanel({
@@ -384,7 +388,9 @@ function ManutencionesPanel({
   ticketPeople: TicketPerson[];
 }) {
   const manualPerson = ticketPeople.find(
-    (person) => normalizeTicketEmployeeSearch(person.empleado) === normalizeTicketEmployeeSearch(manualEmployee),
+    (person) =>
+      normalizeTicketEmployeeSearch(person.empleado) ===
+      normalizeTicketEmployeeSearch(manualEmployee),
   );
   const rowsToImport = previewRows.filter((row) => row.importar).length;
 
@@ -401,7 +407,8 @@ function ManutencionesPanel({
         <div>
           <h3 className="text-base font-bold text-metro-text">Manutenciones</h3>
           <p className="text-xs text-metro-muted">
-            Importa notas de gasto y deja preparada la revisión. Las notas marcadas como afectantes descontarán tickets en el mes imputado.
+            Importa notas de gasto y deja preparada la revisión. Las notas marcadas como afectantes
+            descontarán tickets en el mes imputado.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -422,10 +429,14 @@ function ManutencionesPanel({
         </div>
       </div>
 
-      {importMessage ? <p className="mb-2 text-xs font-semibold text-metro-muted">{importMessage}</p> : null}
+      {importMessage ? (
+        <p className="mb-2 text-xs font-semibold text-metro-muted">{importMessage}</p>
+      ) : null}
 
       <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">Alta manual</p>
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">
+          Alta manual
+        </p>
         <div className="grid gap-2 lg:grid-cols-[140px_190px_1fr_auto] lg:items-center">
           <input
             className="h-8 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm text-metro-text outline-none focus:border-metro-red"
@@ -440,7 +451,9 @@ function ManutencionesPanel({
             value={manualDate}
           />
           <div className="text-xs font-semibold text-metro-muted">
-            {manualPerson ? manualPerson.nombreApellidos : 'Introduce una persona con derecho a ticket'}
+            {manualPerson
+              ? manualPerson.nombreApellidos
+              : 'Introduce una persona con derecho a ticket'}
           </div>
           <button
             className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
@@ -458,7 +471,9 @@ function ManutencionesPanel({
           <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">Preview</p>
-              <p className="text-xs text-metro-muted">{rowsToImport} registros marcados para importar.</p>
+              <p className="text-xs text-metro-muted">
+                {rowsToImport} registros marcados para importar.
+              </p>
             </div>
             <button
               className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
@@ -489,7 +504,9 @@ function ManutencionesPanel({
                       <input
                         checked={row.importar}
                         className="h-4 w-4 accent-metro-red"
-                        onChange={(event) => updatePreviewRow(row.id, { importar: event.target.checked })}
+                        onChange={(event) =>
+                          updatePreviewRow(row.id, { importar: event.target.checked })
+                        }
                         type="checkbox"
                       />
                     </td>
@@ -497,13 +514,17 @@ function ManutencionesPanel({
                       <input
                         checked={row.afectaTicket}
                         className="h-4 w-4 accent-metro-red"
-                        onChange={(event) => updatePreviewRow(row.id, { afectaTicket: event.target.checked })}
+                        onChange={(event) =>
+                          updatePreviewRow(row.id, { afectaTicket: event.target.checked })
+                        }
                         type="checkbox"
                       />
                     </td>
                     <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
                     <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
-                    <td className="px-2 py-1 text-metro-text">{formatManutencionDate(row.fechaGasto)}</td>
+                    <td className="px-2 py-1 text-metro-text">
+                      {formatManutencionDate(row.fechaGasto)}
+                    </td>
                     <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
                     <td className="px-2 py-1 text-metro-red">{row.errors.join(' ')}</td>
                   </tr>
@@ -539,8 +560,12 @@ function ManutencionesPanel({
                 <tr className="border-t border-metro-border" key={row.id}>
                   <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
                   <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
-                  <td className="px-2 py-1 text-metro-text">{formatManutencionDate(row.fechaGasto)}</td>
-                  <td className="px-2 py-1 text-metro-muted">{formatManutencionMonth(row.imputacionYear, row.imputacionMonth)}</td>
+                  <td className="px-2 py-1 text-metro-text">
+                    {formatManutencionDate(row.fechaGasto)}
+                  </td>
+                  <td className="px-2 py-1 text-metro-muted">
+                    {formatManutencionMonth(row.imputacionYear, row.imputacionMonth)}
+                  </td>
                   <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
                   <td className="px-2 py-1 text-metro-text">{row.afectaTicket ? 'Sí' : 'No'}</td>
                   <td className="px-2 py-1">
@@ -608,7 +633,9 @@ export function TicketRestaurantePage({
   const [importMessage, setImportMessage] = useState('');
   const [peopleImportMessage, setPeopleImportMessage] = useState('');
   const [manutencionImportMessage, setManutencionImportMessage] = useState('');
-  const [manutencionPreviewRows, setManutencionPreviewRows] = useState<TicketManutencionPreviewRow[]>([]);
+  const [manutencionPreviewRows, setManutencionPreviewRows] = useState<
+    TicketManutencionPreviewRow[]
+  >([]);
   const [manualManutencionEmployee, setManualManutencionEmployee] = useState('');
   const [manualManutencionDate, setManualManutencionDate] = useState('');
   const [isManutencionMonthModalOpen, setIsManutencionMonthModalOpen] = useState(false);
@@ -1438,12 +1465,18 @@ export function TicketRestaurantePage({
           manutenciones={visibleManutenciones}
           onAddManual={addManualManutencionPreviewRow}
           onExportModel={() =>
-            exportCsv('modelo-manutenciones-ticket-restaurante.csv', MANUTENCIONES_MODEL_HEADERS, [])
+            exportCsv(
+              'modelo-manutenciones-ticket-restaurante.csv',
+              MANUTENCIONES_MODEL_HEADERS,
+              [],
+            )
           }
           onImport={() => manutencionesFileInputRef.current?.click()}
           onManualDateChange={setManualManutencionDate}
           onManualEmployeeChange={setManualManutencionEmployee}
-          onPreviewChange={(rows) => setManutencionPreviewRows(validateTicketManutencionPreviewRows(rows))}
+          onPreviewChange={(rows) =>
+            setManutencionPreviewRows(validateTicketManutencionPreviewRows(rows))
+          }
           onRemove={removeManutencion}
           onSavePreview={saveManutencionPreview}
           previewRows={manutencionPreviewRows}
@@ -1453,7 +1486,8 @@ export function TicketRestaurantePage({
         <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-8 text-center">
           <p className="text-base font-bold text-metro-text">Selecciona una sección</p>
           <p className="mt-1 text-sm text-metro-muted">
-            El contenido de Ticket Restaurante se carga al pulsar en Calendarios, Personas, Cómputos, Ausencias o Manutenciones.
+            El contenido de Ticket Restaurante se carga al pulsar en Calendarios, Personas,
+            Cómputos, Ausencias o Manutenciones.
           </p>
         </div>
       )}
@@ -1545,4 +1579,3 @@ export function TicketRestaurantePage({
     </section>
   );
 }
-
