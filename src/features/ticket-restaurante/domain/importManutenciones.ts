@@ -55,11 +55,12 @@ export function importTicketManutenciones(
   rows: readonly TabularRow[],
   ticketPeople: readonly TicketPerson[],
 ): TicketManutencionPreviewRow[] {
-  const peopleByEmployee = new Map(
-    ticketPeople
-      .filter((person) => person.activo && !person.deletedAt)
-      .map((person) => [normalizeEmployeeNumber(person.empleado), person]),
-  );
+  const peopleByEmployee = buildTicketPeopleMap(ticketPeople);
+  const structuredRows = importStructuredManutenciones(rows, peopleByEmployee);
+  if (structuredRows.length > 0) {
+    return deduplicatePreviewRows(structuredRows);
+  }
+
   const parsed: TicketManutencionPreviewRow[] = [];
   const startIndex = findManutencionStartIndex(rows);
   const candidateRows = rows.slice(startIndex >= 0 ? startIndex : 0);
@@ -131,13 +132,137 @@ function findManutencionStartIndex(rows: readonly TabularRow[]): number {
   return rows.findIndex((row) => normalizeHeader(row.join(' ')).includes('gastos de manutencion'));
 }
 
+function buildTicketPeopleMap(ticketPeople: readonly TicketPerson[]): Map<string, TicketPerson> {
+  return new Map(
+    ticketPeople
+      .filter((person) => person.activo && !person.deletedAt)
+      .map((person) => [normalizeEmployeeNumber(person.empleado), person]),
+  );
+}
+
+interface ManutencionColumns {
+  empleado: number;
+  nombre: number;
+  fechaGasto: number;
+  repartidoEmpleado: number;
+  repartidoNombre: number;
+}
+
+function importStructuredManutenciones(
+  rows: readonly TabularRow[],
+  peopleByEmployee: ReadonlyMap<string, TicketPerson>,
+): TicketManutencionPreviewRow[] {
+  const headerIndex = findStructuredHeaderIndex(rows);
+  if (headerIndex < 0) return [];
+
+  const columns = resolveStructuredColumns(rows[headerIndex]);
+  if (!columns) return [];
+
+  const parsed: TicketManutencionPreviewRow[] = [];
+  let currentPayer: { empleado: string; nombreApellidos: string } | null = null;
+  let currentDate = '';
+
+  rows.slice(headerIndex + 1).forEach((row, offset) => {
+    const rowIndex = headerIndex + offset + 1;
+    const text = row.map(cleanText).filter(Boolean).join(' ');
+    if (!text || isIgnoredRow(text)) return;
+
+    const payer = readEmployeePair(row, columns.empleado, columns.nombre);
+    if (payer) {
+      currentPayer = payer;
+    }
+
+    const rowDate = normalizeDate(row[columns.fechaGasto]);
+    if (rowDate) {
+      currentDate = rowDate;
+    }
+
+    if (currentPayer && rowDate) {
+      pushPreviewRow(parsed, peopleByEmployee, currentPayer, rowDate, 'Pagador', rowIndex, 0);
+    }
+
+    const sharedPerson = readEmployeePair(row, columns.repartidoEmpleado, columns.repartidoNombre);
+    if (sharedPerson && currentDate) {
+      pushPreviewRow(parsed, peopleByEmployee, sharedPerson, currentDate, 'Repartido entre', rowIndex, 1);
+    }
+  });
+
+  return parsed;
+}
+
+function findStructuredHeaderIndex(rows: readonly TabularRow[]): number {
+  return rows.findIndex((row) => {
+    const normalizedCells = row.map(normalizeHeader);
+    return (
+      normalizedCells.some((cell) => cell.includes('empleado')) &&
+      normalizedCells.some((cell) => cell.includes('fecha gasto')) &&
+      normalizedCells.some((cell) => cell.includes('repartido entre'))
+    );
+  });
+}
+
+function resolveStructuredColumns(row: readonly string[]): ManutencionColumns | null {
+  const normalizedCells = row.map(normalizeHeader);
+  const empleado = normalizedCells.findIndex((cell) => cell.includes('empleado'));
+  const fechaGasto = normalizedCells.findIndex((cell) => cell.includes('fecha gasto'));
+  const repartidoEmpleado = normalizedCells.findIndex((cell) => cell.includes('repartido entre'));
+
+  if (empleado < 0 || fechaGasto < 0 || repartidoEmpleado < 0) return null;
+
+  return {
+    empleado,
+    nombre: empleado + 1,
+    fechaGasto,
+    repartidoEmpleado,
+    repartidoNombre: repartidoEmpleado + 1,
+  };
+}
+
+function readEmployeePair(
+  row: readonly string[],
+  employeeColumn: number,
+  nameColumn: number,
+): { empleado: string; nombreApellidos: string } | null {
+  const empleado = normalizeEmployeeNumber(row[employeeColumn]);
+  if (!/^\d{1,6}$/.test(empleado)) return null;
+
+  return {
+    empleado,
+    nombreApellidos: cleanText(row[nameColumn]),
+  };
+}
+
+function pushPreviewRow(
+  rows: TicketManutencionPreviewRow[],
+  peopleByEmployee: ReadonlyMap<string, TicketPerson>,
+  employee: { empleado: string; nombreApellidos: string },
+  fechaGasto: string,
+  origen: 'Pagador' | 'Repartido entre',
+  rowIndex: number,
+  employeeIndex: number,
+): void {
+  const ticketPerson = peopleByEmployee.get(employee.empleado);
+  if (!ticketPerson) return;
+
+  rows.push({
+    id: `manutencion-preview-${rowIndex + 1}-${ticketPerson.empleado}-${employeeIndex}`,
+    empleado: ticketPerson.empleado,
+    nombreApellidos: ticketPerson.nombreApellidos || employee.nombreApellidos,
+    fechaGasto,
+    origen,
+    importar: true,
+    afectaTicket: true,
+    errors: [],
+  });
+}
+
 function isIgnoredRow(text: string): boolean {
   const normalized = normalizeHeader(text);
   return normalized.includes('gastos de manutencion') || normalized.includes('fecha desde');
 }
 
 function extractEmployees(text: string): { empleado: string; nombreApellidos: string }[] {
-  const matches = Array.from(text.matchAll(/(?:^|\s)(\d{3,6})(?:\.0)?\s+([^\d;|,]+?)(?=\s+\d{3,6}(?:\.0)?\s+|\s+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|$)/g));
+  const matches = Array.from(text.matchAll(/(?:^|\s)(\d{1,6})(?:\.0)?\s+([^\d;|]+?)(?=\s+\d{1,6}(?:\.0)?\s+|\s+\d{1,2}[/-]\d{1,2}[/-](?:\d{2}|\d{4})|$)/g));
   return matches
     .map((match) => ({
       empleado: normalizeEmployeeNumber(match[1] ?? ''),
