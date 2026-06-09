@@ -664,8 +664,7 @@ function calculatePersonMonthlyContribution(
     ? buildPersonManutencionTicketDays(person, calendar, manutenciones, year, month)
     : new Set<string>();
   const effectivePrice = getEffectiveTicketPrice(config, year, month);
-  const discountDays = new Set([...absenceDays, ...manutencionDays]);
-  const ticketsFinales = Math.max(0, ticketDays.length - discountDays.size);
+  const ticketsFinales = Math.max(0, ticketDays.length - absenceDays.size);
 
   return {
     empleado: person.empleado,
@@ -678,10 +677,10 @@ function calculatePersonMonthlyContribution(
     calendario: calendar?.nombre ?? 'Sin calendario',
     diasTeoricos: ticketDays.length,
     diasSinTicket: calendar ? countMonthNoTicketDays(calendar, year, month) : 0,
-    ausenciasMes: discountDays.size,
+    ausenciasMes: absenceDays.size,
     hojasGastoMes: manutencionDays.size,
     deudaEntrante: 0,
-    ausenciasAplicadas: discountDays.size,
+    ausenciasAplicadas: absenceDays.size,
     deudaPendiente: 0,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
@@ -694,7 +693,6 @@ function calculatePersonMonthlyContribution(
         monthEnd,
         config.rules,
       ),
-      ...getAppliedManutencionIdsForImputedMonth(person, calendar, manutenciones, year, month),
     ],
     ausenciaDiasDescontados: {
       ...getAppliedAbsenceDiscountedDaysById(
@@ -705,7 +703,6 @@ function calculatePersonMonthlyContribution(
         monthEnd,
         config.rules,
       ),
-      ...getAppliedManutencionDiscountedDaysById(person, calendar, manutenciones, year, month),
     },
     deudaAplicadaDetalle: calendar
       ? buildPersonAbsenceTicketDayDetails(
