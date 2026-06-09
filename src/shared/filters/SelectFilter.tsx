@@ -6,6 +6,7 @@ interface SelectFilterProps {
   placeholder?: string;
   showLabel?: boolean;
   labelClassName?: string;
+  className?: string;
 }
 
 export function SelectFilter({
@@ -16,6 +17,7 @@ export function SelectFilter({
   placeholder,
   showLabel = false,
   labelClassName = 'whitespace-nowrap text-xs font-bold uppercase tracking-wide',
+  className,
 }: SelectFilterProps) {
   if (showLabel) {
     return (
@@ -23,7 +25,7 @@ export function SelectFilter({
         <span className={labelClassName}>{label}</span>
         <select
           aria-label={label}
-          className="w-full bg-transparent text-metro-text outline-none"
+          className={className ?? 'w-full bg-transparent text-metro-text outline-none'}
           onChange={(event) => onChange(event.target.value)}
           value={value}
         >
@@ -41,7 +43,10 @@ export function SelectFilter({
   return (
     <select
       aria-label={label}
-      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+      className={
+        className ??
+        'rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red'
+      }
       onChange={(event) => onChange(event.target.value)}
       value={value}
     >

@@ -675,11 +675,11 @@ export function TareasPage({
               }}
             />
           </div>
-          <div className="grid flex-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(210px,1.3fr)_repeat(5,minmax(112px,0.7fr))]">
-            <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-1.5 text-sm text-metro-muted">
-              <Search size={16} />
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1 xl:pb-0">
+            <label className="flex h-9 w-[170px] shrink-0 items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-2.5 text-sm text-metro-muted">
+              <Search size={15} className="shrink-0" />
               <input
-                className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
+                className="min-w-0 flex-1 bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
                 onChange={(event) => setFilter('search', event.target.value)}
                 placeholder="Buscar..."
                 type="search"
@@ -687,30 +687,35 @@ export function TareasPage({
               />
             </label>
             <SelectFilter
+              className="h-9 w-[104px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
               label="Tipo"
               onChange={(value) => setFilter('tipo', value as typeof filters.tipo)}
               options={TASK_TYPES}
               value={filters.tipo}
             />
             <SelectFilter
+              className="h-9 w-[112px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
               label="Fase"
               onChange={(value) => setFilter('fase', value)}
               options={phaseFilterOptions}
               value={filters.fase}
             />
             <SelectFilter
+              className="h-9 w-[112px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
               label="Estado"
               onChange={(value) => setFilter('estado', value as typeof filters.estado)}
               options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
               value={filters.estado}
             />
             <SelectFilter
+              className="h-9 w-[116px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
               label="Prioridad"
               onChange={(value) => setFilter('prioridad', value as typeof filters.prioridad)}
               options={TASK_PRIORITIES}
               value={filters.prioridad}
             />
             <SelectFilter
+              className="h-9 w-[132px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
               label="Origen"
               onChange={(value) => setFilter('origen', value)}
               options={originFilterOptions}
