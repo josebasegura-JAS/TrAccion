@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -265,10 +266,12 @@ export function SessionManagementPage({
   useSessionStore,
   onClosedSession,
 }: SessionManagementPageProps) {
-  const { sessions, load, create, importSessions, remove, addTask, removeTask, moveTask, closeSession } = useSessionStore();
+  const { sessions, load, create, importSessions, remove, update, addTask, removeTask, moveTask, closeSession } = useSessionStore();
   const { tasks, load: loadTasks, closeTasksFromSession, createManyFromImport } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [openPanel, setOpenPanel] = useState<'open' | 'history'>('open');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [openHistoryYears, setOpenHistoryYears] = useState<Record<string, boolean>>({});
@@ -315,6 +318,10 @@ export function SessionManagementPage({
   const closingSession = closingSessionId
     ? sessions.find((session) => session.id === closingSessionId) ?? null
     : null;
+  const editingSession = editingSessionId
+    ? sessions.find((session) => session.id === editingSessionId) ?? null
+    : null;
+  const canEditSessions = config.moduleId === 'comite';
   const sessionFilterLabel = buildFilterLabel([['Módulo', config.title], ['Búsqueda', sessionSearch]]);
   const moduleImportKind = config.moduleId === 'paritaria' ? 'paritaria' : 'comite';
   const relevantImportSessions = useMemo(
@@ -353,6 +360,10 @@ export function SessionManagementPage({
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
+  const updateEditDraft = <K extends keyof ManagedSessionDraft>(key: K, value: ManagedSessionDraft[K]) => {
+    setEditDraft((current) => ({ ...current, [key]: value }));
+  };
+
   const handleCreate = () => {
     if (!draft.date || !draft.code.trim()) {
       window.alert('Indica al menos fecha y código documental de la sesión.');
@@ -369,6 +380,39 @@ export function SessionManagementPage({
   const openCloseModal = (session: ManagedSession) => {
     setTreatedTaskIds(Object.fromEntries(session.items.map((taskId) => [taskId, true])));
     setClosingSessionId(session.id);
+  };
+
+  const openEditModal = (session: ManagedSession) => {
+    if (!canEditSessions) {
+      return;
+    }
+
+    setEditDraft({
+      date: session.date,
+      code: session.code,
+      title: session.title,
+      notes: session.notes,
+    });
+    setEditingSessionId(session.id);
+  };
+
+  const cancelEditSession = () => {
+    setEditingSessionId(null);
+    setEditDraft(EMPTY_MANAGED_SESSION_DRAFT);
+  };
+
+  const saveEditSession = () => {
+    if (!editingSession) {
+      return;
+    }
+
+    if (!editDraft.date || !editDraft.code.trim()) {
+      window.alert('Indica al menos fecha y código documental de la sesión.');
+      return;
+    }
+
+    update(editingSession.id, editDraft);
+    cancelEditSession();
   };
 
   const confirmCloseSession = () => {
@@ -623,6 +667,7 @@ export function SessionManagementPage({
               key={session.id}
               moveTask={moveTask}
               onClose={openCloseModal}
+              onEdit={canEditSessions ? openEditModal : undefined}
               onRemove={remove}
               onToggle={() => setExpandedSessionId((current) => (current === session.id ? null : session.id))}
               removeTask={removeTask}
@@ -667,6 +712,7 @@ export function SessionManagementPage({
                       <HistoricSessionCard
                         config={config}
                         key={session.id}
+                        onEdit={canEditSessions ? openEditModal : undefined}
                         onRemove={remove}
                         session={session}
                         tasksById={tasksById}
@@ -737,6 +783,59 @@ export function SessionManagementPage({
                 type="button"
               >
                 Confirmar importación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-metro-text">Editar sesión de {config.shortTitle}</h3>
+            <p className="mt-1 text-sm text-metro-muted">
+              Modifica la fecha, el código documental, el título o las notas. El estado de la sesión no se cambia.
+            </p>
+            <div className="mt-4 grid gap-2 xl:grid-cols-[150px_180px_minmax(220px,1fr)]">
+              <input
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateEditDraft('date', event.target.value)}
+                type="date"
+                value={editDraft.date}
+              />
+              <input
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateEditDraft('code', event.target.value)}
+                placeholder="Código documento"
+                value={editDraft.code}
+              />
+              <input
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateEditDraft('title', event.target.value)}
+                placeholder="Título / referencia de la sesión"
+                value={editDraft.title}
+              />
+            </div>
+            <textarea
+              className="mt-2 min-h-[120px] w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => updateEditDraft('notes', event.target.value)}
+              placeholder="Notas de la sesión, documentación asociada, observaciones, etc."
+              value={editDraft.notes}
+            />
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={cancelEditSession}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+                onClick={saveEditSession}
+                type="button"
+              >
+                Guardar cambios
               </button>
             </div>
           </div>
@@ -857,6 +956,7 @@ function SessionCard({
   isExpanded,
   moveTask,
   onClose,
+  onEdit,
   onRemove,
   onToggle,
   removeTask,
@@ -869,6 +969,7 @@ function SessionCard({
   isExpanded: boolean;
   moveTask: (sessionId: string, taskId: string, direction: 'up' | 'down') => void;
   onClose: (session: ManagedSession) => void;
+  onEdit?: (session: ManagedSession) => void;
   onRemove: (sessionId: string) => void;
   onToggle: () => void;
   removeTask: (sessionId: string, taskId: string) => void;
@@ -899,6 +1000,17 @@ function SessionCard({
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ExportPrintButtons payload={sessionExportPayload} />
+          {onEdit && (
+            <button
+              className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!isExpanded || isReadOnly}
+              onClick={() => onEdit(session)}
+              title={!isExpanded ? 'Abre la sesión para bloquearla antes de editarla' : 'Editar sesión'}
+              type="button"
+            >
+              <Pencil size={14} /> Editar
+            </button>
+          )}
           <button
             className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!isExpanded || isReadOnly}
@@ -1016,11 +1128,13 @@ function SessionCard({
 
 function HistoricSessionCard({
   config,
+  onEdit,
   onRemove,
   session,
   tasksById,
 }: {
   config: SessionModuleConfig;
+  onEdit?: (session: ManagedSession) => void;
   onRemove: (sessionId: string) => void;
   session: ManagedSession;
   tasksById: Map<string, Task>;
@@ -1042,6 +1156,16 @@ function HistoricSessionCard({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ExportPrintButtons payload={sessionExportPayload} />
+          {onEdit && (
+            <button
+              className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={() => onEdit(session)}
+              title="Editar sesión histórica"
+              type="button"
+            >
+              <Pencil size={14} /> Editar
+            </button>
+          )}
           <button
             className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10"
             onClick={() => {

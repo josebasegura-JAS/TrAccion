@@ -16,6 +16,7 @@ export interface ManagedSessionStateStore {
   create: (draft: ManagedSessionDraft) => string;
   importSessions: (drafts: Array<{ externalKey: string; draft: ManagedSessionDraft; taskIds: string[] }>) => number;
   remove: (sessionId: string) => void;
+  update: (sessionId: string, draft: ManagedSessionDraft) => void;
   addTask: (sessionId: string, taskId: string) => void;
   removeTask: (sessionId: string, taskId: string) => void;
   moveTask: (sessionId: string, taskId: string, direction: 'up' | 'down') => void;
@@ -138,6 +139,21 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     remove: (sessionId) => {
       set((state) => {
         const sessions = state.sessions.filter((session) => session.id !== sessionId);
+        persistSessions(config.storageKey, sessions);
+        return { sessions };
+      });
+    },
+    update: (sessionId, draft) => {
+      set((state) => {
+        const now = new Date().toISOString();
+        const sessions = updateSessionList(state.sessions, sessionId, (session) => ({
+          ...session,
+          date: draft.date,
+          code: draft.code.trim(),
+          title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
+          notes: draft.notes.trim(),
+          updatedAt: now,
+        }));
         persistSessions(config.storageKey, sessions);
         return { sessions };
       });
