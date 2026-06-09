@@ -84,15 +84,10 @@ function formatMailFromMsg(data: {
   date: string;
   body: string;
 }): string {
-  const header = [
-    data.subject ? `Asunto: ${data.subject}` : '',
-    data.senderName || data.senderEmail
-      ? `De: ${[data.senderName, data.senderEmail ? `<${data.senderEmail}>` : ''].filter(Boolean).join(' ')}`
-      : '',
-    data.date ? `Fecha: ${data.date}` : '',
-  ].filter(Boolean);
+  const header = data.subject ? [`Asunto: ${data.subject}`] : [];
+  const body = data.body.trim();
 
-  return [...header, data.body].filter(Boolean).join('\n');
+  return [...header, body].filter(Boolean).join('\n\n');
 }
 
 function formatSessionModuleLabel(sessionModule: string): string {

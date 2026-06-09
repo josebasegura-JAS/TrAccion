@@ -250,6 +250,74 @@ function absenceDiscountsTicket(
   return false;
 }
 
+
+type DailyAbsenceDetailRow = {
+  id: string;
+  fecha: string;
+  motivo: string;
+  afectaTicket: boolean;
+  descuentaTicket: boolean;
+  observacion: string;
+};
+
+function formatDisplayDate(fecha: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return fecha;
+  }
+  return `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}/${fecha.slice(0, 4)}`;
+}
+
+function buildDailyAbsenceDetailRows(
+  absences: readonly TicketRestaurantAbsence[],
+  calendar: TicketCalendar | null,
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+): DailyAbsenceDetailRow[] {
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const monthEndDate = new Date(Date.UTC(year, month, 0));
+  const monthEnd = monthEndDate.toISOString().slice(0, 10);
+  const rows: DailyAbsenceDetailRow[] = [];
+
+  absences.forEach((absence) => {
+    let cursor = absence.desde < monthStart ? monthStart : absence.desde;
+    const end = absence.hasta > monthEnd ? monthEnd : absence.hasta;
+    if (cursor > end) {
+      return;
+    }
+
+    const discountsByMotive = absenceDiscountsTicket(absence, calendar, config);
+    const noTicket = new Set(calendar?.diasSinTicket ?? []);
+    const ticketIsoWeekdays = new Set(calendar?.ticketIsoWeekdays ?? []);
+
+    while (cursor <= end) {
+      const hasTicketByCalendar = Boolean(
+        calendar && ticketIsoWeekdays.has(isoWeekday(cursor)) && !noTicket.has(cursor),
+      );
+      const descuentaTicket = absence.afectaTicket && discountsByMotive && hasTicketByCalendar;
+      rows.push({
+        id: `${absence.id}-${cursor}`,
+        fecha: cursor,
+        motivo: absence.motivo,
+        afectaTicket: absence.afectaTicket,
+        descuentaTicket,
+        observacion: descuentaTicket
+          ? 'Afecta al ticket'
+          : !absence.afectaTicket
+            ? 'Motivo sin impacto en ticket'
+            : !calendar
+              ? 'Sin calendario asignado'
+              : !hasTicketByCalendar
+                ? 'Sin impacto en ticket por calendario'
+                : 'Motivo no descontable en este calendario',
+      });
+      cursor = addDays(cursor, 1);
+    }
+  });
+
+  return rows.sort((first, second) => first.fecha.localeCompare(second.fecha));
+}
+
 export function SubviewButton({
   active,
   label,
@@ -1433,8 +1501,10 @@ export function CalculationPanel({
           calendars={calendars}
           config={config}
           mode={mode}
+          month={month}
           onClose={() => setSelectedDetailRow(null)}
           row={selectedDetailRow}
+          year={year}
         />
       ) : null}
     </div>
@@ -1446,20 +1516,26 @@ export function CalculationAbsenceDetailModal({
   calendars,
   config,
   mode,
+  month,
   onClose,
   row,
+  year,
 }: {
   absences: TicketRestaurantAbsence[];
   calendars: TicketCalendar[];
   config: TicketRestaurantConfig;
   mode: 'monthly' | 'contribution';
+  month: number;
   onClose: () => void;
   row: TicketPersonCalculation;
+  year: number;
 }) {
   const calendar = calendars.find((item) => item.nombre === row.calendario) ?? null;
   const detailAbsences = row.ausenciaIds
     .map((absenceId) => absences.find((absence) => absence.id === absenceId))
     .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence));
+  const dailyRows = buildDailyAbsenceDetailRows(detailAbsences, calendar, config, year, month);
+  const totalTicketDays = dailyRows.filter((detail) => detail.descuentaTicket).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -1481,37 +1557,38 @@ export function CalculationAbsenceDetailModal({
           </button>
         </div>
         <div className="max-h-[68vh] overflow-auto p-3">
-          {detailAbsences.length > 0 ? (
-            <table className="min-w-full text-left text-xs">
-              <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
-                <tr>
-                  <th className="px-2 py-1">Desde</th>
-                  <th className="px-2 py-1">Hasta</th>
-                  <th className="px-2 py-1">Motivo</th>
-                  <th className="px-2 py-1 text-right">Días naturales</th>
-                  <th className="px-2 py-1 text-right">Días ticket</th>
-                  <th className="px-2 py-1">Afecta ticket</th>
-                  <th className="px-2 py-1">Descuenta ticket</th>
-                </tr>
-              </thead>
-              <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45">
-                {detailAbsences.map((absence) => (
-                  <tr key={absence.id}>
-                    <td className="px-2 py-1">{absence.desde}</td>
-                    <td className="px-2 py-1">{absence.hasta}</td>
-                    <td className="px-2 py-1">{absence.motivo}</td>
-                    <td className="px-2 py-1 text-right">{absence.totalDias}</td>
-                    <td className="px-2 py-1 text-right font-semibold">
-                      {row.ausenciaDiasDescontados[absence.id] ?? 0}
-                    </td>
-                    <td className="px-2 py-1">{absence.afectaTicket ? 'Sí' : 'No'}</td>
-                    <td className="px-2 py-1 font-semibold">
-                      {absenceDiscountsTicket(absence, calendar, config) ? 'Sí' : 'No'}
-                    </td>
+          {dailyRows.length > 0 ? (
+            <>
+              <p className="mb-3 text-xs font-semibold text-metro-muted">
+                {row.nombreApellidos} · {year}-{String(month).padStart(2, '0')} · Ausencias aplicadas: {totalTicketDays}
+              </p>
+              <table className="min-w-full text-left text-xs">
+                <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+                  <tr>
+                    <th className="px-2 py-1">Desde</th>
+                    <th className="px-2 py-1">Hasta</th>
+                    <th className="px-2 py-1">Motivo</th>
+                    <th className="px-2 py-1 text-right">Días ausencia</th>
+                    <th className="px-2 py-1 text-right">Días que afectan a ticket</th>
+                    <th className="px-2 py-1">Observación</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-panel/45">
+                  {dailyRows.map((detail) => (
+                    <tr key={detail.id}>
+                      <td className="px-2 py-1 font-semibold">{formatDisplayDate(detail.fecha)}</td>
+                      <td className="px-2 py-1">{formatDisplayDate(detail.fecha)}</td>
+                      <td className="px-2 py-1">{detail.motivo}</td>
+                      <td className="px-2 py-1 text-right">1</td>
+                      <td className="px-2 py-1 text-right font-semibold">
+                        {detail.descuentaTicket ? 1 : 0}
+                      </td>
+                      <td className="px-2 py-1">{detail.observacion}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           ) : (
             <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-6 text-center text-sm font-semibold text-metro-muted">
               No hay ausencias vinculadas a esta persona en el cómputo seleccionado.

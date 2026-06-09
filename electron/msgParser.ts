@@ -57,15 +57,15 @@ function normalizePlainText(value: string): string {
 }
 
 function isReadableMsgLine(line: string): boolean {
-  const text = line.replace(/\0/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = normalizeMsgContentLine(line);
   if (text.length < 3 || text.length > 500) {
     return false;
   }
   if (
     hasMsgStructuralNoise(text) ||
     hasForbiddenControlCharacter(text) ||
-    isMostlySeparatedMsgText(text) ||
-    isTransportHeaderLine(text)
+    isTransportHeaderLine(text) ||
+    isKnownMsgNoiseLine(text)
   ) {
     return false;
   }
@@ -74,19 +74,41 @@ function isReadableMsgLine(line: string): boolean {
   return printable / text.length >= 0.8 && lettersOrNumbers >= Math.max(2, Math.floor(text.length * 0.25));
 }
 
-function isMostlySeparatedMsgText(text: string): boolean {
-  const compact = text.trim();
-  if (compact.length < 24) {
-    return false;
+function normalizeMsgContentLine(line: string): string {
+  const compact = line.replace(/\0/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return '';
   }
 
+  return isMostlySeparatedMsgText(compact) ? compactSeparatedMsgText(compact) : compact;
+}
+
+function compactSeparatedMsgText(text: string): string {
+  const tokens = text.trim().split(' ').filter(Boolean);
+  let output = '';
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const next = tokens[index + 1] ?? '';
+    output += token;
+    if (token.length === 1 && next.length === 1) {
+      continue;
+    }
+    if (next) {
+      output += ' ';
+    }
+  }
+  return output.replace(/\s+([.,;:!?])/g, '$1').trim();
+}
+
+function isMostlySeparatedMsgText(text: string): boolean {
+  const compact = text.trim();
   const tokens = compact.split(' ').filter(Boolean);
-  if (tokens.length < 12) {
+  if (tokens.length < 4) {
     return false;
   }
 
   const singleCharacterTokens = tokens.filter((token) => token.length === 1).length;
-  return singleCharacterTokens / tokens.length >= 0.75;
+  return singleCharacterTokens / tokens.length >= 0.7;
 }
 
 function isTransportHeaderLine(text: string): boolean {
@@ -125,6 +147,30 @@ function isTransportHeaderLine(text: string): boolean {
     lower.includes('winmail.dat') ||
     lower.includes('metrobilbao.local')
   );
+}
+
+function isKnownMsgNoiseLine(text: string): boolean {
+  const lower = normalizePlainText(text);
+  if (!lower) {
+    return true;
+  }
+
+  const noiseFragments = [
+    'rules found',
+    'no applicable attachment filtering',
+    'scan successful',
+    'protection disabled',
+    'kaspersky',
+    'clean bases',
+    'processed by bcc foldering',
+    'end to end latency',
+    'transport',
+    'cipher tls',
+    'version tls',
+    'mapi id',
+  ];
+
+  return noiseFragments.some((fragment) => lower.includes(fragment));
 }
 
 function countReadableMsgCharacters(text: string): number {
@@ -180,7 +226,7 @@ function extractReadableMsgBody(value: string, subject = ''): string {
   const seen = new Set<string>();
 
   for (const rawLine of normalized.split('\n')) {
-    const line = rawLine.replace(/\s+/g, ' ').trim();
+    const line = normalizeMsgContentLine(rawLine);
     if (!isReadableMsgLine(line)) {
       continue;
     }
@@ -195,7 +241,30 @@ function extractReadableMsgBody(value: string, subject = ''): string {
     }
   }
 
-  return acceptedLines.join('\n').trim();
+  return trimMsgBodyNoise(acceptedLines).join('\n').trim();
+}
+
+function trimMsgBodyNoise(lines: string[]): string[] {
+  const bodyStartIndex = lines.findIndex((line) => isLikelyMsgBodyStart(line));
+  const trimmed = bodyStartIndex >= 0 ? lines.slice(bodyStartIndex) : lines;
+  return trimmed.filter((line) => !isKnownMsgNoiseLine(line));
+}
+
+function isLikelyMsgBodyStart(line: string): boolean {
+  const lower = normalizePlainText(line);
+  return (
+    lower.startsWith('kaixo') ||
+    lower.startsWith('egun on') ||
+    lower.startsWith('hola') ||
+    lower.startsWith('adjuntamos') ||
+    lower.startsWith('adjunto') ||
+    lower.startsWith('para nuestro') ||
+    lower.startsWith('en caso') ||
+    lower.startsWith('eskerrik') ||
+    lower.startsWith('agur') ||
+    lower.startsWith('buenos dias') ||
+    lower.startsWith('buenas tardes')
+  );
 }
 
 async function loadMsgReader(): Promise<MsgReaderConstructor> {
