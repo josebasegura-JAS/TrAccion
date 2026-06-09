@@ -491,8 +491,9 @@ function buildParsedMsgResult(
   const subject = decodeMimeWords(parsed.subject || extractMsgSubject(rawUtf16Text, rawLatin1Text, fileName));
   const htmlBody = parsed.htmlBody || '';
   const htmlText = stripHtmlToText(htmlBody);
-  const body = extractReadableMsgBody(decodeMimeWords(parsed.body || htmlText), subject);
+  const parsedBody = extractReadableMsgBody(decodeMimeWords(parsed.body || htmlText), subject);
   const rawReadableText = extractReadableMsgBody(`${rawUtf16Text}\n${rawLatin1Text}`, subject);
+  const body = parsedBody || rawReadableText;
   const safeDetectionSources = [body, htmlText, rawReadableText, subject].filter(Boolean);
   const textForDetection = `${subject}\n${body}\n${htmlText}\n${rawReadableText}`;
   const auto = detectAutoFields(textForDetection, subject, safeDetectionSources);
@@ -584,12 +585,70 @@ function isReadableMsgLine(line: string): boolean {
   if (text.length < 3 || text.length > 500) {
     return false;
   }
-  if (hasMsgStructuralNoise(text) || hasForbiddenControlCharacter(text)) {
+  if (
+    hasMsgStructuralNoise(text) ||
+    hasForbiddenControlCharacter(text) ||
+    isMostlySeparatedMsgText(text) ||
+    isTransportHeaderLine(text)
+  ) {
     return false;
   }
   const printable = countReadableMsgCharacters(text);
   const lettersOrNumbers = countLettersOrNumbers(text);
   return printable / text.length >= 0.8 && lettersOrNumbers >= Math.max(2, Math.floor(text.length * 0.25));
+}
+
+function isMostlySeparatedMsgText(text: string): boolean {
+  const compact = text.trim();
+  if (compact.length < 24) {
+    return false;
+  }
+
+  const tokens = compact.split(' ').filter(Boolean);
+  if (tokens.length < 12) {
+    return false;
+  }
+
+  const singleCharacterTokens = tokens.filter((token) => token.length === 1).length;
+  return singleCharacterTokens / tokens.length >= 0.75;
+}
+
+function isTransportHeaderLine(text: string): boolean {
+  const lower = text.toLowerCase();
+  const headerPrefixes = [
+    'received:',
+    'content-type:',
+    'content-transfer-encoding:',
+    'from:',
+    'to:',
+    'cc:',
+    'bcc:',
+    'subject:',
+    'thread-topic:',
+    'thread-index:',
+    'date:',
+    'message-id:',
+    'accept-language:',
+    'content-language:',
+    'mime-version:',
+    'return-path:',
+    'x-ms-',
+    'x-kse-',
+    'x-auto-response-',
+    'x-originating-ip:',
+  ];
+
+  if (headerPrefixes.some((prefix) => lower.startsWith(prefix))) {
+    return true;
+  }
+
+  return (
+    lower.includes('microsoft smtp server') ||
+    lower.includes('mailbox transport') ||
+    lower.includes('application/ms-tnef') ||
+    lower.includes('winmail.dat') ||
+    lower.includes('metrobilbao.local')
+  );
 }
 
 function countReadableMsgCharacters(text: string): number {

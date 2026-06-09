@@ -1,4 +1,4 @@
-import { Eye, FilePlus, Mail, Trash2, X } from 'lucide-react';
+import { Eye, Mail, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import {
@@ -529,14 +529,9 @@ export function TaskEditor({
             <section className="rounded-xl border border-metro-border bg-metro-surface p-3 sm:col-span-6 lg:col-span-12">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-metro-text">Documentos vinculados</h4>
-                <button
-                  className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-surface px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => void handleSelectDocumentPath()}
-                  type="button"
-                >
-                  <FilePlus size={14} />
-                  Seleccionar documento
-                </button>
+                <p className="text-xs font-semibold text-metro-muted">
+                  Guarda solo la ruta; el documento permanece en la carpeta de red.
+                </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
@@ -545,6 +540,15 @@ export function TaskEditor({
                   placeholder="Pegar ruta de red o local..."
                   value={manualDocumentPath}
                 />
+                <button
+                  aria-label="Buscar documento en carpetas"
+                  className="inline-flex items-center justify-center rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => void handleSelectDocumentPath()}
+                  title="Buscar documento"
+                  type="button"
+                >
+                  <Search size={16} />
+                </button>
                 <button
                   className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-semibold text-metro-text hover:border-metro-red"
                   onClick={handleAddManualDocumentPath}
