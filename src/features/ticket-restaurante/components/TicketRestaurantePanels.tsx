@@ -6,6 +6,7 @@ import {
   FileDown,
   Pencil,
   Save,
+  Search,
   Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -1311,10 +1312,32 @@ export function CalculationPanel({
         id: 'ticketsFinales',
         header: mode === 'monthly' ? 'Tickets a pedir' : 'Tickets cotización',
         accessor: (row) => row.ticketsFinales,
-        render: (row) => row.ticketsFinales,
-        width: 125,
-        minWidth: 110,
-        maxWidth: 180,
+        render: (row) => (
+          <div className="flex items-center justify-end gap-2">
+            <span
+              className={
+                mode === 'monthly' ? 'font-bold text-emerald-600' : 'font-bold text-metro-text'
+              }
+            >
+              {row.ticketsFinales}
+            </span>
+            <button
+              aria-label={`Ver cálculo de ${row.nombreApellidos}`}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedDetailRow(row);
+              }}
+              title="Ver cálculo"
+              type="button"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ),
+        width: 135,
+        minWidth: 120,
+        maxWidth: 190,
         sortable: true,
         className: 'text-right font-semibold text-metro-text',
         headerClassName: 'text-right',
@@ -1387,7 +1410,6 @@ export function CalculationPanel({
         getRowId={(row) => row.empleado}
         maxHeightClassName="max-h-[460px]"
         onColumnWidthChange={setColumnWidth}
-        onRowClick={(row) => setSelectedDetailRow(row)}
         onSortChange={setSort}
         rows={calculation.rows}
         sort={preferences.sort}
@@ -1427,6 +1449,8 @@ export function CalculationAbsenceDetailModal({
   const appliedDebtRows = row.deudaAplicadaDetalle ?? [];
   const pendingDebtRows = row.deudaPendienteDetalle ?? [];
   const hojaGastoRows = row.hojaGastoDetalle ?? [];
+  const appliedDiscounts = Math.max(0, row.diasTeoricos - row.ticketsFinales);
+  const monthlyDebtDiscounts = Math.max(0, appliedDiscounts - row.hojasGastoMes);
   const hasDetail =
     appliedDebtRows.length > 0 || pendingDebtRows.length > 0 || hojaGastoRows.length > 0;
 
@@ -1456,9 +1480,30 @@ export function CalculationAbsenceDetailModal({
             <DetailStat label="Días teóricos" value={row.diasTeoricos} />
             <DetailStat label="Hoja gastos" value={row.hojasGastoMes} />
             <DetailStat label="Deuda entrante" value={row.deudaEntrante} />
-            <DetailStat label="Aplicado" value={row.ausenciasAplicadas} />
+            <DetailStat
+              label={mode === 'monthly' ? 'Descuento total' : 'Ausencias mes'}
+              value={appliedDiscounts}
+            />
             <DetailStat label="Deuda pendiente" value={row.deudaPendiente} />
           </div>
+
+          <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
+            <h4 className="mb-2 text-sm font-bold">Cálculo aplicado</h4>
+            {mode === 'monthly' ? (
+              <div className="grid gap-2 md:grid-cols-4">
+                <DetailFormulaItem label="Días calendario" value={row.diasTeoricos} />
+                <DetailFormulaItem label="Hojas de gasto" value={`-${row.hojasGastoMes}`} />
+                <DetailFormulaItem label="Deuda aplicada" value={`-${monthlyDebtDiscounts}`} />
+                <DetailFormulaItem label="Tickets a pedir" value={row.ticketsFinales} strong />
+              </div>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-3">
+                <DetailFormulaItem label="Días calendario" value={row.diasTeoricos} />
+                <DetailFormulaItem label="Ausencias del mes" value={`-${appliedDiscounts}`} />
+                <DetailFormulaItem label="Tickets cotización" value={row.ticketsFinales} strong />
+              </div>
+            )}
+          </section>
 
           {hasDetail ? (
             <>
@@ -1482,6 +1527,30 @@ export function CalculationAbsenceDetailModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+function DetailFormulaItem({
+  label,
+  strong = false,
+  value,
+}: {
+  label: string;
+  strong?: boolean;
+  value: number | string;
+}) {
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-white/70 p-2">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">{label}</p>
+      <p
+        className={`mt-1 text-base font-bold ${
+          strong ? 'text-emerald-700' : 'text-emerald-950'
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
