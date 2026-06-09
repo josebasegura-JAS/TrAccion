@@ -10,6 +10,7 @@ import {
   type ActaAlegacion,
   type ActaDraft,
   type ActaUpdateEntry,
+  type ActaState,
   type CreateActaFromSessionInput,
 } from '../domain/acta';
 
@@ -205,11 +206,12 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
   closeActa: (actaId) => {
     set((state) => {
       const now = new Date().toISOString();
-      const actas = state.actas.map((acta) =>
+      const closedState: ActaState = 'Cerrada';
+      const actas: Acta[] = state.actas.map((acta) =>
         acta.id === actaId
           ? {
               ...acta,
-              estado: 'Cerrada',
+              estado: closedState,
               closedAt: acta.closedAt ?? now,
               updatedAt: now,
             }
