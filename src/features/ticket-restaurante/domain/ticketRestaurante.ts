@@ -1168,6 +1168,68 @@ export function visibleTicketRestaurantAbsences(
   );
 }
 
+
+export interface TicketAbsenceTicketImpactInput {
+  empleado: string;
+  desde: string;
+  hasta: string;
+  motivo: string;
+}
+
+export interface TicketAbsenceTicketImpactResult {
+  diasTicket: number;
+  afectaTicket: boolean;
+  calendario: string;
+}
+
+export function calculateTicketAbsenceTicketImpact(
+  absence: TicketAbsenceTicketImpactInput,
+  people: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+  config: TicketRestaurantConfig,
+): TicketAbsenceTicketImpactResult {
+  const person = people.find(
+    (item) => !item.deletedAt && item.activo && item.empleado === absence.empleado,
+  );
+  const calendar = person
+    ? calendars.find((item) => !item.deletedAt && item.activo && item.id === person.calendarId)
+    : undefined;
+
+  if (!person || !calendar || absence.desde < TICKET_RESTAURANT_MIN_ABSENCE_DATE) {
+    return { diasTicket: 0, afectaTicket: false, calendario: calendar?.nombre ?? 'Sin calendario' };
+  }
+
+  const syntheticAbsence: TicketRestaurantAbsence = {
+    id: 'ticket-absence-preview',
+    empleado: absence.empleado,
+    nombreApellidos: '',
+    desde: absence.desde,
+    hasta: absence.hasta,
+    motivo: absence.motivo,
+    totalDias: 0,
+    afectaTicket: true,
+    createdAt: '',
+    updatedAt: '',
+    deletedAt: null,
+  };
+
+  if (absenceIsNonDiscountableByCalendar(syntheticAbsence, calendar, config.rules)) {
+    return { diasTicket: 0, afectaTicket: false, calendario: calendar.nombre };
+  }
+
+  const ticketIsoWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
+  const noTicket = new Set(calendar.diasSinTicket);
+  let diasTicket = 0;
+
+  forEachIsoDate(absence.desde, absence.hasta, (fecha) => {
+    if (calendarHasTicketRightOnDate(calendar, fecha, ticketIsoWeekdays, noTicket)) {
+      diasTicket += 1;
+    }
+  });
+
+  return { diasTicket, afectaTicket: diasTicket > 0, calendario: calendar.nombre };
+}
+
 export function filterTicketRestaurantAbsencesByMonth(
   absences: TicketRestaurantAbsence[],
   year: number,

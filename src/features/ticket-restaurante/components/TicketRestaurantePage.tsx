@@ -4,6 +4,7 @@ import {
   buildYearCalendar,
   calculateMonthlyTicketOrder,
   calculateTicketAbsenceMonthImpact,
+  calculateTicketAbsenceTicketImpact,
   calculateTicketContribution,
   EMPTY_TICKET_CALENDAR_DRAFT,
   EMPTY_TICKET_PERSON_DRAFT,
@@ -675,6 +676,50 @@ export function TicketRestaurantePage({
       ),
     [people],
   );
+
+  const applyCalendarTicketImpactToPreviewRows = useCallback(
+    (rows: readonly TicketRestaurantAbsencePreviewRow[]): TicketRestaurantAbsencePreviewRow[] =>
+      rows.map((row) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(row.desde) || !/^\d{4}-\d{2}-\d{2}$/.test(row.hasta)) {
+          return row;
+        }
+
+        const person = people.find(
+          (item) =>
+            !item.deletedAt &&
+            item.activo &&
+            normalizeTicketEmployeeNumberForMatch(item.empleado) ===
+              normalizeTicketEmployeeNumberForMatch(row.empleado),
+        );
+        const calendar = person
+          ? calendars.find(
+              (item) => !item.deletedAt && item.activo && item.id === person.calendarId,
+            )
+          : undefined;
+
+        if (!person || !calendar) {
+          return row;
+        }
+
+        const impact = calculateTicketAbsenceTicketImpact(
+          {
+            empleado: person.empleado,
+            desde: row.desde,
+            hasta: row.hasta,
+            motivo: row.motivo,
+          },
+          people,
+          calendars,
+          config,
+        );
+
+        return {
+          ...row,
+          afectaTicket: impact.afectaTicket,
+        };
+      }),
+    [calendars, config, people],
+  );
   const calculationAbsences = useMemo(
     () => [...absences, ...toManutencionDetailAbsences(manutenciones)],
     [absences, manutenciones],
@@ -870,8 +915,10 @@ export function TicketRestaurantePage({
         return;
       }
 
-      const rowsWithTicketRight = rows.filter((row) =>
-        activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumberForMatch(row.empleado)),
+      const rowsWithTicketRight = applyCalendarTicketImpactToPreviewRows(
+        rows.filter((row) =>
+          activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumberForMatch(row.empleado)),
+        ),
       );
       const ignoredWithoutTicketRight = rows.length - rowsWithTicketRight.length;
       const rowsWithErrors = rowsWithTicketRight.filter((row) => row.errors.length > 0).length;
@@ -984,9 +1031,10 @@ export function TicketRestaurantePage({
     const currentAbsences = editingAbsenceId
       ? absences.filter((absence) => absence.id !== editingAbsenceId)
       : absences;
-    const result = saveTicketRestaurantAbsencePreviewRows(currentAbsences, previewRows);
+    const rowsWithCalendarImpact = applyCalendarTicketImpactToPreviewRows(previewRows);
+    const result = saveTicketRestaurantAbsencePreviewRows(currentAbsences, rowsWithCalendarImpact);
     if (result.errors.length > 0) {
-      setPreviewRows(validateTicketRestaurantAbsencePreviewRows(previewRows));
+      setPreviewRows(validateTicketRestaurantAbsencePreviewRows(rowsWithCalendarImpact));
       setImportMessage(result.errors.join(' '));
       return;
     }
