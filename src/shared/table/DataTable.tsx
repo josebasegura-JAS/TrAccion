@@ -27,6 +27,7 @@ interface DataTableProps<Row, ColumnId extends string> {
   onSortChange: (sort: TableSortState<ColumnId> | null) => void;
   columnWidths: Partial<Record<ColumnId, number>>;
   onColumnWidthChange: (columnId: ColumnId, width: number) => void;
+  onResetColumnWidths?: () => void;
   emptyMessage: string;
   onRowClick?: (row: Row) => void;
   onRowDoubleClick?: (row: Row) => void;
@@ -66,6 +67,7 @@ export function DataTable<Row, ColumnId extends string>({
   onSortChange,
   columnWidths,
   onColumnWidthChange,
+  onResetColumnWidths,
   emptyMessage,
   onRowClick,
   onRowDoubleClick,
@@ -150,7 +152,19 @@ export function DataTable<Row, ColumnId extends string>({
   };
 
   return (
-    <div className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}>
+    <div className="space-y-2">
+      {onResetColumnWidths && (
+        <div className="flex justify-end">
+          <button
+            className="inline-flex items-center rounded-lg border border-metro-border px-2.5 py-1 text-[11px] font-semibold text-metro-muted transition-colors hover:border-metro-red hover:text-metro-text"
+            onClick={onResetColumnWidths}
+            type="button"
+          >
+            Restablecer columnas
+          </button>
+        </div>
+      )}
+      <div className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}>
       <table
         aria-label={ariaLabel}
         className="w-full table-fixed text-left text-xs"
@@ -263,6 +277,7 @@ export function DataTable<Row, ColumnId extends string>({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

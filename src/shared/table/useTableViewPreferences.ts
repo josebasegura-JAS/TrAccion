@@ -166,6 +166,13 @@ export function useTableViewPreferences<ColumnId extends string>({
     }));
   }, []);
 
+  const resetColumnWidths = useCallback(() => {
+    setPreferences((current) => ({
+      ...current,
+      columnWidths: defaultPreferences.columnWidths,
+    }));
+  }, [defaultPreferences.columnWidths]);
+
   const resetPreferences = useCallback(() => {
     writeStoredPreferences(storageKey, defaultPreferences);
     skipNextWriteRef.current = true;
@@ -176,6 +183,7 @@ export function useTableViewPreferences<ColumnId extends string>({
     preferences,
     setSort,
     setColumnWidth,
+    resetColumnWidths,
     resetPreferences,
   };
 }
