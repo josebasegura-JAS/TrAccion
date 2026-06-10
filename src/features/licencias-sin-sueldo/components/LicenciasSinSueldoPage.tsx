@@ -383,7 +383,7 @@ function LicenciasTable({
   onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
   generatingWordId: string | null;
 }) {
-  const { preferences, setSort, setColumnWidth, resetPreferences } = useTableViewPreferences<LicenciasTableColumnId>({
+  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } = useTableViewPreferences<LicenciasTableColumnId>({
     storageKey: `traccion.tableView.licenciasSinSueldo.${blockId}`,
     defaultPreferences: defaultTablePreferences,
     validColumnIds: tableColumnIds,
@@ -433,6 +433,7 @@ function LicenciasTable({
       <DataTable
         ariaLabel={title}
         columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
         columns={columns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
