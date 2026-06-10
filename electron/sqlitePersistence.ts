@@ -20,6 +20,7 @@ const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
+const MODULE_LOCK_RECORD_ID = '__module__';
 
 export interface PersistedStorageRecord {
   key: string;
@@ -1088,6 +1089,40 @@ function readRecordLockRow(
   return isEditingLockRow(row) ? row : null;
 }
 
+function readConflictingEditingLock(
+  db: Database,
+  moduleName: string,
+  recordId: string,
+): EditingLockRow | null {
+  const normalizedRecordId = recordId.trim();
+
+  if (normalizedRecordId === MODULE_LOCK_RECORD_ID) {
+    const row = db
+      .prepare(
+        `SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at
+         FROM editing_locks
+         WHERE module = ? AND owner_id <> ?
+         ORDER BY record_id = ? DESC, expires_at DESC
+         LIMIT 1`,
+      )
+      .get(moduleName, ownerId, MODULE_LOCK_RECORD_ID);
+    return isEditingLockRow(row) ? row : null;
+  }
+
+  const row = db
+    .prepare(
+      `SELECT module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at
+       FROM editing_locks
+       WHERE module = ?
+         AND owner_id <> ?
+         AND record_id IN (?, ?)
+       ORDER BY record_id = ? DESC, expires_at DESC
+       LIMIT 1`,
+    )
+    .get(moduleName, ownerId, normalizedRecordId, MODULE_LOCK_RECORD_ID, MODULE_LOCK_RECORD_ID);
+  return isEditingLockRow(row) ? row : null;
+}
+
 export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult {
   if (!validateRecordLockPayload(payload)) {
     return recordLockError('Identificador de bloqueo inválido.');
@@ -1105,16 +1140,21 @@ export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult 
     const nowIso = now.toISOString();
     const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
     deleteExpiredRecordLocks(db, nowIso);
-    const existingLock = readRecordLockRow(db, moduleName, recordId);
+    const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
 
-    if (existingLock && existingLock.owner_id !== ownerId) {
+    if (conflictingLock) {
+      const isModuleLock = conflictingLock.record_id === MODULE_LOCK_RECORD_ID;
       return {
         ok: false,
         status: 'locked',
-        lock: lockOwnerFromRow(existingLock),
-        message: `Registro bloqueado por ${existingLock.owner_name}@${existingLock.machine_name}.`,
+        lock: lockOwnerFromRow(conflictingLock),
+        message: isModuleLock
+          ? `Módulo bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`
+          : `Registro bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`,
       };
     }
+
+    const existingLock = readRecordLockRow(db, moduleName, recordId);
 
     if (existingLock) {
       db.prepare(
@@ -1234,12 +1274,28 @@ export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
 
     const nowIso = new Date().toISOString();
     deleteExpiredRecordLocks(db, nowIso);
-    const existingLock = readRecordLockRow(db, payload.module.trim(), payload.recordId.trim());
+    const moduleName = payload.module.trim();
+    const recordId = payload.recordId.trim();
+    const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
+
+    if (conflictingLock) {
+      return {
+        ok: false,
+        status: 'locked',
+        lock: lockOwnerFromRow(conflictingLock),
+        message:
+          conflictingLock.record_id === MODULE_LOCK_RECORD_ID
+            ? 'Bloqueo global de módulo activo.'
+            : 'Bloqueo de registro activo.',
+      };
+    }
+
+    const existingLock = readRecordLockRow(db, moduleName, recordId);
 
     return existingLock
       ? {
           ok: existingLock.owner_id === ownerId,
-          status: existingLock.owner_id === ownerId ? 'acquired' : 'locked',
+          status: 'acquired',
           lock: lockOwnerFromRow(existingLock),
           message: 'Bloqueo activo.',
         }

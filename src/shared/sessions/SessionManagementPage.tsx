@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
+import { withSharedModuleLocks } from '../../services/sharedModuleLock';
 import { useSharedRecordLock } from '../../services/useSharedRecordLock';
 import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
@@ -420,25 +421,42 @@ export function SessionManagementPage({
     cancelEditSession();
   };
 
-  const confirmCloseSession = () => {
+  const confirmCloseSession = async () => {
     if (!closingSession) {
       return;
     }
 
-    const treatedIds = closingSession.items.filter((taskId) => treatedTaskIds[taskId]);
-    const treatedTasks = treatedIds.flatMap((taskId) => {
-      const task = tasksById.get(taskId);
-      return task ? [task] : [];
-    });
-    closeSession(closingSession.id, treatedIds);
-    closeTasksFromSession(treatedIds, config.closeTrackingLabel, managedSessionLabel(closingSession));
-    if (window.confirm('¿Desea crear un registro en Actas?')) {
-      onClosedSession?.(closingSession, treatedTasks);
+    try {
+      await withSharedModuleLocks(
+        [
+          { module: config.moduleId, label: config.title },
+          { module: 'tareas', label: 'Tareas' },
+        ],
+        () => {
+          const treatedIds = closingSession.items.filter((taskId) => treatedTaskIds[taskId]);
+          const treatedTasks = treatedIds.flatMap((taskId) => {
+            const task = tasksById.get(taskId);
+            return task ? [task] : [];
+          });
+
+          closeSession(closingSession.id, treatedIds);
+          closeTasksFromSession(treatedIds, config.closeTrackingLabel, managedSessionLabel(closingSession));
+          if (window.confirm('¿Desea crear un registro en Actas?')) {
+            onClosedSession?.(closingSession, treatedTasks);
+          }
+          setClosingSessionId(null);
+          setTreatedTaskIds({});
+          setExpandedSessionId(null);
+          setOpenPanel('history');
+        },
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'No se ha podido cerrar la sesión de forma segura. Reintenta cuando finalicen otras ediciones.',
+      );
     }
-    setClosingSessionId(null);
-    setTreatedTaskIds({});
-    setExpandedSessionId(null);
-    setOpenPanel('history');
   };
 
   const openImporter = () => {
@@ -486,54 +504,72 @@ export function SessionManagementPage({
     }
   };
 
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (!importPreview || relevantImportSessions.length === 0) {
       return;
     }
 
-    const importableSessions = relevantImportSessions.filter((session) => {
-      const normalizedCode = session.draft.code.trim().toLowerCase();
-      return !sessions.some(
-        (existingSession) =>
-          existingSession.code.trim().toLowerCase() === normalizedCode &&
-          existingSession.date === session.draft.date,
-      );
-    });
-    const importableTaskKeys = new Set(importableSessions.flatMap((session) => session.taskExternalKeys));
-    const closedAtByTaskExternalKey = new Map(
-      importableSessions.flatMap((session) =>
-        session.taskExternalKeys.map((externalKey) => [
-          externalKey,
-          session.draft.date ? `${session.draft.date}T00:00:00.000Z` : null,
-        ] as const),
-      ),
-    );
-    const importableTasks = relevantImportTasks
-      .filter((task) => importableTaskKeys.has(task.externalKey))
-      .map((task) => ({
-        ...task,
-        closedAt: closedAtByTaskExternalKey.get(task.externalKey) ?? null,
-      }));
-    const taskIdsByExternalKey = createManyFromImport(importableTasks);
-    const importedSessionCount = importSessions(
-      importableSessions.map((session) => ({
-        externalKey: session.externalKey,
-        draft: session.draft,
-        taskIds: session.taskExternalKeys.flatMap((externalKey) => {
-          const taskId = taskIdsByExternalKey[externalKey];
-          return taskId ? [taskId] : [];
-        }),
-      })),
-    );
+    setImportError('');
+    try {
+      await withSharedModuleLocks(
+        [
+          { module: config.moduleId, label: config.title },
+          { module: 'tareas', label: 'Tareas' },
+        ],
+        () => {
+          const latestSessions = useSessionStore.getState().sessions;
+          const importableSessions = relevantImportSessions.filter((session) => {
+            const normalizedCode = session.draft.code.trim().toLowerCase();
+            return !latestSessions.some(
+              (existingSession) =>
+                existingSession.code.trim().toLowerCase() === normalizedCode &&
+                existingSession.date === session.draft.date,
+            );
+          });
+          const importableTaskKeys = new Set(importableSessions.flatMap((session) => session.taskExternalKeys));
+          const closedAtByTaskExternalKey = new Map(
+            importableSessions.flatMap((session) =>
+              session.taskExternalKeys.map((externalKey) => [
+                externalKey,
+                session.draft.date ? `${session.draft.date}T00:00:00.000Z` : null,
+              ] as const),
+            ),
+          );
+          const importableTasks = relevantImportTasks
+            .filter((task) => importableTaskKeys.has(task.externalKey))
+            .map((task) => ({
+              ...task,
+              closedAt: closedAtByTaskExternalKey.get(task.externalKey) ?? null,
+            }));
+          const taskIdsByExternalKey = createManyFromImport(importableTasks);
+          const importedSessionCount = importSessions(
+            importableSessions.map((session) => ({
+              externalKey: session.externalKey,
+              draft: session.draft,
+              taskIds: session.taskExternalKeys.flatMap((externalKey) => {
+                const taskId = taskIdsByExternalKey[externalKey];
+                return taskId ? [taskId] : [];
+              }),
+            })),
+          );
 
-    loadTasks();
-    setOpenPanel('history');
-    setImportPreview(null);
-    window.alert(
-      importedSessionCount > 0
-        ? `Importación completada: ${importedSessionCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
-        : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
-    );
+          loadTasks();
+          setOpenPanel('history');
+          setImportPreview(null);
+          window.alert(
+            importedSessionCount > 0
+              ? `Importación completada: ${importedSessionCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
+              : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
+          );
+        },
+      );
+    } catch (error) {
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : 'No se ha podido confirmar la importación de forma segura.',
+      );
+    }
   };
 
   return (
