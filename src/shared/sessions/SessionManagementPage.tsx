@@ -18,6 +18,7 @@ import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
 import { ActionButton } from '../../components/ui/ActionButton';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import type { ManagedSessionStateStore } from './createSessionStore';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
@@ -68,7 +69,9 @@ interface SessionManagementPageProps {
   initialSessionId?: string | null;
   navigationNonce?: number;
   onClosedSession?: (session: ManagedSession, treatedTasks: Task[]) => void;
+  helpSections?: ModuleHelpSection[];
 }
+
 
 function sortOpenSessions(sessions: ManagedSession[]): ManagedSession[] {
   return [...sessions].sort(
@@ -265,6 +268,7 @@ export function SessionManagementPage({
   navigationNonce,
   useSessionStore,
   onClosedSession,
+  helpSections,
 }: SessionManagementPageProps) {
   const { sessions, load, create, importSessions, remove, update, addTask, removeTask, moveTask, closeSession } = useSessionStore();
   const { tasks, load: loadTasks, closeTasksFromSession, createManyFromImport } = useTaskStore();
@@ -536,7 +540,16 @@ export function SessionManagementPage({
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-2xl font-bold text-metro-text">{config.title}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-bold text-metro-text">{config.title}</h2>
+            {helpSections ? (
+              <ModuleHelpButton
+                title={config.title}
+                subtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
+                sections={helpSections}
+              />
+            ) : null}
+          </div>
           <p className="mt-0.5 text-base text-metro-muted">
             Alta de sesiones, orden del día y cierre automático de tareas en fase {config.taskPhase}.
           </p>

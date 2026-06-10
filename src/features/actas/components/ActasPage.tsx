@@ -15,6 +15,46 @@ import {
 } from '../domain/acta';
 import { useActasStore } from '../store/useActasStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+
+
+const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: '¿Qué hace este módulo?',
+    body: 'Gestiona el ciclo completo de elaboración, envío, alegaciones, firma e histórico de actas.',
+  },
+  {
+    title: 'Estados',
+    items: [
+      'Pendiente de hacer.',
+      'Enviada a Dirección.',
+      'Pendiente de alegaciones.',
+      'Pendiente de firma.',
+      'Cerrada o finalizada según corresponda.',
+    ],
+  },
+  {
+    title: 'Reglas principales',
+    items: [
+      'Cada cambio de estado debe mantener la trazabilidad del acta.',
+      'Las fechas límite se actualizan según el estado de tramitación.',
+      'Las alegaciones quedan registradas por sindicato.',
+      'Las actas firmadas o cerradas pasan a histórico.',
+      'Los tipos de acta pueden gestionarse desde el botón Nuevo tipo.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    ordered: true,
+    items: [
+      'Crear o generar el acta desde la sesión correspondiente.',
+      'Completar título, fechas y estado.',
+      'Registrar alegaciones cuando proceda.',
+      'Adjuntar la ruta del acta firmada al cerrar el ciclo.',
+      'Consultar el histórico por año cuando el acta ya no esté abierta.',
+    ],
+  },
+];
 
 type ActaColumnId =
   | 'tipo'
@@ -566,9 +606,16 @@ export function ActasPage() {
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="flex items-center gap-2 text-2xl font-bold text-metro-text">
-            <FileText size={24} /> Actas
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="flex items-center gap-2 text-2xl font-bold text-metro-text">
+              <FileText size={24} /> Actas
+            </h2>
+            <ModuleHelpButton
+              title="Actas"
+              subtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
+              sections={ACTAS_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-base text-metro-muted">
             Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e histórico.
           </p>

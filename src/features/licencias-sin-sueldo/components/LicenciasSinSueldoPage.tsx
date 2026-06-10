@@ -8,6 +8,7 @@ import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -55,6 +56,40 @@ const defaultTablePreferences: TableViewPreferences<LicenciasTableColumnId> = {
 
 const inputClass = 'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60';
 const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-metro-muted';
+
+const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: '¿Qué hace este módulo?',
+    body: 'Gestiona solicitudes de licencia sin sueldo, excedencias y permisos no retribuidos, desde la aprobación hasta el histórico.',
+  },
+  {
+    title: 'Estados',
+    items: [
+      'Pendiente de aprobar.',
+      'Pendiente de firma.',
+      'Vigente.',
+      'Histórico.',
+    ],
+  },
+  {
+    title: 'Reglas principales',
+    items: [
+      'Las licencias sin sueldo tienen duración mínima de 15 días y máxima de 9 meses.',
+      'El Año de Libre Disposición genera automáticamente una duración de 5 años.',
+      'Las solicitudes aprobadas pasan a pendiente de firma antes de quedar vigentes.',
+      'Los registros finalizados quedan agrupados en histórico por año.',
+    ],
+  },
+  {
+    title: 'Generación documental',
+    items: [
+      'En los registros de licencia sin sueldo aprobados puede generarse documento Word desde plantilla.',
+      'La plantilla se toma de la ruta configurada en Ajustes.',
+      'El documento rellena datos de la persona, puesto, fechas y fecha del sistema.',
+    ],
+  },
+];
+
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50';
 const secondaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -602,7 +637,14 @@ export function LicenciasSinSueldoPage() {
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-xl font-bold text-metro-text">Licencias sin sueldo y permisos no retribuidos</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-metro-text">Licencias sin sueldo y permisos no retribuidos</h2>
+            <ModuleHelpButton
+              title="Licencias sin sueldo y permisos no retribuidos"
+              subtitle="Guía rápida de estados, reglas, vigencia, histórico y generación documental."
+              sections={LICENCIAS_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-sm text-metro-muted">Seguimiento por aprobación, firma, vigencia e histórico.</p>
         </div>
         <button className={buttonClass} onClick={() => setEditor({ mode: 'create', record: null })} type="button"><Plus size={16} /> Nueva solicitud</button>

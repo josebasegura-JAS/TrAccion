@@ -1,4 +1,4 @@
-import { CalendarDays, Euro, HelpCircle, Settings, Trash2, X } from 'lucide-react';
+import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildYearCalendar,
@@ -35,6 +35,7 @@ import {
 } from '../domain/importManutenciones';
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn } from '../../../shared/export/types';
@@ -51,6 +52,55 @@ import {
   TicketPriceModal,
   TicketRulesModal,
 } from './TicketRestaurantePanels';
+
+
+const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: '¿Qué hace este módulo?',
+    body: 'Gestiona el cálculo, seguimiento y cotización de los Tickets Restaurante de la plantilla.',
+  },
+  {
+    title: 'Flujo recomendado',
+    ordered: true,
+    items: [
+      'Configurar calendarios.',
+      'Configurar personas con derecho a ticket.',
+      'Importar ausencias.',
+      'Revisar cómputo mensual.',
+      'Revisar cotización mensual.',
+      'Exportar resultados.',
+    ],
+  },
+  {
+    title: 'Reglas de cálculo',
+    items: [
+      'Solo se calculan personas con derecho a ticket.',
+      'Las ausencias no computables se ignoran.',
+      'Las ausencias anteriores al 01/03/2026 no se consideran.',
+      'Las deudas se arrastran al primer mes con tickets disponibles.',
+      'Los calendarios determinan los días potencialmente generadores de ticket.',
+      'El precio del ticket es parametrizable.',
+      'Los meses sin pedido generan deuda pendiente para meses posteriores.',
+    ],
+  },
+  {
+    title: 'Importación de ausencias',
+    items: [
+      'Se eliminan duplicados.',
+      'Se agrupan por empleado y fecha.',
+      'Se ignoran registros sin empleado válido.',
+      'Se muestran advertencias de incidencias detectadas.',
+    ],
+  },
+  {
+    title: 'Cotización',
+    items: [
+      'Muestra tickets realmente generados.',
+      'Permite verificar importes por empleado y mes.',
+      'Incluye el calendario asignado a cada persona.',
+    ],
+  },
+];
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'Enero' },
@@ -645,7 +695,6 @@ export function TicketRestaurantePage({
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
-  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const peopleFileInputRef = useRef<HTMLInputElement | null>(null);
   const manutencionesFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1222,15 +1271,11 @@ export function TicketRestaurantePage({
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-bold text-metro-text">Ticket Restaurante</h2>
-            <button
-              aria-label="Abrir ayuda de Ticket Restaurante"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-blue-300 bg-blue-50 text-blue-700 shadow-sm transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
-              onClick={() => setIsHelpModalOpen(true)}
-              title="Ayuda de Ticket Restaurante"
-              type="button"
-            >
-              <HelpCircle size={17} strokeWidth={2.4} />
-            </button>
+            <ModuleHelpButton
+              title="Ticket Restaurante"
+              subtitle="Guía rápida de uso, reglas principales e importaciones del módulo."
+              sections={TICKET_RESTAURANTE_HELP_SECTIONS}
+            />
           </div>
           <p className="mt-0.5 text-sm text-metro-muted">
             Gestión anual de calendarios y ausencias de Ticket Restaurante.
@@ -1552,7 +1597,6 @@ export function TicketRestaurantePage({
         </div>
       ) : null}
 
-      {isHelpModalOpen ? <TicketHelpModal onClose={() => setIsHelpModalOpen(false)} /> : null}
 
       {isPriceModalOpen ? (
         <TicketPriceModal
@@ -1591,97 +1635,5 @@ export function TicketRestaurantePage({
         />
       ) : null}
     </section>
-  );
-}
-
-function TicketHelpModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-metro-border bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-metro-border bg-blue-50 px-5 py-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">
-              Ayuda
-            </p>
-            <h3 className="text-lg font-bold text-metro-text">Ticket Restaurante</h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Guía rápida de uso, reglas principales e importaciones del módulo.
-            </p>
-          </div>
-          <button
-            aria-label="Cerrar ayuda"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-metro-border bg-white text-metro-muted transition hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={17} />
-          </button>
-        </div>
-
-        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4 text-sm text-metro-text">
-          <section>
-            <h4 className="font-semibold text-metro-text">¿Qué hace este módulo?</h4>
-            <p className="mt-1 text-metro-muted">
-              Gestiona el cálculo, seguimiento y cotización de los Tickets Restaurante de la
-              plantilla.
-            </p>
-          </section>
-
-          <section>
-            <h4 className="font-semibold text-metro-text">Flujo recomendado</h4>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-metro-muted">
-              <li>Configurar calendarios.</li>
-              <li>Configurar personas con derecho a ticket.</li>
-              <li>Importar ausencias.</li>
-              <li>Revisar cómputo mensual.</li>
-              <li>Revisar cotización mensual.</li>
-              <li>Exportar resultados.</li>
-            </ol>
-          </section>
-
-          <section>
-            <h4 className="font-semibold text-metro-text">Reglas de cálculo</h4>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-metro-muted">
-              <li>Solo se calculan personas con derecho a ticket.</li>
-              <li>Las ausencias no computables se ignoran.</li>
-              <li>Las ausencias anteriores al 01/03/2026 no se consideran.</li>
-              <li>Las deudas se arrastran al primer mes con tickets disponibles.</li>
-              <li>Los calendarios determinan los días potencialmente generadores de ticket.</li>
-              <li>El precio del ticket es parametrizable.</li>
-              <li>Los meses sin pedido generan deuda pendiente para meses posteriores.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h4 className="font-semibold text-metro-text">Importación de ausencias</h4>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-metro-muted">
-              <li>Se eliminan duplicados.</li>
-              <li>Se agrupan por empleado y fecha.</li>
-              <li>Se ignoran registros sin empleado válido.</li>
-              <li>Se muestran advertencias de incidencias detectadas.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h4 className="font-semibold text-metro-text">Cotización</h4>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-metro-muted">
-              <li>Muestra tickets realmente generados.</li>
-              <li>Permite verificar importes por empleado y mes.</li>
-              <li>Incluye el calendario asignado a cada persona.</li>
-            </ul>
-          </section>
-        </div>
-
-        <div className="flex justify-end border-t border-metro-border bg-metro-panel px-5 py-3">
-          <button
-            className="rounded-lg bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={onClose}
-            type="button"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

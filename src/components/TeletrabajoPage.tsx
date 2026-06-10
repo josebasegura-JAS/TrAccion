@@ -38,10 +38,48 @@ import {
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
+import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+
+
+const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: '¿Qué hace este módulo?',
+    body: 'Gestiona solicitudes y renovaciones de teletrabajo, con seguimiento de validaciones, aprobación, denegación e histórico.',
+  },
+  {
+    title: 'Flujo recomendado',
+    ordered: true,
+    items: [
+      'Crear solicitud o importar interesados desde encuesta.',
+      'Revisar los datos de la persona y el puesto asignado.',
+      'Completar las validaciones necesarias.',
+      'Aprobar o denegar la solicitud.',
+      'Mantener el histórico cuando finalice el periodo correspondiente.',
+    ],
+  },
+  {
+    title: 'Reglas principales',
+    items: [
+      'El puesto debe existir en Plantilla y debe poder traducirse a un puesto de teletrabajo.',
+      'Las renovaciones mantienen trazabilidad respecto al ejercicio anterior.',
+      'Las solicitudes conservan observaciones y validaciones para revisión posterior.',
+      'Los registros eliminados no desaparecen físicamente: quedan fuera de la vista activa mediante borrado lógico.',
+    ],
+  },
+  {
+    title: 'Importación de interesados',
+    items: [
+      'Permite alta o actualización masiva desde Excel de encuesta.',
+      'Busca la persona en Plantilla para tomar el puesto correcto.',
+      'Si un puesto no tiene correspondencia, debe resolverse desde el popup de asignación de puestos.',
+      'La importación debe informar si termina correctamente o si no ha podido procesarse.',
+    ],
+  },
+];
 
 type TeletrabajoTableColumnId =
   | 'empleado'
@@ -742,7 +780,14 @@ export function TeletrabajoPage({
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-xl font-bold text-metro-text">Teletrabajo</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-metro-text">Teletrabajo</h2>
+            <ModuleHelpButton
+              title="Teletrabajo"
+              subtitle="Guía rápida de solicitudes, validaciones, importación e histórico."
+              sections={TELETRABAJO_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-sm text-metro-muted">
             Listado de solicitudes con alta manual, edición, borrado lógico, búsqueda y filtros.
           </p>
