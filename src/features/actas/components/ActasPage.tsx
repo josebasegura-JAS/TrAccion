@@ -1,5 +1,5 @@
 import { CalendarClock, Eye, FileText, FolderOpen, Plus, Settings2, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback} from 'react';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn } from '../../../shared/export/types';
@@ -387,10 +387,13 @@ export function ActasPage() {
     setPendingDeleteActaTypeId(null);
   };
 
-  const deleteActa = (actaId: string) => {
-    remove(actaId);
-    setPendingDeleteActaId(null);
-  };
+  const deleteActa = useCallback(
+    (actaId: string) => {
+      remove(actaId);
+      setPendingDeleteActaId(null);
+    },
+    [remove],
+  );
 
   const years = useMemo(
     () => [...new Set(actas.map(getActaYear))].sort((first, second) => second.localeCompare(first)),
