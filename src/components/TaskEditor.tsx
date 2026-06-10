@@ -77,17 +77,41 @@ function mergeDocumentLinks(
   return [...currentLinks, ...dedupedNextLinks];
 }
 
+function decodeHtmlEntities(value: string): string {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = value;
+  return textarea.value;
+}
+
+function stripHtmlToPlainText(value: string): string {
+  return decodeHtmlEntities(
+    value
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<br\s*\/?>(?=\s*)/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<[^>]+>/g, ' '),
+  );
+}
+
+function normalizeMailBodyAsPlainText(value: string): string {
+  const withoutHtml = /<[^>]+>/.test(value) ? stripHtmlToPlainText(value) : decodeHtmlEntities(value);
+
+  return withoutHtml
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function formatMailFromMsg(data: {
-  subject: string;
-  senderName: string;
-  senderEmail: string;
-  date: string;
   body: string;
 }): string {
-  const header = data.subject ? [`Asunto: ${data.subject}`] : [];
-  const body = data.body.trim();
-
-  return [...header, body].filter(Boolean).join('\n\n');
+  return normalizeMailBodyAsPlainText(data.body);
 }
 
 function formatSessionModuleLabel(sessionModule: string): string {
@@ -628,7 +652,7 @@ export function TaskEditor({
                 }}
               >
                 <p className="mb-2 text-xs font-semibold text-metro-muted">
-                  Arrastra aquí un mensaje .msg de Outlook. Se copiarán el asunto y el cuerpo
+                  Arrastra aquí un mensaje .msg de Outlook. Se copiará solo el texto plano del cuerpo
                   al campo Email.
                 </p>
                 <textarea
@@ -636,7 +660,7 @@ export function TaskEditor({
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, mail: event.target.value }))
                   }
-                  placeholder="Asunto y cuerpo del email vinculado..."
+                  placeholder="Texto plano del email vinculado..."
                   value={draft.mail}
                 />
               </div>
