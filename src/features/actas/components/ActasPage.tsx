@@ -170,6 +170,63 @@ function addDaysToIsoDate(value: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+
+function getActaStateBadgeClass(state: ActaDraft['estado']): string {
+  if (state === 'Pendiente de redactar') {
+    return 'border-orange-400/40 bg-orange-500/15 text-orange-200';
+  }
+  if (state === 'Enviada a Dirección') {
+    return 'border-sky-400/40 bg-sky-500/15 text-sky-200';
+  }
+  if (state === 'Pendiente de alegaciones') {
+    return 'border-yellow-400/40 bg-yellow-500/15 text-yellow-100';
+  }
+  if (state === 'Pendiente de firma') {
+    return 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200';
+  }
+  return 'border-metro-border bg-metro-panel text-metro-muted';
+}
+
+function renderActaStateBadge(state: ActaDraft['estado']) {
+  return (
+    <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-bold ${getActaStateBadgeClass(state)}`}>
+      {state}
+    </span>
+  );
+}
+
+function getDeadlineStatusClass(value: string): string {
+  if (!value) {
+    return 'text-metro-muted';
+  }
+
+  const today = new Date(`${getTodayIsoDate()}T00:00:00`);
+  const deadline = new Date(`${value}T00:00:00`);
+  const diffDays = Math.floor((deadline.getTime() - today.getTime()) / 86_400_000);
+
+  if (diffDays < 0) {
+    return 'border-red-400/45 bg-red-500/15 text-red-200';
+  }
+
+  if (diffDays < 3) {
+    return 'border-yellow-400/45 bg-yellow-500/15 text-yellow-100';
+  }
+
+  return 'border-metro-border bg-metro-panel text-metro-text';
+}
+
+function renderDeadlineBadge(value: string) {
+  if (!value) {
+    return <span className="text-metro-muted">—</span>;
+  }
+
+  return (
+    <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-bold ${getDeadlineStatusClass(value)}`}>
+      {value}
+    </span>
+  );
+}
+
 function getAutomaticDeadlineForState(state: ActaDraft['estado'], changedAt = getTodayIsoDate()): string | null {
   if (state === 'Enviada a Dirección') {
     return addDaysToIsoDate(changedAt, 7);
@@ -397,7 +454,7 @@ export function ActasPage() {
         id: 'estado',
         header: 'Estado',
         accessor: (acta) => acta.estado,
-        render: (acta) => acta.estado,
+        render: (acta) => renderActaStateBadge(acta.estado),
         width: 190,
         sortable: true,
         resizable: true,
@@ -406,7 +463,7 @@ export function ActasPage() {
         id: 'fechaLimite',
         header: 'Fecha límite',
         accessor: (acta) => acta.fechaLimite,
-        render: (acta) => acta.fechaLimite || '—',
+        render: (acta) => renderDeadlineBadge(acta.fechaLimite),
         width: 130,
         sortable: true,
         resizable: true,
