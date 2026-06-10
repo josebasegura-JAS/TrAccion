@@ -7,9 +7,10 @@ import { PrintPreviewModal } from './PrintPreviewModal';
 
 interface ExportPrintButtonsProps<T> {
   payload: ExportTablePayload<T>;
+  htmlBuilder?: () => string;
 }
 
-export function ExportPrintButtons<T>({ payload }: ExportPrintButtonsProps<T>) {
+export function ExportPrintButtons<T>({ payload, htmlBuilder }: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   return (
     <>
@@ -23,7 +24,7 @@ export function ExportPrintButtons<T>({ payload }: ExportPrintButtonsProps<T>) {
       <ActionButton
         disabled={payload.rows.length === 0}
         onClick={() =>
-          setPreviewHtml(buildPrintableTableHtml({ ...payload, generatedAt: new Date() }))
+          setPreviewHtml(htmlBuilder ? htmlBuilder() : buildPrintableTableHtml({ ...payload, generatedAt: new Date() }))
         }
         variant="print"
       >

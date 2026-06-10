@@ -20,6 +20,7 @@ import { sanitizeFilenamePart } from '../export/tableExport';
 import { ActionButton } from '../../components/ui/ActionButton';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
+import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
 import type { ManagedSessionStateStore } from './createSessionStore';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
 import {
@@ -997,6 +998,10 @@ function SessionCard({
   });
   const isReadOnly = recordLock.isReadOnly;
   const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
+  const sessionPrintBuilder =
+    config.moduleId === 'comite'
+      ? () => buildPrintableCommitteeSessionHtml({ session, tasksById, config, generatedAt: new Date() })
+      : undefined;
 
   return (
     <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
@@ -1012,7 +1017,7 @@ function SessionCard({
           {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons payload={sessionExportPayload} />
+          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} />
           {onEdit && (
             <button
               className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
@@ -1153,6 +1158,10 @@ function HistoricSessionCard({
   tasksById: Map<string, Task>;
 }) {
   const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
+  const sessionPrintBuilder =
+    config.moduleId === 'comite'
+      ? () => buildPrintableCommitteeSessionHtml({ session, tasksById, config, generatedAt: new Date() })
+      : undefined;
 
   return (
     <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
@@ -1168,7 +1177,7 @@ function HistoricSessionCard({
           {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons payload={sessionExportPayload} />
+          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} />
           {onEdit && (
             <button
               className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
