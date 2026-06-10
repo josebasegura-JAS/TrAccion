@@ -151,7 +151,7 @@ export function PlantillaPage() {
     setFilter('nivelRetributivo', '');
   };
 
-  const { preferences, setSort, setColumnWidth, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<EmployeeTableColumnId>({
       storageKey: PLANTILLA_TABLE_STORAGE_KEY,
       defaultPreferences: defaultPlantillaTablePreferences,
@@ -397,6 +397,7 @@ export function PlantillaPage() {
         <DataTable
           ariaLabel="Personas en plantilla"
           columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
           columns={employeeTableColumns}
           emptyMessage="No hay personas que coincidan con los filtros."
           getRowId={(employee) => employee.empleado}

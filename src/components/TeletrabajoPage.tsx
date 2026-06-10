@@ -340,7 +340,7 @@ export function TeletrabajoPage({
     () => filterTeletrabajoSolicitudes(solicitudes, filters),
     [filters, solicitudes],
   );
-  const { preferences, setSort, setColumnWidth, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<TeletrabajoTableColumnId>({
       storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTeletrabajoTablePreferences,
@@ -863,6 +863,7 @@ export function TeletrabajoPage({
         <DataTable
           ariaLabel="Solicitudes de teletrabajo"
           columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
           columns={teletrabajoTableColumns}
           emptyMessage="No hay solicitudes de teletrabajo para los criterios seleccionados."
           getRowId={(solicitud) => solicitud.id}

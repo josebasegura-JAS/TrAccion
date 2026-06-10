@@ -45,7 +45,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
     });
   }, [jobPositionTranslations, search]);
 
-  const { preferences, setSort, setColumnWidth, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<JobPositionTranslationColumnId>({
       storageKey: JOB_POSITION_TRANSLATIONS_TABLE_STORAGE_KEY,
       defaultPreferences: defaultJobPositionTranslationTablePreferences,
@@ -202,6 +202,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
             <DataTable
               ariaLabel="Traducciones de puestos"
               columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
               columns={translationColumns}
               emptyMessage="No hay puestos traducidos importados."
               getRowId={(translation) => translation.puestoCastellano}

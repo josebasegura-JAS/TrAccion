@@ -428,7 +428,7 @@ export function TareasPage({
     setFilter('origen', '');
   };
 
-  const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActiveTaskTableColumnId>(
+  const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActiveTaskTableColumnId>(
     {
       storageKey: TAREAS_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTareasTablePreferences,
@@ -726,6 +726,7 @@ export function TareasPage({
         <DataTable
           ariaLabel="Tareas activas"
           columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
           columns={activeTaskColumns}
           emptyMessage="No hay tareas activas con los filtros aplicados."
           getRowId={(task) => task.id}
