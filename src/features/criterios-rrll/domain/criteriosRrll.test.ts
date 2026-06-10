@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CriterioRrll } from './criterioRrll';
 import { filterCriteriosRrll } from './filters';
+import { rowsToCriterioRrllDrafts } from './importExcel';
 import { sortCriteriosRrllByColumn, sortCriteriosRrllByDefault } from './sort';
 
 function buildCriterio(overrides: Partial<CriterioRrll>): CriterioRrll {
@@ -75,6 +76,26 @@ describe('criterios RRLL domain', () => {
     expect(filterCriteriosRrll(criterios, { search: '', estado: '' }).map(({ id }) => id)).toEqual([
       'criterio-1',
       'criterio-2',
+    ]);
+  });
+
+  it('convierte filas importadas en criterios vigentes y deduplicados', () => {
+    const drafts = rowsToCriterioRrllDrafts([
+      ['Tema', 'Fecha', 'Responsable', 'Criterio'],
+      ['Asuntos propios - Notaría', '2017', 'RRLL', 'La asistencia a notaría no constituye normalmente permiso.'],
+      ['Asuntos propios - Notaría', '2017', 'RRLL', 'La asistencia a notaría no constituye normalmente permiso.'],
+      ['', '2017', 'RRLL', 'Sin tema no se importa.'],
+    ]);
+
+    expect(drafts).toEqual([
+      {
+        tema: 'Asuntos propios - Notaría',
+        fecha: '2017',
+        responsable: 'RRLL',
+        criterio: 'La asistencia a notaría no constituye normalmente permiso.',
+        estado: 'vigente',
+        observaciones: '',
+      },
     ]);
   });
 });
