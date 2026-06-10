@@ -469,7 +469,7 @@ export function SessionManagementPage({
         text = await file.text();
       }
 
-      const preview = parseSessionImportText(text);
+      const preview = parseSessionImportText(text, moduleImportKind);
       setImportPreview(preview);
       const matchingSessions = preview.sessions.filter((session) => session.kind === moduleImportKind);
       if (matchingSessions.length === 0) {

@@ -70,8 +70,20 @@ function normalizeCode(line: string): string {
   return line.replace(/\s+/g, '-').replace(/\.+/g, '-').replace(/--+/g, '-').toUpperCase();
 }
 
-function resolveKind(code: string): SessionImportKind {
-  return /(?:^|-)CP(?:-|$)/i.test(code) ? 'paritaria' : 'comite';
+function resolveKind(code: string, fallbackKind: SessionImportKind = 'comite'): SessionImportKind {
+  if (/(?:^|-)CP(?:-|$)/i.test(code)) {
+    return 'paritaria';
+  }
+
+  if (/(?:^|-)CE(?:-|$)/i.test(code)) {
+    return 'comite';
+  }
+
+  if (/(?:^|-)PE(?:-|$)/i.test(code)) {
+    return fallbackKind;
+  }
+
+  return fallbackKind;
 }
 
 function cleanPoint(line: string): string {
@@ -105,7 +117,7 @@ function toTaskDraft(title: string, phase: string, session: MutableImportedSessi
   };
 }
 
-export function parseSessionImportText(text: string): SessionImportPreview {
+export function parseSessionImportText(text: string, fallbackKind: SessionImportKind = 'comite'): SessionImportPreview {
   const lines = text
     .split(/\r?\n/)
     .map(normalizeLine)
@@ -132,7 +144,7 @@ export function parseSessionImportText(text: string): SessionImportPreview {
 
     const parsedDate = parseDate(line, currentYear);
     if (parsedDate && pendingCode) {
-      const kind = resolveKind(pendingCode);
+      const kind = resolveKind(pendingCode, fallbackKind);
       currentSession = {
         externalKey: `${kind}:${pendingCode}:${parsedDate}`,
         kind,
