@@ -152,8 +152,6 @@ function createWindow(
   createContextMenu(mainWindow);
 
   let hasRequestedMainWindowShow = false;
-  let forceShowTimer: ReturnType<typeof setTimeout>;
-
   const requestMainWindowShow = (): void => {
     if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) {
       return;
@@ -164,7 +162,10 @@ function createWindow(
     showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
   };
 
-  forceShowTimer = setTimeout(requestMainWindowShow, splashMaximumVisibleMs);
+  const forceShowTimer: ReturnType<typeof setTimeout> = setTimeout(
+    requestMainWindowShow,
+    splashMaximumVisibleMs,
+  );
 
   const onBootVisible = (event: IpcMainEvent): void => {
     if (event.sender !== mainWindow.webContents) {
