@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
-import type { IpcMainInvokeEvent, MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
+import type { IpcMainEvent, IpcMainInvokeEvent, MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
@@ -151,25 +151,44 @@ function createWindow(
 
   createContextMenu(mainWindow);
 
-  const forceShowTimer = setTimeout(() => {
-    if (!mainWindow.isVisible()) {
-      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+  let hasRequestedMainWindowShow = false;
+  let forceShowTimer: ReturnType<typeof setTimeout>;
+
+  const requestMainWindowShow = (): void => {
+    if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) {
+      return;
     }
-  }, splashMaximumVisibleMs);
 
-  mainWindow.once('closed', () => clearTimeout(forceShowTimer));
-
-  ipcMain.once('app:boot-visible', () => {
-    if (!mainWindow.isVisible()) {
-      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
-    }
-  });
-
-  ipcMain.once('app:renderer-ready', () => {
+    hasRequestedMainWindowShow = true;
     clearTimeout(forceShowTimer);
-    if (!mainWindow.isVisible()) {
-      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+    showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+  };
+
+  forceShowTimer = setTimeout(requestMainWindowShow, splashMaximumVisibleMs);
+
+  const onBootVisible = (event: IpcMainEvent): void => {
+    if (event.sender !== mainWindow.webContents) {
+      return;
     }
+
+    requestMainWindowShow();
+  };
+
+  const onRendererReady = (event: IpcMainEvent): void => {
+    if (event.sender !== mainWindow.webContents) {
+      return;
+    }
+
+    requestMainWindowShow();
+  };
+
+  ipcMain.on('app:boot-visible', onBootVisible);
+  ipcMain.on('app:renderer-ready', onRendererReady);
+
+  mainWindow.once('closed', () => {
+    clearTimeout(forceShowTimer);
+    ipcMain.removeListener('app:boot-visible', onBootVisible);
+    ipcMain.removeListener('app:renderer-ready', onRendererReady);
   });
 
   if (isDev) {
