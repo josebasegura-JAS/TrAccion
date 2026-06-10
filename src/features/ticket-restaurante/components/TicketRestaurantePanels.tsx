@@ -575,7 +575,7 @@ export function PeoplePanel({
     setIsPersonFormOpen(false);
   };
 
-  const { preferences, setSort, setColumnWidth } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
     useTableViewPreferences<TicketPeopleTableColumnId>({
       storageKey: TICKET_PEOPLE_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTicketPeopleTablePreferences,
@@ -855,6 +855,7 @@ export function PeoplePanel({
         <DataTable
           ariaLabel="Personas con derecho a ticket"
           columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
           columns={peopleColumns}
           emptyMessage="Añade personas manualmente para poder calcular tickets."
           getRowId={(person) => person.empleado}
@@ -1187,7 +1188,7 @@ export function CalculationPanel({
   const [selectedDetailRow, setSelectedDetailRow] = useState<TicketPersonCalculation | null>(null);
   const validColumnIds =
     mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
-  const { preferences, setSort, setColumnWidth } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
     useTableViewPreferences<TicketCalculationTableColumnId>({
       storageKey:
         mode === 'monthly'
@@ -1405,6 +1406,7 @@ export function CalculationPanel({
             : 'Cómputo cotización Ticket Restaurante'
         }
         columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
         columns={calculationColumns}
         emptyMessage="No hay personas activas para calcular."
         getRowId={(row) => row.empleado}
@@ -1675,7 +1677,7 @@ export function AbsencesTable({
   onYearChange: (value: string) => void;
   year: number;
 }) {
-  const { preferences, setSort, setColumnWidth } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
     useTableViewPreferences<TicketAbsencesTableColumnId>({
       storageKey: TICKET_ABSENCES_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTicketAbsencesTablePreferences,
@@ -1859,6 +1861,7 @@ export function AbsencesTable({
       <DataTable
         ariaLabel="Ausencias Ticket Restaurante"
         columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
         columns={absenceColumns}
         emptyMessage="No hay ausencias guardadas."
         getRowId={(absence) => absence.id}
