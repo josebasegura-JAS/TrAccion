@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
@@ -7,6 +6,7 @@ import {
   type CriterioRrllDraft,
 } from '../domain/criterioRrll';
 import { EMPTY_CRITERIO_RRLL_FILTERS, type CriterioRrllFilters } from '../domain/filters';
+import { buildImportedCriterioKey, importCriteriosRrllFromFile } from '../domain/importExcel';
 
 const STORAGE_KEY = 'traccion.v1.criterios-rrll.criterios';
 
@@ -15,10 +15,10 @@ interface CriteriosRrllStateStore {
   selectedCriterioId: string;
   filters: CriterioRrllFilters;
   load: () => void;
-  reloadFromStorage: () => void;
   create: (draft: CriterioRrllDraft) => void;
   update: (id: string, draft: CriterioRrllDraft) => void;
   remove: (id: string) => void;
+  importExcel: (file: File) => Promise<void>;
   selectCriterio: (criterioId: string) => void;
   setFilter: <K extends keyof CriterioRrllFilters>(key: K, value: CriterioRrllFilters[K]) => void;
 }
@@ -56,7 +56,7 @@ function normalizeCriterioRrll(criterio: CriterioRrll): CriterioRrll {
 }
 
 function readCriteriosRrll(): CriterioRrll[] {
-  const stored = readStorageItem(STORAGE_KEY);
+  const stored = window.localStorage.getItem(STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -70,7 +70,7 @@ function readCriteriosRrll(): CriterioRrll[] {
 }
 
 function persistCriteriosRrll(criterios: CriterioRrll[]): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(criterios));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(criterios));
 }
 
 function firstActiveCriterioId(criterios: CriterioRrll[]): string {
@@ -81,21 +81,48 @@ function createCriterioRrllId(): string {
   return `criterio-rrll-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) => ({
+function upsertImportedCriterios(criterios: CriterioRrll[], drafts: CriterioRrllDraft[]): CriterioRrll[] {
+  const now = new Date().toISOString();
+  const importedByKey = new Map(drafts.map((draft) => [buildImportedCriterioKey(draft), draft]));
+  const processedKeys = new Set<string>();
+
+  const updated = criterios.map((criterio) => {
+    const key = buildImportedCriterioKey(criterio);
+    const imported = importedByKey.get(key);
+
+    if (!imported) {
+      return criterio;
+    }
+
+    processedKeys.add(key);
+    return {
+      ...criterio,
+      ...imported,
+      deletedAt: null,
+      updatedAt: now,
+    };
+  });
+
+  const created = drafts
+    .filter((draft) => !processedKeys.has(buildImportedCriterioKey(draft)))
+    .map((draft): CriterioRrll => ({
+      id: createCriterioRrllId(),
+      ...draft,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    }));
+
+  return [...updated, ...created];
+}
+
+export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
   criterios: [],
   selectedCriterioId: '',
   filters: EMPTY_CRITERIO_RRLL_FILTERS,
   load: () => {
     const criterios = readCriteriosRrll();
     set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
-  },
-  reloadFromStorage: () => {
-    const criterios = readCriteriosRrll();
-    const currentSelectedId = get().selectedCriterioId;
-    const selectedCriterioId = criterios.some((criterio) => criterio.id === currentSelectedId && !criterio.deletedAt)
-      ? currentSelectedId
-      : firstActiveCriterioId(criterios);
-    set({ criterios, selectedCriterioId });
   },
   create: (draft) => {
     set((state) => {
@@ -128,6 +155,14 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
       const criterios = state.criterios.map((criterio) =>
         criterio.id === id ? { ...criterio, deletedAt: now, updatedAt: now } : criterio,
       );
+      persistCriteriosRrll(criterios);
+      return { criterios, selectedCriterioId: firstActiveCriterioId(criterios) };
+    });
+  },
+  importExcel: async (file) => {
+    const drafts = await importCriteriosRrllFromFile(file);
+    set((state) => {
+      const criterios = upsertImportedCriterios(state.criterios, drafts);
       persistCriteriosRrll(criterios);
       return { criterios, selectedCriterioId: firstActiveCriterioId(criterios) };
     });
