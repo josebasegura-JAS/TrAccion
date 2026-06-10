@@ -37,6 +37,11 @@ interface TeletrabajoOpenWordResult {
   message: string;
 }
 
+interface TraccionOpenExcelWorkbookResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TraccionOpenPathResult {
   ok: boolean;
   message: string;
@@ -166,6 +171,10 @@ interface TraccionApi {
     buffer: ArrayBuffer,
     fileName: string,
   ) => Promise<TeletrabajoOpenWordResult>;
+  openExcelWorkbook?: (
+    buffer: ArrayBuffer,
+    fileName: string,
+  ) => Promise<TraccionOpenExcelWorkbookResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
   parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
   extractDocxText?: (payload: ArrayBuffer) => Promise<TraccionDocxTextResult>;

@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('licencias-sin-sueldo:read-template', path),
   openTeletrabajoWord: (buffer: ArrayBuffer, fileName: string) =>
     ipcRenderer.invoke('teletrabajo:open-word', { buffer, fileName }),
+  openExcelWorkbook: (buffer: ArrayBuffer, fileName: string) =>
+    ipcRenderer.invoke('excel:open-workbook', { buffer, fileName }),
   createOutlookDraft,
   parseOutlookMsg,
   extractDocxText: (payload: ArrayBuffer) => ipcRenderer.invoke('docx:extract-text', payload),

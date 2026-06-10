@@ -103,15 +103,30 @@ function buildIsoDate(value: string): Date {
   return new Date(year, month - 1, day);
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBuffer {
+  if (buffer instanceof ArrayBuffer) {
+    return buffer;
+  }
+
+  const copy = new Uint8Array(buffer.byteLength);
+  copy.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+  return copy.buffer;
+}
+
+async function openWorkbookInExcel(
+  buffer: ArrayBuffer | ArrayBufferView,
+  filename: string,
+): Promise<void> {
+  const openExcelWorkbook = window.traccion?.openExcelWorkbook;
+
+  if (!openExcelWorkbook) {
+    throw new Error('La apertura directa en Excel no está disponible en este entorno.');
+  }
+
+  const result = await openExcelWorkbook(normalizeWorkbookBuffer(buffer), filename);
+  if (!result.ok) {
+    throw new Error(result.message || 'No se ha podido abrir el Excel generado.');
+  }
 }
 
 export function exportTableToExcel<T>(payload: ExportTablePayload<T>): void {
@@ -224,10 +239,14 @@ export function exportTableToExcel<T>(payload: ExportTablePayload<T>): void {
     worksheet.getColumn(columnIndex + 1).width = width;
   });
 
-  void workbook.xlsx.writeBuffer().then((buffer) => {
-    const blob = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  void workbook.xlsx
+    .writeBuffer()
+    .then((buffer) =>
+      openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt)),
+    )
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'No se ha podido abrir Excel.';
+      console.error('Error al abrir Excel:', error);
+      window.alert(message);
     });
-    downloadBlob(blob, buildStableExportFilename(payload.filename, generatedAt));
-  });
 }
