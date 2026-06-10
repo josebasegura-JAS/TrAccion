@@ -193,7 +193,7 @@ export function ActasPage() {
   const [pathStatus, setPathStatus] = useState('');
   const [pathStatusIsError, setPathStatusIsError] = useState(false);
   const [deadlineWasAutoUpdated, setDeadlineWasAutoUpdated] = useState(false);
-  const { preferences, setSort, setColumnWidth } = useTableViewPreferences<ActaColumnId>({
+  const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
     defaultPreferences: {
       sort: { columnId: 'fechaSesion', direction: 'desc' },
@@ -578,6 +578,7 @@ export function ActasPage() {
         <DataTable
           ariaLabel="Actas abiertas"
           columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
           columns={columns}
           emptyMessage="No hay actas abiertas con los filtros actuales."
           getRowId={(acta) => acta.id}
@@ -605,6 +606,7 @@ export function ActasPage() {
               <DataTable
                 ariaLabel={`Actas históricas ${year}`}
                 columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
                 columns={columns}
                 emptyMessage="No hay actas cerradas."
                 getRowId={(acta) => acta.id}
