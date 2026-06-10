@@ -27,7 +27,7 @@ describe('tableExport', () => {
 
   it('genera nombres estables con fecha', () => {
     expect(buildStableExportFilename('Criterios RRLL', new Date('2026-06-06T00:00:00'))).toBe(
-      'criterios-rrll-2026-06-06.xls',
+      'criterios-rrll-2026-06-06.xlsx',
     );
   });
 
