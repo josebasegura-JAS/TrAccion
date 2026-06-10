@@ -32,6 +32,8 @@ import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { relativeDate } from '../utils/relativeDate';
+import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import {
   type TableViewPreferences,
@@ -502,7 +504,18 @@ export function TareasPage({
         id: 'fechaLimite',
         header: 'Fecha límite',
         accessor: (task) => task.fechaLimite,
-        render: (task) => task.fechaLimite || '—',
+        render: (task) => {
+          if (!task.fechaLimite) {
+            return '—';
+          }
+          const relative = relativeDate(task.fechaLimite);
+          return (
+            <span title={task.fechaLimite}>
+              {task.fechaLimite}
+              {relative && <span className="ml-1.5 text-xs text-metro-muted">{relative}</span>}
+            </span>
+          );
+        },
         width: 120,
         minWidth: 105,
         maxWidth: 180,
@@ -896,12 +909,16 @@ function TaskOriginRow({
 }) {
   const [name, setName] = useState(origin.nombre);
   const [type, setType] = useState<TaskOriginConfig['tipo']>(origin.tipo);
+  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
   const hasChanges = name.trim() !== origin.nombre || type !== origin.tipo;
 
   const handleDelete = () => {
-    if (window.confirm(`¿Eliminar el origen ${origin.nombre}? Dejará de aparecer en filtros y altas.`)) {
-      onDelete(origin.id);
-    }
+    setIsDeleteConfirmVisible(true);
+  };
+
+  const confirmDelete = () => {
+    onDelete(origin.id);
+    setIsDeleteConfirmVisible(false);
   };
 
   useEffect(() => {
@@ -910,7 +927,19 @@ function TaskOriginRow({
   }, [origin.nombre, origin.tipo]);
 
   return (
-    <tr className="align-top">
+    <>
+      {isDeleteConfirmVisible && (
+        <tr>
+          <td className="px-3 py-2" colSpan={4}>
+            <DeleteConfirmDialog
+              label={`el origen «${origin.nombre}»`}
+              onCancel={() => setIsDeleteConfirmVisible(false)}
+              onConfirm={confirmDelete}
+            />
+          </td>
+        </tr>
+      )}
+      <tr className="align-top">
       <td className="px-3 py-2">
         <input
           className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -958,7 +987,8 @@ function TaskOriginRow({
         </button>
         </div>
       </td>
-    </tr>
+      </tr>
+    </>
   );
 }
 

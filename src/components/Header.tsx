@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { UserRound } from 'lucide-react';
 import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
+import { useDatabaseStatus } from '../services/databaseStatus';
+import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 
 
@@ -86,6 +88,16 @@ export function Header({
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
   const breadcrumb = useMemo(() => getNavigationBreadcrumb(activeView), [activeView]);
+  const dbStatus = useDatabaseStatus();
+  const syncStatus = useExternalDataSyncStatus();
+
+  const syncDotClass = !dbStatus?.ready
+    ? 'bg-orange-400'
+    : syncStatus.status === 'error'
+      ? 'bg-red-500'
+      : syncStatus.status === 'checking'
+        ? 'bg-amber-400 animate-pulse'
+        : 'bg-emerald-400';
 
   useEffect(() => {
     let isMounted = true;
@@ -130,8 +142,13 @@ export function Header({
         <GlobalSearch onNavigate={onViewChange} />
 
         <div className="flex items-center gap-3 rounded-2xl border border-metro-border bg-metro-panel/70 px-3 py-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-metro-red/15 text-metro-red ring-1 ring-metro-red/20">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-metro-red/15 text-metro-red ring-1 ring-metro-red/20">
             <UserRound size={18} />
+            <span
+              aria-label={`Estado de sincronización: ${syncStatus.message}`}
+              className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-metro-panel ${syncDotClass}`}
+              title={syncStatus.message}
+            />
           </div>
           <div className="hidden min-w-0 sm:block">
             <p className="text-[11px] uppercase tracking-[0.18em] text-metro-muted">Usuario</p>

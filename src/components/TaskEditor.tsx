@@ -1,4 +1,4 @@
-import { Eye, Mail, Search, Trash2, X } from 'lucide-react';
+import { Eye, LockKeyhole, Mail, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import {
@@ -449,15 +449,21 @@ export function TaskEditor({
         </div>
 
         {lockMessage && (
-          <p
-            className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+          <div
+            className={`mb-3 flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
               isFormReadOnly
-                ? 'border-red-400/40 bg-red-950/20 text-red-100'
-                : 'border-metro-border bg-metro-surface text-metro-muted'
+                ? 'border-red-400/40 bg-red-950/30 text-red-200'
+                : 'border-amber-400/30 bg-amber-950/20 text-amber-200'
             }`}
           >
-            {lockMessage}
-          </p>
+            <LockKeyhole className="shrink-0 opacity-70" size={15} />
+            <span className="text-xs font-semibold">{lockMessage}</span>
+            {isFormReadOnly && (
+              <span className="ml-auto shrink-0 rounded-md border border-red-400/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-300">
+                Solo lectura
+              </span>
+            )}
+          </div>
         )}
 
         {hasExternalTaskUpdate && isFormReadOnly && (

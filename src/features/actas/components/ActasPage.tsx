@@ -15,6 +15,8 @@ import {
 } from '../domain/acta';
 import { useActasStore } from '../store/useActasStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
+import { relativeDate } from '../../../utils/relativeDate';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 
 
@@ -220,9 +222,15 @@ function renderDeadlineBadge(value: string) {
     return <span className="text-metro-muted">—</span>;
   }
 
+  const relative = relativeDate(value);
+
   return (
-    <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-bold ${getDeadlineStatusClass(value)}`}>
+    <span
+      className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-bold ${getDeadlineStatusClass(value)}`}
+      title={formatDate(value)}
+    >
       {value}
+      {relative && <span className="ml-1.5 font-semibold opacity-70">{relative}</span>}
     </span>
   );
 }
@@ -301,6 +309,8 @@ export function ActasPage() {
   const [deadlineWasAutoUpdated, setDeadlineWasAutoUpdated] = useState(false);
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
   const [newActaTypeName, setNewActaTypeName] = useState('');
+  const [pendingDeleteActaId, setPendingDeleteActaId] = useState<string | null>(null);
+  const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
   const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
     defaultPreferences: {
@@ -372,7 +382,14 @@ export function ActasPage() {
     const result = removeActaType(typeId);
     if (!result.ok) {
       window.alert(result.message ?? 'No se ha podido eliminar el tipo de acta.');
+      return;
     }
+    setPendingDeleteActaTypeId(null);
+  };
+
+  const deleteActa = (actaId: string) => {
+    remove(actaId);
+    setPendingDeleteActaId(null);
   };
 
   const years = useMemo(
@@ -427,7 +444,18 @@ export function ActasPage() {
         id: 'fechaSesion',
         header: 'Fecha sesión',
         accessor: (acta) => acta.fechaSesion,
-        render: (acta) => acta.fechaSesion || '—',
+        render: (acta) => {
+          if (!acta.fechaSesion) {
+            return '—';
+          }
+          const relative = relativeDate(acta.fechaSesion);
+          return (
+            <span title={formatDate(acta.fechaSesion)}>
+              {acta.fechaSesion}
+              {relative && <span className="ml-1.5 text-xs text-metro-muted">{relative}</span>}
+            </span>
+          );
+        },
         width: 130,
         sortable: true,
         resizable: true,
@@ -436,7 +464,18 @@ export function ActasPage() {
         id: 'fechaCreacion',
         header: 'Creación',
         accessor: (acta) => acta.fechaCreacion,
-        render: (acta) => acta.fechaCreacion || '—',
+        render: (acta) => {
+          if (!acta.fechaCreacion) {
+            return '—';
+          }
+          const relative = relativeDate(acta.fechaCreacion);
+          return (
+            <span title={formatDate(acta.fechaCreacion)}>
+              {acta.fechaCreacion}
+              {relative && <span className="ml-1.5 text-xs text-metro-muted">{relative}</span>}
+            </span>
+          );
+        },
         width: 120,
         sortable: true,
         resizable: true,
@@ -490,24 +529,31 @@ export function ActasPage() {
         id: 'acciones',
         header: 'Acciones',
         render: (acta) => (
-          <button
-            className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-500/10"
-            onClick={(event) => {
-              event.stopPropagation();
-              remove(acta.id);
-            }}
-            title="Eliminar acta"
-            type="button"
-          >
-            <Trash2 size={13} />
-          </button>
+          <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
+            {pendingDeleteActaId === acta.id ? (
+              <DeleteConfirmDialog
+                label={`el acta «${acta.titulo}»`}
+                onCancel={() => setPendingDeleteActaId(null)}
+                onConfirm={() => deleteActa(acta.id)}
+              />
+            ) : (
+              <button
+                className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-500/10"
+                onClick={() => setPendingDeleteActaId(acta.id)}
+                title="Eliminar acta"
+                type="button"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
         ),
         width: 80,
         minWidth: 70,
         isActionColumn: true,
       },
     ],
-    [remove],
+    [deleteActa, pendingDeleteActaId, setPendingDeleteActaId],
   );
 
   const openEditor = (acta?: Acta) => {
@@ -853,15 +899,25 @@ export function ActasPage() {
                       >
                         {type.disabled ? 'Habilitar' : 'Deshabilitar'}
                       </button>
-                      <button
-                        className="inline-flex items-center justify-center rounded-lg border border-red-500/40 p-2 text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={usageCount > 0}
-                        onClick={() => deleteActaType(type.id)}
-                        title={usageCount > 0 ? 'No se puede eliminar: tiene actas asociadas' : 'Eliminar tipo de acta'}
-                        type="button"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {pendingDeleteActaTypeId === type.id ? (
+                        <div className="xl:col-span-4">
+                          <DeleteConfirmDialog
+                            label={`el tipo de acta «${type.nombre}»`}
+                            onCancel={() => setPendingDeleteActaTypeId(null)}
+                            onConfirm={() => deleteActaType(type.id)}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          className="inline-flex items-center justify-center rounded-lg border border-red-500/40 p-2 text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={usageCount > 0}
+                          onClick={() => setPendingDeleteActaTypeId(type.id)}
+                          title={usageCount > 0 ? 'No se puede eliminar: tiene actas asociadas' : 'Eliminar tipo de acta'}
+                          type="button"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
