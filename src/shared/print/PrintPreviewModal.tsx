@@ -139,7 +139,7 @@ body{margin:0;background:#eef2f7;color:var(--print-ink);font-family:Inter,Segoe 
 .print-page-number:after{content:counter(page)}
 @media screen{.print-preview-content .print-document{border-radius:18px;overflow:hidden}.print-preview-content{padding:0}}
 @media print{
-  @page{size:A4 landscape;margin:8mm}
+  @page{size:A4 portrait;margin:8mm}
   body{background:#fff}
   .print-document{max-width:none;min-height:auto;box-shadow:none}
   .print-report-header{padding:18px 24px 16px}

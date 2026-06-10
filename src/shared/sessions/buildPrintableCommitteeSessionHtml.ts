@@ -154,7 +154,6 @@ export function buildPrintableCommitteeSessionHtml({
     <article class="print-document print-session-document">
       <header class="print-report-header print-session-header">
         <div>
-          <p class="print-eyebrow">Acta de sesión</p>
           <h1>${escapeHtml(config.title)}</h1>
           <p class="print-header-subtitle">${escapeHtml(session.title || managedSessionLabel(session))}</p>
         </div>
@@ -206,7 +205,7 @@ export function buildPrintableCommitteeSessionHtml({
       </section>
 
       <footer class="print-footer">
-        <span>Documento generado desde la aplicación RRLL.</span>
+        <span>Relaciones Laborales MB</span>
         <span>Página <span class="print-page-number"></span></span>
       </footer>
     </article>

@@ -140,7 +140,6 @@ export function buildPrintableTableHtml<T>(payload: ExportTablePayload<T>): stri
     <article class="print-document">
       <header class="print-report-header">
         <div>
-          <p class="print-eyebrow">Informe de impresión</p>
           <h1>${escapeHtml(payload.title)}</h1>
         </div>
         <div class="print-header-pill">${escapeHtml(generatedAt.toLocaleDateString('es-ES'))}</div>
@@ -162,7 +161,7 @@ export function buildPrintableTableHtml<T>(payload: ExportTablePayload<T>): stri
       </section>
 
       <footer class="print-footer">
-        <span>Documento generado desde la aplicación RRLL.</span>
+        <span>Relaciones Laborales MB</span>
         <span>Página <span class="print-page-number"></span></span>
       </footer>
     </article>
