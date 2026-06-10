@@ -1,51 +1,69 @@
-import { Plus, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
-import { sortDataTableRows } from '../../../shared/table/tableSorting';
-import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
+import { FileUp, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
+import {
+  sortCriteriosRrllByColumn,
+  sortCriteriosRrllByDefault,
+  type CriterioRrllSortKey,
+  type SortDirection,
+} from '../domain/sort';
 import {
   CRITERIO_RRLL_ESTADOS,
   type CriterioRrll,
   type CriterioRrllEstado,
 } from '../domain/criterioRrll';
-import { buildFilterLabel } from '../../../shared/export/filterLabel';
-import { ActiveFilterChips, type ActiveFilterChip } from '../../../shared/filters/ActiveFilterChips';
-import { SelectFilter } from '../../../shared/filters/SelectFilter';
-import type { ExportColumn } from '../../../shared/export/types';
-import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 
-type CriterioTableColumnId = 'tema' | 'estado' | 'fecha' | 'responsable' | 'criterio' | 'actions';
+interface SortState {
+  key: CriterioRrllSortKey;
+  direction: SortDirection;
+}
 
-const CRITERIOS_TABLE_STORAGE_KEY = 'traccion.tableView.criteriosRrll.main';
-const criterioTableColumnIds: readonly CriterioTableColumnId[] = [
-  'tema',
-  'estado',
-  'fecha',
-  'responsable',
-  'criterio',
-  'actions',
-];
-const defaultCriterioTablePreferences: TableViewPreferences<CriterioTableColumnId> = {
-  sort: null,
-  columnWidths: {},
-};
-
-const criterioExportColumns: ExportColumn<CriterioRrll>[] = [
-  { key: 'tema', header: 'Tema', value: (criterio) => criterio.tema },
-  { key: 'estado', header: 'Estado', value: (criterio) => criterio.estado },
-  { key: 'fecha', header: 'Fecha', value: (criterio) => criterio.fecha || null },
-  { key: 'responsable', header: 'Responsable', value: (criterio) => criterio.responsable },
-  { key: 'criterio', header: 'Criterio', value: (criterio) => criterio.criterio },
+const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; className: string }> = [
+  { key: 'tema', label: 'Tema', className: 'w-[220px]' },
+  { key: 'estado', label: 'Estado', className: 'w-[120px]' },
+  { key: 'fecha', label: 'Fecha', className: 'w-[115px]' },
+  { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
 ];
 
+function SelectFilter({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  value: string;
+}) {
+  return (
+    <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
+      <span className="shrink-0 text-xs font-bold uppercase tracking-wide">{label}</span>
+      <select
+        className="w-full bg-transparent text-metro-text outline-none"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        <option value="">Todos</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export function CriteriosRrllPage() {
-  const { criterios, filters, load, remove, selectCriterio, setFilter } = useCriteriosRrllStore();
+  const { criterios, filters, importExcel, load, remove, selectCriterio, setFilter } = useCriteriosRrllStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingCriterioId, setEditingCriterioId] = useState<string | null>(null);
+  const [sortState, setSortState] = useState<SortState | null>(null);
+  const [importMessage, setImportMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     load();
@@ -59,53 +77,18 @@ export function CriteriosRrllPage() {
     () => filterCriteriosRrll(criterios, filters),
     [criterios, filters],
   );
-  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
-    useTableViewPreferences<CriterioTableColumnId>({
-      storageKey: CRITERIOS_TABLE_STORAGE_KEY,
-      defaultPreferences: defaultCriterioTablePreferences,
-      validColumnIds: criterioTableColumnIds,
-    });
+  const sortedCriterios = useMemo(() => {
+    if (!sortState) {
+      return sortCriteriosRrllByDefault(filteredCriterios);
+    }
 
-  const criterioTableColumns = useMemo<Array<DataTableColumn<CriterioRrll, CriterioTableColumnId>>>(
-    () => [
-      { id: 'tema', header: 'Tema', accessor: (c) => c.tema, render: (c) => c.tema, width: 220, minWidth: 150, maxWidth: 360, sortable: true, className: 'font-semibold text-metro-text' },
-      { id: 'estado', header: 'Estado', accessor: (c) => c.estado, render: (c) => c.estado, width: 120, minWidth: 95, maxWidth: 190, sortable: true, className: 'text-metro-muted' },
-      { id: 'fecha', header: 'Fecha', accessor: (c) => c.fecha, render: (c) => c.fecha || '—', width: 115, minWidth: 90, maxWidth: 180, sortable: true, className: 'text-metro-muted' },
-      { id: 'responsable', header: 'Responsable', accessor: (c) => c.responsable, render: (c) => c.responsable, width: 150, minWidth: 115, maxWidth: 260, sortable: true, className: 'text-metro-muted' },
-      { id: 'criterio', header: 'Criterio', accessor: (c) => c.criterio, render: (c) => c.criterio, width: 300, minWidth: 190, maxWidth: 520, sortable: true, className: 'text-metro-muted' },
-      { id: 'actions', header: 'Acciones', render: (criterio) => (
-        <button className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark" onClick={(event) => { event.stopPropagation(); remove(criterio.id); }} type="button">Eliminar</button>
-      ), width: 100, minWidth: 90, maxWidth: 120, resizable: false, isActionColumn: true, className: 'whitespace-nowrap' },
-    ],
-    [remove],
-  );
-
-  const sortedCriterios = useMemo(
-    () => sortDataTableRows(filteredCriterios, criterioTableColumns, preferences.sort),
-    [criterioTableColumns, filteredCriterios, preferences.sort],
-  );
+    return sortCriteriosRrllByColumn(filteredCriterios, sortState.key, sortState.direction);
+  }, [filteredCriterios, sortState]);
 
   const editorCriterio =
     editorMode === 'edit'
       ? (visibleCriterios.find((criterio) => criterio.id === editingCriterioId) ?? null)
       : null;
-  const criterioFilterLabel = buildFilterLabel([
-    ['Búsqueda', filters.search],
-    ['Estado', filters.estado],
-  ]);
-  const activeFilterChips: ActiveFilterChip[] = [
-    filters.search.trim()
-      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
-      : null,
-    filters.estado
-      ? { key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') }
-      : null,
-  ].filter((filter): filter is ActiveFilterChip => filter !== null);
-
-  const clearActiveFilters = () => {
-    setFilter('search', '');
-    setFilter('estado', '');
-  };
 
   const openEditor = (criterio: CriterioRrll) => {
     selectCriterio(criterio.id);
@@ -123,6 +106,13 @@ export function CriteriosRrllPage() {
     setEditingCriterioId(null);
   };
 
+  const toggleSort = (key: CriterioRrllSortKey) => {
+    setSortState((current) => ({
+      key,
+      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
   return (
     <section
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
@@ -133,10 +123,33 @@ export function CriteriosRrllPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
           <h2 className="text-2xl font-bold text-metro-text">Criterios RRLL</h2>
           <p className="mt-0.5 text-base text-metro-muted">
-            Listado de criterios con alta manual, edición, borrado lógico, búsqueda y filtros.
+            Listado de criterios con alta manual, edición, importación Excel, búsqueda y filtros.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <input
+            accept=".xlsx,.xls,.csv,.tsv,.txt"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) {
+                return;
+              }
+
+              await importExcel(file);
+              setImportMessage(`Importación completada: ${file.name}`);
+              event.target.value = '';
+            }}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            <FileUp size={16} /> Importar Excel
+          </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}
@@ -146,6 +159,12 @@ export function CriteriosRrllPage() {
           </button>
         </div>
       </div>
+
+      {importMessage && (
+        <p className="mb-3 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
+          {importMessage}
+        </p>
+      )}
 
       <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)]">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
@@ -159,7 +178,6 @@ export function CriteriosRrllPage() {
           />
         </label>
         <SelectFilter
-          showLabel
           label="Estado"
           onChange={(value) => setFilter('estado', value as '' | CriterioRrllEstado)}
           options={CRITERIO_RRLL_ESTADOS}
@@ -167,52 +185,92 @@ export function CriteriosRrllPage() {
         />
       </div>
 
-      {activeFilterChips.length > 0 && (
-        <div className="mb-3">
-          <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
-        </div>
-      )}
-
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
+        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Criterios RRLL
-            <ExportPrintButtons
-              payload={{
-                title: 'Criterios RRLL',
-                filename: 'criterios-rrll',
-                columns: criterioExportColumns,
-                rows: sortedCriterios,
-                filterLabel: criterioFilterLabel,
-              }}
-            />
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredCriterios.length} registros
           </span>
         </div>
-        <div className="flex flex-wrap justify-end pb-2">
-          <button
-            className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={resetPreferences}
-            type="button"
-          >
-            <RotateCcw size={14} /> Restablecer vista
-          </button>
+        <div className="max-h-[460px] overflow-auto">
+          <table className="w-full table-fixed text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+              <tr>
+                {sortableColumns.map((column) => {
+                  const isActive = sortState?.key === column.key;
+
+                  return (
+                    <th className={`${column.className} px-3 py-2`} key={column.key}>
+                      <button
+                        className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
+                        onClick={() => toggleSort(column.key)}
+                        type="button"
+                      >
+                        <span>{column.label}</span>
+                        {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
+                      </button>
+                    </th>
+                  );
+                })}
+                <th className="w-[300px] px-3 py-2">Criterio</th>
+                <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-metro-border bg-metro-surface">
+              {sortedCriterios.map((criterio) => (
+                <tr
+                  className="cursor-pointer hover:bg-metro-red/10"
+                  key={criterio.id}
+                  onClick={() => openEditor(criterio)}
+                >
+                  <td
+                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
+                    title={criterio.tema}
+                  >
+                    {criterio.tema}
+                  </td>
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.estado}>
+                    {criterio.estado}
+                  </td>
+                  <td
+                    className="truncate px-3 py-1.5 text-metro-muted"
+                    title={criterio.fecha || '—'}
+                  >
+                    {criterio.fecha || '—'}
+                  </td>
+                  <td
+                    className="truncate px-3 py-1.5 text-metro-muted"
+                    title={criterio.responsable}
+                  >
+                    {criterio.responsable}
+                  </td>
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.criterio}>
+                    {criterio.criterio}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                    <button
+                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        remove(criterio.id);
+                      }}
+                      type="button"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {sortedCriterios.length === 0 && (
+            <p className="border-t border-metro-border bg-metro-surface px-3 py-3 text-sm text-metro-muted">
+              No hay criterios para los filtros seleccionados.
+            </p>
+          )}
         </div>
-        <DataTable
-          ariaLabel="Criterios RRLL"
-          columnWidths={preferences.columnWidths}
-          onResetColumnWidths={resetColumnWidths}
-          columns={criterioTableColumns}
-          emptyMessage="No hay criterios para los filtros seleccionados."
-          getRowId={(criterio) => criterio.id}
-          onColumnWidthChange={setColumnWidth}
-          onRowClick={openEditor}
-          onSortChange={setSort}
-          rows={filteredCriterios}
-          sort={preferences.sort}
-        />
       </div>
 
       {editorMode && (
