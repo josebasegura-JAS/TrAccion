@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DashboardCards } from './components/DashboardCards';
 import { Header } from './components/Header';
@@ -77,6 +77,67 @@ type NavigationTarget = {
   recordId?: string;
   nonce: number;
 };
+
+interface ModuleErrorBoundaryProps {
+  activeView: AppView;
+  children: ReactNode;
+}
+
+interface ModuleErrorBoundaryState {
+  error: Error | null;
+}
+
+class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErrorBoundaryState> {
+  state: ModuleErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ModuleErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error('Error renderizando el módulo activo.', error, errorInfo);
+  }
+
+  componentDidUpdate(previousProps: ModuleErrorBoundaryProps): void {
+    if (previousProps.activeView !== this.props.activeView && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  handleReload = (): void => {
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.error) {
+      return this.props.children;
+    }
+
+    return (
+      <section className="rounded-2xl border border-red-500/50 bg-red-950/30 p-5 text-red-100" role="alert">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 shrink-0" size={22} aria-hidden="true" />
+          <div className="space-y-2">
+            <h2 className="text-base font-semibold">No se ha podido cargar este módulo</h2>
+            <p className="text-sm text-red-100/85">
+              La aplicación ha evitado quedarse en pantalla negra. Revisa la consola o el log de Electron para ver el error exacto.
+            </p>
+            <p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">
+              {this.state.error.message}
+            </p>
+            <button
+              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              onClick={this.handleReload}
+              type="button"
+            >
+              Recargar aplicación
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+}
 
 function readInitialActiveView(): AppView {
   return 'dashboard';
@@ -196,8 +257,9 @@ export function App() {
           {activeView === 'dashboard' && (
             <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
           )}
-          <Suspense fallback={<ModuleLoading activeView={activeView} />}>
-            {activeView === 'plantilla' && <PlantillaPage />}
+          <ModuleErrorBoundary activeView={activeView}>
+            <Suspense fallback={<ModuleLoading activeView={activeView} />}>
+              {activeView === 'plantilla' && <PlantillaPage />}
             {activeView === 'tareas' && (
               <TareasPage
                 initialTaskId={navigationTarget?.view === 'tareas' ? navigationTarget.recordId : null}
@@ -252,7 +314,8 @@ export function App() {
             {activeView === 'vinculograma' && <VinculogramaPage />}
             {activeView === 'especiales' && <EspecialesPage />}
             {activeView === 'ajustes' && <AjustesPage />}
-          </Suspense>
+            </Suspense>
+          </ModuleErrorBoundary>
         </main>
         <Footer />
       </div>

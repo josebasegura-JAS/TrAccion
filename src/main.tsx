@@ -27,6 +27,24 @@ function notifyBootVisible(): void {
   window.traccion?.notifyBootVisible?.();
 }
 
+function renderFatalError(error: unknown): void {
+  const message = error instanceof Error ? error.message : 'Error desconocido.';
+  root.render(
+    <React.StrictMode>
+      <div className="flex min-h-screen items-center justify-center bg-metro-app p-6 text-metro-text">
+        <section className="max-w-2xl rounded-2xl border border-red-500/50 bg-red-950/30 p-6 text-red-100 shadow-xl" role="alert">
+          <h1 className="mb-2 text-lg font-semibold">No se ha podido arrancar TrAccion</h1>
+          <p className="mb-3 text-sm text-red-100/85">
+            La aplicación ha evitado quedarse en pantalla negra. Revisa la consola o el log de Electron para ver el detalle completo.
+          </p>
+          <p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">{message}</p>
+        </section>
+      </div>
+    </React.StrictMode>,
+  );
+  window.traccion?.notifyRendererReady?.();
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 
 function renderBootScreen(message?: string): void {
@@ -67,6 +85,6 @@ startApp().catch((error: unknown) => {
   renderBootScreen('Preparando arranque alternativo...');
   renderApp().catch((renderError: unknown) => {
     console.error('No se ha podido arrancar TrAccion.', renderError);
-    window.traccion?.notifyRendererReady?.();
+    renderFatalError(renderError);
   });
 });
