@@ -21,6 +21,60 @@ const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
 
 let latestPersistenceFeedback: PersistenceFeedback | null = null;
 
+const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
+  'traccion.v1.tareas.peticionesMigrated',
+  'traccion.sidebar.pinned',
+  'traccion.sidebar.activeGroup',
+  'traccion.v1.vinculograma.showExpired',
+]);
+
+const reportedCorruptStorageKeys = new Set<string>();
+
+function shouldValidatePersistedJson(key: string): boolean {
+  if (!isPersistedStorageKey(key)) {
+    return false;
+  }
+
+  if (NON_JSON_PERSISTED_STORAGE_KEYS.has(key) || key.startsWith('traccion.header.')) {
+    return false;
+  }
+
+  return true;
+}
+
+
+function reportCorruptPersistedValue(key: string, error: unknown, source: 'localStorage' | 'sqlite'): void {
+  const message = `Dato persistido corrupto en ${source}. Clave afectada: ${key}. Se omite para permitir el arranque.`;
+  console.warn(message, error);
+
+  const reportKey = `${source}:${key}`;
+  if (reportedCorruptStorageKeys.has(reportKey)) {
+    return;
+  }
+
+  reportedCorruptStorageKeys.add(reportKey);
+  emitPersistenceFeedback({
+    kind: 'error',
+    updatedAt: new Date().toISOString(),
+    key,
+    message,
+  });
+}
+
+function isRecoverablePersistedValue(key: string, value: string, source: 'localStorage' | 'sqlite'): boolean {
+  if (!shouldValidatePersistedJson(key)) {
+    return true;
+  }
+
+  try {
+    JSON.parse(value);
+    return true;
+  } catch (error) {
+    reportCorruptPersistedValue(key, error, source);
+    return false;
+  }
+}
+
 function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
   latestPersistenceFeedback = feedback;
   window.dispatchEvent(
@@ -238,7 +292,9 @@ function currentLocalRecords(): TraccionStorageRecord[] {
   for (const key of PERSISTED_STORAGE_KEYS) {
     const value = window.localStorage.getItem(key);
     if (value !== null) {
-      records.push({ key, value });
+      if (isRecoverablePersistedValue(key, value, 'localStorage')) {
+        records.push({ key, value });
+      }
       seenKeys.add(key);
     }
   }
@@ -250,7 +306,7 @@ function currentLocalRecords(): TraccionStorageRecord[] {
     }
 
     const value = window.localStorage.getItem(key);
-    if (value !== null) {
+    if (value !== null && isRecoverablePersistedValue(key, value, 'localStorage')) {
       records.push({ key, value });
     }
   }
@@ -321,7 +377,12 @@ function mirrorToSqlite(key: string, value: string): void {
 }
 
 export function readStorageItem(key: string): string | null {
-  return window.localStorage.getItem(key);
+  const value = window.localStorage.getItem(key);
+  if (value === null) {
+    return null;
+  }
+
+  return isRecoverablePersistedValue(key, value, 'localStorage') ? value : null;
 }
 
 export function writeStorageItem(key: string, value: string): void {
@@ -386,6 +447,16 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
 
   for (const record of sqliteRecords) {
     if (pendingKeys.has(record.key)) {
+      continue;
+    }
+
+    if (!isRecoverablePersistedValue(record.key, record.value, 'sqlite')) {
+      const existingValue = window.localStorage.getItem(record.key);
+      if (existingValue !== null && isRecoverablePersistedValue(record.key, existingValue, 'localStorage')) {
+        continue;
+      }
+
+      window.localStorage.removeItem(record.key);
       continue;
     }
 
