@@ -1,3 +1,5 @@
+import ExcelJS from 'exceljs';
+
 import type { ExportCellValue, ExportTablePayload } from './types';
 
 const DANGEROUS_EXCEL_PREFIXES = ['=', '+', '-', '@'];
@@ -21,7 +23,7 @@ export function sanitizeFilenamePart(value: string): string {
 
 export function buildStableExportFilename(filename: string, generatedAt = new Date()): string {
   const sanitized = sanitizeFilenamePart(filename) || 'exportacion';
-  return `${sanitized}-${formatExportDate(generatedAt)}.xls`;
+  return `${sanitized}-${formatExportDate(generatedAt)}.xlsx`;
 }
 
 export function normalizeCellValue(value: ExportCellValue): string {
@@ -84,16 +86,148 @@ export function buildExcelTableHtml<T>(payload: ExportTablePayload<T>): string {
   return `<!doctype html><html><head><meta charset="utf-8" /></head><body><table>${headerRows.join('')}<tr></tr><thead><tr>${columnHeaders}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
 }
 
-export function exportTableToExcel<T>(payload: ExportTablePayload<T>): void {
-  const generatedAt = payload.generatedAt ?? new Date();
-  const html = buildExcelTableHtml({ ...payload, generatedAt });
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_SHEET_NAME = 'Exportacion';
+
+function toExcelColor(hex: string): { argb: string } {
+  return { argb: `FF${hex.replace('#', '').toUpperCase()}` };
+}
+
+function buildWorksheetName(filename: string): string {
+  const sanitized = filename.replace(/[\\/*?:[\]]/g, ' ').trim() || DEFAULT_SHEET_NAME;
+  return sanitized.slice(0, 31);
+}
+
+function buildIsoDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = buildStableExportFilename(payload.filename, generatedAt);
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export function exportTableToExcel<T>(payload: ExportTablePayload<T>): void {
+  const generatedAt = payload.generatedAt ?? new Date();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'TrAccion';
+  workbook.created = generatedAt;
+  workbook.modified = generatedAt;
+
+  const worksheet = workbook.addWorksheet(buildWorksheetName(payload.filename), {
+    views: [{ state: 'frozen', ySplit: 4 }],
+  });
+
+  const columnCount = Math.max(payload.columns.length, 1);
+  const lastColumnLetter = worksheet.getColumn(columnCount).letter;
+
+  worksheet.mergeCells(`A1:${lastColumnLetter}1`);
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = payload.title;
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: toExcelColor('#1f2937'),
+  };
+  titleCell.font = { color: toExcelColor('#ffffff'), bold: true, size: 13 };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getRow(1).height = 28;
+
+  const generatedCell = worksheet.getCell('A2');
+  generatedCell.value = `Generado: ${generatedAt.toLocaleString('es-ES')}`;
+  generatedCell.font = { color: toExcelColor('#94a3b8'), size: 9, bold: false };
+
+  const filterLabel = payload.filterLabel?.trim();
+  if (filterLabel && columnCount > 1) {
+    const filterCell = worksheet.getCell('B2');
+    filterCell.value = `Filtros: ${filterLabel}`;
+    filterCell.font = { color: toExcelColor('#94a3b8'), size: 9, bold: false };
+  } else if (filterLabel) {
+    generatedCell.value = `Generado: ${generatedAt.toLocaleString('es-ES')} · Filtros: ${filterLabel}`;
+  }
+
+  worksheet.getRow(3).height = 6;
+
+  const headerRow = worksheet.getRow(4);
+  payload.columns.forEach((column, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = column.header;
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: toExcelColor('#dc2626'),
+    };
+    cell.font = { color: toExcelColor('#ffffff'), bold: true, size: 11 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: toExcelColor('#991b1b') } };
+  });
+  headerRow.height = 22;
+
+  payload.rows.forEach((row, rowIndex) => {
+    const excelRow = worksheet.getRow(rowIndex + 5);
+    const isOddDataRow = rowIndex % 2 === 0;
+    const fillColor = toExcelColor(isOddDataRow ? '#1f2937' : '#111827');
+
+    payload.columns.forEach((column, columnIndex) => {
+      const value = column.value(row);
+      const cell = excelRow.getCell(columnIndex + 1);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fillColor };
+      cell.font = { color: toExcelColor('#e5e7eb'), size: 10 };
+      cell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+      if (value === null || value === undefined) {
+        cell.value = null;
+        return;
+      }
+
+      if (typeof value === 'number') {
+        cell.value = value;
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        return;
+      }
+
+      if (typeof value === 'string' && ISO_DATE_REGEX.test(value)) {
+        cell.value = buildIsoDate(value);
+        cell.numFmt = 'dd/mm/yyyy';
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        return;
+      }
+
+      cell.value = String(value);
+    });
+
+    excelRow.height = 18;
+  });
+
+  const lastRowNumber = Math.max(payload.rows.length + 4, 4);
+  worksheet.autoFilter = {
+    from: { row: 4, column: 1 },
+    to: { row: lastRowNumber, column: columnCount },
+  };
+
+  payload.columns.forEach((column, columnIndex) => {
+    const longestValueLength = payload.rows.reduce((maxLength, row) => {
+      const value = column.value(row);
+      return Math.max(maxLength, normalizeCellValue(value).length);
+    }, 0);
+    const width = Math.max(
+      10,
+      Math.min(Math.max(column.header.length, longestValueLength) + 4, 60),
+    );
+    worksheet.getColumn(columnIndex + 1).width = width;
+  });
+
+  void workbook.xlsx.writeBuffer().then((buffer) => {
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    downloadBlob(blob, buildStableExportFilename(payload.filename, generatedAt));
+  });
 }
