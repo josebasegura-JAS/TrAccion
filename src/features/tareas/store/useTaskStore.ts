@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
@@ -18,7 +19,7 @@ import {
   type TaskSeguimientoEntry,
 } from '../domain/task';
 
-const STORAGE_KEY = 'traccion.v1.tareas.tasks';
+export const TASKS_STORAGE_KEY = 'traccion.v1.tareas.tasks';
 const LEGACY_PETICIONES_STORAGE_KEY = 'traccion.v1.peticiones.peticiones';
 const PETICIONES_MIGRATION_FLAG_KEY = 'traccion.v1.tareas.peticionesMigrated';
 
@@ -137,8 +138,7 @@ interface TaskStateStore {
     draft: TaskDraft,
     seguimientoText: string | undefined,
     expectedUpdatedAt: string | null,
-    latestTasks: Task[],
-  ) => TaskUpdateResult;
+  ) => Promise<TaskUpdateResult>;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
   closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
@@ -475,7 +475,7 @@ function readMigratedPeticiones(): Task[] {
 }
 
 function readTasks(): Task[] {
-  const rawCurrentTasks = readStoredArray(STORAGE_KEY).filter(isTask);
+  const rawCurrentTasks = readStoredArray(TASKS_STORAGE_KEY).filter(isTask);
   const currentTasks = reconcileTasksWithClosedSessions(rawCurrentTasks.map(normalizeTask));
   const migratedTasks = readMigratedPeticiones().filter(
     (migratedTask) => !currentTasks.some((task) => task.id === migratedTask.id),
@@ -498,7 +498,7 @@ function readTasks(): Task[] {
 }
 
 function persistTasks(tasks: Task[]): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
+  writeStorageItem(TASKS_STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
 }
 
 function firstActiveTaskId(tasks: Task[]): string {
@@ -665,52 +665,35 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       };
     });
   },
-  updateWithConcurrencyCheck: (id, draft, seguimientoText, expectedUpdatedAt, latestTasks) => {
-    let result: TaskUpdateResult = {
-      ok: false,
-      message: 'No se ha podido guardar la tarea.',
-    };
+  updateWithConcurrencyCheck: async (id, draft, seguimientoText, expectedUpdatedAt) => {
+    try {
+      const { records, updatedRecord } = await saveSharedArrayRecord<Task>({
+        storageKey: TASKS_STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords: parseTasksSnapshot,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestTask) => normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText)),
+        missingMessage:
+          'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
+        conflictMessage:
+          'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
 
-    set((state) => {
-      const normalizedLatestTasks = latestTasks.map(normalizeTask);
-      const latestTask = normalizedLatestTasks.find((task) => task.id === id);
-      if (!latestTask) {
-        result = {
-          ok: false,
-          message:
-            'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
-        };
-        return {
-          tasks: normalizedLatestTasks,
-          selectedTaskId: firstActiveTaskId(normalizedLatestTasks),
-        };
-      }
+      const normalizedRecords = records.map(normalizeTask);
+      set({
+        tasks: normalizedRecords,
+        selectedTaskId: isTaskClosed(updatedRecord) ? firstActiveTaskId(normalizedRecords) : id,
+      });
 
-      if (expectedUpdatedAt && latestTask.updatedAt !== expectedUpdatedAt) {
-        result = {
-          ok: false,
-          message:
-            'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
-        };
-        return {
-          tasks: normalizedLatestTasks,
-          selectedTaskId: state.selectedTaskId,
-        };
-      }
-
-      const tasks = normalizedLatestTasks.map((task) =>
-        task.id === id ? buildUpdatedTask(task, draft, seguimientoText) : task,
-      );
-      persistTasks(tasks);
-      const updatedTask = tasks.find((task) => task.id === id);
-      result = { ok: true, message: 'Tarea guardada.' };
+      return { ok: true, message: 'Tarea guardada.' };
+    } catch (error) {
       return {
-        tasks,
-        selectedTaskId: updatedTask && isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido guardar la tarea.',
       };
-    });
-
-    return result;
+    }
   },
   remove: (id) => {
     set((state) => {

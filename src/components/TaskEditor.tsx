@@ -12,7 +12,7 @@ import {
   type TaskDocumentLink,
 } from '../features/tareas/domain/task';
 import { parseOutlookMsg } from '../features/especiales/domain/especiales';
-import { parseTasksSnapshot, useTaskStore } from '../features/tareas/store/useTaskStore';
+import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
@@ -248,24 +248,6 @@ export function TaskEditor({
     (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
   const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
 
-  const readLatestSharedTasks = async (): Promise<Task[] | null> => {
-    if (!window.traccion?.loadPersistedRecords) {
-      return null;
-    }
-
-    const snapshot = await window.traccion.loadPersistedRecords();
-    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-      throw new Error(
-        snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-      );
-    }
-
-    const tasksRecord = snapshot.records.find(
-      (record) => record.key === 'traccion.v1.tareas.tasks',
-    );
-    return parseTasksSnapshot(tasksRecord?.value ?? null);
-  };
-
   const handleSubmit = async () => {
     if (!canSubmit || isFormReadOnly) {
       return;
@@ -291,14 +273,11 @@ export function TaskEditor({
     }
 
     try {
-      const latestSharedTasks = await readLatestSharedTasks();
-      const result = updateTaskWithConcurrencyCheck(
+      const result = await updateTaskWithConcurrencyCheck(
         task.id,
         draft,
         newUpdateText,
         loadedTaskUpdatedAt,
-        latestSharedTasks ??
-          parseTasksSnapshot(window.localStorage.getItem('traccion.v1.tareas.tasks')),
       );
 
       if (!result.ok) {
