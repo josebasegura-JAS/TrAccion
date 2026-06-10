@@ -15,6 +15,7 @@ interface CriteriosRrllStateStore {
   selectedCriterioId: string;
   filters: CriterioRrllFilters;
   load: () => void;
+  reloadFromStorage: () => void;
   create: (draft: CriterioRrllDraft) => void;
   update: (id: string, draft: CriterioRrllDraft) => void;
   remove: (id: string) => void;
@@ -121,6 +122,10 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
   selectedCriterioId: '',
   filters: EMPTY_CRITERIO_RRLL_FILTERS,
   load: () => {
+    const criterios = readCriteriosRrll();
+    set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
+  },
+  reloadFromStorage: () => {
     const criterios = readCriteriosRrll();
     set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
   },
