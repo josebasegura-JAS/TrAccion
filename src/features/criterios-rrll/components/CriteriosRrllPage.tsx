@@ -59,7 +59,7 @@ export function CriteriosRrllPage() {
     () => filterCriteriosRrll(criterios, filters),
     [criterios, filters],
   );
-  const { preferences, setSort, setColumnWidth, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<CriterioTableColumnId>({
       storageKey: CRITERIOS_TABLE_STORAGE_KEY,
       defaultPreferences: defaultCriterioTablePreferences,
@@ -203,6 +203,7 @@ export function CriteriosRrllPage() {
         <DataTable
           ariaLabel="Criterios RRLL"
           columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
           columns={criterioTableColumns}
           emptyMessage="No hay criterios para los filtros seleccionados."
           getRowId={(criterio) => criterio.id}
