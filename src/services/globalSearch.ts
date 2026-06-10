@@ -28,6 +28,57 @@ type SearchableModule = {
 type UnknownRecord = Record<string, unknown>;
 
 const UNKNOWN_YEAR = 0;
+
+
+const MODULE_ALIASES: Record<string, AppView> = {
+  tarea: 'tareas',
+  tareas: 'tareas',
+  comite: 'comite',
+  comité: 'comite',
+  ce: 'comite',
+  acta: 'actas',
+  actas: 'actas',
+  paritaria: 'paritaria',
+  cp: 'paritaria',
+  criterio: 'criterios-rrll',
+  criterios: 'criterios-rrll',
+  rrll: 'criterios-rrll',
+  teletrabajo: 'teletrabajo',
+  telelana: 'teletrabajo',
+  licencia: 'licencias-sin-sueldo',
+  licencias: 'licencias-sin-sueldo',
+  excedencia: 'licencias-sin-sueldo',
+  excedencias: 'licencias-sin-sueldo',
+  ticket: 'ticket-restaurante',
+  tickets: 'ticket-restaurante',
+  restaurante: 'ticket-restaurante',
+  plantilla: 'plantilla',
+  persona: 'plantilla',
+  personas: 'plantilla',
+  vinculograma: 'vinculograma',
+  sorteos: 'sorteos',
+  sorteo: 'sorteos',
+  especiales: 'especiales',
+  especial: 'especiales',
+};
+
+type SearchStatusFilter = 'open' | 'closed' | 'overdue';
+
+interface ParsedSearchQuery {
+  terms: string[];
+  filters: {
+    moduleView?: AppView;
+    year?: number;
+    status?: string;
+    code?: string;
+    person?: string;
+    employeeNumber?: string;
+    statusFilter?: SearchStatusFilter;
+  };
+  activeFilters: string[];
+  normalizedFreeText: string;
+}
+
 const MODULE_ORDER: AppView[] = [
   'tareas',
   'comite',
@@ -52,6 +103,126 @@ function normalizeText(value: string): string {
     .toLocaleLowerCase('es')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+
+function normalizeToken(value: string): string {
+  return normalizeText(value).replace(/^['"]|['"]$/g, '');
+}
+
+function parseSearchQuery(query: string): ParsedSearchQuery {
+  const rawTokens = query.match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+  const freeTextTokens: string[] = [];
+  const activeFilters: string[] = [];
+  const filters: ParsedSearchQuery['filters'] = {};
+
+  for (const rawToken of rawTokens) {
+    const token = rawToken.trim();
+    if (!token) {
+      continue;
+    }
+
+    const normalizedToken = normalizeToken(token);
+    const separatorIndex = normalizedToken.indexOf(':');
+
+    if (separatorIndex > 0) {
+      const key = normalizedToken.slice(0, separatorIndex);
+      const value = normalizedToken.slice(separatorIndex + 1).trim();
+      if (!value) {
+        continue;
+      }
+
+      if (['modulo', 'módulo', 'module'].includes(key)) {
+        const moduleView = MODULE_ALIASES[value] ?? MODULE_ALIASES[normalizeText(value)];
+        if (moduleView) {
+          filters.moduleView = moduleView;
+          activeFilters.push(`módulo:${value}`);
+          continue;
+        }
+      }
+
+      if (['ano', 'año', 'year'].includes(key)) {
+        const year = Number(value);
+        if (Number.isInteger(year) && year > 1900) {
+          filters.year = year;
+          activeFilters.push(`año:${year}`);
+          continue;
+        }
+      }
+
+      if (['estado', 'status'].includes(key)) {
+        filters.status = value;
+        activeFilters.push(`estado:${value}`);
+        continue;
+      }
+
+      if (['codigo', 'código', 'code', 'cod'].includes(key)) {
+        filters.code = value;
+        activeFilters.push(`código:${value}`);
+        continue;
+      }
+
+      if (['persona', 'nombre', 'person'].includes(key)) {
+        filters.person = value;
+        activeFilters.push(`persona:${value}`);
+        continue;
+      }
+
+      if (['empleado', 'employee', 'numero', 'n'].includes(key)) {
+        filters.employeeNumber = value;
+        activeFilters.push(`empleado:${value}`);
+        continue;
+      }
+    }
+
+    if (['abierto', 'abiertos', 'pendiente', 'pendientes'].includes(normalizedToken)) {
+      filters.statusFilter = 'open';
+      activeFilters.push('abiertos');
+      continue;
+    }
+
+    if (['cerrado', 'cerrados', 'finalizado', 'finalizados', 'historico', 'histórico'].includes(normalizedToken)) {
+      filters.statusFilter = 'closed';
+      activeFilters.push('cerrados');
+      continue;
+    }
+
+    if (['vencido', 'vencidos'].includes(normalizedToken)) {
+      filters.statusFilter = 'overdue';
+      activeFilters.push('vencidos');
+      continue;
+    }
+
+    freeTextTokens.push(token.replace(/^"|"$/g, ''));
+  }
+
+  const normalizedFreeText = normalizeText(freeTextTokens.join(' '));
+  return {
+    terms: normalizedFreeText.split(' ').filter(Boolean),
+    filters,
+    activeFilters,
+    normalizedFreeText,
+  };
+}
+
+function isClosedStatus(value: string | undefined): boolean {
+  const normalized = normalizeText(value ?? '');
+  return ['cerrad', 'finalizad', 'histor', 'firmad', 'resuelt'].some((closedStatus) => normalized.includes(closedStatus));
+}
+
+function isPastDate(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(`${value.slice(0, 10)}T23:59:59`);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date.getTime() < today.getTime();
 }
 
 function asString(value: unknown): string {
@@ -194,6 +365,47 @@ function makeSessionResultFromLinkedTask(
   return result;
 }
 
+
+function linkedResultMatchesParsedQuery(result: GlobalSearchResult, parsedQuery: ParsedSearchQuery): boolean {
+  if (parsedQuery.filters.moduleView && parsedQuery.filters.moduleView !== result.moduleView) {
+    return false;
+  }
+
+  if (parsedQuery.filters.year && parsedQuery.filters.year !== result.year) {
+    return false;
+  }
+
+  if (parsedQuery.filters.status && !normalizeText(result.status ?? '').includes(parsedQuery.filters.status)) {
+    return false;
+  }
+
+  if (parsedQuery.filters.code && !result.haystack.includes(parsedQuery.filters.code)) {
+    return false;
+  }
+
+  if (parsedQuery.filters.person && !result.haystack.includes(parsedQuery.filters.person)) {
+    return false;
+  }
+
+  if (parsedQuery.filters.employeeNumber && !result.haystack.includes(parsedQuery.filters.employeeNumber)) {
+    return false;
+  }
+
+  if (parsedQuery.filters.statusFilter === 'open' && isClosedStatus(result.status)) {
+    return false;
+  }
+
+  if (parsedQuery.filters.statusFilter === 'closed' && !isClosedStatus(result.status)) {
+    return false;
+  }
+
+  if (parsedQuery.filters.statusFilter === 'overdue' && (!isPastDate(result.date) || isClosedStatus(result.status))) {
+    return false;
+  }
+
+  return everyTermMatches(parsedQuery.terms, [result.haystack]);
+}
+
 function uniqueResults(results: GlobalSearchResult[]): GlobalSearchResult[] {
   const resultByKey = new Map<string, GlobalSearchResult>();
 
@@ -210,21 +422,57 @@ function uniqueResults(results: GlobalSearchResult[]): GlobalSearchResult[] {
 
 
 function everyTermMatches(terms: string[], values: string[]): boolean {
-  return terms.every((term) => values.some((value) => value.includes(term)));
+  return terms.length === 0 || terms.every((term) => values.some((value) => value.includes(term)));
 }
 
 function getWeightedMatch(
-  normalizedQuery: string,
-  terms: string[],
+  parsedQuery: ParsedSearchQuery,
   result: SearchableResultDraft,
   record: UnknownRecord,
   moduleName: string,
+  moduleView: AppView,
 ): { score: number; reason: string } | null {
   const code = firstText(record, ['code', 'codigo', 'id']);
   const person = firstText(record, ['nombreCompleto', 'nombre', 'persona', 'solicitante', 'employeeName']);
   const employeeNumber = firstText(record, ['empleado', 'numeroEmpleado', 'employeeNumber', 'employeeId']);
   const status = result.status ?? firstText(record, ['estado', 'status']);
   const description = firstText(record, ['descripcion', 'description', 'observaciones', 'notes', 'criterio', 'tema']);
+
+  if (parsedQuery.filters.moduleView && parsedQuery.filters.moduleView !== moduleView) {
+    return null;
+  }
+
+  if (parsedQuery.filters.year && parsedQuery.filters.year !== result.year) {
+    return null;
+  }
+
+  if (parsedQuery.filters.status && !normalizeText(status).includes(parsedQuery.filters.status)) {
+    return null;
+  }
+
+  if (parsedQuery.filters.code && !normalizeText(code).includes(parsedQuery.filters.code)) {
+    return null;
+  }
+
+  if (parsedQuery.filters.person && !normalizeText(person).includes(parsedQuery.filters.person)) {
+    return null;
+  }
+
+  if (parsedQuery.filters.employeeNumber && !normalizeText(employeeNumber).includes(parsedQuery.filters.employeeNumber)) {
+    return null;
+  }
+
+  if (parsedQuery.filters.statusFilter === 'open' && isClosedStatus(status)) {
+    return null;
+  }
+
+  if (parsedQuery.filters.statusFilter === 'closed' && !isClosedStatus(status)) {
+    return null;
+  }
+
+  if (parsedQuery.filters.statusFilter === 'overdue' && (!isPastDate(result.date) || isClosedStatus(status))) {
+    return null;
+  }
 
   const weightedFields = [
     { label: 'título', value: result.title, weight: 100 },
@@ -243,27 +491,35 @@ function getWeightedMatch(
   const primitiveValues = Object.values(record).flatMap(extractPrimitiveValues).map(normalizeText).filter(Boolean);
   const allValues = [...weightedFields.map((field) => field.normalizedValue), ...primitiveValues];
 
-  if (!everyTermMatches(terms, allValues)) {
+  if (!everyTermMatches(parsedQuery.terms, allValues)) {
     return null;
   }
 
-  let bestMatch = weightedFields.find((field) => field.normalizedValue === normalizedQuery) ?? null;
+  const normalizedQuery = parsedQuery.normalizedFreeText;
+  let bestMatch = normalizedQuery
+    ? weightedFields.find((field) => field.normalizedValue === normalizedQuery) ?? null
+    : null;
   let exactBonus = bestMatch ? 80 : 0;
 
-  if (!bestMatch) {
+  if (!bestMatch && normalizedQuery) {
     bestMatch = weightedFields.find((field) => field.normalizedValue.includes(normalizedQuery)) ?? null;
     exactBonus = bestMatch ? 35 : 0;
   }
 
-  const matchedFields = weightedFields.filter((field) => terms.some((term) => field.normalizedValue.includes(term)));
+  const matchedFields = weightedFields.filter((field) => parsedQuery.terms.some((term) => field.normalizedValue.includes(term)));
   const weightedScore = matchedFields.reduce((score, field) => score + field.weight, 0);
-  const completeFieldBonus = matchedFields.some((field) => everyTermMatches(terms, [field.normalizedValue])) ? 30 : 0;
-  const score = weightedScore + exactBonus + completeFieldBonus + Math.min(terms.length * 5, 25);
+  const filterBonus = parsedQuery.activeFilters.length * 20;
+  const completeFieldBonus = matchedFields.some((field) => everyTermMatches(parsedQuery.terms, [field.normalizedValue])) ? 30 : 0;
+  const score = weightedScore + exactBonus + completeFieldBonus + filterBonus + Math.min(parsedQuery.terms.length * 5, 25);
   const reasonField = bestMatch ?? matchedFields[0] ?? null;
 
   return {
     score,
-    reason: reasonField ? `Coincidencia en ${reasonField.label}: ${reasonField.value}` : 'Coincidencia en contenido del registro',
+    reason: reasonField
+      ? `Coincidencia en ${reasonField.label}: ${reasonField.value}`
+      : parsedQuery.activeFilters.length > 0
+        ? `Coincidencia por filtros: ${parsedQuery.activeFilters.join(' · ')}`
+        : 'Coincidencia en contenido del registro',
   };
 }
 
@@ -271,10 +527,9 @@ function addSearchMetadata(
   result: SearchableResultDraft,
   record: UnknownRecord,
   searchableModule: SearchableModule,
-  normalizedQuery: string,
-  terms: string[],
+  parsedQuery: ParsedSearchQuery,
 ): GlobalSearchResult | null {
-  const match = getWeightedMatch(normalizedQuery, terms, result, record, searchableModule.module);
+  const match = getWeightedMatch(parsedQuery, result, record, searchableModule.module, searchableModule.moduleView);
   if (!match) {
     return null;
   }
@@ -415,12 +670,10 @@ const searchableModules: SearchableModule[] = [
 ];
 
 export function searchTraccion(query: string): GlobalSearchResult[] {
-  const normalizedQuery = normalizeText(query);
-  if (normalizedQuery.length < 2) {
+  const parsedQuery = parseSearchQuery(query);
+  if (parsedQuery.normalizedFreeText.length < 2 && parsedQuery.activeFilters.length === 0) {
     return [];
   }
-
-  const terms = normalizedQuery.split(' ').filter(Boolean);
 
   const linkedSessionLookup = buildLinkedSessionLookup();
   const rawResults = searchableModules.flatMap((searchableModule) =>
@@ -430,11 +683,11 @@ export function searchTraccion(query: string): GlobalSearchResult[] {
         return [];
       }
 
-      const standardResult = addSearchMetadata(mapped, record, searchableModule, normalizedQuery, terms);
+      const standardResult = addSearchMetadata(mapped, record, searchableModule, parsedQuery);
       const linkedResult = searchableModule.moduleView === 'tareas'
         ? makeSessionResultFromLinkedTask(record, index, linkedSessionLookup)
         : null;
-      const result = linkedResult && everyTermMatches(terms, [linkedResult.haystack])
+      const result = linkedResult && linkedResultMatchesParsedQuery(linkedResult, parsedQuery)
         ? { ...linkedResult, score: standardResult?.score ?? 50, matchReason: linkedResult.matchReason }
         : standardResult;
 
@@ -465,4 +718,8 @@ export function searchTraccion(query: string): GlobalSearchResult[] {
 
 export function getResultYearLabel(year: number): string {
   return year > 0 ? String(year) : 'Sin fecha';
+}
+
+export function getParsedSearchSummary(query: string): string[] {
+  return parseSearchQuery(query).activeFilters;
 }

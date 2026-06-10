@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import type { AppView } from '../navigation/navigation';
-import { getResultYearLabel, searchTraccion, type GlobalSearchResult } from '../services/globalSearch';
+import { getParsedSearchSummary, getResultYearLabel, searchTraccion, type GlobalSearchResult } from '../services/globalSearch';
 
 interface GlobalSearchNavigationTarget {
   view: AppView;
@@ -23,6 +23,8 @@ interface GroupedResults {
 
 const ALL_MODULES_FILTER = 'all';
 const ALL_YEARS_FILTER = 'all';
+const RECENT_SEARCHES_STORAGE_KEY = 'traccion.v1.global-search.recent';
+const MAX_RECENT_SEARCHES = 6;
 
 type ModuleFilter = typeof ALL_MODULES_FILTER | AppView;
 type YearFilter = typeof ALL_YEARS_FILTER | number;
@@ -60,6 +62,35 @@ function groupResults(results: GlobalSearchResult[]): GroupedResults[] {
   }));
 }
 
+
+function readRecentSearches(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(RECENT_SEARCHES_STORAGE_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string').slice(0, MAX_RECENT_SEARCHES) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentSearches(searches: string[]): void {
+  try {
+    window.localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(searches.slice(0, MAX_RECENT_SEARCHES)));
+  } catch {
+    // La búsqueda no debe fallar porque no pueda guardar el historial local.
+  }
+}
+
+function buildQuickSearch(label: string, query: string): { label: string; query: string } {
+  return { label, query };
+}
+
+const QUICK_SEARCHES = [
+  buildQuickSearch('Paritaria 2024', 'modulo:paritaria año:2024'),
+  buildQuickSearch('Actas pendientes', 'modulo:actas pendiente'),
+  buildQuickSearch('Tareas vencidas', 'modulo:tareas vencido'),
+  buildQuickSearch('Teletrabajo', 'modulo:teletrabajo'),
+];
+
 function formatResultDate(value: string): string {
   if (!value) {
     return 'Sin fecha';
@@ -76,7 +107,9 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const [moduleFilter, setModuleFilter] = useState<ModuleFilter>(ALL_MODULES_FILTER);
   const [yearFilter, setYearFilter] = useState<YearFilter>(ALL_YEARS_FILTER);
   const [onlyOpen, setOnlyOpen] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentSearches());
   const results = useMemo(() => searchTraccion(query), [query]);
+  const parsedSearchSummary = useMemo(() => getParsedSearchSummary(query), [query]);
   const moduleOptions = useMemo(
     () => Array.from(new Map(results.map((result) => [result.moduleView, result.module])).entries()),
     [results],
@@ -131,7 +164,26 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
     setIsOpen(false);
   };
 
+  const applySearch = (nextQuery: string) => {
+    setQuery(nextQuery);
+    setIsOpen(true);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const rememberSearch = (rawQuery: string) => {
+    const normalizedQuery = rawQuery.trim();
+    if (normalizedQuery.length < 2) {
+      return;
+    }
+
+    const nextSearches = [normalizedQuery, ...recentSearches.filter((item) => item !== normalizedQuery)].slice(0, MAX_RECENT_SEARCHES);
+    setRecentSearches(nextSearches);
+    writeRecentSearches(nextSearches);
+  };
+
   const handleResultClick = (result: GlobalSearchResult) => {
+    rememberSearch(query);
+
     onNavigate({ view: result.moduleView, recordId: result.recordId });
     setIsOpen(false);
   };
@@ -163,6 +215,12 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                 ref={inputRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && filteredResults[0]) {
+                    event.preventDefault();
+                    handleResultClick(filteredResults[0]);
+                  }
+                }}
                 placeholder="Buscar por persona, tarea, origen, fecha, módulo..."
                 className="min-w-0 flex-1 bg-transparent text-sm font-medium text-metro-text outline-none placeholder:text-metro-muted"
               />
@@ -175,6 +233,43 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                 <X size={18} />
               </button>
             </div>
+
+            {query.trim().length < 2 && (
+              <div className="border-b border-metro-border bg-slate-950/10 px-4 py-3">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-metro-muted">Búsquedas rápidas</div>
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_SEARCHES.map((quickSearch) => (
+                    <button
+                      key={quickSearch.query}
+                      type="button"
+                      className={getFilterButtonClass(false)}
+                      onClick={() => applySearch(quickSearch.query)}
+                    >
+                      {quickSearch.label}
+                    </button>
+                  ))}
+                  {recentSearches.map((recentSearch) => (
+                    <button
+                      key={recentSearch}
+                      type="button"
+                      className={getFilterButtonClass(false)}
+                      onClick={() => applySearch(recentSearch)}
+                    >
+                      {recentSearch}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-metro-muted">
+                  Sintaxis avanzada: modulo:paritaria · año:2024 · estado:pendiente · codigo:24-PE · persona:garcia · empleado:1234 · vencido · abierto · cerrado.
+                </p>
+              </div>
+            )}
+
+            {parsedSearchSummary.length > 0 && (
+              <div className="border-b border-metro-border bg-slate-950/10 px-4 py-2 text-[11px] text-metro-muted">
+                Filtros detectados: <span className="font-semibold text-metro-text">{parsedSearchSummary.join(' · ')}</span>
+              </div>
+            )}
 
             {query.trim().length >= 2 && results.length > 0 && (
               <div className="space-y-2 border-b border-metro-border bg-slate-950/10 px-4 py-3">
@@ -229,7 +324,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             <div className="min-h-[16rem] overflow-auto p-4">
               {query.trim().length < 2 && (
                 <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
-                  Escribe al menos 2 caracteres. Los resultados se ordenan por relevancia y se agrupan por año y módulo.
+                  Escribe al menos 2 caracteres o usa filtros avanzados. Ejemplos: modulo:paritaria año:2024, codigo:24-PE, persona:garcia, vencido.
                 </div>
               )}
 
@@ -296,7 +391,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             </div>
 
             <div className="border-t border-metro-border px-4 py-2 text-[11px] text-metro-muted">
-              Los resultados se ordenan por relevancia. Usa los filtros para acotar por módulo, año o registros abiertos.
+              Enter abre el primer resultado. Puedes combinar texto libre con filtros: modulo, año, estado, codigo, persona, empleado, abierto, cerrado o vencido.
             </div>
           </div>
         </div>
