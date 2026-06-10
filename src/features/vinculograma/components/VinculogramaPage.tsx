@@ -405,7 +405,7 @@ function VinculogramaTable({
 }
 
 export function VinculogramaPage() {
-  const { records, load, create, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useVinculogramaStore();
+  const { records, load, createWithConcurrencyCheck, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useVinculogramaStore();
   const { employees, load: loadEmployees } = useEmployeeStore();
   const [draft, setDraft] = useState<VinculogramaDraft>(EMPTY_VINCULOGRAMA_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -471,9 +471,11 @@ export function VinculogramaPage() {
       return result;
     }
 
-    create(draft);
-    closeModal();
-    return { ok: true, message: 'Vínculo creado.' };
+    const result = await createWithConcurrencyCheck(draft);
+    if (result.ok) {
+      closeModal();
+    }
+    return result;
   };
 
   const deleteRecord = async () => {

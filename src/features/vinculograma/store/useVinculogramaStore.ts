@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildVinculograma,
   type Vinculograma,
@@ -12,6 +12,7 @@ const STORAGE_KEY = 'traccion.v1.vinculograma.records';
 interface VinculogramaUpdateResult {
   ok: boolean;
   message: string;
+  recordId?: string;
 }
 
 interface VinculogramaState {
@@ -19,6 +20,7 @@ interface VinculogramaState {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: VinculogramaDraft) => string;
+  createWithConcurrencyCheck: (draft: VinculogramaDraft) => Promise<VinculogramaUpdateResult>;
   update: (id: string, draft: VinculogramaDraft) => void;
   updateWithConcurrencyCheck: (
     id: string,
@@ -98,6 +100,27 @@ export const useVinculogramaStore = create<VinculogramaState>((set) => ({
       return { records };
     });
     return id;
+  },
+  createWithConcurrencyCheck: async (draft) => {
+    const id = createId();
+    const record = buildVinculograma(draft, nowIso(), id);
+
+    try {
+      const result = await saveNewSharedArrayRecord<Vinculograma>({
+        storageKey: STORAGE_KEY,
+        newRecord: record,
+        parseRecords,
+        getRecordId: (item) => item.id,
+        duplicateMessage:
+          'El vínculo ya existe en la base compartida. Recarga antes de continuar.',
+      });
+
+      set({ records: result.records });
+      return { ok: true, message: 'Vínculo creado.', recordId: result.newRecord.id };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido crear el vínculo.';
+      return { ok: false, message };
+    }
   },
   update: (id, draft) => {
     set((state) => {

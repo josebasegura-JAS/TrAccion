@@ -518,7 +518,7 @@ export function LicenciasSinSueldoPage() {
   const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
     (state) => state.rutaPlantillaLicenciaSinSueldo,
   );
-  const { records, load, create, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useLicenciasSinSueldoStore();
+  const { records, load, createWithConcurrencyCheck, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useLicenciasSinSueldoStore();
   const [editor, setEditor] = useState<{ mode: EditorMode; record: LicenciaSinSueldoRecord | null } | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'todos' | LicenciaSinSueldoTipo>('todos');
@@ -576,9 +576,11 @@ export function LicenciasSinSueldoPage() {
       return { ok: false, message: 'No hay editor activo.' };
     }
     if (editor.mode === 'create') {
-      create({ ...draft, estado: 'pendiente_aprobacion' });
-      setEditor(null);
-      return { ok: true, message: 'Solicitud creada.' };
+      const result = await createWithConcurrencyCheck({ ...draft, estado: 'pendiente_aprobacion' });
+      if (result.ok) {
+        setEditor(null);
+      }
+      return result;
     }
     if (editor.record) {
       const result = await updateWithConcurrencyCheck(editor.record.id, draft, editor.record.updatedAt);

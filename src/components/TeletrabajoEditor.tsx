@@ -109,7 +109,7 @@ export function TeletrabajoEditor({
   mode: 'create' | 'edit';
   onDone: () => void;
 }) {
-  const createSolicitud = useTeletrabajoStore((state) => state.create);
+  const createSolicitud = useTeletrabajoStore((state) => state.createWithConcurrencyCheck);
   const updateSolicitud = useTeletrabajoStore((state) => state.updateWithConcurrencyCheck);
   const removeSolicitud = useTeletrabajoStore((state) => state.removeWithConcurrencyCheck);
   const employees = useEmployeeStore((state) => state.employees);
@@ -263,8 +263,17 @@ export function TeletrabajoEditor({
             }
 
             if (isCreate) {
-              createSolicitud(draft);
-              onDone();
+              setIsSaving(true);
+              setSaveStatus('');
+              void createSolicitud(draft)
+                .then((result) => {
+                  if (result.ok) {
+                    onDone();
+                    return;
+                  }
+                  setSaveStatus(result.message);
+                })
+                .finally(() => setIsSaving(false));
               return;
             }
 

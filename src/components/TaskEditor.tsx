@@ -179,7 +179,7 @@ export function TaskEditor({
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
-  const createTask = useTaskStore((state) => state.create);
+  const createTaskWithConcurrencyCheck = useTaskStore((state) => state.createWithConcurrencyCheck);
   const updateTaskWithConcurrencyCheck = useTaskStore(
     (state) => state.updateWithConcurrencyCheck,
   );
@@ -257,7 +257,12 @@ export function TaskEditor({
     setSaveStatusIsError(false);
 
     if (isCreate) {
-      createTask(draft, newUpdateText);
+      const result = await createTaskWithConcurrencyCheck(draft, newUpdateText);
+      if (!result.ok) {
+        setSaveStatus(result.message);
+        setSaveStatusIsError(true);
+        return;
+      }
       onDone();
       return;
     }

@@ -14,7 +14,7 @@ import {
   type TeletrabajoPuestoDraft,
 } from '../domain/puestosTeletrabajo';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   addAuditEvent,
   buildAuditChanges,
@@ -111,6 +111,7 @@ function registerTeletrabajoUpdateAudit(
 interface TeletrabajoUpdateResult {
   ok: boolean;
   message: string;
+  recordId?: string;
 }
 
 interface TeletrabajoStateStore {
@@ -121,6 +122,7 @@ interface TeletrabajoStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: TeletrabajoDraft) => void;
+  createWithConcurrencyCheck: (draft: TeletrabajoDraft) => Promise<TeletrabajoUpdateResult>;
   update: (id: string, draft: TeletrabajoDraft) => void;
   updateWithConcurrencyCheck: (
     id: string,
@@ -368,6 +370,41 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       persistSolicitudes(solicitudes);
       return { solicitudes, selectedSolicitudId: solicitud.id };
     });
+  },
+  createWithConcurrencyCheck: async (draft) => {
+    const now = new Date().toISOString();
+    const solicitud: TeletrabajoSolicitud = {
+      id: createSolicitudId(),
+      ...normalizeDraft(draft),
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    try {
+      const result = await saveNewSharedArrayRecord<TeletrabajoSolicitud>({
+        storageKey: STORAGE_KEY,
+        newRecord: solicitud,
+        parseRecords: parseSolicitudes,
+        getRecordId: (record) => record.id,
+        duplicateMessage:
+          'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
+      });
+
+      addAuditEvent({
+        module: 'teletrabajo',
+        entityId: result.newRecord.id,
+        action: 'created',
+        summary: 'Registro creado',
+        changes: [],
+      });
+
+      set({ solicitudes: result.records, selectedSolicitudId: result.newRecord.id });
+      return { ok: true, message: 'Solicitud creada.', recordId: result.newRecord.id };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
+      return { ok: false, message };
+    }
   },
   update: (id, draft) => {
     set((state) => {

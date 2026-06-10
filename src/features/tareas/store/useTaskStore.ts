@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
@@ -120,6 +120,7 @@ type StoredManagedSessionForTaskSync = {
 interface TaskUpdateResult {
   ok: boolean;
   message: string;
+  recordId?: string;
 }
 
 interface TaskStateStore {
@@ -129,6 +130,7 @@ interface TaskStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: TaskDraft, seguimientoText?: string) => void;
+  createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string) => Promise<TaskUpdateResult>;
   createManyFromImport: (
     drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
   ) => Record<string, string>;
@@ -594,6 +596,53 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         selectedTaskId: isTaskClosed(task) ? firstActiveTaskId(tasks) : task.id,
       };
     });
+  },
+  createWithConcurrencyCheck: async (draft, seguimientoText) => {
+    const now = new Date().toISOString();
+    const task: Task = {
+      id: createTaskId(),
+      ...draft,
+      sessionDocumentCode: '',
+      sessionModule: '',
+      sessionDate: '',
+      seguimiento: buildSeguimiento(seguimientoText, now),
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      closedAt: isTaskClosed(draft) ? now : null,
+    };
+
+    try {
+      const { records, newRecord } = await saveNewSharedArrayRecord<Task>({
+        storageKey: TASKS_STORAGE_KEY,
+        newRecord: task,
+        parseRecords: parseTasksSnapshot,
+        getRecordId: (record) => record.id,
+        duplicateMessage:
+          'La tarea ya existe en la base compartida. Recarga antes de continuar.',
+      });
+
+      addAuditEvent({
+        module: 'tareas',
+        entityId: newRecord.id,
+        action: 'created',
+        summary: 'Registro creado',
+        changes: [],
+      });
+
+      const normalizedRecords = records.map(normalizeTask);
+      set({
+        tasks: normalizedRecords,
+        selectedTaskId: isTaskClosed(newRecord) ? firstActiveTaskId(normalizedRecords) : newRecord.id,
+      });
+
+      return { ok: true, message: 'Tarea creada.', recordId: newRecord.id };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido crear la tarea.',
+      };
+    }
   },
   createManyFromImport: (drafts) => {
     const createdIds: Record<string, string> = {};

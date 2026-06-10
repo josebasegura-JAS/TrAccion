@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   buildLicenciaSinSueldoRecord,
@@ -71,6 +71,7 @@ function registerLicenciaUpdateAudit(
 interface LicenciaUpdateResult {
   ok: boolean;
   message: string;
+  recordId?: string;
 }
 
 interface LicenciasSinSueldoState {
@@ -78,6 +79,7 @@ interface LicenciasSinSueldoState {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: LicenciaSinSueldoDraft) => string;
+  createWithConcurrencyCheck: (draft: LicenciaSinSueldoDraft) => Promise<LicenciaUpdateResult>;
   update: (id: string, draft: LicenciaSinSueldoDraft) => void;
   updateWithConcurrencyCheck: (
     id: string,
@@ -182,6 +184,35 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set) 
       return { records };
     });
     return id;
+  },
+  createWithConcurrencyCheck: async (draft) => {
+    const id = createId();
+    const record = buildLicenciaSinSueldoRecord(draft, nowIso(), id);
+
+    try {
+      const result = await saveNewSharedArrayRecord<LicenciaSinSueldoRecord>({
+        storageKey: LICENCIA_SIN_SUELDO_STORAGE_KEY,
+        newRecord: record,
+        parseRecords,
+        getRecordId: (item) => item.id,
+        duplicateMessage:
+          'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
+      });
+
+      addAuditEvent({
+        module: 'licencias-sin-sueldo',
+        entityId: result.newRecord.id,
+        action: 'created',
+        summary: 'Registro creado',
+        changes: [],
+      });
+
+      set({ records: result.records });
+      return { ok: true, message: 'Solicitud creada.', recordId: result.newRecord.id };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
+      return { ok: false, message };
+    }
   },
   update: (id, draft) => {
     set((state) => {
