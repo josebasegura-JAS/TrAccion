@@ -1,6 +1,6 @@
 import { CalendarClock, Eye, FileText, FolderOpen, Plus, Settings2, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState, useCallback} from 'react';
-import { useTaskStore } from '../../tareas/store/useTaskStore';
+import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
@@ -296,7 +296,8 @@ export function ActasPage() {
     toggleActaType,
     removeActaType,
   } = useActasStore();
-  const { tasks, load: loadTasks } = useTaskStore();
+  const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
+  const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const [draft, setDraft] = useState<ActaDraft>(EMPTY_ACTA_DRAFT);
   const [editingActaId, setEditingActaId] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -322,25 +323,15 @@ export function ActasPage() {
 
   useEffect(() => {
     load();
-    loadTasks();
-  }, [load, loadTasks]);
+    loadConfiguracion();
+  }, [load, loadConfiguracion]);
 
-  const sindicatoOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const task of tasks) {
-      if (task.sindicato.trim()) {
-        values.add(task.sindicato.trim());
-      }
-    }
-    for (const acta of actas) {
-      for (const alegacion of acta.alegaciones) {
-        if (alegacion.sindicato.trim()) {
-          values.add(alegacion.sindicato.trim());
-        }
-      }
-    }
-    return [...values].sort((first, second) => first.localeCompare(second, 'es'));
-  }, [actas, tasks]);
+  const sindicatoOptions = useMemo(() =>
+    taskOrigins
+      .filter((origin) => origin.active && !origin.deletedAt)
+      .map((origin) => origin.nombre)
+      .sort((first, second) => first.localeCompare(second, 'es', { sensitivity: 'base' })),
+  [taskOrigins]);
 
 
   const selectableActaTypes = useMemo(() => {
