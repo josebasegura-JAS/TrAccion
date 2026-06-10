@@ -4,20 +4,25 @@ import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
   buildActaObservacionesFromSession,
+  createDefaultActaTypes,
   isActaState,
   isActaType,
+  normalizeActaTypeName,
   type Acta,
   type ActaAlegacion,
   type ActaDraft,
+  type ActaTypeDefinition,
   type ActaUpdateEntry,
   type ActaState,
   type CreateActaFromSessionInput,
 } from '../domain/acta';
 
 const STORAGE_KEY = 'traccion.v1.actas.records';
+const ACTA_TYPES_STORAGE_KEY = 'traccion.v1.actas.types';
 
 interface ActasStateStore {
   actas: Acta[];
+  actaTypes: ActaTypeDefinition[];
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: ActaDraft) => string;
@@ -26,14 +31,31 @@ interface ActasStateStore {
   closeActa: (actaId: string) => void;
   remove: (actaId: string) => void;
   createFromSession: (input: CreateActaFromSessionInput) => string;
+  createActaType: (nombre: string) => { ok: boolean; message?: string };
+  toggleActaType: (typeId: string) => void;
+  removeActaType: (typeId: string) => { ok: boolean; message?: string };
 }
 
 function createActaId(): string {
   return `acta-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function createActaTypeId(nombre: string): string {
+  const slug = normalizeActaTypeName(nombre)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return `acta-type-${slug || Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
 function persistActas(actas: Acta[]): void {
   writeStorageItem(STORAGE_KEY, JSON.stringify(actas));
+}
+
+function persistActaTypes(actaTypes: ActaTypeDefinition[]): void {
+  writeStorageItem(ACTA_TYPES_STORAGE_KEY, JSON.stringify(actaTypes));
 }
 
 function isActaAlegacion(value: unknown): value is ActaAlegacion {
@@ -50,7 +72,6 @@ function isActaAlegacion(value: unknown): value is ActaAlegacion {
   );
 }
 
-
 function isActaUpdateEntry(value: unknown): value is ActaUpdateEntry {
   if (!value || typeof value !== 'object') {
     return false;
@@ -61,6 +82,19 @@ function isActaUpdateEntry(value: unknown): value is ActaUpdateEntry {
     typeof candidate.id === 'string' &&
     typeof candidate.fecha === 'string' &&
     typeof candidate.texto === 'string'
+  );
+}
+
+function isStoredActaType(value: unknown): value is ActaTypeDefinition {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof ActaTypeDefinition, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.nombre === 'string' &&
+    typeof candidate.disabled === 'boolean'
   );
 }
 
@@ -90,7 +124,7 @@ function normalizeActa(acta: Acta): Acta {
   return {
     id: acta.id,
     titulo: acta.titulo,
-    tipo: acta.tipo,
+    tipo: normalizeActaTypeName(acta.tipo),
     fechaSesion: acta.fechaSesion,
     fechaCreacion: acta.fechaCreacion ?? createdAt.slice(0, 10),
     estado,
@@ -106,6 +140,28 @@ function normalizeActa(acta: Acta): Acta {
   };
 }
 
+function normalizeActaType(type: ActaTypeDefinition): ActaTypeDefinition {
+  const createdAt = typeof type.createdAt === 'string' ? type.createdAt : new Date().toISOString();
+  return {
+    id: type.id,
+    nombre: normalizeActaTypeName(type.nombre),
+    disabled: type.disabled,
+    createdAt,
+    updatedAt: typeof type.updatedAt === 'string' ? type.updatedAt : createdAt,
+  };
+}
+
+function dedupeActaTypes(types: ActaTypeDefinition[]): ActaTypeDefinition[] {
+  const byName = new Map<string, ActaTypeDefinition>();
+  for (const type of types.map(normalizeActaType)) {
+    const key = type.nombre.toLowerCase();
+    if (type.nombre && !byName.has(key)) {
+      byName.set(key, type);
+    }
+  }
+  return [...byName.values()].sort((first, second) => first.nombre.localeCompare(second.nombre, 'es'));
+}
+
 function readActas(): Acta[] {
   const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
@@ -116,12 +172,33 @@ function readActas(): Acta[] {
   return Array.isArray(parsed) ? parsed.filter(isActa).map(normalizeActa) : [];
 }
 
+function readActaTypes(actas: Acta[]): ActaTypeDefinition[] {
+  const stored = readStorageItem(ACTA_TYPES_STORAGE_KEY);
+  const parsed: unknown = stored ? JSON.parse(stored) : null;
+  const storedTypes = Array.isArray(parsed) ? parsed.filter(isStoredActaType) : [];
+  const now = new Date().toISOString();
+  const typesFromActas = actas.map((acta) => ({
+    id: createActaTypeId(acta.tipo),
+    nombre: acta.tipo,
+    disabled: false,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  const types = dedupeActaTypes([...createDefaultActaTypes(), ...storedTypes, ...typesFromActas]);
+
+  if (!stored || storedTypes.length !== types.length) {
+    persistActaTypes(types);
+  }
+
+  return types;
+}
+
 function buildActaFromDraft(draft: ActaDraft, sourceSessionId: string | null): Acta {
   const now = new Date().toISOString();
   return {
     id: createActaId(),
     titulo: draft.titulo.trim(),
-    tipo: draft.tipo,
+    tipo: normalizeActaTypeName(draft.tipo),
     fechaSesion: draft.fechaSesion,
     fechaCreacion: now.slice(0, 10),
     estado: draft.estado,
@@ -137,16 +214,22 @@ function buildActaFromDraft(draft: ActaDraft, sourceSessionId: string | null): A
   };
 }
 
+function loadActasState(): Pick<ActasStateStore, 'actas' | 'actaTypes'> {
+  const actas = readActas();
+  return { actas, actaTypes: readActaTypes(actas) };
+}
+
 export const useActasStore = create<ActasStateStore>((set, get) => ({
   actas: [],
-  load: () => set({ actas: readActas() }),
-  reloadFromStorage: () => set({ actas: readActas() }),
+  actaTypes: [],
+  load: () => set(loadActasState()),
+  reloadFromStorage: () => set(loadActasState()),
   create: (draft) => {
     const acta = buildActaFromDraft(draft, null);
     set((state) => {
       const actas = [acta, ...state.actas];
       persistActas(actas);
-      return { actas };
+      return { actas, actaTypes: readActaTypes(actas) };
     });
     return acta.id;
   },
@@ -158,7 +241,7 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
           ? {
               ...acta,
               titulo: draft.titulo.trim(),
-              tipo: draft.tipo,
+              tipo: normalizeActaTypeName(draft.tipo),
               fechaSesion: draft.fechaSesion,
               estado: draft.estado,
               fechaLimite: draft.fechaLimite,
@@ -172,7 +255,7 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
           : acta,
       );
       persistActas(actas);
-      return { actas };
+      return { actas, actaTypes: readActaTypes(actas) };
     });
   },
   addUpdate: (actaId, text) => {
@@ -245,8 +328,66 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
     set((state) => {
       const actas = [acta, ...state.actas];
       persistActas(actas);
-      return { actas };
+      return { actas, actaTypes: readActaTypes(actas) };
     });
     return acta.id;
+  },
+  createActaType: (nombre) => {
+    const normalizedName = normalizeActaTypeName(nombre);
+    if (!normalizedName) {
+      return { ok: false, message: 'Indica un nombre de tipo de acta.' };
+    }
+
+    const exists = get().actaTypes.some((type) => type.nombre.toLowerCase() === normalizedName.toLowerCase());
+    if (exists) {
+      return { ok: false, message: 'Ya existe un tipo de acta con ese nombre.' };
+    }
+
+    set((state) => {
+      const now = new Date().toISOString();
+      const actaTypes = dedupeActaTypes([
+        ...state.actaTypes,
+        {
+          id: createActaTypeId(normalizedName),
+          nombre: normalizedName,
+          disabled: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      persistActaTypes(actaTypes);
+      return { actaTypes };
+    });
+
+    return { ok: true };
+  },
+  toggleActaType: (typeId) => {
+    set((state) => {
+      const now = new Date().toISOString();
+      const actaTypes = state.actaTypes.map((type) =>
+        type.id === typeId ? { ...type, disabled: !type.disabled, updatedAt: now } : type,
+      );
+      persistActaTypes(actaTypes);
+      return { actaTypes };
+    });
+  },
+  removeActaType: (typeId) => {
+    const type = get().actaTypes.find((item) => item.id === typeId);
+    if (!type) {
+      return { ok: false, message: 'No se ha encontrado el tipo de acta.' };
+    }
+
+    const hasChildren = get().actas.some((acta) => acta.tipo.toLowerCase() === type.nombre.toLowerCase());
+    if (hasChildren) {
+      return { ok: false, message: 'No se puede eliminar porque tiene actas asociadas. Puedes deshabilitarlo.' };
+    }
+
+    set((state) => {
+      const actaTypes = state.actaTypes.filter((item) => item.id !== typeId);
+      persistActaTypes(actaTypes);
+      return { actaTypes };
+    });
+
+    return { ok: true };
   },
 }));

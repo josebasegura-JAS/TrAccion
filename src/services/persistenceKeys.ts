@@ -11,6 +11,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.licenciasSinSueldo.records',
   'traccion.v1.comite.sessions',
   'traccion.v1.actas.records',
+  'traccion.v1.actas.types',
   'traccion.v1.actas.table',
   'traccion.v1.paritaria.sessions',
   'traccion.v1.ticketRestaurante.calendars',

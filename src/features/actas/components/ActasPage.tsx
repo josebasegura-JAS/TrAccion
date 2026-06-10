@@ -1,4 +1,4 @@
-import { CalendarClock, Eye, FileText, FolderOpen, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, Eye, FileText, FolderOpen, Plus, Settings2, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -8,7 +8,6 @@ import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import {
   ACTA_STATES,
-  ACTA_TYPES,
   EMPTY_ACTA_DRAFT,
   type Acta,
   type ActaAlegacion,
@@ -181,7 +180,17 @@ function getNextStateLabel(state: ActaDraft['estado']): string {
 }
 
 export function ActasPage() {
-  const { actas, load, create, update, remove } = useActasStore();
+  const {
+    actas,
+    actaTypes,
+    load,
+    create,
+    update,
+    remove,
+    createActaType,
+    toggleActaType,
+    removeActaType,
+  } = useActasStore();
   const { tasks, load: loadTasks } = useTaskStore();
   const [draft, setDraft] = useState<ActaDraft>(EMPTY_ACTA_DRAFT);
   const [editingActaId, setEditingActaId] = useState<string | null>(null);
@@ -193,6 +202,8 @@ export function ActasPage() {
   const [pathStatus, setPathStatus] = useState('');
   const [pathStatusIsError, setPathStatusIsError] = useState(false);
   const [deadlineWasAutoUpdated, setDeadlineWasAutoUpdated] = useState(false);
+  const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
+  const [newActaTypeName, setNewActaTypeName] = useState('');
   const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
     defaultPreferences: {
@@ -223,6 +234,49 @@ export function ActasPage() {
     }
     return [...values].sort((first, second) => first.localeCompare(second, 'es'));
   }, [actas, tasks]);
+
+
+  const selectableActaTypes = useMemo(() => {
+    const activeTypes = actaTypes.filter((type) => !type.disabled);
+    if (draft.tipo && !activeTypes.some((type) => type.nombre === draft.tipo)) {
+      const currentType = actaTypes.find((type) => type.nombre === draft.tipo);
+      return [
+        ...activeTypes,
+        currentType ?? {
+          id: `acta-type-current-${draft.tipo}`,
+          nombre: draft.tipo,
+          disabled: true,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ];
+    }
+    return activeTypes;
+  }, [actaTypes, draft.tipo]);
+
+  const actaTypeUsage = useMemo(() => {
+    const usage = new Map<string, number>();
+    for (const acta of actas) {
+      usage.set(acta.tipo.toLowerCase(), (usage.get(acta.tipo.toLowerCase()) ?? 0) + 1);
+    }
+    return usage;
+  }, [actas]);
+
+  const saveNewActaType = () => {
+    const result = createActaType(newActaTypeName);
+    if (!result.ok) {
+      window.alert(result.message ?? 'No se ha podido crear el tipo de acta.');
+      return;
+    }
+    setNewActaTypeName('');
+  };
+
+  const deleteActaType = (typeId: string) => {
+    const result = removeActaType(typeId);
+    if (!result.ok) {
+      window.alert(result.message ?? 'No se ha podido eliminar el tipo de acta.');
+    }
+  };
 
   const years = useMemo(
     () => [...new Set(actas.map(getActaYear))].sort((first, second) => second.localeCompare(first)),
@@ -520,6 +574,15 @@ export function ActasPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={() => setIsTypeManagerOpen(true)}
+            title="Gestionar tipos de acta"
+            type="button"
+          >
+            <Settings2 size={16} />
+            Nuevo tipo
+          </button>
           <ExportPrintButtons
             payload={{
               title: 'Actas',
@@ -621,6 +684,94 @@ export function ActasPage() {
         ))}
       </div>
 
+
+      {isTypeManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
+            <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-metro-text">Tipos de acta</h3>
+                <p className="text-xs text-metro-muted">Alta, deshabilitado y borrado seguro de tipos sin actas asociadas.</p>
+              </div>
+              <button
+                className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setIsTypeManagerOpen(false)}
+                title="Cerrar"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px]">
+                <input
+                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => setNewActaTypeName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      saveNewActaType();
+                    }
+                  }}
+                  placeholder="Nuevo tipo de acta..."
+                  value={newActaTypeName}
+                />
+                <button
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+                  onClick={saveNewActaType}
+                  type="button"
+                >
+                  <Plus size={16} />
+                  Alta
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {actaTypes.map((type) => {
+                  const usageCount = actaTypeUsage.get(type.nombre.toLowerCase()) ?? 0;
+                  return (
+                    <div
+                      className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 xl:grid-cols-[minmax(180px,1fr)_90px_130px_44px] xl:items-center"
+                      key={type.id}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-metro-text">{type.nombre}</p>
+                        <p className="text-xs text-metro-muted">{type.disabled ? 'Deshabilitado' : 'Activo'}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-metro-muted">
+                        {usageCount} acta{usageCount === 1 ? '' : 's'}
+                      </span>
+                      <button
+                        className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                        onClick={() => toggleActaType(type.id)}
+                        type="button"
+                      >
+                        {type.disabled ? 'Habilitar' : 'Deshabilitar'}
+                      </button>
+                      <button
+                        className="inline-flex items-center justify-center rounded-lg border border-red-500/40 p-2 text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={usageCount > 0}
+                        onClick={() => deleteActaType(type.id)}
+                        title={usageCount > 0 ? 'No se puede eliminar: tiene actas asociadas' : 'Eliminar tipo de acta'}
+                        type="button"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  );
+                })}
+                {actaTypes.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
+                    No hay tipos de acta configurados.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isEditorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
@@ -645,12 +796,12 @@ export function ActasPage() {
                   Tipo
                   <select
                     className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
-                    onChange={(event) => updateDraft('tipo', event.target.value === 'Paritaria' ? 'Paritaria' : 'Comité')}
+                    onChange={(event) => updateDraft('tipo', event.target.value)}
                     value={draft.tipo}
                   >
-                    {ACTA_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
+                    {selectableActaTypes.map((type) => (
+                      <option key={type.id} value={type.nombre}>
+                        {type.nombre}{type.disabled ? ' (deshabilitado)' : ''}
                       </option>
                     ))}
                   </select>
