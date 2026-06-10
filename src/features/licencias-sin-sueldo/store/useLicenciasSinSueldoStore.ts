@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   buildLicenciaSinSueldoRecord,
@@ -67,12 +68,26 @@ function registerLicenciaUpdateAudit(
   });
 }
 
+interface LicenciaUpdateResult {
+  ok: boolean;
+  message: string;
+}
+
 interface LicenciasSinSueldoState {
   records: LicenciaSinSueldoRecord[];
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: LicenciaSinSueldoDraft) => string;
   update: (id: string, draft: LicenciaSinSueldoDraft) => void;
+  updateWithConcurrencyCheck: (
+    id: string,
+    draft: LicenciaSinSueldoDraft,
+    expectedUpdatedAt: string | null,
+  ) => Promise<LicenciaUpdateResult>;
+  removeWithConcurrencyCheck: (
+    id: string,
+    expectedUpdatedAt: string | null,
+  ) => Promise<LicenciaUpdateResult>;
   remove: (id: string) => void;
 }
 
@@ -112,8 +127,7 @@ function isLicenciaSinSueldoRecord(value: unknown): value is LicenciaSinSueldoRe
   );
 }
 
-function readRecords(): LicenciaSinSueldoRecord[] {
-  const stored = readStorageItem(LICENCIA_SIN_SUELDO_STORAGE_KEY);
+function parseRecords(stored: string | null): LicenciaSinSueldoRecord[] {
   if (!stored) {
     return [];
   }
@@ -124,6 +138,10 @@ function readRecords(): LicenciaSinSueldoRecord[] {
   } catch {
     return [];
   }
+}
+
+function readRecords(): LicenciaSinSueldoRecord[] {
+  return parseRecords(readStorageItem(LICENCIA_SIN_SUELDO_STORAGE_KEY));
 }
 
 function persistRecords(records: LicenciaSinSueldoRecord[]): void {
@@ -179,6 +197,59 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set) 
       persistRecords(records);
       return { records };
     });
+  },
+  updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
+    try {
+      const result = await saveSharedArrayRecord<LicenciaSinSueldoRecord>({
+        storageKey: LICENCIA_SIN_SUELDO_STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestRecord) => {
+          registerLicenciaUpdateAudit(latestRecord, draft);
+          return buildLicenciaSinSueldoRecord(draft, nowIso(), id, latestRecord);
+        },
+        missingMessage: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ records: result.records });
+      return { ok: true, message: 'Solicitud guardada.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
+      return { ok: false, message };
+    }
+  },
+  removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    try {
+      const deletedAt = nowIso();
+      const result = await saveSharedArrayRecord<LicenciaSinSueldoRecord>({
+        storageKey: LICENCIA_SIN_SUELDO_STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestRecord) => {
+          addAuditEvent({
+            module: 'licencias-sin-sueldo',
+            entityId: latestRecord.id,
+            action: 'deleted',
+            summary: 'Registro eliminado',
+            changes: [],
+          });
+          return { ...latestRecord, updatedAt: deletedAt, deletedAt };
+        },
+        missingMessage: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ records: result.records });
+      return { ok: true, message: 'Solicitud eliminada.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
+      return { ok: false, message };
+    }
   },
   remove: (id) => {
     set((state) => {

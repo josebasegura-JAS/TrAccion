@@ -179,7 +179,7 @@ function LicenseEditor({
   record: LicenciaSinSueldoRecord | null;
   onClose: () => void;
   onDelete: () => void;
-  onSave: (draft: LicenciaSinSueldoDraft) => void;
+  onSave: (draft: LicenciaSinSueldoDraft) => Promise<{ ok: boolean; message: string }>;
 }) {
   const [draft, setDraft] = useState<LicenciaSinSueldoDraft>(() =>
     record ? toDraft(record) : { ...EMPTY_LICENCIA_SIN_SUELDO_DRAFT, fechaSolicitud: todayIso() },
@@ -187,6 +187,8 @@ function LicenseEditor({
   const [errors, setErrors] = useState<string[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [newUpdate, setNewUpdate] = useState('');
+  const [saveStatus, setSaveStatus] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const recordLock = useSharedRecordLock({
     module: 'licencias-sin-sueldo',
     recordId: record?.id ?? null,
@@ -242,14 +244,20 @@ function LicenseEditor({
   };
 
   const handleSave = () => {
-    if (isReadOnly) return;
+    if (isReadOnly || isSaving) return;
     const normalizedDraft = normalizeDraftForTipo(draft);
     const result = validateLicenciaSinSueldoDraft(normalizedDraft);
     if (!result.ok) {
       setErrors(result.errors);
       return;
     }
-    onSave(normalizedDraft);
+    setIsSaving(true);
+    setSaveStatus('');
+    void onSave(normalizedDraft).then((saveResult) => {
+      if (!saveResult.ok) {
+        setSaveStatus(saveResult.message);
+      }
+    }).finally(() => setIsSaving(false));
   };
 
   return (
@@ -276,6 +284,12 @@ function LicenseEditor({
             }`}>
               {recordLock.message}
             </p>
+          )}
+
+          {saveStatus && (
+            <div className="mx-5 mt-4 rounded-xl border border-red-400/40 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-100">
+              {saveStatus}
+            </div>
           )}
 
           {errors.length > 0 && (
@@ -389,7 +403,7 @@ function LicenseEditor({
                 module="licencias-sin-sueldo"
               />
             )}
-            <ActionButton disabled={isReadOnly} onClick={handleSave} size="sm" variant="save">Guardar</ActionButton><InlineSaveFeedback />
+            <ActionButton disabled={isReadOnly || isSaving} onClick={handleSave} size="sm" variant="save">{isSaving ? 'Guardando…' : 'Guardar'}</ActionButton><InlineSaveFeedback />
           </div>
         </div>
       </div>
@@ -504,7 +518,7 @@ export function LicenciasSinSueldoPage() {
   const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
     (state) => state.rutaPlantillaLicenciaSinSueldo,
   );
-  const { records, load, create, update, remove } = useLicenciasSinSueldoStore();
+  const { records, load, create, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useLicenciasSinSueldoStore();
   const [editor, setEditor] = useState<{ mode: EditorMode; record: LicenciaSinSueldoRecord | null } | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'todos' | LicenciaSinSueldoTipo>('todos');
@@ -557,14 +571,23 @@ export function LicenciasSinSueldoPage() {
     await window.traccion?.releaseRecordLock?.({ module: 'licencias-sin-sueldo', recordId: record.id });
   }, []);
 
-  const saveDraft = (draft: LicenciaSinSueldoDraft) => {
-    if (!editor) return;
+  const saveDraft = async (draft: LicenciaSinSueldoDraft): Promise<{ ok: boolean; message: string }> => {
+    if (!editor) {
+      return { ok: false, message: 'No hay editor activo.' };
+    }
     if (editor.mode === 'create') {
       create({ ...draft, estado: 'pendiente_aprobacion' });
-    } else if (editor.record) {
-      update(editor.record.id, draft);
+      setEditor(null);
+      return { ok: true, message: 'Solicitud creada.' };
     }
-    setEditor(null);
+    if (editor.record) {
+      const result = await updateWithConcurrencyCheck(editor.record.id, draft, editor.record.updatedAt);
+      if (result.ok) {
+        setEditor(null);
+      }
+      return result;
+    }
+    return { ok: false, message: 'No se ha encontrado el registro a guardar.' };
   };
 
   const deleteRecord = async (record: LicenciaSinSueldoRecord) => {
@@ -574,7 +597,10 @@ export function LicenciasSinSueldoPage() {
     if (!(await acquireMutationLock(record))) {
       return;
     }
-    remove(record.id);
+    const result = await removeWithConcurrencyCheck(record.id, record.updatedAt);
+    if (!result.ok) {
+      window.alert(result.message);
+    }
     await releaseMutationLock(record);
     setEditor(null);
   };
@@ -584,7 +610,10 @@ export function LicenciasSinSueldoPage() {
       return;
     }
     const nextEstado = record.estado === 'pendiente_aprobacion' ? 'pendiente_firma' : record.estado === 'pendiente_firma' ? 'vigente' : record.estado;
-    update(record.id, { ...toDraft(record), estado: nextEstado });
+    const result = await updateWithConcurrencyCheck(record.id, { ...toDraft(record), estado: nextEstado }, record.updatedAt);
+    if (!result.ok) {
+      window.alert(result.message);
+    }
     await releaseMutationLock(record);
   };
 

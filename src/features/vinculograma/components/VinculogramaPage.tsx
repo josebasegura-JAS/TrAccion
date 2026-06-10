@@ -97,10 +97,12 @@ function VinculogramaModal({
   onChange: (draft: VinculogramaDraft) => void;
   onClose: () => void;
   onDelete: () => void;
-  onSave: () => void;
+  onSave: () => Promise<{ ok: boolean; message: string }>;
   recordId: string | null;
 }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const recordLock = useSharedRecordLock({
     module: 'vinculograma',
     recordId,
@@ -229,10 +231,16 @@ function VinculogramaModal({
           </fieldset>
         </div>
 
+        {saveStatus && (
+          <p className="mx-5 mt-4 rounded-xl border border-red-400/40 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-100">
+            {saveStatus}
+          </p>
+        )}
+
         <div className="flex flex-wrap justify-between gap-2 border-t border-metro-border px-5 py-4">
           <div>
             {mode === 'edit' && (
-              <button className={secondaryButtonClass} disabled={isReadOnly} onClick={onDelete} type="button">
+              <button className={secondaryButtonClass} disabled={isReadOnly || isSaving} onClick={onDelete} type="button">
                 <Trash2 size={16} /> Eliminar
               </button>
             )}
@@ -241,8 +249,21 @@ function VinculogramaModal({
             <button className={secondaryButtonClass} onClick={onClose} type="button">
               Cancelar
             </button>
-            <button className={buttonClass} disabled={isReadOnly} onClick={onSave} type="button">
-              <Save size={16} /> Guardar
+            <button
+              className={buttonClass}
+              disabled={isReadOnly || isSaving}
+              onClick={() => {
+                setIsSaving(true);
+                setSaveStatus('');
+                void onSave().then((result) => {
+                  if (!result.ok) {
+                    setSaveStatus(result.message);
+                  }
+                }).finally(() => setIsSaving(false));
+              }}
+              type="button"
+            >
+              <Save size={16} /> {isSaving ? 'Guardando…' : 'Guardar'}
             </button>
             <InlineSaveFeedback />
           </div>
@@ -384,7 +405,7 @@ function VinculogramaTable({
 }
 
 export function VinculogramaPage() {
-  const { records, load, create, update, remove } = useVinculogramaStore();
+  const { records, load, create, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useVinculogramaStore();
   const { employees, load: loadEmployees } = useEmployeeStore();
   const [draft, setDraft] = useState<VinculogramaDraft>(EMPTY_VINCULOGRAMA_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -436,22 +457,33 @@ export function VinculogramaPage() {
     await window.traccion?.releaseRecordLock?.({ module: 'vinculograma', recordId });
   }, []);
 
-  const saveRecord = () => {
+  const saveRecord = async (): Promise<{ ok: boolean; message: string }> => {
     if (!draft.employeeNumber.trim() || !draft.nombreCompleto.trim() || !draft.requestDate.trim()) {
-      return;
+      return { ok: false, message: 'Empleado, nombre y fecha de solicitud son obligatorios.' };
     }
 
     if (editingId) {
-      update(editingId, draft);
-    } else {
-      create(draft);
+      const currentRecord = records.find((record) => record.id === editingId);
+      const result = await updateWithConcurrencyCheck(editingId, draft, currentRecord?.updatedAt ?? null);
+      if (result.ok) {
+        closeModal();
+      }
+      return result;
     }
+
+    create(draft);
     closeModal();
+    return { ok: true, message: 'Vínculo creado.' };
   };
 
   const deleteRecord = async () => {
     if (editingId) {
-      remove(editingId);
+      const currentRecord = records.find((record) => record.id === editingId);
+      const result = await removeWithConcurrencyCheck(editingId, currentRecord?.updatedAt ?? null);
+      if (!result.ok) {
+        window.alert(result.message);
+        return;
+      }
     }
     closeModal();
   };
@@ -460,7 +492,10 @@ export function VinculogramaPage() {
     if (!(await acquireMutationLock(record.id))) {
       return;
     }
-    remove(record.id);
+    const result = await removeWithConcurrencyCheck(record.id, record.updatedAt);
+    if (!result.ok) {
+      window.alert(result.message);
+    }
     await releaseMutationLock(record.id);
   };
 

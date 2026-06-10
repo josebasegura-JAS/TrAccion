@@ -110,13 +110,15 @@ export function TeletrabajoEditor({
   onDone: () => void;
 }) {
   const createSolicitud = useTeletrabajoStore((state) => state.create);
-  const updateSolicitud = useTeletrabajoStore((state) => state.update);
-  const removeSolicitud = useTeletrabajoStore((state) => state.remove);
+  const updateSolicitud = useTeletrabajoStore((state) => state.updateWithConcurrencyCheck);
+  const removeSolicitud = useTeletrabajoStore((state) => state.removeWithConcurrencyCheck);
   const employees = useEmployeeStore((state) => state.employees);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [draft, setDraft] = useState<TeletrabajoDraft>(() => toDraft(solicitud));
   const [wordStatus, setWordStatus] = useState('');
+  const [saveStatus, setSaveStatus] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [loadedSolicitudIdentity, setLoadedSolicitudIdentity] = useState(
     () => `${mode}:${solicitud?.id ?? 'new'}`,
   );
@@ -135,6 +137,7 @@ export function TeletrabajoEditor({
     if (nextIdentity !== loadedSolicitudIdentity) {
       setDraft(toDraft(solicitud));
       setWordStatus('');
+      setSaveStatus('');
       setLoadedSolicitudIdentity(nextIdentity);
       setLoadedSolicitudUpdatedAt(solicitud?.updatedAt ?? null);
     }
@@ -160,7 +163,10 @@ export function TeletrabajoEditor({
     Boolean(loadedSolicitudUpdatedAt) &&
     solicitud?.updatedAt !== loadedSolicitudUpdatedAt;
   const canSubmit =
-    hasRequiredManualData(draft) && draft.diasTeletrabajo.length > 0 && !recordLock.isReadOnly;
+    hasRequiredManualData(draft) &&
+    draft.diasTeletrabajo.length > 0 &&
+    !recordLock.isReadOnly &&
+    !isSaving;
 
   const handleEmpleadoChange = (empleado: string) => {
     const employee = employees.find(
@@ -252,17 +258,29 @@ export function TeletrabajoEditor({
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canSubmit || recordLock.isReadOnly) {
+            if (!canSubmit || recordLock.isReadOnly || isSaving) {
               return;
             }
 
             if (isCreate) {
               createSolicitud(draft);
-            } else if (solicitud) {
-              updateSolicitud(solicitud.id, draft);
+              onDone();
+              return;
             }
 
-            onDone();
+            if (!solicitud) {
+              return;
+            }
+
+            setIsSaving(true);
+            setSaveStatus('');
+            void updateSolicitud(solicitud.id, draft, loadedSolicitudUpdatedAt).then((result) => {
+              if (result.ok) {
+                onDone();
+                return;
+              }
+              setSaveStatus(result.message);
+            }).finally(() => setIsSaving(false));
           }}
         >
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -478,6 +496,12 @@ export function TeletrabajoEditor({
               </p>
             )}
 
+            {saveStatus && (
+              <p className="mt-3 rounded-lg border border-red-400/40 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-100">
+                {saveStatus}
+              </p>
+            )}
+
             {wordStatus && (
               <p className="mt-3 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
               {wordStatus}
@@ -487,7 +511,7 @@ export function TeletrabajoEditor({
 
           <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-t border-metro-border bg-metro-panel pt-3">
             <ActionButton disabled={!canSubmit} size="sm" type="submit" variant="save">
-              Guardar
+              {isSaving ? 'Guardando…' : 'Guardar'}
             </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && solicitud && (
@@ -508,10 +532,17 @@ export function TeletrabajoEditor({
             {!isCreate && solicitud && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={recordLock.isReadOnly}
+                disabled={recordLock.isReadOnly || isSaving}
                 onClick={() => {
-                  removeSolicitud(solicitud.id);
-                  onDone();
+                  setIsSaving(true);
+                  setSaveStatus('');
+                  void removeSolicitud(solicitud.id, loadedSolicitudUpdatedAt).then((result) => {
+                    if (result.ok) {
+                      onDone();
+                      return;
+                    }
+                    setSaveStatus(result.message);
+                  }).finally(() => setIsSaving(false));
                 }}
                 type="button"
               >

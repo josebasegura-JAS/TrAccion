@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildVinculograma,
   type Vinculograma,
@@ -8,12 +9,26 @@ import {
 
 const STORAGE_KEY = 'traccion.v1.vinculograma.records';
 
+interface VinculogramaUpdateResult {
+  ok: boolean;
+  message: string;
+}
+
 interface VinculogramaState {
   records: Vinculograma[];
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: VinculogramaDraft) => string;
   update: (id: string, draft: VinculogramaDraft) => void;
+  updateWithConcurrencyCheck: (
+    id: string,
+    draft: VinculogramaDraft,
+    expectedUpdatedAt: string | null,
+  ) => Promise<VinculogramaUpdateResult>;
+  removeWithConcurrencyCheck: (
+    id: string,
+    expectedUpdatedAt: string | null,
+  ) => Promise<VinculogramaUpdateResult>;
   remove: (id: string) => void;
 }
 
@@ -36,8 +51,7 @@ function isVinculograma(value: unknown): value is Vinculograma {
   );
 }
 
-function readRecords(): Vinculograma[] {
-  const stored = readStorageItem(STORAGE_KEY);
+function parseRecords(stored: string | null): Vinculograma[] {
   if (!stored) {
     return [];
   }
@@ -48,6 +62,10 @@ function readRecords(): Vinculograma[] {
   }
 
   return parsed.filter(isVinculograma);
+}
+
+function readRecords(): Vinculograma[] {
+  return parseRecords(readStorageItem(STORAGE_KEY));
 }
 
 function persistRecords(records: Vinculograma[]): void {
@@ -90,6 +108,47 @@ export const useVinculogramaStore = create<VinculogramaState>((set) => ({
       persistRecords(records);
       return { records };
     });
+  },
+  updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
+    try {
+      const result = await saveSharedArrayRecord<Vinculograma>({
+        storageKey: STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestRecord) => buildVinculograma(draft, nowIso(), id, latestRecord),
+        missingMessage: 'El vínculo ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Este vínculo ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ records: result.records });
+      return { ok: true, message: 'Vínculo guardado.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido guardar el vínculo.';
+      return { ok: false, message };
+    }
+  },
+  removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    try {
+      const deletedAt = nowIso();
+      const result = await saveSharedArrayRecord<Vinculograma>({
+        storageKey: STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestRecord) => ({ ...latestRecord, updatedAt: deletedAt, deletedAt }),
+        missingMessage: 'El vínculo ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Este vínculo ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ records: result.records });
+      return { ok: true, message: 'Vínculo eliminado.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido eliminar el vínculo.';
+      return { ok: false, message };
+    }
   },
   remove: (id) => {
     set((state) => {

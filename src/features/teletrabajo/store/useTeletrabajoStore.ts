@@ -14,6 +14,7 @@ import {
   type TeletrabajoPuestoDraft,
 } from '../domain/puestosTeletrabajo';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   addAuditEvent,
   buildAuditChanges,
@@ -107,6 +108,11 @@ function registerTeletrabajoUpdateAudit(
   });
 }
 
+interface TeletrabajoUpdateResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
   puestosTeletrabajo: TeletrabajoPuesto[];
@@ -116,6 +122,11 @@ interface TeletrabajoStateStore {
   reloadFromStorage: () => void;
   create: (draft: TeletrabajoDraft) => void;
   update: (id: string, draft: TeletrabajoDraft) => void;
+  updateWithConcurrencyCheck: (
+    id: string,
+    draft: TeletrabajoDraft,
+    expectedUpdatedAt: string | null,
+  ) => Promise<TeletrabajoUpdateResult>;
   importEncuesta: (
     file: File,
     employees: readonly Employee[],
@@ -127,6 +138,10 @@ interface TeletrabajoStateStore {
   importPuestosTeletrabajo: (file: File) => Promise<number>;
   importPuestosTeletrabajoDrafts: (drafts: readonly TeletrabajoPuestoDraft[]) => number;
   remove: (id: string) => void;
+  removeWithConcurrencyCheck: (
+    id: string,
+    expectedUpdatedAt: string | null,
+  ) => Promise<TeletrabajoUpdateResult>;
   selectSolicitud: (solicitudId: string) => void;
   setFilter: <K extends keyof TeletrabajoFilters>(key: K, value: TeletrabajoFilters[K]) => void;
 }
@@ -180,8 +195,7 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
   };
 }
 
-function readSolicitudes(): TeletrabajoSolicitud[] {
-  const stored = readStorageItem(STORAGE_KEY);
+function parseSolicitudes(stored: string | null): TeletrabajoSolicitud[] {
   if (!stored) {
     return [];
   }
@@ -192,6 +206,10 @@ function readSolicitudes(): TeletrabajoSolicitud[] {
   }
 
   return parsed.filter(isTeletrabajoSolicitud).map(normalizeSolicitud);
+}
+
+function readSolicitudes(): TeletrabajoSolicitud[] {
+  return parseSolicitudes(readStorageItem(STORAGE_KEY));
 }
 
 function persistSolicitudes(solicitudes: TeletrabajoSolicitud[]): void {
@@ -367,6 +385,34 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       return { solicitudes, selectedSolicitudId: id };
     });
   },
+  updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
+    const normalizedDraft = normalizeDraft(draft);
+    try {
+      const result = await saveSharedArrayRecord<TeletrabajoSolicitud>({
+        storageKey: STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords: parseSolicitudes,
+        getRecordId: (solicitud) => solicitud.id,
+        getRecordUpdatedAt: (solicitud) => solicitud.updatedAt,
+        updateRecord: (latestSolicitud) => {
+          registerTeletrabajoUpdateAudit(latestSolicitud, normalizedDraft);
+          return {
+            ...latestSolicitud,
+            ...normalizedDraft,
+            updatedAt: new Date().toISOString(),
+          };
+        },
+        missingMessage: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ solicitudes: result.records, selectedSolicitudId: id });
+      return { ok: true, message: 'Solicitud guardada.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
+      return { ok: false, message };
+    }
+  },
   importEncuesta: async (file, employees, options = {}) => {
     const result = await importEncuestaFromFile(file, employees, get().solicitudes, options);
 
@@ -456,6 +502,39 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       persistSolicitudes(solicitudes);
       return { solicitudes, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) };
     });
+  },
+  removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    try {
+      const deletedAt = new Date().toISOString();
+      const result = await saveSharedArrayRecord<TeletrabajoSolicitud>({
+        storageKey: STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords: parseSolicitudes,
+        getRecordId: (solicitud) => solicitud.id,
+        getRecordUpdatedAt: (solicitud) => solicitud.updatedAt,
+        updateRecord: (latestSolicitud) => {
+          addAuditEvent({
+            module: 'teletrabajo',
+            entityId: latestSolicitud.id,
+            action: 'deleted',
+            summary: 'Registro eliminado',
+            changes: [],
+          });
+          return { ...latestSolicitud, deletedAt, updatedAt: deletedAt };
+        },
+        missingMessage: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({
+        solicitudes: result.records,
+        selectedSolicitudId: firstVisibleSolicitudId(result.records),
+      });
+      return { ok: true, message: 'Solicitud eliminada.' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
+      return { ok: false, message };
+    }
   },
   selectSolicitud: (solicitudId) => set({ selectedSolicitudId: solicitudId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),
