@@ -265,7 +265,7 @@ function VinculogramaTable({
   onDelete: (record: Vinculograma) => void;
   onEdit: (record: Vinculograma) => void;
 }) {
-  const { preferences, setSort, setColumnWidth, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<VinculogramaTableColumnId>({
       storageKey: VINCULOGRAMA_TABLE_STORAGE_KEY,
       defaultPreferences: defaultVinculogramaTablePreferences,
@@ -369,6 +369,7 @@ function VinculogramaTable({
       <DataTable
         ariaLabel="Vinculograma"
         columnWidths={preferences.columnWidths}
+          onResetColumnWidths={resetColumnWidths}
         columns={columns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
