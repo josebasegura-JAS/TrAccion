@@ -88,6 +88,17 @@ interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsToken
   records: TraccionStorageRecordSnapshot[];
 }
 
+interface TraccionConditionalStorageRecord extends TraccionStorageRecord {
+  expectedUpdatedAt: string | null;
+}
+
+interface TraccionConditionalStorageSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  currentUpdatedAt: string | null;
+  message: string;
+}
+
 interface TraccionLocalBackupEntry {
   id: string;
   fileName: string;
@@ -138,6 +149,9 @@ interface TraccionApi {
   backupLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;
+  saveLocalStorageRecordIfUnchanged?: (
+    record: TraccionConditionalStorageRecord,
+  ) => Promise<TraccionConditionalStorageSaveResult>;
   acquireRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;

@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('database:migrate-local-storage', { records }),
   saveLocalStorageRecord: (record: { key: string; value: string }) =>
     ipcRenderer.invoke('database:save-local-storage-record', record),
+  saveLocalStorageRecordIfUnchanged: (record: {
+    key: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('database:save-local-storage-record-if-unchanged', record),
   acquireRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:acquire', payload),
   heartbeatRecordLock: (payload: { module: string; recordId: string }) =>

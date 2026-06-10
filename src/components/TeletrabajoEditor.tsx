@@ -162,10 +162,15 @@ export function TeletrabajoEditor({
     Boolean(solicitud?.updatedAt) &&
     Boolean(loadedSolicitudUpdatedAt) &&
     solicitud?.updatedAt !== loadedSolicitudUpdatedAt;
+  const isEditWithoutAcquiredLock = !isCreate && recordLock.status !== 'acquired';
+  const isFormReadOnly = recordLock.isReadOnly || isEditWithoutAcquiredLock;
+  const lockMessage =
+    recordLock.message ||
+    (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
   const canSubmit =
     hasRequiredManualData(draft) &&
     draft.diasTeletrabajo.length > 0 &&
-    !recordLock.isReadOnly &&
+    !isFormReadOnly &&
     !isSaving;
 
   const handleEmpleadoChange = (empleado: string) => {
@@ -179,7 +184,7 @@ export function TeletrabajoEditor({
   };
 
   const handleGenerateWord = async () => {
-    if (!canSubmit || isGeneratingWord || recordLock.isReadOnly) {
+    if (!canSubmit || isGeneratingWord || isFormReadOnly) {
       return;
     }
 
@@ -244,13 +249,13 @@ export function TeletrabajoEditor({
           </button>
         </div>
 
-        {recordLock.message && (
+        {lockMessage && (
           <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
-            recordLock.isReadOnly
+            isFormReadOnly
               ? 'border-red-400/40 bg-red-950/20 text-red-100'
               : 'border-metro-border bg-metro-surface text-metro-muted'
           }`}>
-            {recordLock.message}
+            {lockMessage}
           </p>
         )}
 
@@ -258,7 +263,7 @@ export function TeletrabajoEditor({
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canSubmit || recordLock.isReadOnly || isSaving) {
+            if (!canSubmit || isFormReadOnly || isSaving) {
               return;
             }
 
@@ -295,7 +300,7 @@ export function TeletrabajoEditor({
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <fieldset
               className="grid gap-2 disabled:opacity-70 sm:grid-cols-2"
-              disabled={recordLock.isReadOnly}
+              disabled={isFormReadOnly}
             >
             <div className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
               {draft.empleado.trim().length === 0
@@ -498,7 +503,7 @@ export function TeletrabajoEditor({
             </label>
             </fieldset>
 
-            {hasExternalSolicitudUpdate && recordLock.isReadOnly && (
+            {hasExternalSolicitudUpdate && isFormReadOnly && (
               <p className="mt-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
               Esta solicitud ha recibido cambios externos. No se han aplicado al formulario abierto
               para no sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
@@ -531,7 +536,7 @@ export function TeletrabajoEditor({
               />
             )}
             <ActionButton
-              disabled={!canSubmit || isGeneratingWord || recordLock.isReadOnly}
+              disabled={!canSubmit || isGeneratingWord || isFormReadOnly}
               onClick={handleGenerateWord}
               size="sm"
               variant="word"
@@ -541,7 +546,7 @@ export function TeletrabajoEditor({
             {!isCreate && solicitud && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={recordLock.isReadOnly || isSaving}
+                disabled={isFormReadOnly || isSaving}
                 onClick={() => {
                   setIsSaving(true);
                   setSaveStatus('');

@@ -27,9 +27,9 @@ export async function saveSharedArrayRecord<TRecord>({
   conflictMessage = 'El registro ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
 }: SaveSharedArrayRecordOptions<TRecord>): Promise<SaveSharedArrayRecordResult<TRecord>> {
   const loadPersistedRecords = window.traccion?.loadPersistedRecords;
-  const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
+  const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
 
-  if (!loadPersistedRecords || !saveLocalStorageRecord) {
+  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
 
@@ -40,8 +40,9 @@ export async function saveSharedArrayRecord<TRecord>({
     );
   }
 
-  const latestStorageValue =
-    snapshot.records.find((record) => record.key === storageKey)?.value ?? null;
+  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
+  const latestStorageValue = latestStorageRecord?.value ?? null;
+  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
   const latestRecords = parseRecords(latestStorageValue);
   const latestRecord = latestRecords.find((record) => getRecordId(record) === recordId);
 
@@ -59,10 +60,14 @@ export async function saveSharedArrayRecord<TRecord>({
     getRecordId(record) === recordId ? updatedRecord : record,
   );
   const serialized = JSON.stringify(nextRecords);
-  const status = await saveLocalStorageRecord({ key: storageKey, value: serialized });
+  const result = await saveLocalStorageRecordIfUnchanged({
+    key: storageKey,
+    value: serialized,
+    expectedUpdatedAt: expectedStorageUpdatedAt,
+  });
 
-  if (!status.ready || status.phase !== 'active') {
-    throw new Error(status.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
+  if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
+    throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
 
   window.localStorage.setItem(storageKey, serialized);
@@ -90,9 +95,9 @@ export async function saveNewSharedArrayRecord<TRecord>({
   duplicateMessage = 'El registro ya existe en la base compartida. Recarga antes de continuar.',
 }: SaveNewSharedArrayRecordOptions<TRecord>): Promise<SaveNewSharedArrayRecordResult<TRecord>> {
   const loadPersistedRecords = window.traccion?.loadPersistedRecords;
-  const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
+  const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
 
-  if (!loadPersistedRecords || !saveLocalStorageRecord) {
+  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
 
@@ -103,8 +108,9 @@ export async function saveNewSharedArrayRecord<TRecord>({
     );
   }
 
-  const latestStorageValue =
-    snapshot.records.find((record) => record.key === storageKey)?.value ?? null;
+  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
+  const latestStorageValue = latestStorageRecord?.value ?? null;
+  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
   const latestRecords = parseRecords(latestStorageValue);
   const newRecordId = getRecordId(newRecord);
 
@@ -114,10 +120,14 @@ export async function saveNewSharedArrayRecord<TRecord>({
 
   const nextRecords = [...latestRecords, newRecord];
   const serialized = JSON.stringify(nextRecords);
-  const status = await saveLocalStorageRecord({ key: storageKey, value: serialized });
+  const result = await saveLocalStorageRecordIfUnchanged({
+    key: storageKey,
+    value: serialized,
+    expectedUpdatedAt: expectedStorageUpdatedAt,
+  });
 
-  if (!status.ready || status.phase !== 'active') {
-    throw new Error(status.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
+  if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
+    throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
 
   window.localStorage.setItem(storageKey, serialized);

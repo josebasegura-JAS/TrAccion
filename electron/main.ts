@@ -20,6 +20,7 @@ import {
   resetSqliteDirectory,
   restoreLocalBackup,
   savePersistedRecord,
+  savePersistedRecordIfUnchanged,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir, userInfo } from 'node:os';
@@ -744,6 +745,37 @@ function registerIpcHandlers(): void {
     }
 
     return savePersistedRecord({ key: candidate.key, value: candidate.value });
+  });
+
+  ipcMain.handle('database:save-local-storage-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de guardado inválido.',
+      };
+    }
+
+    const candidate = payload as { key?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.key !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de guardado inválido.',
+      };
+    }
+
+    return savePersistedRecordIfUnchanged({
+      key: candidate.key,
+      value: candidate.value,
+      expectedUpdatedAt: candidate.expectedUpdatedAt,
+    });
   });
 
 

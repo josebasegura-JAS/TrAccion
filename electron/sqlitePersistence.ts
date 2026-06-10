@@ -27,6 +27,10 @@ export interface PersistedStorageRecord {
   value: string;
 }
 
+export interface ConditionalPersistedStorageRecord extends PersistedStorageRecord {
+  expectedUpdatedAt: string | null;
+}
+
 export interface PersistedStorageRecordSnapshot extends PersistedStorageRecord {
   updatedAt: string;
 }
@@ -641,6 +645,10 @@ interface MetadataRow {
   value: string;
 }
 
+interface UpdatedAtRow {
+  updated_at: string;
+}
+
 function isPersistedRecordRow(value: unknown): value is PersistedRecordRow {
   if (!value || typeof value !== 'object') {
     return false;
@@ -661,6 +669,15 @@ function isMetadataRow(value: unknown): value is MetadataRow {
 
   const candidate = value as Partial<MetadataRow>;
   return typeof candidate.value === 'string';
+}
+
+function isUpdatedAtRow(value: unknown): value is UpdatedAtRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<UpdatedAtRow>;
+  return typeof candidate.updated_at === 'string';
 }
 
 function readAllPersistedRecords(db: Database): PersistedStorageRecordSnapshot[] {
@@ -775,6 +792,98 @@ export function savePersistedRecord(record: PersistedStorageRecord): DatabaseSta
   enqueueLocalBackup(`save:${record.key}`);
 
   return currentStatus;
+}
+
+export interface ConditionalPersistedRecordSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  currentUpdatedAt: string | null;
+  message: string;
+}
+
+export function savePersistedRecordIfUnchanged(
+  record: ConditionalPersistedStorageRecord,
+): ConditionalPersistedRecordSaveResult {
+  const currentStatus = getSqliteStatus();
+  if (!currentStatus.ready || currentStatus.phase !== 'active') {
+    return {
+      ok: false,
+      status: currentStatus,
+      currentUpdatedAt: null,
+      message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+    };
+  }
+
+  const db = requireDatabase();
+  const row = db
+    .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+    .get(record.key);
+  const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+  if (currentUpdatedAt !== record.expectedUpdatedAt) {
+    return {
+      ok: false,
+      status: currentStatus,
+      currentUpdatedAt,
+      message:
+        'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+    };
+  }
+
+  const now = new Date().toISOString();
+
+  if (currentUpdatedAt === null) {
+    const result = db
+      .prepare(
+        `INSERT OR IGNORE INTO persisted_records (key, value_json, source, created_at, updated_at)
+         VALUES (?, ?, 'sqlite-primary', ?, ?)`,
+      )
+      .run(record.key, record.value, now, now);
+
+    if (result.changes !== 1) {
+      const latest = db
+        .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+        .get(record.key);
+      return {
+        ok: false,
+        status: currentStatus,
+        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+        message:
+          'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+      };
+    }
+  } else {
+    const result = db
+      .prepare(
+        `UPDATE persisted_records
+         SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+         WHERE key = ? AND updated_at = ?`,
+      )
+      .run(record.value, now, record.key, currentUpdatedAt);
+
+    if (result.changes !== 1) {
+      const latest = db
+        .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+        .get(record.key);
+      return {
+        ok: false,
+        status: currentStatus,
+        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+        message:
+          'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+      };
+    }
+  }
+
+  updateRefreshMetadata(db, now);
+  enqueueLocalBackup(`save:${record.key}`);
+
+  return {
+    ok: true,
+    status: currentStatus,
+    currentUpdatedAt: now,
+    message: 'Guardado confirmado en SQLite compartido.',
+  };
 }
 
 export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): DatabaseStatus {

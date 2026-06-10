@@ -194,7 +194,11 @@ function LicenseEditor({
     recordId: record?.id ?? null,
     enabled: mode === 'edit' && Boolean(record?.id),
   });
-  const isReadOnly = recordLock.isReadOnly;
+  const isEditWithoutAcquiredLock = mode === 'edit' && recordLock.status !== 'acquired';
+  const isReadOnly = recordLock.isReadOnly || isEditWithoutAcquiredLock;
+  const lockMessage =
+    recordLock.message ||
+    (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
 
   const suggestions = useMemo(
     () => suggestEmployees(employees, employeeSearch).filter((suggestion) => suggestion.empleado !== draft.numeroEmpleado),
@@ -276,13 +280,13 @@ function LicenseEditor({
         </div>
 
         <div className="max-h-[70vh] space-y-4 overflow-auto px-5 py-4">
-          {recordLock.message && (
+          {lockMessage && (
             <p className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
               isReadOnly
                 ? 'border-red-400/40 bg-red-950/20 text-red-100'
                 : 'border-metro-border bg-metro-surface text-metro-muted'
             }`}>
-              {recordLock.message}
+              {lockMessage}
             </p>
           )}
 
