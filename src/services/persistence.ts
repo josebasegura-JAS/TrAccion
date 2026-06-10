@@ -6,6 +6,7 @@ import {
   type PersistedStorageKey,
   isPersistedStorageKey as isKnownPersistedStorageKey,
 } from './persistenceKeys';
+import { getCachedDatabaseStatus } from './databaseStatus';
 
 export type PersistenceFeedbackKind = 'saving' | 'saved' | 'error';
 
@@ -257,6 +258,24 @@ function currentLocalRecords(): TraccionStorageRecord[] {
   return records;
 }
 
+
+function shouldBlockSharedWrite(): string | null {
+  if (!window.traccion) {
+    return null;
+  }
+
+  const status = getCachedDatabaseStatus();
+  if (!status) {
+    return 'Estado SQLite desconocido. Recarga la app o espera a que termine la conexión antes de editar.';
+  }
+
+  if (!status.ready || status.phase !== 'active') {
+    return status.message ?? 'SQLite no está activo. Edición bloqueada para evitar cambios locales divergentes.';
+  }
+
+  return null;
+}
+
 function mirrorToSqlite(key: string, value: string): void {
   if (!isPersistedStorageKey(key)) {
     return;
@@ -302,6 +321,21 @@ export function readStorageItem(key: string): string | null {
 }
 
 export function writeStorageItem(key: string, value: string): void {
+  if (isPersistedStorageKey(key)) {
+    const blockReason = shouldBlockSharedWrite();
+    if (blockReason) {
+      const message = `${blockReason} Clave afectada: ${key}.`;
+      console.warn(message);
+      emitPersistenceFeedback({
+        kind: 'error',
+        updatedAt: new Date().toISOString(),
+        key,
+        message,
+      });
+      return;
+    }
+  }
+
   window.localStorage.setItem(key, value);
   writeHydrationMetadata({
     lastUpdatedAt: new Date().toISOString(),

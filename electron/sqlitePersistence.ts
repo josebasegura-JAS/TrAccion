@@ -17,6 +17,8 @@ const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 2;
 const LOCK_TTL_MS = 30 * 1000;
+const LOCK_HEARTBEAT_MS = 10 * 1000;
+const SQLITE_BUSY_TIMEOUT_MS = 5000;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 
 export interface PersistedStorageRecord {
@@ -372,6 +374,27 @@ async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
   return lock;
 }
 
+async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
+  const currentLock = await readLock(lockPath);
+  if (currentLock?.ownerId !== lock.ownerId) {
+    throw new Error('El bloqueo de arranque SQLite ya no pertenece a esta instancia.');
+  }
+
+  await writeFile(
+    lockPath,
+    JSON.stringify({ ...currentLock, updatedAt: new Date().toISOString() }, null, 2),
+    'utf8',
+  );
+}
+
+function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): ReturnType<typeof setInterval> {
+  return setInterval(() => {
+    heartbeatDatabaseLock(lockPath, lock).catch((error: unknown) => {
+      console.warn('No se ha podido renovar el bloqueo de arranque SQLite.', error);
+    });
+  }, LOCK_HEARTBEAT_MS);
+}
+
 async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   await removeLock(lockPath, lock.ownerId);
 }
@@ -481,6 +504,7 @@ function applyMigrations(db: Database): void {
 function openDatabase(databasePath: string): Database {
   const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
   const db = new BetterSqlite3(databasePath);
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   applyMigrations(db);
@@ -524,6 +548,7 @@ async function activateDatabase(
   const lockPath = getLockPath(databasePath);
   await ensureDirectoryIsUsable(directoryPath);
   const lock = await acquireLock(databasePath);
+  const lockHeartbeat = startDatabaseLockHeartbeat(lockPath, lock);
 
   try {
     await prepareDatabaseAtPath(databasePath, sourceDatabasePath);
@@ -539,9 +564,11 @@ async function activateDatabase(
       isDefaultPath,
       lockPath,
     };
+    clearInterval(lockHeartbeat);
     await releaseLock(lockPath, lock);
     return status;
   } catch (error) {
+    clearInterval(lockHeartbeat);
     await releaseLock(lockPath, lock);
     throw error;
   }
