@@ -116,6 +116,11 @@ type StoredManagedSessionForTaskSync = {
   closedAt: string | null;
 };
 
+interface TaskUpdateResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TaskStateStore {
   tasks: Task[];
   selectedTaskId: string;
@@ -127,6 +132,13 @@ interface TaskStateStore {
     drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
   ) => Record<string, string>;
   update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
+  updateWithConcurrencyCheck: (
+    id: string,
+    draft: TaskDraft,
+    seguimientoText: string | undefined,
+    expectedUpdatedAt: string | null,
+    latestTasks: Task[],
+  ) => TaskUpdateResult;
   remove: (id: string) => void;
   selectTask: (taskId: string) => void;
   closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
@@ -510,6 +522,32 @@ function resolveClosedAt(task: Task, draft: TaskDraft, fechaHora: string): strin
   return isTaskClosed(task) ? (task.closedAt ?? fechaHora) : fechaHora;
 }
 
+function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: string | undefined): Task {
+  const now = new Date().toISOString();
+  registerTaskUpdateAudit(task, draft);
+
+  return {
+    ...task,
+    ...draft,
+    seguimiento: [...buildSeguimiento(seguimientoText, now), ...task.seguimiento],
+    closedAt: resolveClosedAt(task, draft, now),
+    updatedAt: now,
+  };
+}
+
+export function parseTasksSnapshot(storageValue: string | null): Task[] {
+  if (!storageValue) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(storageValue);
+    return Array.isArray(parsed) ? parsed.filter(isTask).map(normalizeTask) : [];
+  } catch {
+    return [];
+  }
+}
+
 export const useTaskStore = create<TaskStateStore>((set) => ({
   tasks: [],
   selectedTaskId: '',
@@ -616,22 +654,9 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
   update: (id, draft, seguimientoText) => {
     set((state) => {
-      const now = new Date().toISOString();
-      const tasks = state.tasks.map((task) => {
-        if (task.id !== id) {
-          return task;
-        }
-
-        registerTaskUpdateAudit(task, draft);
-
-        return {
-          ...task,
-          ...draft,
-          seguimiento: [...buildSeguimiento(seguimientoText, now), ...task.seguimiento],
-          closedAt: resolveClosedAt(task, draft, now),
-          updatedAt: now,
-        };
-      });
+      const tasks = state.tasks.map((task) =>
+        task.id === id ? buildUpdatedTask(task, draft, seguimientoText) : task,
+      );
       persistTasks(tasks);
       const updatedTask = tasks.find((task) => task.id === id);
       return {
@@ -639,6 +664,53 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         selectedTaskId: updatedTask && isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
       };
     });
+  },
+  updateWithConcurrencyCheck: (id, draft, seguimientoText, expectedUpdatedAt, latestTasks) => {
+    let result: TaskUpdateResult = {
+      ok: false,
+      message: 'No se ha podido guardar la tarea.',
+    };
+
+    set((state) => {
+      const normalizedLatestTasks = latestTasks.map(normalizeTask);
+      const latestTask = normalizedLatestTasks.find((task) => task.id === id);
+      if (!latestTask) {
+        result = {
+          ok: false,
+          message:
+            'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
+        };
+        return {
+          tasks: normalizedLatestTasks,
+          selectedTaskId: firstActiveTaskId(normalizedLatestTasks),
+        };
+      }
+
+      if (expectedUpdatedAt && latestTask.updatedAt !== expectedUpdatedAt) {
+        result = {
+          ok: false,
+          message:
+            'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+        };
+        return {
+          tasks: normalizedLatestTasks,
+          selectedTaskId: state.selectedTaskId,
+        };
+      }
+
+      const tasks = normalizedLatestTasks.map((task) =>
+        task.id === id ? buildUpdatedTask(task, draft, seguimientoText) : task,
+      );
+      persistTasks(tasks);
+      const updatedTask = tasks.find((task) => task.id === id);
+      result = { ok: true, message: 'Tarea guardada.' };
+      return {
+        tasks,
+        selectedTaskId: updatedTask && isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
+      };
+    });
+
+    return result;
   },
   remove: (id) => {
     set((state) => {

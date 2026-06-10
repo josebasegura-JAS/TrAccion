@@ -55,8 +55,8 @@ function stateFromResult(result: TraccionRecordLockResult): SharedRecordLockStat
     return {
       status: 'error',
       lockedBy: null,
-      message: `${result.message} Puedes editar, pero no hay coordinación multiusuario sobre este registro.`,
-      isReadOnly: false,
+      message: `${result.message} Edición bloqueada para evitar conflictos multiusuario.`,
+      isReadOnly: true,
     };
   }
 
@@ -88,8 +88,8 @@ export function useSharedRecordLock({
       setState({
         status: 'error',
         lockedBy: null,
-        message: 'IPC de bloqueo compartido no disponible. Puedes editar con precaución.',
-        isReadOnly: false,
+        message: 'IPC de bloqueo compartido no disponible. Edición bloqueada para evitar conflictos multiusuario.',
+        isReadOnly: true,
       });
       return undefined;
     }
@@ -115,8 +115,8 @@ export function useSharedRecordLock({
         setState({
           status: 'error',
           lockedBy: null,
-          message: `${message} Puedes editar, pero no hay coordinación multiusuario sobre este registro.`,
-          isReadOnly: false,
+          message: `${message} Edición bloqueada para evitar conflictos multiusuario.`,
+          isReadOnly: true,
         });
       });
 
@@ -138,8 +138,8 @@ export function useSharedRecordLock({
           setState({
             status: 'error',
             lockedBy: null,
-            message: `${message} Puedes editar, pero no hay coordinación multiusuario sobre este registro.`,
-            isReadOnly: false,
+            message: `${message} Edición bloqueada para evitar conflictos multiusuario.`,
+            isReadOnly: true,
           });
         });
     }, HEARTBEAT_MS);

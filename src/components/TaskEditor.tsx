@@ -12,7 +12,7 @@ import {
   type TaskDocumentLink,
 } from '../features/tareas/domain/task';
 import { parseOutlookMsg } from '../features/especiales/domain/especiales';
-import { useTaskStore } from '../features/tareas/store/useTaskStore';
+import { parseTasksSnapshot, useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
@@ -180,7 +180,9 @@ export function TaskEditor({
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const createTask = useTaskStore((state) => state.create);
-  const updateTask = useTaskStore((state) => state.update);
+  const updateTaskWithConcurrencyCheck = useTaskStore(
+    (state) => state.updateWithConcurrencyCheck,
+  );
   const removeTask = useTaskStore((state) => state.remove);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [newUpdateText, setNewUpdateText] = useState('');
@@ -189,6 +191,8 @@ export function TaskEditor({
   const [documentStatusIsError, setDocumentStatusIsError] = useState(false);
   const [mailStatus, setMailStatus] = useState('');
   const [mailStatusIsError, setMailStatusIsError] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
+  const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedTaskIdentity, setLoadedTaskIdentity] = useState(
     () => `${mode}:${task?.id ?? 'new'}`,
   );
@@ -211,6 +215,8 @@ export function TaskEditor({
       setManualDocumentPath('');
       setDocumentStatus('');
       setMailStatus('');
+      setSaveStatus('');
+      setSaveStatusIsError(false);
       setLoadedTaskIdentity(nextIdentity);
       setLoadedTaskUpdatedAt(task?.updatedAt ?? null);
     }
@@ -233,6 +239,84 @@ export function TaskEditor({
       ? [draft.sindicato, ...activeOriginNames]
       : activeOriginNames;
   }, [draft.sindicato, taskOrigins]);
+
+  const isCreate = mode === 'create';
+  const isEditWithoutAcquiredLock = !isCreate && recordLock.status !== 'acquired';
+  const isFormReadOnly = recordLock.isReadOnly || isEditWithoutAcquiredLock;
+  const lockMessage =
+    recordLock.message ||
+    (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
+  const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
+
+  const readLatestSharedTasks = async (): Promise<Task[] | null> => {
+    if (!window.traccion?.loadPersistedRecords) {
+      return null;
+    }
+
+    const snapshot = await window.traccion.loadPersistedRecords();
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+      throw new Error(
+        snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+      );
+    }
+
+    const tasksRecord = snapshot.records.find(
+      (record) => record.key === 'traccion.v1.tareas.tasks',
+    );
+    return parseTasksSnapshot(tasksRecord?.value ?? null);
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit || isFormReadOnly) {
+      return;
+    }
+
+    setSaveStatus('');
+    setSaveStatusIsError(false);
+
+    if (isCreate) {
+      createTask(draft, newUpdateText);
+      onDone();
+      return;
+    }
+
+    if (!task) {
+      return;
+    }
+
+    if (recordLock.status !== 'acquired') {
+      setSaveStatus('No se puede guardar: la tarea no tiene bloqueo de edición activo.');
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    try {
+      const latestSharedTasks = await readLatestSharedTasks();
+      const result = updateTaskWithConcurrencyCheck(
+        task.id,
+        draft,
+        newUpdateText,
+        loadedTaskUpdatedAt,
+        latestSharedTasks ??
+          parseTasksSnapshot(window.localStorage.getItem('traccion.v1.tareas.tasks')),
+      );
+
+      if (!result.ok) {
+        setSaveStatus(result.message);
+        setSaveStatusIsError(true);
+        return;
+      }
+
+      onDone();
+    } catch (error) {
+      setSaveStatus(
+        error instanceof Error
+          ? error.message
+          : 'No se ha podido validar la tarea contra la base de datos compartida.',
+      );
+      setSaveStatusIsError(true);
+    }
+  };
 
   const handleAddManualDocumentPath = () => {
     const trimmedPath = manualDocumentPath.trim();
@@ -334,7 +418,6 @@ export function TaskEditor({
     setMailStatusIsError(false);
   };
 
-  const isCreate = mode === 'create';
   const hasExternalTaskUpdate =
     !isCreate &&
     Boolean(task?.updatedAt) &&
@@ -349,8 +432,6 @@ export function TaskEditor({
         .filter(Boolean)
         .join(' · ')
     : '';
-
-  const canSubmit = draft.titulo.trim().length > 0 && !recordLock.isReadOnly;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -383,19 +464,19 @@ export function TaskEditor({
           </button>
         </div>
 
-        {recordLock.message && (
+        {lockMessage && (
           <p
             className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
-              recordLock.isReadOnly
+              isFormReadOnly
                 ? 'border-red-400/40 bg-red-950/20 text-red-100'
                 : 'border-metro-border bg-metro-surface text-metro-muted'
             }`}
           >
-            {recordLock.message}
+            {lockMessage}
           </p>
         )}
 
-        {hasExternalTaskUpdate && recordLock.isReadOnly && (
+        {hasExternalTaskUpdate && isFormReadOnly && (
           <p className="mb-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
             Esta tarea ha recibido cambios externos. No se han aplicado al formulario abierto para
             no sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
@@ -413,22 +494,12 @@ export function TaskEditor({
           className="flex min-h-0 flex-1 flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canSubmit || recordLock.isReadOnly) {
-              return;
-            }
-
-            if (isCreate) {
-              createTask(draft, newUpdateText);
-            } else if (task) {
-              updateTask(task.id, draft, newUpdateText);
-            }
-
-            onDone();
+            void handleSubmit();
           }}
         >
           <fieldset
             className="grid min-h-0 max-h-[calc(100vh-14rem)] grid-cols-1 gap-2 overflow-y-auto overscroll-contain pr-2 disabled:opacity-70 sm:grid-cols-6 lg:grid-cols-12"
-            disabled={recordLock.isReadOnly}
+            disabled={isFormReadOnly}
           >
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Tipo
@@ -735,6 +806,15 @@ export function TaskEditor({
               Guardar
             </button>
             <InlineSaveFeedback />
+            {saveStatus && (
+              <p
+                className={`self-center text-xs font-semibold ${
+                  saveStatusIsError ? 'text-metro-red' : 'text-metro-muted'
+                }`}
+              >
+                {saveStatus}
+              </p>
+            )}
             {!isCreate && task && (
               <AuditHistoryButton
                 entityId={task.id}
@@ -745,7 +825,7 @@ export function TaskEditor({
             {!isCreate && task && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={recordLock.isReadOnly}
+                disabled={isFormReadOnly}
                 onClick={() => {
                   removeTask(task.id);
                   onDone();
