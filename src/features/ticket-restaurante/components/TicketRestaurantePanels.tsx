@@ -73,9 +73,9 @@ type TicketCalculationTableColumnId =
 
 const TICKET_PEOPLE_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.people';
 const TICKET_ABSENCES_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.absences';
-const TICKET_MONTHLY_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.monthlyCalculation';
+const TICKET_MONTHLY_TABLE_STORAGE_KEY = 'traccion.tableView.ticketRestaurante.monthlyCalculation.v2';
 const TICKET_CONTRIBUTION_TABLE_STORAGE_KEY =
-  'traccion.tableView.ticketRestaurante.contributionCalculation';
+  'traccion.tableView.ticketRestaurante.contributionCalculation.v2';
 
 const defaultTicketPeopleTablePreferences: TableViewPreferences<TicketPeopleTableColumnId> = {
   sort: { columnId: 'empleado', direction: 'asc' },
@@ -141,7 +141,7 @@ type TicketAbsenceDisplayRow = TicketRestaurantAbsence & {
 
 const defaultTicketCalculationTablePreferences: TableViewPreferences<TicketCalculationTableColumnId> =
   {
-    sort: { columnId: 'nombreApellidos', direction: 'asc' },
+    sort: { columnId: 'empleado', direction: 'asc' },
     columnWidths: {
       empleado: 110,
       nombreApellidos: 230,
@@ -1406,7 +1406,7 @@ export function CalculationPanel({
             : 'Cómputo cotización Ticket Restaurante'
         }
         columnWidths={preferences.columnWidths}
-          onResetColumnWidths={resetColumnWidths}
+        onResetColumnWidths={resetColumnWidths}
         columns={calculationColumns}
         emptyMessage="No hay personas activas para calcular."
         getRowId={(row) => row.empleado}

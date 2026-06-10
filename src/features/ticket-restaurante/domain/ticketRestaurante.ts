@@ -566,6 +566,26 @@ export function normalizeTicketCalculationRules(
   };
 }
 
+
+function compareTicketCalculationRowsByEmployee(
+  first: TicketPersonCalculation,
+  second: TicketPersonCalculation,
+): number {
+  const employeeComparison = first.empleado.localeCompare(second.empleado, 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+
+  if (employeeComparison !== 0) {
+    return employeeComparison;
+  }
+
+  return first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
 function calculateTicketMonthInternal(
   people: readonly TicketPerson[],
   calendars: readonly TicketCalendar[],
@@ -605,12 +625,7 @@ function calculateTicketMonthInternal(
             manutenciones,
           );
     })
-    .sort((first, second) =>
-      first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
-        numeric: true,
-        sensitivity: 'base',
-      }),
-    );
+    .sort(compareTicketCalculationRowsByEmployee);
 
   return {
     year,
