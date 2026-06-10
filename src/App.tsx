@@ -139,8 +139,42 @@ class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErro
   }
 }
 
+const ACTIVE_VIEW_STORAGE_KEY = 'traccion.v1.ui.activeView';
+const VALID_APP_VIEWS = new Set<AppView>([
+  'dashboard',
+  'plantilla',
+  'tareas',
+  'comite',
+  'actas',
+  'paritaria',
+  'criterios-rrll',
+  'teletrabajo',
+  'ticket-restaurante',
+  'presupuestos',
+  'licencias-sin-sueldo',
+  'sorteos',
+  'vinculograma',
+  'especiales',
+  'ajustes',
+]);
+
 function readInitialActiveView(): AppView {
-  return 'dashboard';
+  try {
+    const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+    return storedView && VALID_APP_VIEWS.has(storedView as AppView)
+      ? (storedView as AppView)
+      : 'dashboard';
+  } catch {
+    return 'dashboard';
+  }
+}
+
+function writeActiveView(view: AppView): void {
+  try {
+    window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
+  } catch {
+    // La navegación no debe bloquear el render si localStorage no está disponible.
+  }
 }
 
 const moduleLoadingLabels: Partial<Record<AppView, string>> = {
@@ -225,6 +259,62 @@ function ModuleLoading({ activeView }: { activeView: AppView }) {
   );
 }
 
+
+class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErrorBoundaryState> {
+  state: ModuleErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ModuleErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error('Error renderizando la aplicación.', error, errorInfo);
+  }
+
+  handleReset = (): void => {
+    try {
+      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
+    } catch {
+      // No bloquear recuperación si localStorage falla.
+    }
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.error) {
+      return this.props.children;
+    }
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-metro-app p-6 text-metro-text">
+        <section className="max-w-2xl rounded-2xl border border-red-500/50 bg-red-950/30 p-6 text-red-100 shadow-xl" role="alert">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 shrink-0" size={24} aria-hidden="true" />
+            <div className="space-y-3">
+              <div>
+                <h1 className="text-lg font-semibold">No se ha podido mostrar TrAccion</h1>
+                <p className="mt-1 text-sm text-red-100/85">
+                  Se ha capturado un error de render para evitar la pantalla gris. Reinicia al inicio y revisa el log si persiste.
+                </p>
+              </div>
+              <p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">
+                {this.state.error.message}
+              </p>
+              <button
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                onClick={this.handleReset}
+                type="button"
+              >
+                Reiniciar al inicio
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<AppView>(() => readInitialActiveView());
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
@@ -236,28 +326,34 @@ export function App() {
     return () => stopExternalDataSyncPolling();
   }, []);
 
+  const changeActiveView = (view: AppView): void => {
+    writeActiveView(view);
+    setActiveView(view);
+  };
+
   const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string }) => {
     setNavigationTarget({ ...target, nonce: Date.now() });
-    setActiveView(target.view);
+    changeActiveView(target.view);
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
+    <AppShellErrorBoundary>
+      <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
       <Sidebar
         activeView={activeView}
         onViewChange={(view) => {
           setNavigationTarget(null);
-          setActiveView(view);
+          changeActiveView(view);
         }}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-metro-app/95">
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
           <PersistenceErrorBanner />
-          {activeView === 'dashboard' && (
-            <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
-          )}
           <ModuleErrorBoundary activeView={activeView}>
+            {activeView === 'dashboard' && (
+              <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
+            )}
             <Suspense fallback={<ModuleLoading activeView={activeView} />}>
               {activeView === 'plantilla' && <PlantillaPage />}
             {activeView === 'tareas' && (
@@ -319,6 +415,7 @@ export function App() {
         </main>
         <Footer />
       </div>
-    </div>
+      </div>
+    </AppShellErrorBoundary>
   );
 }

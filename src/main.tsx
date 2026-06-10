@@ -64,6 +64,7 @@ async function renderApp(): Promise<void> {
     </React.StrictMode>,
   );
 
+  await waitForNextPaint();
   notifyRendererReady();
 }
 
