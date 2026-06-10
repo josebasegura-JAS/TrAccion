@@ -140,33 +140,9 @@ class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErro
 }
 
 const ACTIVE_VIEW_STORAGE_KEY = 'traccion.v1.ui.activeView';
-const VALID_APP_VIEWS = new Set<AppView>([
-  'dashboard',
-  'plantilla',
-  'tareas',
-  'comite',
-  'actas',
-  'paritaria',
-  'criterios-rrll',
-  'teletrabajo',
-  'ticket-restaurante',
-  'presupuestos',
-  'licencias-sin-sueldo',
-  'sorteos',
-  'vinculograma',
-  'especiales',
-  'ajustes',
-]);
 
 function readInitialActiveView(): AppView {
-  try {
-    const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
-    return storedView && VALID_APP_VIEWS.has(storedView as AppView)
-      ? (storedView as AppView)
-      : 'dashboard';
-  } catch {
-    return 'dashboard';
-  }
+  return 'dashboard';
 }
 
 function writeActiveView(view: AppView): void {
@@ -331,6 +307,16 @@ export function App() {
     setActiveView(view);
   };
 
+  const resetToDashboard = (): void => {
+    try {
+      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
+    } catch {
+      // No bloquear el reinicio si localStorage no está disponible.
+    }
+
+    window.location.reload();
+  };
+
   const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string }) => {
     setNavigationTarget({ ...target, nonce: Date.now() });
     changeActiveView(target.view);
@@ -341,6 +327,7 @@ export function App() {
       <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
       <Sidebar
         activeView={activeView}
+        onDashboardReset={resetToDashboard}
         onViewChange={(view) => {
           setNavigationTarget(null);
           changeActiveView(view);

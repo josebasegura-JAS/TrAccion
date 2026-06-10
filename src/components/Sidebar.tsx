@@ -159,9 +159,11 @@ const readStoredActiveGroup = (activeView: AppView) => {
 
 export function Sidebar({
   activeView,
+  onDashboardReset,
   onViewChange,
 }: {
   activeView: AppView;
+  onDashboardReset?: () => void;
   onViewChange: (view: AppView) => void;
 }) {
   const [isPinned, setIsPinned] = useState(readStoredPinnedPreference);
@@ -197,11 +199,16 @@ export function Sidebar({
   }, [activeViewGroupId]);
 
   const handleHomeSelect = () => {
-    onViewChange('dashboard');
-
     if (!isPinned) {
       setIsPanelOpen(false);
     }
+
+    if (onDashboardReset) {
+      onDashboardReset();
+      return;
+    }
+
+    onViewChange('dashboard');
   };
 
   const handleGroupSelect = (groupId: NavigationGroupId) => {
