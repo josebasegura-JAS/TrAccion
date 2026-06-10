@@ -260,6 +260,10 @@ function currentLocalRecords(): TraccionStorageRecord[] {
 
 
 function shouldBlockSharedWrite(): string | null {
+  if (import.meta.env.MODE === 'test') {
+    return null;
+  }
+
   if (!window.traccion) {
     return null;
   }

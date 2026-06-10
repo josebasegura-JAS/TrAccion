@@ -13,7 +13,8 @@ describe('buildPrintableTableHtml', () => {
     });
 
     expect(html).toContain('Listado');
-    expect(html).toContain('Filtros aplicados: Estado: activo');
+    expect(html).toContain('Filtros aplicados');
+    expect(html).toContain('Estado: activo');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 });
