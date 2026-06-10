@@ -1,8 +1,9 @@
-import { Calculator, Copy, Edit3, Plus, Save, Trash2 } from 'lucide-react';
+import { Calculator, Copy, Plus, Save } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
 import {
   BUDGET_ACTUAL_BLOCKS,
@@ -176,7 +177,7 @@ export function PresupuestosPage() {
     { id: 'manual', header: 'Partidas manuales', accessor: (row) => calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).manualTotal, render: (row) => euro(calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).manualTotal), width: 140 },
     { id: 'ticketTotal', header: 'Ticket Restaurante', accessor: (row) => calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).ticketTotal, render: (row) => euro(calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).ticketTotal), width: 140 },
     { id: 'total', header: 'Total global', accessor: (row) => calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).total, render: (row) => euro(calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).total), width: 120 },
-    { id: 'actions', header: 'Acciones', width: 210, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><button className="rounded bg-metro-red/20 px-2 py-1" onClick={(event) => { event.stopPropagation(); setActiveScenario(row.id); }} type="button">Seleccionar</button><button className="rounded bg-metro-surface px-2 py-1" onClick={(event) => { event.stopPropagation(); setScenarioDraft({ name: row.name, year: row.year, ticketAmount: row.ticketAmount, notes: row.notes }); setEditingScenarioId(row.id); }} type="button"><Edit3 size={14} /></button><button className="rounded bg-metro-surface px-2 py-1" onClick={(event) => { event.stopPropagation(); duplicateScenario(row.id); }} type="button"><Copy size={14} /></button><button className="rounded bg-metro-surface px-2 py-1 text-red-200" onClick={(event) => { event.stopPropagation(); removeScenario(row.id); }} type="button"><Trash2 size={14} /></button></div> },
+    { id: 'actions', header: 'Acciones', width: 210, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><button className="rounded bg-metro-red/20 px-2 py-1" onClick={(event) => { event.stopPropagation(); setActiveScenario(row.id); }} type="button">Seleccionar</button><ActionButton onClick={(event) => { event.stopPropagation(); setScenarioDraft({ name: row.name, year: row.year, ticketAmount: row.ticketAmount, notes: row.notes }); setEditingScenarioId(row.id); }} size="sm" title="Editar escenario" type="button" variant="edit" /><ActionButton onClick={(event) => { event.stopPropagation(); duplicateScenario(row.id); }} size="sm" title="Duplicar escenario" type="button" variant="duplicate" /><ActionButton onClick={(event) => { event.stopPropagation(); removeScenario(row.id); }} size="sm" title="Eliminar escenario" type="button" variant="delete" /></div> },
   ], [calendars, duplicateScenario, manualItems, removeScenario, setActiveScenario, ticketGroups]);
 
   const manualColumns: Array<DataTableColumn<BudgetManualItem, ManualColumnId>> = [
@@ -185,7 +186,7 @@ export function PresupuestosPage() {
     { id: 'monthly', header: 'Mensual', accessor: (row) => row.monthlyAmount, render: (row) => euro(row.monthlyAmount), width: 100 },
     { id: 'annual', header: 'Anual informado', accessor: (row) => row.annualAmount, render: (row) => euro(row.annualAmount), width: 120 },
     { id: 'total', header: 'Total anual', accessor: calculateBudgetManualItemYear, render: (row) => euro(calculateBudgetManualItemYear(row)), width: 110 },
-    { id: 'actions', header: 'Acciones', width: 110, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><button className="rounded bg-metro-surface px-2 py-1" onClick={() => { setManualDraft({ scenarioId: row.scenarioId, concept: row.concept, category: row.category, monthlyAmount: row.monthlyAmount, annualAmount: row.annualAmount, notes: row.notes }); setEditingManualId(row.id); }} type="button"><Edit3 size={14} /></button><button className="rounded bg-metro-surface px-2 py-1 text-red-200" onClick={() => removeManualItem(row.id)} type="button"><Trash2 size={14} /></button></div> },
+    { id: 'actions', header: 'Acciones', width: 110, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><ActionButton onClick={() => { setManualDraft({ scenarioId: row.scenarioId, concept: row.concept, category: row.category, monthlyAmount: row.monthlyAmount, annualAmount: row.annualAmount, notes: row.notes }); setEditingManualId(row.id); }} size="sm" title="Editar partida" type="button" variant="edit" /><ActionButton onClick={() => removeManualItem(row.id)} size="sm" title="Eliminar partida" type="button" variant="delete" /></div> },
   ];
   const ticketColumns: Array<DataTableColumn<BudgetTicketGroup, TicketColumnId>> = [
     { id: 'name', header: 'Grupo', accessor: (row) => row.name, width: 170 },
@@ -193,7 +194,7 @@ export function PresupuestosPage() {
     { id: 'people', header: 'Personas', accessor: (row) => row.peopleCount, width: 90 },
     { id: 'calendar', header: 'Calendario', accessor: (row) => row.ticketCalendar, width: 140 },
     { id: 'amount', header: 'Total anual', accessor: (row) => activeScenario ? calculateBudgetScenarioYear(activeScenario, [], [row], simulationYear, calendars).ticketTotal : 0, render: (row) => activeScenario ? euro(calculateBudgetScenarioYear(activeScenario, [], [row], simulationYear, calendars).ticketTotal) : '—', width: 110 },
-    { id: 'actions', header: 'Acciones', width: 110, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><button className="rounded bg-metro-surface px-2 py-1" onClick={() => { setTicketDraft({ scenarioId: row.scenarioId, name: row.name, peopleCount: row.peopleCount, ticketCalendar: row.ticketCalendar, absenceRate: row.absenceRate, ticketAmount: row.ticketAmount, calculationType: row.calculationType, manualTickets: row.manualTickets, annualTickets: row.annualTickets, manualMonthlyAmount: row.manualMonthlyAmount, notes: row.notes }); setEditingTicketId(row.id); }} type="button"><Edit3 size={14} /></button><button className="rounded bg-metro-surface px-2 py-1 text-red-200" onClick={() => removeTicketGroup(row.id)} type="button"><Trash2 size={14} /></button></div> },
+    { id: 'actions', header: 'Acciones', width: 110, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><ActionButton onClick={() => { setTicketDraft({ scenarioId: row.scenarioId, name: row.name, peopleCount: row.peopleCount, ticketCalendar: row.ticketCalendar, absenceRate: row.absenceRate, ticketAmount: row.ticketAmount, calculationType: row.calculationType, manualTickets: row.manualTickets, annualTickets: row.annualTickets, manualMonthlyAmount: row.manualMonthlyAmount, notes: row.notes }); setEditingTicketId(row.id); }} size="sm" title="Editar grupo" type="button" variant="edit" /><ActionButton onClick={() => removeTicketGroup(row.id)} size="sm" title="Eliminar grupo" type="button" variant="delete" /></div> },
   ];
   const monthColumns: Array<DataTableColumn<BudgetScenarioMonthlyTotal, MonthColumnId>> = [
     { id: 'month', header: 'Mes', accessor: (row) => row.month, render: (row) => MONTH_NAMES[row.month - 1], width: 110 },
@@ -207,7 +208,7 @@ export function PresupuestosPage() {
     { id: 'block', header: 'Bloque', accessor: (row) => row.block, width: 170 },
     { id: 'concept', header: 'Concepto', accessor: (row) => row.concept, width: 180 },
     { id: 'amount', header: 'Importe', accessor: (row) => row.amount, render: (row) => euro(row.amount), width: 100 },
-    { id: 'actions', header: 'Acciones', width: 100, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><button className="rounded bg-metro-surface px-2 py-1" onClick={() => { setActualDraft({ year: row.year, month: row.month, block: row.block, concept: row.concept, amount: row.amount, notes: row.notes }); setEditingActualId(row.id); }} type="button"><Edit3 size={14} /></button><button className="rounded bg-metro-surface px-2 py-1 text-red-200" onClick={() => removeActual(row.id)} type="button"><Trash2 size={14} /></button></div> },
+    { id: 'actions', header: 'Acciones', width: 100, isActionColumn: true, render: (row) => <div className="flex justify-end gap-1"><ActionButton onClick={() => { setActualDraft({ year: row.year, month: row.month, block: row.block, concept: row.concept, amount: row.amount, notes: row.notes }); setEditingActualId(row.id); }} size="sm" title="Editar real" type="button" variant="edit" /><ActionButton onClick={() => removeActual(row.id)} size="sm" title="Eliminar real" type="button" variant="delete" /></div> },
   ];
 
   const comparisonTableColumns: Array<DataTableColumn<BudgetComparisonRow, ComparisonColumnId>> = [

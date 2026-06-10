@@ -1,5 +1,6 @@
-import { Clock3, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ActionButton } from '../../components/ui/ActionButton';
 import {
   getAuditEventsForRecord,
   type AuditEvent,
@@ -45,14 +46,15 @@ export function AuditHistoryButton({
 
   return (
     <>
-      <button
-        className={className ?? 'inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red'}
+      <ActionButton
+        className={className}
+        iconOnly={false}
         onClick={() => setIsOpen(true)}
         type="button"
+        variant="history"
       >
-        <Clock3 size={15} />
         Historial
-      </button>
+      </ActionButton>
 
       {isOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">

@@ -1,18 +1,17 @@
 import {
   CheckCircle2,
-  FileSpreadsheet,
-  FileText,
-  History,
+  Clock3,
+  Copy,
   Pencil,
   Plus,
   Printer,
   Save,
   Trash2,
   Upload,
-  X,
+  XCircle,
   type LucideIcon,
 } from 'lucide-react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, FC, ReactNode } from 'react';
 
 type ActionButtonVariant =
   | 'save'
@@ -21,6 +20,7 @@ type ActionButtonVariant =
   | 'import'
   | 'print'
   | 'delete'
+  | 'duplicate'
   | 'edit'
   | 'history'
   | 'add'
@@ -37,25 +37,67 @@ interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ActionButtonSize;
 }
 
-const iconByVariant: Record<ActionButtonVariant, LucideIcon> = {
+type ActionButtonIcon = LucideIcon | FC<{ size: number }>;
+
+function ExcelIcon({ size }: { size: number }) {
+  return (
+    <svg aria-hidden="true" focusable="false" height={size} viewBox="0 0 16 16" width={size}>
+      <rect fill="#217346" height="16" rx="3" width="16" />
+      <text
+        fill="#ffffff"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontSize="10"
+        fontWeight="700"
+        textAnchor="middle"
+        x="8"
+        y="11.5"
+      >
+        X
+      </text>
+    </svg>
+  );
+}
+
+function WordIcon({ size }: { size: number }) {
+  return (
+    <svg aria-hidden="true" focusable="false" height={size} viewBox="0 0 16 16" width={size}>
+      <rect fill="#2b579a" height="16" rx="3" width="16" />
+      <text
+        fill="#ffffff"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontSize="10"
+        fontWeight="700"
+        textAnchor="middle"
+        x="8"
+        y="11.5"
+      >
+        W
+      </text>
+    </svg>
+  );
+}
+
+const iconByVariant: Record<ActionButtonVariant, ActionButtonIcon> = {
   add: Plus,
   approve: CheckCircle2,
   delete: Trash2,
+  duplicate: Copy,
   edit: Pencil,
-  excel: FileSpreadsheet,
-  history: History,
+  excel: ExcelIcon,
+  history: Clock3,
   import: Upload,
   print: Printer,
-  reject: X,
+  reject: XCircle,
   save: Save,
   secondary: Pencil,
-  word: FileText,
+  word: WordIcon,
 };
 
 const labelByVariant: Record<ActionButtonVariant, string> = {
   add: 'Añadir',
   approve: 'Aprobar',
   delete: 'Eliminar',
+  duplicate: 'Duplicar',
   edit: 'Editar',
   excel: 'Excel',
   history: 'Historial',
@@ -69,17 +111,18 @@ const labelByVariant: Record<ActionButtonVariant, string> = {
 
 const colorClassByVariant: Record<ActionButtonVariant, string> = {
   add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
-  approve: 'bg-emerald-600 text-white hover:bg-emerald-700 border-transparent',
-  delete: 'bg-red-600 text-white hover:bg-red-700 border-transparent',
+  approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent',
+  delete: 'border-red-500 bg-transparent text-red-400 hover:bg-red-950/40',
+  duplicate: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   edit: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
-  excel: 'bg-emerald-600 text-white hover:bg-emerald-700 border-transparent',
+  excel: 'bg-[#1a5c38] text-white hover:bg-[#217346] border-transparent',
   history: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   import: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   print: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   reject: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
   secondary: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
-  word: 'bg-blue-600 text-white hover:bg-blue-700 border-transparent',
+  word: 'bg-[#1e3f6f] text-white hover:bg-[#2b579a] border-transparent',
 };
 
 const sizeClassBySize: Record<ActionButtonSize, string> = {
