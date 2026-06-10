@@ -11,13 +11,18 @@ export interface GlobalSearchResult {
   year: number;
   recordId: string;
   haystack: string;
+  score: number;
+  matchReason: string;
+  status?: string;
 }
+
+type SearchableResultDraft = Omit<GlobalSearchResult, 'module' | 'moduleView' | 'haystack' | 'score' | 'matchReason'>;
 
 type SearchableModule = {
   module: string;
   moduleView: AppView;
   storageKey: string;
-  mapRecord: (record: UnknownRecord, index: number) => Omit<GlobalSearchResult, 'module' | 'moduleView' | 'haystack'> | null;
+  mapRecord: (record: UnknownRecord, index: number) => SearchableResultDraft | null;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -182,25 +187,106 @@ function makeSessionResultFromLinkedTask(
       ...Object.values(linkedSession.session).flatMap(extractPrimitiveValues),
       ...Object.values(task).flatMap(extractPrimitiveValues),
     ].join(' ')),
+    score: 0,
+    matchReason: 'Coincidencia en punto incluido en sesión',
   };
 
   return result;
 }
 
 function uniqueResults(results: GlobalSearchResult[]): GlobalSearchResult[] {
-  const seen = new Set<string>();
-  const unique: GlobalSearchResult[] = [];
+  const resultByKey = new Map<string, GlobalSearchResult>();
 
   for (const result of results) {
     const key = `${result.moduleView}:${result.recordId}`;
-    if (seen.has(key)) {
-      continue;
+    const current = resultByKey.get(key);
+    if (!current || result.score > current.score) {
+      resultByKey.set(key, result);
     }
-    seen.add(key);
-    unique.push(result);
   }
 
-  return unique;
+  return Array.from(resultByKey.values());
+}
+
+
+function everyTermMatches(terms: string[], values: string[]): boolean {
+  return terms.every((term) => values.some((value) => value.includes(term)));
+}
+
+function getWeightedMatch(
+  normalizedQuery: string,
+  terms: string[],
+  result: SearchableResultDraft,
+  record: UnknownRecord,
+  moduleName: string,
+): { score: number; reason: string } | null {
+  const code = firstText(record, ['code', 'codigo', 'id']);
+  const person = firstText(record, ['nombreCompleto', 'nombre', 'persona', 'solicitante', 'employeeName']);
+  const employeeNumber = firstText(record, ['empleado', 'numeroEmpleado', 'employeeNumber', 'employeeId']);
+  const status = result.status ?? firstText(record, ['estado', 'status']);
+  const description = firstText(record, ['descripcion', 'description', 'observaciones', 'notes', 'criterio', 'tema']);
+
+  const weightedFields = [
+    { label: 'título', value: result.title, weight: 100 },
+    { label: 'código', value: code, weight: 95 },
+    { label: 'nº empleado', value: employeeNumber, weight: 92 },
+    { label: 'persona', value: person, weight: 85 },
+    { label: 'estado', value: status, weight: 55 },
+    { label: 'fecha', value: result.date, weight: 50 },
+    { label: 'módulo', value: moduleName, weight: 45 },
+    { label: 'detalle', value: result.subtitle, weight: 40 },
+    { label: 'descripción', value: description, weight: 35 },
+  ]
+    .map((field) => ({ ...field, normalizedValue: normalizeText(field.value) }))
+    .filter((field) => field.normalizedValue);
+
+  const primitiveValues = Object.values(record).flatMap(extractPrimitiveValues).map(normalizeText).filter(Boolean);
+  const allValues = [...weightedFields.map((field) => field.normalizedValue), ...primitiveValues];
+
+  if (!everyTermMatches(terms, allValues)) {
+    return null;
+  }
+
+  let bestMatch = weightedFields.find((field) => field.normalizedValue === normalizedQuery) ?? null;
+  let exactBonus = bestMatch ? 80 : 0;
+
+  if (!bestMatch) {
+    bestMatch = weightedFields.find((field) => field.normalizedValue.includes(normalizedQuery)) ?? null;
+    exactBonus = bestMatch ? 35 : 0;
+  }
+
+  const matchedFields = weightedFields.filter((field) => terms.some((term) => field.normalizedValue.includes(term)));
+  const weightedScore = matchedFields.reduce((score, field) => score + field.weight, 0);
+  const completeFieldBonus = matchedFields.some((field) => everyTermMatches(terms, [field.normalizedValue])) ? 30 : 0;
+  const score = weightedScore + exactBonus + completeFieldBonus + Math.min(terms.length * 5, 25);
+  const reasonField = bestMatch ?? matchedFields[0] ?? null;
+
+  return {
+    score,
+    reason: reasonField ? `Coincidencia en ${reasonField.label}: ${reasonField.value}` : 'Coincidencia en contenido del registro',
+  };
+}
+
+function addSearchMetadata(
+  result: SearchableResultDraft,
+  record: UnknownRecord,
+  searchableModule: SearchableModule,
+  normalizedQuery: string,
+  terms: string[],
+): GlobalSearchResult | null {
+  const match = getWeightedMatch(normalizedQuery, terms, result, record, searchableModule.module);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    ...result,
+    module: searchableModule.module,
+    moduleView: searchableModule.moduleView,
+    haystack: buildHaystack(searchableModule.module, result, record),
+    score: match.score,
+    matchReason: match.reason,
+  };
 }
 
 function extractPrimitiveValues(value: unknown): string[] {
@@ -218,7 +304,7 @@ function extractPrimitiveValues(value: unknown): string[] {
 
 function buildHaystack(
   moduleName: string,
-  result: Omit<GlobalSearchResult, 'module' | 'moduleView' | 'haystack'>,
+  result: SearchableResultDraft,
   record: UnknownRecord,
 ): string {
   const primitiveValues = Object.values(record).flatMap(extractPrimitiveValues);
@@ -233,7 +319,7 @@ function makeResult(
   subtitleKeys: string[],
   dateKeys: string[],
   fallbackTitle: string,
-): Omit<GlobalSearchResult, 'module' | 'moduleView' | 'haystack'> | null {
+): SearchableResultDraft | null {
   if (isDeleted(record)) {
     return null;
   }
@@ -242,6 +328,7 @@ function makeResult(
   const title = firstText(record, titleKeys) || fallbackTitle;
   const subtitle = firstText(record, subtitleKeys);
   const date = firstDate(record, dateKeys);
+  const status = firstText(record, ['estado', 'status']);
 
   return {
     id: `${recordId}-${index}`,
@@ -250,6 +337,7 @@ function makeResult(
     subtitle,
     date,
     year: getYear(date),
+    status,
   };
 }
 
@@ -342,23 +430,24 @@ export function searchTraccion(query: string): GlobalSearchResult[] {
         return [];
       }
 
-      const standardResult: GlobalSearchResult = {
-        ...mapped,
-        module: searchableModule.module,
-        moduleView: searchableModule.moduleView,
-        haystack: buildHaystack(searchableModule.module, mapped, record),
-      };
-
-      const result = searchableModule.moduleView === 'tareas'
-        ? makeSessionResultFromLinkedTask(record, index, linkedSessionLookup) ?? standardResult
+      const standardResult = addSearchMetadata(mapped, record, searchableModule, normalizedQuery, terms);
+      const linkedResult = searchableModule.moduleView === 'tareas'
+        ? makeSessionResultFromLinkedTask(record, index, linkedSessionLookup)
+        : null;
+      const result = linkedResult && everyTermMatches(terms, [linkedResult.haystack])
+        ? { ...linkedResult, score: standardResult?.score ?? 50, matchReason: linkedResult.matchReason }
         : standardResult;
 
-      return terms.every((term) => result.haystack.includes(term)) ? [result] : [];
+      return result ? [result] : [];
     }),
   );
 
   return uniqueResults(rawResults)
     .sort((first, second) => {
+      if (first.score !== second.score) {
+        return second.score - first.score;
+      }
+
       if (first.year !== second.year) {
         return second.year - first.year;
       }

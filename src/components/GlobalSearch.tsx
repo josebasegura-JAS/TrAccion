@@ -20,6 +20,27 @@ interface GroupedResults {
   }[];
 }
 
+
+const ALL_MODULES_FILTER = 'all';
+const ALL_YEARS_FILTER = 'all';
+
+type ModuleFilter = typeof ALL_MODULES_FILTER | AppView;
+type YearFilter = typeof ALL_YEARS_FILTER | number;
+
+function isClosedStatus(value: string | undefined): boolean {
+  const normalized = value?.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim() ?? '';
+  return ['cerrad', 'finalizad', 'histor', 'firmad', 'resuelt'].some((closedStatus) => normalized.includes(closedStatus));
+}
+
+function getFilterButtonClass(isActive: boolean): string {
+  return [
+    'rounded-full border px-3 py-1 text-[11px] font-semibold transition',
+    isActive
+      ? 'border-metro-red/50 bg-metro-red/15 text-metro-text'
+      : 'border-metro-border bg-slate-950/20 text-metro-muted hover:border-metro-red/35 hover:text-metro-text',
+  ].join(' ');
+}
+
 function groupResults(results: GlobalSearchResult[]): GroupedResults[] {
   const yearMap = new Map<number, Map<string, GlobalSearchResult[]>>();
 
@@ -52,8 +73,35 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [moduleFilter, setModuleFilter] = useState<ModuleFilter>(ALL_MODULES_FILTER);
+  const [yearFilter, setYearFilter] = useState<YearFilter>(ALL_YEARS_FILTER);
+  const [onlyOpen, setOnlyOpen] = useState(false);
   const results = useMemo(() => searchTraccion(query), [query]);
-  const groupedResults = useMemo(() => groupResults(results), [results]);
+  const moduleOptions = useMemo(
+    () => Array.from(new Map(results.map((result) => [result.moduleView, result.module])).entries()),
+    [results],
+  );
+  const yearOptions = useMemo(
+    () => Array.from(new Set(results.map((result) => result.year))).sort((first, second) => second - first),
+    [results],
+  );
+  const filteredResults = useMemo(
+    () =>
+      results.filter((result) => {
+        if (moduleFilter !== ALL_MODULES_FILTER && result.moduleView !== moduleFilter) {
+          return false;
+        }
+        if (yearFilter !== ALL_YEARS_FILTER && result.year !== yearFilter) {
+          return false;
+        }
+        if (onlyOpen && isClosedStatus(result.status)) {
+          return false;
+        }
+        return true;
+      }),
+    [moduleFilter, onlyOpen, results, yearFilter],
+  );
+  const groupedResults = useMemo(() => groupResults(filteredResults), [filteredResults]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -128,16 +176,72 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
               </button>
             </div>
 
+            {query.trim().length >= 2 && results.length > 0 && (
+              <div className="space-y-2 border-b border-metro-border bg-slate-950/10 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={getFilterButtonClass(moduleFilter === ALL_MODULES_FILTER)}
+                    onClick={() => setModuleFilter(ALL_MODULES_FILTER)}
+                  >
+                    Todos
+                  </button>
+                  {moduleOptions.map(([moduleView, module]) => (
+                    <button
+                      key={moduleView}
+                      type="button"
+                      className={getFilterButtonClass(moduleFilter === moduleView)}
+                      onClick={() => setModuleFilter(moduleView)}
+                    >
+                      {module}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={getFilterButtonClass(yearFilter === ALL_YEARS_FILTER)}
+                    onClick={() => setYearFilter(ALL_YEARS_FILTER)}
+                  >
+                    Todos los años
+                  </button>
+                  {yearOptions.slice(0, 8).map((year) => (
+                    <button
+                      key={year}
+                      type="button"
+                      className={getFilterButtonClass(yearFilter === year)}
+                      onClick={() => setYearFilter(year)}
+                    >
+                      {getResultYearLabel(year)}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={getFilterButtonClass(onlyOpen)}
+                    onClick={() => setOnlyOpen((current) => !current)}
+                  >
+                    Solo abiertos
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="min-h-[16rem] overflow-auto p-4">
               {query.trim().length < 2 && (
                 <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
-                  Escribe al menos 2 caracteres. Los resultados se agrupan por año descendente y módulo.
+                  Escribe al menos 2 caracteres. Los resultados se ordenan por relevancia y se agrupan por año y módulo.
                 </div>
               )}
 
               {query.trim().length >= 2 && results.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
                   No hay resultados para “{query.trim()}”.
+                </div>
+              )}
+
+              {query.trim().length >= 2 && results.length > 0 && filteredResults.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
+                  No hay resultados con los filtros actuales.
                 </div>
               )}
 
@@ -170,10 +274,16 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-semibold text-metro-text">{result.title}</p>
                                   <p className="line-clamp-2 text-xs text-metro-muted">{result.subtitle || 'Sin detalle adicional'}</p>
+                                  <p className="mt-1 line-clamp-1 text-[11px] font-medium text-metro-red/90">{result.matchReason}</p>
                                 </div>
-                                <span className="flex-none rounded-full border border-metro-border bg-slate-950/20 px-2 py-0.5 text-[11px] text-metro-muted">
-                                  {formatResultDate(result.date)}
-                                </span>
+                                <div className="flex flex-none flex-col items-end gap-1">
+                                  <span className="rounded-full border border-metro-border bg-slate-950/20 px-2 py-0.5 text-[11px] text-metro-muted">
+                                    {formatResultDate(result.date)}
+                                  </span>
+                                  <span className="rounded-full border border-metro-border bg-slate-950/20 px-2 py-0.5 text-[10px] text-metro-muted">
+                                    Relevancia {result.score}
+                                  </span>
+                                </div>
                               </div>
                             </button>
                           ))}
@@ -186,7 +296,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             </div>
 
             <div className="border-t border-metro-border px-4 py-2 text-[11px] text-metro-muted">
-              Selecciona un resultado para abrir su módulo y, cuando esté disponible, el registro concreto.
+              Los resultados se ordenan por relevancia. Usa los filtros para acotar por módulo, año o registros abiertos.
             </div>
           </div>
         </div>
