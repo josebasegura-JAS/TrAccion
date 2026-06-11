@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
-import { closeSync, constants, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
@@ -383,18 +383,6 @@ async function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
   }
 }
 
-async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  await writeFile(lockPath, JSON.stringify(lock, null, 2), { encoding: 'utf8', flag: 'wx' });
-}
-
-async function removeLock(lockPath: string, expectedOwnerId: string): Promise<void> {
-  const lock = await readLock(lockPath);
-  if (lock?.ownerId === expectedOwnerId) {
-    await unlink(lockPath).catch(() => undefined);
-  }
-}
-
-
 function readLockSync(lockPath: string): DatabaseLockInfo | null {
   try {
     const raw = readFileSync(lockPath, 'utf8');
@@ -433,6 +421,7 @@ function removeLockSync(lockPath: string, expectedOwnerId: string): void {
 
 function acquireOperationLockSync(databasePath: string, waitMs = SQLITE_OPERATION_LOCK_WAIT_MS): DatabaseLockInfo {
   const lockPath = getLockPath(databasePath);
+  mkdirSync(path.dirname(lockPath), { recursive: true });
   const startedAt = Date.now();
   let lastLock: DatabaseLockInfo | null = null;
 
@@ -486,37 +475,11 @@ function withDatabaseOperationLockSync<T>(operation: () => T, waitMs = SQLITE_OP
 }
 
 async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
-  const lockPath = getLockPath(databasePath);
-  await mkdir(path.dirname(lockPath), { recursive: true });
-  const existingLock = await readLock(lockPath);
-  if (existingLock && existingLock.ownerId !== ownerId && !isLockStale(existingLock)) {
-    throw new Error(
-      `Base ocupada por ${existingLock.username}@${existingLock.hostname} (PID ${existingLock.pid}).`,
-    );
-  }
-
-  if (existingLock && isLockStale(existingLock)) {
-    await unlink(lockPath).catch(() => undefined);
-  }
-
-  const lock = createLockInfo();
-  try {
-    await writeLock(lockPath, lock);
-  } catch {
-    const racedLock = await readLock(lockPath);
-    if (racedLock?.ownerId === ownerId) {
-      return racedLock;
-    }
-    if (racedLock && !isLockStale(racedLock)) {
-      throw new Error(
-        `Base ocupada por ${racedLock.username}@${racedLock.hostname} (PID ${racedLock.pid}).`,
-      );
-    }
-    await unlink(lockPath).catch(() => undefined);
-    await writeLock(lockPath, lock);
-  }
-
-  return lock;
+  // Compatibilidad incremental: mantenemos la API async para los llamadores existentes
+  // (backups/arranque), pero el mecanismo real es el mismo lock síncrono que usan
+  // las operaciones SQLite. Así no hay dos escritores peleando con semánticas distintas
+  // sobre el mismo .lock.
+  return acquireOperationLockSync(databasePath, SQLITE_OPERATION_LOCK_WAIT_MS);
 }
 
 async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
@@ -561,7 +524,9 @@ function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): R
 }
 
 async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  await removeLock(lockPath, lock.ownerId);
+  // Misma ruta de liberación que las operaciones síncronas. Evita diferencias
+  // entre CRUD y backups sobre el archivo .lock compartido.
+  removeLockSync(lockPath, lock.ownerId);
 }
 
 async function releaseActiveSessionLock(): Promise<void> {
@@ -766,8 +731,9 @@ async function activateDatabase(
   await ensureDirectoryIsUsable(directoryPath);
 
   // Bloqueo temporal solo para la fase delicada de arranque: creación inicial,
-  // copia desde origen y migraciones. No es un lock de sesión. Después de abrir
-  // SQLite se libera para permitir varias instancias activas; las operaciones reales se serializan con lock corto y journal DELETE.
+  // copia desde origen y migraciones. No se mantiene como lock de sesión porque
+  // bloquearía al segundo usuario. La confiabilidad multiusuario se apoya en un
+  // único lock corto por operación crítica SQLite, compartido también por backups.
   const startupLock = await acquireStartupLock(databasePath);
   const startupLockHeartbeat = startDatabaseLockHeartbeat(lockPath, startupLock);
 
@@ -1273,34 +1239,43 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
     return currentStatus;
   }
 
-  const db = requireDatabase();
-  const now = new Date().toISOString();
-  const records = payload.records.filter(
-    (record): record is PersistedStorageRecord =>
-      typeof record.key === 'string' && typeof record.value === 'string',
-  );
+  return withDatabaseOperationLockSync(() => {
+    const db = requireDatabase();
+    const now = new Date().toISOString();
+    const records = payload.records.filter(
+      (record): record is PersistedStorageRecord =>
+        typeof record.key === 'string' && typeof record.value === 'string',
+    );
 
-  createLocalStorageBackup({ records });
+    createLocalStorageBackup({ records });
 
-  const upsert = db.prepare(
-    `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-     VALUES (?, ?, 'sqlite-primary', ?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value_json = excluded.value_json,
-       source = excluded.source,
-       updated_at = excluded.updated_at`,
-  );
+    const migrateSnapshotTransaction = db.transaction(() => {
+      const upsert = db.prepare(
+        `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
+         VALUES (?, ?, 'sqlite-primary', ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value_json = excluded.value_json,
+           source = excluded.source,
+           updated_at = excluded.updated_at`,
+      );
 
-  for (const record of records) {
-    upsert.run(record.key, record.value, now, now);
-  }
+      for (const record of records) {
+        upsert.run(record.key, record.value, now, now);
+      }
 
-  if (records.length > 0) {
-    updateRefreshMetadata(db, now);
-    enqueueLocalBackup('migrate-local-storage-snapshot');
-  }
+      if (records.length > 0) {
+        updateRefreshMetadata(db, now);
+      }
+    });
 
-  return currentStatus;
+    migrateSnapshotTransaction();
+
+    if (records.length > 0) {
+      enqueueLocalBackup('migrate-local-storage-snapshot');
+    }
+
+    return currentStatus;
+  });
 }
 
 export function createLocalStorageBackup(payload: LocalStorageBackupPayload): DatabaseStatus {

@@ -8,6 +8,7 @@ declare module 'better-sqlite3' {
   export interface Database {
     exec(sql: string): void;
     prepare<BindParameters extends unknown[] = unknown[]>(sql: string): Statement<BindParameters>;
+    transaction<T extends (...args: never[]) => unknown>(fn: T): T;
     pragma(source: string): unknown;
     close(): void;
   }
