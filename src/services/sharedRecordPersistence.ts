@@ -1,3 +1,4 @@
+import { publishDatabaseStatus } from './databaseStatus';
 export interface SaveSharedArrayRecordOptions<TRecord> {
   storageKey: string;
   recordId: string;
@@ -34,6 +35,7 @@ export async function saveSharedArrayRecord<TRecord>({
   }
 
   const snapshot = await loadPersistedRecords();
+  publishDatabaseStatus(snapshot.status);
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     throw new Error(
       snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
@@ -65,6 +67,7 @@ export async function saveSharedArrayRecord<TRecord>({
     value: serialized,
     expectedUpdatedAt: expectedStorageUpdatedAt,
   });
+  publishDatabaseStatus(result.status);
 
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
@@ -102,6 +105,7 @@ export async function saveNewSharedArrayRecord<TRecord>({
   }
 
   const snapshot = await loadPersistedRecords();
+  publishDatabaseStatus(snapshot.status);
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     throw new Error(
       snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
@@ -125,6 +129,7 @@ export async function saveNewSharedArrayRecord<TRecord>({
     value: serialized,
     expectedUpdatedAt: expectedStorageUpdatedAt,
   });
+  publishDatabaseStatus(result.status);
 
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');

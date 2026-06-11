@@ -277,6 +277,17 @@ export function TaskEditor({
       return;
     }
 
+    const liveLock = await window.traccion?.getRecordLock?.({ module: 'tareas', recordId: task.id });
+    if (!liveLock || liveLock.status !== 'acquired' || !liveLock.ok) {
+      setSaveStatus(
+        liveLock?.message
+          ? `${liveLock.message} Abre la tarea en solo lectura y espera a que el otro usuario cierre la ventana.`
+          : 'No se puede guardar: no se ha confirmado el bloqueo compartido de edición.',
+      );
+      setSaveStatusIsError(true);
+      return;
+    }
+
     try {
       const result = await updateTaskWithConcurrencyCheck(
         task.id,
@@ -303,6 +314,10 @@ export function TaskEditor({
   };
 
   const handleAddManualDocumentPath = () => {
+    if (isFormReadOnly) {
+      return;
+    }
+
     const trimmedPath = manualDocumentPath.trim();
     if (!trimmedPath) {
       setDocumentStatus('Indica una ruta de documento antes de añadirla.');
@@ -322,6 +337,10 @@ export function TaskEditor({
   };
 
   const handleSelectDocumentPath = async () => {
+    if (isFormReadOnly) {
+      return;
+    }
+
     const selector = window.traccion?.selectTaskDocument;
     if (!selector) {
       setDocumentStatus('Selector de documentos no disponible. Pega la ruta manualmente.');
@@ -366,6 +385,10 @@ export function TaskEditor({
   };
 
   const handleRemoveDocumentLink = (linkId: string) => {
+    if (isFormReadOnly) {
+      return;
+    }
+
     setDraft((current) => ({
       ...current,
       documentLinks: current.documentLinks.filter((link) => link.id !== linkId),
@@ -375,6 +398,10 @@ export function TaskEditor({
   };
 
   const handleImportMailFile = async (file: File | undefined) => {
+    if (isFormReadOnly) {
+      return;
+    }
+
     if (!file) {
       return;
     }
@@ -694,6 +721,7 @@ export function TaskEditor({
                   <input
                     accept=".msg"
                     className="sr-only"
+                    disabled={isFormReadOnly}
                     onChange={(event) => void handleImportMailFile(event.target.files?.[0])}
                     type="file"
                   />

@@ -19,6 +19,7 @@ import { useParitariaSessionStore } from '../features/paritaria/store/useParitar
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
 import type { AppView } from '../navigation/navigation';
+import { readStorageItem } from '../services/persistence';
 
 type CalendarEventType = 'task' | 'committee' | 'paritaria' | 'telework' | 'tickets' | 'actas';
 
@@ -48,6 +49,24 @@ type DashboardNavigationTarget = {
   view: AppView;
   recordId?: string;
 };
+
+
+function getStoredDashboardUserName(): string {
+  if (typeof window === 'undefined') {
+    return 'Usuario local';
+  }
+
+  return readStorageItem('traccion.header.username')?.trim() || 'Usuario local';
+}
+
+function getGreetingUserName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'Usuario local') {
+    return 'usuario';
+  }
+
+  return trimmed;
+}
 
 type KpiCard = {
   title: string;
@@ -194,6 +213,7 @@ export function DashboardCards({
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dashboardPopup, setDashboardPopup] = useState<DashboardPopup | null>(null);
+  const [dashboardUserName, setDashboardUserName] = useState(getStoredDashboardUserName);
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
   const todayLabel = fullDateFormatter.format(today);
@@ -213,7 +233,29 @@ export function DashboardCards({
     loadSessions();
     loadSolicitudes();
     loadParitariaSessions();
+    setDashboardUserName(getStoredDashboardUserName());
   }, [loadParitariaSessions, loadSessions, loadSolicitudes, loadTasks]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    window.traccion
+      ?.getWindowsUser?.()
+      .then((userName) => {
+        if (isMounted) {
+          setDashboardUserName(userName?.trim() || getStoredDashboardUserName());
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setDashboardUserName(getStoredDashboardUserName());
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const openRecord = (target: DashboardNavigationTarget) => {
     onOpenRecord?.(target);
@@ -573,7 +615,7 @@ export function DashboardCards({
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-xl font-black tracking-tight text-metro-text">
-              Buenos días, Joseba
+              Buenos días, {getGreetingUserName(dashboardUserName)}
             </h2>
             <p className="mt-0.5 text-xs font-semibold text-metro-muted">
               Vista ejecutiva de Relaciones Laborales

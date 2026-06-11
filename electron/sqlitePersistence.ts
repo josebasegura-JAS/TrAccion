@@ -13,7 +13,6 @@ const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
 const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
 const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
 const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
-const DEFENSIVE_DATABASE_BACKUP_RETENTION_COUNT = 1;
 const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
 const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
@@ -449,43 +448,6 @@ async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<vo
 }
 
 
-function isRecoverableBackupCopyError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === 'ENOSPC'
-  );
-}
-
-async function pruneDefensiveDatabaseBackups(databasePath: string): Promise<void> {
-  const directoryPath = path.dirname(databasePath);
-  const databaseFileName = path.basename(databasePath);
-  const backupPrefix = `${databaseFileName}.backup-`;
-  const entries = await readdir(directoryPath).catch(() => []);
-  const backupEntries = await Promise.all(
-    entries
-      .filter((entry) => entry.startsWith(backupPrefix))
-      .map(async (entry) => {
-        const filePath = path.join(directoryPath, entry);
-        const fileStat = await stat(filePath).catch(() => null);
-        return fileStat?.isFile() ? { filePath, modifiedAt: fileStat.mtime.getTime() } : null;
-      }),
-  );
-
-  const sortedBackups = backupEntries
-    .filter((entry): entry is { filePath: string; modifiedAt: number } => entry !== null)
-    .sort((left, right) => right.modifiedAt - left.modifiedAt);
-
-  await Promise.all(
-    sortedBackups.slice(DEFENSIVE_DATABASE_BACKUP_RETENTION_COUNT).map((entry) =>
-      unlink(entry.filePath).catch((error: unknown) => {
-        console.warn('No se ha podido eliminar una copia preventiva SQLite antigua.', error);
-      }),
-    ),
-  );
-}
-
 async function backupExistingDatabase(databasePath: string): Promise<void> {
   try {
     await stat(databasePath);
@@ -493,19 +455,8 @@ async function backupExistingDatabase(databasePath: string): Promise<void> {
     return;
   }
 
-  await pruneDefensiveDatabaseBackups(databasePath);
-
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  try {
-    await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
-  } catch (error) {
-    if (isRecoverableBackupCopyError(error)) {
-      console.warn('No se ha podido crear la copia preventiva SQLite por falta de espacio.', error);
-      return;
-    }
-
-    console.warn('No se ha podido crear la copia preventiva SQLite.', error);
-  }
+  await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
 }
 
 async function ensureDirectoryIsUsable(directoryPath: string): Promise<void> {
@@ -687,15 +638,19 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
     status = {
       ready: false,
       engine: 'better-sqlite3',
-      phase:
-        error instanceof Error && error.message.startsWith('Base ocupada') ? 'locked' : 'fallback',
+      phase: isSqliteCorruptionError(error)
+        ? 'error'
+        : error instanceof Error && error.message.startsWith('Base ocupada')
+          ? 'locked'
+          : 'fallback',
       path: databasePath,
       schemaVersion: 0,
       isDefaultPath: configured.isDefaultPath,
       lockPath,
       lock: currentLock ?? undefined,
-      message:
-        error instanceof Error
+      message: isSqliteCorruptionError(error)
+        ? `Base de datos SQLite dañada: ${error instanceof Error ? error.message : 'error desconocido'}. Restaura una copia de seguridad antes de seguir trabajando.`
+        : error instanceof Error
           ? error.message
           : 'SQLite no está disponible; se mantiene localStorage.',
     };
@@ -710,6 +665,51 @@ function requireDatabase(): Database {
   }
 
   return database;
+}
+
+function isSqliteCorruptionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('database disk image is malformed') ||
+    message.includes('database corruption') ||
+    message.includes('file is not a database')
+  );
+}
+
+function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
+  const previousStatus = getSqliteStatus();
+  const message =
+    error instanceof Error
+      ? `Base de datos SQLite dañada: ${error.message}. Restaura una copia de seguridad antes de seguir trabajando.`
+      : 'Base de datos SQLite dañada. Restaura una copia de seguridad antes de seguir trabajando.';
+
+  try {
+    closeDatabase();
+  } catch {
+    database = null;
+  }
+
+  status = {
+    ...previousStatus,
+    ready: false,
+    phase: 'error',
+    message,
+  };
+
+  return status;
+}
+
+function safeDatabaseOperation<T>(operation: () => T, fallback: (status: DatabaseStatus, message: string) => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    if (isSqliteCorruptionError(error)) {
+      const nextStatus = markDatabaseAsCorrupted(error);
+      return fallback(nextStatus, nextStatus.message ?? 'Base de datos SQLite dañada.');
+    }
+
+    throw error;
+  }
 }
 
 export function getSqliteStatus(): DatabaseStatus {
@@ -922,25 +922,30 @@ function readRefreshToken(db: Database): string | null {
 }
 
 export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked') {
-    return currentStatus;
-  }
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+        return currentStatus;
+      }
 
-  const now = new Date().toISOString();
-  const db = requireDatabase();
-  db.prepare(
-    `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-       VALUES (?, ?, 'sqlite-primary', ?, ?)
-       ON CONFLICT(key) DO UPDATE SET
-         value_json = excluded.value_json,
-         source = excluded.source,
-         updated_at = excluded.updated_at`,
-  ).run(record.key, record.value, now, now);
-  updateRefreshMetadata(db, now);
-  enqueueLocalBackup(`save:${record.key}`);
+      const now = new Date().toISOString();
+      const db = requireDatabase();
+      db.prepare(
+        `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
+           VALUES (?, ?, 'sqlite-primary', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             value_json = excluded.value_json,
+             source = excluded.source,
+             updated_at = excluded.updated_at`,
+      ).run(record.key, record.value, now, now);
+      updateRefreshMetadata(db, now);
+      enqueueLocalBackup(`save:${record.key}`);
 
-  return currentStatus;
+      return currentStatus;
+    },
+    (nextStatus) => nextStatus,
+  );
 }
 
 export interface ConditionalPersistedRecordSaveResult {
@@ -953,86 +958,96 @@ export interface ConditionalPersistedRecordSaveResult {
 export function savePersistedRecordIfUnchanged(
   record: ConditionalPersistedStorageRecord,
 ): ConditionalPersistedRecordSaveResult {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase !== 'active') {
-    return {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      const db = requireDatabase();
+      const row = db
+        .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+        .get(record.key);
+      const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+      if (currentUpdatedAt !== record.expectedUpdatedAt) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt,
+          message:
+            'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+        };
+      }
+
+      const now = new Date().toISOString();
+
+      if (currentUpdatedAt === null) {
+        const result = db
+          .prepare(
+            `INSERT OR IGNORE INTO persisted_records (key, value_json, source, created_at, updated_at)
+             VALUES (?, ?, 'sqlite-primary', ?, ?)`,
+          )
+          .run(record.key, record.value, now, now);
+
+        if (result.changes !== 1) {
+          const latest = db
+            .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+            .get(record.key);
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+            message:
+              'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+          };
+        }
+      } else {
+        const result = db
+          .prepare(
+            `UPDATE persisted_records
+             SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+             WHERE key = ? AND updated_at = ?`,
+          )
+          .run(record.value, now, record.key, currentUpdatedAt);
+
+        if (result.changes !== 1) {
+          const latest = db
+            .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+            .get(record.key);
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+            message:
+              'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+          };
+        }
+      }
+
+      updateRefreshMetadata(db, now);
+      enqueueLocalBackup(`save:${record.key}`);
+
+      return {
+        ok: true,
+        status: currentStatus,
+        currentUpdatedAt: now,
+        message: 'Guardado confirmado en SQLite compartido.',
+      };
+    },
+    (nextStatus, message) => ({
       ok: false,
-      status: currentStatus,
+      status: nextStatus,
       currentUpdatedAt: null,
-      message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-    };
-  }
-
-  const db = requireDatabase();
-  const row = db
-    .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-    .get(record.key);
-  const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-
-  if (currentUpdatedAt !== record.expectedUpdatedAt) {
-    return {
-      ok: false,
-      status: currentStatus,
-      currentUpdatedAt,
-      message:
-        'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-    };
-  }
-
-  const now = new Date().toISOString();
-
-  if (currentUpdatedAt === null) {
-    const result = db
-      .prepare(
-        `INSERT OR IGNORE INTO persisted_records (key, value_json, source, created_at, updated_at)
-         VALUES (?, ?, 'sqlite-primary', ?, ?)`,
-      )
-      .run(record.key, record.value, now, now);
-
-    if (result.changes !== 1) {
-      const latest = db
-        .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-        .get(record.key);
-      return {
-        ok: false,
-        status: currentStatus,
-        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-        message:
-          'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-      };
-    }
-  } else {
-    const result = db
-      .prepare(
-        `UPDATE persisted_records
-         SET value_json = ?, source = 'sqlite-primary', updated_at = ?
-         WHERE key = ? AND updated_at = ?`,
-      )
-      .run(record.value, now, record.key, currentUpdatedAt);
-
-    if (result.changes !== 1) {
-      const latest = db
-        .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-        .get(record.key);
-      return {
-        ok: false,
-        status: currentStatus,
-        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-        message:
-          'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-      };
-    }
-  }
-
-  updateRefreshMetadata(db, now);
-  enqueueLocalBackup(`save:${record.key}`);
-
-  return {
-    ok: true,
-    status: currentStatus,
-    currentUpdatedAt: now,
-    message: 'Guardado confirmado en SQLite compartido.',
-  };
+      message,
+    }),
+  );
 }
 
 export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): DatabaseStatus {
@@ -1263,51 +1278,61 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
 }
 
 export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked') {
-    return { status: currentStatus, records: [], refreshToken: null, latestUpdatedAt: null };
-  }
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+        return { status: currentStatus, records: [], refreshToken: null, latestUpdatedAt: null };
+      }
 
-  const db = requireDatabase();
-  const records = readAllPersistedRecords(db);
-  const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
-    if (!latest) {
-      return record.updatedAt;
-    }
+      const db = requireDatabase();
+      const records = readAllPersistedRecords(db);
+      const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
+        if (!latest) {
+          return record.updatedAt;
+        }
 
-    return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
-  }, null);
+        return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
+      }, null);
 
-  return {
-    status: currentStatus,
-    records,
-    refreshToken: readRefreshToken(db),
-    latestUpdatedAt,
-  };
+      return {
+        status: currentStatus,
+        records,
+        refreshToken: readRefreshToken(db),
+        latestUpdatedAt,
+      };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [], refreshToken: null, latestUpdatedAt: null }),
+  );
 }
 
 export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapshot {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked') {
-    return { status: currentStatus, refreshToken: null, latestUpdatedAt: null };
-  }
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+        return { status: currentStatus, refreshToken: null, latestUpdatedAt: null };
+      }
 
-  const db = requireDatabase();
-  const latestRow = db
-    .prepare('SELECT updated_at FROM persisted_records ORDER BY updated_at DESC LIMIT 1')
-    .get();
-  const latestUpdatedAt =
-    latestRow &&
-    typeof latestRow === 'object' &&
-    typeof (latestRow as { updated_at?: unknown }).updated_at === 'string'
-      ? (latestRow as { updated_at: string }).updated_at
-      : null;
+      const db = requireDatabase();
+      const latestRow = db
+        .prepare('SELECT updated_at FROM persisted_records ORDER BY updated_at DESC LIMIT 1')
+        .get();
+      const latestUpdatedAt =
+        latestRow &&
+        typeof latestRow === 'object' &&
+        typeof (latestRow as { updated_at?: unknown }).updated_at === 'string'
+          ? (latestRow as { updated_at: string }).updated_at
+          : null;
 
-  return {
-    status: currentStatus,
-    refreshToken: readRefreshToken(db),
-    latestUpdatedAt,
-  };
+      return {
+        status: currentStatus,
+        refreshToken: readRefreshToken(db),
+        latestUpdatedAt,
+      };
+    },
+    (nextStatus) => ({ status: nextStatus, refreshToken: null, latestUpdatedAt: null }),
+  );
 }
 
 

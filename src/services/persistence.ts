@@ -6,7 +6,7 @@ import {
   type PersistedStorageKey,
   isPersistedStorageKey as isKnownPersistedStorageKey,
 } from './persistenceKeys';
-import { getCachedDatabaseStatus } from './databaseStatus';
+import { getCachedDatabaseStatus, publishDatabaseStatus } from './databaseStatus';
 
 export type PersistenceFeedbackKind = 'saving' | 'saved' | 'error';
 
@@ -200,6 +200,7 @@ async function saveRecordToSqlite(record: TraccionStorageRecord): Promise<boolea
   }
 
   const status = await saveLocalStorageRecord(record);
+  publishDatabaseStatus(status);
   if (!status.ready || status.phase !== 'active') {
     throw new Error(
       status.message ?? 'SQLite no está activo; el cambio queda pendiente de sincronización.',
@@ -478,6 +479,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
 
   try {
     const snapshot = await window.traccion.loadPersistedRecords();
+    publishDatabaseStatus(snapshot.status);
     if (!snapshot.status.ready || snapshot.status.phase === 'locked') {
       return {
         status: 'sqlite-unavailable',
