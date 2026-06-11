@@ -14,6 +14,7 @@ const HEADER_ALIASES: ReadonlyArray<readonly [CriterioRrllDraftField, readonly s
   ['fecha', ['fecha', 'año', 'ano', 'ejercicio']],
   ['responsable', ['responsable', 'area', 'área', 'departamento']],
   ['criterio', ['criterio', 'descripcion', 'descripción', 'detalle', 'texto']],
+  ['sentido', ['sentido', 'resultado', 'resolucion', 'resolución']],
   ['estado', ['estado']],
   ['observaciones', ['observaciones', 'observacion', 'observación', 'notas', 'nota']],
 ];
@@ -60,6 +61,8 @@ export function rowsToCriterioRrllDrafts(rows: TabularRow[]): CriterioRrllDraft[
       const value = normalizeCellValue(row[index] ?? '');
       if (field === 'estado') {
         draft.estado = value === 'archivado' || value === 'en revisión' ? value : 'vigente';
+      } else if (field === 'sentido') {
+        draft.sentido = normalizeSentido(value);
       } else {
         draft[field] = value;
       }
@@ -81,6 +84,20 @@ export function buildImportedCriterioKey(draft: Pick<CriterioRrllDraft, 'tema' |
 
 function normalizeCellValue(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeSentido(value: string): CriterioRrllDraft['sentido'] {
+  const normalized = normalizeDuplicatePart(value);
+
+  if (['aprobado', 'aprobar', 'si', 'sí', 'favorable', 'concedido', 'aceptado'].includes(normalized)) {
+    return 'aprobado';
+  }
+
+  if (['denegado', 'denegar', 'no', 'desfavorable', 'rechazado'].includes(normalized)) {
+    return 'denegado';
+  }
+
+  return 'sin clasificar';
 }
 
 function normalizeDuplicatePart(value: string): string {

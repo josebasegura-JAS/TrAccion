@@ -662,7 +662,7 @@ const searchableModules: SearchableModule[] = [
         record,
         index,
         ['tema'],
-        ['criterio', 'estado', 'responsable', 'observaciones'],
+        ['criterio', 'sentido', 'estado', 'responsable', 'observaciones'],
         ['fecha', 'updatedAt', 'createdAt'],
         'Criterio RRLL',
       ),

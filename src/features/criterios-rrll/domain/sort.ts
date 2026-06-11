@@ -1,6 +1,6 @@
 import type { CriterioRrll } from './criterioRrll';
 
-export type CriterioRrllSortKey = 'tema' | 'estado' | 'fecha' | 'responsable';
+export type CriterioRrllSortKey = 'tema' | 'estado' | 'sentido' | 'fecha' | 'responsable';
 export type SortDirection = 'asc' | 'desc';
 
 function compareDateWithEmptyLast(firstDate: string, secondDate: string): number {

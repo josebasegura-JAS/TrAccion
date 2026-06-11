@@ -9,8 +9,10 @@ import {
 } from '../domain/sort';
 import {
   CRITERIO_RRLL_ESTADOS,
+  CRITERIO_RRLL_SENTIDOS,
   type CriterioRrll,
   type CriterioRrllEstado,
+  type CriterioRrllSentido,
 } from '../domain/criterioRrll';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
@@ -23,6 +25,7 @@ interface SortState {
 const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; className: string }> = [
   { key: 'tema', label: 'Tema', className: 'w-[220px]' },
   { key: 'estado', label: 'Estado', className: 'w-[120px]' },
+  { key: 'sentido', label: 'Sentido', className: 'w-[120px]' },
   { key: 'fecha', label: 'Fecha', className: 'w-[115px]' },
   { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
 ];
@@ -54,6 +57,21 @@ function SelectFilter({
         ))}
       </select>
     </label>
+  );
+}
+
+
+function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
+  const className = sentido === 'aprobado'
+    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+    : sentido === 'denegado'
+      ? 'border-red-500/40 bg-red-500/10 text-red-200'
+      : 'border-metro-border bg-metro-panel text-metro-muted';
+
+  return (
+    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${className}`}>
+      {sentido}
+    </span>
   );
 }
 
@@ -166,13 +184,13 @@ export function CriteriosRrllPage() {
         </p>
       )}
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)]">
+      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
             className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
             onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por tema, criterio u observaciones..."
+            placeholder="Buscar por tema, criterio, sentido u observaciones..."
             type="search"
             value={filters.search}
           />
@@ -182,6 +200,12 @@ export function CriteriosRrllPage() {
           onChange={(value) => setFilter('estado', value as '' | CriterioRrllEstado)}
           options={CRITERIO_RRLL_ESTADOS}
           value={filters.estado}
+        />
+        <SelectFilter
+          label="Sentido"
+          onChange={(value) => setFilter('sentido', value as '' | CriterioRrllSentido)}
+          options={CRITERIO_RRLL_SENTIDOS}
+          value={filters.sentido}
         />
       </div>
 
@@ -233,6 +257,9 @@ export function CriteriosRrllPage() {
                   </td>
                   <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.estado}>
                     {criterio.estado}
+                  </td>
+                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.sentido}>
+                    <SentidoBadge sentido={criterio.sentido} />
                   </td>
                   <td
                     className="truncate px-3 py-1.5 text-metro-muted"

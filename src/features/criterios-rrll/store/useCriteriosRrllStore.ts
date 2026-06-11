@@ -1,7 +1,9 @@
 import { create } from 'zustand';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
+  CRITERIO_RRLL_SENTIDOS,
   type CriterioRrll,
   type CriterioRrllDraft,
 } from '../domain/criterioRrll';
@@ -35,7 +37,10 @@ function isCriterioRrll(value: unknown): value is CriterioRrll {
     typeof candidate.tema === 'string' &&
     typeof candidate.criterio === 'string' &&
     typeof candidate.estado === 'string' &&
-    (CRITERIO_RRLL_ESTADOS as readonly string[]).includes(candidate.estado)
+    (CRITERIO_RRLL_ESTADOS as readonly string[]).includes(candidate.estado) &&
+    (candidate.sentido === undefined ||
+      (typeof candidate.sentido === 'string' &&
+        (CRITERIO_RRLL_SENTIDOS as readonly string[]).includes(candidate.sentido)))
   );
 }
 
@@ -47,6 +52,7 @@ function normalizeCriterioRrll(criterio: CriterioRrll): CriterioRrll {
     tema: criterio.tema,
     criterio: criterio.criterio,
     estado: criterio.estado,
+    sentido: criterio.sentido ?? EMPTY_CRITERIO_RRLL_DRAFT.sentido,
     fecha: criterio.fecha ?? EMPTY_CRITERIO_RRLL_DRAFT.fecha,
     responsable: criterio.responsable ?? EMPTY_CRITERIO_RRLL_DRAFT.responsable,
     observaciones: criterio.observaciones ?? EMPTY_CRITERIO_RRLL_DRAFT.observaciones,
@@ -57,7 +63,7 @@ function normalizeCriterioRrll(criterio: CriterioRrll): CriterioRrll {
 }
 
 function readCriteriosRrll(): CriterioRrll[] {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -71,7 +77,7 @@ function readCriteriosRrll(): CriterioRrll[] {
 }
 
 function persistCriteriosRrll(criterios: CriterioRrll[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(criterios));
+  writeStorageItem(STORAGE_KEY, JSON.stringify(criterios));
 }
 
 function firstActiveCriterioId(criterios: CriterioRrll[]): string {

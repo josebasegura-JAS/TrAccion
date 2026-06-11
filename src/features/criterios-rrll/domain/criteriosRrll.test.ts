@@ -12,6 +12,7 @@ function buildCriterio(overrides: Partial<CriterioRrll>): CriterioRrll {
     estado: 'vigente',
     fecha: '2026-02-01',
     responsable: 'RRLL',
+    sentido: 'sin clasificar',
     observaciones: '',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -42,13 +43,13 @@ describe('criterios RRLL domain', () => {
   ];
 
   it('busca por tema, criterio u observaciones', () => {
-    expect(filterCriteriosRrll(criterios, { search: 'justificante', estado: '' })).toEqual([
+    expect(filterCriteriosRrll(criterios, { search: 'justificante', estado: '', sentido: '' })).toEqual([
       criterios[1],
     ]);
   });
 
   it('filtra por estado', () => {
-    expect(filterCriteriosRrll(criterios, { search: '', estado: 'vigente' })).toEqual([
+    expect(filterCriteriosRrll(criterios, { search: '', estado: 'vigente', sentido: '' })).toEqual([
       criterios[0],
     ]);
   });
@@ -73,18 +74,29 @@ describe('criterios RRLL domain', () => {
   });
 
   it('excluye criterios con borrado lógico', () => {
-    expect(filterCriteriosRrll(criterios, { search: '', estado: '' }).map(({ id }) => id)).toEqual([
+    expect(filterCriteriosRrll(criterios, { search: '', estado: '', sentido: '' }).map(({ id }) => id)).toEqual([
       'criterio-1',
       'criterio-2',
     ]);
   });
 
+  it('filtra por sentido', () => {
+    const withSentidos = [
+      buildCriterio({ id: 'criterio-aprobado', sentido: 'aprobado' }),
+      buildCriterio({ id: 'criterio-denegado', sentido: 'denegado' }),
+    ];
+
+    expect(filterCriteriosRrll(withSentidos, { search: '', estado: '', sentido: 'denegado' })).toEqual([
+      withSentidos[1],
+    ]);
+  });
+
   it('convierte filas importadas en criterios vigentes y deduplicados', () => {
     const drafts = rowsToCriterioRrllDrafts([
-      ['Tema', 'Fecha', 'Responsable', 'Criterio'],
-      ['Asuntos propios - Notaría', '2017', 'RRLL', 'La asistencia a notaría no constituye normalmente permiso.'],
-      ['Asuntos propios - Notaría', '2017', 'RRLL', 'La asistencia a notaría no constituye normalmente permiso.'],
-      ['', '2017', 'RRLL', 'Sin tema no se importa.'],
+      ['Tema', 'Fecha', 'Responsable', 'Criterio', 'Sentido'],
+      ['Asuntos propios - Notaría', '2017', 'RRLL', 'La asistencia a notaría no constituye normalmente permiso.', 'Denegado'],
+      ['Asuntos propios - Notaría', '2017', 'RRLL', 'La asistencia a notaría no constituye normalmente permiso.', 'Denegado'],
+      ['', '2017', 'RRLL', 'Sin tema no se importa.', 'Aprobado'],
     ]);
 
     expect(drafts).toEqual([
@@ -94,6 +106,7 @@ describe('criterios RRLL domain', () => {
         responsable: 'RRLL',
         criterio: 'La asistencia a notaría no constituye normalmente permiso.',
         estado: 'vigente',
+        sentido: 'denegado',
         observaciones: '',
       },
     ]);

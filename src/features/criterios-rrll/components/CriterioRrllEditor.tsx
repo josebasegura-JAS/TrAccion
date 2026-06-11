@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
+  CRITERIO_RRLL_SENTIDOS,
   type CriterioRrll,
   type CriterioRrllDraft,
   type CriterioRrllDraftField,
@@ -29,6 +30,7 @@ function toDraft(criterio: CriterioRrll | null): CriterioRrllDraft {
     tema: criterio.tema,
     criterio: criterio.criterio,
     estado: criterio.estado,
+    sentido: criterio.sentido,
     fecha: criterio.fecha,
     responsable: criterio.responsable,
     observaciones: criterio.observaciones,
@@ -131,6 +133,25 @@ export function CriterioRrllEditor({
                 {CRITERIO_RRLL_ESTADOS.map((estado) => (
                   <option key={estado} value={estado}>
                     {estado}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-metro-muted">
+              Sentido
+              <select
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    sentido: event.target.value as CriterioRrllDraft['sentido'],
+                  }))
+                }
+                value={draft.sentido}
+              >
+                {CRITERIO_RRLL_SENTIDOS.map((sentido) => (
+                  <option key={sentido} value={sentido}>
+                    {sentido}
                   </option>
                 ))}
               </select>
