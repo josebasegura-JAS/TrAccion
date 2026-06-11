@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { closeSync, constants, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
@@ -23,6 +23,8 @@ const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
+const SQLITE_OPERATION_LOCK_WAIT_MS = 15 * 1000;
+const SQLITE_OPERATION_LOCK_RETRY_MS = 100;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 const MODULE_LOCK_RECORD_ID = '__module__';
 
@@ -391,6 +393,97 @@ async function removeLock(lockPath: string, expectedOwnerId: string): Promise<vo
   }
 }
 
+
+function readLockSync(lockPath: string): DatabaseLockInfo | null {
+  try {
+    const raw = readFileSync(lockPath, 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    return isDatabaseLockInfo(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function sleepSync(milliseconds: number): void {
+  const buffer = new SharedArrayBuffer(4);
+  const view = new Int32Array(buffer);
+  Atomics.wait(view, 0, 0, milliseconds);
+}
+
+function writeLockSync(lockPath: string, lock: DatabaseLockInfo): void {
+  const fileDescriptor = openSync(lockPath, 'wx');
+  try {
+    writeFileSync(fileDescriptor, JSON.stringify(lock, null, 2), 'utf8');
+  } finally {
+    closeSync(fileDescriptor);
+  }
+}
+
+function removeLockSync(lockPath: string, expectedOwnerId: string): void {
+  const lock = readLockSync(lockPath);
+  if (lock?.ownerId === expectedOwnerId) {
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // El lock puede haber sido eliminado por un proceso que se adelantó; no es crítico.
+    }
+  }
+}
+
+function acquireOperationLockSync(databasePath: string): DatabaseLockInfo {
+  const lockPath = getLockPath(databasePath);
+  const startedAt = Date.now();
+  let lastLock: DatabaseLockInfo | null = null;
+
+  while (Date.now() - startedAt <= SQLITE_OPERATION_LOCK_WAIT_MS) {
+    const existingLock = readLockSync(lockPath);
+    lastLock = existingLock;
+
+    if (existingLock && isLockStale(existingLock)) {
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        // Otro proceso puede haber limpiado el lock antes.
+      }
+    }
+
+    if (!existingLock || isLockStale(existingLock)) {
+      const lock = createLockInfo();
+      try {
+        writeLockSync(lockPath, lock);
+        return lock;
+      } catch {
+        lastLock = readLockSync(lockPath);
+      }
+    }
+
+    sleepSync(SQLITE_OPERATION_LOCK_RETRY_MS);
+  }
+
+  if (lastLock) {
+    throw new Error(
+      `Base ocupada temporalmente por ${lastLock.username}@${lastLock.hostname} (PID ${lastLock.pid}). Inténtalo de nuevo en unos segundos.`,
+    );
+  }
+
+  throw new Error('No se ha podido adquirir el bloqueo temporal de operación SQLite.');
+}
+
+function withDatabaseOperationLockSync<T>(operation: () => T): T {
+  const currentStatus = getSqliteStatus();
+  if (!currentStatus.ready || currentStatus.phase !== 'active') {
+    return operation();
+  }
+
+  const lockPath = getLockPath(currentStatus.path);
+  const operationLock = acquireOperationLockSync(currentStatus.path);
+  try {
+    return operation();
+  } finally {
+    removeLockSync(lockPath, operationLock.ownerId);
+  }
+}
+
 async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
   const lockPath = getLockPath(databasePath);
   await mkdir(path.dirname(lockPath), { recursive: true });
@@ -618,7 +711,11 @@ function openDatabase(databasePath: string): Database {
   const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
   const db = new BetterSqlite3(databasePath);
   db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-  db.pragma('journal_mode = WAL');
+  // En carpetas SMB/WAL se han observado corrupciones con varias instancias.
+  // La concurrencia se coordina con un lock corto por operación, así que usamos
+  // rollback journal clásico, más compatible con red que WAL/-shm.
+  db.pragma('journal_mode = DELETE');
+  db.pragma('synchronous = FULL');
   db.pragma('foreign_keys = ON');
   applyMigrations(db);
   return db;
@@ -626,7 +723,6 @@ function openDatabase(databasePath: string): Database {
 
 function closeDatabase(): void {
   if (database) {
-    database.pragma('wal_checkpoint(PASSIVE)');
     database.close();
     database = null;
   }
@@ -634,7 +730,6 @@ function closeDatabase(): void {
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
   if (database) {
-    database.pragma('wal_checkpoint(PASSIVE)');
     database.close();
     database = null;
   }
@@ -777,7 +872,7 @@ function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
 
 function safeDatabaseOperation<T>(operation: () => T, fallback: (status: DatabaseStatus, message: string) => T): T {
   try {
-    return operation();
+    return withDatabaseOperationLockSync(operation);
   } catch (error) {
     if (isSqliteCorruptionError(error)) {
       const nextStatus = markDatabaseAsCorrupted(error);
@@ -890,35 +985,45 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
   const backupDirectory = getLocalBackupDirectory();
   await mkdir(backupDirectory, { recursive: true });
 
-  const now = new Date().toISOString();
-  const backupTimestamp = backupTimestampForFileName();
-  const records = readAllPersistedRecords(currentDatabase);
-  const payload = {
-    createdAt: now,
-    sourceDatabasePath: currentStatus.path,
-    reason,
-    recordCount: records.length,
-    records,
-  };
-  const serializedPayload = JSON.stringify(payload, null, 2);
-
-  const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
-
-  await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
-  if (shouldRotateBackup) {
-    await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-  }
-  await pruneRotatedLocalBackups('json');
+  const backupLock = await acquireStartupLock(currentStatus.path);
+  const backupLockPath = getLockPath(currentStatus.path);
+  const backupLockHeartbeat = startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
   try {
-    currentDatabase.pragma('wal_checkpoint(PASSIVE)');
-    await copyFile(currentStatus.path, getLocalBackupDatabasePath());
+    const now = new Date().toISOString();
+    const backupTimestamp = backupTimestampForFileName();
+    const records = readAllPersistedRecords(currentDatabase);
+    const payload = {
+      createdAt: now,
+      sourceDatabasePath: currentStatus.path,
+      reason,
+      recordCount: records.length,
+      records,
+    };
+    const serializedPayload = JSON.stringify(payload, null, 2);
+
+    const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
+
+    await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
     if (shouldRotateBackup) {
-      await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
+      await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
     }
-    await pruneRotatedLocalBackups('sqlite');
-  } catch (error) {
-    console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
+    await pruneRotatedLocalBackups('json');
+
+    try {
+      await copyFile(currentStatus.path, getLocalBackupDatabasePath());
+      if (shouldRotateBackup) {
+        await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
+      }
+      await pruneRotatedLocalBackups('sqlite');
+    } catch (error) {
+      console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
+    }
+  } finally {
+    clearInterval(backupLockHeartbeat);
+    await releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
+      console.warn('No se ha podido liberar el bloqueo SQLite de respaldo local.', error);
+    });
   }
 }
 
@@ -950,27 +1055,37 @@ async function writeShutdownLocalBackupArtifacts(): Promise<void> {
   const backupDirectory = getLocalShutdownBackupDirectory();
   await mkdir(backupDirectory, { recursive: true });
 
-  const now = new Date().toISOString();
-  const backupTimestamp = backupTimestampForFileName();
-  const records = readAllPersistedRecords(currentDatabase);
-  const payload = {
-    createdAt: now,
-    sourceDatabasePath: currentStatus.path,
-    reason: 'shutdown',
-    recordCount: records.length,
-    records,
-  };
-  const serializedPayload = JSON.stringify(payload, null, 2);
-
-  await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-  await pruneShutdownLocalBackups('json');
+  const backupLock = await acquireStartupLock(currentStatus.path);
+  const backupLockPath = getLockPath(currentStatus.path);
+  const backupLockHeartbeat = startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
   try {
-    currentDatabase.pragma('wal_checkpoint(PASSIVE)');
-    await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
-    await pruneShutdownLocalBackups('sqlite');
-  } catch (error) {
-    console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
+    const now = new Date().toISOString();
+    const backupTimestamp = backupTimestampForFileName();
+    const records = readAllPersistedRecords(currentDatabase);
+    const payload = {
+      createdAt: now,
+      sourceDatabasePath: currentStatus.path,
+      reason: 'shutdown',
+      recordCount: records.length,
+      records,
+    };
+    const serializedPayload = JSON.stringify(payload, null, 2);
+
+    await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+    await pruneShutdownLocalBackups('json');
+
+    try {
+      await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
+      await pruneShutdownLocalBackups('sqlite');
+    } catch (error) {
+      console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
+    }
+  } finally {
+    clearInterval(backupLockHeartbeat);
+    await releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
+      console.warn('No se ha podido liberar el bloqueo SQLite de respaldo de cierre.', error);
+    });
   }
 }
 
@@ -1163,21 +1278,26 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
 }
 
 export function createLocalStorageBackup(payload: LocalStorageBackupPayload): DatabaseStatus {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked') {
-    return currentStatus;
-  }
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+        return currentStatus;
+      }
 
-  const records = payload.records.filter(
-    (record): record is PersistedStorageRecord =>
-      typeof record.key === 'string' && typeof record.value === 'string',
+      const records = payload.records.filter(
+        (record): record is PersistedStorageRecord =>
+          typeof record.key === 'string' && typeof record.value === 'string',
+      );
+      const db = requireDatabase();
+      db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
+        .run(new Date().toISOString(), JSON.stringify({ records }));
+      enqueueLocalBackup('local-storage-backup');
+
+      return currentStatus;
+    },
+    (nextStatus) => nextStatus,
   );
-  const db = requireDatabase();
-  db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
-    .run(new Date().toISOString(), JSON.stringify({ records }));
-  enqueueLocalBackup('local-storage-backup');
-
-  return currentStatus;
 }
 
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
@@ -1321,8 +1441,7 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
   try {
     await mkdir(path.dirname(targetDatabasePath), { recursive: true });
     if (database) {
-      database.pragma('wal_checkpoint(PASSIVE)');
-    }
+      }
     if (currentStatus.ready) {
       await backupExistingDatabase(currentStatus.path);
     } else {
@@ -1528,60 +1647,62 @@ export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult 
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  try {
-    const db = ensureRecordLockDatabase();
-    if (!db) {
-      return recordLockError('SQLite no está disponible para coordinar bloqueos.');
-    }
+  return withDatabaseOperationLockSync(() => {
+    try {
+      const db = ensureRecordLockDatabase();
+      if (!db) {
+        return recordLockError('SQLite no está disponible para coordinar bloqueos.');
+      }
 
-    const moduleName = payload.module.trim();
-    const recordId = payload.recordId.trim();
-    const now = new Date();
-    const nowIso = now.toISOString();
-    const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
-    deleteExpiredRecordLocks(db, nowIso);
-    const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
+      const moduleName = payload.module.trim();
+      const recordId = payload.recordId.trim();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
+      deleteExpiredRecordLocks(db, nowIso);
+      const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
 
-    if (conflictingLock) {
-      const isModuleLock = conflictingLock.record_id === MODULE_LOCK_RECORD_ID;
+      if (conflictingLock) {
+        const isModuleLock = conflictingLock.record_id === MODULE_LOCK_RECORD_ID;
+        return {
+          ok: false,
+          status: 'locked',
+          lock: lockOwnerFromRow(conflictingLock),
+          message: isModuleLock
+            ? `Módulo bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`
+            : `Registro bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`,
+        };
+      }
+
+      const existingLock = readRecordLockRow(db, moduleName, recordId);
+
+      if (existingLock) {
+        db.prepare(
+          `UPDATE editing_locks
+           SET owner_name = ?, machine_name = ?, expires_at = ?
+           WHERE module = ? AND record_id = ? AND owner_id = ?`,
+        ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
+      } else {
+        db.prepare(
+          `INSERT INTO editing_locks
+           (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
+      }
+
+      const lock = readRecordLockRow(db, moduleName, recordId);
       return {
-        ok: false,
-        status: 'locked',
-        lock: lockOwnerFromRow(conflictingLock),
-        message: isModuleLock
-          ? `Módulo bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`
-          : `Registro bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`,
+        ok: true,
+        status: 'acquired',
+        lock: lock ? lockOwnerFromRow(lock) : null,
+        message: 'Bloqueo adquirido.',
       };
+    } catch (error) {
+      return recordLockError(
+        error instanceof Error ? error.message : 'No se ha podido adquirir el bloqueo del registro.',
+      );
     }
-
-    const existingLock = readRecordLockRow(db, moduleName, recordId);
-
-    if (existingLock) {
-      db.prepare(
-        `UPDATE editing_locks
-         SET owner_name = ?, machine_name = ?, expires_at = ?
-         WHERE module = ? AND record_id = ? AND owner_id = ?`,
-      ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
-    } else {
-      db.prepare(
-        `INSERT INTO editing_locks
-         (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
-    }
-
-    const lock = readRecordLockRow(db, moduleName, recordId);
-    return {
-      ok: true,
-      status: 'acquired',
-      lock: lock ? lockOwnerFromRow(lock) : null,
-      message: 'Bloqueo adquirido.',
-    };
-  } catch (error) {
-    return recordLockError(
-      error instanceof Error ? error.message : 'No se ha podido adquirir el bloqueo del registro.',
-    );
-  }
+  });
 }
 
 export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResult {
@@ -1589,51 +1710,67 @@ export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResul
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  try {
-    const db = ensureRecordLockDatabase();
-    if (!db) {
-      return recordLockError('SQLite no está disponible para renovar bloqueos.');
-    }
+  return withDatabaseOperationLockSync(() => {
+    try {
+      const db = ensureRecordLockDatabase();
+      if (!db) {
+        return recordLockError('SQLite no está disponible para renovar bloqueos.');
+      }
 
-    const moduleName = payload.module.trim();
-    const recordId = payload.recordId.trim();
-    const now = new Date();
-    const nowIso = now.toISOString();
-    const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
-    deleteExpiredRecordLocks(db, nowIso);
-    const existingLock = readRecordLockRow(db, moduleName, recordId);
+      const moduleName = payload.module.trim();
+      const recordId = payload.recordId.trim();
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
+      deleteExpiredRecordLocks(db, nowIso);
+      const existingLock = readRecordLockRow(db, moduleName, recordId);
 
-    if (!existingLock) {
-      return acquireRecordLock(payload);
-    }
+      if (existingLock && existingLock.owner_id !== ownerId) {
+        return {
+          ok: false,
+          status: 'locked',
+          lock: lockOwnerFromRow(existingLock),
+          message: `Registro bloqueado por ${existingLock.owner_name}@${existingLock.machine_name}.`,
+        };
+      }
 
-    if (existingLock.owner_id !== ownerId) {
+      if (existingLock) {
+        db.prepare(
+          `UPDATE editing_locks
+           SET owner_name = ?, machine_name = ?, expires_at = ?
+           WHERE module = ? AND record_id = ? AND owner_id = ?`,
+        ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
+      } else {
+        const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
+        if (conflictingLock) {
+          return {
+            ok: false,
+            status: 'locked',
+            lock: lockOwnerFromRow(conflictingLock),
+            message: `Registro bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`,
+          };
+        }
+        db.prepare(
+          `INSERT INTO editing_locks
+           (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
+      }
+
+      const lock = readRecordLockRow(db, moduleName, recordId);
+
       return {
-        ok: false,
-        status: 'locked',
-        lock: lockOwnerFromRow(existingLock),
-        message: `Registro bloqueado por ${existingLock.owner_name}@${existingLock.machine_name}.`,
+        ok: true,
+        status: 'acquired',
+        lock: lock ? lockOwnerFromRow(lock) : null,
+        message: 'Bloqueo renovado.',
       };
+    } catch (error) {
+      return recordLockError(
+        error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo del registro.',
+      );
     }
-
-    db.prepare(
-      `UPDATE editing_locks
-       SET owner_name = ?, machine_name = ?, expires_at = ?
-       WHERE module = ? AND record_id = ? AND owner_id = ?`,
-    ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
-    const lock = readRecordLockRow(db, moduleName, recordId);
-
-    return {
-      ok: true,
-      status: 'acquired',
-      lock: lock ? lockOwnerFromRow(lock) : null,
-      message: 'Bloqueo renovado.',
-    };
-  } catch (error) {
-    return recordLockError(
-      error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo del registro.',
-    );
-  }
+  });
 }
 
 export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult {
@@ -1641,24 +1778,26 @@ export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult 
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  try {
-    const db = ensureRecordLockDatabase();
-    if (!db) {
-      return recordLockError('SQLite no está disponible para liberar bloqueos.');
+  return withDatabaseOperationLockSync(() => {
+    try {
+      const db = ensureRecordLockDatabase();
+      if (!db) {
+        return recordLockError('SQLite no está disponible para liberar bloqueos.');
+      }
+
+      db.prepare('DELETE FROM editing_locks WHERE module = ? AND record_id = ? AND owner_id = ?').run(
+        payload.module.trim(),
+        payload.recordId.trim(),
+        ownerId,
+      );
+
+      return { ok: true, status: 'released', lock: null, message: 'Bloqueo liberado.' };
+    } catch (error) {
+      return recordLockError(
+        error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo del registro.',
+      );
     }
-
-    db.prepare('DELETE FROM editing_locks WHERE module = ? AND record_id = ? AND owner_id = ?').run(
-      payload.module.trim(),
-      payload.recordId.trim(),
-      ownerId,
-    );
-
-    return { ok: true, status: 'released', lock: null, message: 'Bloqueo liberado.' };
-  } catch (error) {
-    return recordLockError(
-      error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo del registro.',
-    );
-  }
+  });
 }
 
 export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
@@ -1666,45 +1805,47 @@ export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  try {
-    const db = ensureRecordLockDatabase();
-    if (!db) {
-      return recordLockError('SQLite no está disponible para consultar bloqueos.');
+  return withDatabaseOperationLockSync(() => {
+    try {
+      const db = ensureRecordLockDatabase();
+      if (!db) {
+        return recordLockError('SQLite no está disponible para consultar bloqueos.');
+      }
+
+      const nowIso = new Date().toISOString();
+      deleteExpiredRecordLocks(db, nowIso);
+      const moduleName = payload.module.trim();
+      const recordId = payload.recordId.trim();
+      const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
+
+      if (conflictingLock) {
+        return {
+          ok: false,
+          status: 'locked',
+          lock: lockOwnerFromRow(conflictingLock),
+          message:
+            conflictingLock.record_id === MODULE_LOCK_RECORD_ID
+              ? 'Bloqueo global de módulo activo.'
+              : 'Bloqueo de registro activo.',
+        };
+      }
+
+      const existingLock = readRecordLockRow(db, moduleName, recordId);
+
+      return existingLock
+        ? {
+            ok: existingLock.owner_id === ownerId,
+            status: 'acquired',
+            lock: lockOwnerFromRow(existingLock),
+            message: 'Bloqueo activo.',
+          }
+        : { ok: true, status: 'idle', lock: null, message: 'Sin bloqueo activo.' };
+    } catch (error) {
+      return recordLockError(
+        error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.',
+      );
     }
-
-    const nowIso = new Date().toISOString();
-    deleteExpiredRecordLocks(db, nowIso);
-    const moduleName = payload.module.trim();
-    const recordId = payload.recordId.trim();
-    const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
-
-    if (conflictingLock) {
-      return {
-        ok: false,
-        status: 'locked',
-        lock: lockOwnerFromRow(conflictingLock),
-        message:
-          conflictingLock.record_id === MODULE_LOCK_RECORD_ID
-            ? 'Bloqueo global de módulo activo.'
-            : 'Bloqueo de registro activo.',
-      };
-    }
-
-    const existingLock = readRecordLockRow(db, moduleName, recordId);
-
-    return existingLock
-      ? {
-          ok: existingLock.owner_id === ownerId,
-          status: 'acquired',
-          lock: lockOwnerFromRow(existingLock),
-          message: 'Bloqueo activo.',
-        }
-      : { ok: true, status: 'idle', lock: null, message: 'Sin bloqueo activo.' };
-  } catch (error) {
-    return recordLockError(
-      error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.',
-    );
-  }
+  });
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
@@ -1719,8 +1860,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
 
   try {
     if (database) {
-      database.pragma('wal_checkpoint(PASSIVE)');
-      await backupExistingDatabase(previousStatus.path);
+        await backupExistingDatabase(previousStatus.path);
     }
 
     await closeDatabaseAndReleaseLock();
@@ -1770,8 +1910,7 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
 
   try {
     if (database) {
-      database.pragma('wal_checkpoint(PASSIVE)');
-      await backupExistingDatabase(previousStatus.path);
+        await backupExistingDatabase(previousStatus.path);
     }
     await closeDatabaseAndReleaseLock();
     const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
