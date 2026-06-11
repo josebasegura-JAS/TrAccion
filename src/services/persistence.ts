@@ -18,7 +18,9 @@ export interface PersistenceFeedback {
 }
 
 const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
+const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-recovered';
 
+let sharedWritesBlockedByConnectivity = false;
 let latestPersistenceFeedback: PersistenceFeedback | null = null;
 
 let unsubscribeDatabaseConnectivityIssue: (() => void) | null = null;
@@ -47,17 +49,23 @@ export function startDatabaseConnectivityIssueListener(): void {
       return;
     }
 
+    sharedWritesBlockedByConnectivity = payload.blocked;
     emitPersistenceFeedback({
       kind: payload.blocked ? 'error' : 'saved',
       updatedAt: payload.updatedAt,
       message: payload.message,
     });
+
+    if (!payload.blocked) {
+      window.dispatchEvent(new CustomEvent(DATABASE_CONNECTIVITY_RECOVERED_EVENT));
+    }
   });
 }
 
 export function stopDatabaseConnectivityIssueListener(): void {
   unsubscribeDatabaseConnectivityIssue?.();
   unsubscribeDatabaseConnectivityIssue = null;
+  sharedWritesBlockedByConnectivity = false;
 }
 
 const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
@@ -367,6 +375,10 @@ function shouldBlockSharedWrite(): string | null {
 
   if (!window.traccion) {
     return null;
+  }
+
+  if (sharedWritesBlockedByConnectivity) {
+    return 'Escritura bloqueada: la conexión con la carpeta compartida SQLite está en recuperación.';
   }
 
   const status = getCachedDatabaseStatus();

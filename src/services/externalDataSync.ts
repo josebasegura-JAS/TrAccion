@@ -8,6 +8,7 @@ import {
 } from './persistence';
 
 const POLLING_INTERVAL_MS = 30_000;
+const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-recovered';
 
 type ExternalDataSyncState = {
   status: 'idle' | 'checking' | 'synced' | 'applied' | 'error' | 'disabled';
@@ -156,6 +157,10 @@ async function pollOnce(): Promise<void> {
   }
 }
 
+function handleDatabaseConnectivityRecovered(): void {
+  void pollOnce();
+}
+
 export function startExternalDataSyncPolling(): void {
   if (typeof window === 'undefined' || timerId !== null) {
     return;
@@ -167,6 +172,7 @@ export function startExternalDataSyncPolling(): void {
   timerId = window.setInterval(() => {
     void pollOnce();
   }, POLLING_INTERVAL_MS);
+  window.addEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
 }
 
 export function stopExternalDataSyncPolling(): void {
@@ -176,6 +182,7 @@ export function stopExternalDataSyncPolling(): void {
 
   window.clearInterval(timerId);
   timerId = null;
+  window.removeEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
 }
 
 export function useExternalDataSyncStatus(): ExternalDataSyncState {
