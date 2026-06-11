@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { markSharedEditingActive, markSharedEditingInactive } from './sharedEditingActivity';
 
 type SharedRecordLockStatus = 'idle' | 'acquired' | 'locked' | 'error';
 
@@ -115,6 +116,19 @@ export function useSharedRecordLock({
 
     let cancelled = false;
     let acquired = false;
+
+    const setAcquired = (nextAcquired: boolean): void => {
+      if (acquired === nextAcquired) {
+        return;
+      }
+
+      acquired = nextAcquired;
+      if (nextAcquired) {
+        markSharedEditingActive(activeLockPayload.module, activeLockPayload.recordId);
+      } else {
+        markSharedEditingInactive(activeLockPayload.module, activeLockPayload.recordId);
+      }
+    };
     let retryTimeoutId: number | null = null;
     let noticeTimeoutId: number | null = null;
     const traccionApi = window.traccion;
@@ -190,7 +204,7 @@ export function useSharedRecordLock({
       }
 
       clearTemporaryLockTimers();
-      acquired = result.status === 'acquired';
+      setAcquired(result.status === 'acquired');
       setState(stateFromResult(result));
     };
 
@@ -262,7 +276,7 @@ export function useSharedRecordLock({
             return;
           }
 
-          acquired = false;
+          setAcquired(false);
           setState({
             status: 'error',
             lockedBy: null,
@@ -277,6 +291,7 @@ export function useSharedRecordLock({
       clearTemporaryLockTimers();
       window.clearInterval(heartbeatId);
       if (acquired) {
+        setAcquired(false);
         window.traccion?.releaseRecordLock?.(activeLockPayload).catch((error: unknown) => {
           console.warn('No se ha podido liberar el bloqueo compartido del registro.', error);
         });

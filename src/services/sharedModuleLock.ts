@@ -1,3 +1,5 @@
+import { markSharedEditingActive, markSharedEditingInactive } from './sharedEditingActivity';
+
 export const SHARED_MODULE_LOCK_RECORD_ID = '__module__';
 
 const MODULE_LOCK_HEARTBEAT_MS = 10 * 1000;
@@ -57,12 +59,15 @@ export async function withSharedModuleLocks<TResult>(
 
   try {
     for (const target of targets) {
-      acquiredPayloads.push(await acquireModuleLock(target));
+      const payload = await acquireModuleLock(target);
+      acquiredPayloads.push(payload);
+      markSharedEditingActive(payload.module, payload.recordId);
     }
 
     return await operation();
   } finally {
     window.clearInterval(heartbeatId);
+    acquiredPayloads.forEach((payload) => markSharedEditingInactive(payload.module, payload.recordId));
     await Promise.all(acquiredPayloads.reverse().map(releaseModuleLock));
   }
 }

@@ -3,6 +3,7 @@ import {
   SQLITE_HYDRATION_METADATA_KEY,
   SQLITE_MIGRATION_FLAG_KEY,
   SQLITE_PENDING_WRITES_KEY,
+  SQLITE_RECORD_METADATA_KEY,
   type PersistedStorageKey,
   isPersistedStorageKey as isKnownPersistedStorageKey,
 } from './persistenceKeys';
@@ -166,6 +167,7 @@ interface PendingSqliteWrite {
   key: string;
   value: string;
   updatedAt: string;
+  expectedUpdatedAt: string | null;
   attempts: number;
   lastError: string | null;
 }
@@ -180,10 +182,69 @@ function isPendingSqliteWrite(value: unknown): value is PendingSqliteWrite {
     typeof candidate.key === 'string' &&
     typeof candidate.value === 'string' &&
     typeof candidate.updatedAt === 'string' &&
+    (typeof candidate.expectedUpdatedAt === 'string' ||
+      candidate.expectedUpdatedAt === null ||
+      typeof candidate.expectedUpdatedAt === 'undefined') &&
     typeof candidate.attempts === 'number' &&
     Number.isFinite(candidate.attempts) &&
     (typeof candidate.lastError === 'string' || candidate.lastError === null)
   );
+}
+
+type SqliteRecordMetadata = Record<string, string | null>;
+
+function readSqliteRecordMetadata(): SqliteRecordMetadata {
+  const stored = window.localStorage.getItem(SQLITE_RECORD_METADATA_KEY);
+  if (!stored) {
+    return {};
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    const metadata: SqliteRecordMetadata = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (isPersistedStorageKey(key) && (typeof value === 'string' || value === null)) {
+        metadata[key] = value;
+      }
+    }
+
+    return metadata;
+  } catch {
+    return {};
+  }
+}
+
+function writeSqliteRecordMetadata(metadata: SqliteRecordMetadata): void {
+  window.localStorage.setItem(SQLITE_RECORD_METADATA_KEY, JSON.stringify(metadata));
+}
+
+function updateSqliteRecordMetadata(key: string, updatedAt: string | null): void {
+  if (!isPersistedStorageKey(key)) {
+    return;
+  }
+
+  const metadata = readSqliteRecordMetadata();
+  metadata[key] = updatedAt;
+  writeSqliteRecordMetadata(metadata);
+}
+
+function replaceSqliteRecordMetadata(records: TraccionStorageRecordSnapshot[]): void {
+  const metadata: SqliteRecordMetadata = {};
+  for (const record of records) {
+    if (isPersistedStorageKey(record.key)) {
+      metadata[record.key] = record.updatedAt;
+    }
+  }
+
+  writeSqliteRecordMetadata(metadata);
+}
+
+function isConcurrencyConflictMessage(message: string): boolean {
+  return message.toLowerCase().includes('han cambiado mientras guardabas');
 }
 
 function readPendingSqliteWrites(): PendingSqliteWrite[] {
@@ -194,7 +255,13 @@ function readPendingSqliteWrites(): PendingSqliteWrite[] {
 
   try {
     const parsed: unknown = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed.filter(isPendingSqliteWrite) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter(isPendingSqliteWrite).map((write) => ({
+          ...write,
+          expectedUpdatedAt:
+            typeof write.expectedUpdatedAt === 'undefined' ? null : write.expectedUpdatedAt,
+        }))
+      : [];
   } catch {
     return [];
   }
@@ -209,7 +276,12 @@ function writePendingSqliteWrites(writes: PendingSqliteWrite[]): void {
   window.localStorage.setItem(SQLITE_PENDING_WRITES_KEY, JSON.stringify(writes));
 }
 
-function upsertPendingSqliteWrite(key: string, value: string, lastError: string): void {
+function upsertPendingSqliteWrite(
+  key: string,
+  value: string,
+  lastError: string,
+  expectedUpdatedAt: string | null,
+): void {
   if (!isPersistedStorageKey(key)) {
     return;
   }
@@ -221,6 +293,7 @@ function upsertPendingSqliteWrite(key: string, value: string, lastError: string)
     key,
     value,
     updatedAt: now,
+    expectedUpdatedAt,
     attempts: existingIndex >= 0 ? writes[existingIndex].attempts + 1 : 1,
     lastError,
   };
@@ -260,6 +333,65 @@ async function saveRecordToSqlite(record: TraccionStorageRecord): Promise<boolea
   return true;
 }
 
+async function saveRecordToSqliteIfUnchanged(
+  record: TraccionStorageRecord,
+  expectedUpdatedAt: string | null,
+): Promise<string | null> {
+  const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
+  if (!saveLocalStorageRecordIfUnchanged) {
+    await saveRecordToSqlite(record);
+    return null;
+  }
+
+  const result = await saveLocalStorageRecordIfUnchanged({
+    ...record,
+    expectedUpdatedAt,
+  });
+  publishDatabaseStatus(result.status);
+
+  if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
+    throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
+  }
+
+  return result.currentUpdatedAt;
+}
+
+async function resolveExpectedUpdatedAtForWrite(
+  key: string,
+  previousValue: string | null,
+): Promise<string | null> {
+  const knownUpdatedAt = readSqliteRecordMetadata()[key];
+  if (typeof knownUpdatedAt !== 'undefined') {
+    return knownUpdatedAt;
+  }
+
+  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
+  if (!loadPersistedRecords) {
+    return null;
+  }
+
+  const snapshot = await loadPersistedRecords();
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    throw new Error(
+      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+    );
+  }
+
+  const latestRecord = snapshot.records.find((record) => record.key === key) ?? null;
+  if (!latestRecord) {
+    return null;
+  }
+
+  if (previousValue !== latestRecord.value) {
+    throw new Error(
+      'Los datos compartidos han cambiado mientras editabas. Recarga antes de guardar para no pisar cambios de otro usuario.',
+    );
+  }
+
+  return latestRecord.updatedAt;
+}
+
 export async function flushPendingSqliteWrites(): Promise<number> {
   const pendingWrites = readPendingSqliteWrites();
   if (pendingWrites.length === 0) {
@@ -272,13 +404,24 @@ export async function flushPendingSqliteWrites(): Promise<number> {
   )) {
     try {
       window.localStorage.setItem(pendingWrite.key, pendingWrite.value);
-      await saveRecordToSqlite({ key: pendingWrite.key, value: pendingWrite.value });
+      const savedUpdatedAt = await saveRecordToSqliteIfUnchanged(
+        { key: pendingWrite.key, value: pendingWrite.value },
+        pendingWrite.expectedUpdatedAt,
+      );
+      updateSqliteRecordMetadata(pendingWrite.key, savedUpdatedAt);
       removePendingSqliteWrite(pendingWrite.key);
       flushedCount += 1;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'No se ha podido sincronizar un cambio pendiente.';
-      upsertPendingSqliteWrite(pendingWrite.key, pendingWrite.value, message);
+      if (!isConcurrencyConflictMessage(message)) {
+        upsertPendingSqliteWrite(
+          pendingWrite.key,
+          pendingWrite.value,
+          message,
+          pendingWrite.expectedUpdatedAt,
+        );
+      }
       if (!isTemporarySqliteLockMessage(message)) {
         emitPersistenceFeedback({
           kind: 'error',
@@ -393,7 +536,7 @@ function shouldBlockSharedWrite(): string | null {
   return null;
 }
 
-function mirrorToSqlite(key: string, value: string): void {
+function mirrorToSqlite(key: string, value: string, previousValue: string | null): void {
   if (!isPersistedStorageKey(key)) {
     return;
   }
@@ -406,8 +549,15 @@ function mirrorToSqlite(key: string, value: string): void {
     message: 'Guardando en SQLite...',
   });
 
-  saveRecordToSqlite({ key, value })
-    .then(() => {
+  let expectedUpdatedAt: string | null = null;
+
+  resolveExpectedUpdatedAtForWrite(key, previousValue)
+    .then((resolvedExpectedUpdatedAt) => {
+      expectedUpdatedAt = resolvedExpectedUpdatedAt;
+      return saveRecordToSqliteIfUnchanged({ key, value }, expectedUpdatedAt);
+    })
+    .then((savedUpdatedAt) => {
+      updateSqliteRecordMetadata(key, savedUpdatedAt);
       removePendingSqliteWrite(key);
       emitPersistenceFeedback({
         kind: 'saved',
@@ -423,7 +573,9 @@ function mirrorToSqlite(key: string, value: string): void {
           : 'Error de guardado SQLite: cambio mantenido como caché local pendiente.';
       const messageWithKey = `${message} Clave afectada: ${key}.`;
       console.warn(messageWithKey, error);
-      upsertPendingSqliteWrite(key, value, messageWithKey);
+      if (!isConcurrencyConflictMessage(message)) {
+        upsertPendingSqliteWrite(key, value, messageWithKey, expectedUpdatedAt);
+      }
       if (!isTemporarySqliteLockMessage(message)) {
         emitPersistenceFeedback({
           kind: 'error',
@@ -460,6 +612,7 @@ export function writeStorageItem(key: string, value: string): void {
     }
   }
 
+  const previousValue = window.localStorage.getItem(key);
   window.localStorage.setItem(key, value);
   writeHydrationMetadata({
     lastUpdatedAt: new Date().toISOString(),
@@ -467,7 +620,7 @@ export function writeStorageItem(key: string, value: string): void {
     refreshToken: null,
     strategy: 'localStorage',
   });
-  mirrorToSqlite(key, value);
+  mirrorToSqlite(key, value, previousValue);
 }
 
 export function readJsonStorage<T>(
@@ -499,6 +652,7 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
 ): void {
   void options;
   const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
+  replaceSqliteRecordMetadata(sqliteRecords);
 
   for (const record of sqliteRecords) {
     if (!isRecoverablePersistedValue(record.key, record.value, 'sqlite')) {
@@ -539,6 +693,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
 
     const localRecords = currentLocalRecords();
     const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
+  replaceSqliteRecordMetadata(sqliteRecords);
 
     if (sqliteRecords.length === 0) {
       if (localRecords.length > 0) {

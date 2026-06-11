@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import './syncableStoreRegistrations';
 import { reloadRegisteredSyncableStores } from './syncableStoreRegistry';
+import { hasActiveSharedEditing, subscribeSharedEditingActivity } from './sharedEditingActivity';
 import {
   applyPersistedRecordsSnapshotToLocalStorage,
   flushPendingSqliteWrites,
@@ -31,6 +32,7 @@ let state: ExternalDataSyncState = {
 let timerId: number | null = null;
 let isPolling = false;
 let lastSeenRefreshToken: string | null = null;
+let unsubscribeSharedEditingActivity: (() => void) | null = null;
 
 function emit(): void {
   listeners.forEach((listener) => listener());
@@ -121,6 +123,16 @@ async function pollOnce(): Promise<void> {
       return;
     }
 
+    if (hasActiveSharedEditing()) {
+      setState({
+        status: 'synced',
+        message: 'Cambios compartidos detectados; refresco aplazado mientras hay una edición abierta.',
+        lastCheckedAt: checkedAt,
+        lastError: null,
+      });
+      return;
+    }
+
     const snapshot = await window.traccion.loadPersistedRecords();
     if (!canPollStatus(snapshot.status)) {
       setState({
@@ -161,6 +173,12 @@ function handleDatabaseConnectivityRecovered(): void {
   void pollOnce();
 }
 
+function handleSharedEditingActivityChanged(): void {
+  if (!hasActiveSharedEditing()) {
+    void pollOnce();
+  }
+}
+
 export function startExternalDataSyncPolling(): void {
   if (typeof window === 'undefined' || timerId !== null) {
     return;
@@ -173,6 +191,7 @@ export function startExternalDataSyncPolling(): void {
     void pollOnce();
   }, POLLING_INTERVAL_MS);
   window.addEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
+  unsubscribeSharedEditingActivity = subscribeSharedEditingActivity(handleSharedEditingActivityChanged);
 }
 
 export function stopExternalDataSyncPolling(): void {
@@ -183,6 +202,8 @@ export function stopExternalDataSyncPolling(): void {
   window.clearInterval(timerId);
   timerId = null;
   window.removeEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
+  unsubscribeSharedEditingActivity?.();
+  unsubscribeSharedEditingActivity = null;
 }
 
 export function useExternalDataSyncStatus(): ExternalDataSyncState {
