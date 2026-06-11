@@ -15,6 +15,7 @@ import {
 import { useSorteosStore } from '../store/useSorteosStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -116,6 +117,8 @@ export function SorteosPage() {
   const [exclusionsOpen, setExclusionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+  const moduleLock = useSharedRecordLock({ module: 'sorteos', recordId: '__module__', enabled: true });
+  const isReadOnly = moduleLock.isReadOnly;
 
   useEffect(() => {
     loadEmployees();
@@ -133,10 +136,16 @@ export function SorteosPage() {
   );
 
   const handleDraftChange = <K extends keyof SorteosDraft>(key: K, value: SorteosDraft[K]) => {
+    if (isReadOnly) {
+      return;
+    }
     setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
   };
 
   const handleDraw = () => {
+    if (isReadOnly) {
+      return;
+    }
     const validation = validateSorteosDraft(draft, people, exclusions);
     if (!validation.valid) {
       setErrors(validation.errors);
@@ -151,10 +160,16 @@ export function SorteosPage() {
   };
 
   const requestDeleteDraw = (drawId: string) => {
+    if (isReadOnly) {
+      return;
+    }
     setPendingConfirmation({ type: 'delete-draw', drawId });
   };
 
   const requestResetAllExclusions = () => {
+    if (isReadOnly) {
+      return;
+    }
     setPendingConfirmation({ type: 'reset-all-exclusions' });
   };
 
@@ -163,6 +178,9 @@ export function SorteosPage() {
   };
 
   const confirmDeleteDraw = (removeLinkedWinnerExclusions: boolean) => {
+    if (isReadOnly) {
+      return;
+    }
     if (pendingConfirmation?.type !== 'delete-draw') {
       return;
     }
@@ -172,6 +190,9 @@ export function SorteosPage() {
   };
 
   const confirmResetAllExclusions = () => {
+    if (isReadOnly) {
+      return;
+    }
     resetAllExclusions();
     setPendingConfirmation(null);
   };
@@ -181,6 +202,11 @@ export function SorteosPage() {
       className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="sorteos"
     >
+      {moduleLock.status === 'locked' && moduleLock.lockedBy && (
+        <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
+          📖 Modo consulta — editando: {moduleLock.lockedBy.ownerName}@{moduleLock.lockedBy.machineName}
+        </div>
+      )}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
@@ -206,6 +232,7 @@ export function SorteosPage() {
               <input
                 className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => handleDraftChange('title', event.target.value)}
+                disabled={isReadOnly}
                 value={draft.title}
               />
             </label>
@@ -215,6 +242,7 @@ export function SorteosPage() {
                 className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => handleDraftChange('date', event.target.value)}
                 type="date"
+                disabled={isReadOnly}
                 value={draft.date}
               />
             </label>
@@ -225,11 +253,13 @@ export function SorteosPage() {
                 min="1"
                 onChange={(event) => handleDraftChange('winnersCount', Number(event.target.value))}
                 type="number"
+                disabled={isReadOnly}
                 value={draft.winnersCount}
               />
             </label>
             <button
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 md:w-auto md:self-end"
+              disabled={isReadOnly}
               onClick={handleDraw}
               type="button"
             >

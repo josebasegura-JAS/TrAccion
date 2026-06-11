@@ -439,18 +439,10 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
   snapshot: TraccionPersistedRecordsSnapshot,
   options: { preservePendingWrites?: boolean } = {},
 ): void {
-  const pendingKeys = new Set(
-    options.preservePendingWrites === false
-      ? []
-      : readPendingSqliteWrites().map((pendingWrite) => pendingWrite.key),
-  );
+  void options;
   const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
 
   for (const record of sqliteRecords) {
-    if (pendingKeys.has(record.key)) {
-      continue;
-    }
-
     if (!isRecoverablePersistedValue(record.key, record.value, 'sqlite')) {
       const existingValue = window.localStorage.getItem(record.key);
       if (existingValue !== null && isRecoverablePersistedValue(record.key, existingValue, 'localStorage')) {

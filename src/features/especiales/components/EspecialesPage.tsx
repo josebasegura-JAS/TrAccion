@@ -18,6 +18,7 @@ import {
 import { useEspecialesStore } from '../store/useEspecialesStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 
 const inputClass =
   'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red';
@@ -98,6 +99,8 @@ export function EspecialesPage() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [hasOutlookApi, setHasOutlookApi] = useState(() => Boolean(getOutlookDraftApi()));
+  const moduleLock = useSharedRecordLock({ module: 'especiales', recordId: '__module__', enabled: true });
+  const isReadOnly = moduleLock.isReadOnly;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
@@ -151,10 +154,16 @@ export function EspecialesPage() {
   }, [hasOutlookApi, recipientGroups.to.length, serviceDraft.evento]);
 
   const setField = (field: keyof EspecialServiceDraft, value: string) => {
+    if (isReadOnly) {
+      return;
+    }
     setServiceDraft((current) => ({ ...current, [field]: value }));
   };
 
   const resetPreview = () => {
+    if (isReadOnly) {
+      return;
+    }
     setHasEditedPreview(false);
     setEditedPreviewHtml(generatedPreviewHtml);
     if (previewRef.current) {
@@ -207,6 +216,9 @@ export function EspecialesPage() {
   };
 
   const deleteRecipient = (recipientId: string) => {
+    if (isReadOnly) {
+      return;
+    }
     removeRecipient(recipientId);
     if (editingRecipientId === recipientId) {
       setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
@@ -313,6 +325,11 @@ export function EspecialesPage() {
 
   return (
     <section className="space-y-4" id="especiales">
+      {moduleLock.status === 'locked' && moduleLock.lockedBy && (
+        <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
+          📖 Modo consulta — editando: {moduleLock.lockedBy.ownerName}@{moduleLock.lockedBy.machineName}
+        </div>
+      )}
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>

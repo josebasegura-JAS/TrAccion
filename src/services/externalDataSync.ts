@@ -7,7 +7,7 @@ import {
   readHydrationMetadata,
 } from './persistence';
 
-const POLLING_INTERVAL_MS = 12_000;
+const POLLING_INTERVAL_MS = 4_000;
 
 type ExternalDataSyncState = {
   status: 'idle' | 'checking' | 'synced' | 'applied' | 'error' | 'disabled';

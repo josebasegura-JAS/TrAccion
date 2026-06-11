@@ -18,6 +18,7 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { relativeDate } from '../../../utils/relativeDate';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 
 
 const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -312,6 +313,8 @@ export function ActasPage() {
   const [newActaTypeName, setNewActaTypeName] = useState('');
   const [pendingDeleteActaId, setPendingDeleteActaId] = useState<string | null>(null);
   const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
+  const recordLock = useSharedRecordLock({ module: 'actas', recordId: editingActaId, enabled: isEditorOpen && Boolean(editingActaId) });
+  const isEditorReadOnly = recordLock.isReadOnly;
   const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
     defaultPreferences: {
@@ -576,6 +579,9 @@ export function ActasPage() {
   };
 
   const updateDraft = <K extends keyof ActaDraft>(key: K, value: ActaDraft[K]) => {
+    if (isEditorReadOnly) {
+      return;
+    }
     if (key === 'fechaLimite') {
       setDeadlineWasAutoUpdated(false);
     }
@@ -583,6 +589,9 @@ export function ActasPage() {
   };
 
   const updateAlegacion = <K extends keyof ActaAlegacion>(index: number, key: K, value: ActaAlegacion[K]) => {
+    if (isEditorReadOnly) {
+      return;
+    }
     setDraft((current) => ({
       ...current,
       alegaciones: current.alegaciones.map((alegacion, currentIndex) =>
@@ -592,6 +601,9 @@ export function ActasPage() {
   };
 
   const addDraftUpdate = () => {
+    if (isEditorReadOnly) {
+      return;
+    }
     const trimmedText = newUpdateText.trim();
     if (!trimmedText) {
       return;
@@ -612,6 +624,9 @@ export function ActasPage() {
   };
 
   const saveActa = () => {
+    if (isEditorReadOnly) {
+      return;
+    }
     if (!draft.titulo.trim() || !draft.fechaSesion) {
       window.alert('Indica título y fecha de sesión.');
       return;
@@ -628,6 +643,9 @@ export function ActasPage() {
   };
 
   const applyStateChange = (nextState: ActaDraft['estado']) => {
+    if (isEditorReadOnly) {
+      return;
+    }
     const automaticDeadline = getAutomaticDeadlineForState(nextState);
     setDraft((current) => ({
       ...current,
@@ -945,6 +963,11 @@ export function ActasPage() {
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              {recordLock.status === 'locked' && recordLock.lockedBy && (
+                <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
+                  📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@{recordLock.lockedBy.machineName}
+                </div>
+              )}
               <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
                 <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
                   Tipo
@@ -1208,6 +1231,7 @@ export function ActasPage() {
               )}
               <button
                 className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+                disabled={isEditorReadOnly}
                 onClick={saveActa}
                 type="button"
               >
