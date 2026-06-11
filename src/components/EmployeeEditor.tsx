@@ -8,6 +8,7 @@ import {
 } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { useSharedRecordLock } from '../services/useSharedRecordLock';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
   { field: 'empleado', label: 'Empleado', required: true },
@@ -60,17 +61,24 @@ export function EmployeeEditor({
   mode: 'create' | 'edit';
   onDone: () => void;
 }) {
-  const createEmployee = useEmployeeStore((state) => state.create);
-  const updateEmployee = useEmployeeStore((state) => state.update);
-  const removeEmployee = useEmployeeStore((state) => state.remove);
+  const createEmployee = useEmployeeStore((state) => state.createWithConcurrencyCheck);
+  const updateEmployee = useEmployeeStore((state) => state.updateWithConcurrencyCheck);
+  const removeEmployee = useEmployeeStore((state) => state.removeWithConcurrencyCheck);
   const [draft, setDraft] = useState<EmployeeDraft>(() => toDraft(employee));
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     setDraft(toDraft(employee));
   }, [employee, mode]);
 
   const isCreate = mode === 'create';
-  const canSubmit = draft.empleado.trim() && draft.nombreApellidos.trim();
+  const recordLock = useSharedRecordLock({
+    module: 'plantilla',
+    recordId: employee?.empleado ?? null,
+    enabled: mode === 'edit' && Boolean(employee?.empleado),
+  });
+  const isReadOnly = recordLock.isReadOnly;
+  const canSubmit = Boolean(draft.empleado.trim() && draft.nombreApellidos.trim()) && !isReadOnly;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -103,6 +111,12 @@ export function EmployeeEditor({
           </button>
         </div>
 
+        {recordLock.status === 'locked' && recordLock.lockedBy && (
+          <div className="mb-3 rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
+            📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@{recordLock.lockedBy.machineName}
+          </div>
+        )}
+
         <form
           className="flex min-h-0 flex-1 flex-col space-y-3"
           onSubmit={(event) => {
@@ -111,13 +125,21 @@ export function EmployeeEditor({
               return;
             }
 
-            if (isCreate) {
-              createEmployee(draft);
-            } else if (employee) {
-              updateEmployee(employee.empleado, draft);
-            }
+            void (async () => {
+              setSaveError('');
+              const result = isCreate
+                ? await createEmployee(draft)
+                : employee
+                  ? await updateEmployee(employee.empleado, draft, JSON.stringify(employee))
+                  : { ok: false, message: 'No se ha encontrado la persona seleccionada.' };
 
-            onDone();
+              if (!result.ok) {
+                setSaveError(result.message);
+                return;
+              }
+
+              onDone();
+            })();
           }}
         >
           <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
@@ -135,7 +157,8 @@ export function EmployeeEditor({
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, [field]: event.target.value }))
                     }
-                    readOnly={isReadOnlyKey}
+                    readOnly={isReadOnlyKey || isReadOnly}
+                    disabled={isReadOnly}
                     required={required}
                     value={draft[field]}
                   />
@@ -178,6 +201,11 @@ export function EmployeeEditor({
           )}
 
           <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
+            {saveError && (
+              <p className="w-full rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
+                {saveError}
+              </p>
+            )}
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSubmit}
@@ -189,9 +217,17 @@ export function EmployeeEditor({
             {!isCreate && employee && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                disabled={isReadOnly}
                 onClick={() => {
-                  removeEmployee(employee.empleado);
-                  onDone();
+                  void (async () => {
+                    setSaveError('');
+                    const result = await removeEmployee(employee.empleado, JSON.stringify(employee));
+                    if (!result.ok) {
+                      setSaveError(result.message);
+                      return;
+                    }
+                    onDone();
+                  })();
                 }}
                 type="button"
               >

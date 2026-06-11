@@ -7,8 +7,10 @@ import { importJobPositionTranslationsFromFile } from '../domain/importJobPositi
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft } from '../domain/employee';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 
-const STORAGE_KEY = 'traccion.v1.plantilla.employees';
+export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
+const STORAGE_KEY = EMPLOYEES_STORAGE_KEY;
 const JOB_POSITION_TRANSLATIONS_STORAGE_KEY = 'traccion.v1.plantilla.jobPositionTranslations';
 
 interface EmployeeState {
@@ -20,8 +22,11 @@ interface EmployeeState {
   reloadFromStorage: () => void;
   save: () => void;
   create: (draft: EmployeeDraft) => void;
+  createWithConcurrencyCheck: (draft: EmployeeDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   update: (empleado: string, draft: EmployeeDraft) => void;
+  updateWithConcurrencyCheck: (empleado: string, draft: EmployeeDraft, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   remove: (empleado: string) => void;
+  removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   importExcel: (file: File) => Promise<void>;
   importJobPositionTranslations: (file: File) => Promise<number>;
   updateEmptyEmployeeJobPositionTranslations: () => { updated: number; missing: number };
@@ -50,6 +55,23 @@ function readEmployees(): Employee[] {
   }
 
   return parsed.filter(isEmployee).map((employee) => hydrateEmployee(employee, employee.deletedAt));
+}
+
+function parseEmployeesSnapshot(storageValue: string | null): Employee[] {
+  if (!storageValue) {
+    return mockEmployees;
+  }
+
+  const parsed: unknown = JSON.parse(storageValue);
+  if (!Array.isArray(parsed)) {
+    return mockEmployees;
+  }
+
+  return parsed.filter(isEmployee).map((employee) => hydrateEmployee(employee, employee.deletedAt));
+}
+
+function employeeSnapshot(employee: Employee): string {
+  return JSON.stringify(employee);
 }
 
 function persistEmployees(employees: Employee[]): void {
@@ -178,6 +200,22 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       return { employees, selectedEmployeeId: draft.empleado };
     });
   },
+  createWithConcurrencyCheck: async (draft) => {
+    try {
+      const newEmployee = hydrateEmployee(draft, null);
+      const result = await saveNewSharedArrayRecord<Employee>({
+        storageKey: STORAGE_KEY,
+        newRecord: newEmployee,
+        parseRecords: parseEmployeesSnapshot,
+        getRecordId: (employee) => employee.empleado,
+        duplicateMessage: 'La persona ya existe en la base compartida. Recarga antes de continuar.',
+      });
+      set({ employees: result.records, selectedEmployeeId: result.newRecord.empleado });
+      return { ok: true, message: 'Persona creada.', recordId: result.newRecord.empleado };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear la persona.' };
+    }
+  },
   update: (empleado, draft) => {
     set((state) => {
       const employees = state.employees.map((employee) =>
@@ -187,6 +225,25 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       return { employees, selectedEmployeeId: draft.empleado };
     });
   },
+  updateWithConcurrencyCheck: async (empleado, draft, expectedSnapshot) => {
+    try {
+      const result = await saveSharedArrayRecord<Employee>({
+        storageKey: STORAGE_KEY,
+        recordId: empleado,
+        expectedUpdatedAt: expectedSnapshot,
+        parseRecords: parseEmployeesSnapshot,
+        getRecordId: (employee) => employee.empleado,
+        getRecordUpdatedAt: employeeSnapshot,
+        updateRecord: (latestEmployee) => hydrateEmployee(draft, latestEmployee.deletedAt),
+        missingMessage: 'La persona ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta persona ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ employees: result.records, selectedEmployeeId: result.updatedRecord.empleado });
+      return { ok: true, message: 'Persona guardada.' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar la persona.' };
+    }
+  },
   remove: (empleado) => {
     set((state) => {
       const employees = state.employees.map((employee) =>
@@ -195,6 +252,26 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       persistEmployees(employees);
       return { employees, selectedEmployeeId: firstVisibleEmployeeId(employees) };
     });
+  },
+  removeWithConcurrencyCheck: async (empleado, expectedSnapshot) => {
+    try {
+      const deletedAt = new Date().toISOString();
+      const result = await saveSharedArrayRecord<Employee>({
+        storageKey: STORAGE_KEY,
+        recordId: empleado,
+        expectedUpdatedAt: expectedSnapshot,
+        parseRecords: parseEmployeesSnapshot,
+        getRecordId: (employee) => employee.empleado,
+        getRecordUpdatedAt: employeeSnapshot,
+        updateRecord: (latestEmployee) => ({ ...latestEmployee, deletedAt }),
+        missingMessage: 'La persona ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta persona ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ employees: result.records, selectedEmployeeId: firstVisibleEmployeeId(result.records) });
+      return { ok: true, message: 'Persona eliminada.' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar la persona.' };
+    }
   },
   importExcel: async (file) => {
     const drafts = await importEmployeesFromFile(file);

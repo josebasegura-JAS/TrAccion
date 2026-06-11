@@ -99,15 +99,15 @@ function WinnersTable({ draw }: { draw: SorteosDraw }) {
 export function SorteosPage() {
   const { employees, load: loadEmployees } = useEmployeeStore();
   const {
-    addExclusion,
-    createDraw,
-    deleteDraw,
+    addExclusionWithConcurrencyCheck,
+    createDrawWithConcurrencyCheck,
+    deleteDrawWithConcurrencyCheck,
     draws,
     exclusions,
     load: loadSorteos,
-    removeExclusion,
-    resetAllExclusions,
-    resetDrawWinnerExclusions,
+    removeExclusionWithConcurrencyCheck,
+    resetAllExclusionsWithConcurrencyCheck,
+    resetDrawWinnerExclusionsWithConcurrencyCheck,
     viewDraw,
     visibleResult,
   } = useSorteosStore();
@@ -117,7 +117,18 @@ export function SorteosPage() {
   const [exclusionsOpen, setExclusionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
-  const moduleLock = useSharedRecordLock({ module: 'sorteos', recordId: '__module__', enabled: true });
+  const isSorteosEditing = Boolean(
+    draft.title.trim() ||
+      draft.date !== today ||
+      draft.winnersCount !== 1 ||
+      search.trim() ||
+      pendingConfirmation,
+  );
+  const moduleLock = useSharedRecordLock({
+    module: 'sorteos',
+    recordId: '__module__',
+    enabled: isSorteosEditing,
+  });
   const isReadOnly = moduleLock.isReadOnly;
 
   useEffect(() => {
@@ -152,11 +163,13 @@ export function SorteosPage() {
       return;
     }
 
-    const result = createDraw(draft, people);
-    setErrors(result.errors);
-    if (result.valid) {
-      setDraft({ title: '', date: today, winnersCount: 1 });
-    }
+    void (async () => {
+      const result = await createDrawWithConcurrencyCheck(draft, people);
+      setErrors(result.errors);
+      if (result.valid) {
+        setDraft({ title: '', date: today, winnersCount: 1 });
+      }
+    })();
   };
 
   const requestDeleteDraw = (drawId: string) => {
@@ -185,16 +198,31 @@ export function SorteosPage() {
       return;
     }
 
-    deleteDraw(pendingConfirmation.drawId, removeLinkedWinnerExclusions);
-    setPendingConfirmation(null);
+    void (async () => {
+      const result = await deleteDrawWithConcurrencyCheck(
+        pendingConfirmation.drawId,
+        removeLinkedWinnerExclusions,
+      );
+      if (!result.ok) {
+        setErrors([result.message]);
+        return;
+      }
+      setPendingConfirmation(null);
+    })();
   };
 
   const confirmResetAllExclusions = () => {
     if (isReadOnly) {
       return;
     }
-    resetAllExclusions();
-    setPendingConfirmation(null);
+    void (async () => {
+      const result = await resetAllExclusionsWithConcurrencyCheck();
+      if (!result.ok) {
+        setErrors([result.message]);
+        return;
+      }
+      setPendingConfirmation(null);
+    })();
   };
 
   return (
@@ -368,7 +396,14 @@ export function SorteosPage() {
                       </div>
                       <button
                         className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
-                        onClick={() => addExclusion(person)}
+                        onClick={() => {
+                          void (async () => {
+                            const result = await addExclusionWithConcurrencyCheck(person);
+                            if (!result.ok) {
+                              setErrors([result.message]);
+                            }
+                          })();
+                        }}
                         type="button"
                       >
                         Excluir
@@ -426,7 +461,14 @@ export function SorteosPage() {
                           <td className="px-3 py-2">
                             <button
                               className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
-                              onClick={() => removeExclusion(exclusion.id)}
+                              onClick={() => {
+                                void (async () => {
+                                  const result = await removeExclusionWithConcurrencyCheck(exclusion.id);
+                                  if (!result.ok) {
+                                    setErrors([result.message]);
+                                  }
+                                })();
+                              }}
                               type="button"
                             >
                               Quitar
@@ -565,7 +607,14 @@ export function SorteosPage() {
                           />
                           <button
                             className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
-                            onClick={() => resetDrawWinnerExclusions(draw.id)}
+                            onClick={() => {
+                              void (async () => {
+                                const result = await resetDrawWinnerExclusionsWithConcurrencyCheck(draw.id);
+                                if (!result.ok) {
+                                  setErrors([result.message]);
+                                }
+                              })();
+                            }}
                             type="button"
                           >
                             Resetear exclusiones por sorteo

@@ -79,8 +79,13 @@ function getOutlookDraftApi(): OutlookDraftApi | null {
 }
 
 export function EspecialesPage() {
-  const { recipients, load, createRecipient, updateRecipient, removeRecipient } =
-    useEspecialesStore();
+  const {
+    recipients,
+    load,
+    createRecipientWithConcurrencyCheck,
+    updateRecipientWithConcurrencyCheck,
+    removeRecipientWithConcurrencyCheck,
+  } = useEspecialesStore();
   const [serviceDraft, setServiceDraft] = useState<EspecialServiceDraft>(
     EMPTY_ESPECIAL_SERVICE_DRAFT,
   );
@@ -99,7 +104,14 @@ export function EspecialesPage() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [hasOutlookApi, setHasOutlookApi] = useState(() => Boolean(getOutlookDraftApi()));
-  const moduleLock = useSharedRecordLock({ module: 'especiales', recordId: '__module__', enabled: true });
+  const isRecipientEditing = Boolean(
+    editingRecipientId || recipientDraft.name.trim() || recipientDraft.email.trim(),
+  );
+  const moduleLock = useSharedRecordLock({
+    module: 'especiales',
+    recordId: '__module__',
+    enabled: isRecipientEditing,
+  });
   const isReadOnly = moduleLock.isReadOnly;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -188,25 +200,35 @@ export function EspecialesPage() {
   };
 
   const saveRecipient = (type?: EspecialRecipientType) => {
+    if (isReadOnly) {
+      return;
+    }
+
     const draft = {
       ...recipientDraft,
       type: editingRecipientId ? editingRecipientType : (type ?? recipientDraft.type),
     };
-    const result = editingRecipientId
-      ? updateRecipient(editingRecipientId, draft)
-      : createRecipient(draft);
+    const expectedUpdatedAt = editingRecipientId
+      ? recipients.find((recipient) => recipient.id === editingRecipientId)?.updatedAt ?? null
+      : null;
 
-    if (!result.ok) {
-      setOutlookStatus(result.message ?? 'No se ha podido guardar el destinatario.');
-      setOutlookStatusTone('error');
-      return;
-    }
+    void (async () => {
+      const result = editingRecipientId
+        ? await updateRecipientWithConcurrencyCheck(editingRecipientId, draft, expectedUpdatedAt)
+        : await createRecipientWithConcurrencyCheck(draft);
 
-    setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
-    setEditingRecipientId(null);
-    setEditingRecipientType('to');
-    setOutlookStatus('');
-    setOutlookStatusTone('neutral');
+      if (!result.ok) {
+        setOutlookStatus(result.message ?? 'No se ha podido guardar el destinatario.');
+        setOutlookStatusTone('error');
+        return;
+      }
+
+      setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
+      setEditingRecipientId(null);
+      setEditingRecipientType('to');
+      setOutlookStatus('');
+      setOutlookStatusTone('neutral');
+    })();
   };
 
   const editRecipient = (recipient: EspecialRecipient) => {
@@ -219,12 +241,20 @@ export function EspecialesPage() {
     if (isReadOnly) {
       return;
     }
-    removeRecipient(recipientId);
-    if (editingRecipientId === recipientId) {
-      setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
-      setEditingRecipientId(null);
-      setEditingRecipientType('to');
-    }
+    const expectedUpdatedAt = recipients.find((recipient) => recipient.id === recipientId)?.updatedAt ?? null;
+    void (async () => {
+      const result = await removeRecipientWithConcurrencyCheck(recipientId, expectedUpdatedAt);
+      if (!result.ok) {
+        setOutlookStatus(result.message);
+        setOutlookStatusTone('error');
+        return;
+      }
+      if (editingRecipientId === recipientId) {
+        setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
+        setEditingRecipientId(null);
+        setEditingRecipientType('to');
+      }
+    })();
   };
 
   const importMessage = async (file = messageFile) => {
@@ -565,13 +595,14 @@ export function EspecialesPage() {
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className={buttonClass} onClick={() => saveRecipient('to')} type="button">
+                  <button className={buttonClass} disabled={isReadOnly} onClick={() => saveRecipient('to')} type="button">
                     <Save size={16} />
                     {editingRecipientId ? 'Guardar cambios' : 'Añadir a Para'}
                   </button>
                   {!editingRecipientId && (
                     <button
                       className={secondaryButtonClass}
+                      disabled={isReadOnly}
                       onClick={() => saveRecipient('cc')}
                       type="button"
                     >

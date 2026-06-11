@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
@@ -17,7 +18,8 @@ import {
   type CreateActaFromSessionInput,
 } from '../domain/acta';
 
-const STORAGE_KEY = 'traccion.v1.actas.records';
+export const ACTAS_STORAGE_KEY = 'traccion.v1.actas.records';
+const STORAGE_KEY = ACTAS_STORAGE_KEY;
 const ACTA_TYPES_STORAGE_KEY = 'traccion.v1.actas.types';
 
 interface ActasStateStore {
@@ -26,7 +28,9 @@ interface ActasStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: ActaDraft) => string;
+  createWithConcurrencyCheck: (draft: ActaDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   update: (actaId: string, draft: ActaDraft) => void;
+  updateWithConcurrencyCheck: (actaId: string, draft: ActaDraft, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
   addUpdate: (actaId: string, text: string) => void;
   closeActa: (actaId: string) => void;
   remove: (actaId: string) => void;
@@ -172,6 +176,32 @@ function readActas(): Acta[] {
   return Array.isArray(parsed) ? parsed.filter(isActa).map(normalizeActa) : [];
 }
 
+function parseActasSnapshot(storageValue: string | null): Acta[] {
+  if (!storageValue) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(storageValue);
+  return Array.isArray(parsed) ? parsed.filter(isActa).map(normalizeActa) : [];
+}
+
+function buildUpdatedActaFromDraft(acta: Acta, draft: ActaDraft, now: string): Acta {
+  return {
+    ...acta,
+    titulo: draft.titulo.trim(),
+    tipo: normalizeActaTypeName(draft.tipo),
+    fechaSesion: draft.fechaSesion,
+    estado: draft.estado,
+    fechaLimite: draft.fechaLimite,
+    observaciones: draft.observaciones.trim(),
+    alegaciones: draft.alegaciones,
+    actualizaciones: draft.actualizaciones,
+    actaPath: draft.actaPath.trim(),
+    closedAt: draft.estado === 'Cerrada' ? acta.closedAt ?? now : null,
+    updatedAt: now,
+  };
+}
+
 function readActaTypes(actas: Acta[]): ActaTypeDefinition[] {
   const stored = readStorageItem(ACTA_TYPES_STORAGE_KEY);
   const parsed: unknown = stored ? JSON.parse(stored) : null;
@@ -233,30 +263,50 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
     });
     return acta.id;
   },
+  createWithConcurrencyCheck: async (draft) => {
+    try {
+      const acta = buildActaFromDraft(draft, null);
+      const result = await saveNewSharedArrayRecord<Acta>({
+        storageKey: STORAGE_KEY,
+        newRecord: acta,
+        parseRecords: parseActasSnapshot,
+        getRecordId: (record) => record.id,
+        duplicateMessage: 'El acta ya existe en la base compartida. Recarga antes de continuar.',
+      });
+      set({ actas: result.records, actaTypes: readActaTypes(result.records) });
+      return { ok: true, message: 'Acta creada.', recordId: result.newRecord.id };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el acta.' };
+    }
+  },
   update: (actaId, draft) => {
     set((state) => {
       const now = new Date().toISOString();
       const actas = state.actas.map((acta) =>
-        acta.id === actaId
-          ? {
-              ...acta,
-              titulo: draft.titulo.trim(),
-              tipo: normalizeActaTypeName(draft.tipo),
-              fechaSesion: draft.fechaSesion,
-              estado: draft.estado,
-              fechaLimite: draft.fechaLimite,
-              observaciones: draft.observaciones.trim(),
-              alegaciones: draft.alegaciones,
-              actualizaciones: draft.actualizaciones,
-              actaPath: draft.actaPath.trim(),
-              closedAt: draft.estado === 'Cerrada' ? acta.closedAt ?? now : null,
-              updatedAt: now,
-            }
-          : acta,
+        acta.id === actaId ? buildUpdatedActaFromDraft(acta, draft, now) : acta,
       );
       persistActas(actas);
       return { actas, actaTypes: readActaTypes(actas) };
     });
+  },
+  updateWithConcurrencyCheck: async (actaId, draft, expectedUpdatedAt) => {
+    try {
+      const result = await saveSharedArrayRecord<Acta>({
+        storageKey: STORAGE_KEY,
+        recordId: actaId,
+        expectedUpdatedAt,
+        parseRecords: parseActasSnapshot,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestActa) => buildUpdatedActaFromDraft(latestActa, draft, new Date().toISOString()),
+        missingMessage: 'El acta ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta acta ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ actas: result.records, actaTypes: readActaTypes(result.records) });
+      return { ok: true, message: 'Acta guardada.' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el acta.' };
+    }
   },
   addUpdate: (actaId, text) => {
     const trimmedText = text.trim();

@@ -290,8 +290,8 @@ export function ActasPage() {
     actas,
     actaTypes,
     load,
-    create,
-    update,
+    createWithConcurrencyCheck,
+    updateWithConcurrencyCheck,
     remove,
     createActaType,
     toggleActaType,
@@ -313,7 +313,8 @@ export function ActasPage() {
   const [newActaTypeName, setNewActaTypeName] = useState('');
   const [pendingDeleteActaId, setPendingDeleteActaId] = useState<string | null>(null);
   const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
-  const recordLock = useSharedRecordLock({ module: 'actas', recordId: editingActaId, enabled: isEditorOpen && Boolean(editingActaId) });
+  const [saveError, setSaveError] = useState('');
+  const recordLock = useSharedRecordLock({ module: 'actas', recordId: editingActaId ?? '__new__', enabled: isEditorOpen });
   const isEditorReadOnly = recordLock.isReadOnly;
   const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActaColumnId>({
     storageKey: 'traccion.v1.actas.table',
@@ -632,14 +633,25 @@ export function ActasPage() {
       return;
     }
 
-    if (editingActaId) {
-      update(editingActaId, draft);
-    } else {
-      create(draft);
-    }
-    setIsEditorOpen(false);
-    setEditingActaId(null);
-    setDraft(EMPTY_ACTA_DRAFT);
+    const expectedUpdatedAt = editingActaId
+      ? actas.find((acta) => acta.id === editingActaId)?.updatedAt ?? null
+      : null;
+
+    void (async () => {
+      setSaveError('');
+      const result = editingActaId
+        ? await updateWithConcurrencyCheck(editingActaId, draft, expectedUpdatedAt)
+        : await createWithConcurrencyCheck(draft);
+
+      if (!result.ok) {
+        setSaveError(result.message);
+        return;
+      }
+
+      setIsEditorOpen(false);
+      setEditingActaId(null);
+      setDraft(EMPTY_ACTA_DRAFT);
+    })();
   };
 
   const applyStateChange = (nextState: ActaDraft['estado']) => {
@@ -1212,6 +1224,11 @@ export function ActasPage() {
               </div>
             </div>
 
+            {saveError && (
+              <p className="mx-4 rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
+                {saveError}
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
               <button
                 className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"

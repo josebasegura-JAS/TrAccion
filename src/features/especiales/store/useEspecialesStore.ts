@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildEspecialRecipient,
   isValidEmail,
@@ -10,15 +11,18 @@ import {
   type EspecialRecipientType,
 } from '../domain/especiales';
 
-const RECIPIENTS_STORAGE_KEY = 'rrll_especiales_destinatarios';
+export const RECIPIENTS_STORAGE_KEY = 'rrll_especiales_destinatarios';
 
 interface EspecialesState {
   recipients: EspecialRecipient[];
   load: () => void;
   reloadFromStorage: () => void;
   createRecipient: (draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
+  createRecipientWithConcurrencyCheck: (draft: EspecialRecipientDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   updateRecipient: (id: string, draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
+  updateRecipientWithConcurrencyCheck: (id: string, draft: EspecialRecipientDraft, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
   removeRecipient: (id: string) => void;
+  removeRecipientWithConcurrencyCheck: (id: string, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
 }
 
 function isEspecialRecipientType(value: unknown): value is EspecialRecipientType {
@@ -77,6 +81,29 @@ function readRecipients(): EspecialRecipient[] {
   }
 
   return parsed.map(normalizeStoredRecipient).filter((recipient): recipient is EspecialRecipient => !!recipient);
+}
+
+function parseRecipientsSnapshot(storageValue: string | null): EspecialRecipient[] {
+  if (!storageValue) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(storageValue);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed.map(normalizeStoredRecipient).filter((recipient): recipient is EspecialRecipient => !!recipient);
+}
+
+function validateRecipientDraft(draft: EspecialRecipientDraft): string | null {
+  if (!draft.name.trim()) {
+    return 'Debes indicar un nombre.';
+  }
+  if (!isValidEmail(draft.email.trim())) {
+    return 'El email no tiene un formato válido.';
+  }
+  return null;
 }
 
 function persist(recipients: EspecialRecipient[]): void {
@@ -144,6 +171,35 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
     });
     return result;
   },
+  createRecipientWithConcurrencyCheck: async (draft) => {
+    const validationError = validateRecipientDraft(draft);
+    if (validationError) {
+      return { ok: false, message: validationError };
+    }
+
+    try {
+      const snapshot = await window.traccion?.loadPersistedRecords?.();
+      const latestRecord = snapshot?.records.find((record) => record.key === RECIPIENTS_STORAGE_KEY) ?? null;
+      const recipients = parseRecipientsSnapshot(latestRecord?.value ?? null);
+      const duplicate = duplicatedEmail(recipients, draft.email);
+      if (duplicate) {
+        const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
+        return { ok: false, message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.` };
+      }
+
+      const recipient = buildEspecialRecipient(draft, nowIso(), createId('especial-recipient'));
+      const result = await saveNewSharedArrayRecord<EspecialRecipient>({
+        storageKey: RECIPIENTS_STORAGE_KEY,
+        newRecord: recipient,
+        parseRecords: parseRecipientsSnapshot,
+        getRecordId: (record) => record.id,
+      });
+      set({ recipients: result.records });
+      return { ok: true, message: 'Destinatario creado.', recordId: result.newRecord.id };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el destinatario.' };
+    }
+  },
   updateRecipient: (id, draft) => {
     const name = draft.name.trim();
     const email = draft.email.trim();
@@ -175,6 +231,39 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
     });
     return result;
   },
+  updateRecipientWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
+    const validationError = validateRecipientDraft(draft);
+    if (validationError) {
+      return { ok: false, message: validationError };
+    }
+
+    try {
+      const snapshot = await window.traccion?.loadPersistedRecords?.();
+      const latestRecord = snapshot?.records.find((record) => record.key === RECIPIENTS_STORAGE_KEY) ?? null;
+      const recipients = parseRecipientsSnapshot(latestRecord?.value ?? null);
+      const duplicate = duplicatedEmail(recipients, draft.email, id);
+      if (duplicate) {
+        const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
+        return { ok: false, message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.` };
+      }
+
+      const result = await saveSharedArrayRecord<EspecialRecipient>({
+        storageKey: RECIPIENTS_STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords: parseRecipientsSnapshot,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestRecipient) => buildEspecialRecipient(draft, nowIso(), id, latestRecipient),
+        missingMessage: 'El destinatario ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Este destinatario ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ recipients: result.records });
+      return { ok: true, message: 'Destinatario guardado.' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el destinatario.' };
+    }
+  },
   removeRecipient: (id) => {
     set((state) => {
       const updatedAt = nowIso();
@@ -184,5 +273,25 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
       persist(recipients);
       return { recipients };
     });
+  },
+  removeRecipientWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    try {
+      const deletedAt = nowIso();
+      const result = await saveSharedArrayRecord<EspecialRecipient>({
+        storageKey: RECIPIENTS_STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords: parseRecipientsSnapshot,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestRecipient) => ({ ...latestRecipient, updatedAt: deletedAt, deletedAt }),
+        missingMessage: 'El destinatario ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Este destinatario ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+      set({ recipients: result.records });
+      return { ok: true, message: 'Destinatario eliminado.' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar el destinatario.' };
+    }
   },
 }));

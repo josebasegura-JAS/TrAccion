@@ -10,6 +10,7 @@ import {
 } from '../domain/criterioRrll';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 
 const criterioTextFields: Array<{
   field: CriterioRrllDraftField;
@@ -46,17 +47,24 @@ export function CriterioRrllEditor({
   mode: 'create' | 'edit';
   onDone: () => void;
 }) {
-  const createCriterio = useCriteriosRrllStore((state) => state.create);
-  const updateCriterio = useCriteriosRrllStore((state) => state.update);
-  const removeCriterio = useCriteriosRrllStore((state) => state.remove);
+  const createCriterio = useCriteriosRrllStore((state) => state.createWithConcurrencyCheck);
+  const updateCriterio = useCriteriosRrllStore((state) => state.updateWithConcurrencyCheck);
+  const removeCriterio = useCriteriosRrllStore((state) => state.removeWithConcurrencyCheck);
   const [draft, setDraft] = useState<CriterioRrllDraft>(() => toDraft(criterio));
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     setDraft(toDraft(criterio));
   }, [criterio, mode]);
 
   const isCreate = mode === 'create';
-  const canSubmit = draft.tema.trim().length > 0 && draft.criterio.trim().length > 0;
+  const recordLock = useSharedRecordLock({
+    module: 'criterios-rrll',
+    recordId: criterio?.id ?? null,
+    enabled: mode === 'edit' && Boolean(criterio?.id),
+  });
+  const isReadOnly = recordLock.isReadOnly;
+  const canSubmit = draft.tema.trim().length > 0 && draft.criterio.trim().length > 0 && !isReadOnly;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -87,6 +95,12 @@ export function CriterioRrllEditor({
           </button>
         </div>
 
+        {recordLock.status === 'locked' && recordLock.lockedBy && (
+          <div className="mb-3 rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
+            📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@{recordLock.lockedBy.machineName}
+          </div>
+        )}
+
         <form
           className="flex min-h-0 flex-1 flex-col space-y-3"
           onSubmit={(event) => {
@@ -95,12 +109,20 @@ export function CriterioRrllEditor({
               return;
             }
 
-            if (isCreate) {
-              createCriterio(draft);
-            } else if (criterio) {
-              updateCriterio(criterio.id, draft);
-            }
-            onDone();
+            void (async () => {
+              setSaveError('');
+              const result = isCreate
+                ? await createCriterio(draft)
+                : criterio
+                  ? await updateCriterio(criterio.id, draft, criterio.updatedAt)
+                  : { ok: false, message: 'No se ha encontrado el criterio seleccionado.' };
+
+              if (!result.ok) {
+                setSaveError(result.message);
+                return;
+              }
+              onDone();
+            })();
           }}
         >
           <div className="grid min-h-0 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
@@ -112,6 +134,7 @@ export function CriterioRrllEditor({
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, [field]: event.target.value }))
                   }
+                  disabled={isReadOnly}
                   required={required}
                   type={field === 'fecha' ? 'date' : 'text'}
                   value={draft[field]}
@@ -128,6 +151,7 @@ export function CriterioRrllEditor({
                     estado: event.target.value as CriterioRrllDraft['estado'],
                   }))
                 }
+                disabled={isReadOnly}
                 value={draft.estado}
               >
                 {CRITERIO_RRLL_ESTADOS.map((estado) => (
@@ -147,6 +171,7 @@ export function CriterioRrllEditor({
                     sentido: event.target.value as CriterioRrllDraft['sentido'],
                   }))
                 }
+                disabled={isReadOnly}
                 value={draft.sentido}
               >
                 {CRITERIO_RRLL_SENTIDOS.map((sentido) => (
@@ -163,6 +188,7 @@ export function CriterioRrllEditor({
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, criterio: event.target.value }))
                 }
+                disabled={isReadOnly}
                 required
                 value={draft.criterio}
               />
@@ -174,12 +200,18 @@ export function CriterioRrllEditor({
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, observaciones: event.target.value }))
                 }
+                disabled={isReadOnly}
                 value={draft.observaciones}
               />
             </label>
           </div>
 
           <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
+            {saveError && (
+              <p className="w-full rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
+                {saveError}
+              </p>
+            )}
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSubmit}
@@ -191,9 +223,17 @@ export function CriterioRrllEditor({
             {!isCreate && criterio && (
               <button
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                disabled={isReadOnly}
                 onClick={() => {
-                  removeCriterio(criterio.id);
-                  onDone();
+                  void (async () => {
+                    setSaveError('');
+                    const result = await removeCriterio(criterio.id, criterio.updatedAt);
+                    if (!result.ok) {
+                      setSaveError(result.message);
+                      return;
+                    }
+                    onDone();
+                  })();
                 }}
                 type="button"
               >
