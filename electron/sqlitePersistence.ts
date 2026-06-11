@@ -766,7 +766,7 @@ async function activateDatabase(
 
   // Bloqueo temporal solo para la fase delicada de arranque: creación inicial,
   // copia desde origen y migraciones. No es un lock de sesión. Después de abrir
-  // SQLite se libera para permitir varias instancias activas sobre WAL + busy_timeout.
+  // SQLite se libera para permitir varias instancias activas; las operaciones reales se serializan con lock corto y journal DELETE.
   const startupLock = await acquireStartupLock(databasePath);
   const startupLockHeartbeat = startDatabaseLockHeartbeat(lockPath, startupLock);
 
@@ -845,6 +845,11 @@ function isSqliteCorruptionError(error: unknown): boolean {
     message.includes('database corruption') ||
     message.includes('file is not a database')
   );
+}
+
+function isSqliteLockContentionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('base ocupada') || message.includes('bloqueo temporal');
 }
 
 function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
@@ -985,7 +990,17 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
   const backupDirectory = getLocalBackupDirectory();
   await mkdir(backupDirectory, { recursive: true });
 
-  const backupLock = await acquireStartupLock(currentStatus.path);
+  let backupLock: DatabaseLockInfo;
+  try {
+    backupLock = await acquireLock(currentStatus.path);
+  } catch (error) {
+    if (isSqliteLockContentionError(error)) {
+      console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
+      return;
+    }
+    throw error;
+  }
+
   const backupLockPath = getLockPath(currentStatus.path);
   const backupLockHeartbeat = startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
@@ -1055,7 +1070,17 @@ async function writeShutdownLocalBackupArtifacts(): Promise<void> {
   const backupDirectory = getLocalShutdownBackupDirectory();
   await mkdir(backupDirectory, { recursive: true });
 
-  const backupLock = await acquireStartupLock(currentStatus.path);
+  let backupLock: DatabaseLockInfo;
+  try {
+    backupLock = await acquireLock(currentStatus.path);
+  } catch (error) {
+    if (isSqliteLockContentionError(error)) {
+      console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
+      return;
+    }
+    throw error;
+  }
+
   const backupLockPath = getLockPath(currentStatus.path);
   const backupLockHeartbeat = startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
