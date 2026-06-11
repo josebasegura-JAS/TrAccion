@@ -248,6 +248,8 @@ export function TaskEditor({
   const lockMessage =
     recordLock.message ||
     (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
+  const isWaitingForSharedDatabase = lockMessage.startsWith('Esperando base compartida');
+  const shouldShowReadOnlyBadge = isFormReadOnly && !isWaitingForSharedDatabase;
   const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
 
   const handleSubmit = async () => {
@@ -501,14 +503,14 @@ export function TaskEditor({
         {lockMessage && (
           <div
             className={`mb-3 flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
-              isFormReadOnly
+              isFormReadOnly && !isWaitingForSharedDatabase
                 ? 'border-red-400/40 bg-red-950/30 text-red-200'
                 : 'border-amber-400/30 bg-amber-950/20 text-amber-200'
             }`}
           >
             <LockKeyhole className="shrink-0 opacity-70" size={15} />
             <span className="text-xs font-semibold">{lockMessage}</span>
-            {isFormReadOnly && (
+            {shouldShowReadOnlyBadge && (
               <span className="ml-auto shrink-0 rounded-md border border-red-400/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-300">
                 Solo lectura
               </span>

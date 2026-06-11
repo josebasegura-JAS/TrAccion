@@ -24,6 +24,7 @@ const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
 const SQLITE_OPERATION_LOCK_WAIT_MS = 15 * 1000;
+const SQLITE_RECORD_LOCK_WAIT_MS = 750;
 const SQLITE_OPERATION_LOCK_RETRY_MS = 100;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 const MODULE_LOCK_RECORD_ID = '__module__';
@@ -430,12 +431,12 @@ function removeLockSync(lockPath: string, expectedOwnerId: string): void {
   }
 }
 
-function acquireOperationLockSync(databasePath: string): DatabaseLockInfo {
+function acquireOperationLockSync(databasePath: string, waitMs = SQLITE_OPERATION_LOCK_WAIT_MS): DatabaseLockInfo {
   const lockPath = getLockPath(databasePath);
   const startedAt = Date.now();
   let lastLock: DatabaseLockInfo | null = null;
 
-  while (Date.now() - startedAt <= SQLITE_OPERATION_LOCK_WAIT_MS) {
+  while (Date.now() - startedAt <= waitMs) {
     const existingLock = readLockSync(lockPath);
     lastLock = existingLock;
 
@@ -469,14 +470,14 @@ function acquireOperationLockSync(databasePath: string): DatabaseLockInfo {
   throw new Error('No se ha podido adquirir el bloqueo temporal de operación SQLite.');
 }
 
-function withDatabaseOperationLockSync<T>(operation: () => T): T {
+function withDatabaseOperationLockSync<T>(operation: () => T, waitMs = SQLITE_OPERATION_LOCK_WAIT_MS): T {
   const currentStatus = getSqliteStatus();
   if (!currentStatus.ready || currentStatus.phase !== 'active') {
     return operation();
   }
 
   const lockPath = getLockPath(currentStatus.path);
-  const operationLock = acquireOperationLockSync(currentStatus.path);
+  const operationLock = acquireOperationLockSync(currentStatus.path, waitMs);
   try {
     return operation();
   } finally {
@@ -1725,7 +1726,7 @@ export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult 
         error instanceof Error ? error.message : 'No se ha podido adquirir el bloqueo del registro.',
       );
     }
-  });
+  }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
 export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResult {
@@ -1793,7 +1794,7 @@ export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResul
         error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo del registro.',
       );
     }
-  });
+  }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
 export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult {
@@ -1820,7 +1821,7 @@ export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult 
         error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo del registro.',
       );
     }
-  });
+  }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
 export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
@@ -1868,7 +1869,7 @@ export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
         error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.',
       );
     }
-  });
+  }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
