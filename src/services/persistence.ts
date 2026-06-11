@@ -23,12 +23,15 @@ let latestPersistenceFeedback: PersistenceFeedback | null = null;
 
 const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
   'traccion.v1.tareas.peticionesMigrated',
-  'traccion.sidebar.pinned',
-  'traccion.sidebar.activeGroup',
   'traccion.v1.vinculograma.showExpired',
 ]);
 
 const reportedCorruptStorageKeys = new Set<string>();
+
+function isTemporarySqliteLockMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('base ocupada temporalmente') || normalized.includes('bloqueo temporal de operación sqlite');
+}
 
 function shouldValidatePersistedJson(key: string): boolean {
   if (!isPersistedStorageKey(key)) {
@@ -229,12 +232,14 @@ export async function flushPendingSqliteWrites(): Promise<number> {
       const message =
         error instanceof Error ? error.message : 'No se ha podido sincronizar un cambio pendiente.';
       upsertPendingSqliteWrite(pendingWrite.key, pendingWrite.value, message);
-      emitPersistenceFeedback({
-        kind: 'error',
-        updatedAt: new Date().toISOString(),
-        key: pendingWrite.key,
-        message: `SQLite pendiente: ${message}`,
-      });
+      if (!isTemporarySqliteLockMessage(message)) {
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key: pendingWrite.key,
+          message: `SQLite pendiente: ${message}`,
+        });
+      }
       break;
     }
   }
@@ -368,12 +373,14 @@ function mirrorToSqlite(key: string, value: string): void {
       const messageWithKey = `${message} Clave afectada: ${key}.`;
       console.warn(messageWithKey, error);
       upsertPendingSqliteWrite(key, value, messageWithKey);
-      emitPersistenceFeedback({
-        kind: 'error',
-        updatedAt: new Date().toISOString(),
-        key,
-        message: `${messageWithKey} Cambio pendiente de sincronizar.`,
-      });
+      if (!isTemporarySqliteLockMessage(message)) {
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key,
+          message: `${messageWithKey} Cambio pendiente de sincronizar.`,
+        });
+      }
     });
 }
 

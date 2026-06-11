@@ -30,8 +30,6 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.criterios-rrll.criterios',
   'traccion.v1.vinculograma.records',
   'traccion.v1.configuracion',
-  'traccion.sidebar.pinned',
-  'traccion.sidebar.activeGroup',
   'traccion.v1.vinculograma.showExpired',
 ] as const;
 
@@ -41,9 +39,7 @@ export const SQLITE_MIGRATION_FLAG_KEY = 'traccion.v1.sqlite.localStorageBackupC
 export const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetadata';
 export const SQLITE_PENDING_WRITES_KEY = 'traccion.v1.sqlite.pendingWrites';
 
-const PERSISTED_STORAGE_PREFIXES = [
-  'traccion.tableView.',
-] as const;
+const PERSISTED_STORAGE_PREFIXES = [] as const;
 
 function shouldPersistDynamicKey(key: string): boolean {
   if (key.startsWith('traccion.v1.sqlite.')) {

@@ -16,6 +16,7 @@ interface SharedRecordLockState {
 }
 
 const HEARTBEAT_MS = 10 * 1000;
+const RETRY_AFTER_TEMPORARY_LOCK_MS = 1_500;
 
 const idleState: SharedRecordLockState = {
   status: 'idle',
@@ -30,6 +31,20 @@ function getLockMessage(lock: TraccionRecordLockOwnerInfo | null, fallback: stri
   }
 
   return `Modo consulta — registro bloqueado por ${lock.ownerName}@${lock.machineName}. No se permite editar ni guardar hasta que cierre la otra ventana.`;
+}
+
+function isTemporarySqliteLockMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('base ocupada temporalmente') || normalized.includes('bloqueo temporal de operación sqlite');
+}
+
+function waitingForSharedDatabaseState(message: string): SharedRecordLockState {
+  return {
+    status: 'idle',
+    lockedBy: null,
+    message: `Esperando base compartida — ${message}`,
+    isReadOnly: true,
+  };
 }
 
 function stateFromResult(result: TraccionRecordLockResult): SharedRecordLockState {
@@ -52,6 +67,10 @@ function stateFromResult(result: TraccionRecordLockResult): SharedRecordLockStat
   }
 
   if (result.status === 'error') {
+    if (isTemporarySqliteLockMessage(result.message)) {
+      return waitingForSharedDatabaseState(result.message);
+    }
+
     return {
       status: 'error',
       lockedBy: null,
@@ -82,7 +101,15 @@ export function useSharedRecordLock({
 
     let cancelled = false;
     let acquired = false;
+    let retryTimeoutId: number | null = null;
     const traccionApi = window.traccion;
+
+    const clearRetry = (): void => {
+      if (retryTimeoutId !== null) {
+        window.clearTimeout(retryTimeoutId);
+        retryTimeoutId = null;
+      }
+    };
 
     if (!traccionApi?.acquireRecordLock) {
       setState({
@@ -94,31 +121,65 @@ export function useSharedRecordLock({
       return undefined;
     }
 
+    const scheduleAcquireRetry = (): void => {
+      if (cancelled || retryTimeoutId !== null) {
+        return;
+      }
+
+      retryTimeoutId = window.setTimeout(() => {
+        retryTimeoutId = null;
+        acquireLock();
+      }, RETRY_AFTER_TEMPORARY_LOCK_MS);
+    };
+
     const applyResult = (result: TraccionRecordLockResult): void => {
       if (cancelled) {
         return;
       }
 
+      if (result.status === 'error' && isTemporarySqliteLockMessage(result.message)) {
+        setState(stateFromResult(result));
+        scheduleAcquireRetry();
+        return;
+      }
+
+      clearRetry();
       acquired = result.status === 'acquired';
       setState(stateFromResult(result));
     };
 
-    traccionApi
-      .acquireRecordLock(lockPayload)
-      .then(applyResult)
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
+    const handleAcquireError = (error: unknown): void => {
+      if (cancelled) {
+        return;
+      }
 
-        const message = error instanceof Error ? error.message : 'No se ha podido bloquear el registro.';
-        setState({
-          status: 'error',
-          lockedBy: null,
-          message: `Modo consulta — ${message} Edición bloqueada para evitar conflictos multiusuario.`,
-          isReadOnly: true,
-        });
+      const message = error instanceof Error ? error.message : 'No se ha podido bloquear el registro.';
+      if (isTemporarySqliteLockMessage(message)) {
+        setState(waitingForSharedDatabaseState(message));
+        scheduleAcquireRetry();
+        return;
+      }
+
+      setState({
+        status: 'error',
+        lockedBy: null,
+        message: `Modo consulta — ${message} Edición bloqueada para evitar conflictos multiusuario.`,
+        isReadOnly: true,
       });
+    };
+
+    function acquireLock(): void {
+      traccionApi
+        .acquireRecordLock?.(lockPayload)
+        .then((result) => {
+          if (result) {
+            applyResult(result);
+          }
+        })
+        .catch(handleAcquireError);
+    }
+
+    acquireLock();
 
     const heartbeatId = window.setInterval(() => {
       if (!acquired || !window.traccion?.heartbeatRecordLock) {
@@ -127,13 +188,37 @@ export function useSharedRecordLock({
 
       window.traccion
         .heartbeatRecordLock(lockPayload)
-        .then(applyResult)
+        .then((result) => {
+          if (cancelled) {
+            return;
+          }
+
+          if (result.status === 'error' && isTemporarySqliteLockMessage(result.message)) {
+            // La base estaba ocupada durante la renovación. No degradamos a modo consulta:
+            // el lock de edición aún tiene TTL y se intentará renovar en el siguiente ciclo.
+            setState((current) => ({
+              ...current,
+              message: `Edición bloqueada para otros usuarios. Renovación pendiente: ${result.message}`,
+            }));
+            return;
+          }
+
+          applyResult(result);
+        })
         .catch((error: unknown) => {
           if (cancelled) {
             return;
           }
 
           const message = error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo.';
+          if (isTemporarySqliteLockMessage(message)) {
+            setState((current) => ({
+              ...current,
+              message: `Edición bloqueada para otros usuarios. Renovación pendiente: ${message}`,
+            }));
+            return;
+          }
+
           acquired = false;
           setState({
             status: 'error',
@@ -146,6 +231,7 @@ export function useSharedRecordLock({
 
     return () => {
       cancelled = true;
+      clearRetry();
       window.clearInterval(heartbeatId);
       if (acquired) {
         window.traccion?.releaseRecordLock?.(lockPayload).catch((error: unknown) => {
