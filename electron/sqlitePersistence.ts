@@ -13,6 +13,7 @@ const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
 const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
 const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
 const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
+const DEFENSIVE_DATABASE_BACKUP_RETENTION_COUNT = 1;
 const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
 const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
@@ -448,6 +449,43 @@ async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<vo
 }
 
 
+function isRecoverableBackupCopyError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'ENOSPC'
+  );
+}
+
+async function pruneDefensiveDatabaseBackups(databasePath: string): Promise<void> {
+  const directoryPath = path.dirname(databasePath);
+  const databaseFileName = path.basename(databasePath);
+  const backupPrefix = `${databaseFileName}.backup-`;
+  const entries = await readdir(directoryPath).catch(() => []);
+  const backupEntries = await Promise.all(
+    entries
+      .filter((entry) => entry.startsWith(backupPrefix))
+      .map(async (entry) => {
+        const filePath = path.join(directoryPath, entry);
+        const fileStat = await stat(filePath).catch(() => null);
+        return fileStat?.isFile() ? { filePath, modifiedAt: fileStat.mtime.getTime() } : null;
+      }),
+  );
+
+  const sortedBackups = backupEntries
+    .filter((entry): entry is { filePath: string; modifiedAt: number } => entry !== null)
+    .sort((left, right) => right.modifiedAt - left.modifiedAt);
+
+  await Promise.all(
+    sortedBackups.slice(DEFENSIVE_DATABASE_BACKUP_RETENTION_COUNT).map((entry) =>
+      unlink(entry.filePath).catch((error: unknown) => {
+        console.warn('No se ha podido eliminar una copia preventiva SQLite antigua.', error);
+      }),
+    ),
+  );
+}
+
 async function backupExistingDatabase(databasePath: string): Promise<void> {
   try {
     await stat(databasePath);
@@ -455,8 +493,19 @@ async function backupExistingDatabase(databasePath: string): Promise<void> {
     return;
   }
 
+  await pruneDefensiveDatabaseBackups(databasePath);
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
+  try {
+    await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
+  } catch (error) {
+    if (isRecoverableBackupCopyError(error)) {
+      console.warn('No se ha podido crear la copia preventiva SQLite por falta de espacio.', error);
+      return;
+    }
+
+    console.warn('No se ha podido crear la copia preventiva SQLite.', error);
+  }
 }
 
 async function ensureDirectoryIsUsable(directoryPath: string): Promise<void> {
