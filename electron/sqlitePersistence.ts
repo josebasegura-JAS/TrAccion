@@ -626,7 +626,7 @@ function openDatabase(databasePath: string): Database {
 
 function closeDatabase(): void {
   if (database) {
-    database.pragma('wal_checkpoint(TRUNCATE)');
+    database.pragma('wal_checkpoint(PASSIVE)');
     database.close();
     database = null;
   }
@@ -634,7 +634,7 @@ function closeDatabase(): void {
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
   if (database) {
-    database.pragma('wal_checkpoint(TRUNCATE)');
+    database.pragma('wal_checkpoint(PASSIVE)');
     database.close();
     database = null;
   }
@@ -1321,7 +1321,7 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
   try {
     await mkdir(path.dirname(targetDatabasePath), { recursive: true });
     if (database) {
-      database.pragma('wal_checkpoint(TRUNCATE)');
+      database.pragma('wal_checkpoint(PASSIVE)');
     }
     if (currentStatus.ready) {
       await backupExistingDatabase(currentStatus.path);
@@ -1719,7 +1719,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
 
   try {
     if (database) {
-      database.pragma('wal_checkpoint(TRUNCATE)');
+      database.pragma('wal_checkpoint(PASSIVE)');
       await backupExistingDatabase(previousStatus.path);
     }
 
@@ -1770,7 +1770,7 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
 
   try {
     if (database) {
-      database.pragma('wal_checkpoint(TRUNCATE)');
+      database.pragma('wal_checkpoint(PASSIVE)');
       await backupExistingDatabase(previousStatus.path);
     }
     await closeDatabaseAndReleaseLock();

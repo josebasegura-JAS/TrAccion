@@ -35,7 +35,7 @@ function shouldValidatePersistedJson(key: string): boolean {
     return false;
   }
 
-  if (NON_JSON_PERSISTED_STORAGE_KEYS.has(key) || key.startsWith('traccion.header.')) {
+  if (NON_JSON_PERSISTED_STORAGE_KEYS.has(key)) {
     return false;
   }
 

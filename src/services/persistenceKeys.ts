@@ -43,7 +43,6 @@ export const SQLITE_PENDING_WRITES_KEY = 'traccion.v1.sqlite.pendingWrites';
 
 const PERSISTED_STORAGE_PREFIXES = [
   'traccion.tableView.',
-  'traccion.header.',
 ] as const;
 
 function shouldPersistDynamicKey(key: string): boolean {
