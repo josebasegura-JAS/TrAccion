@@ -1,6 +1,6 @@
 import { app } from 'electron';
-import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
-import { closeSync, constants, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFile, mkdir, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { constants, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
@@ -24,9 +24,10 @@ const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
-const SQLITE_OPERATION_LOCK_WAIT_MS = 15 * 1000;
+const SQLITE_OPERATION_LOCK_WAIT_MS = 5 * 1000;
+const SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS = 15 * 1000;
 const SQLITE_RECORD_LOCK_WAIT_MS = 750;
-const SQLITE_OPERATION_LOCK_RETRY_MS = 100;
+const SQLITE_OPERATION_LOCK_RETRY_MS = 50;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 const MODULE_LOCK_RECORD_ID = '__module__';
 
@@ -366,7 +367,11 @@ async function getConfiguredDatabaseDirectory(): Promise<{
 }
 
 function getLockPath(databasePath: string): string {
-  return `${databasePath}.lock`;
+  return `${databasePath}.lockdir`;
+}
+
+function getLockInfoPath(lockPath: string): string {
+  return path.join(lockPath, 'owner.json');
 }
 
 function createLockInfo(): DatabaseLockInfo {
@@ -411,21 +416,33 @@ function isLockStale(lock: DatabaseLockInfo): boolean {
 
 async function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
   try {
-    const raw = await readFile(lockPath, 'utf8');
+    const raw = await readFile(getLockInfoPath(lockPath), 'utf8');
     const parsed: unknown = JSON.parse(raw);
     return isDatabaseLockInfo(parsed) ? parsed : null;
   } catch {
-    return null;
+    try {
+      const raw = await readFile(lockPath, 'utf8');
+      const parsed: unknown = JSON.parse(raw);
+      return isDatabaseLockInfo(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 }
 
 function readLockSync(lockPath: string): DatabaseLockInfo | null {
   try {
-    const raw = readFileSync(lockPath, 'utf8');
+    const raw = readFileSync(getLockInfoPath(lockPath), 'utf8');
     const parsed: unknown = JSON.parse(raw);
     return isDatabaseLockInfo(parsed) ? parsed : null;
   } catch {
-    return null;
+    try {
+      const raw = readFileSync(lockPath, 'utf8');
+      const parsed: unknown = JSON.parse(raw);
+      return isDatabaseLockInfo(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -436,18 +453,26 @@ function sleepSync(milliseconds: number): void {
 }
 
 function writeLockSync(lockPath: string, lock: DatabaseLockInfo): void {
-  const fileDescriptor = openSync(lockPath, 'wx');
-  try {
-    writeFileSync(fileDescriptor, JSON.stringify(lock, null, 2), 'utf8');
-  } finally {
-    closeSync(fileDescriptor);
-  }
+  // En SMB, crear un directorio es más fiable que openSync(..., 'wx') sobre fichero.
+  // La adquisición se basa en mkdir exclusivo: si dos procesos compiten, solo uno
+  // debería poder crear el directorio .lockdir. El owner.json solo identifica al dueño.
+  mkdirSync(lockPath);
+  writeFileSync(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), 'utf8');
 
-  // Refuerzo para SMB: algunos servidores no garantizan O_EXCL de forma fiable.
-  // Tras crear el fichero, verificamos que el contenido sigue siendo nuestro.
-  // Si no coincide, tratamos la adquisición como perdida y dejamos que el bucle reintente.
   const confirmedLock = readLockSync(lockPath);
   if (confirmedLock?.ownerId !== lock.ownerId) {
+    removeLockSync(lockPath, lock.ownerId);
+    throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
+  }
+}
+
+async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
+  await mkdir(lockPath);
+  await writeFile(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), 'utf8');
+
+  const confirmedLock = await readLock(lockPath);
+  if (confirmedLock?.ownerId !== lock.ownerId) {
+    await releaseLock(lockPath, lock);
     throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
   }
 }
@@ -456,10 +481,64 @@ function removeLockSync(lockPath: string, expectedOwnerId: string): void {
   const lock = readLockSync(lockPath);
   if (lock?.ownerId === expectedOwnerId) {
     try {
-      unlinkSync(lockPath);
+      rmSync(lockPath, { recursive: true, force: true });
     } catch {
       // El lock puede haber sido eliminado por un proceso que se adelantó; no es crítico.
     }
+  }
+}
+
+function removeStaleLockSync(lockPath: string, staleLock: DatabaseLockInfo): void {
+  const currentLock = readLockSync(lockPath);
+  if (currentLock?.ownerId !== staleLock.ownerId || !isLockStale(currentLock)) {
+    return;
+  }
+
+  try {
+    rmSync(lockPath, { recursive: true, force: true });
+  } catch {
+    // Otro proceso puede haber limpiado el lock antes.
+  }
+}
+
+function removeCorruptStaleLockSync(lockPath: string): void {
+  try {
+    const metadata = statSync(lockPath);
+    if (Date.now() - metadata.mtimeMs <= LOCK_TTL_MS) {
+      return;
+    }
+
+    rmSync(lockPath, { recursive: true, force: true });
+  } catch {
+    // Si no existe o no se puede leer, dejamos que el bucle normal reintente.
+  }
+}
+
+async function removeStaleLock(lockPath: string, staleLock: DatabaseLockInfo): Promise<void> {
+  const currentLock = await readLock(lockPath);
+  if (currentLock?.ownerId !== staleLock.ownerId || !isLockStale(currentLock)) {
+    return;
+  }
+
+  try {
+    await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
+    await rmdir(lockPath).catch(() => undefined);
+  } catch {
+    // Otro proceso puede haber limpiado el lock antes.
+  }
+}
+
+async function removeCorruptStaleLock(lockPath: string): Promise<void> {
+  try {
+    const metadata = await stat(lockPath);
+    if (Date.now() - metadata.mtimeMs <= LOCK_TTL_MS) {
+      return;
+    }
+
+    await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
+    await rmdir(lockPath).catch(() => undefined);
+  } catch {
+    // Si no existe o no se puede leer, dejamos que el bucle normal reintente.
   }
 }
 
@@ -474,11 +553,11 @@ function acquireOperationLockSync(databasePath: string, waitMs = SQLITE_OPERATIO
     lastLock = existingLock;
 
     if (existingLock && isLockStale(existingLock)) {
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        // Otro proceso puede haber limpiado el lock antes.
-      }
+      removeStaleLockSync(lockPath, existingLock);
+    }
+
+    if (!existingLock) {
+      removeCorruptStaleLockSync(lockPath);
     }
 
     if (!existingLock || isLockStale(existingLock)) {
@@ -518,12 +597,46 @@ function withDatabaseOperationLockSync<T>(operation: () => T, waitMs = SQLITE_OP
   }
 }
 
-async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
-  // Compatibilidad incremental: mantenemos la API async para los llamadores existentes
-  // (backups/arranque), pero el mecanismo real es el mismo lock síncrono que usan
-  // las operaciones SQLite. Así no hay dos escritores peleando con semánticas distintas
-  // sobre el mismo .lock.
-  return acquireOperationLockSync(databasePath, SQLITE_OPERATION_LOCK_WAIT_MS);
+async function acquireLock(databasePath: string, waitMs = SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS): Promise<DatabaseLockInfo> {
+  const lockPath = getLockPath(databasePath);
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  const startedAt = Date.now();
+  let lastLock: DatabaseLockInfo | null = null;
+
+  while (Date.now() - startedAt <= waitMs) {
+    const existingLock = await readLock(lockPath);
+    lastLock = existingLock;
+
+    if (existingLock && isLockStale(existingLock)) {
+      await removeStaleLock(lockPath, existingLock);
+    }
+
+    if (!existingLock) {
+      await removeCorruptStaleLock(lockPath);
+    }
+
+    if (!existingLock || isLockStale(existingLock)) {
+      const lock = createLockInfo();
+      try {
+        await writeLock(lockPath, lock);
+        return lock;
+      } catch {
+        lastLock = await readLock(lockPath);
+      }
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, SQLITE_OPERATION_LOCK_RETRY_MS);
+    });
+  }
+
+  if (lastLock) {
+    throw new Error(
+      `Base ocupada temporalmente por ${lastLock.username}@${lastLock.hostname} (PID ${lastLock.pid}). Inténtalo de nuevo en unos segundos.`,
+    );
+  }
+
+  throw new Error('No se ha podido adquirir el bloqueo temporal de operación SQLite.');
 }
 
 async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
@@ -609,7 +722,7 @@ async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): 
   }
 
   await writeFile(
-    lockPath,
+    getLockInfoPath(lockPath),
     JSON.stringify({ ...currentLock, updatedAt: new Date().toISOString() }, null, 2),
     'utf8',
   );
@@ -624,9 +737,13 @@ function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): R
 }
 
 async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  // Misma ruta de liberación que las operaciones síncronas. Evita diferencias
-  // entre CRUD y backups sobre el archivo .lock compartido.
-  removeLockSync(lockPath, lock.ownerId);
+  const currentLock = await readLock(lockPath);
+  if (currentLock?.ownerId !== lock.ownerId) {
+    return;
+  }
+
+  await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
+  await rmdir(lockPath).catch(() => undefined);
 }
 
 async function releaseActiveSessionLock(): Promise<void> {
