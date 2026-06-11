@@ -103,6 +103,7 @@ export function useSharedRecordLock({
     let acquired = false;
     let retryTimeoutId: number | null = null;
     const traccionApi = window.traccion;
+    const activeLockPayload: TraccionRecordLockPayload = lockPayload;
 
     const clearRetry = (): void => {
       if (retryTimeoutId !== null) {
@@ -169,14 +170,12 @@ export function useSharedRecordLock({
     };
 
     function acquireLock(): void {
-      traccionApi
-        .acquireRecordLock?.(lockPayload)
-        .then((result) => {
-          if (result) {
-            applyResult(result);
-          }
-        })
-        .catch(handleAcquireError);
+      if (!traccionApi?.acquireRecordLock) {
+        handleAcquireError(new Error('IPC de bloqueo compartido no disponible.'));
+        return;
+      }
+
+      traccionApi.acquireRecordLock(activeLockPayload).then(applyResult).catch(handleAcquireError);
     }
 
     acquireLock();
@@ -187,7 +186,7 @@ export function useSharedRecordLock({
       }
 
       window.traccion
-        .heartbeatRecordLock(lockPayload)
+        .heartbeatRecordLock(activeLockPayload)
         .then((result) => {
           if (cancelled) {
             return;
@@ -234,7 +233,7 @@ export function useSharedRecordLock({
       clearRetry();
       window.clearInterval(heartbeatId);
       if (acquired) {
-        window.traccion?.releaseRecordLock?.(lockPayload).catch((error: unknown) => {
+        window.traccion?.releaseRecordLock?.(activeLockPayload).catch((error: unknown) => {
           console.warn('No se ha podido liberar el bloqueo compartido del registro.', error);
         });
       }
