@@ -21,6 +21,45 @@ const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
 
 let latestPersistenceFeedback: PersistenceFeedback | null = null;
 
+let unsubscribeDatabaseConnectivityIssue: (() => void) | null = null;
+
+function isDatabaseConnectivityIssue(value: unknown): value is TraccionDatabaseConnectivityIssue {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<TraccionDatabaseConnectivityIssue>;
+  return (
+    typeof candidate.blocked === 'boolean' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.failedHeartbeatCount === 'number' &&
+    typeof candidate.updatedAt === 'string'
+  );
+}
+
+export function startDatabaseConnectivityIssueListener(): void {
+  if (unsubscribeDatabaseConnectivityIssue || !window.traccion?.onDatabaseConnectivityIssue) {
+    return;
+  }
+
+  unsubscribeDatabaseConnectivityIssue = window.traccion.onDatabaseConnectivityIssue((payload) => {
+    if (!isDatabaseConnectivityIssue(payload)) {
+      return;
+    }
+
+    emitPersistenceFeedback({
+      kind: payload.blocked ? 'error' : 'saved',
+      updatedAt: payload.updatedAt,
+      message: payload.message,
+    });
+  });
+}
+
+export function stopDatabaseConnectivityIssueListener(): void {
+  unsubscribeDatabaseConnectivityIssue?.();
+  unsubscribeDatabaseConnectivityIssue = null;
+}
+
 const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
   'traccion.v1.tareas.peticionesMigrated',
   'traccion.v1.vinculograma.showExpired',
