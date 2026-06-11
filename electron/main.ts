@@ -995,8 +995,22 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('before-quit', () => {
-  closeSqlitePersistence().catch(() => undefined);
+let isQuitAfterSqlitePersistenceClosed = false;
+
+app.on('before-quit', (event) => {
+  if (isQuitAfterSqlitePersistenceClosed) {
+    return;
+  }
+
+  event.preventDefault();
+  closeSqlitePersistence()
+    .catch((error: unknown) => {
+      console.warn('No se ha podido crear la copia de cierre antes de salir.', error);
+    })
+    .finally(() => {
+      isQuitAfterSqlitePersistenceClosed = true;
+      app.quit();
+    });
 });
 
 app.on('window-all-closed', () => {

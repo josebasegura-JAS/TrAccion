@@ -12,7 +12,9 @@ const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
 const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
 const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
 const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
-const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 10;
+const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
+const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
+const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 2;
@@ -148,6 +150,10 @@ function getLocalBackupJsonPath(): string {
   return path.join(getLocalBackupDirectory(), LOCAL_BACKUP_JSON_FILE_NAME);
 }
 
+function getLocalShutdownBackupDirectory(): string {
+  return path.join(getLocalBackupDirectory(), LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME);
+}
+
 function backupTimestampForFileName(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
@@ -160,12 +166,28 @@ function getRotatedLocalBackupJsonPath(timestamp: string): string {
   return path.join(getLocalBackupDirectory(), `traccion-local-backup-${timestamp}.json`);
 }
 
+function getShutdownLocalBackupDatabasePath(timestamp: string): string {
+  return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.sqlite`);
+}
+
+function getShutdownLocalBackupJsonPath(timestamp: string): string {
+  return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.json`);
+}
+
 function isLocalBackupFileName(fileName: string): boolean {
   return (
     fileName === LOCAL_BACKUP_DATABASE_FILE_NAME ||
     fileName === LOCAL_BACKUP_JSON_FILE_NAME ||
     /^traccion-local-backup-.*\.(sqlite|json)$/.test(fileName)
   );
+}
+
+function isShutdownBackupFileName(fileName: string): boolean {
+  return /^traccion-shutdown-backup-.*\.(sqlite|json)$/.test(fileName);
+}
+
+function isKnownBackupFileName(fileName: string): boolean {
+  return isLocalBackupFileName(fileName) || isShutdownBackupFileName(fileName);
 }
 
 function localBackupKindFromFileName(fileName: string): 'sqlite' | 'json' | null {
@@ -180,20 +202,41 @@ function localBackupKindFromFileName(fileName: string): 'sqlite' | 'json' | null
   return null;
 }
 
-async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
-  const backupDirectory = getLocalBackupDirectory();
-  const prefix = 'traccion-local-backup-';
+async function pruneBackupsInDirectory(
+  backupDirectory: string,
+  prefix: string,
+  extension: 'sqlite' | 'json',
+  retentionCount: number,
+): Promise<void> {
   const suffix = `.${extension}`;
   const entries = await readdir(backupDirectory).catch(() => []);
-  const rotatedBackups = entries
+  const backups = entries
     .filter((entry) => entry.startsWith(prefix) && entry.endsWith(suffix))
     .sort()
     .reverse();
 
   await Promise.all(
-    rotatedBackups.slice(LOCAL_ROTATED_BACKUP_RETENTION_COUNT).map((entry) =>
+    backups.slice(retentionCount).map((entry) =>
       unlink(path.join(backupDirectory, entry)).catch(() => undefined),
     ),
+  );
+}
+
+async function pruneRotatedLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
+  await pruneBackupsInDirectory(
+    getLocalBackupDirectory(),
+    'traccion-local-backup-',
+    extension,
+    LOCAL_ROTATED_BACKUP_RETENTION_COUNT,
+  );
+}
+
+async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json'): Promise<void> {
+  await pruneBackupsInDirectory(
+    getLocalShutdownBackupDirectory(),
+    'traccion-shutdown-backup-',
+    extension,
+    LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT,
   );
 }
 
@@ -754,6 +797,63 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
   }
 }
 
+async function flushPendingLocalBackup(): Promise<void> {
+  const reasonToWrite = pendingLocalBackupReason;
+
+  if (localBackupTimer) {
+    clearTimeout(localBackupTimer);
+    localBackupTimer = null;
+  }
+
+  pendingLocalBackupReason = null;
+  await localBackupQueue;
+
+  if (reasonToWrite) {
+    await writeLocalBackupArtifacts(reasonToWrite);
+  }
+
+  await localBackupQueue;
+}
+
+async function writeShutdownLocalBackupArtifacts(): Promise<void> {
+  const currentDatabase = database;
+  const currentStatus = getSqliteStatus();
+  if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
+    return;
+  }
+
+  const backupDirectory = getLocalShutdownBackupDirectory();
+  await mkdir(backupDirectory, { recursive: true });
+
+  const now = new Date().toISOString();
+  const backupTimestamp = backupTimestampForFileName();
+  const records = readAllPersistedRecords(currentDatabase);
+  const payload = {
+    createdAt: now,
+    sourceDatabasePath: currentStatus.path,
+    reason: 'shutdown',
+    recordCount: records.length,
+    records,
+  };
+  const serializedPayload = JSON.stringify(payload, null, 2);
+
+  await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+  await pruneShutdownLocalBackups('json');
+
+  try {
+    currentDatabase.pragma('wal_checkpoint(PASSIVE)');
+    await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
+    await pruneShutdownLocalBackups('sqlite');
+  } catch (error) {
+    console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
+  }
+}
+
+export async function createShutdownLocalBackup(): Promise<void> {
+  await flushPendingLocalBackup();
+  await writeShutdownLocalBackupArtifacts();
+}
+
 function updateRefreshMetadata(db: Database, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
   db.prepare(
@@ -943,39 +1043,53 @@ export function createLocalStorageBackup(payload: LocalStorageBackupPayload): Da
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
   await pruneRotatedLocalBackups('json');
   await pruneRotatedLocalBackups('sqlite');
+  await pruneShutdownLocalBackups('json');
+  await pruneShutdownLocalBackups('sqlite');
 
-  const backupDirectory = getLocalBackupDirectory();
-  const entries = await readdir(backupDirectory).catch(() => []);
-  const backups = await Promise.all(
-    entries
-      .filter(isLocalBackupFileName)
-      .map(async (fileName): Promise<LocalBackupEntry | null> => {
-        const kind = localBackupKindFromFileName(fileName);
-        if (!kind) {
-          return null;
-        }
+  const readBackupEntries = async (
+    backupDirectory: string,
+    fileNamePredicate: (fileName: string) => boolean,
+    idPrefix = '',
+  ): Promise<LocalBackupEntry[]> => {
+    const entries = await readdir(backupDirectory).catch(() => []);
+    const backups = await Promise.all(
+      entries
+        .filter(fileNamePredicate)
+        .map(async (fileName): Promise<LocalBackupEntry | null> => {
+          const kind = localBackupKindFromFileName(fileName);
+          if (!kind) {
+            return null;
+          }
 
-        const filePath = path.join(backupDirectory, fileName);
-        const fileStat = await stat(filePath).catch(() => null);
-        if (!fileStat?.isFile()) {
-          return null;
-        }
+          const filePath = path.join(backupDirectory, fileName);
+          const fileStat = await stat(filePath).catch(() => null);
+          if (!fileStat?.isFile()) {
+            return null;
+          }
 
-        return {
-          id: fileName,
-          fileName,
-          kind,
-          path: filePath,
-          sizeBytes: fileStat.size,
-          createdAt: fileStat.mtime.toISOString(),
-          isLiveCopy:
-            fileName === LOCAL_BACKUP_DATABASE_FILE_NAME || fileName === LOCAL_BACKUP_JSON_FILE_NAME,
-        };
-      }),
-  );
+          return {
+            id: `${idPrefix}${fileName}`,
+            fileName,
+            kind,
+            path: filePath,
+            sizeBytes: fileStat.size,
+            createdAt: fileStat.mtime.toISOString(),
+            isLiveCopy:
+              !idPrefix &&
+              (fileName === LOCAL_BACKUP_DATABASE_FILE_NAME || fileName === LOCAL_BACKUP_JSON_FILE_NAME),
+          };
+        }),
+    );
 
-  return backups
-    .filter((entry): entry is LocalBackupEntry => Boolean(entry))
+    return backups.filter((entry): entry is LocalBackupEntry => Boolean(entry));
+  };
+
+  const [localBackups, shutdownBackups] = await Promise.all([
+    readBackupEntries(getLocalBackupDirectory(), isLocalBackupFileName),
+    readBackupEntries(getLocalShutdownBackupDirectory(), isShutdownBackupFileName, `${LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME}/`),
+  ]);
+
+  return [...localBackups, ...shutdownBackups]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
@@ -998,16 +1112,43 @@ function parseLocalBackupJson(raw: string): PersistedStorageRecord[] {
   );
 }
 
-export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
-  const safeFileName = path.basename(fileName);
-  const kind = localBackupKindFromFileName(safeFileName);
-  const currentStatus = getSqliteStatus();
+function resolveLocalBackupReference(fileName: string): { safeFileName: string; backupPath: string } | null {
+  const normalizedReference = fileName.replace(/\\/g, '/');
+  const isShutdownReference = normalizedReference.startsWith(`${LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME}/`);
+  const rawFileName = isShutdownReference
+    ? normalizedReference.slice(LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME.length + 1)
+    : normalizedReference;
+  const safeFileName = path.basename(rawFileName);
 
-  if (!kind || !isLocalBackupFileName(safeFileName)) {
+  if (safeFileName !== rawFileName || !isKnownBackupFileName(safeFileName)) {
+    return null;
+  }
+
+  if (isShutdownReference) {
+    return isShutdownBackupFileName(safeFileName)
+      ? { safeFileName, backupPath: path.join(getLocalShutdownBackupDirectory(), safeFileName) }
+      : null;
+  }
+
+  return isLocalBackupFileName(safeFileName)
+    ? { safeFileName, backupPath: path.join(getLocalBackupDirectory(), safeFileName) }
+    : null;
+}
+
+export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
+  const currentStatus = getSqliteStatus();
+  const backupReference = resolveLocalBackupReference(fileName);
+
+  if (!backupReference) {
     return { ok: false, status: currentStatus, message: 'Copia de respaldo no válida.' };
   }
 
-  const backupPath = path.join(getLocalBackupDirectory(), safeFileName);
+  const { safeFileName, backupPath } = backupReference;
+  const kind = localBackupKindFromFileName(safeFileName);
+  if (!kind) {
+    return { ok: false, status: currentStatus, message: 'Copia de respaldo no válida.' };
+  }
+
   const backupStat = await stat(backupPath).catch(() => null);
   if (!backupStat?.isFile()) {
     return { ok: false, status: currentStatus, message: 'La copia de respaldo no existe.' };
@@ -1510,5 +1651,6 @@ function errorMessage(error: unknown): string {
 }
 
 export async function closeSqlitePersistence(): Promise<void> {
+  await createShutdownLocalBackup();
   closeDatabase();
 }
