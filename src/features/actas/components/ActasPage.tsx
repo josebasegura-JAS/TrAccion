@@ -292,7 +292,7 @@ export function ActasPage() {
     load,
     createWithConcurrencyCheck,
     updateWithConcurrencyCheck,
-    remove,
+    removeWithConcurrencyCheck,
     createActaType,
     toggleActaType,
     removeActaType,
@@ -384,10 +384,22 @@ export function ActasPage() {
 
   const deleteActa = useCallback(
     (actaId: string) => {
-      remove(actaId);
-      setPendingDeleteActaId(null);
+      const acta = actas.find((candidate) => candidate.id === actaId);
+      if (!acta) {
+        window.alert('El acta ya no existe. Recarga antes de continuar.');
+        setPendingDeleteActaId(null);
+        return;
+      }
+
+      void removeWithConcurrencyCheck(actaId, acta.updatedAt).then((result) => {
+        if (!result.ok) {
+          window.alert(result.message);
+          return;
+        }
+        setPendingDeleteActaId(null);
+      });
     },
-    [remove],
+    [actas, removeWithConcurrencyCheck],
   );
 
   const years = useMemo(
