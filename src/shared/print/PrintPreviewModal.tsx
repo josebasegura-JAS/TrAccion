@@ -88,7 +88,7 @@ export const printStyles = `<style>
   --print-violet:#7456c8;
 }
 *{box-sizing:border-box}
-body{margin:0;background:#eef2f7;color:var(--print-ink);font-family:Inter,Segoe UI,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;background:#eef2f7;color:var(--print-ink);font-family:Inter,Segoe UI,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;counter-reset:print-page}
 .print-document{max-width:1180px;margin:0 auto;background:#fff;box-shadow:0 18px 45px rgba(15,23,42,.16);min-height:100vh;position:relative;overflow:hidden}
 .print-report-header{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:28px 34px 24px;background:radial-gradient(circle at 82% 10%,rgba(22,147,95,.28),transparent 28%),linear-gradient(135deg,#08111f,#13233a 62%,#0b1422);border-bottom:5px solid var(--print-green);color:#fff}
 .print-report-header h1{margin:0;font-size:30px;line-height:1.08;text-transform:uppercase;letter-spacing:.02em}
@@ -135,8 +135,8 @@ body{margin:0;background:#eef2f7;color:var(--print-ink);font-family:Inter,Segoe 
 .print-session-table th:nth-child(6){width:13%}
 .print-session-observations{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 34px 28px}
 .print-session-observations>div{border:1px solid var(--print-line);border-radius:16px;background:linear-gradient(180deg,#fff,#f8fafc);padding:14px 16px}
-.print-footer{display:flex;justify-content:space-between;gap:20px;padding:14px 34px;border-top:1px solid var(--print-line);background:#0b1422;color:#dbeafe;font-size:10px}
-.print-page-number:after{content:counter(page)}
+.print-footer{display:flex;justify-content:space-between;gap:20px;padding:14px 34px;border-top:1px solid var(--print-line);background:#0b1422;color:#dbeafe;font-size:10px;counter-increment:print-page}
+.print-page-number:after{content:counter(print-page)}
 @media screen{.print-preview-content .print-document{border-radius:18px;overflow:hidden}.print-preview-content{padding:0}}
 @media print{
   @page{size:A4 portrait;margin:8mm}
