@@ -20,6 +20,8 @@ const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 2;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
+const STARTUP_LOCK_WAIT_MS = 15 * 1000;
+const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 const MODULE_LOCK_RECORD_ID = '__module__';
@@ -423,6 +425,26 @@ async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
   return lock;
 }
 
+async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
+  const startedAt = Date.now();
+  let lastError: unknown = null;
+
+  while (Date.now() - startedAt <= STARTUP_LOCK_WAIT_MS) {
+    try {
+      return await acquireLock(databasePath);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => {
+        setTimeout(resolve, STARTUP_LOCK_RETRY_MS);
+      });
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('No se ha podido adquirir el bloqueo temporal de arranque SQLite.');
+}
+
 async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   const currentLock = await readLock(lockPath);
   if (currentLock?.ownerId !== lock.ownerId) {
@@ -446,19 +468,6 @@ function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): R
 
 async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   await removeLock(lockPath, lock.ownerId);
-}
-
-function activateSessionLock(
-  lockPath: string,
-  lock: DatabaseLockInfo,
-  heartbeat: ReturnType<typeof setInterval>,
-): void {
-  if (activeDatabaseLock && activeDatabaseLock.lock.ownerId !== lock.ownerId) {
-    clearInterval(activeDatabaseLock.heartbeat);
-    void releaseLock(activeDatabaseLock.lockPath, activeDatabaseLock.lock);
-  }
-
-  activeDatabaseLock = { lockPath, lock, heartbeat };
 }
 
 async function releaseActiveSessionLock(): Promise<void> {
@@ -621,8 +630,6 @@ function closeDatabase(): void {
     database.close();
     database = null;
   }
-
-  void releaseActiveSessionLock();
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -661,12 +668,15 @@ async function activateDatabase(
   const databasePath = getDatabasePathForDirectory(directoryPath);
   const lockPath = getLockPath(databasePath);
   await ensureDirectoryIsUsable(directoryPath);
-  const lock = await acquireLock(databasePath);
-  const lockHeartbeat = startDatabaseLockHeartbeat(lockPath, lock);
+
+  // Bloqueo temporal solo para la fase delicada de arranque: creación inicial,
+  // copia desde origen y migraciones. No es un lock de sesión. Después de abrir
+  // SQLite se libera para permitir varias instancias activas sobre WAL + busy_timeout.
+  const startupLock = await acquireStartupLock(databasePath);
+  const startupLockHeartbeat = startDatabaseLockHeartbeat(lockPath, startupLock);
 
   try {
     await prepareDatabaseAtPath(databasePath, sourceDatabasePath);
-    await backupExistingDatabase(databasePath);
     const db = openDatabase(databasePath);
     database = db;
     status = {
@@ -677,13 +687,13 @@ async function activateDatabase(
       schemaVersion: CURRENT_SCHEMA_VERSION,
       isDefaultPath,
       lockPath,
-      lock,
     };
-    activateSessionLock(lockPath, lock, lockHeartbeat);
+    clearInterval(startupLockHeartbeat);
+    await releaseLock(lockPath, startupLock);
     return status;
   } catch (error) {
-    clearInterval(lockHeartbeat);
-    await releaseLock(lockPath, lock);
+    clearInterval(startupLockHeartbeat);
+    await releaseLock(lockPath, startupLock);
     throw error;
   }
 }
