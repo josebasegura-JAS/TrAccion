@@ -9,6 +9,12 @@ interface ZipEntry {
 
 type TabularRow = string[];
 
+export interface CriterioRrllImportPreviewRow {
+  rowNumber: number;
+  draft: CriterioRrllDraft;
+}
+
+
 const HEADER_ALIASES: ReadonlyArray<readonly [CriterioRrllDraftField, readonly string[]]> = [
   ['tema', ['tema', 'asunto', 'materia']],
   ['fecha', ['fecha', 'año', 'ano', 'ejercicio']],
@@ -30,27 +36,36 @@ function buildFieldByHeader(): Map<string, CriterioRrllDraftField> {
 }
 
 export async function importCriteriosRrllFromFile(file: File): Promise<CriterioRrllDraft[]> {
+  const previewRows = await parseCriteriosRrllImportFile(file);
+  return previewRows.map((row) => row.draft);
+}
+
+export async function parseCriteriosRrllImportFile(file: File): Promise<CriterioRrllImportPreviewRow[]> {
   const buffer = await file.arrayBuffer();
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
 
   if (extension === 'csv' || extension === 'tsv' || extension === 'txt') {
     const text = new TextDecoder().decode(buffer);
-    return rowsToCriterioRrllDrafts(parseDelimitedText(text));
+    return rowsToCriterioRrllImportPreviewRows(parseDelimitedText(text));
   }
 
-  return rowsToCriterioRrllDrafts(await parseXlsxRows(buffer));
+  return rowsToCriterioRrllImportPreviewRows(await parseXlsxRows(buffer));
 }
 
 export function rowsToCriterioRrllDrafts(rows: TabularRow[]): CriterioRrllDraft[] {
+  return rowsToCriterioRrllImportPreviewRows(rows).map((row) => row.draft);
+}
+
+export function rowsToCriterioRrllImportPreviewRows(rows: TabularRow[]): CriterioRrllImportPreviewRow[] {
   const [headers, ...dataRows] = rows;
   if (!headers) {
     return [];
   }
 
   const fieldByColumn = headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null);
-  const draftsByKey = new Map<string, CriterioRrllDraft>();
+  const draftsByKey = new Map<string, CriterioRrllImportPreviewRow>();
 
-  dataRows.forEach((row) => {
+  dataRows.forEach((row, rowIndex) => {
     const draft: CriterioRrllDraft = { ...EMPTY_CRITERIO_RRLL_DRAFT, estado: 'vigente' };
 
     fieldByColumn.forEach((field, index) => {
@@ -72,11 +87,12 @@ export function rowsToCriterioRrllDrafts(rows: TabularRow[]): CriterioRrllDraft[
       return;
     }
 
-    draftsByKey.set(buildImportedCriterioKey(draft), draft);
+    draftsByKey.set(buildImportedCriterioKey(draft), { rowNumber: rowIndex + 2, draft });
   });
 
   return Array.from(draftsByKey.values());
 }
+
 
 export function buildImportedCriterioKey(draft: Pick<CriterioRrllDraft, 'tema' | 'fecha' | 'criterio'>): string {
   return [draft.tema, draft.fecha, draft.criterio].map(normalizeDuplicatePart).join('|');
@@ -243,8 +259,8 @@ async function inflateRaw(data: Uint8Array): Promise<ArrayBuffer> {
 
 function parseSharedStrings(xml: string): string[] {
   const document = new DOMParser().parseFromString(xml, 'application/xml');
-  return Array.from(document.getElementsByTagName('si')).map((item) =>
-    Array.from(item.getElementsByTagName('t'))
+  return getElementsByLocalName(document, 'si').map((item) =>
+    getElementsByLocalName(item, 't')
       .map((textNode) => textNode.textContent ?? '')
       .join(''),
   );
@@ -252,10 +268,10 @@ function parseSharedStrings(xml: string): string[] {
 
 function parseSheetRows(xml: string, sharedStrings: string[]): TabularRow[] {
   const document = new DOMParser().parseFromString(xml, 'application/xml');
-  return Array.from(document.getElementsByTagName('row')).map((row) => {
+  return getElementsByLocalName(document, 'row').map((row) => {
     const values: string[] = [];
 
-    Array.from(row.getElementsByTagName('c')).forEach((cell) => {
+    getElementsByLocalName(row, 'c').forEach((cell) => {
       const reference = cell.getAttribute('r') ?? '';
       const columnIndex = getColumnIndex(reference);
       values[columnIndex] = readCellValue(cell, sharedStrings);
@@ -267,19 +283,31 @@ function parseSheetRows(xml: string, sharedStrings: string[]): TabularRow[] {
 
 function readCellValue(cell: Element, sharedStrings: string[]): string {
   const type = cell.getAttribute('t');
-  const value = cell.getElementsByTagName('v')[0]?.textContent ?? '';
+  const value = getElementsByLocalName(cell, 'v')[0]?.textContent ?? '';
 
   if (type === 's') {
     return sharedStrings[Number(value)] ?? '';
   }
 
   if (type === 'inlineStr') {
-    return Array.from(cell.getElementsByTagName('t'))
+    return getElementsByLocalName(cell, 't')
       .map((textNode) => textNode.textContent ?? '')
       .join('');
   }
 
   return value;
+}
+
+function getElementsByLocalName(root: ParentNode, localName: string): Element[] {
+  return Array.from(root.childNodes).flatMap((node) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return [];
+    }
+
+    const element = node as Element;
+    const matches = element.localName === localName ? [element] : [];
+    return [...matches, ...getElementsByLocalName(element, localName)];
+  });
 }
 
 function getColumnIndex(reference: string): number {

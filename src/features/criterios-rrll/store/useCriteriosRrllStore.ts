@@ -22,6 +22,7 @@ interface CriteriosRrllStateStore {
   update: (id: string, draft: CriterioRrllDraft) => void;
   remove: (id: string) => void;
   importExcel: (file: File) => Promise<void>;
+  importDrafts: (drafts: CriterioRrllDraft[]) => void;
   selectCriterio: (criterioId: string) => void;
   setFilter: <K extends keyof CriterioRrllFilters>(key: K, value: CriterioRrllFilters[K]) => void;
 }
@@ -172,6 +173,13 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
   },
   importExcel: async (file) => {
     const drafts = await importCriteriosRrllFromFile(file);
+    set((state) => {
+      const criterios = upsertImportedCriterios(state.criterios, drafts);
+      persistCriteriosRrll(criterios);
+      return { criterios, selectedCriterioId: firstActiveCriterioId(criterios) };
+    });
+  },
+  importDrafts: (drafts) => {
     set((state) => {
       const criterios = upsertImportedCriterios(state.criterios, drafts);
       persistCriteriosRrll(criterios);
