@@ -140,6 +140,13 @@ interface TraccionRecordLockResult {
   message: string;
 }
 
+interface TraccionDatabaseConnectivityIssue {
+  blocked: boolean;
+  message: string;
+  failedHeartbeatCount: number;
+  updatedAt: string;
+}
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -151,6 +158,9 @@ interface TraccionApi {
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
+  onDatabaseConnectivityIssue?: (
+    listener: (payload: TraccionDatabaseConnectivityIssue) => void,
+  ) => () => void;
   backupLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   migrateLocalStorage?: (records: TraccionStorageRecord[]) => Promise<TraccionDatabaseStatus>;
   saveLocalStorageRecord?: (record: TraccionStorageRecord) => Promise<TraccionDatabaseStatus>;

@@ -11,6 +11,8 @@ import {
 } from './services/externalDataSync';
 import {
   bootstrapSqlitePersistence,
+  startDatabaseConnectivityIssueListener,
+  stopDatabaseConnectivityIssueListener,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from './services/persistence';
@@ -297,9 +299,13 @@ export function App() {
 
   useEffect(() => {
     bootstrapSqlitePersistence();
+    startDatabaseConnectivityIssueListener();
     startExternalDataSyncPolling();
 
-    return () => stopExternalDataSyncPolling();
+    return () => {
+      stopExternalDataSyncPolling();
+      stopDatabaseConnectivityIssueListener();
+    };
   }, []);
 
   const changeActiveView = (view: AppView): void => {
