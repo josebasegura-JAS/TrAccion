@@ -197,6 +197,7 @@ export function TaskEditor({
     () => `${mode}:${task?.id ?? 'new'}`,
   );
   const [loadedTaskUpdatedAt, setLoadedTaskUpdatedAt] = useState(task?.updatedAt ?? null);
+  const [externalUpdateIgnoredAt, setExternalUpdateIgnoredAt] = useState<string | null>(null);
   const recordLock = useSharedRecordLock({
     module: 'tareas',
     recordId: task?.id ?? null,
@@ -219,6 +220,7 @@ export function TaskEditor({
       setSaveStatusIsError(false);
       setLoadedTaskIdentity(nextIdentity);
       setLoadedTaskUpdatedAt(task?.updatedAt ?? null);
+      setExternalUpdateIgnoredAt(null);
     }
   }, [loadedTaskIdentity, mode, task]);
 
@@ -429,11 +431,32 @@ export function TaskEditor({
     setMailStatusIsError(false);
   };
 
+  const externalTaskUpdatedAt = !isCreate ? (task?.updatedAt ?? null) : null;
   const hasExternalTaskUpdate =
     !isCreate &&
-    Boolean(task?.updatedAt) &&
+    Boolean(externalTaskUpdatedAt) &&
     Boolean(loadedTaskUpdatedAt) &&
-    task?.updatedAt !== loadedTaskUpdatedAt;
+    externalTaskUpdatedAt !== loadedTaskUpdatedAt &&
+    externalTaskUpdatedAt !== externalUpdateIgnoredAt;
+
+  const handleReloadExternalTask = () => {
+    if (!task) {
+      return;
+    }
+
+    setDraft(toDraft(task));
+    setNewUpdateText('');
+    setLoadedTaskUpdatedAt(task.updatedAt ?? null);
+    setExternalUpdateIgnoredAt(null);
+    setSaveStatus('Versión compartida recargada en el formulario.');
+    setSaveStatusIsError(false);
+  };
+
+  const handleIgnoreExternalTask = () => {
+    setExternalUpdateIgnoredAt(externalTaskUpdatedAt);
+    setSaveStatus('Cambio externo ignorado temporalmente. Al guardar se validará contra SQLite.');
+    setSaveStatusIsError(false);
+  };
   const linkedSessionText = task?.sessionDocumentCode
     ? [
         formatSessionModuleLabel(task.sessionModule),
@@ -493,11 +516,29 @@ export function TaskEditor({
           </div>
         )}
 
-        {hasExternalTaskUpdate && isFormReadOnly && (
-          <p className="mb-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
-            Esta tarea ha recibido cambios externos. No se han aplicado al formulario abierto para
-            no sobrescribir datos locales; cierra y vuelve a abrir para ver la versión compartida.
-          </p>
+        {hasExternalTaskUpdate && (
+          <div className="mb-3 rounded-lg border border-amber-400/40 bg-amber-950/20 px-3 py-2 text-xs font-semibold text-amber-100">
+            <p>
+              ⚠️ Este registro fue modificado por otro usuario. Recarga la versión compartida antes
+              de seguir, o ignora el aviso si quieres revisar tus cambios locales.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                className="rounded-md border border-amber-300/40 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-50 hover:bg-amber-400/10"
+                onClick={handleReloadExternalTask}
+                type="button"
+              >
+                Recargar
+              </button>
+              <button
+                className="rounded-md border border-amber-300/20 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/10"
+                onClick={handleIgnoreExternalTask}
+                type="button"
+              >
+                Ignorar
+              </button>
+            </div>
+          </div>
         )}
 
         {linkedSessionText && (
