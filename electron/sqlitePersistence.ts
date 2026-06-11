@@ -1440,8 +1440,6 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
 
   try {
     await mkdir(path.dirname(targetDatabasePath), { recursive: true });
-    if (database) {
-      }
     if (currentStatus.ready) {
       await backupExistingDatabase(currentStatus.path);
     } else {
