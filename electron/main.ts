@@ -21,6 +21,7 @@ import {
   restoreLocalBackup,
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  setDatabaseConnectivityIssueNotifier,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir, userInfo } from 'node:os';
@@ -151,6 +152,12 @@ function createWindow(
 
   createContextMenu(mainWindow);
 
+  setDatabaseConnectivityIssueNotifier((payload) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('database:connectivity-issue', payload);
+    }
+  });
+
   let hasRequestedMainWindowShow = false;
   const requestMainWindowShow = (): void => {
     if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) {
@@ -190,6 +197,7 @@ function createWindow(
     clearTimeout(forceShowTimer);
     ipcMain.removeListener('app:boot-visible', onBootVisible);
     ipcMain.removeListener('app:renderer-ready', onRendererReady);
+    setDatabaseConnectivityIssueNotifier(null);
   });
 
   if (isDev) {

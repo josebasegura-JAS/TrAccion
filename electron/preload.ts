@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 const createOutlookDraft = (payload: unknown) =>
   ipcRenderer.invoke('especiales:create-outlook-draft', payload);
@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('traccion', {
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
+  onDatabaseConnectivityIssue: (listener: (payload: unknown) => void) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => listener(payload);
+    ipcRenderer.on('database:connectivity-issue', handler);
+    return () => ipcRenderer.removeListener('database:connectivity-issue', handler);
+  },
   backupLocalStorage: (records: { key: string; value: string }[]) =>
     ipcRenderer.invoke('database:backup-local-storage', { records }),
   migrateLocalStorage: (records: { key: string; value: string }[]) =>

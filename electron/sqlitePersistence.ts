@@ -15,6 +15,7 @@ const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
 const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
 const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
 const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
+const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 2;
@@ -131,6 +132,16 @@ let localBackupQueue: Promise<void> = Promise.resolve();
 let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingLocalBackupReason: string | null = null;
 let activeDatabaseLock: { lockPath: string; lock: DatabaseLockInfo; heartbeat: ReturnType<typeof setInterval> } | null = null;
+let databaseWriteBlockedByHeartbeat = false;
+let heartbeatConsecutiveFailureCount = 0;
+let notifyDatabaseConnectivityIssue: ((payload: DatabaseConnectivityIssuePayload) => void) | null = null;
+
+export interface DatabaseConnectivityIssuePayload {
+  blocked: boolean;
+  message: string;
+  failedHeartbeatCount: number;
+  updatedAt: string;
+}
 
 function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
   if (!value || typeof value !== 'object') {
@@ -178,6 +189,14 @@ function getShutdownLocalBackupDatabasePath(timestamp: string): string {
 
 function getShutdownLocalBackupJsonPath(timestamp: string): string {
   return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.json`);
+}
+
+function getSharedSqliteBackupPath(databasePath: string, timestamp: string): string {
+  return path.join(path.dirname(databasePath), `traccion-backup-${timestamp}.sqlite`);
+}
+
+function isSharedSqliteBackupFileName(fileName: string): boolean {
+  return /^traccion-backup-.*\.sqlite$/.test(fileName);
 }
 
 function isLocalBackupFileName(fileName: string): boolean {
@@ -244,6 +263,23 @@ async function pruneShutdownLocalBackups(extension: 'sqlite' | 'json'): Promise<
     extension,
     LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT,
   );
+}
+
+async function pruneSharedSqliteBackups(databasePath: string): Promise<void> {
+  const backupDirectory = path.dirname(databasePath);
+  const entries = await readdir(backupDirectory).catch(() => []);
+  const backups = entries.filter(isSharedSqliteBackupFileName).sort().reverse();
+
+  await Promise.all(
+    backups.slice(SHARED_SQLITE_BACKUP_RETENTION_COUNT).map((entry) =>
+      unlink(path.join(backupDirectory, entry)).catch(() => undefined),
+    ),
+  );
+}
+
+async function writeSharedSqliteBackup(databasePath: string, timestamp: string): Promise<void> {
+  await copyFile(databasePath, getSharedSqliteBackupPath(databasePath, timestamp));
+  await pruneSharedSqliteBackups(databasePath);
 }
 
 
@@ -406,6 +442,14 @@ function writeLockSync(lockPath: string, lock: DatabaseLockInfo): void {
   } finally {
     closeSync(fileDescriptor);
   }
+
+  // Refuerzo para SMB: algunos servidores no garantizan O_EXCL de forma fiable.
+  // Tras crear el fichero, verificamos que el contenido sigue siendo nuestro.
+  // Si no coincide, tratamos la adquisición como perdida y dejamos que el bucle reintente.
+  const confirmedLock = readLockSync(lockPath);
+  if (confirmedLock?.ownerId !== lock.ownerId) {
+    throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
+  }
 }
 
 function removeLockSync(lockPath: string, expectedOwnerId: string): void {
@@ -502,6 +546,62 @@ async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInf
     : new Error('No se ha podido adquirir el bloqueo temporal de arranque SQLite.');
 }
 
+export function setDatabaseConnectivityIssueNotifier(
+  notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
+): void {
+  notifyDatabaseConnectivityIssue = notifier;
+}
+
+function publishDatabaseConnectivityIssue(payload: DatabaseConnectivityIssuePayload): void {
+  notifyDatabaseConnectivityIssue?.(payload);
+}
+
+function markHeartbeatFailure(error: unknown): void {
+  heartbeatConsecutiveFailureCount += 1;
+  console.warn('No se ha podido renovar el bloqueo SQLite de sesión.', error);
+
+  if (heartbeatConsecutiveFailureCount < 3) {
+    return;
+  }
+
+  databaseWriteBlockedByHeartbeat = true;
+  publishDatabaseConnectivityIssue({
+    blocked: true,
+    failedHeartbeatCount: heartbeatConsecutiveFailureCount,
+    updatedAt: new Date().toISOString(),
+    message:
+      'La conexión con la carpeta compartida de SQLite puede estar interrumpida. Se bloquean nuevas escrituras hasta recuperar el heartbeat.',
+  });
+}
+
+function markHeartbeatRecovered(): void {
+  if (heartbeatConsecutiveFailureCount === 0 && !databaseWriteBlockedByHeartbeat) {
+    return;
+  }
+
+  heartbeatConsecutiveFailureCount = 0;
+
+  if (databaseWriteBlockedByHeartbeat) {
+    databaseWriteBlockedByHeartbeat = false;
+    publishDatabaseConnectivityIssue({
+      blocked: false,
+      failedHeartbeatCount: 0,
+      updatedAt: new Date().toISOString(),
+      message: 'La conexión con la carpeta compartida de SQLite se ha recuperado. Escrituras reactivadas.',
+    });
+  }
+}
+
+function assertDatabaseWritesAllowed(): void {
+  if (!databaseWriteBlockedByHeartbeat) {
+    return;
+  }
+
+  throw new Error(
+    'Escritura bloqueada: la conexión con la carpeta compartida SQLite puede estar interrumpida. Espera a que se recupere o revisa la red.',
+  );
+}
+
 async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   const currentLock = await readLock(lockPath);
   if (currentLock?.ownerId !== lock.ownerId) {
@@ -517,9 +617,9 @@ async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): 
 
 function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): ReturnType<typeof setInterval> {
   return setInterval(() => {
-    heartbeatDatabaseLock(lockPath, lock).catch((error: unknown) => {
-      console.warn('No se ha podido renovar el bloqueo SQLite de sesión.', error);
-    });
+    heartbeatDatabaseLock(lockPath, lock)
+      .then(() => markHeartbeatRecovered())
+      .catch((error: unknown) => markHeartbeatFailure(error));
   }, LOCK_HEARTBEAT_MS);
 }
 
@@ -1001,6 +1101,12 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
     } catch (error) {
       console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
     }
+
+    try {
+      await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
+    } catch (error) {
+      console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
+    }
   } finally {
     clearInterval(backupLockHeartbeat);
     await releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
@@ -1073,6 +1179,12 @@ async function writeShutdownLocalBackupArtifacts(): Promise<void> {
     } catch (error) {
       console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
     }
+
+    try {
+      await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
+    } catch (error) {
+      console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
+    }
   } finally {
     clearInterval(backupLockHeartbeat);
     await releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
@@ -1107,6 +1219,7 @@ function readRefreshToken(db: Database): string | null {
 export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
   return safeDatabaseOperation(
     () => {
+      assertDatabaseWritesAllowed();
       const currentStatus = getSqliteStatus();
       if (!currentStatus.ready || currentStatus.phase === 'locked') {
         return currentStatus;
@@ -1143,6 +1256,7 @@ export function savePersistedRecordIfUnchanged(
 ): ConditionalPersistedRecordSaveResult {
   return safeDatabaseOperation(
     () => {
+      assertDatabaseWritesAllowed();
       const currentStatus = getSqliteStatus();
       if (!currentStatus.ready || currentStatus.phase !== 'active') {
         return {
@@ -1234,6 +1348,7 @@ export function savePersistedRecordIfUnchanged(
 }
 
 export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): DatabaseStatus {
+  assertDatabaseWritesAllowed();
   const currentStatus = getSqliteStatus();
   if (!currentStatus.ready || currentStatus.phase === 'locked') {
     return currentStatus;
@@ -1247,9 +1362,10 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
         typeof record.key === 'string' && typeof record.value === 'string',
     );
 
-    createLocalStorageBackup({ records });
-
     const migrateSnapshotTransaction = db.transaction(() => {
+      db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
+        .run(now, JSON.stringify({ records }));
+
       const upsert = db.prepare(
         `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
          VALUES (?, ?, 'sqlite-primary', ?, ?)
@@ -1281,6 +1397,7 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
 export function createLocalStorageBackup(payload: LocalStorageBackupPayload): DatabaseStatus {
   return safeDatabaseOperation(
     () => {
+      assertDatabaseWritesAllowed();
       const currentStatus = getSqliteStatus();
       if (!currentStatus.ready || currentStatus.phase === 'locked') {
         return currentStatus;
