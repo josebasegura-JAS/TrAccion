@@ -125,6 +125,7 @@ let status: DatabaseStatus | null = null;
 let localBackupQueue: Promise<void> = Promise.resolve();
 let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingLocalBackupReason: string | null = null;
+let activeDatabaseLock: { lockPath: string; lock: DatabaseLockInfo; heartbeat: ReturnType<typeof setInterval> } | null = null;
 
 function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
   if (!value || typeof value !== 'object') {
@@ -425,7 +426,7 @@ async function acquireLock(databasePath: string): Promise<DatabaseLockInfo> {
 async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   const currentLock = await readLock(lockPath);
   if (currentLock?.ownerId !== lock.ownerId) {
-    throw new Error('El bloqueo de arranque SQLite ya no pertenece a esta instancia.');
+    throw new Error('El bloqueo SQLite de sesión ya no pertenece a esta instancia.');
   }
 
   await writeFile(
@@ -438,13 +439,55 @@ async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): 
 function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): ReturnType<typeof setInterval> {
   return setInterval(() => {
     heartbeatDatabaseLock(lockPath, lock).catch((error: unknown) => {
-      console.warn('No se ha podido renovar el bloqueo de arranque SQLite.', error);
+      console.warn('No se ha podido renovar el bloqueo SQLite de sesión.', error);
     });
   }, LOCK_HEARTBEAT_MS);
 }
 
 async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   await removeLock(lockPath, lock.ownerId);
+}
+
+function activateSessionLock(
+  lockPath: string,
+  lock: DatabaseLockInfo,
+  heartbeat: ReturnType<typeof setInterval>,
+): void {
+  if (activeDatabaseLock && activeDatabaseLock.lock.ownerId !== lock.ownerId) {
+    clearInterval(activeDatabaseLock.heartbeat);
+    void releaseLock(activeDatabaseLock.lockPath, activeDatabaseLock.lock);
+  }
+
+  activeDatabaseLock = { lockPath, lock, heartbeat };
+}
+
+async function releaseActiveSessionLock(): Promise<void> {
+  const sessionLock = activeDatabaseLock;
+  if (!sessionLock) {
+    return;
+  }
+
+  activeDatabaseLock = null;
+  clearInterval(sessionLock.heartbeat);
+  await releaseLock(sessionLock.lockPath, sessionLock.lock).catch((error: unknown) => {
+    console.warn('No se ha podido liberar el bloqueo SQLite de sesión.', error);
+  });
+}
+
+async function pruneEmergencyDatabaseBackups(databasePath: string, retentionCount = 1): Promise<void> {
+  const directory = path.dirname(databasePath);
+  const prefix = `${path.basename(databasePath)}.backup-`;
+  const entries = await readdir(directory).catch(() => []);
+  const backups = entries
+    .filter((entry) => entry.startsWith(prefix))
+    .sort()
+    .reverse();
+
+  await Promise.all(
+    backups.slice(retentionCount).map((entry) =>
+      unlink(path.join(directory, entry)).catch(() => undefined),
+    ),
+  );
 }
 
 
@@ -455,8 +498,21 @@ async function backupExistingDatabase(databasePath: string): Promise<void> {
     return;
   }
 
+  await pruneEmergencyDatabaseBackups(databasePath, 1);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
+  try {
+    await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
+    await pruneEmergencyDatabaseBackups(databasePath, 1);
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code) : '';
+    if (code === 'ENOSPC') {
+      console.warn('No hay espacio para crear la copia preventiva SQLite. Se continúa sin bloquear el guardado.', error);
+      await pruneEmergencyDatabaseBackups(databasePath, 1);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function ensureDirectoryIsUsable(directoryPath: string): Promise<void> {
@@ -560,13 +616,23 @@ function openDatabase(databasePath: string): Database {
 }
 
 function closeDatabase(): void {
-  if (!database) {
-    return;
+  if (database) {
+    database.pragma('wal_checkpoint(TRUNCATE)');
+    database.close();
+    database = null;
   }
 
-  database.pragma('wal_checkpoint(TRUNCATE)');
-  database.close();
-  database = null;
+  void releaseActiveSessionLock();
+}
+
+async function closeDatabaseAndReleaseLock(): Promise<void> {
+  if (database) {
+    database.pragma('wal_checkpoint(TRUNCATE)');
+    database.close();
+    database = null;
+  }
+
+  await releaseActiveSessionLock();
 }
 
 async function prepareDatabaseAtPath(
@@ -611,9 +677,9 @@ async function activateDatabase(
       schemaVersion: CURRENT_SCHEMA_VERSION,
       isDefaultPath,
       lockPath,
+      lock,
     };
-    clearInterval(lockHeartbeat);
-    await releaseLock(lockPath, lock);
+    activateSessionLock(lockPath, lock, lockHeartbeat);
     return status;
   } catch (error) {
     clearInterval(lockHeartbeat);
@@ -1255,7 +1321,7 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
       );
     }
 
-    closeDatabase();
+    await closeDatabaseAndReleaseLock();
     await unlink(`${targetDatabasePath}-wal`).catch(() => undefined);
     await unlink(`${targetDatabasePath}-shm`).catch(() => undefined);
     await copyFile(backupPath, targetDatabasePath);
@@ -1647,7 +1713,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
       await backupExistingDatabase(previousStatus.path);
     }
 
-    closeDatabase();
+    await closeDatabaseAndReleaseLock();
 
     try {
       const nextStatus = await activateDatabase(
@@ -1697,7 +1763,7 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
       database.pragma('wal_checkpoint(TRUNCATE)');
       await backupExistingDatabase(previousStatus.path);
     }
-    closeDatabase();
+    await closeDatabaseAndReleaseLock();
     const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
     await writeDatabasePreferences({ customDirectoryPath: null });
     return nextStatus;
@@ -1726,5 +1792,5 @@ function errorMessage(error: unknown): string {
 
 export async function closeSqlitePersistence(): Promise<void> {
   await createShutdownLocalBackup();
-  closeDatabase();
+  await closeDatabaseAndReleaseLock();
 }

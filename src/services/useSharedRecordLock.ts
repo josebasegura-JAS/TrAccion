@@ -29,7 +29,7 @@ function getLockMessage(lock: TraccionRecordLockOwnerInfo | null, fallback: stri
     return fallback;
   }
 
-  return `Registro bloqueado por ${lock.ownerName}@${lock.machineName}.`;
+  return `Modo consulta — registro bloqueado por ${lock.ownerName}@${lock.machineName}. No se permite editar ni guardar hasta que cierre la otra ventana.`;
 }
 
 function stateFromResult(result: TraccionRecordLockResult): SharedRecordLockState {
@@ -55,7 +55,7 @@ function stateFromResult(result: TraccionRecordLockResult): SharedRecordLockStat
     return {
       status: 'error',
       lockedBy: null,
-      message: `${result.message} Edición bloqueada para evitar conflictos multiusuario.`,
+      message: `Modo consulta — ${result.message} Edición bloqueada para evitar conflictos multiusuario.`,
       isReadOnly: true,
     };
   }
@@ -88,7 +88,7 @@ export function useSharedRecordLock({
       setState({
         status: 'error',
         lockedBy: null,
-        message: 'IPC de bloqueo compartido no disponible. Edición bloqueada para evitar conflictos multiusuario.',
+        message: 'Modo consulta — IPC de bloqueo compartido no disponible. Edición bloqueada para evitar conflictos multiusuario.',
         isReadOnly: true,
       });
       return undefined;
@@ -115,7 +115,7 @@ export function useSharedRecordLock({
         setState({
           status: 'error',
           lockedBy: null,
-          message: `${message} Edición bloqueada para evitar conflictos multiusuario.`,
+          message: `Modo consulta — ${message} Edición bloqueada para evitar conflictos multiusuario.`,
           isReadOnly: true,
         });
       });
@@ -138,7 +138,7 @@ export function useSharedRecordLock({
           setState({
             status: 'error',
             lockedBy: null,
-            message: `${message} Edición bloqueada para evitar conflictos multiusuario.`,
+            message: `Modo consulta — ${message} Edición bloqueada para evitar conflictos multiusuario.`,
             isReadOnly: true,
           });
         });
