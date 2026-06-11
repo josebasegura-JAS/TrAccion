@@ -391,7 +391,7 @@ export function ActasPage() {
         return;
       }
 
-      void removeWithConcurrencyCheck(actaId, acta.updatedAt).then((result) => {
+      void removeWithConcurrencyCheck(actaId, acta.updatedAt).then((result: { ok: boolean; message: string }) => {
         if (!result.ok) {
           window.alert(result.message);
           return;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { deleteSharedArrayRecord, saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
@@ -34,6 +34,7 @@ interface ActasStateStore {
   addUpdate: (actaId: string, text: string) => void;
   closeActa: (actaId: string) => void;
   remove: (actaId: string) => void;
+  removeWithConcurrencyCheck: (actaId: string, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
   createFromSession: (input: CreateActaFromSessionInput) => string;
   createActaType: (nombre: string) => { ok: boolean; message?: string };
   toggleActaType: (typeId: string) => void;
@@ -360,6 +361,24 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       persistActas(actas);
       return { actas };
     });
+  },
+  removeWithConcurrencyCheck: async (actaId, expectedUpdatedAt) => {
+    try {
+      const result = await deleteSharedArrayRecord<Acta>({
+        storageKey: STORAGE_KEY,
+        recordId: actaId,
+        expectedUpdatedAt,
+        parseRecords: parseActasSnapshot,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        missingMessage: 'El acta ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'Esta acta ha sido modificada por otro usuario. Recarga antes de eliminarla.',
+      });
+      set({ actas: result.records, actaTypes: readActaTypes(result.records) });
+      return { ok: true, message: 'Acta eliminada.' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar el acta.' };
+    }
   },
   createFromSession: (input) => {
     const existing = get().actas.find((acta) => acta.sourceSessionId === input.session.id);
