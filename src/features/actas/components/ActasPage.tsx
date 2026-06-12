@@ -449,7 +449,7 @@ export function ActasPage() {
   const isEditorReadOnly = recordLock.isReadOnly;
   const { preferences, setSort, setColumnWidth, resetColumnWidths } =
     useTableViewPreferences<ActaColumnId>({
-      storageKey: 'traccion.v1.actas.table',
+      storageKey: 'traccion.tableView.actas.main',
       defaultPreferences: {
         sort: { columnId: 'fechaSesion', direction: 'desc' },
         columnWidths: {},
@@ -599,8 +599,11 @@ export function ActasPage() {
     try {
       saveActasOutlookTemplate(nextTemplate);
       setOutlookTemplate(nextTemplate);
-      setOutlookTemplateStatus('Plantilla Outlook guardada correctamente.');
+      setOutlookTemplateStatus('');
       setOutlookTemplateStatusIsError(false);
+      setOutlookDraftStatus('Plantilla Outlook guardada correctamente.');
+      setOutlookDraftStatusIsError(false);
+      setIsOutlookTemplateOpen(false);
     } catch (error) {
       setOutlookTemplateStatus(
         error instanceof Error ? error.message : 'No se ha podido guardar la plantilla Outlook.',
