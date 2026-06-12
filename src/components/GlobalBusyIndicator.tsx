@@ -33,6 +33,7 @@ export function GlobalBusyIndicator() {
   const showTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
+  const pendingOperations = pendingOperationsRef.current;
     const clearShowTimeout = (): void => {
       if (showTimeoutRef.current !== null) {
         window.clearTimeout(showTimeoutRef.current);
@@ -41,7 +42,7 @@ export function GlobalBusyIndicator() {
     };
 
     const hideIfIdle = (): void => {
-      if (pendingOperationsRef.current.size === 0) {
+      if (pendingOperations.size === 0) {
         clearShowTimeout();
         setBusyState((current) => ({ ...current, active: false }));
       }
@@ -51,16 +52,16 @@ export function GlobalBusyIndicator() {
       const operationKey = feedbackOperationKey(feedback);
 
       if (feedback.kind !== 'saving') {
-        pendingOperationsRef.current.delete(operationKey);
+        pendingOperations.delete(operationKey);
         hideIfIdle();
         return;
       }
 
-      pendingOperationsRef.current.add(operationKey);
+      pendingOperations.add(operationKey);
       const message = buildBusyMessage(feedback);
       clearShowTimeout();
       showTimeoutRef.current = window.setTimeout(() => {
-        if (pendingOperationsRef.current.size > 0) {
+        if (pendingOperations.size > 0) {
           setBusyState({ active: true, message });
         }
         showTimeoutRef.current = null;
@@ -69,7 +70,7 @@ export function GlobalBusyIndicator() {
 
     return () => {
       clearShowTimeout();
-      pendingOperationsRef.current.clear();
+      pendingOperations.clear();
       unsubscribe();
     };
   }, []);
