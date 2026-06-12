@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
 import {
@@ -255,6 +256,7 @@ export function PresupuestosPage() {
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-metro-red">Herramientas RRLL</p>
         <h2 className="text-2xl font-bold text-metro-text">Presupuestos RRLL</h2>
         <p className="text-sm text-metro-muted">Escenarios, simulación anual, Ticket Restaurante, comparativas y reales ejecutados.</p>
+        <div className="mt-2"><InlineSaveFeedback /></div>
         {message && <p className="mt-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-muted">{message}</p>}
       </div>
 
