@@ -35,6 +35,7 @@ import {
 } from '../domain/importManutenciones';
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -1280,6 +1281,7 @@ export function TicketRestaurantePage({
           <p className="mt-0.5 text-sm text-metro-muted">
             Gestión anual de calendarios y ausencias de Ticket Restaurante.
           </p>
+          <div className="mt-2"><InlineSaveFeedback /></div>
         </div>
       </div>
 
