@@ -1,5 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
-import type { IpcMainEvent, IpcMainInvokeEvent, MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
+import type {
+  IpcMainEvent,
+  IpcMainInvokeEvent,
+  MenuItemConstructorOptions,
+  OpenDialogOptions,
+} from 'electron';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { inflateRawSync } from 'node:zlib';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
@@ -108,7 +113,10 @@ function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promi
   });
 }
 
-function closeSplashAndShowMain(splashWindow: BrowserWindow | null, mainWindow: BrowserWindow): void {
+function closeSplashAndShowMain(
+  splashWindow: BrowserWindow | null,
+  mainWindow: BrowserWindow,
+): void {
   if (!mainWindow.isDestroyed()) {
     mainWindow.show();
     mainWindow.focus();
@@ -206,17 +214,14 @@ function createWindow(
       showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
     });
   } else {
-    mainWindow
-      .loadFile(path.join(__dirname, '../dist/index.html'))
-      .catch(() => {
-        clearTimeout(forceShowTimer);
-        showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
-      });
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => {
+      clearTimeout(forceShowTimer);
+      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
+    });
   }
 
   return mainWindow;
 }
-
 
 interface ZipEntryContent {
   fileName: string;
@@ -695,7 +700,6 @@ function assertDocxPath(filePath: string): void {
   }
 }
 
-
 function normalizeRecordLockPayload(payload: unknown): { module: string; recordId: string } | null {
   if (!payload || typeof payload !== 'object') {
     return null;
@@ -714,7 +718,6 @@ function normalizeRecordLockPayload(payload: unknown): { module: string; recordI
 
   return { module: moduleName, recordId };
 }
-
 
 async function selectTaskDocumentPaths(event: IpcMainInvokeEvent): Promise<string[] | null> {
   const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -860,7 +863,6 @@ function registerIpcHandlers(): void {
     });
   });
 
-
   ipcMain.handle('recordLock:acquire', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
@@ -891,7 +893,9 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('tasks:select-document', (event) => selectTaskDocumentPaths(event));
 
-  ipcMain.handle('tasks:open-document', (_event, filePath: unknown) => openTaskDocumentPath(filePath));
+  ipcMain.handle('tasks:open-document', (_event, filePath: unknown) =>
+    openTaskDocumentPath(filePath),
+  );
 
   ipcMain.handle('teletrabajo:select-template', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);

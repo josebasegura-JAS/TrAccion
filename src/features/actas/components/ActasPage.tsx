@@ -42,6 +42,30 @@ const EMPTY_ACTAS_OUTLOOK_TEMPLATE: ActasOutlookTemplate = {
   bodyHtml: '',
 };
 
+function stripHtmlToText(value: string): string {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof window !== 'undefined' && window.document) {
+    const element = window.document.createElement('div');
+    element.innerHTML = value;
+    return element.textContent?.trim() ?? '';
+  }
+
+  return value.replace(/<[^>]*>/g, '').trim();
+}
+
+function isMeaningfulHtml(value: string): boolean {
+  return stripHtmlToText(value).length > 0 || /<img\s/i.test(value);
+}
+
+function buildDefaultActaOutlookSubject(
+  acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>,
+): string {
+  return `Acta ${acta.titulo}`.trim();
+}
+
 function isActasOutlookTemplate(value: unknown): value is ActasOutlookTemplate {
   if (!value || typeof value !== 'object') {
     return false;
@@ -593,9 +617,16 @@ export function ActasPage() {
 
   const saveOutlookTemplate = () => {
     const nextTemplate = {
-      ...outlookTemplate,
+      subject: outlookTemplate.subject,
       bodyHtml: outlookTemplateBodyRef.current?.innerHTML ?? outlookTemplate.bodyHtml,
     };
+
+    if (!isMeaningfulHtml(nextTemplate.bodyHtml)) {
+      setOutlookTemplateStatus('Pega primero el cuerpo de la plantilla Outlook.');
+      setOutlookTemplateStatusIsError(true);
+      return;
+    }
+
     try {
       saveActasOutlookTemplate(nextTemplate);
       setOutlookTemplate(nextTemplate);
@@ -616,12 +647,16 @@ export function ActasPage() {
     setOutlookDraftStatus('');
     setOutlookDraftStatusIsError(false);
 
-    const template = loadActasOutlookTemplate();
-    const subject = replaceActaTemplateMarkers(template.subject, acta, 'plain').trim();
-    const html = replaceActaTemplateMarkers(template.bodyHtml, acta, 'html').trim();
+    const storedTemplate = loadActasOutlookTemplate();
+    const effectiveTemplate = isMeaningfulHtml(outlookTemplate.bodyHtml)
+      ? outlookTemplate
+      : storedTemplate;
+    const subjectTemplate = effectiveTemplate.subject.trim() || buildDefaultActaOutlookSubject(acta);
+    const subject = replaceActaTemplateMarkers(subjectTemplate, acta, 'plain').trim();
+    const html = replaceActaTemplateMarkers(effectiveTemplate.bodyHtml, acta, 'html').trim();
 
-    if (!subject || !html) {
-      setOutlookDraftStatus('Configura primero la plantilla Outlook de Actas.');
+    if (!isMeaningfulHtml(html)) {
+      setOutlookDraftStatus('Configura primero el cuerpo de la plantilla Outlook de Actas.');
       setOutlookDraftStatusIsError(true);
       setIsOutlookTemplateOpen(true);
       return;
@@ -647,7 +682,7 @@ export function ActasPage() {
       );
       setOutlookDraftStatusIsError(true);
     }
-  }, []);
+  }, [outlookTemplate]);
 
   const columns = useMemo<Array<DataTableColumn<Acta, ActaColumnId>>>(
     () => [
@@ -1153,6 +1188,14 @@ export function ActasPage() {
               </button>
             </div>
 
+            {outlookTemplateStatus && (
+              <p
+                className={`mx-4 mt-3 rounded-lg border px-3 py-2 text-xs font-semibold ${outlookTemplateStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+              >
+                {outlookTemplateStatus}
+              </p>
+            )}
+
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
               <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
                 Asunto plantilla
@@ -1186,14 +1229,6 @@ export function ActasPage() {
                   formato AAAA/MM/DD] · [Fecha Límite formato DD/MM/AAAA]
                 </p>
               </div>
-
-              {outlookTemplateStatus && (
-                <p
-                  className={`rounded-lg border px-3 py-2 text-xs font-semibold ${outlookTemplateStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
-                >
-                  {outlookTemplateStatus}
-                </p>
-              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">

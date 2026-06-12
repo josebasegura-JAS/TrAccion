@@ -12,6 +12,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.comite.sessions',
   'traccion.v1.actas.records',
   'traccion.v1.actas.types',
+  'traccion.v1.actas.outlookTemplate',
   'traccion.v1.actas.table',
   'traccion.v1.paritaria.sessions',
   'traccion.v1.ticketRestaurante.calendars',
@@ -51,5 +52,7 @@ function shouldPersistDynamicKey(key: string): boolean {
 }
 
 export function isPersistedStorageKey(key: string): key is PersistedStorageKey {
-  return PERSISTED_STORAGE_KEYS.includes(key as PersistedStorageKey) || shouldPersistDynamicKey(key);
+  return (
+    PERSISTED_STORAGE_KEYS.includes(key as PersistedStorageKey) || shouldPersistDynamicKey(key)
+  );
 }
