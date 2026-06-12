@@ -367,7 +367,6 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   if (
     !subject ||
     !html ||
-    !to.length ||
     subject.length > 255 ||
     html.length > 100_000 ||
     to.length > 200 ||

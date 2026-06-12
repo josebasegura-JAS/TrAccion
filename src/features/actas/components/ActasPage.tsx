@@ -29,7 +29,6 @@ import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog'
 import { relativeDate } from '../../../utils/relativeDate';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 
 const ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY = 'traccion.v1.actas.outlookTemplate';
 
@@ -53,7 +52,11 @@ function isActasOutlookTemplate(value: unknown): value is ActasOutlookTemplate {
 }
 
 function loadActasOutlookTemplate(): ActasOutlookTemplate {
-  const stored = readStorageItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY);
+  if (typeof window === 'undefined') {
+    return EMPTY_ACTAS_OUTLOOK_TEMPLATE;
+  }
+
+  const stored = window.localStorage.getItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY);
   if (!stored) {
     return EMPTY_ACTAS_OUTLOOK_TEMPLATE;
   }
@@ -67,7 +70,7 @@ function loadActasOutlookTemplate(): ActasOutlookTemplate {
 }
 
 function saveActasOutlookTemplate(template: ActasOutlookTemplate): void {
-  writeStorageItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY, JSON.stringify(template));
+  window.localStorage.setItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY, JSON.stringify(template));
 }
 
 function escapeTemplateHtml(value: string): string {
@@ -100,7 +103,11 @@ function formatIsoDateWithPattern(value: string, pattern: string): string {
   return value;
 }
 
-function replaceActaTemplateMarkers(template: string, acta: Acta, mode: 'plain' | 'html'): string {
+function replaceActaTemplateMarkers(
+  template: string,
+  acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>,
+  mode: 'plain' | 'html',
+): string {
   const mapValue = (value: string): string => (mode === 'html' ? escapeTemplateHtml(value) : value);
   const replacements = new Map<string, string>([
     ['[Título Acta]', mapValue(acta.titulo)],
@@ -589,13 +596,20 @@ export function ActasPage() {
       ...outlookTemplate,
       bodyHtml: outlookTemplateBodyRef.current?.innerHTML ?? outlookTemplate.bodyHtml,
     };
-    saveActasOutlookTemplate(nextTemplate);
-    setOutlookTemplate(nextTemplate);
-    setOutlookTemplateStatus('Plantilla Outlook guardada.');
-    setOutlookTemplateStatusIsError(false);
+    try {
+      saveActasOutlookTemplate(nextTemplate);
+      setOutlookTemplate(nextTemplate);
+      setOutlookTemplateStatus('Plantilla Outlook guardada correctamente.');
+      setOutlookTemplateStatusIsError(false);
+    } catch (error) {
+      setOutlookTemplateStatus(
+        error instanceof Error ? error.message : 'No se ha podido guardar la plantilla Outlook.',
+      );
+      setOutlookTemplateStatusIsError(true);
+    }
   };
 
-  const createActaOutlookDraft = useCallback(async (acta: Acta) => {
+  const createActaOutlookDraft = useCallback(async (acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>) => {
     setOutlookDraftStatus('');
     setOutlookDraftStatusIsError(false);
 
@@ -954,6 +968,7 @@ export function ActasPage() {
   const editingActa = editingActaId ? actas.find((acta) => acta.id === editingActaId) : null;
   const displayedCreationDate = editingActa?.fechaCreacion ?? getTodayIsoDate();
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
+  const canCreateOutlookDraftFromEditor = draft.estado === 'Pendiente de alegaciones';
 
   return (
     <section
@@ -1601,6 +1616,14 @@ export function ActasPage() {
               </div>
             </div>
 
+            {outlookDraftStatus && (
+              <p
+                className={`mx-4 rounded-lg border px-3 py-2 text-xs font-semibold ${outlookDraftStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+              >
+                {outlookDraftStatus}
+              </p>
+            )}
+
             {saveError && (
               <p className="mx-4 rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
                 {saveError}
@@ -1621,6 +1644,16 @@ export function ActasPage() {
                   type="button"
                 >
                   Cerrar acta
+                </button>
+              )}
+              {canCreateOutlookDraftFromEditor && (
+                <button
+                  className="inline-flex items-center gap-2 rounded-xl border border-sky-400/60 bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-200 hover:bg-sky-500/20"
+                  onClick={() => void createActaOutlookDraft(draft)}
+                  title="Abrir borrador Outlook de alegaciones"
+                  type="button"
+                >
+                  O Outlook
                 </button>
               )}
               <button
