@@ -331,3 +331,46 @@ a {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
+
+.global-busy-indicator {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: rgba(2, 6, 23, 0.18);
+  backdrop-filter: blur(1px);
+}
+
+.global-busy-indicator__panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.35);
+  color: #e5e7eb;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 10px 16px;
+}
+
+.global-busy-indicator__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(226, 232, 240, 0.28);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: globalBusySpin 0.8s linear infinite;
+}
+
+@keyframes globalBusySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

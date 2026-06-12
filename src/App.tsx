@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DashboardCards } from './components/DashboardCards';
+import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Sidebar } from './components/Sidebar';
@@ -343,6 +344,7 @@ export function App() {
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
           <PersistenceErrorBanner />
+          <GlobalBusyIndicator />
           <ModuleErrorBoundary activeView={activeView}>
             {activeView === 'dashboard' && (
               <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
