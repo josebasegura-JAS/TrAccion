@@ -141,6 +141,10 @@ function replaceActaTemplateMarkers(
       mapValue(formatIsoDateWithPattern(acta.fechaSesion, 'DD/MM/AAAA')),
     ],
     [
+      '[Fecha Acta formato AAAA/MM/DD]',
+      mapValue(formatIsoDateWithPattern(acta.fechaSesion, 'AAAA/MM/DD')),
+    ],
+    [
       '[Fecha Límite formato AAAA/MM/DD]',
       mapValue(formatIsoDateWithPattern(acta.fechaLimite, 'AAAA/MM/DD')),
     ],
@@ -683,6 +687,46 @@ export function ActasPage() {
       setOutlookDraftStatusIsError(true);
     }
   }, [outlookTemplate]);
+
+  const createActaOutlookCalendar = useCallback(async (
+    acta: Pick<Acta, 'titulo' | 'fechaLimite'>,
+  ) => {
+    setOutlookDraftStatus('');
+    setOutlookDraftStatusIsError(false);
+
+    if (!acta.fechaLimite) {
+      setOutlookDraftStatus('El acta no tiene fecha límite para crear la cita de calendario.');
+      setOutlookDraftStatusIsError(true);
+      return;
+    }
+
+    const api = window.traccion?.createOutlookCalendar ?? window.rrllOutlook?.createCalendar;
+    if (!api) {
+      setOutlookDraftStatus('Outlook no está disponible en este entorno.');
+      setOutlookDraftStatusIsError(true);
+      return;
+    }
+
+    try {
+      const result = await api({
+        subject: `FIN ALEGACIONES ${acta.titulo}`.trim(),
+        date: acta.fechaLimite,
+        startTime: '09:00',
+        endTime: '09:30',
+        requiredAttendees: ['jasegura@metrobilbao.eus', 'acabrera@metrobilbao.eus'],
+      });
+      setOutlookDraftStatus(
+        result.message ||
+          (result.ok ? 'Cita de Outlook abierta.' : 'No se ha podido abrir la cita de Outlook.'),
+      );
+      setOutlookDraftStatusIsError(!result.ok);
+    } catch (error) {
+      setOutlookDraftStatus(
+        error instanceof Error ? error.message : 'No se ha podido abrir la cita de Outlook.',
+      );
+      setOutlookDraftStatusIsError(true);
+    }
+  }, []);
 
   const columns = useMemo<Array<DataTableColumn<Acta, ActaColumnId>>>(
     () => [
@@ -1692,6 +1736,17 @@ export function ActasPage() {
                   type="button"
                 >
                   O Outlook
+                </button>
+              )}
+              {canCreateOutlookDraftFromEditor && (
+                <button
+                  className="inline-flex items-center gap-2 rounded-xl border border-blue-400/60 bg-blue-500/10 px-3 py-2 text-sm font-bold text-blue-200 hover:bg-blue-500/20"
+                  onClick={() => void createActaOutlookCalendar(draft)}
+                  title="Abrir cita Outlook para fin de alegaciones"
+                  type="button"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Calendario
                 </button>
               )}
               <button
