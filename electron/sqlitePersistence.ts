@@ -597,6 +597,22 @@ function withDatabaseOperationLockSync<T>(operation: () => T, waitMs = SQLITE_OP
   }
 }
 
+async function withDatabaseOperationLock<T>(
+  databasePath: string,
+  operation: () => Promise<T>,
+  waitMs = SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS,
+): Promise<T> {
+  const lockPath = getLockPath(databasePath);
+  const operationLock = await acquireLock(databasePath, waitMs);
+  try {
+    return await operation();
+  } finally {
+    await releaseLock(lockPath, operationLock).catch((error: unknown) => {
+      console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
+    });
+  }
+}
+
 async function acquireLock(databasePath: string, waitMs = SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS): Promise<DatabaseLockInfo> {
   const lockPath = getLockPath(databasePath);
   await mkdir(path.dirname(lockPath), { recursive: true });
@@ -1344,15 +1360,17 @@ export function savePersistedRecord(record: PersistedStorageRecord): DatabaseSta
 
       const now = new Date().toISOString();
       const db = requireDatabase();
-      db.prepare(
-        `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
-           VALUES (?, ?, 'sqlite-primary', ?, ?)
-           ON CONFLICT(key) DO UPDATE SET
-             value_json = excluded.value_json,
-             source = excluded.source,
-             updated_at = excluded.updated_at`,
-      ).run(record.key, record.value, now, now);
-      updateRefreshMetadata(db, now);
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
+             VALUES (?, ?, 'sqlite-primary', ?, ?)
+             ON CONFLICT(key) DO UPDATE SET
+               value_json = excluded.value_json,
+               source = excluded.source,
+               updated_at = excluded.updated_at`,
+        ).run(record.key, record.value, now, now);
+        updateRefreshMetadata(db, now);
+      })();
       enqueueLocalBackup(`save:${record.key}`);
 
       return currentStatus;
@@ -1385,75 +1403,82 @@ export function savePersistedRecordIfUnchanged(
       }
 
       const db = requireDatabase();
-      const row = db
-        .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-        .get(record.key);
-      const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+      const result = db.transaction((): ConditionalPersistedRecordSaveResult => {
+        const row = db
+          .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+          .get(record.key);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
 
-      if (currentUpdatedAt !== record.expectedUpdatedAt) {
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message:
+              'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+          };
+        }
+
+        const now = new Date().toISOString();
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO persisted_records (key, value_json, source, created_at, updated_at)
+               VALUES (?, ?, 'sqlite-primary', ?, ?)`,
+            )
+            .run(record.key, record.value, now, now);
+
+          if (insertResult.changes !== 1) {
+            const latest = db
+              .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+              .get(record.key);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message:
+                'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE persisted_records
+               SET value_json = ?, source = 'sqlite-primary', updated_at = ?
+               WHERE key = ? AND updated_at = ?`,
+            )
+            .run(record.value, now, record.key, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db
+              .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
+              .get(record.key);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message:
+                'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, now);
+
         return {
-          ok: false,
+          ok: true,
           status: currentStatus,
-          currentUpdatedAt,
-          message:
-            'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
+          currentUpdatedAt: now,
+          message: 'Guardado confirmado en SQLite compartido.',
         };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup(`save:${record.key}`);
       }
 
-      const now = new Date().toISOString();
-
-      if (currentUpdatedAt === null) {
-        const result = db
-          .prepare(
-            `INSERT OR IGNORE INTO persisted_records (key, value_json, source, created_at, updated_at)
-             VALUES (?, ?, 'sqlite-primary', ?, ?)`,
-          )
-          .run(record.key, record.value, now, now);
-
-        if (result.changes !== 1) {
-          const latest = db
-            .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-            .get(record.key);
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-            message:
-              'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-          };
-        }
-      } else {
-        const result = db
-          .prepare(
-            `UPDATE persisted_records
-             SET value_json = ?, source = 'sqlite-primary', updated_at = ?
-             WHERE key = ? AND updated_at = ?`,
-          )
-          .run(record.value, now, record.key, currentUpdatedAt);
-
-        if (result.changes !== 1) {
-          const latest = db
-            .prepare('SELECT updated_at FROM persisted_records WHERE key = ?')
-            .get(record.key);
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-            message:
-              'Los datos compartidos han cambiado mientras guardabas. Recarga antes de continuar para no pisar cambios de otro usuario.',
-          };
-        }
-      }
-
-      updateRefreshMetadata(db, now);
-      enqueueLocalBackup(`save:${record.key}`);
-
-      return {
-        ok: true,
-        status: currentStatus,
-        currentUpdatedAt: now,
-        message: 'Guardado confirmado en SQLite compartido.',
-      };
+      return result;
     },
     (nextStatus, message) => ({
       ok: false,
@@ -1675,18 +1700,22 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
 
   try {
     await mkdir(path.dirname(targetDatabasePath), { recursive: true });
-    if (currentStatus.ready) {
-      await backupExistingDatabase(currentStatus.path);
-    } else {
-      await copyFile(targetDatabasePath, `${targetDatabasePath}.backup-${backupTimestampForFileName()}`).catch(
-        () => undefined,
-      );
-    }
 
-    await closeDatabaseAndReleaseLock();
-    await unlink(`${targetDatabasePath}-wal`).catch(() => undefined);
-    await unlink(`${targetDatabasePath}-shm`).catch(() => undefined);
-    await copyFile(backupPath, targetDatabasePath);
+    await withDatabaseOperationLock(targetDatabasePath, async () => {
+      if (currentStatus.ready) {
+        await backupExistingDatabase(currentStatus.path);
+      } else {
+        await copyFile(targetDatabasePath, `${targetDatabasePath}.backup-${backupTimestampForFileName()}`).catch(
+          () => undefined,
+        );
+      }
+
+      await closeDatabaseAndReleaseLock();
+      await unlink(`${targetDatabasePath}-wal`).catch(() => undefined);
+      await unlink(`${targetDatabasePath}-shm`).catch(() => undefined);
+      await copyFile(backupPath, targetDatabasePath);
+    });
+
     const nextStatus = await activateDatabase(
       configuredDirectory.directoryPath,
       configuredDirectory.isDefaultPath,
@@ -2093,7 +2122,9 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
 
   try {
     if (database) {
+      await withDatabaseOperationLock(previousStatus.path, async () => {
         await backupExistingDatabase(previousStatus.path);
+      });
     }
 
     await closeDatabaseAndReleaseLock();
@@ -2143,7 +2174,9 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
 
   try {
     if (database) {
+      await withDatabaseOperationLock(previousStatus.path, async () => {
         await backupExistingDatabase(previousStatus.path);
+      });
     }
     await closeDatabaseAndReleaseLock();
     const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
