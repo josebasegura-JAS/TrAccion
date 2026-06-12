@@ -1,5 +1,15 @@
-import { CalendarClock, Eye, FileText, FolderOpen, Plus, Settings2, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState, useCallback} from 'react';
+import {
+  CalendarClock,
+  Eye,
+  FileText,
+  FolderOpen,
+  Mail,
+  Plus,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn } from '../../../shared/export/types';
@@ -19,7 +29,102 @@ import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog'
 import { relativeDate } from '../../../utils/relativeDate';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 
+const ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY = 'traccion.v1.actas.outlookTemplate';
+
+interface ActasOutlookTemplate {
+  subject: string;
+  bodyHtml: string;
+}
+
+const EMPTY_ACTAS_OUTLOOK_TEMPLATE: ActasOutlookTemplate = {
+  subject: '',
+  bodyHtml: '',
+};
+
+function isActasOutlookTemplate(value: unknown): value is ActasOutlookTemplate {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<ActasOutlookTemplate>;
+  return typeof candidate.subject === 'string' && typeof candidate.bodyHtml === 'string';
+}
+
+function loadActasOutlookTemplate(): ActasOutlookTemplate {
+  const stored = readStorageItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY);
+  if (!stored) {
+    return EMPTY_ACTAS_OUTLOOK_TEMPLATE;
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as unknown;
+    return isActasOutlookTemplate(parsed) ? parsed : EMPTY_ACTAS_OUTLOOK_TEMPLATE;
+  } catch {
+    return EMPTY_ACTAS_OUTLOOK_TEMPLATE;
+  }
+}
+
+function saveActasOutlookTemplate(template: ActasOutlookTemplate): void {
+  writeStorageItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY, JSON.stringify(template));
+}
+
+function escapeTemplateHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatIsoDateWithPattern(value: string, pattern: string): string {
+  if (!value) {
+    return '';
+  }
+
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  if (pattern === 'DD/MM/AAAA') {
+    return `${day}/${month}/${year}`;
+  }
+
+  if (pattern === 'AAAA/MM/DD') {
+    return `${year}/${month}/${day}`;
+  }
+
+  return value;
+}
+
+function replaceActaTemplateMarkers(template: string, acta: Acta, mode: 'plain' | 'html'): string {
+  const mapValue = (value: string): string => (mode === 'html' ? escapeTemplateHtml(value) : value);
+  const replacements = new Map<string, string>([
+    ['[Título Acta]', mapValue(acta.titulo)],
+    ['[Tipo Acta]', mapValue(acta.tipo)],
+    [
+      '[Fecha Acta formato DD/MM/AAAA]',
+      mapValue(formatIsoDateWithPattern(acta.fechaSesion, 'DD/MM/AAAA')),
+    ],
+    [
+      '[Fecha Límite formato AAAA/MM/DD]',
+      mapValue(formatIsoDateWithPattern(acta.fechaLimite, 'AAAA/MM/DD')),
+    ],
+    [
+      '[Fecha Límite formato DD/MM/AAAA]',
+      mapValue(formatIsoDateWithPattern(acta.fechaLimite, 'DD/MM/AAAA')),
+    ],
+  ]);
+
+  let result = template;
+  for (const [marker, value] of replacements) {
+    result = result.split(marker).join(value);
+  }
+  return result;
+}
 
 const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -102,10 +207,11 @@ const actaExportColumns: ExportColumn<Acta>[] = [
     header: 'Alegaciones',
     value: (acta) =>
       acta.alegaciones
-        .map((alegacion) =>
-          `${alegacion.sindicato}: ${alegacion.presentada ? 'presentada' : 'no presentada'}${
-            alegacion.fecha ? ` (${alegacion.fecha})` : ''
-          }${alegacion.observacion ? ` - ${alegacion.observacion}` : ''}`,
+        .map(
+          (alegacion) =>
+            `${alegacion.sindicato}: ${alegacion.presentada ? 'presentada' : 'no presentada'}${
+              alegacion.fecha ? ` (${alegacion.fecha})` : ''
+            }${alegacion.observacion ? ` - ${alegacion.observacion}` : ''}`,
         )
         .join('\n') || null,
   },
@@ -150,14 +256,15 @@ function createEmptyAlegacion(sindicato = ''): ActaAlegacion {
   return { sindicato, presentada: false, fecha: '', observacion: '' };
 }
 
-
 function formatDate(value: string): string {
   if (!value) {
     return '—';
   }
 
   try {
-    return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short' }).format(new Date(`${value}T00:00:00`));
+    return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short' }).format(
+      new Date(`${value}T00:00:00`),
+    );
   } catch {
     return value;
   }
@@ -172,7 +279,6 @@ function addDaysToIsoDate(value: string, days: number): string {
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
 }
-
 
 function getActaStateBadgeClass(state: ActaDraft['estado']): string {
   if (state === 'Pendiente de redactar') {
@@ -192,7 +298,9 @@ function getActaStateBadgeClass(state: ActaDraft['estado']): string {
 
 function renderActaStateBadge(state: ActaDraft['estado']) {
   return (
-    <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-bold ${getActaStateBadgeClass(state)}`}>
+    <span
+      className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-bold ${getActaStateBadgeClass(state)}`}
+    >
       {state}
     </span>
   );
@@ -236,7 +344,10 @@ function renderDeadlineBadge(value: string) {
   );
 }
 
-function getAutomaticDeadlineForState(state: ActaDraft['estado'], changedAt = getTodayIsoDate()): string | null {
+function getAutomaticDeadlineForState(
+  state: ActaDraft['estado'],
+  changedAt = getTodayIsoDate(),
+): string | null {
   if (state === 'Enviada a Dirección') {
     return addDaysToIsoDate(changedAt, 7);
   }
@@ -314,29 +425,54 @@ export function ActasPage() {
   const [pendingDeleteActaId, setPendingDeleteActaId] = useState<string | null>(null);
   const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState('');
-  const recordLock = useSharedRecordLock({ module: 'actas', recordId: editingActaId ?? '__new__', enabled: isEditorOpen });
-  const isEditorReadOnly = recordLock.isReadOnly;
-  const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActaColumnId>({
-    storageKey: 'traccion.v1.actas.table',
-    defaultPreferences: {
-      sort: { columnId: 'fechaSesion', direction: 'desc' },
-      columnWidths: {},
-    },
-    validColumnIds,
+  const [isOutlookTemplateOpen, setIsOutlookTemplateOpen] = useState(false);
+  const [outlookTemplate, setOutlookTemplate] = useState<ActasOutlookTemplate>(
+    EMPTY_ACTAS_OUTLOOK_TEMPLATE,
+  );
+  const [outlookTemplateStatus, setOutlookTemplateStatus] = useState('');
+  const [outlookTemplateStatusIsError, setOutlookTemplateStatusIsError] = useState(false);
+  const [outlookDraftStatus, setOutlookDraftStatus] = useState('');
+  const [outlookDraftStatusIsError, setOutlookDraftStatusIsError] = useState(false);
+  const outlookTemplateBodyRef = useRef<HTMLDivElement | null>(null);
+  const recordLock = useSharedRecordLock({
+    module: 'actas',
+    recordId: editingActaId ?? '__new__',
+    enabled: isEditorOpen,
   });
+  const isEditorReadOnly = recordLock.isReadOnly;
+  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
+    useTableViewPreferences<ActaColumnId>({
+      storageKey: 'traccion.v1.actas.table',
+      defaultPreferences: {
+        sort: { columnId: 'fechaSesion', direction: 'desc' },
+        columnWidths: {},
+      },
+      validColumnIds,
+    });
 
   useEffect(() => {
     load();
     loadConfiguracion();
   }, [load, loadConfiguracion]);
 
-  const sindicatoOptions = useMemo(() =>
-    taskOrigins
-      .filter((origin) => origin.active && !origin.deletedAt)
-      .map((origin) => origin.nombre)
-      .sort((first, second) => first.localeCompare(second, 'es', { sensitivity: 'base' })),
-  [taskOrigins]);
+  useEffect(() => {
+    setOutlookTemplate(loadActasOutlookTemplate());
+  }, []);
 
+  useEffect(() => {
+    if (isOutlookTemplateOpen && outlookTemplateBodyRef.current) {
+      outlookTemplateBodyRef.current.innerHTML = outlookTemplate.bodyHtml;
+    }
+  }, [isOutlookTemplateOpen, outlookTemplate.bodyHtml]);
+
+  const sindicatoOptions = useMemo(
+    () =>
+      taskOrigins
+        .filter((origin) => origin.active && !origin.deletedAt)
+        .map((origin) => origin.nombre)
+        .sort((first, second) => first.localeCompare(second, 'es', { sensitivity: 'base' })),
+    [taskOrigins],
+  );
 
   const selectableActaTypes = useMemo(() => {
     const activeTypes = actaTypes.filter((type) => !type.disabled);
@@ -391,13 +527,15 @@ export function ActasPage() {
         return;
       }
 
-      void removeWithConcurrencyCheck(actaId, acta.updatedAt).then((result: { ok: boolean; message: string }) => {
-        if (!result.ok) {
-          window.alert(result.message);
-          return;
-        }
-        setPendingDeleteActaId(null);
-      });
+      void removeWithConcurrencyCheck(actaId, acta.updatedAt).then(
+        (result: { ok: boolean; message: string }) => {
+          if (!result.ok) {
+            window.alert(result.message);
+            return;
+          }
+          setPendingDeleteActaId(null);
+        },
+      );
     },
     [actas, removeWithConcurrencyCheck],
   );
@@ -438,6 +576,61 @@ export function ActasPage() {
     ['Estado', stateFilter],
     ['Año', yearFilter],
   ]);
+
+  const openOutlookTemplateManager = () => {
+    setOutlookTemplate(loadActasOutlookTemplate());
+    setOutlookTemplateStatus('');
+    setOutlookTemplateStatusIsError(false);
+    setIsOutlookTemplateOpen(true);
+  };
+
+  const saveOutlookTemplate = () => {
+    const nextTemplate = {
+      ...outlookTemplate,
+      bodyHtml: outlookTemplateBodyRef.current?.innerHTML ?? outlookTemplate.bodyHtml,
+    };
+    saveActasOutlookTemplate(nextTemplate);
+    setOutlookTemplate(nextTemplate);
+    setOutlookTemplateStatus('Plantilla Outlook guardada.');
+    setOutlookTemplateStatusIsError(false);
+  };
+
+  const createActaOutlookDraft = useCallback(async (acta: Acta) => {
+    setOutlookDraftStatus('');
+    setOutlookDraftStatusIsError(false);
+
+    const template = loadActasOutlookTemplate();
+    const subject = replaceActaTemplateMarkers(template.subject, acta, 'plain').trim();
+    const html = replaceActaTemplateMarkers(template.bodyHtml, acta, 'html').trim();
+
+    if (!subject || !html) {
+      setOutlookDraftStatus('Configura primero la plantilla Outlook de Actas.');
+      setOutlookDraftStatusIsError(true);
+      setIsOutlookTemplateOpen(true);
+      return;
+    }
+
+    const api = window.traccion?.createOutlookDraft ?? window.rrllOutlook?.createDraft;
+    if (!api) {
+      setOutlookDraftStatus('Outlook no está disponible en este entorno.');
+      setOutlookDraftStatusIsError(true);
+      return;
+    }
+
+    try {
+      const result = await api({ subject, html, to: [], cc: [] });
+      setOutlookDraftStatus(
+        result.message ||
+          (result.ok ? 'Borrador Outlook abierto.' : 'No se ha podido abrir Outlook.'),
+      );
+      setOutlookDraftStatusIsError(!result.ok);
+    } catch (error) {
+      setOutlookDraftStatus(
+        error instanceof Error ? error.message : 'No se ha podido abrir Outlook.',
+      );
+      setOutlookDraftStatusIsError(true);
+    }
+  }, []);
 
   const columns = useMemo<Array<DataTableColumn<Acta, ActaColumnId>>>(
     () => [
@@ -530,7 +723,8 @@ export function ActasPage() {
         id: 'alegaciones',
         header: 'Alegaciones',
         accessor: (acta) => acta.alegaciones.length,
-        render: (acta) => `${acta.alegaciones.filter((alegacion) => alegacion.presentada).length}/${acta.alegaciones.length}`,
+        render: (acta) =>
+          `${acta.alegaciones.filter((alegacion) => alegacion.presentada).length}/${acta.alegaciones.length}`,
         width: 120,
         sortable: true,
         resizable: true,
@@ -539,7 +733,20 @@ export function ActasPage() {
         id: 'acciones',
         header: 'Acciones',
         render: (acta) => (
-          <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="flex flex-wrap items-center gap-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {acta.estado === 'Pendiente de alegaciones' && (
+              <button
+                className="inline-flex items-center gap-1 rounded-lg border border-sky-400/50 px-2 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/10"
+                onClick={() => void createActaOutlookDraft(acta)}
+                title="Abrir borrador Outlook de alegaciones"
+                type="button"
+              >
+                O
+              </button>
+            )}
             {pendingDeleteActaId === acta.id ? (
               <DeleteConfirmDialog
                 label={`el acta «${acta.titulo}»`}
@@ -563,7 +770,7 @@ export function ActasPage() {
         isActionColumn: true,
       },
     ],
-    [deleteActa, pendingDeleteActaId, setPendingDeleteActaId],
+    [createActaOutlookDraft, deleteActa, pendingDeleteActaId, setPendingDeleteActaId],
   );
 
   const openEditor = (acta?: Acta) => {
@@ -601,7 +808,11 @@ export function ActasPage() {
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
-  const updateAlegacion = <K extends keyof ActaAlegacion>(index: number, key: K, value: ActaAlegacion[K]) => {
+  const updateAlegacion = <K extends keyof ActaAlegacion>(
+    index: number,
+    key: K,
+    value: ActaAlegacion[K],
+  ) => {
     if (isEditorReadOnly) {
       return;
     }
@@ -646,7 +857,7 @@ export function ActasPage() {
     }
 
     const expectedUpdatedAt = editingActaId
-      ? actas.find((acta) => acta.id === editingActaId)?.updatedAt ?? null
+      ? (actas.find((acta) => acta.id === editingActaId)?.updatedAt ?? null)
       : null;
 
     void (async () => {
@@ -706,7 +917,9 @@ export function ActasPage() {
       setPathStatus('Ruta de acta vinculada.');
       setPathStatusIsError(false);
     } catch (error) {
-      setPathStatus(error instanceof Error ? error.message : 'No se ha podido seleccionar el acta.');
+      setPathStatus(
+        error instanceof Error ? error.message : 'No se ha podido seleccionar el acta.',
+      );
       setPathStatusIsError(true);
     }
   };
@@ -728,7 +941,9 @@ export function ActasPage() {
 
     try {
       const result = await opener(trimmedPath);
-      setPathStatus(result.message || (result.ok ? 'Acta abierta.' : 'No se ha podido abrir el acta.'));
+      setPathStatus(
+        result.message || (result.ok ? 'Acta abierta.' : 'No se ha podido abrir el acta.'),
+      );
       setPathStatusIsError(!result.ok);
     } catch (error) {
       setPathStatus(error instanceof Error ? error.message : 'No se ha podido abrir el acta.');
@@ -741,7 +956,10 @@ export function ActasPage() {
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
 
   return (
-    <section className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card" id="actas">
+    <section
+      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      id="actas"
+    >
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
@@ -756,7 +974,8 @@ export function ActasPage() {
             />
           </div>
           <p className="mt-0.5 text-base text-metro-muted">
-            Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e histórico.
+            Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e
+            histórico.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -768,6 +987,15 @@ export function ActasPage() {
           >
             <Settings2 size={16} />
             Nuevo tipo
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={openOutlookTemplateManager}
+            title="Configurar plantilla Outlook de Actas"
+            type="button"
+          >
+            <Mail size={16} />
+            Outlook
           </button>
           <ExportPrintButtons
             payload={{
@@ -822,8 +1050,18 @@ export function ActasPage() {
         </select>
       </div>
 
+      {outlookDraftStatus && (
+        <p
+          className={`rounded-lg border px-3 py-2 text-xs font-semibold ${outlookDraftStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+        >
+          {outlookDraftStatus}
+        </p>
+      )}
+
       <div className="rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-metro-muted">Actas abiertas</h3>
+        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-metro-muted">
+          Actas abiertas
+        </h3>
         <DataTable
           ariaLabel="Actas abiertas"
           columnWidths={preferences.columnWidths}
@@ -840,14 +1078,20 @@ export function ActasPage() {
       </div>
 
       <div className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Histórico de actas</h3>
+        <h3 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+          Histórico de actas
+        </h3>
         {closedActasByYear.length === 0 && (
           <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
             No hay actas cerradas con los filtros actuales.
           </p>
         )}
         {closedActasByYear.map(([year, rows]) => (
-          <details className="rounded-xl border border-metro-border bg-metro-surface p-3" key={year} open={Boolean(search || yearFilter)}>
+          <details
+            className="rounded-xl border border-metro-border bg-metro-surface p-3"
+            key={year}
+            open={Boolean(search || yearFilter)}
+          >
             <summary className="cursor-pointer text-sm font-bold text-metro-text">
               {year} · {rows.length} acta{rows.length === 1 ? '' : 's'}
             </summary>
@@ -855,7 +1099,7 @@ export function ActasPage() {
               <DataTable
                 ariaLabel={`Actas históricas ${year}`}
                 columnWidths={preferences.columnWidths}
-          onResetColumnWidths={resetColumnWidths}
+                onResetColumnWidths={resetColumnWidths}
                 columns={columns}
                 emptyMessage="No hay actas cerradas."
                 getRowId={(acta) => acta.id}
@@ -870,6 +1114,89 @@ export function ActasPage() {
         ))}
       </div>
 
+      {isOutlookTemplateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
+            <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
+              <div>
+                <h3 className="text-lg font-bold text-metro-text">Plantilla Outlook Actas</h3>
+                <p className="text-xs text-metro-muted">
+                  Pega el cuerpo desde Outlook. No se configuran destinatarios: Para y CC quedarán
+                  vacíos.
+                </p>
+              </div>
+              <button
+                className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setIsOutlookTemplateOpen(false)}
+                title="Cerrar"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                Asunto plantilla
+                <input
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) =>
+                    setOutlookTemplate((current) => ({ ...current, subject: event.target.value }))
+                  }
+                  placeholder="Akta ZIRRIBORROA BORRADOR Acta [Título Acta]"
+                  value={outlookTemplate.subject}
+                />
+              </label>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                  Cuerpo plantilla
+                </p>
+                <div
+                  className="mt-1 min-h-[320px] rounded-lg border border-metro-border bg-white px-4 py-3 text-sm text-slate-950 outline-none focus:border-metro-red"
+                  contentEditable
+                  ref={outlookTemplateBodyRef}
+                  role="textbox"
+                  suppressContentEditableWarning
+                />
+              </div>
+
+              <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-3 text-xs text-metro-muted">
+                <p className="font-semibold text-metro-text">Marcadores disponibles</p>
+                <p className="mt-2 break-words">
+                  [Título Acta] · [Tipo Acta] · [Fecha Acta formato DD/MM/AAAA] · [Fecha Límite
+                  formato AAAA/MM/DD] · [Fecha Límite formato DD/MM/AAAA]
+                </p>
+              </div>
+
+              {outlookTemplateStatus && (
+                <p
+                  className={`rounded-lg border px-3 py-2 text-xs font-semibold ${outlookTemplateStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+                >
+                  {outlookTemplateStatus}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
+              <button
+                className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setIsOutlookTemplateOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+                onClick={saveOutlookTemplate}
+                type="button"
+              >
+                Guardar plantilla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isTypeManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -877,7 +1204,9 @@ export function ActasPage() {
             <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
               <div>
                 <h3 className="text-lg font-bold text-metro-text">Tipos de acta</h3>
-                <p className="text-xs text-metro-muted">Alta, deshabilitado y borrado seguro de tipos sin actas asociadas.</p>
+                <p className="text-xs text-metro-muted">
+                  Alta, deshabilitado y borrado seguro de tipos sin actas asociadas.
+                </p>
               </div>
               <button
                 className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
@@ -923,7 +1252,9 @@ export function ActasPage() {
                     >
                       <div>
                         <p className="text-sm font-semibold text-metro-text">{type.nombre}</p>
-                        <p className="text-xs text-metro-muted">{type.disabled ? 'Deshabilitado' : 'Activo'}</p>
+                        <p className="text-xs text-metro-muted">
+                          {type.disabled ? 'Deshabilitado' : 'Activo'}
+                        </p>
                       </div>
                       <span className="text-xs font-semibold text-metro-muted">
                         {usageCount} acta{usageCount === 1 ? '' : 's'}
@@ -948,7 +1279,11 @@ export function ActasPage() {
                           className="inline-flex items-center justify-center rounded-lg border border-red-500/40 p-2 text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                           disabled={usageCount > 0}
                           onClick={() => setPendingDeleteActaTypeId(type.id)}
-                          title={usageCount > 0 ? 'No se puede eliminar: tiene actas asociadas' : 'Eliminar tipo de acta'}
+                          title={
+                            usageCount > 0
+                              ? 'No se puede eliminar: tiene actas asociadas'
+                              : 'Eliminar tipo de acta'
+                          }
                           type="button"
                         >
                           <Trash2 size={15} />
@@ -973,7 +1308,9 @@ export function ActasPage() {
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
             <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
               <div>
-                <h3 className="text-lg font-bold text-metro-text">{editingActaId ? 'Editar acta' : 'Nueva acta'}</h3>
+                <h3 className="text-lg font-bold text-metro-text">
+                  {editingActaId ? 'Editar acta' : 'Nueva acta'}
+                </h3>
                 <p className="text-xs text-metro-muted">Estado actual: {draft.estado}</p>
               </div>
               <button
@@ -989,7 +1326,8 @@ export function ActasPage() {
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
               {recordLock.status === 'locked' && recordLock.lockedBy && (
                 <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
-                  📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@{recordLock.lockedBy.machineName}
+                  📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@
+                  {recordLock.lockedBy.machineName}
                 </div>
               )}
               <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
@@ -1002,7 +1340,8 @@ export function ActasPage() {
                   >
                     {selectableActaTypes.map((type) => (
                       <option key={type.id} value={type.nombre}>
-                        {type.nombre}{type.disabled ? ' (deshabilitado)' : ''}
+                        {type.nombre}
+                        {type.disabled ? ' (deshabilitado)' : ''}
                       </option>
                     ))}
                   </select>
@@ -1083,8 +1422,12 @@ export function ActasPage() {
 
               <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Actualizaciones</h4>
-                  <span className="text-xs text-metro-muted">{draft.actualizaciones.length} registro(s)</span>
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                    Actualizaciones
+                  </h4>
+                  <span className="text-xs text-metro-muted">
+                    {draft.actualizaciones.length} registro(s)
+                  </span>
                 </div>
                 <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_140px]">
                   <input
@@ -1112,9 +1455,16 @@ export function ActasPage() {
                     <p className="text-sm text-metro-muted">Sin actualizaciones.</p>
                   )}
                   {draft.actualizaciones.map((entry) => (
-                    <div className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2" key={entry.id}>
-                      <p className="text-xs font-semibold text-metro-muted">{formatDateTime(entry.fecha)}</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-metro-text">{entry.texto}</p>
+                    <div
+                      className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
+                      key={entry.id}
+                    >
+                      <p className="text-xs font-semibold text-metro-muted">
+                        {formatDateTime(entry.fecha)}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-metro-text">
+                        {entry.texto}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1122,10 +1472,14 @@ export function ActasPage() {
 
               <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Alegaciones</h4>
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                    Alegaciones
+                  </h4>
                   <button
                     className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                    onClick={() => updateDraft('alegaciones', [...draft.alegaciones, createEmptyAlegacion()])}
+                    onClick={() =>
+                      updateDraft('alegaciones', [...draft.alegaciones, createEmptyAlegacion()])
+                    }
                     type="button"
                   >
                     Añadir sindicato
@@ -1143,14 +1497,18 @@ export function ActasPage() {
                       <input
                         className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
                         list="actas-sindicatos"
-                        onChange={(event) => updateAlegacion(index, 'sindicato', event.target.value)}
+                        onChange={(event) =>
+                          updateAlegacion(index, 'sindicato', event.target.value)
+                        }
                         placeholder="Sindicato"
                         value={alegacion.sindicato}
                       />
                       <label className="flex items-center gap-2 text-sm text-metro-muted">
                         <input
                           checked={alegacion.presentada}
-                          onChange={(event) => updateAlegacion(index, 'presentada', event.target.checked)}
+                          onChange={(event) =>
+                            updateAlegacion(index, 'presentada', event.target.checked)
+                          }
                           type="checkbox"
                         />
                         Presentada
@@ -1163,7 +1521,9 @@ export function ActasPage() {
                       />
                       <input
                         className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
-                        onChange={(event) => updateAlegacion(index, 'observacion', event.target.value)}
+                        onChange={(event) =>
+                          updateAlegacion(index, 'observacion', event.target.value)
+                        }
                         placeholder="Observación"
                         value={alegacion.observacion}
                       />
@@ -1192,9 +1552,12 @@ export function ActasPage() {
               <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">Acta firmada</h4>
+                    <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                      Acta firmada
+                    </h4>
                     <p className="text-xs text-metro-muted">
-                      Se habilita en estado Pendiente de firma para vincular la ruta de red del acta.
+                      Se habilita en estado Pendiente de firma para vincular la ruta de red del
+                      acta.
                     </p>
                   </div>
                   {!canAttachFinalActa && (
@@ -1229,7 +1592,9 @@ export function ActasPage() {
                   </button>
                 </div>
                 {pathStatus && (
-                  <p className={`mt-2 text-xs ${pathStatusIsError ? 'text-red-200' : 'text-metro-muted'}`}>
+                  <p
+                    className={`mt-2 text-xs ${pathStatusIsError ? 'text-red-200' : 'text-metro-muted'}`}
+                  >
                     {pathStatus}
                   </p>
                 )}
