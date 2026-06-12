@@ -573,9 +573,18 @@ function mirrorToSqlite(key: string, value: string, previousValue: string | null
           : 'Error de guardado SQLite: cambio mantenido como caché local pendiente.';
       const messageWithKey = `${message} Clave afectada: ${key}.`;
       console.warn(messageWithKey, error);
-      if (!isConcurrencyConflictMessage(message)) {
-        upsertPendingSqliteWrite(key, value, messageWithKey, expectedUpdatedAt);
+      if (isConcurrencyConflictMessage(message)) {
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key,
+          message:
+            'Cambio no guardado — otro usuario modificó estos datos. Recarga la página para ver la versión actual antes de volver a editar.',
+        });
+        return;
       }
+
+      upsertPendingSqliteWrite(key, value, messageWithKey, expectedUpdatedAt);
       if (!isTemporarySqliteLockMessage(message)) {
         emitPersistenceFeedback({
           kind: 'error',
