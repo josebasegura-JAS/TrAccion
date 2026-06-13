@@ -554,11 +554,35 @@ export function LicenciasSinSueldoPage() {
     pendienteAprobacion: filteredRecords.filter((record) => record.estado === 'pendiente_aprobacion'),
     pendienteFirma: filteredRecords.filter((record) => record.estado === 'pendiente_firma'),
     vigente: filteredRecords.filter((record) => record.estado === 'vigente'),
-    historico: filteredRecords.filter((record) => record.estado === 'historico'),
   }), [filteredRecords]);
 
-  const historicalYears = useMemo(() => Array.from(new Set(effectiveRecords.filter((record) => record.estado === 'historico').map(getHistoricalYear))).sort((first, second) => second - first), [effectiveRecords]);
-  const groupedHistory = useMemo(() => historicalYears.map((year) => ({ year, records: blocks.historico.filter((record) => getHistoricalYear(record) === year) })), [blocks.historico, historicalYears]);
+  const shouldMaterializeHistory = yearFilter !== 'todos' || query.trim().length >= 2;
+  const groupedHistory = useMemo(() => {
+    const groups = new Map<number, { count: number; records: LicenciaSinSueldoRecord[] }>();
+
+    for (const record of filteredRecords) {
+      if (record.estado !== 'historico') {
+        continue;
+      }
+
+      const year = getHistoricalYear(record);
+      const current = groups.get(year) ?? { count: 0, records: [] };
+      current.count += 1;
+      if (shouldMaterializeHistory || openHistoryYears.has(year)) {
+        current.records.push(record);
+      }
+      groups.set(year, current);
+    }
+
+    return [...groups.entries()]
+      .sort(([first], [second]) => second - first)
+      .map(([year, value]) => ({ year, count: value.count, records: value.records }));
+  }, [filteredRecords, openHistoryYears, shouldMaterializeHistory]);
+
+  const historicalCount = useMemo(
+    () => filteredRecords.reduce((count, record) => count + (record.estado === 'historico' ? 1 : 0), 0),
+    [filteredRecords],
+  );
 
   const acquireMutationLock = useCallback(async (record: LicenciaSinSueldoRecord) => {
     const payload = { module: 'licencias-sin-sueldo', recordId: record.id };
@@ -733,21 +757,22 @@ export function LicenciasSinSueldoPage() {
       <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm shadow-slate-950/20">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-metro-text">Histórico por año</h2>
-          <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">{blocks.historico.length}</span>
+          <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">{historicalCount}</span>
         </div>
         <div className="space-y-3">
           {groupedHistory.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-4 text-sm text-metro-muted">No hay registros históricos.</p>}
-          {groupedHistory.map(({ year, records: yearRecords }) => {
+          {groupedHistory.map(({ year, count, records: yearRecords }) => {
             const isYearOpen = yearFilter !== 'todos' || query.trim().length >= 2 || openHistoryYears.has(year);
+            const visibleYearRecords = isYearOpen ? yearRecords : [];
 
             return (
               <div className="rounded-xl border border-metro-border bg-slate-950/10 p-3" key={year}>
                 <button className="mb-3 flex w-full items-center justify-between text-left" onClick={() => toggleYear(year)} type="button">
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-metro-text">{isYearOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {year || 'Sin año'}</span>
-                  <span className="text-xs text-metro-muted">{yearRecords.length} registros</span>
+                  <span className="text-xs text-metro-muted">{count} registros</span>
                 </button>
                 {isYearOpen && (
-                  <LicenciasTable blockId={`historico-${year}`} emptyText="Sin históricos para este año con los filtros actuales." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={yearRecords} title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`} />
+                  <LicenciasTable blockId={`historico-${year}`} emptyText="Sin históricos para este año con los filtros actuales." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={visibleYearRecords} title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`} />
                 )}
               </div>
             );
