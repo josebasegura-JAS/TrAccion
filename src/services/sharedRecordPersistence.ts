@@ -1,4 +1,44 @@
 import { publishDatabaseStatus } from './databaseStatus';
+
+async function loadSharedStorageRecord(
+  storageKey: string,
+): Promise<{ value: string | null; updatedAt: string | null }> {
+  const getPersistedRecord = window.traccion?.getPersistedRecord;
+  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
+
+  if (getPersistedRecord) {
+    const snapshot = await getPersistedRecord(storageKey);
+    publishDatabaseStatus(snapshot.status);
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+      throw new Error(
+        snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+      );
+    }
+
+    return {
+      value: snapshot.record?.value ?? null,
+      updatedAt: snapshot.record?.updatedAt ?? null,
+    };
+  }
+
+  if (!loadPersistedRecords) {
+    throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
+  }
+
+  const snapshot = await loadPersistedRecords();
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    throw new Error(
+      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+    );
+  }
+
+  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
+  return {
+    value: latestStorageRecord?.value ?? null,
+    updatedAt: latestStorageRecord?.updatedAt ?? null,
+  };
+}
 export interface SaveSharedArrayRecordOptions<TRecord> {
   storageKey: string;
   recordId: string;
@@ -27,24 +67,14 @@ export async function saveSharedArrayRecord<TRecord>({
   missingMessage = 'El registro ya no existe en la base compartida. Recarga antes de continuar.',
   conflictMessage = 'El registro ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
 }: SaveSharedArrayRecordOptions<TRecord>): Promise<SaveSharedArrayRecordResult<TRecord>> {
-  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
   const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
 
-  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
+  if (!saveLocalStorageRecordIfUnchanged) {
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
 
-  const snapshot = await loadPersistedRecords();
-  publishDatabaseStatus(snapshot.status);
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    throw new Error(
-      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-    );
-  }
-
-  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
-  const latestStorageValue = latestStorageRecord?.value ?? null;
-  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
+  const { value: latestStorageValue, updatedAt: expectedStorageUpdatedAt } =
+    await loadSharedStorageRecord(storageKey);
   const latestRecords = parseRecords(latestStorageValue);
   const latestRecord = latestRecords.find((record) => getRecordId(record) === recordId);
 
@@ -97,24 +127,14 @@ export async function saveNewSharedArrayRecord<TRecord>({
   getRecordId,
   duplicateMessage = 'El registro ya existe en la base compartida. Recarga antes de continuar.',
 }: SaveNewSharedArrayRecordOptions<TRecord>): Promise<SaveNewSharedArrayRecordResult<TRecord>> {
-  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
   const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
 
-  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
+  if (!saveLocalStorageRecordIfUnchanged) {
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
 
-  const snapshot = await loadPersistedRecords();
-  publishDatabaseStatus(snapshot.status);
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    throw new Error(
-      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-    );
-  }
-
-  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
-  const latestStorageValue = latestStorageRecord?.value ?? null;
-  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
+  const { value: latestStorageValue, updatedAt: expectedStorageUpdatedAt } =
+    await loadSharedStorageRecord(storageKey);
   const latestRecords = parseRecords(latestStorageValue);
   const newRecordId = getRecordId(newRecord);
 
@@ -156,24 +176,14 @@ export async function saveSharedArrayMutation<TRecord>({
   parseRecords,
   updateRecords,
 }: SaveSharedArrayMutationOptions<TRecord>): Promise<SaveSharedArrayMutationResult<TRecord>> {
-  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
   const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
 
-  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
+  if (!saveLocalStorageRecordIfUnchanged) {
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
 
-  const snapshot = await loadPersistedRecords();
-  publishDatabaseStatus(snapshot.status);
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    throw new Error(
-      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-    );
-  }
-
-  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
-  const latestStorageValue = latestStorageRecord?.value ?? null;
-  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
+  const { value: latestStorageValue, updatedAt: expectedStorageUpdatedAt } =
+    await loadSharedStorageRecord(storageKey);
   const latestRecords = parseRecords(latestStorageValue);
   const nextRecords = updateRecords(latestRecords);
   const serialized = JSON.stringify(nextRecords);
@@ -217,24 +227,14 @@ export async function deleteSharedArrayRecord<TRecord>({
   missingMessage = 'El registro ya no existe en la base compartida. Recarga antes de continuar.',
   conflictMessage = 'El registro ha sido modificado por otro usuario. Recarga antes de eliminarlo.',
 }: DeleteSharedArrayRecordOptions<TRecord>): Promise<DeleteSharedArrayRecordResult<TRecord>> {
-  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
   const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
 
-  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
+  if (!saveLocalStorageRecordIfUnchanged) {
     throw new Error('SQLite compartido no disponible. No se permite eliminar sin base compartida.');
   }
 
-  const snapshot = await loadPersistedRecords();
-  publishDatabaseStatus(snapshot.status);
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    throw new Error(
-      snapshot.status.message ?? 'SQLite no está activo. No se permite eliminar sin base compartida.',
-    );
-  }
-
-  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
-  const latestStorageValue = latestStorageRecord?.value ?? null;
-  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
+  const { value: latestStorageValue, updatedAt: expectedStorageUpdatedAt } =
+    await loadSharedStorageRecord(storageKey);
   const latestRecords = parseRecords(latestStorageValue);
   const latestRecord = latestRecords.find((record) => getRecordId(record) === recordId);
 

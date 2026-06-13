@@ -76,6 +76,29 @@ const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
 
 const reportedCorruptStorageKeys = new Set<string>();
 
+
+function logPersistenceMetric(message: string, data?: Record<string, unknown>): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+
+  if (data) {
+    console.debug(`[persistencia] ${message}`, data);
+    return;
+  }
+
+  console.debug(`[persistencia] ${message}`);
+}
+
+function summarizeStorageRecordSizes(records: TraccionStorageRecord[]): Array<{
+  key: string;
+  bytes: number;
+}> {
+  return records
+    .map((record) => ({ key: record.key, bytes: new Blob([record.value]).size }))
+    .sort((left, right) => right.bytes - left.bytes);
+}
+
 function isTemporarySqliteLockMessage(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('base ocupada temporalmente') || normalized.includes('bloqueo temporal de operación sqlite');
@@ -363,6 +386,29 @@ async function resolveExpectedUpdatedAtForWrite(
   const knownUpdatedAt = readSqliteRecordMetadata()[key];
   if (typeof knownUpdatedAt !== 'undefined') {
     return knownUpdatedAt;
+  }
+
+  const getPersistedRecord = window.traccion?.getPersistedRecord;
+  if (getPersistedRecord) {
+    const snapshot = await getPersistedRecord(key);
+    publishDatabaseStatus(snapshot.status);
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+      throw new Error(
+        snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+      );
+    }
+
+    if (!snapshot.record) {
+      return null;
+    }
+
+    if (previousValue !== snapshot.record.value) {
+      throw new Error(
+        'Los datos compartidos han cambiado mientras editabas. Recarga antes de guardar para no pisar cambios de otro usuario.',
+      );
+    }
+
+    return snapshot.record.updatedAt;
   }
 
   const loadPersistedRecords = window.traccion?.loadPersistedRecords;
@@ -691,6 +737,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
   }
 
   try {
+    const hydrationStartedAt = performance.now();
     const snapshot = await window.traccion.loadPersistedRecords();
     publishDatabaseStatus(snapshot.status);
     if (!snapshot.status.ready || snapshot.status.phase === 'locked') {
@@ -702,7 +749,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
 
     const localRecords = currentLocalRecords();
     const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
-  replaceSqliteRecordMetadata(sqliteRecords);
+    logPersistenceMetric('hidratación SQLite: snapshot recibido', {
+      records: sqliteRecords.length,
+      elapsedMs: Math.round(performance.now() - hydrationStartedAt),
+      largestKeys: summarizeStorageRecordSizes(sqliteRecords).slice(0, 10),
+    });
+    replaceSqliteRecordMetadata(sqliteRecords);
 
     if (sqliteRecords.length === 0) {
       if (localRecords.length > 0) {
@@ -724,7 +776,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       await window.traccion.backupLocalStorage?.(localRecords);
     }
 
+    const applyStartedAt = performance.now();
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    logPersistenceMetric('hidratación SQLite: localStorage actualizado', {
+      records: sqliteRecords.length,
+      elapsedMs: Math.round(performance.now() - applyStartedAt),
+    });
     await flushPendingSqliteWrites();
 
     return {
