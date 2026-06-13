@@ -320,11 +320,15 @@ export function SessionManagementPage({
     () => openSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch)),
     [config, effectiveSessionSearch, openSessions, tasksById],
   );
-  const filteredClosedSessions = useMemo(
-    () => closedSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch)),
-    [closedSessions, config, effectiveSessionSearch, tasksById],
-  );
   const shouldRenderClosedSessions = hasSessionSearch || openPanel === 'history';
+  const filteredClosedSessions = useMemo(
+    () =>
+      shouldRenderClosedSessions
+        ? closedSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch))
+        : [],
+    [closedSessions, config, effectiveSessionSearch, shouldRenderClosedSessions, tasksById],
+  );
+  const closedSessionCount = shouldRenderClosedSessions ? filteredClosedSessions.length : closedSessions.length;
   const closedSessionGroups = useMemo(
     () => (shouldRenderClosedSessions ? groupClosedSessionsByYear(filteredClosedSessions) : []),
     [filteredClosedSessions, shouldRenderClosedSessions],
@@ -806,7 +810,7 @@ export function SessionManagementPage({
             value={sessionSearch}
           />
           <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
-            {filteredOpenSessions.length + filteredClosedSessions.length} de {sessions.length} sesiones
+            {filteredOpenSessions.length + closedSessionCount} de {sessions.length} sesiones
           </span>
           {sessionSearch && (
             <button
@@ -852,12 +856,12 @@ export function SessionManagementPage({
         </SessionPanel>
 
         <SessionPanel
-          count={filteredClosedSessions.length}
+          count={closedSessionCount}
           isOpen={hasSessionSearch || openPanel === 'history'}
           label="Histórico de sesiones"
           onToggle={() => setOpenPanel(openPanel === 'history' ? 'open' : 'history')}
         >
-          {filteredClosedSessions.length === 0 && (
+          {closedSessionCount === 0 && (
             <p className="text-sm text-metro-muted">
               {hasSessionSearch ? 'No hay sesiones cerradas que coincidan con la búsqueda.' : 'No hay sesiones cerradas.'}
             </p>
