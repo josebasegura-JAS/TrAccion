@@ -115,7 +115,7 @@ export function SorteosPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [exclusionsOpen, setExclusionsOpen] = useState(true);
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const isSorteosEditing = Boolean(
     draft.title.trim() ||
