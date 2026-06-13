@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { deleteSharedArrayRecord, saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { deleteSharedArrayRecord, saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
@@ -36,6 +36,7 @@ interface ActasStateStore {
   remove: (actaId: string) => void;
   removeWithConcurrencyCheck: (actaId: string, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
   createFromSession: (input: CreateActaFromSessionInput) => string;
+  createFromSessionWithConcurrencyCheck: (input: CreateActaFromSessionInput) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   createActaType: (nombre: string) => { ok: boolean; message?: string };
   toggleActaType: (typeId: string) => void;
   removeActaType: (typeId: string) => { ok: boolean; message?: string };
@@ -400,6 +401,40 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       return { actas, actaTypes: readActaTypes(actas) };
     });
     return acta.id;
+  },
+  createFromSessionWithConcurrencyCheck: async (input) => {
+    try {
+      let recordId = '';
+      const result = await saveSharedArrayMutation<Acta>({
+        storageKey: STORAGE_KEY,
+        parseRecords: parseActasSnapshot,
+        updateRecords: (latestActas) => {
+          const existing = latestActas.find((acta) => acta.sourceSessionId === input.session.id);
+          if (existing) {
+            recordId = existing.id;
+            return latestActas;
+          }
+
+          const draft: ActaDraft = {
+            ...EMPTY_ACTA_DRAFT,
+            titulo: input.session.title,
+            tipo: input.tipo,
+            fechaSesion: input.session.date,
+            observaciones: buildActaObservacionesFromSession(input.session, input.treatedTasks),
+          };
+          const acta = buildActaFromDraft(draft, input.session.id);
+          recordId = acta.id;
+          return [acta, ...latestActas];
+        },
+      });
+      set({ actas: result.records, actaTypes: readActaTypes(result.records) });
+      return { ok: true, message: 'Acta creada desde la sesión.', recordId };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido crear el acta desde la sesión.',
+      };
+    }
   },
   createActaType: (nombre) => {
     const normalizedName = normalizeActaTypeName(nombre);
