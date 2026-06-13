@@ -321,7 +321,6 @@ export function DashboardCards({
   );
 
 
-  const allVisibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const committeeTasks = useMemo(
     () => activeTasks.filter((task) => task.fase.trim().toLowerCase() === 'comite'),
     [activeTasks],
@@ -551,7 +550,7 @@ export function DashboardCards({
         helper: `${criticalTasks.length} críticas`,
         icon: ClipboardList,
         tone: 'text-red-400 bg-red-500/10 ring-1 ring-red-500/20',
-        segments: stateSegmentsFromTasks(allVisibleTasks),
+        segments: stateSegmentsFromTasks(activeTasks),
       },
       {
         title: 'Comité',
@@ -567,11 +566,6 @@ export function DashboardCards({
             className: 'bg-red-500',
           },
           { label: 'Puntos abiertos', value: committeeTasks.length, className: 'bg-orange-500' },
-          {
-            label: 'Sesiones cerradas',
-            value: sessions.filter((session) => session.status === 'closed').length,
-            className: 'bg-emerald-500',
-          },
         ],
       },
       {
@@ -600,13 +594,11 @@ export function DashboardCards({
     criticalTasks.length,
     openCommitteeSessions.length,
     pendingTelework.length,
-    sessions,
-    allVisibleTasks,
     ticketSummary,
   ]);
 
-  const totalTasks = allVisibleTasks.length;
-  const taskSegments = stateSegmentsFromTasks(allVisibleTasks);
+  const totalTasks = activeTasks.length;
+  const taskSegments = stateSegmentsFromTasks(activeTasks);
   const maxTaskSegment = Math.max(...taskSegments.map((segment) => segment.value), 1);
 
   return (
@@ -878,7 +870,7 @@ export function DashboardCards({
                   <button
                     className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)_1.5rem] items-center gap-2 rounded-lg text-left transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/30"
                     key={segment.label}
-                    onClick={() => showTaskPopup(`Tareas ${segment.label.toLowerCase()}`, allVisibleTasks.filter((task) => taskStateLabels[task.estado] === segment.label))}
+                    onClick={() => showTaskPopup(`Tareas ${segment.label.toLowerCase()}`, activeTasks.filter((task) => taskStateLabels[task.estado] === segment.label))}
                     type="button"
                   >
                     <span className="truncate text-[11px] font-bold text-metro-secondary">

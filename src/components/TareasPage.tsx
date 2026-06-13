@@ -371,7 +371,10 @@ export function TareasPage({
     () => visibleTasks.filter((task) => isTaskClosed(task)),
     [visibleTasks],
   );
-  const historicGroups = useMemo(() => groupHistoricTasks(historicTasks), [historicTasks]);
+  const historicGroups = useMemo(
+    () => (isHistoricOpen ? groupHistoricTasks(historicTasks) : []),
+    [historicTasks, isHistoricOpen],
+  );
   const activeTasksFilterLabel = buildFilterLabel([
     ['Búsqueda', filters.search],
     ['Tipo', filters.tipo],
