@@ -272,9 +272,13 @@ export function DashboardCards({
     setDashboardPopup(null);
   };
 
-  const activeTasks = useMemo(
-    () => tasks.filter((task) => !task.deletedAt && !isTaskClosed(task)),
+  const nonDeletedTasks = useMemo(
+    () => tasks.filter((task) => !task.deletedAt),
     [tasks],
+  );
+  const activeTasks = useMemo(
+    () => nonDeletedTasks.filter((task) => !isTaskClosed(task)),
+    [nonDeletedTasks],
   );
   const criticalTasks = useMemo(
     () => activeTasks.filter((task) => task.prioridad === 'critica'),
@@ -491,7 +495,9 @@ export function DashboardCards({
   const eventsByDay = useMemo(
     () =>
       calendarEvents.reduce<Record<string, CalendarEvent[]>>((accumulator, event) => {
-        accumulator[event.date] = [...(accumulator[event.date] ?? []), event];
+        const dayEvents = accumulator[event.date] ?? [];
+        dayEvents.push(event);
+        accumulator[event.date] = dayEvents;
         return accumulator;
       }, {}),
     [calendarEvents],
@@ -511,6 +517,10 @@ export function DashboardCards({
         .sort((first, second) => first.date.localeCompare(second.date))
         .slice(0, 5),
     [calendarEvents, todayIso],
+  );
+  const nextCommitteeOrParitariaEvent = useMemo(
+    () => upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria') ?? null,
+    [upcomingEvents],
   );
 
   const monthCells = useMemo(() => getMonthMatrix(visibleMonth), [visibleMonth]);
@@ -701,19 +711,11 @@ export function DashboardCards({
               className="border-orange-500"
               onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Próximo Comité/Paritaria', subtitle: 'Sesiones abiertas con fecha', emptyText: 'No hay sesiones abiertas con fecha.', items: committeePopupItems() })}
               title={
-                upcomingEvents.find(
-                  (event) => event.type === 'committee' || event.type === 'paritaria',
-                )?.title ?? 'Sin comité/paritaria próximo'
+                nextCommitteeOrParitariaEvent?.title ?? 'Sin comité/paritaria próximo'
               }
               subtitle={
-                upcomingEvents.find(
-                  (event) => event.type === 'committee' || event.type === 'paritaria',
-                )
-                  ? `Próximo ${formatDisplayDate(
-                      upcomingEvents.find(
-                        (event) => event.type === 'committee' || event.type === 'paritaria',
-                      )?.date ?? '',
-                    )}`
+                nextCommitteeOrParitariaEvent
+                  ? `Próximo ${formatDisplayDate(nextCommitteeOrParitariaEvent.date)}`
                   : 'No hay sesión abierta con fecha'
               }
             />
@@ -960,7 +962,7 @@ export function DashboardCards({
                 onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
               />
             ))}
-          {tasks.filter((task) => !task.deletedAt).length === 0 && (
+          {nonDeletedTasks.length === 0 && (
             <EmptyDashboardRow text="Aún no hay actividad registrada." />
           )}
         </DashboardList>

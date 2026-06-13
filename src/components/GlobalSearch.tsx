@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import type { AppView } from '../navigation/navigation';
-import { getParsedSearchSummary, getResultYearLabel, searchTraccion, type GlobalSearchResult } from '../services/globalSearch';
+import {
+  MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH,
+  getParsedSearchSummary,
+  getResultYearLabel,
+  searchTraccion,
+  type GlobalSearchResult,
+} from '../services/globalSearch';
 
 interface GlobalSearchNavigationTarget {
   view: AppView;
@@ -49,7 +55,8 @@ function groupResults(results: GlobalSearchResult[]): GroupedResults[] {
   for (const result of results) {
     const moduleMap = yearMap.get(result.year) ?? new Map<string, GlobalSearchResult[]>();
     const moduleResults = moduleMap.get(result.module) ?? [];
-    moduleMap.set(result.module, [...moduleResults, result]);
+    moduleResults.push(result);
+    moduleMap.set(result.module, moduleResults);
     yearMap.set(result.year, moduleMap);
   }
 
@@ -121,8 +128,16 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentSearches());
   const debouncedQuery = useDebouncedValue(query, 180);
-  const results = useMemo(() => searchTraccion(debouncedQuery), [debouncedQuery]);
+  const trimmedQuery = query.trim();
+  const debouncedTrimmedQuery = debouncedQuery.trim();
   const parsedSearchSummary = useMemo(() => getParsedSearchSummary(debouncedQuery), [debouncedQuery]);
+  const canSearch =
+    debouncedTrimmedQuery.length >= MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH ||
+    parsedSearchSummary.length > 0;
+  const results = useMemo(
+    () => (canSearch ? searchTraccion(debouncedQuery) : []),
+    [canSearch, debouncedQuery],
+  );
   const moduleOptions = useMemo(
     () => Array.from(new Map(results.map((result) => [result.moduleView, result.module])).entries()),
     [results],
@@ -185,7 +200,10 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
 
   const rememberSearch = (rawQuery: string) => {
     const normalizedQuery = rawQuery.trim();
-    if (normalizedQuery.length < 2) {
+    if (
+      normalizedQuery.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH &&
+      getParsedSearchSummary(normalizedQuery).length === 0
+    ) {
       return;
     }
 
@@ -247,7 +265,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
               </button>
             </div>
 
-            {query.trim().length < 2 && (
+            {trimmedQuery.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH && parsedSearchSummary.length === 0 && (
               <div className="border-b border-metro-border bg-slate-950/10 px-4 py-3">
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-metro-muted">Búsquedas rápidas</div>
                 <div className="flex flex-wrap gap-2">
@@ -284,7 +302,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
               </div>
             )}
 
-            {query.trim().length >= 2 && results.length > 0 && (
+            {canSearch && results.length > 0 && (
               <div className="space-y-2 border-b border-metro-border bg-slate-950/10 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -335,19 +353,19 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             )}
 
             <div className="min-h-[16rem] overflow-auto p-4">
-              {query.trim().length < 2 && (
+              {trimmedQuery.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH && parsedSearchSummary.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
-                  Escribe al menos 2 caracteres o usa filtros avanzados. Ejemplos: modulo:paritaria año:2024, codigo:24-PE, persona:garcia, vencido.
+                  Escribe al menos 3 caracteres o usa filtros avanzados. Ejemplos: modulo:paritaria año:2024, codigo:24-PE, persona:garcia, vencido.
                 </div>
               )}
 
-              {query.trim().length >= 2 && results.length === 0 && (
+              {canSearch && results.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
                   No hay resultados para “{query.trim()}”.
                 </div>
               )}
 
-              {query.trim().length >= 2 && results.length > 0 && filteredResults.length === 0 && (
+              {canSearch && results.length > 0 && filteredResults.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-metro-border bg-slate-950/15 p-6 text-sm text-metro-muted">
                   No hay resultados con los filtros actuales.
                 </div>
