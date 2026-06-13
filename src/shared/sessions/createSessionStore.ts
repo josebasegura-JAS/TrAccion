@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../services/persistence';
+import { readStorageItem } from '../../services/persistence';
 import {
   deleteSharedArrayRecord,
   saveSharedArrayMutation,
@@ -88,17 +88,7 @@ function readSessions(config: SessionModuleConfig): ManagedSession[] {
   return parseManagedSessionsSnapshot(readStorageItem(config.storageKey), config.newSessionDefaultTitle);
 }
 
-function persistSessions(storageKey: string, sessions: ManagedSession[]): void {
-  writeStorageItem(storageKey, JSON.stringify(sessions));
-}
 
-function updateSessionList(
-  sessions: ManagedSession[],
-  sessionId: string,
-  updater: (session: ManagedSession) => ManagedSession,
-): ManagedSession[] {
-  return sessions.map((session) => (session.id === sessionId ? updater(session) : session));
-}
 
 
 function getSessionId(session: ManagedSession): string {
@@ -107,6 +97,10 @@ function getSessionId(session: ManagedSession): string {
 
 function getSessionUpdatedAt(session: ManagedSession): string | null {
   return session.updatedAt ?? null;
+}
+
+function logSessionPersistenceError(action: string, error: unknown): void {
+  console.error(`[${action}] No se ha podido guardar la sesión compartida.`, error);
 }
 
 function buildSessionFromDraft(config: SessionModuleConfig, draft: ManagedSessionDraft): ManagedSession {
@@ -186,11 +180,19 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     create: (draft) => {
       const session = buildSessionFromDraft(config, draft);
 
-      set((state) => {
-        const sessions = [session, ...state.sessions];
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+      void saveSharedArrayMutation<ManagedSession>({
+        storageKey: config.storageKey,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        updateRecords: (latestSessions) => {
+          if (latestSessions.some((existingSession) => existingSession.id === session.id)) {
+            throw new Error('La sesión ya existe en la base compartida. Recarga antes de continuar.');
+          }
+
+          return [session, ...latestSessions];
+        },
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('createSession', error));
 
       return session.id;
     },
@@ -219,59 +221,60 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     importSessions: (drafts) => {
-      let importedCount = 0;
-      set((state) => {
-        const now = new Date().toISOString();
-        const existingKeys = new Set(
-          state.sessions
-            .map((session) => session.notes.match(/ImportKey:([^\s]+)/)?.[1])
-            .filter((value): value is string => Boolean(value)),
-        );
-        const importedSessions: ManagedSession[] = [];
+      let estimatedImportedCount = 0;
 
-        drafts.forEach(({ externalKey, draft, taskIds }) => {
-          const normalizedCode = draft.code.trim().toLowerCase();
-          const isDuplicate =
-            existingKeys.has(externalKey) ||
-            state.sessions.some(
-              (session) =>
-                session.code.trim().toLowerCase() === normalizedCode &&
-                session.date === draft.date,
-            );
+      void saveSharedArrayMutation<ManagedSession>({
+        storageKey: config.storageKey,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        updateRecords: (latestSessions) => {
+          const now = new Date().toISOString();
+          const existingKeys = new Set(
+            latestSessions
+              .map((session) => session.notes.match(/ImportKey:([^\s]+)/)?.[1])
+              .filter((value): value is string => Boolean(value)),
+          );
+          const importedSessions: ManagedSession[] = [];
 
-          if (isDuplicate) {
-            return;
-          }
+          drafts.forEach(({ externalKey, draft, taskIds }) => {
+            const normalizedCode = draft.code.trim().toLowerCase();
+            const isDuplicate =
+              existingKeys.has(externalKey) ||
+              latestSessions.some(
+                (session) =>
+                  session.code.trim().toLowerCase() === normalizedCode &&
+                  session.date === draft.date,
+              );
 
-          const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
+            if (isDuplicate) {
+              return;
+            }
 
-          importedSessions.push({
-            id: createSessionId(config.moduleId),
-            date: draft.date,
-            code: draft.code.trim(),
-            title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
-            notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
-            status: 'closed',
-            items: taskIds,
-            treatedTaskIds: taskIds,
-            untreatedTaskIds: [],
-            createdAt: closedAt,
-            updatedAt: now,
-            closedAt,
+            const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
+
+            importedSessions.push({
+              id: createSessionId(config.moduleId),
+              date: draft.date,
+              code: draft.code.trim(),
+              title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
+              notes: `${draft.notes.trim() ? `${draft.notes.trim()} ` : ''}ImportKey:${externalKey}`,
+              status: 'closed',
+              items: taskIds,
+              treatedTaskIds: taskIds,
+              untreatedTaskIds: [],
+              createdAt: closedAt,
+              updatedAt: now,
+              closedAt,
+            });
           });
-        });
 
-        if (importedSessions.length === 0) {
-          return state;
-        }
+          estimatedImportedCount = importedSessions.length;
+          return importedSessions.length === 0 ? latestSessions : [...importedSessions, ...latestSessions];
+        },
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('importSessions', error));
 
-        importedCount = importedSessions.length;
-        const sessions = [...importedSessions, ...state.sessions];
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
-
-      return importedCount;
+      return estimatedImportedCount;
     },
     importSessionsWithConcurrencyCheck: async (drafts) => {
       try {
@@ -336,11 +339,18 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     remove: (sessionId) => {
-      set((state) => {
-        const sessions = state.sessions.filter((session) => session.id !== sessionId);
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+      void deleteSharedArrayRecord<ManagedSession>({
+        storageKey: config.storageKey,
+        recordId: sessionId,
+        expectedUpdatedAt: null,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        getRecordId: getSessionId,
+        getRecordUpdatedAt: getSessionUpdatedAt,
+        missingMessage: 'La sesión ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'La sesión ha sido modificada por otro usuario. Recarga antes de eliminarla.',
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('removeSession', error));
     },
     removeWithConcurrencyCheck: async (sessionId, expectedUpdatedAt) => {
       try {
@@ -365,13 +375,19 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     update: (sessionId, draft) => {
-      set((state) => {
-        const sessions = updateSessionList(state.sessions, sessionId, (session) =>
-          buildUpdatedSessionFromDraft(config, session, draft),
-        );
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+      void saveSharedArrayRecord<ManagedSession>({
+        storageKey: config.storageKey,
+        recordId: sessionId,
+        expectedUpdatedAt: null,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        getRecordId: getSessionId,
+        getRecordUpdatedAt: getSessionUpdatedAt,
+        updateRecord: (latestSession) => buildUpdatedSessionFromDraft(config, latestSession, draft),
+        missingMessage: 'La sesión ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('updateSession', error));
     },
     updateWithConcurrencyCheck: async (sessionId, draft, expectedUpdatedAt) => {
       try {
@@ -397,11 +413,19 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     addTask: (sessionId, taskId) => {
-      set((state) => {
-        const sessions = updateSessionList(state.sessions, sessionId, (session) => addTaskToSession(session, taskId));
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+      void saveSharedArrayRecord<ManagedSession>({
+        storageKey: config.storageKey,
+        recordId: sessionId,
+        expectedUpdatedAt: null,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        getRecordId: getSessionId,
+        getRecordUpdatedAt: getSessionUpdatedAt,
+        updateRecord: (latestSession) => addTaskToSession(latestSession, taskId),
+        missingMessage: 'La sesión ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'La sesión ha sido modificada por otro usuario. Recarga antes de añadir puntos.',
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('addSessionTask', error));
     },
     addTaskWithConcurrencyCheck: async (sessionId, taskId, expectedUpdatedAt) => {
       try {
@@ -427,11 +451,19 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     removeTask: (sessionId, taskId) => {
-      set((state) => {
-        const sessions = updateSessionList(state.sessions, sessionId, (session) => removeTaskFromSession(session, taskId));
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+      void saveSharedArrayRecord<ManagedSession>({
+        storageKey: config.storageKey,
+        recordId: sessionId,
+        expectedUpdatedAt: null,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        getRecordId: getSessionId,
+        getRecordUpdatedAt: getSessionUpdatedAt,
+        updateRecord: (latestSession) => removeTaskFromSession(latestSession, taskId),
+        missingMessage: 'La sesión ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'La sesión ha sido modificada por otro usuario. Recarga antes de quitar puntos.',
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('removeSessionTask', error));
     },
     removeTaskWithConcurrencyCheck: async (sessionId, taskId, expectedUpdatedAt) => {
       try {
@@ -457,13 +489,19 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     moveTask: (sessionId, taskId, direction) => {
-      set((state) => {
-        const sessions = updateSessionList(state.sessions, sessionId, (session) =>
-          moveTaskInSession(session, taskId, direction),
-        );
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+      void saveSharedArrayRecord<ManagedSession>({
+        storageKey: config.storageKey,
+        recordId: sessionId,
+        expectedUpdatedAt: null,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        getRecordId: getSessionId,
+        getRecordUpdatedAt: getSessionUpdatedAt,
+        updateRecord: (latestSession) => moveTaskInSession(latestSession, taskId, direction),
+        missingMessage: 'La sesión ya no existe en la base compartida. Recarga antes de continuar.',
+        conflictMessage: 'La sesión ha sido modificada por otro usuario. Recarga antes de reordenar puntos.',
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('moveSessionTask', error));
     },
     moveTaskWithConcurrencyCheck: async (sessionId, taskId, direction, expectedUpdatedAt) => {
       try {
@@ -489,28 +527,41 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }
     },
     closeSession: (sessionId, treatedTaskIds) => {
-      set((state) => {
-        const now = new Date().toISOString();
-        const treatedSet = new Set(treatedTaskIds);
-        const sessions = updateSessionList(state.sessions, sessionId, (session) => {
-          if (session.status === 'closed') {
-            return session;
+      void saveSharedArrayMutation<ManagedSession>({
+        storageKey: config.storageKey,
+        parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+        updateRecords: (latestSessions) => {
+          const latestSession = latestSessions.find((session) => session.id === sessionId);
+          if (!latestSession) {
+            throw new Error('La sesión ya no existe en la base compartida. Recarga antes de continuar.');
           }
 
-          const treated = session.items.filter((taskId) => treatedSet.has(taskId));
-          const untreated = session.items.filter((taskId) => !treatedSet.has(taskId));
-          return {
-            ...session,
-            status: 'closed',
-            treatedTaskIds: treated,
-            untreatedTaskIds: untreated,
-            updatedAt: now,
-            closedAt: now,
-          };
-        });
-        persistSessions(config.storageKey, sessions);
-        return { sessions };
-      });
+          if (latestSession.status === 'closed') {
+            throw new Error('La sesión ya está cerrada. Recarga antes de continuar.');
+          }
+
+          const now = new Date().toISOString();
+          const treatedSet = new Set(treatedTaskIds);
+          return latestSessions.map((session) => {
+            if (session.id !== sessionId) {
+              return session;
+            }
+
+            const treated = session.items.filter((taskId) => treatedSet.has(taskId));
+            const untreated = session.items.filter((taskId) => !treatedSet.has(taskId));
+            return {
+              ...session,
+              status: 'closed',
+              treatedTaskIds: treated,
+              untreatedTaskIds: untreated,
+              updatedAt: now,
+              closedAt: now,
+            };
+          });
+        },
+      })
+        .then((result) => set({ sessions: result.records }))
+        .catch((error) => logSessionPersistenceError('closeSession', error));
     },
 
     closeSessionWithConcurrencyCheck: async (sessionId, treatedTaskIds, expectedUpdatedAt) => {
