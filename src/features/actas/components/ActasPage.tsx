@@ -458,6 +458,7 @@ export function ActasPage() {
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
   const [newActaTypeName, setNewActaTypeName] = useState('');
   const [pendingDeleteActaId, setPendingDeleteActaId] = useState<string | null>(null);
+  const [openHistoryYears, setOpenHistoryYears] = useState<Record<string, boolean>>({});
   const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState('');
   const [isOutlookTemplateOpen, setIsOutlookTemplateOpen] = useState(false);
@@ -1183,32 +1184,44 @@ export function ActasPage() {
             No hay actas cerradas con los filtros actuales.
           </p>
         )}
-        {closedActasByYear.map(([year, rows]) => (
-          <details
-            className="rounded-xl border border-metro-border bg-metro-surface p-3"
-            key={year}
-            open={Boolean(search || yearFilter)}
-          >
-            <summary className="cursor-pointer text-sm font-bold text-metro-text">
-              {year} · {rows.length} acta{rows.length === 1 ? '' : 's'}
-            </summary>
-            <div className="mt-3">
-              <DataTable
-                ariaLabel={`Actas históricas ${year}`}
-                columnWidths={preferences.columnWidths}
-                onResetColumnWidths={resetColumnWidths}
-                columns={columns}
-                emptyMessage="No hay actas cerradas."
-                getRowId={(acta) => acta.id}
-                onColumnWidthChange={setColumnWidth}
-                onRowClick={openEditor}
-                onSortChange={setSort}
-                rows={rows}
-                sort={preferences.sort}
-              />
-            </div>
-          </details>
-        ))}
+        {closedActasByYear.map(([year, rows]) => {
+          const isYearOpen = Boolean(search || yearFilter || openHistoryYears[year]);
+
+          return (
+            <details
+              className="rounded-xl border border-metro-border bg-metro-surface p-3"
+              key={year}
+              onToggle={(event) => {
+                if (search || yearFilter) {
+                  return;
+                }
+                setOpenHistoryYears((current) => ({ ...current, [year]: event.currentTarget.open }));
+              }}
+              open={isYearOpen}
+            >
+              <summary className="cursor-pointer text-sm font-bold text-metro-text">
+                {year} · {rows.length} acta{rows.length === 1 ? '' : 's'}
+              </summary>
+              {isYearOpen && (
+                <div className="mt-3">
+                  <DataTable
+                    ariaLabel={`Actas históricas ${year}`}
+                    columnWidths={preferences.columnWidths}
+                    onResetColumnWidths={resetColumnWidths}
+                    columns={columns}
+                    emptyMessage="No hay actas cerradas."
+                    getRowId={(acta) => acta.id}
+                    onColumnWidthChange={setColumnWidth}
+                    onRowClick={openEditor}
+                    onSortChange={setSort}
+                    rows={rows}
+                    sort={preferences.sort}
+                  />
+                </div>
+              )}
+            </details>
+          );
+        })}
       </div>
 
       {isOutlookTemplateOpen && (
