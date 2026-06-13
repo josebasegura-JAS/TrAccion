@@ -140,6 +140,58 @@ export async function saveNewSharedArrayRecord<TRecord>({
 }
 
 
+
+export interface SaveSharedArrayMutationOptions<TRecord> {
+  storageKey: string;
+  parseRecords: (storageValue: string | null) => TRecord[];
+  updateRecords: (latestRecords: TRecord[]) => TRecord[];
+}
+
+export interface SaveSharedArrayMutationResult<TRecord> {
+  records: TRecord[];
+}
+
+export async function saveSharedArrayMutation<TRecord>({
+  storageKey,
+  parseRecords,
+  updateRecords,
+}: SaveSharedArrayMutationOptions<TRecord>): Promise<SaveSharedArrayMutationResult<TRecord>> {
+  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
+  const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
+
+  if (!loadPersistedRecords || !saveLocalStorageRecordIfUnchanged) {
+    throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
+  }
+
+  const snapshot = await loadPersistedRecords();
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    throw new Error(
+      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+    );
+  }
+
+  const latestStorageRecord = snapshot.records.find((record) => record.key === storageKey) ?? null;
+  const latestStorageValue = latestStorageRecord?.value ?? null;
+  const expectedStorageUpdatedAt = latestStorageRecord?.updatedAt ?? null;
+  const latestRecords = parseRecords(latestStorageValue);
+  const nextRecords = updateRecords(latestRecords);
+  const serialized = JSON.stringify(nextRecords);
+  const result = await saveLocalStorageRecordIfUnchanged({
+    key: storageKey,
+    value: serialized,
+    expectedUpdatedAt: expectedStorageUpdatedAt,
+  });
+  publishDatabaseStatus(result.status);
+
+  if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
+    throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
+  }
+
+  window.localStorage.setItem(storageKey, serialized);
+  return { records: nextRecords };
+}
+
 export interface DeleteSharedArrayRecordOptions<TRecord> {
   storageKey: string;
   recordId: string;
