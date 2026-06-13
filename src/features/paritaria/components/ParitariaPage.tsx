@@ -41,10 +41,13 @@ export function ParitariaPage({
   initialSessionId?: string | null;
   navigationNonce?: number;
 }) {
-  const createActaFromSession = useActasStore((state) => state.createFromSession);
+  const createActaFromSession = useActasStore((state) => state.createFromSessionWithConcurrencyCheck);
 
-  const handleClosedSession = (session: ManagedSession, treatedTasks: Task[]) => {
-    createActaFromSession({ tipo: 'Paritaria', session, treatedTasks });
+  const handleClosedSession = async (session: ManagedSession, treatedTasks: Task[]) => {
+    const result = await createActaFromSession({ tipo: 'Paritaria', session, treatedTasks });
+    if (!result.ok) {
+      window.alert(result.message);
+    }
   };
 
   return (
