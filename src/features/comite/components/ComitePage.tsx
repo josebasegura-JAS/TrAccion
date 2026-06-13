@@ -41,10 +41,13 @@ export function ComitePage({
   initialSessionId?: string | null;
   navigationNonce?: number;
 }) {
-  const createActaFromSession = useActasStore((state) => state.createFromSession);
+  const createActaFromSession = useActasStore((state) => state.createFromSessionWithConcurrencyCheck);
 
-  const handleClosedSession = (session: ManagedSession, treatedTasks: Task[]) => {
-    createActaFromSession({ tipo: 'Comité', session, treatedTasks });
+  const handleClosedSession = async (session: ManagedSession, treatedTasks: Task[]) => {
+    const result = await createActaFromSession({ tipo: 'Comité', session, treatedTasks });
+    if (!result.ok) {
+      window.alert(result.message);
+    }
   };
 
   return (
