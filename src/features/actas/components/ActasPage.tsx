@@ -597,15 +597,26 @@ export function ActasPage() {
     [filteredActas],
   );
 
+  const shouldMaterializeClosedActas = Boolean(search.trim() || yearFilter);
   const closedActasByYear = useMemo(() => {
-    const groups = new Map<string, Acta[]>();
-    for (const acta of filteredActas.filter((item) => item.estado === 'Cerrada')) {
+    const groups = new Map<string, { count: number; rows: Acta[] }>();
+
+    for (const acta of filteredActas) {
+      if (acta.estado !== 'Cerrada') {
+        continue;
+      }
+
       const year = getClosedYear(acta);
-      groups.set(year, [...(groups.get(year) ?? []), acta]);
+      const current = groups.get(year) ?? { count: 0, rows: [] };
+      current.count += 1;
+      if (shouldMaterializeClosedActas || openHistoryYears[year]) {
+        current.rows.push(acta);
+      }
+      groups.set(year, current);
     }
 
     return [...groups.entries()].sort(([first], [second]) => second.localeCompare(first));
-  }, [filteredActas]);
+  }, [filteredActas, openHistoryYears, shouldMaterializeClosedActas]);
 
   const filterLabel = buildFilterLabel([
     ['Búsqueda', search],
@@ -1184,8 +1195,9 @@ export function ActasPage() {
             No hay actas cerradas con los filtros actuales.
           </p>
         )}
-        {closedActasByYear.map(([year, rows]) => {
+        {closedActasByYear.map(([year, group]) => {
           const isYearOpen = Boolean(search || yearFilter || openHistoryYears[year]);
+          const rows = isYearOpen ? group.rows : [];
 
           return (
             <details
@@ -1200,7 +1212,7 @@ export function ActasPage() {
               open={isYearOpen}
             >
               <summary className="cursor-pointer text-sm font-bold text-metro-text">
-                {year} · {rows.length} acta{rows.length === 1 ? '' : 's'}
+                {year} · {group.count} acta{group.count === 1 ? '' : 's'}
               </summary>
               {isYearOpen && (
                 <div className="mt-3">
