@@ -275,13 +275,13 @@ export function SessionManagementPage({
   const {
     sessions,
     load,
-    create,
-    importSessions,
-    remove,
-    update,
-    addTask,
-    removeTask,
-    moveTask,
+    createWithConcurrencyCheck,
+    importSessionsWithConcurrencyCheck,
+    removeWithConcurrencyCheck,
+    updateWithConcurrencyCheck,
+    addTaskWithConcurrencyCheck,
+    removeTaskWithConcurrencyCheck,
+    moveTaskWithConcurrencyCheck,
     closeSessionWithConcurrencyCheck,
   } = useSessionStore();
   const { tasks, load: loadTasks, closeTasksFromSessionWithConcurrencyCheck, createManyFromImport } = useTaskStore();
@@ -381,17 +381,27 @@ export function SessionManagementPage({
     setEditDraft((current) => ({ ...current, [key]: value }));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!draft.date || !draft.code.trim()) {
       window.alert('Indica al menos fecha y código documental de la sesión.');
       return;
     }
 
-    const createdSessionId = create(draft);
-    setDraft(EMPTY_MANAGED_SESSION_DRAFT);
-    setIsCreateOpen(false);
-    setOpenPanel('open');
-    setExpandedSessionId(createdSessionId);
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await createWithConcurrencyCheck(draft);
+        if (!result.ok || !result.sessionId) {
+          throw new Error(result.message);
+        }
+
+        setDraft(EMPTY_MANAGED_SESSION_DRAFT);
+        setIsCreateOpen(false);
+        setOpenPanel('open');
+        setExpandedSessionId(result.sessionId);
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se ha podido crear la sesión.');
+    }
   };
 
   const openCloseModal = (session: ManagedSession) => {
@@ -418,7 +428,7 @@ export function SessionManagementPage({
     setEditDraft(EMPTY_MANAGED_SESSION_DRAFT);
   };
 
-  const saveEditSession = () => {
+  const saveEditSession = async () => {
     if (!editingSession) {
       return;
     }
@@ -428,8 +438,87 @@ export function SessionManagementPage({
       return;
     }
 
-    update(editingSession.id, editDraft);
-    cancelEditSession();
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await updateWithConcurrencyCheck(
+          editingSession.id,
+          editDraft,
+          editingSession.updatedAt ?? null,
+        );
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+
+        cancelEditSession();
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se ha podido guardar la sesión.');
+    }
+  };
+
+  const handleRemoveSession = async (session: ManagedSession) => {
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await removeWithConcurrencyCheck(session.id, session.updatedAt ?? null);
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+
+        if (expandedSessionId === session.id) {
+          setExpandedSessionId(null);
+        }
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se ha podido eliminar la sesión.');
+    }
+  };
+
+  const handleAddTaskToSession = async (session: ManagedSession, taskId: string) => {
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await addTaskWithConcurrencyCheck(session.id, taskId, session.updatedAt ?? null);
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se ha podido añadir el punto.');
+    }
+  };
+
+  const handleRemoveTaskFromSession = async (session: ManagedSession, taskId: string) => {
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await removeTaskWithConcurrencyCheck(session.id, taskId, session.updatedAt ?? null);
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se ha podido quitar el punto.');
+    }
+  };
+
+  const handleMoveTaskInSession = async (
+    session: ManagedSession,
+    taskId: string,
+    direction: 'up' | 'down',
+  ) => {
+    try {
+      await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
+        const result = await moveTaskWithConcurrencyCheck(
+          session.id,
+          taskId,
+          direction,
+          session.updatedAt ?? null,
+        );
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se ha podido reordenar el punto.');
+    }
   };
 
   const confirmCloseSession = async () => {
@@ -544,7 +633,7 @@ export function SessionManagementPage({
           { module: config.moduleId, label: config.title },
           { module: 'tareas', label: 'Tareas' },
         ],
-        () => {
+        async () => {
           const latestSessions = useSessionStore.getState().sessions;
           const importableSessions = relevantImportSessions.filter((session) => {
             const normalizedCode = session.draft.code.trim().toLowerCase();
@@ -570,7 +659,7 @@ export function SessionManagementPage({
               closedAt: closedAtByTaskExternalKey.get(task.externalKey) ?? null,
             }));
           const taskIdsByExternalKey = createManyFromImport(importableTasks);
-          const importedSessionCount = importSessions(
+          const importedSessionsResult = await importSessionsWithConcurrencyCheck(
             importableSessions.map((session) => ({
               externalKey: session.externalKey,
               draft: session.draft,
@@ -580,13 +669,16 @@ export function SessionManagementPage({
               }),
             })),
           );
+          if (!importedSessionsResult.ok) {
+            throw new Error(importedSessionsResult.message);
+          }
 
           loadTasks();
           setOpenPanel('history');
           setImportPreview(null);
           window.alert(
-            importedSessionCount > 0
-              ? `Importación completada: ${importedSessionCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
+            importedSessionsResult.importedCount > 0
+              ? `Importación completada: ${importedSessionsResult.importedCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
               : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
           );
         },
@@ -738,17 +830,17 @@ export function SessionManagementPage({
           )}
           {filteredOpenSessions.map((session) => (
             <SessionCard
-              addTask={addTask}
+              addTask={handleAddTaskToSession}
               availableTasks={availableTasks}
               config={config}
               isExpanded={expandedSessionId === session.id}
               key={session.id}
-              moveTask={moveTask}
+              moveTask={handleMoveTaskInSession}
               onClose={openCloseModal}
               onEdit={canEditSessions ? openEditModal : undefined}
-              onRemove={remove}
+              onRemove={handleRemoveSession}
               onToggle={() => setExpandedSessionId((current) => (current === session.id ? null : session.id))}
-              removeTask={removeTask}
+              removeTask={handleRemoveTaskFromSession}
               session={session}
               tasksById={tasksById}
             />
@@ -791,7 +883,7 @@ export function SessionManagementPage({
                         config={config}
                         key={session.id}
                         onEdit={canEditSessions ? openEditModal : undefined}
-                        onRemove={remove}
+                        onRemove={handleRemoveSession}
                         session={session}
                         tasksById={tasksById}
                       />
@@ -1041,16 +1133,16 @@ function SessionCard({
   session,
   tasksById,
 }: {
-  addTask: (sessionId: string, taskId: string) => void;
+  addTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
   availableTasks: Task[];
   config: SessionModuleConfig;
   isExpanded: boolean;
-  moveTask: (sessionId: string, taskId: string, direction: 'up' | 'down') => void;
+  moveTask: (session: ManagedSession, taskId: string, direction: 'up' | 'down') => void | Promise<void>;
   onClose: (session: ManagedSession) => void;
   onEdit?: (session: ManagedSession) => void;
-  onRemove: (sessionId: string) => void;
+  onRemove: (session: ManagedSession) => void | Promise<void>;
   onToggle: () => void;
-  removeTask: (sessionId: string, taskId: string) => void;
+  removeTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
   session: ManagedSession;
   tasksById: Map<string, Task>;
 }) {
@@ -1106,7 +1198,7 @@ function SessionCard({
             className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!isExpanded || isReadOnly}
             title={!isExpanded ? 'Abre la sesión para bloquearla antes de eliminarla' : undefined}
-            onClick={() => onRemove(session.id)}
+            onClick={() => void onRemove(session)}
             type="button"
           >
             <Trash2 size={14} /> Eliminar
@@ -1131,7 +1223,7 @@ function SessionCard({
               disabled={isReadOnly}
               onChange={(event) => {
                 if (!isReadOnly && event.target.value) {
-                  addTask(session.id, event.target.value);
+                  void addTask(session, event.target.value);
                   event.target.value = '';
                 }
               }}
@@ -1176,7 +1268,7 @@ function SessionCard({
                     <button
                       className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
                       disabled={isReadOnly || index === 0}
-                      onClick={() => moveTask(session.id, taskId, 'up')}
+                      onClick={() => void moveTask(session, taskId, 'up')}
                       type="button"
                     >
                       ↑
@@ -1184,7 +1276,7 @@ function SessionCard({
                     <button
                       className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
                       disabled={isReadOnly || index === session.items.length - 1}
-                      onClick={() => moveTask(session.id, taskId, 'down')}
+                      onClick={() => void moveTask(session, taskId, 'down')}
                       type="button"
                     >
                       ↓
@@ -1192,7 +1284,7 @@ function SessionCard({
                     <button
                       className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={isReadOnly}
-                      onClick={() => removeTask(session.id, taskId)}
+                      onClick={() => void removeTask(session, taskId)}
                       type="button"
                     >
                       Quitar
@@ -1217,7 +1309,7 @@ function HistoricSessionCard({
 }: {
   config: SessionModuleConfig;
   onEdit?: (session: ManagedSession) => void;
-  onRemove: (sessionId: string) => void;
+  onRemove: (session: ManagedSession) => void | Promise<void>;
   session: ManagedSession;
   tasksById: Map<string, Task>;
 }) {
@@ -1260,7 +1352,7 @@ function HistoricSessionCard({
               );
 
               if (confirmed) {
-                onRemove(session.id);
+                void onRemove(session);
               }
             }}
             type="button"
