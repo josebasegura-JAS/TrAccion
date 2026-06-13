@@ -91,6 +91,18 @@ const QUICK_SEARCHES = [
   buildQuickSearch('Teletrabajo', 'modulo:teletrabajo'),
 ];
 
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [delayMs, value]);
+
+  return debouncedValue;
+}
+
 function formatResultDate(value: string): string {
   if (!value) {
     return 'Sin fecha';
@@ -108,8 +120,9 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const [yearFilter, setYearFilter] = useState<YearFilter>(ALL_YEARS_FILTER);
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readRecentSearches());
-  const results = useMemo(() => searchTraccion(query), [query]);
-  const parsedSearchSummary = useMemo(() => getParsedSearchSummary(query), [query]);
+  const debouncedQuery = useDebouncedValue(query, 180);
+  const results = useMemo(() => searchTraccion(debouncedQuery), [debouncedQuery]);
+  const parsedSearchSummary = useMemo(() => getParsedSearchSummary(debouncedQuery), [debouncedQuery]);
   const moduleOptions = useMemo(
     () => Array.from(new Map(results.map((result) => [result.moduleView, result.module])).entries()),
     [results],
