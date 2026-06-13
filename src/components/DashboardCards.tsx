@@ -598,7 +598,7 @@ export function DashboardCards({
       },
     ];
   }, [
-    activeTasks.length,
+    activeTasks,
     activeTelework,
     committeeTasks.length,
     criticalTasks.length,
