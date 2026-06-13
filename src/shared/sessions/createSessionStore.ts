@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../services/persistence';
+import { saveSharedArrayMutation } from '../../services/sharedRecordPersistence';
 import {
   EMPTY_MANAGED_SESSION_DRAFT,
   isManagedSession,
@@ -21,22 +22,37 @@ export interface ManagedSessionStateStore {
   removeTask: (sessionId: string, taskId: string) => void;
   moveTask: (sessionId: string, taskId: string, direction: 'up' | 'down') => void;
   closeSession: (sessionId: string, treatedTaskIds: string[]) => void;
+  closeSessionWithConcurrencyCheck: (
+    sessionId: string,
+    treatedTaskIds: string[],
+    expectedUpdatedAt: string | null,
+  ) => Promise<{ ok: boolean; message: string; session?: ManagedSession }>;
 }
 
 function createSessionId(moduleId: string): string {
   return `${moduleId}-session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function readSessions(config: SessionModuleConfig): ManagedSession[] {
-  const stored = readStorageItem(config.storageKey);
-  if (!stored) {
+export function parseManagedSessionsSnapshot(
+  storageValue: string | null,
+  defaultTitle: string,
+): ManagedSession[] {
+  if (!storageValue) {
     return [];
   }
 
-  const parsed: unknown = JSON.parse(stored);
-  return Array.isArray(parsed)
-    ? parsed.filter(isManagedSession).map((session) => normalizeManagedSession(session, config.newSessionDefaultTitle))
-    : [];
+  try {
+    const parsed: unknown = JSON.parse(storageValue);
+    return Array.isArray(parsed)
+      ? parsed.filter(isManagedSession).map((session) => normalizeManagedSession(session, defaultTitle))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function readSessions(config: SessionModuleConfig): ManagedSession[] {
+  return parseManagedSessionsSnapshot(readStorageItem(config.storageKey), config.newSessionDefaultTitle);
 }
 
 function persistSessions(storageKey: string, sessions: ManagedSession[]): void {
@@ -235,6 +251,61 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         persistSessions(config.storageKey, sessions);
         return { sessions };
       });
+    },
+
+    closeSessionWithConcurrencyCheck: async (sessionId, treatedTaskIds, expectedUpdatedAt) => {
+      try {
+        let closedSession: ManagedSession | undefined;
+        const result = await saveSharedArrayMutation<ManagedSession>({
+          storageKey: config.storageKey,
+          parseRecords: (storageValue) => parseManagedSessionsSnapshot(storageValue, config.newSessionDefaultTitle),
+          updateRecords: (latestSessions) => {
+            const latestSession = latestSessions.find((session) => session.id === sessionId);
+            if (!latestSession) {
+              throw new Error('La sesión ya no existe en la base compartida. Recarga antes de continuar.');
+            }
+
+            if (latestSession.status === 'closed') {
+              throw new Error('La sesión ya está cerrada. Recarga antes de continuar.');
+            }
+
+            const latestUpdatedAt = latestSession.updatedAt ?? null;
+            if (expectedUpdatedAt && latestUpdatedAt !== expectedUpdatedAt) {
+              throw new Error(
+                'La sesión ha sido modificada por otro usuario. Recarga antes de cerrar para no sobrescribir cambios.',
+              );
+            }
+
+            const now = new Date().toISOString();
+            const treatedSet = new Set(treatedTaskIds);
+            return latestSessions.map((session) => {
+              if (session.id !== sessionId) {
+                return session;
+              }
+
+              const treated = session.items.filter((taskId) => treatedSet.has(taskId));
+              const untreated = session.items.filter((taskId) => !treatedSet.has(taskId));
+              closedSession = {
+                ...session,
+                status: 'closed',
+                treatedTaskIds: treated,
+                untreatedTaskIds: untreated,
+                updatedAt: now,
+                closedAt: now,
+              };
+              return closedSession;
+            });
+          },
+        });
+
+        set({ sessions: result.records });
+        return { ok: true, message: 'Sesión cerrada.', session: closedSession };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido cerrar la sesión.',
+        };
+      }
     },
   }));
 }

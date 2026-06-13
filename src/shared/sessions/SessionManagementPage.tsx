@@ -70,7 +70,7 @@ interface SessionManagementPageProps {
   useSessionStore: UseBoundStore<StoreApi<ManagedSessionStateStore>>;
   initialSessionId?: string | null;
   navigationNonce?: number;
-  onClosedSession?: (session: ManagedSession, treatedTasks: Task[]) => void;
+  onClosedSession?: (session: ManagedSession, treatedTasks: Task[]) => void | Promise<void>;
   helpSections?: ModuleHelpSection[];
 }
 
@@ -272,8 +272,19 @@ export function SessionManagementPage({
   onClosedSession,
   helpSections,
 }: SessionManagementPageProps) {
-  const { sessions, load, create, importSessions, remove, update, addTask, removeTask, moveTask, closeSession } = useSessionStore();
-  const { tasks, load: loadTasks, closeTasksFromSession, createManyFromImport } = useTaskStore();
+  const {
+    sessions,
+    load,
+    create,
+    importSessions,
+    remove,
+    update,
+    addTask,
+    removeTask,
+    moveTask,
+    closeSessionWithConcurrencyCheck,
+  } = useSessionStore();
+  const { tasks, load: loadTasks, closeTasksFromSessionWithConcurrencyCheck, createManyFromImport } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -431,18 +442,35 @@ export function SessionManagementPage({
         [
           { module: config.moduleId, label: config.title },
           { module: 'tareas', label: 'Tareas' },
+          { module: 'actas', label: 'Actas' },
         ],
-        () => {
+        async () => {
           const treatedIds = closingSession.items.filter((taskId) => treatedTaskIds[taskId]);
           const treatedTasks = treatedIds.flatMap((taskId) => {
             const task = tasksById.get(taskId);
             return task ? [task] : [];
           });
 
-          closeSession(closingSession.id, treatedIds);
-          closeTasksFromSession(treatedIds, config.closeTrackingLabel, managedSessionLabel(closingSession));
+          const closeSessionResult = await closeSessionWithConcurrencyCheck(
+            closingSession.id,
+            treatedIds,
+            closingSession.updatedAt ?? null,
+          );
+          if (!closeSessionResult.ok || !closeSessionResult.session) {
+            throw new Error(closeSessionResult.message);
+          }
+
+          const closeTasksResult = await closeTasksFromSessionWithConcurrencyCheck(
+            treatedIds,
+            config.closeTrackingLabel,
+            managedSessionLabel(closeSessionResult.session),
+          );
+          if (!closeTasksResult.ok) {
+            throw new Error(closeTasksResult.message);
+          }
+
           if (window.confirm('¿Desea crear un registro en Actas?')) {
-            onClosedSession?.(closingSession, treatedTasks);
+            await onClosedSession?.(closeSessionResult.session, treatedTasks);
           }
           setClosingSessionId(null);
           setTreatedTaskIds({});
