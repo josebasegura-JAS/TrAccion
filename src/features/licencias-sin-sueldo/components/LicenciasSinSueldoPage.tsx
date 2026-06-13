@@ -539,6 +539,14 @@ export function LicenciasSinSueldoPage() {
   const today = todayIso();
   const visibleRecords = useMemo(() => visibleLicenciasSinSueldo(records), [records]);
   const effectiveRecords = useMemo(() => visibleRecords.map((record) => ({ ...record, estado: getEffectiveLicenciaEstado(record, today) })), [today, visibleRecords]);
+  const historicalYears = useMemo(
+    () => [...new Set(
+      effectiveRecords
+        .filter((record) => record.estado === 'historico')
+        .map((record) => getHistoricalYear(record)),
+    )].sort((first, second) => second - first),
+    [effectiveRecords],
+  );
 
   const filteredRecords = useMemo(() => {
     const normalizedQuery = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
