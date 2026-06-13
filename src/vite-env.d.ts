@@ -93,6 +93,11 @@ interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsToken
   records: TraccionStorageRecordSnapshot[];
 }
 
+interface TraccionPersistedRecordSnapshot {
+  status: TraccionDatabaseStatus;
+  record: TraccionStorageRecordSnapshot | null;
+}
+
 interface TraccionConditionalStorageRecord extends TraccionStorageRecord {
   expectedUpdatedAt: string | null;
 }
@@ -157,6 +162,7 @@ interface TraccionApi {
   listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
+  getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;
   getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
   onDatabaseConnectivityIssue?: (
     listener: (payload: TraccionDatabaseConnectivityIssue) => void,
