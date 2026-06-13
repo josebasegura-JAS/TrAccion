@@ -32,6 +32,19 @@ interface EspecialOutlookDraftResult {
   message: string;
 }
 
+interface EspecialOutlookCalendarPayload {
+  subject: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  requiredAttendees: string[];
+}
+
+interface EspecialOutlookCalendarResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TeletrabajoOpenWordResult {
   ok: boolean;
   message: string;
@@ -192,6 +205,7 @@ interface TraccionApi {
     fileName: string,
   ) => Promise<TraccionOpenExcelWorkbookResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
+  createOutlookCalendar?: (payload: EspecialOutlookCalendarPayload) => Promise<EspecialOutlookCalendarResult>;
   parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
   extractDocxText?: (payload: ArrayBuffer) => Promise<TraccionDocxTextResult>;
 }
@@ -204,6 +218,7 @@ interface RrllOutlookApi {
   createDraft: (
     payload: EspecialOutlookDraftPayload | LegacyEspecialOutlookDraftPayload,
   ) => Promise<EspecialOutlookDraftResult>;
+  createCalendar?: (payload: EspecialOutlookCalendarPayload) => Promise<EspecialOutlookCalendarResult>;
 }
 
 interface Window {
