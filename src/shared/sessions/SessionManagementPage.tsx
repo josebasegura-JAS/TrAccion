@@ -324,7 +324,11 @@ export function SessionManagementPage({
     () => closedSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch)),
     [closedSessions, config, effectiveSessionSearch, tasksById],
   );
-  const closedSessionGroups = useMemo(() => groupClosedSessionsByYear(filteredClosedSessions), [filteredClosedSessions]);
+  const shouldRenderClosedSessions = hasSessionSearch || openPanel === 'history';
+  const closedSessionGroups = useMemo(
+    () => (shouldRenderClosedSessions ? groupClosedSessionsByYear(filteredClosedSessions) : []),
+    [filteredClosedSessions, shouldRenderClosedSessions],
+  );
   const availableTasks = useMemo(
     () =>
       tasks
