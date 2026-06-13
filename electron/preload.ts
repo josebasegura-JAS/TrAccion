@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('traccion', {
   listLocalBackups: () => ipcRenderer.invoke('database:list-local-backups'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
+  getPersistedRecord: (key: string) =>
+    ipcRenderer.invoke('database:get-persisted-record', { key }),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
   onDatabaseConnectivityIssue: (listener: (payload: unknown) => void) => {
     const handler = (_event: IpcRendererEvent, payload: unknown) => listener(payload);

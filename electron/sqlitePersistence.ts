@@ -18,7 +18,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -52,6 +52,11 @@ export interface PersistedRecordsTokenSnapshot {
 
 export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot {
   records: PersistedStorageRecordSnapshot[];
+}
+
+export interface PersistedRecordSnapshot {
+  status: DatabaseStatus;
+  record: PersistedStorageRecordSnapshot | null;
 }
 
 export interface LocalStorageBackupPayload {
@@ -142,6 +147,30 @@ export interface DatabaseConnectivityIssuePayload {
   message: string;
   failedHeartbeatCount: number;
   updatedAt: string;
+}
+
+
+function logSqliteMetric(message: string, data?: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
+
+  if (data) {
+    console.info(`[sqlite] ${message}`, data);
+    return;
+  }
+
+  console.info(`[sqlite] ${message}`);
+}
+
+function largestPersistedRecordSizes(records: PersistedStorageRecordSnapshot[]): Array<{
+  key: string;
+  bytes: number;
+}> {
+  return records
+    .map((record) => ({ key: record.key, bytes: Buffer.byteLength(record.value, 'utf8') }))
+    .sort((left, right) => right.bytes - left.bytes)
+    .slice(0, 10);
 }
 
 function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
@@ -901,9 +930,28 @@ function migrateToVersion2(db: Database): void {
   }
 }
 
+function migrateToVersion3(db: Database): void {
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_persisted_records_updated_at
+      ON persisted_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_editing_locks_expires_at
+      ON editing_locks(expires_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 3) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      3,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
+  migrateToVersion3(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1146,6 +1194,19 @@ function isUpdatedAtRow(value: unknown): value is UpdatedAtRow {
 
   const candidate = value as Partial<UpdatedAtRow>;
   return typeof candidate.updated_at === 'string';
+}
+
+function readPersistedRecordByKey(
+  db: Database,
+  key: string,
+): PersistedStorageRecordSnapshot | null {
+  const row = db
+    .prepare('SELECT key, value_json, updated_at FROM persisted_records WHERE key = ?')
+    .get(key);
+
+  return isPersistedRecordRow(row)
+    ? { key: row.key, value: row.value_json, updatedAt: row.updated_at }
+    : null;
 }
 
 function readAllPersistedRecords(db: Database): PersistedStorageRecordSnapshot[] {
@@ -1734,6 +1795,21 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
   }
 }
 
+export function getPersistedRecordSnapshot(key: string): PersistedRecordSnapshot {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+        return { status: currentStatus, record: null };
+      }
+
+      const db = requireDatabase();
+      return { status: currentStatus, record: readPersistedRecordByKey(db, key) };
+    },
+    (nextStatus) => ({ status: nextStatus, record: null }),
+  );
+}
+
 export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
   return safeDatabaseOperation(
     () => {
@@ -1743,6 +1819,7 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
       }
 
       const db = requireDatabase();
+      const startedAt = Date.now();
       const records = readAllPersistedRecords(db);
       const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
         if (!latest) {
@@ -1751,6 +1828,12 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
 
         return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
       }, null);
+
+      logSqliteMetric('loadPersistedRecordsSnapshot', {
+        records: records.length,
+        elapsedMs: Date.now() - startedAt,
+        largestKeys: largestPersistedRecordSizes(records),
+      });
 
       return {
         status: currentStatus,

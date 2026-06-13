@@ -13,6 +13,7 @@ import {
   changeSqliteDirectory,
   closeSqlitePersistence,
   createLocalStorageBackup,
+  getPersistedRecordSnapshot,
   getRecordLock,
   getSqliteStatus,
   heartbeatRecordLock,
@@ -792,6 +793,19 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('database:load-persisted-records', () => loadPersistedRecordsSnapshot());
+
+  ipcMain.handle('database:get-persisted-record', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return { status: getSqliteStatus(), record: null };
+    }
+
+    const candidate = payload as { key?: unknown };
+    if (typeof candidate.key !== 'string' || !candidate.key.trim()) {
+      return { status: getSqliteStatus(), record: null };
+    }
+
+    return getPersistedRecordSnapshot(candidate.key);
+  });
 
   ipcMain.handle('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot());
 
