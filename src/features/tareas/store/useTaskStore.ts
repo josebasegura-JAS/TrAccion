@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
-import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
@@ -145,6 +145,11 @@ interface TaskStateStore {
   selectTask: (taskId: string) => void;
   closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
   closeTasksFromSession: (taskIds: string[], moduleLabel: string, sessionLabel: string) => void;
+  closeTasksFromSessionWithConcurrencyCheck: (
+    taskIds: string[],
+    moduleLabel: string,
+    sessionLabel: string,
+  ) => Promise<TaskUpdateResult>;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
 
@@ -801,6 +806,52 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       persistTasks(tasks);
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
+  },
+
+  closeTasksFromSessionWithConcurrencyCheck: async (taskIds, moduleLabel, sessionLabel) => {
+    try {
+      const now = new Date().toISOString();
+      const taskIdSet = new Set(taskIds);
+      const seguimiento = buildSeguimiento(`Tratada en ${moduleLabel} (${sessionLabel}).`, now);
+      const result = await saveSharedArrayMutation<Task>({
+        storageKey: TASKS_STORAGE_KEY,
+        parseRecords: parseTasksSnapshot,
+        updateRecords: (latestTasks) =>
+          latestTasks.map((task) => {
+            if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
+              return task;
+            }
+
+            addAuditEvent({
+              module: 'tareas',
+              entityId: task.id,
+              action: 'status_changed',
+              summary: `Estado cambiado: ${task.estado} → cerrada`,
+              changes: [
+                { field: 'estado', label: 'Estado', before: task.estado, after: 'cerrada' },
+                { field: 'fase', label: 'Fase', before: task.fase, after: CLOSED_TASK_PHASE },
+              ],
+            });
+
+            return normalizeTask({
+              ...task,
+              estado: 'cerrada' as const,
+              fase: CLOSED_TASK_PHASE,
+              seguimiento: [...seguimiento, ...task.seguimiento],
+              closedAt: task.closedAt ?? now,
+              updatedAt: now,
+            });
+          }),
+      });
+      const normalizedTasks = result.records.map(normalizeTask);
+      set({ tasks: normalizedTasks, selectedTaskId: firstActiveTaskId(normalizedTasks) });
+      return { ok: true, message: 'Puntos tratados cerrados.' };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se han podido cerrar los puntos tratados.',
+      };
+    }
   },
   selectTask: (taskId) => set({ selectedTaskId: taskId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),
