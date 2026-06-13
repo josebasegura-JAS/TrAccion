@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useMemo, useRef } from 'react';
+import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
@@ -39,6 +39,8 @@ interface DataTableProps<Row, ColumnId extends string> {
 const DEFAULT_MIN_COLUMN_WIDTH = 80;
 const DEFAULT_MAX_COLUMN_WIDTH = 640;
 const RESIZE_HANDLE_WIDTH = 12;
+const DEFAULT_RENDER_BATCH_SIZE = 300;
+const RENDER_BATCH_INCREMENT = 300;
 
 function clampColumnWidth(width: number, minWidth: number, maxWidth: number): number {
   return Math.min(Math.max(width, minWidth), maxWidth);
@@ -99,6 +101,18 @@ export function DataTable<Row, ColumnId extends string>({
     () => sortDataTableRows(rows, visibleColumns, sort),
     [rows, sort, visibleColumns],
   );
+
+  const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_BATCH_SIZE);
+
+  useEffect(() => {
+    setRenderLimit(DEFAULT_RENDER_BATCH_SIZE);
+  }, [rows, sort]);
+
+  const visibleRows = useMemo(
+    () => sortedRows.slice(0, renderLimit),
+    [renderLimit, sortedRows],
+  );
+  const hasHiddenRows = visibleRows.length < sortedRows.length;
 
   const tableMinWidth = visibleColumns.reduce((sum, column) => sum + column.minWidth, 0);
 
@@ -248,7 +262,7 @@ export function DataTable<Row, ColumnId extends string>({
               </td>
             </tr>
           ) : (
-            sortedRows.map((row, rowIndex) => (
+            visibleRows.map((row, rowIndex) => (
               <tr
                 className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                 key={getRowId(row)}
@@ -278,6 +292,20 @@ export function DataTable<Row, ColumnId extends string>({
         </tbody>
       </table>
       </div>
+      {hasHiddenRows && (
+        <div className="flex items-center justify-between rounded-xl border border-metro-border bg-metro-panel/45 px-3 py-2 text-xs text-metro-muted">
+          <span>
+            Mostrando {visibleRows.length} de {sortedRows.length} registros.
+          </span>
+          <button
+            className="rounded-lg border border-metro-border px-3 py-1 font-semibold transition-colors hover:border-metro-red hover:text-metro-text"
+            type="button"
+            onClick={() => setRenderLimit((currentLimit) => currentLimit + RENDER_BATCH_INCREMENT)}
+          >
+            Mostrar más
+          </button>
+        </div>
+      )}
     </div>
   );
 }
