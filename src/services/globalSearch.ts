@@ -28,6 +28,7 @@ type SearchableModule = {
 type UnknownRecord = Record<string, unknown>;
 
 const UNKNOWN_YEAR = 0;
+export const MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH = 3;
 
 
 const MODULE_ALIASES: Record<string, AppView> = {
@@ -682,11 +683,18 @@ const searchableModules: SearchableModule[] = [
 
 export function searchTraccion(query: string): GlobalSearchResult[] {
   const parsedQuery = parseSearchQuery(query);
-  if (parsedQuery.normalizedFreeText.length < 2 && parsedQuery.activeFilters.length === 0) {
+  if (
+    parsedQuery.normalizedFreeText.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH &&
+    parsedQuery.activeFilters.length === 0
+  ) {
     return [];
   }
 
-  const linkedSessionLookup = buildLinkedSessionLookup();
+  const shouldBuildLinkedSessionLookup =
+    !parsedQuery.filters.moduleView || parsedQuery.filters.moduleView === 'tareas';
+  const linkedSessionLookup = shouldBuildLinkedSessionLookup
+    ? buildLinkedSessionLookup()
+    : new Map<string, LinkedSessionMatch>();
   const rawResults = searchableModules.flatMap((searchableModule) =>
     readArray(searchableModule.storageKey).flatMap((record, index) => {
       const mapped = searchableModule.mapRecord(record, index);
