@@ -527,7 +527,7 @@ export function LicenciasSinSueldoPage() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'todos' | LicenciaSinSueldoTipo>('todos');
   const [yearFilter, setYearFilter] = useState<'todos' | string>('todos');
-  const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+  const [openHistoryYears, setOpenHistoryYears] = useState<Set<number>>(new Set());
   const [wordStatus, setWordStatus] = useState('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
 
@@ -656,7 +656,7 @@ export function LicenciasSinSueldoPage() {
   );
 
   const toggleYear = (year: number) => {
-    setCollapsedYears((current) => {
+    setOpenHistoryYears((current) => {
       const next = new Set(current);
       if (next.has(year)) next.delete(year);
       else next.add(year);
@@ -737,17 +737,21 @@ export function LicenciasSinSueldoPage() {
         </div>
         <div className="space-y-3">
           {groupedHistory.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-4 text-sm text-metro-muted">No hay registros históricos.</p>}
-          {groupedHistory.map(({ year, records: yearRecords }) => (
-            <div className="rounded-xl border border-metro-border bg-slate-950/10 p-3" key={year}>
-              <button className="mb-3 flex w-full items-center justify-between text-left" onClick={() => toggleYear(year)} type="button">
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-metro-text">{collapsedYears.has(year) ? <ChevronRight size={16} /> : <ChevronDown size={16} />} {year || 'Sin año'}</span>
-                <span className="text-xs text-metro-muted">{yearRecords.length} registros</span>
-              </button>
-              {!collapsedYears.has(year) && (
-                <LicenciasTable blockId={`historico-${year}`} emptyText="Sin históricos para este año con los filtros actuales." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={yearRecords} title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`} />
-              )}
-            </div>
-          ))}
+          {groupedHistory.map(({ year, records: yearRecords }) => {
+            const isYearOpen = yearFilter !== 'todos' || query.trim().length >= 2 || openHistoryYears.has(year);
+
+            return (
+              <div className="rounded-xl border border-metro-border bg-slate-950/10 p-3" key={year}>
+                <button className="mb-3 flex w-full items-center justify-between text-left" onClick={() => toggleYear(year)} type="button">
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-metro-text">{isYearOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {year || 'Sin año'}</span>
+                  <span className="text-xs text-metro-muted">{yearRecords.length} registros</span>
+                </button>
+                {isYearOpen && (
+                  <LicenciasTable blockId={`historico-${year}`} emptyText="Sin históricos para este año con los filtros actuales." onAdvance={advanceRecord} generatingWordId={generatingWordId} onDelete={deleteRecord} onEdit={(record) => setEditor({ mode: 'edit', record })} onGenerateWord={(record) => { void generateWord(record); }} records={yearRecords} title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`} />
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
