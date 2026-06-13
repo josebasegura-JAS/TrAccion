@@ -334,6 +334,14 @@ interface OutlookDraftPayload {
   cc: string[];
 }
 
+interface OutlookCalendarPayload {
+  subject: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  requiredAttendees: string[];
+}
+
 interface OutlookDraftResult {
   ok: boolean;
   message: string;
@@ -382,6 +390,32 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   }
 
   return { subject, html, to, cc };
+}
+
+function normalizeOutlookCalendarPayload(value: unknown): OutlookCalendarPayload | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as Partial<OutlookCalendarPayload>;
+  const subject = typeof candidate.subject === 'string' ? candidate.subject.trim() : '';
+  const date = typeof candidate.date === 'string' ? candidate.date.trim() : '';
+  const startTime = typeof candidate.startTime === 'string' ? candidate.startTime.trim() : '';
+  const endTime = typeof candidate.endTime === 'string' ? candidate.endTime.trim() : '';
+  const requiredAttendees = normalizeRecipientList(candidate.requiredAttendees);
+
+  if (
+    !subject ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    !/^\d{2}:\d{2}$/.test(startTime) ||
+    !/^\d{2}:\d{2}$/.test(endTime) ||
+    subject.length > 255 ||
+    requiredAttendees.length > 200
+  ) {
+    return null;
+  }
+
+  return { subject, date, startTime, endTime, requiredAttendees };
 }
 
 function powerShellStringLiteral(value: string): string {
@@ -437,6 +471,22 @@ function buildOutlookDraftVbs(payloadPath: string): string {
     '  Set ParseJsonObject = ScriptControl.Eval("(" & Text & ")")',
     'End Function',
   ].join('\r\n');
+}
+
+function buildOutlookCalendarPowerShellScript(payloadPath: string): string {
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    `$payload = Get-Content -LiteralPath ${powerShellStringLiteral(payloadPath)} -Raw -Encoding UTF8 | ConvertFrom-Json`,
+    '$outlook = New-Object -ComObject Outlook.Application',
+    '$appointment = $outlook.CreateItem(1)',
+    '$appointment.Subject = [string]$payload.subject',
+    '$appointment.Start = [datetime]::ParseExact(([string]$payload.date + \' \' + [string]$payload.startTime), \'yyyy-MM-dd HH:mm\', $null)',
+    '$appointment.End = [datetime]::ParseExact(([string]$payload.date + \' \' + [string]$payload.endTime), \'yyyy-MM-dd HH:mm\', $null)',
+    '$appointment.MeetingStatus = 1',
+    'foreach ($attendee in @($payload.requiredAttendees)) { if ([string]$attendee) { $appointment.Recipients.Add([string]$attendee) | Out-Null } }',
+    '$appointment.Display() | Out-Null',
+    "Write-Output 'OK_APPOINTMENT_DISPLAYED'",
+  ].join('\n');
 }
 
 async function withOutlookDraftTempFiles<T>(
@@ -554,6 +604,102 @@ async function runOutlookVbs(payload: OutlookDraftPayload): Promise<void> {
       });
     });
   });
+}
+
+async function withOutlookCalendarTempFiles<T>(
+  payload: OutlookCalendarPayload,
+  buildScript: (payloadPath: string) => string,
+  runScript: (scriptPath: string) => Promise<T>,
+): Promise<T> {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), 'traccion-actas-calendar-'));
+  const payloadPath = path.join(tempRoot, `${randomUUID()}.json`);
+  const scriptPath = path.join(tempRoot, `${randomUUID()}.ps1`);
+  const serializedPayload = JSON.stringify(payload);
+
+  try {
+    await writeFile(payloadPath, serializedPayload, 'utf8');
+    await writeFile(scriptPath, buildScript(payloadPath), 'utf8');
+    return await runScript(scriptPath);
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+}
+
+async function runOutlookCalendarPowerShell(payload: OutlookCalendarPayload): Promise<void> {
+  await withOutlookCalendarTempFiles(payload, buildOutlookCalendarPowerShellScript, async (scriptPath) => {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        'powershell.exe',
+        ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+        { windowsHide: true },
+      );
+      let stderr = '';
+      let stdout = '';
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        child.kill();
+        reject(new Error('Outlook no respondió al intentar crear la cita.'));
+      }, 15_000);
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('error', (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.on('close', (code) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        if (code === 0 && stdout.includes('OK_APPOINTMENT_DISPLAYED')) {
+          resolve();
+          return;
+        }
+        reject(
+          new Error(
+            stderr.trim() ||
+              stdout.trim() ||
+              `PowerShell terminó con código ${code ?? 'desconocido'}.`,
+          ),
+        );
+      });
+    });
+  });
+}
+
+async function createOutlookCalendar(payload: unknown): Promise<OutlookDraftResult> {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
+  }
+
+  const safePayload = normalizeOutlookCalendarPayload(payload);
+  if (!safePayload) {
+    return { ok: false, message: 'Faltan datos obligatorios para crear la cita de Outlook.' };
+  }
+
+  try {
+    await runOutlookCalendarPowerShell(safePayload);
+    return { ok: true, message: 'Cita creada en Outlook.' };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido crear la cita de Outlook.',
+    };
+  }
 }
 
 async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
@@ -975,6 +1121,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('especiales:create-outlook-draft', async (_event, payload: unknown) =>
     createOutlookDraft(payload),
+  );
+
+  ipcMain.handle('actas:create-outlook-calendar', async (_event, payload: unknown) =>
+    createOutlookCalendar(payload),
   );
 
   ipcMain.handle('docx:extract-text', async (_event, payload: unknown) => {

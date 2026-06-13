@@ -3,6 +3,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 const createOutlookDraft = (payload: unknown) =>
   ipcRenderer.invoke('especiales:create-outlook-draft', payload);
 
+const createOutlookCalendar = (payload: unknown) =>
+  ipcRenderer.invoke('actas:create-outlook-calendar', payload);
+
 const parseOutlookMsg = (payload: unknown) => ipcRenderer.invoke('msg:parseOutlookMsg', payload);
 
 contextBridge.exposeInMainWorld('traccion', {
@@ -50,6 +53,7 @@ contextBridge.exposeInMainWorld('traccion', {
   openExcelWorkbook: (buffer: ArrayBuffer, fileName: string) =>
     ipcRenderer.invoke('excel:open-workbook', { buffer, fileName }),
   createOutlookDraft,
+  createOutlookCalendar,
   parseOutlookMsg,
   extractDocxText: (payload: ArrayBuffer) => ipcRenderer.invoke('docx:extract-text', payload),
 });
@@ -57,6 +61,7 @@ contextBridge.exposeInMainWorld('traccion', {
 // Compatibilidad con el módulo Especiales de RRLL Dashboard y con builds intermedias.
 contextBridge.exposeInMainWorld('rrllOutlook', {
   createDraft: createOutlookDraft,
+  createCalendar: createOutlookCalendar,
 });
 
 contextBridge.exposeInMainWorld('rrllMsg', {
