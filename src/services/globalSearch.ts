@@ -235,16 +235,27 @@ function isRecord(value: unknown): value is UnknownRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+const parsedArrayCache = new Map<string, { rawValue: string; records: UnknownRecord[] }>();
+
 function readArray(storageKey: string): UnknownRecord[] {
   const stored = readStorageItem(storageKey);
   if (!stored) {
+    parsedArrayCache.delete(storageKey);
     return [];
+  }
+
+  const cached = parsedArrayCache.get(storageKey);
+  if (cached?.rawValue === stored) {
+    return cached.records;
   }
 
   try {
     const parsed: unknown = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed.filter(isRecord) : [];
+    const records = Array.isArray(parsed) ? parsed.filter(isRecord) : [];
+    parsedArrayCache.set(storageKey, { rawValue: stored, records });
+    return records;
   } catch {
+    parsedArrayCache.delete(storageKey);
     return [];
   }
 }
