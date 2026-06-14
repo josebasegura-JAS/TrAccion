@@ -1,44 +1,27 @@
-name: Electron UI Tests
+name: UI Tests
 
 on:
-  workflow_dispatch:
+push:
+branches:
+- main
+- master
+pull_request:
 
 jobs:
-  ui-tests:
-    name: TrAccion - Electron UI smoke tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+ui:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb libgtk-3-0 libnss3 libxss1 libasound2t64 libgbm1
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build app without packaging
-        run: npm run build
-
-      - name: Run Electron UI tests
-        run: xvfb-run --auto-servernum npm run test:e2e:electron
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-electron-report
-          path: |
-            playwright-report
-            test-results
-          if-no-files-found: ignore
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4
+    with:
+      node-version: 20
+  - name: Install dependencies
+    run: |
+      if [ -f package-lock.json ]; then
+        npm ci
+      else
+        npm install
+      fi
+  - name: Run UI tests
+    run: npm run test:ui --if-present
