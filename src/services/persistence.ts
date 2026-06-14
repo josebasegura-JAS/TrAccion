@@ -601,11 +601,40 @@ function shouldBlockSharedWrite(): string | null {
   return null;
 }
 
-function persistSharedStorageItemToSqlite(
-  key: PersistedStorageKey,
+export interface WriteSharedStorageItemResult {
+  ok: boolean;
+  message: string;
+  updatedAt: string | null;
+}
+
+export async function writeSharedStorageItemAsync(
+  key: string,
   value: string,
-  previousValue: string | null,
-): void {
+): Promise<WriteSharedStorageItemResult> {
+  if (!isPersistedStorageKey(key)) {
+    writeLocalStorageCache(key, value, 'localStorage');
+    return { ok: true, message: 'Guardado local.', updatedAt: null };
+  }
+
+  if (import.meta.env.MODE === 'test') {
+    writeLocalStorageCache(key, value, 'localStorage');
+    return { ok: true, message: 'Guardado local en test.', updatedAt: null };
+  }
+
+  const blockReason = shouldBlockSharedWrite();
+  if (blockReason) {
+    const message = `${blockReason} Clave afectada: ${key}.`;
+    console.warn(message);
+    emitPersistenceFeedback({
+      kind: 'error',
+      updatedAt: new Date().toISOString(),
+      key,
+      message,
+    });
+    return { ok: false, message, updatedAt: null };
+  }
+
+  const previousValue = window.localStorage.getItem(key);
   const now = new Date();
   emitPersistenceFeedback({
     kind: 'saving',
@@ -614,58 +643,55 @@ function persistSharedStorageItemToSqlite(
     message: 'Guardando en SQLite...',
   });
 
-  let expectedUpdatedAt: string | null = null;
+  try {
+    const expectedUpdatedAt = await resolveExpectedUpdatedAtForWrite(key, previousValue);
+    const savedUpdatedAt = await saveRecordToSqliteIfUnchanged({ key, value }, expectedUpdatedAt);
+    updateSqliteRecordMetadata(key, savedUpdatedAt);
+    removePendingSqliteWrite(key);
+    writeLocalStorageCache(key, value, 'sqlite');
+    const message = `Guardado en SQLite ${formatPersistenceTime()}`;
+    emitPersistenceFeedback({
+      kind: 'saved',
+      updatedAt: new Date().toISOString(),
+      key,
+      message,
+    });
+    return { ok: true, message, updatedAt: savedUpdatedAt };
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Error de guardado SQLite: el cambio no se ha confirmado.';
+    const messageWithKey = `${message} Clave afectada: ${key}.`;
+    console.warn(messageWithKey, error);
 
-  resolveExpectedUpdatedAtForWrite(key, previousValue)
-    .then((resolvedExpectedUpdatedAt) => {
-      expectedUpdatedAt = resolvedExpectedUpdatedAt;
-      return saveRecordToSqliteIfUnchanged({ key, value }, expectedUpdatedAt);
-    })
-    .then((savedUpdatedAt) => {
-      updateSqliteRecordMetadata(key, savedUpdatedAt);
-      removePendingSqliteWrite(key);
-      window.localStorage.setItem(key, value);
-      writeHydrationMetadata({
-        lastUpdatedAt: new Date().toISOString(),
-        sqlitePath: null,
-        refreshToken: null,
-        strategy: 'sqlite',
-      });
+    if (isConcurrencyConflictMessage(message)) {
+      const conflictMessage =
+        'Cambio no guardado — otro usuario modificó estos datos. Recarga la página para ver la versión actual antes de volver a editar.';
       emitPersistenceFeedback({
-        kind: 'saved',
+        kind: 'error',
         updatedAt: new Date().toISOString(),
         key,
-        message: `Guardado en SQLite ${formatPersistenceTime()}`,
+        message: conflictMessage,
       });
-    })
-    .catch((error: unknown) => {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Error de guardado SQLite: el cambio no se ha confirmado.';
-      const messageWithKey = `${message} Clave afectada: ${key}.`;
-      console.warn(messageWithKey, error);
+      return { ok: false, message: conflictMessage, updatedAt: null };
+    }
 
-      if (isConcurrencyConflictMessage(message)) {
-        emitPersistenceFeedback({
-          kind: 'error',
-          updatedAt: new Date().toISOString(),
-          key,
-          message:
-            'Cambio no guardado — otro usuario modificó estos datos. Recarga la página para ver la versión actual antes de volver a editar.',
-        });
-        return;
-      }
+    if (!isTemporarySqliteLockMessage(message)) {
+      emitPersistenceFeedback({
+        kind: 'error',
+        updatedAt: new Date().toISOString(),
+        key,
+        message: `${messageWithKey} El cambio no se ha guardado en la base compartida.`,
+      });
+    }
 
-      if (!isTemporarySqliteLockMessage(message)) {
-        emitPersistenceFeedback({
-          kind: 'error',
-          updatedAt: new Date().toISOString(),
-          key,
-          message: `${messageWithKey} El cambio no se ha guardado en la base compartida.`,
-        });
-      }
-    });
+    return {
+      ok: false,
+      message: `${messageWithKey} El cambio no se ha guardado en la base compartida.`,
+      updatedAt: null,
+    };
+  }
 }
 
 function writeLocalStorageCache(
@@ -692,31 +718,7 @@ export function readStorageItem(key: string): string | null {
 }
 
 export function writeStorageItem(key: string, value: string): void {
-  if (!isPersistedStorageKey(key)) {
-    writeLocalStorageCache(key, value, 'localStorage');
-    return;
-  }
-
-  if (import.meta.env.MODE === 'test') {
-    writeLocalStorageCache(key, value, 'localStorage');
-    return;
-  }
-
-  const blockReason = shouldBlockSharedWrite();
-  if (blockReason) {
-    const message = `${blockReason} Clave afectada: ${key}.`;
-    console.warn(message);
-    emitPersistenceFeedback({
-      kind: 'error',
-      updatedAt: new Date().toISOString(),
-      key,
-      message,
-    });
-    return;
-  }
-
-  const previousValue = window.localStorage.getItem(key);
-  persistSharedStorageItemToSqlite(key, value, previousValue);
+  void writeSharedStorageItemAsync(key, value);
 }
 
 export function readJsonStorage<T>(
@@ -740,6 +742,13 @@ export function readJsonStorage<T>(
 
 export function writeJsonStorage<T>(key: string, value: T): void {
   writeStorageItem(key, JSON.stringify(value));
+}
+
+export async function writeJsonStorageAsync<T>(
+  key: string,
+  value: T,
+): Promise<WriteSharedStorageItemResult> {
+  return writeSharedStorageItemAsync(key, JSON.stringify(value));
 }
 
 export function applyPersistedRecordsSnapshotToLocalStorage(
