@@ -156,7 +156,19 @@ function createWindow(
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    const parsedUrl = new URL(navigationUrl);
+    const isAllowedDevNavigation = isDev && navigationUrl.startsWith(devServerUrl);
+    const isAllowedPackagedNavigation = !isDev && parsedUrl.protocol === 'file:';
+
+    if (!isAllowedDevNavigation && !isAllowedPackagedNavigation) {
+      event.preventDefault();
+    }
   });
 
   createContextMenu(mainWindow);
@@ -847,6 +859,29 @@ function assertDocxPath(filePath: string): void {
   }
 }
 
+const allowedTaskDocumentExtensions = new Set([
+  '.doc',
+  '.docx',
+  '.pdf',
+  '.xls',
+  '.xlsx',
+  '.xlsm',
+  '.msg',
+  '.eml',
+  '.txt',
+  '.rtf',
+  '.odt',
+  '.ods',
+  '.ppt',
+  '.pptx',
+]);
+
+function assertAllowedTaskDocumentPath(filePath: string): void {
+  if (!allowedTaskDocumentExtensions.has(path.extname(filePath).toLowerCase())) {
+    throw new Error('Tipo de documento no permitido para abrir desde TrAccion.');
+  }
+}
+
 function normalizeRecordLockPayload(payload: unknown): { module: string; recordId: string } | null {
   if (!payload || typeof payload !== 'object') {
     return null;
@@ -884,7 +919,18 @@ async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; m
     return { ok: false, message: 'Ruta de documento no válida.' };
   }
 
-  const openError = await shell.openPath(filePath.trim());
+  const normalizedPath = filePath.trim();
+
+  try {
+    assertAllowedTaskDocumentPath(normalizedPath);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Tipo de documento no permitido.',
+    };
+  }
+
+  const openError = await shell.openPath(normalizedPath);
   if (openError) {
     return { ok: false, message: openError };
   }
