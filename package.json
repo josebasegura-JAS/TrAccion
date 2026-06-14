@@ -18,7 +18,9 @@
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "playwright:install": "playwright install",
-    "electron:rebuild": "electron-builder install-app-deps"
+    "electron:rebuild": "electron-builder install-app-deps",
+    "test:e2e:electron": "playwright test -c playwright.electron.config.ts",
+    "test:e2e:electron:ci": "playwright test -c playwright.electron.config.ts"
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
