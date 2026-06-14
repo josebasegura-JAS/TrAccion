@@ -4,10 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   test:
-    name: TrAccion – Quality gate
+    name: TrAccion - Quality gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -27,11 +29,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: TypeScript check
-        run: npx tsc --noEmit && npx tsc -p electron/tsconfig.json --noEmit
-
       - name: Unit tests
         run: npm run test -- --run --reporter=verbose
 
-      - name: Build renderer
-        run: npx vite build
+      - name: Build without packaging
+        run: npm run build
