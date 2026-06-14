@@ -5,7 +5,8 @@ import {
   type PersistenceFeedback,
 } from '../services/persistence';
 import { useDatabaseStatus } from '../services/databaseStatus';
-import { buildDatabaseStatusBadge, databaseStatusBadgeClassName } from '../services/databaseStatusView';
+import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
+import { StatusBadge } from './ui/StatusBadge';
 
 const build = (() => {
   const d = new Date();
@@ -21,16 +22,32 @@ function defaultFeedback(): PersistenceFeedback {
   };
 }
 
-function feedbackClassName(kind: PersistenceFeedback['kind']): string {
+function feedbackTone(kind: PersistenceFeedback['kind']): 'success' | 'warning' | 'error' {
   if (kind === 'saving') {
-    return 'text-amber-300';
+    return 'warning';
   }
 
   if (kind === 'error') {
-    return 'text-red-400';
+    return 'error';
   }
 
-  return 'text-emerald-400';
+  return 'success';
+}
+
+function databaseTone(tone: DatabaseStatusTone): 'success' | 'warning' | 'error' | 'muted' {
+  if (tone === 'ok') {
+    return 'success';
+  }
+
+  if (tone === 'error') {
+    return 'error';
+  }
+
+  if (tone === 'locked') {
+    return 'muted';
+  }
+
+  return 'warning';
 }
 
 function feedbackLabel(feedback: PersistenceFeedback): string {
@@ -56,16 +73,18 @@ export function Footer() {
     <footer className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
       <span className="shrink-0">TrAccion 1.0.{build}</span>
       <div className="flex min-w-0 items-center gap-3">
-        <span
-          className={`inline-flex max-w-[15rem] items-center gap-1.5 truncate rounded-full border px-2 py-0.5 font-semibold ${databaseStatusBadgeClassName(databaseBadge.tone)}`}
+        <StatusBadge
+          className="max-w-[15rem]"
+          icon={<Database size={12} aria-hidden="true" />}
+          size="xs"
           title={databaseBadge.title}
+          tone={databaseTone(databaseBadge.tone)}
         >
-          <Database size={12} className="shrink-0" />
-          <span className="truncate">{databaseBadge.label}</span>
-        </span>
-        <span className={`${feedbackClassName(feedback.kind)} truncate font-semibold`}>
+          {databaseBadge.label}
+        </StatusBadge>
+        <StatusBadge className="max-w-[15rem]" size="xs" tone={feedbackTone(feedback.kind)}>
           {feedbackLabel(feedback)}
-        </span>
+        </StatusBadge>
       </div>
     </footer>
   );

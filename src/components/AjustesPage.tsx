@@ -2,9 +2,52 @@ import { Database, FolderOpen, Plus, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
-import { buildDatabaseStatusBadge, databaseStatusBadgeClassName } from '../services/databaseStatusView';
+import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
+import { Notice } from './ui/Notice';
+import { StatusBadge } from './ui/StatusBadge';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+
+function databaseTone(tone: DatabaseStatusTone): 'success' | 'warning' | 'error' | 'muted' {
+  if (tone === 'ok') {
+    return 'success';
+  }
+
+  if (tone === 'error') {
+    return 'error';
+  }
+
+  if (tone === 'locked') {
+    return 'muted';
+  }
+
+  return 'warning';
+}
+
+function noticeTone(message: string): 'success' | 'warning' | 'error' | 'muted' {
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes('no se ha podido') ||
+    normalizedMessage.includes('solo está disponible')
+  ) {
+    return 'error';
+  }
+
+  if (normalizedMessage.includes('restaurando') || normalizedMessage.includes('fallback')) {
+    return 'warning';
+  }
+
+  if (
+    normalizedMessage.includes('guardada') ||
+    normalizedMessage.includes('actualizada') ||
+    normalizedMessage.includes('restaurada')
+  ) {
+    return 'success';
+  }
+
+  return 'muted';
+}
 
 export function AjustesPage() {
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
@@ -244,13 +287,13 @@ export function AjustesPage() {
               existentes.
             </p>
           </div>
-          <span
-            className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${databaseStatusBadgeClassName(databaseBadge.tone)}`}
+          <StatusBadge
+            icon={<Database size={14} aria-hidden="true" />}
             title={databaseBadge.title}
+            tone={databaseTone(databaseBadge.tone)}
           >
-            <Database size={14} />
             {databaseBadge.label}
-          </span>
+          </StatusBadge>
         </div>
 
         <div className="grid gap-3 text-sm text-metro-text md:grid-cols-2">
@@ -272,16 +315,19 @@ export function AjustesPage() {
         </div>
 
         {databaseStatus?.lock && (
-          <p className="mt-3 rounded-xl border border-metro-border bg-metro-surface p-3 text-xs text-metro-muted">
+          <Notice className="mt-3" tone="muted">
             Lock: {databaseStatus.lock.username}@{databaseStatus.lock.hostname} · PID{' '}
             {databaseStatus.lock.pid} · {databaseStatus.lock.updatedAt}
-          </p>
+          </Notice>
         )}
 
         {(databaseStatus?.message || databaseActionStatus) && (
-          <p className="mt-3 text-xs font-semibold text-metro-muted">
+          <Notice
+            className="mt-3"
+            tone={noticeTone(databaseActionStatus || databaseStatus?.message || '')}
+          >
             {databaseActionStatus || databaseStatus?.message}
-          </p>
+          </Notice>
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -323,7 +369,7 @@ export function AjustesPage() {
               </p>
             </div>
             <span className="text-xs font-semibold text-metro-muted">
-              {isLoadingBackups ? 'Cargando...' : `${localBackups.length} copias`}
+              {isLoadingBackups ? 'Cargando…' : `${localBackups.length} copias`}
             </span>
           </div>
 
@@ -388,7 +434,7 @@ export function AjustesPage() {
             <FolderOpen size={16} />
             Seleccionar plantilla
           </button>
-          {status && <p className="text-xs font-semibold text-metro-muted">{status}</p>}
+          {status && <Notice tone={noticeTone(status)}>{status}</Notice>}
         </div>
       </div>
 
@@ -421,7 +467,7 @@ export function AjustesPage() {
             Seleccionar plantilla
           </button>
           {licenciaTemplateStatus && (
-            <p className="text-xs font-semibold text-metro-muted">{licenciaTemplateStatus}</p>
+            <Notice tone={noticeTone(licenciaTemplateStatus)}>{licenciaTemplateStatus}</Notice>
           )}
         </div>
       </div>
