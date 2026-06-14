@@ -27,6 +27,7 @@ import { useActasStore } from '../store/useActasStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { relativeDate } from '../../../utils/relativeDate';
+import { readStorageItem, writeSharedStorageItemAsync } from '../../../services/persistence';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
@@ -81,7 +82,7 @@ function loadActasOutlookTemplate(): ActasOutlookTemplate {
     return EMPTY_ACTAS_OUTLOOK_TEMPLATE;
   }
 
-  const stored = window.localStorage.getItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY);
+  const stored = readStorageItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY);
   if (!stored) {
     return EMPTY_ACTAS_OUTLOOK_TEMPLATE;
   }
@@ -94,8 +95,15 @@ function loadActasOutlookTemplate(): ActasOutlookTemplate {
   }
 }
 
-function saveActasOutlookTemplate(template: ActasOutlookTemplate): void {
-  window.localStorage.setItem(ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY, JSON.stringify(template));
+async function saveActasOutlookTemplate(template: ActasOutlookTemplate): Promise<void> {
+  const result = await writeSharedStorageItemAsync(
+    ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY,
+    JSON.stringify(template),
+  );
+
+  if (!result.ok) {
+    throw new Error(result.message || 'No se ha confirmado el guardado de la plantilla Outlook.');
+  }
 }
 
 function escapeTemplateHtml(value: string): string {
@@ -630,7 +638,7 @@ export function ActasPage() {
     setIsOutlookTemplateOpen(true);
   };
 
-  const saveOutlookTemplate = () => {
+  const saveOutlookTemplate = async () => {
     const nextTemplate = {
       subject: outlookTemplate.subject,
       bodyHtml: outlookTemplateBodyRef.current?.innerHTML ?? outlookTemplate.bodyHtml,
@@ -643,7 +651,7 @@ export function ActasPage() {
     }
 
     try {
-      saveActasOutlookTemplate(nextTemplate);
+      await saveActasOutlookTemplate(nextTemplate);
       setOutlookTemplate(nextTemplate);
       setOutlookTemplateStatus('');
       setOutlookTemplateStatusIsError(false);
