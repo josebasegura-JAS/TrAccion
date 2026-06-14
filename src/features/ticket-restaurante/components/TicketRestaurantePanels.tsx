@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import {
   calculateMonthlyTicketOrder,
   getEffectiveTicketPrice,
@@ -557,6 +558,7 @@ export function PeoplePanel({
   people: TicketPerson[];
 }) {
   const canSave = draft.empleado.trim() && draft.nombre.trim() && draft.calendarId;
+  const { confirm, dialogNode } = useAppDialog();
   const [isPersonFormOpen, setIsPersonFormOpen] = useState(Boolean(editingPersonId));
 
   useEffect(() => {
@@ -696,9 +698,15 @@ export function PeoplePanel({
               className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
               onClick={(event) => {
                 event.stopPropagation();
-                if (window.confirm(`¿Eliminar la persona con Nº empleado ${person.empleado}?`)) {
-                  onRemove(person.empleado);
-                }
+                void (async () => {
+                  if (await confirm(`¿Eliminar la persona con Nº empleado ${person.empleado}?`, {
+                    confirmLabel: 'Eliminar',
+                    danger: true,
+                    title: 'Eliminar persona',
+                  })) {
+                    onRemove(person.empleado);
+                  }
+                })();
               }}
               type="button"
             >
@@ -713,7 +721,7 @@ export function PeoplePanel({
         isActionColumn: true,
       },
     ],
-    [calendars, onEdit, onRemove],
+    [calendars, confirm, onEdit, onRemove],
   );
 
   return (

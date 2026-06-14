@@ -37,6 +37,7 @@ import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn } from '../../../shared/export/types';
@@ -668,6 +669,7 @@ export function TicketRestaurantePage({
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
+  const { confirm, dialogNode } = useAppDialog();
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
   const [year, setYear] = useState(currentYear());
   const [absenceYear, setAbsenceYear] = useState(currentYear());
@@ -902,21 +904,22 @@ export function TicketRestaurantePage({
     setEditingPersonId(person.empleado);
   };
 
-  const removeCalendarAndPeople = (calendarId: string) => {
+  const removeCalendarAndPeople = async (calendarId: string) => {
     const associatedPeople = visiblePeople.filter((person) => person.calendarId === calendarId);
     const calendarName =
       calendars.find((calendar) => calendar.id === calendarId)?.nombre ?? 'este calendario';
 
     if (associatedPeople.length > 0) {
-      const confirmed = window.confirm(
+      const confirmed = await confirm(
         `El calendario "${calendarName}" tiene ${associatedPeople.length} persona(s) adscrita(s). ` +
           'Si continúas, se eliminarán también esas personas de Ticket Restaurante. ¿Continuar?',
+        { confirmLabel: 'Eliminar', danger: true, title: 'Eliminar calendario' },
       );
 
       if (!confirmed) {
         return;
       }
-    } else if (!window.confirm(`¿Eliminar el calendario "${calendarName}"?`)) {
+    } else if (!(await confirm(`¿Eliminar el calendario "${calendarName}"?`, { confirmLabel: 'Eliminar', danger: true, title: 'Eliminar calendario' }))) {
       return;
     }
 
@@ -1636,6 +1639,7 @@ export function TicketRestaurantePage({
           rows={previewRows}
         />
       ) : null}
+      {dialogNode}
     </section>
   );
 }
