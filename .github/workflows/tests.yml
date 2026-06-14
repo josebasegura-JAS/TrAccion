@@ -21,12 +21,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          npm install
+          npm ls eslint || true
 
-      - run: npm run lint --if-present
-      - run: npm test --if-present
-      - run: npm run build --if-present
+      - name: Debug
+        run: |
+          pwd
+          ls -la
+          ls -la node_modules/.bin || true
+
+      - name: Run lint
+        run: npx eslint . --max-warnings=0
+
+      - name: Run tests
+        run: npm test --if-present
+
+      - name: Build
+        run: npm run build --if-present
