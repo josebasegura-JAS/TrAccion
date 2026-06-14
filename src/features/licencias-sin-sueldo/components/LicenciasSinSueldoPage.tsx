@@ -513,7 +513,6 @@ function Block({ children, count, icon, title }: { children: ReactNode; count: n
         <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">{count}</span>
       </div>
       {children}
-      {dialogNode}
     </section>
   );
 }
