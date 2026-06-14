@@ -9,6 +9,7 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -512,6 +513,7 @@ function Block({ children, count, icon, title }: { children: ReactNode; count: n
         <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">{count}</span>
       </div>
       {children}
+      {dialogNode}
     </section>
   );
 }
@@ -530,6 +532,7 @@ export function LicenciasSinSueldoPage() {
   const [openHistoryYears, setOpenHistoryYears] = useState<Set<number>>(new Set());
   const [wordStatus, setWordStatus] = useState('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
+  const { alert, confirm, dialogNode } = useAppDialog();
 
   useEffect(() => {
     loadEmployees();
@@ -597,11 +600,11 @@ export function LicenciasSinSueldoPage() {
     const api = window.traccion;
     const result = await api?.acquireRecordLock?.(payload);
     if (result?.status === 'locked') {
-      window.alert(result.message);
+      await alert(result.message, { type: 'warning' });
       return false;
     }
     return true;
-  }, []);
+  }, [alert]);
 
   const releaseMutationLock = useCallback(async (record: LicenciaSinSueldoRecord) => {
     await window.traccion?.releaseRecordLock?.({ module: 'licencias-sin-sueldo', recordId: record.id });
@@ -629,7 +632,7 @@ export function LicenciasSinSueldoPage() {
   };
 
   const deleteRecord = async (record: LicenciaSinSueldoRecord) => {
-    if (!window.confirm(`¿Eliminar la solicitud de ${record.nombreCompleto}?`)) {
+    if (!(await confirm(`¿Eliminar la solicitud de ${record.nombreCompleto}?`, { confirmLabel: 'Eliminar', danger: true, title: 'Eliminar solicitud' }))) {
       return;
     }
     if (!(await acquireMutationLock(record))) {
@@ -637,7 +640,7 @@ export function LicenciasSinSueldoPage() {
     }
     const result = await removeWithConcurrencyCheck(record.id, record.updatedAt);
     if (!result.ok) {
-      window.alert(result.message);
+      await alert(result.message, { type: 'error' });
     }
     await releaseMutationLock(record);
     setEditor(null);
@@ -650,7 +653,7 @@ export function LicenciasSinSueldoPage() {
     const nextEstado = record.estado === 'pendiente_aprobacion' ? 'pendiente_firma' : record.estado === 'pendiente_firma' ? 'vigente' : record.estado;
     const result = await updateWithConcurrencyCheck(record.id, { ...toDraft(record), estado: nextEstado }, record.updatedAt);
     if (!result.ok) {
-      window.alert(result.message);
+      await alert(result.message, { type: 'error' });
     }
     await releaseMutationLock(record);
   };
@@ -798,6 +801,7 @@ export function LicenciasSinSueldoPage() {
           record={editor.record}
         />
       )}
+      {dialogNode}
     </section>
   );
 }
