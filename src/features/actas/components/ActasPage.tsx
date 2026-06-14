@@ -28,6 +28,7 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { relativeDate } from '../../../utils/relativeDate';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 
 const ACTAS_OUTLOOK_TEMPLATE_STORAGE_KEY = 'traccion.v1.actas.outlookTemplate';
@@ -469,6 +470,7 @@ export function ActasPage() {
   const [outlookTemplateStatusIsError, setOutlookTemplateStatusIsError] = useState(false);
   const [outlookDraftStatus, setOutlookDraftStatus] = useState('');
   const [outlookDraftStatusIsError, setOutlookDraftStatusIsError] = useState(false);
+  const { alert, dialogNode } = useAppDialog();
   const outlookTemplateBodyRef = useRef<HTMLDivElement | null>(null);
   const recordLock = useSharedRecordLock({
     module: 'actas',
@@ -536,44 +538,41 @@ export function ActasPage() {
     return usage;
   }, [actas]);
 
-  const saveNewActaType = () => {
+  const saveNewActaType = async () => {
     const result = createActaType(newActaTypeName);
     if (!result.ok) {
-      window.alert(result.message ?? 'No se ha podido crear el tipo de acta.');
+      await alert(result.message ?? 'No se ha podido crear el tipo de acta.', { type: 'error' });
       return;
     }
     setNewActaTypeName('');
   };
 
-  const deleteActaType = (typeId: string) => {
+  const deleteActaType = async (typeId: string) => {
     const result = removeActaType(typeId);
     if (!result.ok) {
-      window.alert(result.message ?? 'No se ha podido eliminar el tipo de acta.');
+      await alert(result.message ?? 'No se ha podido eliminar el tipo de acta.', { type: 'error' });
       return;
     }
     setPendingDeleteActaTypeId(null);
   };
 
   const deleteActa = useCallback(
-    (actaId: string) => {
+    async (actaId: string) => {
       const acta = actas.find((candidate) => candidate.id === actaId);
       if (!acta) {
-        window.alert('El acta ya no existe. Recarga antes de continuar.');
+        await alert('El acta ya no existe. Recarga antes de continuar.', { type: 'warning' });
         setPendingDeleteActaId(null);
         return;
       }
 
-      void removeWithConcurrencyCheck(actaId, acta.updatedAt).then(
-        (result: { ok: boolean; message: string }) => {
-          if (!result.ok) {
-            window.alert(result.message);
-            return;
-          }
-          setPendingDeleteActaId(null);
-        },
-      );
+      const result = await removeWithConcurrencyCheck(actaId, acta.updatedAt);
+      if (!result.ok) {
+        await alert(result.message, { type: 'error' });
+        return;
+      }
+      setPendingDeleteActaId(null);
     },
-    [actas, removeWithConcurrencyCheck],
+    [actas, alert, removeWithConcurrencyCheck],
   );
 
   const years = useMemo(
@@ -955,12 +954,12 @@ export function ActasPage() {
     setNewUpdateText('');
   };
 
-  const saveActa = () => {
+  const saveActa = async () => {
     if (isEditorReadOnly) {
       return;
     }
     if (!draft.titulo.trim() || !draft.fechaSesion) {
-      window.alert('Indica título y fecha de sesión.');
+      await alert('Indica título y fecha de sesión.', { type: 'warning' });
       return;
     }
 
@@ -1348,7 +1347,7 @@ export function ActasPage() {
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault();
-                      saveNewActaType();
+                      void saveNewActaType();
                     }
                   }}
                   placeholder="Nuevo tipo de acta..."
@@ -1356,7 +1355,7 @@ export function ActasPage() {
                 />
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                  onClick={saveNewActaType}
+                  onClick={() => void saveNewActaType()}
                   type="button"
                 >
                   <Plus size={16} />
@@ -1393,7 +1392,7 @@ export function ActasPage() {
                           <DeleteConfirmDialog
                             label={`el tipo de acta «${type.nombre}»`}
                             onCancel={() => setPendingDeleteActaTypeId(null)}
-                            onConfirm={() => deleteActaType(type.id)}
+                            onConfirm={() => { void deleteActaType(type.id); }}
                           />
                         </div>
                       ) : (
@@ -1777,7 +1776,7 @@ export function ActasPage() {
               <button
                 className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
                 disabled={isEditorReadOnly}
-                onClick={saveActa}
+                onClick={() => void saveActa()}
                 type="button"
               >
                 Guardar acta
@@ -1787,6 +1786,7 @@ export function ActasPage() {
           </div>
         </div>
       )}
+      {dialogNode}
     </section>
   );
 }
