@@ -1,4 +1,5 @@
 import { SessionManagementPage } from '../../../shared/sessions/SessionManagementPage';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import type { ManagedSession } from '../../../shared/sessions/session';
 import type { Task } from '../../tareas/domain/task';
@@ -42,16 +43,18 @@ export function ComitePage({
   navigationNonce?: number;
 }) {
   const createActaFromSession = useActasStore((state) => state.createFromSessionWithConcurrencyCheck);
+  const { alert, dialogNode } = useAppDialog();
 
   const handleClosedSession = async (session: ManagedSession, treatedTasks: Task[]) => {
     const result = await createActaFromSession({ tipo: 'Comité', session, treatedTasks });
     if (!result.ok) {
-      window.alert(result.message);
+      await alert(result.message, { type: 'error' });
     }
   };
 
   return (
-    <SessionManagementPage
+    <>
+      <SessionManagementPage
       config={COMITE_SESSION_CONFIG}
       helpSections={COMITE_HELP_SECTIONS}
       initialSessionId={initialSessionId}
@@ -59,5 +62,7 @@ export function ComitePage({
       onClosedSession={handleClosedSession}
       useSessionStore={useCommitteeSessionStore}
     />
+      {dialogNode}
+    </>
   );
 }
