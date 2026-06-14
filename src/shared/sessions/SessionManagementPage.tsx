@@ -15,6 +15,7 @@ import type { Task } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
 import { withSharedModuleLocks } from '../../services/sharedModuleLock';
 import { useSharedRecordLock } from '../../services/useSharedRecordLock';
+import { useAppDialog } from '../../hooks/useAppDialog';
 import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
@@ -299,6 +300,7 @@ export function SessionManagementPage({
   const [sessionSearch, setSessionSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
+  const { alert, confirm, dialogNode } = useAppDialog();
 
   useEffect(() => {
     load();
@@ -391,7 +393,7 @@ export function SessionManagementPage({
 
   const handleCreate = async () => {
     if (!draft.date || !draft.code.trim()) {
-      window.alert('Indica al menos fecha y código documental de la sesión.');
+      await alert('Indica al menos fecha y código documental de la sesión.', { type: 'warning' });
       return;
     }
 
@@ -408,7 +410,7 @@ export function SessionManagementPage({
         setExpandedSessionId(result.sessionId);
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se ha podido crear la sesión.');
+      await alert(error instanceof Error ? error.message : 'No se ha podido crear la sesión.', { type: 'error' });
     }
   };
 
@@ -442,7 +444,7 @@ export function SessionManagementPage({
     }
 
     if (!editDraft.date || !editDraft.code.trim()) {
-      window.alert('Indica al menos fecha y código documental de la sesión.');
+      await alert('Indica al menos fecha y código documental de la sesión.', { type: 'warning' });
       return;
     }
 
@@ -460,7 +462,7 @@ export function SessionManagementPage({
         cancelEditSession();
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se ha podido guardar la sesión.');
+      await alert(error instanceof Error ? error.message : 'No se ha podido guardar la sesión.', { type: 'error' });
     }
   };
 
@@ -477,7 +479,7 @@ export function SessionManagementPage({
         }
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se ha podido eliminar la sesión.');
+      await alert(error instanceof Error ? error.message : 'No se ha podido eliminar la sesión.', { type: 'error' });
     }
   };
 
@@ -490,7 +492,7 @@ export function SessionManagementPage({
         }
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se ha podido añadir el punto.');
+      await alert(error instanceof Error ? error.message : 'No se ha podido añadir el punto.', { type: 'error' });
     }
   };
 
@@ -503,7 +505,7 @@ export function SessionManagementPage({
         }
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se ha podido quitar el punto.');
+      await alert(error instanceof Error ? error.message : 'No se ha podido quitar el punto.', { type: 'error' });
     }
   };
 
@@ -525,7 +527,7 @@ export function SessionManagementPage({
         }
       });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se ha podido reordenar el punto.');
+      await alert(error instanceof Error ? error.message : 'No se ha podido reordenar el punto.', { type: 'error' });
     }
   };
 
@@ -566,7 +568,7 @@ export function SessionManagementPage({
             throw new Error(closeTasksResult.message);
           }
 
-          if (window.confirm('¿Desea crear un registro en Actas?')) {
+          if (await confirm('¿Desea crear un registro en Actas?', { confirmLabel: 'Crear acta', title: 'Crear acta' })) {
             await onClosedSession?.(closeSessionResult.session, treatedTasks);
           }
           setClosingSessionId(null);
@@ -576,10 +578,11 @@ export function SessionManagementPage({
         },
       );
     } catch (error) {
-      window.alert(
+      await alert(
         error instanceof Error
           ? error.message
           : 'No se ha podido cerrar la sesión de forma segura. Reintenta cuando finalicen otras ediciones.',
+        { type: 'error' },
       );
     }
   };
@@ -684,10 +687,11 @@ export function SessionManagementPage({
           loadTasks();
           setOpenPanel('history');
           setImportPreview(null);
-          window.alert(
+          await alert(
             importedSessionsResult.importedCount > 0
               ? `Importación completada: ${importedSessionsResult.importedCount} sesiones históricas y ${importableTasks.length} puntos históricos procesados.`
               : 'No se han creado sesiones nuevas. Ya existían sesiones con el mismo código y fecha.',
+            { type: 'info' },
           );
         },
       );
@@ -891,6 +895,7 @@ export function SessionManagementPage({
                         config={config}
                         key={session.id}
                         onEdit={canEditSessions ? openEditModal : undefined}
+                        onConfirm={confirm}
                         onRemove={handleRemoveSession}
                         session={session}
                         tasksById={tasksById}
@@ -1083,6 +1088,7 @@ export function SessionManagementPage({
           </div>
         </div>
       )}
+      {dialogNode}
     </section>
   );
 }
@@ -1312,12 +1318,14 @@ function HistoricSessionCard({
   config,
   onEdit,
   onRemove,
+  onConfirm,
   session,
   tasksById,
 }: {
   config: SessionModuleConfig;
   onEdit?: (session: ManagedSession) => void;
   onRemove: (session: ManagedSession) => void | Promise<void>;
+  onConfirm: (message: string, options?: { cancelLabel?: string; confirmLabel?: string; danger?: boolean; title?: string }) => Promise<boolean>;
   session: ManagedSession;
   tasksById: Map<string, Task>;
 }) {
@@ -1355,13 +1363,16 @@ function HistoricSessionCard({
           <button
             className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10"
             onClick={() => {
-              const confirmed = window.confirm(
-                '¿Eliminar definitivamente esta sesión histórica?\n\nEsta acción no puede deshacerse.',
-              );
+              void (async () => {
+                const confirmed = await onConfirm(
+                  '¿Eliminar definitivamente esta sesión histórica?\n\nEsta acción no puede deshacerse.',
+                  { confirmLabel: 'Eliminar', danger: true, title: 'Eliminar sesión histórica' },
+                );
 
-              if (confirmed) {
-                void onRemove(session);
-              }
+                if (confirmed) {
+                  void onRemove(session);
+                }
+              })();
             }}
             type="button"
           >
