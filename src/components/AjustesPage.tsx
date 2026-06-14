@@ -2,6 +2,7 @@ import { Database, FolderOpen, Plus, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
+import { buildDatabaseStatusBadge, databaseStatusBadgeClassName } from '../services/databaseStatusView';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 
 export function AjustesPage() {
@@ -23,6 +24,7 @@ export function AjustesPage() {
   const [status, setStatus] = useState('');
   const [licenciaTemplateStatus, setLicenciaTemplateStatus] = useState('');
   const databaseStatus = useDatabaseStatus();
+  const databaseBadge = buildDatabaseStatusBadge(databaseStatus);
   const [databaseActionStatus, setDatabaseActionStatus] = useState('');
   const [localBackups, setLocalBackups] = useState<TraccionLocalBackupEntry[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
@@ -229,13 +231,22 @@ export function AjustesPage() {
         id="base-de-datos"
         className="mb-4 scroll-mt-6 rounded-2xl border border-metro-border bg-metro-panel p-4"
       >
-        <div className="mb-4">
-          <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
-          <p className="mt-1 text-sm text-metro-muted">
-            SQLite es la base principal. La app mantiene una caché local y una copia de respaldo en este equipo.
-            Selecciona una carpeta local o compartida; TrAccion usará dentro el fichero traccion.sqlite sin sobrescribir bases
-            existentes.
-          </p>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
+            <p className="mt-1 text-sm text-metro-muted">
+              SQLite es la base principal. La app mantiene una caché local y una copia de respaldo en este equipo.
+              Selecciona una carpeta local o compartida; TrAccion usará dentro el fichero traccion.sqlite sin sobrescribir bases
+              existentes.
+            </p>
+          </div>
+          <span
+            className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${databaseStatusBadgeClassName(databaseBadge.tone)}`}
+            title={databaseBadge.title}
+          >
+            <Database size={14} />
+            {databaseBadge.label}
+          </span>
         </div>
 
         <div className="grid gap-3 text-sm text-metro-text md:grid-cols-2">
@@ -252,9 +263,7 @@ export function AjustesPage() {
               Estado
             </p>
             <p className="mt-1 font-medium">{databasePhaseLabel}</p>
-            <p className="mt-1 text-xs text-metro-muted">
-              {databaseStatus?.isDefaultPath ? 'Ruta por defecto del equipo' : 'Ruta personalizada'}
-            </p>
+            <p className="mt-1 text-xs text-metro-muted">{databaseBadge.detail}</p>
           </div>
         </div>
 
