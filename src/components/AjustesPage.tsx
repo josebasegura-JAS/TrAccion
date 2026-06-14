@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { buildDatabaseStatusBadge, databaseStatusBadgeClassName } from '../services/databaseStatusView';
+import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 
 export function AjustesPage() {
@@ -30,6 +31,7 @@ export function AjustesPage() {
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
   const [newTaskPhase, setNewTaskPhase] = useState('');
+  const { confirm, dialogNode } = useAppDialog();
 
   useEffect(() => {
     load();
@@ -68,8 +70,9 @@ export function AjustesPage() {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirm(
       `Vas a restaurar la copia local ${backup.fileName}. TrAccion creará una copia previa de la base activa antes de restaurar. ¿Continuar?`,
+      { confirmLabel: 'Restaurar', danger: true, title: 'Restaurar copia local' },
     );
     if (!confirmed) {
       return;
@@ -217,7 +220,8 @@ export function AjustesPage() {
   };
 
   return (
-    <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
+    <>
+      <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
       <div className="mb-5">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Ajustes</p>
         <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración</h2>
@@ -473,6 +477,8 @@ export function AjustesPage() {
           ))}
         </div>
       </div>
-    </section>
+      </section>
+      {dialogNode}
+    </>
   );
 }
