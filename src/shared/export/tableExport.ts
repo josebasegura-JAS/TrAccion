@@ -129,7 +129,7 @@ async function openWorkbookInExcel(
   }
 }
 
-export function exportTableToExcel<T>(payload: ExportTablePayload<T>): void {
+export function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAlert?: (message: string) => void): void {
   const generatedAt = payload.generatedAt ?? new Date();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'TrAccion';
@@ -247,6 +247,10 @@ export function exportTableToExcel<T>(payload: ExportTablePayload<T>): void {
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'No se ha podido abrir Excel.';
       console.error('Error al abrir Excel:', error);
-      window.alert(message);
+      if (onAlert) {
+        onAlert(message);
+      } else {
+        window.alert(message);
+      }
     });
 }
