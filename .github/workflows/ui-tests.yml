@@ -1,6 +1,7 @@
 name: UI Tests
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -26,5 +27,4 @@ jobs:
             npm install
           fi
 
-      - name: Run UI tests
-        run: npm run test:ui --if-present
+      - run: npm run test:ui --if-present
