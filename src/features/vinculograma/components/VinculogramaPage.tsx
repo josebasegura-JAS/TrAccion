@@ -20,6 +20,7 @@ import { useVinculogramaStore } from '../store/useVinculogramaStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 
 
 type VinculogramaTableColumnId = 'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'status' | 'actions';
@@ -415,6 +416,7 @@ export function VinculogramaPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showExpired, setShowExpired] = useState(readExpiredVisibility);
+  const { alert, dialogNode } = useAppDialog();
   const today = todayIso();
   const expiryDate = calculateExpiryDate(draft.requestDate);
 
@@ -451,11 +453,11 @@ export function VinculogramaPage() {
     const api = window.traccion;
     const result = await api?.acquireRecordLock?.(payload);
     if (result?.status === 'locked') {
-      window.alert(result.message);
+      await alert(result.message, { type: 'warning' });
       return false;
     }
     return true;
-  }, []);
+  }, [alert]);
 
   const releaseMutationLock = useCallback(async (recordId: string) => {
     await window.traccion?.releaseRecordLock?.({ module: 'vinculograma', recordId });
@@ -487,7 +489,7 @@ export function VinculogramaPage() {
       const currentRecord = records.find((record) => record.id === editingId);
       const result = await removeWithConcurrencyCheck(editingId, currentRecord?.updatedAt ?? null);
       if (!result.ok) {
-        window.alert(result.message);
+        await alert(result.message, { type: 'error' });
         return;
       }
     }
@@ -500,7 +502,7 @@ export function VinculogramaPage() {
     }
     const result = await removeWithConcurrencyCheck(record.id, record.updatedAt);
     if (!result.ok) {
-      window.alert(result.message);
+      await alert(result.message, { type: 'error' });
     }
     await releaseMutationLock(record.id);
   };
@@ -606,6 +608,7 @@ export function VinculogramaPage() {
           recordId={editingId}
         />
       )}
+      {dialogNode}
     </section>
   );
 }
