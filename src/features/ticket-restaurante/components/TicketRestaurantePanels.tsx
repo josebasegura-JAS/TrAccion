@@ -875,6 +875,7 @@ export function PeoplePanel({
           sort={preferences.sort}
         />
       </div>
+      {dialogNode}
     </div>
   );
 }
