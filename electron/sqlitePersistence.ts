@@ -30,6 +30,8 @@ const SQLITE_RECORD_LOCK_WAIT_MS = 750;
 const SQLITE_OPERATION_LOCK_RETRY_MS = 50;
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 const MODULE_LOCK_RECORD_ID = '__module__';
+const DATABASE_HEARTBEAT_BLOCKED_MESSAGE =
+  'La conexión con la carpeta compartida de SQLite puede estar interrumpida. Se bloquean nuevas escrituras hasta recuperar el heartbeat.';
 
 export interface PersistedStorageRecord {
   key: string;
@@ -727,8 +729,7 @@ function markHeartbeatFailure(error: unknown): void {
     blocked: true,
     failedHeartbeatCount: heartbeatConsecutiveFailureCount,
     updatedAt: new Date().toISOString(),
-    message:
-      'La conexión con la carpeta compartida de SQLite puede estar interrumpida. Se bloquean nuevas escrituras hasta recuperar el heartbeat.',
+    message: DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
   });
 }
 
@@ -755,9 +756,7 @@ function assertDatabaseWritesAllowed(): void {
     return;
   }
 
-  throw new Error(
-    'Escritura bloqueada: la conexión con la carpeta compartida SQLite puede estar interrumpida. Espera a que se recupere o revisa la red.',
-  );
+  throw new Error(`Escritura bloqueada: ${DATABASE_HEARTBEAT_BLOCKED_MESSAGE}`);
 }
 
 async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
@@ -1138,6 +1137,14 @@ function safeDatabaseOperation<T>(operation: () => T, fallback: (status: Databas
 
 export function getSqliteStatus(): DatabaseStatus {
   const fallbackPath = getDatabasePathForDirectory(getDefaultDatabaseDirectory());
+
+  if (status?.ready && status.phase === 'active' && databaseWriteBlockedByHeartbeat) {
+    return {
+      ...status,
+      message: DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
+    };
+  }
+
   return (
     status ?? {
       ready: false,
@@ -1413,11 +1420,12 @@ function readRefreshToken(db: Database): string | null {
 export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
   return safeDatabaseOperation(
     () => {
-      assertDatabaseWritesAllowed();
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+      if (!currentStatus.ready || currentStatus.phase === 'locked' || databaseWriteBlockedByHeartbeat) {
         return currentStatus;
       }
+
+      assertDatabaseWritesAllowed();
 
       const now = new Date().toISOString();
       const db = requireDatabase();
@@ -1452,9 +1460,8 @@ export function savePersistedRecordIfUnchanged(
 ): ConditionalPersistedRecordSaveResult {
   return safeDatabaseOperation(
     () => {
-      assertDatabaseWritesAllowed();
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
         return {
           ok: false,
           status: currentStatus,
@@ -1462,6 +1469,8 @@ export function savePersistedRecordIfUnchanged(
           message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
         };
       }
+
+      assertDatabaseWritesAllowed();
 
       const db = requireDatabase();
       const result = db.transaction((): ConditionalPersistedRecordSaveResult => {
@@ -1551,12 +1560,12 @@ export function savePersistedRecordIfUnchanged(
 }
 
 export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): DatabaseStatus {
-  assertDatabaseWritesAllowed();
   const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked') {
+  if (!currentStatus.ready || currentStatus.phase === 'locked' || databaseWriteBlockedByHeartbeat) {
     return currentStatus;
   }
 
+  assertDatabaseWritesAllowed();
   return withDatabaseOperationLockSync(() => {
     const db = requireDatabase();
     const now = new Date().toISOString();
