@@ -76,7 +76,6 @@ const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
 
 const reportedCorruptStorageKeys = new Set<string>();
 
-
 function logPersistenceMetric(message: string, data?: Record<string, unknown>): void {
   if (!import.meta.env.DEV) {
     return;
@@ -101,7 +100,10 @@ function summarizeStorageRecordSizes(records: TraccionStorageRecord[]): Array<{
 
 function isTemporarySqliteLockMessage(message: string): boolean {
   const normalized = message.toLowerCase();
-  return normalized.includes('base ocupada temporalmente') || normalized.includes('bloqueo temporal de operación sqlite');
+  return (
+    normalized.includes('base ocupada temporalmente') ||
+    normalized.includes('bloqueo temporal de operación sqlite')
+  );
 }
 
 function shouldValidatePersistedJson(key: string): boolean {
@@ -116,8 +118,11 @@ function shouldValidatePersistedJson(key: string): boolean {
   return true;
 }
 
-
-function reportCorruptPersistedValue(key: string, error: unknown, source: 'localStorage' | 'sqlite'): void {
+function reportCorruptPersistedValue(
+  key: string,
+  error: unknown,
+  source: 'localStorage' | 'sqlite',
+): void {
   const message = `Dato persistido corrupto en ${source}. Clave afectada: ${key}. Se omite para permitir el arranque.`;
   console.warn(message, error);
 
@@ -135,7 +140,11 @@ function reportCorruptPersistedValue(key: string, error: unknown, source: 'local
   });
 }
 
-function isRecoverablePersistedValue(key: string, value: string, source: 'localStorage' | 'sqlite'): boolean {
+function isRecoverablePersistedValue(
+  key: string,
+  value: string,
+  source: 'localStorage' | 'sqlite',
+): boolean {
   if (!shouldValidatePersistedJson(key)) {
     return true;
   }
@@ -394,7 +403,8 @@ async function resolveExpectedUpdatedAtForWrite(
     publishDatabaseStatus(snapshot.status);
     if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
       throw new Error(
-        snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        snapshot.status.message ??
+          'SQLite no está activo. No se permite guardar sin base compartida.',
       );
     }
 
@@ -420,7 +430,8 @@ async function resolveExpectedUpdatedAtForWrite(
   publishDatabaseStatus(snapshot.status);
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     throw new Error(
-      snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+      snapshot.status.message ??
+        'SQLite no está activo. No se permite guardar sin base compartida.',
     );
   }
 
@@ -445,16 +456,22 @@ export async function flushPendingSqliteWrites(): Promise<number> {
   }
 
   let flushedCount = 0;
-  for (const pendingWrite of pendingWrites.sort((left, right) =>
-    Date.parse(left.updatedAt) - Date.parse(right.updatedAt),
+  for (const pendingWrite of pendingWrites.sort(
+    (left, right) => Date.parse(left.updatedAt) - Date.parse(right.updatedAt),
   )) {
     try {
-      window.localStorage.setItem(pendingWrite.key, pendingWrite.value);
       const savedUpdatedAt = await saveRecordToSqliteIfUnchanged(
         { key: pendingWrite.key, value: pendingWrite.value },
         pendingWrite.expectedUpdatedAt,
       );
       updateSqliteRecordMetadata(pendingWrite.key, savedUpdatedAt);
+      window.localStorage.setItem(pendingWrite.key, pendingWrite.value);
+      writeHydrationMetadata({
+        lastUpdatedAt: new Date().toISOString(),
+        sqlitePath: null,
+        refreshToken: null,
+        strategy: 'sqlite',
+      });
       removePendingSqliteWrite(pendingWrite.key);
       flushedCount += 1;
     } catch (error) {
@@ -556,7 +573,6 @@ function currentLocalRecords(): TraccionStorageRecord[] {
   return records;
 }
 
-
 function shouldBlockSharedWrite(): string | null {
   if (import.meta.env.MODE === 'test') {
     return null;
@@ -576,17 +592,20 @@ function shouldBlockSharedWrite(): string | null {
   }
 
   if (!status.ready || status.phase !== 'active') {
-    return status.message ?? 'SQLite no está activo. Edición bloqueada para evitar cambios locales divergentes.';
+    return (
+      status.message ??
+      'SQLite no está activo. Edición bloqueada para evitar cambios locales divergentes.'
+    );
   }
 
   return null;
 }
 
-function mirrorToSqlite(key: string, value: string, previousValue: string | null): void {
-  if (!isPersistedStorageKey(key)) {
-    return;
-  }
-
+function persistSharedStorageItemToSqlite(
+  key: PersistedStorageKey,
+  value: string,
+  previousValue: string | null,
+): void {
   const now = new Date();
   emitPersistenceFeedback({
     kind: 'saving',
@@ -605,6 +624,13 @@ function mirrorToSqlite(key: string, value: string, previousValue: string | null
     .then((savedUpdatedAt) => {
       updateSqliteRecordMetadata(key, savedUpdatedAt);
       removePendingSqliteWrite(key);
+      window.localStorage.setItem(key, value);
+      writeHydrationMetadata({
+        lastUpdatedAt: new Date().toISOString(),
+        sqlitePath: null,
+        refreshToken: null,
+        strategy: 'sqlite',
+      });
       emitPersistenceFeedback({
         kind: 'saved',
         updatedAt: new Date().toISOString(),
@@ -616,9 +642,10 @@ function mirrorToSqlite(key: string, value: string, previousValue: string | null
       const message =
         error instanceof Error
           ? error.message
-          : 'Error de guardado SQLite: cambio mantenido como caché local pendiente.';
+          : 'Error de guardado SQLite: el cambio no se ha confirmado.';
       const messageWithKey = `${message} Clave afectada: ${key}.`;
       console.warn(messageWithKey, error);
+
       if (isConcurrencyConflictMessage(message)) {
         emitPersistenceFeedback({
           kind: 'error',
@@ -630,16 +657,29 @@ function mirrorToSqlite(key: string, value: string, previousValue: string | null
         return;
       }
 
-      upsertPendingSqliteWrite(key, value, messageWithKey, expectedUpdatedAt);
       if (!isTemporarySqliteLockMessage(message)) {
         emitPersistenceFeedback({
           kind: 'error',
           updatedAt: new Date().toISOString(),
           key,
-          message: `${messageWithKey} Cambio pendiente de sincronizar.`,
+          message: `${messageWithKey} El cambio no se ha guardado en la base compartida.`,
         });
       }
     });
+}
+
+function writeLocalStorageCache(
+  key: string,
+  value: string,
+  strategy: HydrationMetadata['strategy'],
+): void {
+  window.localStorage.setItem(key, value);
+  writeHydrationMetadata({
+    lastUpdatedAt: new Date().toISOString(),
+    sqlitePath: null,
+    refreshToken: null,
+    strategy,
+  });
 }
 
 export function readStorageItem(key: string): string | null {
@@ -652,30 +692,31 @@ export function readStorageItem(key: string): string | null {
 }
 
 export function writeStorageItem(key: string, value: string): void {
-  if (isPersistedStorageKey(key)) {
-    const blockReason = shouldBlockSharedWrite();
-    if (blockReason) {
-      const message = `${blockReason} Clave afectada: ${key}.`;
-      console.warn(message);
-      emitPersistenceFeedback({
-        kind: 'error',
-        updatedAt: new Date().toISOString(),
-        key,
-        message,
-      });
-      return;
-    }
+  if (!isPersistedStorageKey(key)) {
+    writeLocalStorageCache(key, value, 'localStorage');
+    return;
+  }
+
+  if (import.meta.env.MODE === 'test') {
+    writeLocalStorageCache(key, value, 'localStorage');
+    return;
+  }
+
+  const blockReason = shouldBlockSharedWrite();
+  if (blockReason) {
+    const message = `${blockReason} Clave afectada: ${key}.`;
+    console.warn(message);
+    emitPersistenceFeedback({
+      kind: 'error',
+      updatedAt: new Date().toISOString(),
+      key,
+      message,
+    });
+    return;
   }
 
   const previousValue = window.localStorage.getItem(key);
-  window.localStorage.setItem(key, value);
-  writeHydrationMetadata({
-    lastUpdatedAt: new Date().toISOString(),
-    sqlitePath: null,
-    refreshToken: null,
-    strategy: 'localStorage',
-  });
-  mirrorToSqlite(key, value, previousValue);
+  persistSharedStorageItemToSqlite(key, value, previousValue);
 }
 
 export function readJsonStorage<T>(
@@ -712,7 +753,10 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
   for (const record of sqliteRecords) {
     if (!isRecoverablePersistedValue(record.key, record.value, 'sqlite')) {
       const existingValue = window.localStorage.getItem(record.key);
-      if (existingValue !== null && isRecoverablePersistedValue(record.key, existingValue, 'localStorage')) {
+      if (
+        existingValue !== null &&
+        isRecoverablePersistedValue(record.key, existingValue, 'localStorage')
+      ) {
         continue;
       }
 
@@ -799,7 +843,6 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     };
   }
 }
-
 
 export function reportStartupHydrationResult(result: HydrationResult): void {
   if (result.status !== 'sqlite-unavailable') {
