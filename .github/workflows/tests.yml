@@ -7,8 +7,9 @@ on:
 
 jobs:
   test:
-    name: TrAccion – Lint + Types + Tests
+    name: TrAccion – Quality gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -18,50 +19,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            node_modules
-            ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      # ── 1. LINT ─────────────────────────────────────────────────────────────
-      # Detecta errores de estilo y reglas ESLint antes de compilar nada.
       - name: Lint
         run: npm run lint
 
-      # ── 2. TIPOS TYPESCRIPT ─────────────────────────────────────────────────
-      # Compila solo para verificar tipos, sin emitir ficheros.
-      # Pilla errores de TypeScript que el lint no ve:
-      # props incorrectas, tipos incompatibles entre módulos, imports rotos.
-      - name: TypeScript – check tipos renderer
-        run: npx tsc --noEmit
+      - name: TypeScript check
+        run: npx tsc --noEmit && npx tsc -p electron/tsconfig.json --noEmit
 
-      - name: TypeScript – check tipos Electron main
-        run: npx tsc -p electron/tsconfig.json --noEmit
-
-      # ── 3. TESTS UNITARIOS ──────────────────────────────────────────────────
-      # Corre todos los *.test.ts y *.test.tsx con Vitest.
-      # Cubre: dominio de tareas, teletrabajo, sorteos, presupuestos,
-      # licencias, especiales, vinculograma, criterios RRLL, plantilla,
-      # ticket restaurante, exportación Excel y store de tareas.
       - name: Unit tests
-        run: npm run test -- --reporter=verbose
+        run: npm run test -- --run --reporter=verbose
 
-      # ── 4. BUILD RENDERER ───────────────────────────────────────────────────
-      # Compila Vite + TypeScript del renderer.
-      # Si algo falla aquí el exe tampoco compilaría.
-      # No genera exe, solo verifica que el código compila limpio.
-      - name: Build renderer (sin exe)
+      - name: Build renderer
         run: npx vite build
-
-      # ── 5. RESUMEN ──────────────────────────────────────────────────────────
-      # Si algún paso falla, GitHub marca el commit en rojo
-      # y ves exactamente en qué paso ha fallado antes de lanzar el build.
