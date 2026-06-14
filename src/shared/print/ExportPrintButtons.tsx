@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ActionButton } from '../../components/ui/ActionButton';
+import { useAppDialog } from '../../hooks/useAppDialog';
 import { exportTableToExcel } from '../export/tableExport';
 import type { ExportTablePayload } from '../export/types';
 import { buildPrintableTableHtml } from './buildPrintableTableHtml';
@@ -12,11 +13,12 @@ interface ExportPrintButtonsProps<T> {
 
 export function ExportPrintButtons<T>({ payload, htmlBuilder }: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const { alert, dialogNode } = useAppDialog();
   return (
     <>
       <ActionButton
         disabled={payload.rows.length === 0}
-        onClick={() => exportTableToExcel({ ...payload, generatedAt: new Date() })}
+        onClick={() => exportTableToExcel({ ...payload, generatedAt: new Date() }, (message) => { void alert(message, { type: 'error' }); })}
         variant="excel"
       >
         Exportar Excel
@@ -30,6 +32,7 @@ export function ExportPrintButtons<T>({ payload, htmlBuilder }: ExportPrintButto
       >
         Imprimir
       </ActionButton>
+      {dialogNode}
       {previewHtml && (
         <PrintPreviewModal
           html={previewHtml}
