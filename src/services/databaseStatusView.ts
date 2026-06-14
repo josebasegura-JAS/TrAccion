@@ -27,6 +27,17 @@ export function buildDatabaseStatusBadge(
 
   if (status.ready) {
     const routeKind = status.isDefaultPath ? 'ruta local por defecto' : 'ruta personalizada/compartida';
+
+    if (status.message?.toLowerCase().includes('bloquean nuevas escrituras')) {
+      return {
+        label: 'SQLite solo lectura',
+        detail: status.message,
+        title: `Base de datos: SQLite activo, pero con escrituras bloqueadas. Ruta: ${fallbackPath(status)}. ${status.message}`,
+        tone: 'warning',
+        requiresAttention: true,
+      };
+    }
+
     return {
       label: 'SQLite activo',
       detail: routeKind,

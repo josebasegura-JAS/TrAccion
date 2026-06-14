@@ -13,6 +13,25 @@ function formatLockOwner(lock: TraccionRecordLockOwnerInfo | null): string {
   return lock ? `${lock.ownerName}@${lock.machineName}` : 'otro usuario';
 }
 
+function sortLockTargets(targets: SharedModuleLockTarget[]): SharedModuleLockTarget[] {
+  return [...targets].sort((left, right) => {
+    const byModule = left.module.localeCompare(right.module);
+    return byModule !== 0 ? byModule : left.label.localeCompare(right.label);
+  });
+}
+
+function ensureHeartbeatResult(payload: TraccionRecordLockPayload, result: TraccionRecordLockResult): void {
+  if (result.status === 'acquired') {
+    return;
+  }
+
+  throw new Error(
+    result.status === 'locked'
+      ? `Se ha perdido el bloqueo de ${payload.module}: ahora lo tiene ${formatLockOwner(result.lock)}.`
+      : result.message || `Se ha perdido el bloqueo de ${payload.module}.`,
+  );
+}
+
 async function acquireModuleLock(target: SharedModuleLockTarget): Promise<TraccionRecordLockPayload> {
   const acquireRecordLock = window.traccion?.acquireRecordLock;
   if (!acquireRecordLock) {
@@ -51,14 +70,16 @@ export async function withSharedModuleLocks<TResult>(
   const acquiredPayloads: TraccionRecordLockPayload[] = [];
   const heartbeatId = window.setInterval(() => {
     acquiredPayloads.forEach((payload) => {
-      window.traccion?.heartbeatRecordLock?.(payload).catch((error: unknown) => {
-        console.warn('No se ha podido renovar el bloqueo global de módulo.', error);
-      });
+      window.traccion?.heartbeatRecordLock?.(payload)
+        .then((result) => ensureHeartbeatResult(payload, result))
+        .catch((error: unknown) => {
+          console.warn('No se ha podido renovar el bloqueo global de módulo.', error);
+        });
     });
   }, MODULE_LOCK_HEARTBEAT_MS);
 
   try {
-    for (const target of targets) {
+    for (const target of sortLockTargets(targets)) {
       const payload = await acquireModuleLock(target);
       acquiredPayloads.push(payload);
       markSharedEditingActive(payload.module, payload.recordId);
