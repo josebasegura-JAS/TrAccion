@@ -18,6 +18,26 @@ import {
 } from '../domain/criterioRrll';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+
+const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Actúa como repositorio de criterios laborales ya analizados para reutilizarlos en casos similares.',
+      'Cada criterio puede registrar tema, resumen, estado, sentido y observaciones de aplicación.',
+      'La importación Excel permite incorporar históricos o respuestas ya trabajadas fuera de la app.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Resume el caso y la solución de forma clara, evitando textos demasiado largos.',
+      'Usa el campo sentido para distinguir criterios de aprobar, denegar u otros resultados.',
+      'Filtra por tema, estado o sentido antes de contestar nuevas consultas similares.',
+    ],
+  },
+];
 
 interface SortState {
   key: CriterioRrllSortKey;
@@ -256,7 +276,14 @@ export function CriteriosRrllPage() {
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-2xl font-bold text-metro-text">Criterios RRLL</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-bold text-metro-text">Criterios RRLL</h2>
+            <ModuleHelpButton
+              title="Criterios RRLL"
+              subtitle="Guía rápida del repositorio de criterios, sentido, filtros e importación."
+              sections={CRITERIOS_RRLL_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-base text-metro-muted">
             Listado de criterios con alta manual, edición, importación Excel, búsqueda y filtros.
           </p>
