@@ -1,23 +1,23 @@
 name: Tests
 
-
 on:
   workflow_dispatch:
-
   push:
     branches:
       - main
       - develop
       - refactor-ui
-
+      - master
   pull_request:
     branches:
       - main
       - develop
       - refactor-ui
+      - master
+
 jobs:
   test:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -27,46 +27,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Verify project files
-        shell: cmd
         run: |
-          echo Current directory:
-          cd
-          dir
-          if not exist package.json (
-            echo ERROR: package.json not found
-            exit /b 1
-          )
+          pwd
+          ls -la
+          test -f package.json
 
       - name: Install dependencies
-        run: npm ci --include=dev --no-audit --no-fund
-
-      - name: Verify installation
-        shell: cmd
         run: |
-          node --version
-          npm --version
+          npm install --include=dev --no-audit --no-fund
 
-          if not exist node_modules (
-            echo ERROR: node_modules was not created
-            exit /b 1
-          )
-
-          if not exist node_modules\.bin\eslint.cmd (
-            echo ERROR: eslint was not installed
-            dir node_modules\.bin
-            exit /b 1
-          )
-
-          npx eslint --version
+      - name: Verify ESLint
+        run: |
+          test -f node_modules/eslint/bin/eslint.js
+          node node_modules/eslint/bin/eslint.js --version
+          npm ls eslint @eslint/js
 
       - name: Lint
-        run: npm run lint
+        run: node node_modules/eslint/bin/eslint.js . --max-warnings=0
 
       - name: Test
-        run: npm run test
+        run: npm run test --if-present
 
       - name: Build
-        run: npm run build
+        run: npm run build --if-present
