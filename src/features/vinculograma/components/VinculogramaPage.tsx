@@ -20,8 +20,28 @@ import { useVinculogramaStore } from '../store/useVinculogramaStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 
+
+const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Registra vínculos entre personas y calcula la vigencia aplicable de forma automática.',
+      'Se apoya en Plantilla para localizar personas por número de empleado y nombre completo.',
+      'Separa vínculos vigentes e históricos para consultar relaciones activas sin perder antecedentes.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Selecciona siempre la persona desde plantilla cuando sea posible para evitar duplicidades.',
+      'Comprueba fechas y estado antes de guardar un nuevo vínculo.',
+      'Usa exportación o impresión para trasladar un listado filtrado de vínculos activos o históricos.',
+    ],
+  },
+];
 
 type VinculogramaTableColumnId = 'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'status' | 'actions';
 const VINCULOGRAMA_TABLE_STORAGE_KEY = 'traccion.tableView.vinculograma.main';
@@ -521,7 +541,14 @@ export function VinculogramaPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
               Módulo
             </p>
-            <h2 className="text-2xl font-bold text-metro-text">Vinculograma</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-2xl font-bold text-metro-text">Vinculograma</h2>
+              <ModuleHelpButton
+                title="Vinculograma"
+                subtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
+                sections={VINCULOGRAMA_HELP_SECTIONS}
+              />
+            </div>
             <p className="mt-0.5 text-base text-metro-muted">
               Gestión de vínculos con cálculo automático de fecha de vigencia.
             </p>
