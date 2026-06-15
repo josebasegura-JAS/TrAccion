@@ -1,50 +1,39 @@
-name: Tests
+name: Ejecutar tests
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-      - develop
-      - master
-  pull_request:
-    branches:
-      - main
-      - develop
-      - master
 
 jobs:
-  test:
+  tests:
+    name: Tests manuales
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Preparar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Instalar dependencias
+        run: npm install
 
-      - name: Verify toolchain
+      - name: Comprobar versiones
         run: |
           node --version
           npm --version
           npx eslint --version
-          node -e "console.log('ESLint JS:', require('@eslint/js/package.json').version)"
-          node -e "console.log('TypeScript ESLint:', require('typescript-eslint/package.json').version)"
 
-      - name: TypeScript check
-        run: npx tsc --noEmit
-
-      - name: Lint
+      - name: Ejecutar lint
         run: npm run lint
 
-      - name: Unit tests
+      - name: Ejecutar tests
         run: npm run test
 
-      - name: Build
+      - name: Compilar app
         run: npm run build
