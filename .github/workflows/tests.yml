@@ -13,25 +13,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install dependencies
         run: |
-          npm install
-          npm ls eslint || true
+          if [ -f package-lock.json ]; then
+            npm ci --include=dev
+          else
+            npm install --include=dev
+          fi
 
-      - name: Debug
+      - name: Verify ESLint installation
         run: |
-          pwd
-          ls -la
-          ls -la node_modules/.bin || true
+          ./node_modules/.bin/eslint --version
+          npm ls eslint @eslint/js
 
       - name: Run lint
-        run: npx eslint . --max-warnings=0
+        run: npm run lint
 
       - name: Run tests
         run: npm test --if-present
