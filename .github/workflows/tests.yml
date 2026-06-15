@@ -1,18 +1,15 @@
 name: Tests
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
       - develop
-      - refactor-ui
       - master
   pull_request:
     branches:
       - main
       - develop
-      - refactor-ui
       - master
 
 jobs:
@@ -23,25 +20,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Verify project root
-        run: |
-          pwd
-          ls -la
-          test -f package.json
-          test -f package-lock.json
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+        run: npm ci
 
-      - name: Verify installed tools
+      - name: Verify toolchain
         run: |
-          npm ls eslint @eslint/js eslint-scope typescript-eslint
-          node node_modules/eslint/bin/eslint.js --version
+          node --version
+          npm --version
+          npx eslint --version
+          node -e "console.log('ESLint JS:', require('@eslint/js/package.json').version)"
+          node -e "console.log('TypeScript ESLint:', require('typescript-eslint/package.json').version)"
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
 
       - name: Lint
         run: npm run lint
