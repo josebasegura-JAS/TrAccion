@@ -16,8 +16,28 @@ import { useSorteosStore } from '../store/useSorteosStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 
 const today = new Date().toISOString().slice(0, 10);
+
+const SORTEOS_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Gestiona sorteos internos con participantes normalizados desde plantilla, ganadores e histórico.',
+      'Permite excluir personas para evitar que vuelvan a participar mientras siga vigente la exclusión.',
+      'El histórico conserva resultados y permite desbloquear exclusiones cuando corresponde.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Define título, fecha y número de ganadores antes de ejecutar el sorteo.',
+      'Revisa exclusiones activas antes de sortear para evitar resultados no deseados.',
+      'Exporta o imprime el resultado cuando necesites dejar constancia del sorteo realizado.',
+    ],
+  },
+];
 
 type PendingConfirmation =
   | { type: 'delete-draw'; drawId: string }
@@ -238,7 +258,14 @@ export function SorteosPage() {
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-xl font-bold text-metro-text">Sorteos</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-metro-text">Sorteos</h2>
+            <ModuleHelpButton
+              title="Sorteos"
+              subtitle="Guía rápida de creación de sorteos, exclusiones, ganadores e histórico."
+              sections={SORTEOS_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-sm text-metro-muted">Gestión compacta de sorteos, exclusiones e histórico de resultados.</p>
         </div>
       </div>
