@@ -4,6 +4,7 @@ import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
 import {
@@ -27,6 +28,25 @@ import {
   type BudgetTicketGroup,
 } from '../domain/presupuestos';
 import { usePresupuestosStore, type BudgetActualDraft, type BudgetManualItemDraft, type BudgetScenarioDraft, type BudgetTicketGroupDraft } from '../store/usePresupuestosStore';
+
+const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Permite crear escenarios presupuestarios de RRLL con conceptos manuales y grupos de Ticket Restaurante.',
+      'Compara previsiones anuales y mensuales para valorar impacto económico antes de cerrar una propuesta.',
+      'Recoge importes reales ejecutados para contrastar presupuesto frente a realidad.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Crea escenarios por año y diferencia claramente conceptos manuales, tickets y reales ejecutados.',
+      'Duplica escenarios cuando quieras probar una alternativa sin perder el cálculo original.',
+      'Revisa la comparativa antes de exportar para comprobar que meses, importes y grupos son coherentes.',
+    ],
+  },
+];
 
 type ScenarioColumnId = 'name' | 'year' | 'ticket' | 'manual' | 'ticketTotal' | 'total' | 'actions';
 type ManualColumnId = 'concept' | 'category' | 'monthly' | 'annual' | 'total' | 'actions';
@@ -254,7 +274,14 @@ export function PresupuestosPage() {
     <div className="space-y-5 pb-8">
       <div className="rounded-2xl border border-metro-border bg-metro-panel p-5">
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-metro-red">Herramientas RRLL</p>
-        <h2 className="text-2xl font-bold text-metro-text">Presupuestos RRLL</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-2xl font-bold text-metro-text">Presupuestos RRLL</h2>
+          <ModuleHelpButton
+            title="Presupuestos RRLL"
+            subtitle="Guía rápida de escenarios, simulación, tickets, comparativas y reales ejecutados."
+            sections={PRESUPUESTOS_HELP_SECTIONS}
+          />
+        </div>
         <p className="text-sm text-metro-muted">Escenarios, simulación anual, Ticket Restaurante, comparativas y reales ejecutados.</p>
         <div className="mt-2"><InlineSaveFeedback /></div>
         {message && <p className="mt-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-muted">{message}</p>}
