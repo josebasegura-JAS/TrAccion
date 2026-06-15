@@ -1,16 +1,21 @@
 name: Tests
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-      - master
+      - develop
+      - refactor-ui
+
   pull_request:
+    branches:
+      - main
+      - develop
+      - refactor-ui
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -20,34 +25,46 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
-      - name: Verify project root
+      - name: Verify project files
+        shell: cmd
         run: |
-          pwd
-          ls -la
-          test -f package.json
+          echo Current directory:
+          cd
+          dir
+          if not exist package.json (
+            echo ERROR: package.json not found
+            exit /b 1
+          )
 
       - name: Install dependencies
-        run: |
-          npm config set omit ""
-          if [ -f package-lock.json ]; then
-            npm ci --include=dev
-          else
-            npm install --include=dev
-          fi
+        run: npm ci --include=dev --no-audit --no-fund
 
-      - name: Verify local tools
+      - name: Verify installation
+        shell: cmd
         run: |
-          ls -la node_modules/.bin
-          test -f node_modules/.bin/eslint
-          ./node_modules/.bin/eslint --version
-          npm ls eslint @eslint/js
+          node --version
+          npm --version
 
-      - name: Run lint
+          if not exist node_modules (
+            echo ERROR: node_modules was not created
+            exit /b 1
+          )
+
+          if not exist node_modules\.bin\eslint.cmd (
+            echo ERROR: eslint was not installed
+            dir node_modules\.bin
+            exit /b 1
+          )
+
+          npx eslint --version
+
+      - name: Lint
         run: npm run lint
 
-      - name: Run unit tests
-        run: npm run test --if-present
+      - name: Test
+        run: npm run test
 
       - name: Build
-        run: npm run build --if-present
+        run: npm run build
