@@ -19,6 +19,26 @@ import { useEspecialesStore } from '../store/useEspecialesStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+
+const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Prepara comunicaciones Outlook para servicios especiales a partir de evento, fecha, hora, enlace y ruta.',
+      'Gestiona destinatarios Para y CC y permite previsualizar el cuerpo HTML antes de abrir Outlook.',
+      'Puede leer mensajes .msg arrastrados para reutilizar asunto, cuerpo, fecha o remitente como apoyo.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Completa primero datos del servicio y destinatarios antes de generar el borrador Outlook.',
+      'Revisa la previsualización HTML para detectar errores de formato o información incompleta.',
+      'Usa restaurar cuando quieras volver a la plantilla base sin conservar cambios manuales.',
+    ],
+  },
+];
 
 const inputClass =
   'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red';
@@ -366,7 +386,14 @@ export function EspecialesPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
               Especiales
             </p>
-            <h2 className="text-2xl font-bold text-metro-text">Especiales</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-2xl font-bold text-metro-text">Especiales</h2>
+              <ModuleHelpButton
+                title="Especiales"
+                subtitle="Guía rápida de comunicaciones Outlook, destinatarios, plantilla HTML y mensajes .msg."
+                sections={ESPECIALES_HELP_SECTIONS}
+              />
+            </div>
             <p className="mt-0.5 text-base text-metro-muted">
               Generación asistida de comunicaciones Outlook para servicios especiales.
             </p>
