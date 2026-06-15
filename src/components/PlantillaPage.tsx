@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
+import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
@@ -24,6 +25,25 @@ import {
   type TableViewPreferences,
   useTableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
+
+const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Mantiene la relación base de personas de Metro Bilbao que utiliza el resto de módulos.',
+      'Permite alta manual, edición, búsqueda, filtros y borrado lógico sin perder trazabilidad.',
+      'La importación Excel actualiza datos de plantilla y evita tener que introducir personas una a una.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Revisa primero que el número de empleado y el nombre completo estén correctamente informados.',
+      'Usa las traducciones de puestos para completar automáticamente puestos EUS cuando falten.',
+      'Exporta o imprime el listado filtrado cuando necesites una foto concreta de plantilla.',
+    ],
+  },
+];
 
 type SortKey =
   | 'empleado'
@@ -275,7 +295,14 @@ export function PlantillaPage() {
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-xl font-bold text-metro-text">Plantilla</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-metro-text">Plantilla</h2>
+            <ModuleHelpButton
+              title="Plantilla"
+              subtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
+              sections={PLANTILLA_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-sm text-metro-muted">
             Listado de personas con alta manual, edición, borrado lógico e importación Excel.
           </p>

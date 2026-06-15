@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrigins';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
@@ -42,6 +43,25 @@ import {
 import { TaskEditor } from './TaskEditor';
 
 type ActiveTaskTableColumnId = TaskSortKey | 'actions';
+
+const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Centraliza tareas internas y solicitudes sindicales para seguirlas por fase, prioridad y fecha límite.',
+      'Permite separar trabajo abierto, cerrado e histórico sin sacar los asuntos del circuito de RRLL.',
+      'Los orígenes configurables sirven para clasificar de dónde viene cada tarea o petición.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Registra cada asunto con prioridad, origen, fase y vencimiento cuando aplique.',
+      'Usa búsqueda, filtros y ordenación para revisar primero lo crítico o lo próximo a vencer.',
+      'En edición multiusuario, respeta el aviso de bloqueo para evitar pisar cambios de otra persona.',
+    ],
+  },
+];
 
 type HistoricSortKey = 'titulo' | 'closedAt' | 'responsable' | 'prioridad';
 
@@ -646,7 +666,14 @@ export function TareasPage({
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <h2 className="text-2xl font-bold text-metro-text">Tareas</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-bold text-metro-text">Tareas</h2>
+            <ModuleHelpButton
+              title="Tareas"
+              subtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
+              sections={TAREAS_HELP_SECTIONS}
+            />
+          </div>
           <p className="mt-0.5 text-base text-metro-muted">
             Centro operativo único para tareas internas y solicitudes sindicales por fase.
           </p>

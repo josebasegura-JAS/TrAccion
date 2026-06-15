@@ -4,9 +4,29 @@ import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
 import { Notice } from './ui/Notice';
+import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { StatusBadge } from './ui/StatusBadge';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+
+const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    items: [
+      'Centraliza configuración técnica de TrAccion: base de datos, rutas externas, plantillas y opciones auxiliares.',
+      'Permite comprobar el estado de SQLite, el modo de conexión y avisos de funcionamiento.',
+      'Guarda rutas necesarias para generar documentos o comunicaciones sin incrustar plantillas en la app.',
+    ],
+  },
+  {
+    title: 'Uso recomendado',
+    items: [
+      'Modifica rutas solo cuando cambie la ubicación real de base de datos o plantillas.',
+      'Comprueba los avisos de estado antes de asumir que la app está trabajando contra la ruta compartida.',
+      'Evita cambiar configuración durante importaciones o escrituras críticas en otros módulos.',
+    ],
+  },
+];
 
 function databaseTone(tone: DatabaseStatusTone): 'success' | 'warning' | 'error' | 'muted' {
   if (tone === 'ok') {
@@ -267,7 +287,14 @@ export function AjustesPage() {
       <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
       <div className="mb-5">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Ajustes</p>
-        <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración</h2>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h2 className="text-2xl font-bold text-metro-text">Configuración</h2>
+          <ModuleHelpButton
+            title="Configuración"
+            subtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
+            sections={AJUSTES_HELP_SECTIONS}
+          />
+        </div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-metro-muted">
           Configura rutas externas necesarias para generar documentos sin almacenar plantillas
           dentro de TrAccion.
