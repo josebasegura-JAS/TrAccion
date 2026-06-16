@@ -49,6 +49,7 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     validacionSeguridadInformatica: false,
     validacionPrevencion: false,
     validacionJefatura: false,
+    revisado: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
@@ -224,6 +225,7 @@ describe('importador de encuesta de teletrabajo', () => {
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
       validacionJefatura: false,
+      revisado: false,
     });
   });
 
