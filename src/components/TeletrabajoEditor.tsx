@@ -64,8 +64,8 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
     tipoSolicitud: solicitud.tipoSolicitud,
     diasTeletrabajo: solicitud.diasTeletrabajo,
     fechaSolicitud: solicitud.fechaSolicitud,
-    fechaOrdenador: solicitud.fechaOrdenador,
-    fechaCascos: solicitud.fechaCascos,
+    fechaOrdenador: solicitud.fechaOrdenador || EMPTY_TELETRABAJO_DRAFT.fechaOrdenador,
+    fechaCascos: solicitud.fechaCascos || EMPTY_TELETRABAJO_DRAFT.fechaCascos,
     periodo: solicitud.periodo,
     observaciones: solicitud.observaciones,
     validacionSeguridadInformatica: solicitud.validacionSeguridadInformatica,
@@ -169,11 +169,10 @@ export function TeletrabajoEditor({
   const lockMessage =
     recordLock.message ||
     (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
-  const canSubmit =
-    hasRequiredManualData(draft) &&
-    draft.diasTeletrabajo.length > 0 &&
-    !isFormReadOnly &&
-    !isSaving;
+  const canCreate = hasRequiredManualData(draft) && draft.diasTeletrabajo.length > 0;
+  const canEdit = Boolean(solicitud);
+  const canSubmit = (isCreate ? canCreate : canEdit) && !isFormReadOnly && !isSaving;
+  const canGenerateWord = canCreate && !isFormReadOnly && !isSaving;
 
   const handleEmpleadoChange = (empleado: string) => {
     const employee = employees.find(
@@ -186,7 +185,7 @@ export function TeletrabajoEditor({
   };
 
   const handleGenerateWord = async () => {
-    if (!canSubmit || isGeneratingWord || isFormReadOnly) {
+    if (!canGenerateWord || isGeneratingWord || isFormReadOnly) {
       return;
     }
 
@@ -534,14 +533,35 @@ export function TeletrabajoEditor({
             </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && solicitud && (
-              <AuditHistoryButton
-                entityId={solicitud.id}
-                entityTitle={solicitud.nombreApellidos || 'Solicitud sin nombre'}
-                module="teletrabajo"
-              />
+              <>
+                <AuditHistoryButton
+                  entityId={solicitud.id}
+                  entityTitle={solicitud.nombreApellidos || 'Solicitud sin nombre'}
+                  module="teletrabajo"
+                />
+                <label
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${
+                    draft.revisado
+                      ? 'border-emerald-400/50 bg-emerald-950/20 text-emerald-100'
+                      : 'border-amber-400/50 bg-amber-950/20 text-amber-100'
+                  }`}
+                  title={draft.revisado ? 'Solicitud revisada' : 'Solicitud pendiente de revisar'}
+                >
+                  <input
+                    checked={draft.revisado}
+                    className="h-4 w-4 accent-metro-red"
+                    disabled={isFormReadOnly || isSaving}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, revisado: event.target.checked }))
+                    }
+                    type="checkbox"
+                  />
+                  Revisado
+                </label>
+              </>
             )}
             <ActionButton
-              disabled={!canSubmit || isGeneratingWord || isFormReadOnly}
+              disabled={!canGenerateWord || isGeneratingWord || isFormReadOnly}
               onClick={handleGenerateWord}
               size="sm"
               variant="word"
