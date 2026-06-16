@@ -82,6 +82,7 @@ const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
 ];
 
 type TeletrabajoTableColumnId =
+  | 'revisado'
   | 'empleado'
   | 'nombreApellidos'
   | 'puestoNomina'
@@ -97,6 +98,7 @@ const TELETRABAJO_TABLE_STORAGE_KEY = 'traccion.tableView.teletrabajo.solicitude
 const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY =
   'traccion.v1.teletrabajo.puestos.translationAliases';
 const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
+  'revisado',
   'empleado',
   'nombreApellidos',
   'puestoNomina',
@@ -114,6 +116,7 @@ const defaultTeletrabajoTablePreferences: TableViewPreferences<TeletrabajoTableC
 };
 
 const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
+  { key: 'revisado', header: 'Revisado', value: (solicitud) => solicitud.revisado ? 'Sí' : 'No' },
   { key: 'empleado', header: 'Empleado', value: (solicitud) => solicitud.empleado },
   {
     key: 'nombreApellidos',
@@ -389,6 +392,28 @@ export function TeletrabajoPage({
     Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>
   >(
     () => [
+      {
+        id: 'revisado',
+        header: 'Revisado',
+        accessor: (s) => (s.revisado ? 1 : 0),
+        render: (s) => (
+          <span
+            className={`inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-bold ${
+              s.revisado
+                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+            }`}
+            title={s.revisado ? 'Solicitud revisada' : 'Solicitud pendiente de revisar'}
+          >
+            {s.revisado ? 'Sí' : 'No'}
+          </span>
+        ),
+        width: 96,
+        minWidth: 84,
+        maxWidth: 130,
+        sortable: true,
+        className: 'text-center',
+      },
       {
         id: 'empleado',
         header: 'Empleado',

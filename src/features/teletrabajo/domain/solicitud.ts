@@ -26,6 +26,7 @@ export interface TeletrabajoSolicitud {
   validacionSeguridadInformatica: boolean;
   validacionPrevencion: boolean;
   validacionJefatura: boolean;
+  revisado: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -51,6 +52,7 @@ export type TeletrabajoDraft = Pick<
   | 'validacionSeguridadInformatica'
   | 'validacionPrevencion'
   | 'validacionJefatura'
+  | 'revisado'
 >;
 
 export type TeletrabajoTextField = Extract<
@@ -87,6 +89,7 @@ export const EMPTY_TELETRABAJO_DRAFT: TeletrabajoDraft = {
   validacionSeguridadInformatica: false,
   validacionPrevencion: false,
   validacionJefatura: false,
+  revisado: false,
 };
 
 export function normalizeDiasTeletrabajo(values: readonly string[]): TeletrabajoDia[] {

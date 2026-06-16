@@ -51,6 +51,7 @@ const TELETRABAJO_AUDIT_LABELS = {
   validacionSeguridadInformatica: 'Validación Seguridad Informática',
   validacionPrevencion: 'Validación Prevención',
   validacionJefatura: 'Validación Jefatura',
+  revisado: 'Revisado',
 } satisfies Partial<Record<keyof TeletrabajoDraft, string>>;
 
 const TELETRABAJO_AUDIT_FIELDS: Array<keyof TeletrabajoDraft> = [
@@ -72,6 +73,7 @@ const TELETRABAJO_AUDIT_FIELDS: Array<keyof TeletrabajoDraft> = [
   'validacionSeguridadInformatica',
   'validacionPrevencion',
   'validacionJefatura',
+  'revisado',
 ];
 
 function pickTeletrabajoAuditSnapshot(
@@ -191,6 +193,7 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
     validacionSeguridadInformatica: Boolean(solicitud.validacionSeguridadInformatica),
     validacionPrevencion: Boolean(solicitud.validacionPrevencion),
     validacionJefatura: Boolean(solicitud.validacionJefatura),
+    revisado: Boolean(solicitud.revisado),
     createdAt,
     updatedAt: solicitud.updatedAt ?? createdAt,
     deletedAt: solicitud.deletedAt ?? null,
@@ -319,6 +322,7 @@ function normalizeDraft(draft: TeletrabajoDraft): TeletrabajoDraft {
     periodo: draft.periodo.trim(),
     observaciones: draft.observaciones.trim(),
     diasTeletrabajo: normalizeDiasTeletrabajo(draft.diasTeletrabajo),
+    revisado: Boolean(draft.revisado),
   };
 }
 
