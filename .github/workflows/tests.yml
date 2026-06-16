@@ -10,6 +10,9 @@ jobs:
   tests:
     name: Tests manuales
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: development
+      NPM_CONFIG_PRODUCTION: "false"
 
     steps:
       - name: Descargar repositorio
@@ -19,15 +22,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
-      - name: Instalar dependencias
-        run: npm install
+      - name: Instalar dependencias completas
+        run: |
+          rm -rf node_modules
+          npm ci --include=dev
 
-      - name: Comprobar versiones
+      - name: Comprobar herramientas
         run: |
           node --version
           npm --version
-          npx eslint --version
+          test -x node_modules/.bin/eslint
+          npx --no-install eslint --version
+          npx --no-install vitest --version
+          npx --no-install tsc --version
 
       - name: Ejecutar lint
         run: npm run lint
