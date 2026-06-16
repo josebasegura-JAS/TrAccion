@@ -1,0 +1,48 @@
+name: Ejecutar tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  tests:
+    name: Tests manuales
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        shell: bash
+        run: |
+          unset NODE_ENV
+          unset NPM_CONFIG_PRODUCTION
+          unset npm_config_production
+          unset NPM_CONFIG_OMIT
+          unset npm_config_omit
+          rm -rf node_modules
+          npm ci
+          test -x node_modules/.bin/eslint
+
+      - name: Comprobar versiones
+        run: |
+          node --version
+          npm --version
+          ./node_modules/.bin/eslint --version
+
+      - name: Ejecutar lint
+        run: npm run lint
+
+      - name: Ejecutar tests
+        run: npm run test
+
+      - name: Compilar app
+        run: npm run build
