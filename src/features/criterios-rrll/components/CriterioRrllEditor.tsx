@@ -10,6 +10,7 @@ import {
 } from '../domain/criterioRrll';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 
 const criterioTextFields: Array<{
@@ -85,6 +86,8 @@ export function CriterioRrllEditor({
               {isCreate ? 'Alta manual compacta.' : `Editando criterio ${criterio?.id ?? '—'}`}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
           <button
             aria-label="Cerrar editor"
             className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
@@ -93,6 +96,7 @@ export function CriterioRrllEditor({
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         {recordLock.status === 'locked' && recordLock.lockedBy && (

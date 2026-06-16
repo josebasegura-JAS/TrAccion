@@ -22,6 +22,7 @@ import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -169,6 +170,8 @@ function VinculogramaModal({
               {mode === 'create' ? 'Nuevo vínculo' : 'Editar vínculo'}
             </h3>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
           <button
             className="rounded-lg p-2 text-metro-muted hover:bg-metro-surface hover:text-metro-text"
             onClick={onClose}
@@ -176,6 +179,7 @@ function VinculogramaModal({
           >
             <X size={18} />
           </button>
+          </div>
         </div>
 
         <div className="px-5 py-4">

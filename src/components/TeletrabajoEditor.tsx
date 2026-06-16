@@ -18,6 +18,7 @@ import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { ActionButton } from './ui/ActionButton';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 
@@ -239,6 +240,8 @@ export function TeletrabajoEditor({
               {isCreate ? 'Alta manual compacta.' : `Editando solicitud ${solicitud?.id ?? '—'}`}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
           <button
             aria-label="Cerrar editor"
             className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
@@ -247,6 +250,7 @@ export function TeletrabajoEditor({
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         {lockMessage && (

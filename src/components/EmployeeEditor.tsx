@@ -8,6 +8,7 @@ import {
 } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
@@ -101,6 +102,8 @@ export function EmployeeEditor({
                 : `Editando empleado ${employee?.empleado ?? '—'}`}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
           <button
             aria-label="Cerrar editor"
             className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
@@ -109,6 +112,7 @@ export function EmployeeEditor({
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         {recordLock.status === 'locked' && recordLock.lockedBy && (

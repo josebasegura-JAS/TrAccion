@@ -10,6 +10,7 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -275,9 +276,12 @@ function LicenseEditor({
             </h2>
             <p className="text-xs text-metro-muted">Doble clic en una fila abre esta ficha para editar el flujo.</p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
           <button className="rounded-full p-2 text-metro-muted transition hover:bg-white/5 hover:text-metro-text" onClick={onClose} type="button">
             <X size={18} />
           </button>
+          </div>
         </div>
 
         <div className="max-h-[70vh] space-y-4 overflow-auto px-5 py-4">

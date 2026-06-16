@@ -15,6 +15,7 @@ import { parseOutlookMsg } from '../features/especiales/domain/especiales';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
+import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
@@ -490,6 +491,8 @@ export function TaskEditor({
                 : `Editando tarea ${task?.id ?? '—'}`}
             </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
           <button
             aria-label="Cerrar editor"
             className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
@@ -498,6 +501,7 @@ export function TaskEditor({
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         {lockMessage && (
