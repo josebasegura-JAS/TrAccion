@@ -1,3 +1,4 @@
+import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from '../../../services/persistence';
 import type { Task } from '../domain/task';
 
 export interface TaskSqliteSaveResult {
@@ -26,6 +27,8 @@ export async function loadTasksFromSqlite(
   return snapshot.records.flatMap((record) => parseTasks(`[${record.value}]`));
 }
 
+const TASKS_DIRECT_STORAGE_KEY = 'traccion.v1.tareas.tasks';
+
 export async function saveTaskToSqlite(
   task: Task,
   expectedUpdatedAt: string | null,
@@ -35,15 +38,25 @@ export async function saveTaskToSqlite(
     return null;
   }
 
-  const result = await saver({
-    id: task.id,
-    value: JSON.stringify(task),
-    expectedUpdatedAt,
-  });
+  publishPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'Guardando tarea en SQLite…');
+  await waitForNextPaint();
 
-  return {
-    ok: result.ok,
-    message: result.message,
-    currentUpdatedAt: result.currentUpdatedAt,
-  };
+  try {
+    const result = await saver({
+      id: task.id,
+      value: JSON.stringify(task),
+      expectedUpdatedAt,
+    });
+
+    clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      currentUpdatedAt: result.currentUpdatedAt,
+    };
+  } catch (error) {
+    clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'No se ha podido guardar la tarea en SQLite.');
+    throw error;
+  }
 }

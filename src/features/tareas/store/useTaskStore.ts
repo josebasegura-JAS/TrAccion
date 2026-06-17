@@ -517,7 +517,25 @@ async function readTasksForStore(): Promise<Task[]> {
   try {
     const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot);
     if (sqliteTasks) {
-      return reconcileTasksWithClosedSessions(sqliteTasks.map(normalizeTask));
+      const normalizedSqliteTasks = sqliteTasks.map(normalizeTask);
+      const reconciledSqliteTasks = reconcileTasksWithClosedSessions(normalizedSqliteTasks);
+      const previousTasksById = new Map(normalizedSqliteTasks.map((task) => [task.id, task]));
+      const migratedPeticiones = readMigratedPeticiones().filter(
+        (migratedTask) => !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
+      );
+      const tasks = [...reconciledSqliteTasks, ...migratedPeticiones].map(normalizeTask);
+
+      const normalizationPersisted = await persistTaskChangesBestEffort(
+        tasks,
+        previousTasksById,
+        'normalización o migración de tareas',
+      );
+
+      if (migratedPeticiones.length > 0 && normalizationPersisted) {
+        writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
+      }
+
+      return tasks;
     }
   } catch (error) {
     console.warn('No se han podido cargar tareas desde SQLite directo. Se usa compatibilidad JSON.', error);
@@ -537,6 +555,37 @@ async function persistTaskDirectly(task: Task, expectedUpdatedAt: string | null)
   }
 
   return { ok: result.ok, message: result.message, recordId: task.id };
+}
+
+function tasksDiffer(first: Task, second: Task): boolean {
+  return JSON.stringify(normalizeTask(first)) !== JSON.stringify(normalizeTask(second));
+}
+
+async function persistTaskChangesBestEffort(
+  tasks: Task[],
+  previousTasksById: Map<string, Task>,
+  context: string,
+): Promise<boolean> {
+  if (!hasTaskSqliteRepository()) {
+    return false;
+  }
+
+  let allPersisted = true;
+  for (const task of tasks) {
+    const previousTask = previousTasksById.get(task.id);
+    const expectedUpdatedAt = previousTask?.updatedAt ?? null;
+    if (previousTask && !tasksDiffer(previousTask, task)) {
+      continue;
+    }
+
+    const result = await persistTaskDirectly(task, expectedUpdatedAt);
+    if (!result.ok) {
+      allPersisted = false;
+      console.warn(`[tareas] No se ha podido persistir ${context}.`, result.message);
+    }
+  }
+
+  return allPersisted;
 }
 
 function firstActiveTaskId(tasks: Task[]): string {
