@@ -1,16 +1,18 @@
 import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { DashboardCards } from './components/DashboardCards';
+import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Sidebar } from './components/Sidebar';
-import { navigationGroups, type AppView } from './navigation/navigation';
+import type { AppView } from './navigation/navigation';
 import {
   startExternalDataSyncPolling,
   stopExternalDataSyncPolling,
 } from './services/externalDataSync';
 import {
   bootstrapSqlitePersistence,
+  startDatabaseConnectivityIssueListener,
+  stopDatabaseConnectivityIssueListener,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from './services/persistence';
@@ -66,6 +68,10 @@ const TicketRestaurantePage = lazy(() =>
     default: module.TicketRestaurantePage,
   })),
 );
+const DashboardCards = lazy(() =>
+  import('./components/DashboardCards').then((module) => ({ default: module.DashboardCards })),
+);
+
 const VinculogramaPage = lazy(() =>
   import('./features/vinculograma/components/VinculogramaPage').then((module) => ({
     default: module.VinculogramaPage,
@@ -104,12 +110,7 @@ class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErro
     }
   }
 
-  handleResetToDashboard = (): void => {
-    try {
-      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
-    } catch {
-      // No bloquear la recuperación si localStorage no está disponible.
-    }
+  handleReload = (): void => {
     window.location.reload();
   };
 
@@ -125,17 +126,17 @@ class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErro
           <div className="space-y-2">
             <h2 className="text-base font-semibold">No se ha podido cargar este módulo</h2>
             <p className="text-sm text-red-100/85">
-              La aplicación ha evitado quedarse en pantalla negra. Vuelve al inicio y revisa la consola o el log de Electron para ver el error exacto.
+              La aplicación ha evitado quedarse en pantalla negra. Revisa la consola o el log de Electron para ver el error exacto.
             </p>
             <p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">
               {this.state.error.message}
             </p>
             <button
               className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
-              onClick={this.handleResetToDashboard}
+              onClick={this.handleReload}
               type="button"
             >
-              Volver al inicio
+              Recargar aplicación
             </button>
           </div>
         </div>
@@ -144,28 +145,17 @@ class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErro
   }
 }
 
-
 const ACTIVE_VIEW_STORAGE_KEY = 'traccion.v1.ui.activeView';
-const validAppViews = new Set<AppView>([
-  'dashboard',
-  'ajustes',
-  ...navigationGroups.flatMap((group) => group.items.map((item) => item.view).filter(Boolean) as AppView[]),
-]);
 
-function readStoredActiveView(): AppView {
-  try {
-    const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
-    return storedView && validAppViews.has(storedView as AppView) ? (storedView as AppView) : 'dashboard';
-  } catch {
-    return 'dashboard';
-  }
+function readInitialActiveView(): AppView {
+  return 'dashboard';
 }
 
-function writeStoredActiveView(view: AppView): void {
+function writeActiveView(view: AppView): void {
   try {
     window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
   } catch {
-    // La navegación no debe bloquear la aplicación si localStorage no está disponible.
+    // La navegación no debe bloquear el render si localStorage no está disponible.
   }
 }
 
@@ -203,7 +193,7 @@ function PersistenceErrorBanner() {
     <section className="persistence-error-banner" role="alert" aria-live="assertive">
       <AlertTriangle size={20} aria-hidden="true" />
       <div>
-        <strong>Error de persistencia</strong>
+        <strong>Error de guardado</strong>
         <p>
           {feedback.message ||
             'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}
@@ -251,20 +241,91 @@ function ModuleLoading({ activeView }: { activeView: AppView }) {
   );
 }
 
+
+class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErrorBoundaryState> {
+  state: ModuleErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ModuleErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error('Error renderizando la aplicación.', error, errorInfo);
+  }
+
+  handleReset = (): void => {
+    try {
+      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
+    } catch {
+      // No bloquear recuperación si localStorage falla.
+    }
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.error) {
+      return this.props.children;
+    }
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-metro-app p-6 text-metro-text">
+        <section className="max-w-2xl rounded-2xl border border-red-500/50 bg-red-950/30 p-6 text-red-100 shadow-xl" role="alert">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 shrink-0" size={24} aria-hidden="true" />
+            <div className="space-y-3">
+              <div>
+                <h1 className="text-lg font-semibold">No se ha podido mostrar TrAccion</h1>
+                <p className="mt-1 text-sm text-red-100/85">
+                  Se ha capturado un error de render para evitar la pantalla gris. Reinicia al inicio y revisa el log si persiste.
+                </p>
+              </div>
+              <p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">
+                {this.state.error.message}
+              </p>
+              <button
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                onClick={this.handleReset}
+                type="button"
+              >
+                Reiniciar al inicio
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+}
+
 export function App() {
-  const [activeView, setActiveView] = useState<AppView>(() => readStoredActiveView());
+  const [activeView, setActiveView] = useState<AppView>(() => readInitialActiveView());
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
 
   useEffect(() => {
     bootstrapSqlitePersistence();
-    startExternalDataSyncPolling();
+    startDatabaseConnectivityIssueListener();
+    const syncTimer = window.setTimeout(() => startExternalDataSyncPolling(), 1500);
 
-    return () => stopExternalDataSyncPolling();
+    return () => {
+      window.clearTimeout(syncTimer);
+      stopExternalDataSyncPolling();
+      stopDatabaseConnectivityIssueListener();
+    };
   }, []);
 
-  const changeActiveView = (view: AppView) => {
-    writeStoredActiveView(view);
+  const changeActiveView = (view: AppView): void => {
+    writeActiveView(view);
     setActiveView(view);
+  };
+
+  const resetToDashboard = (): void => {
+    try {
+      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
+    } catch {
+      // No bloquear el reinicio si localStorage no está disponible.
+    }
+
+    window.location.reload();
   };
 
   const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string }) => {
@@ -273,9 +334,11 @@ export function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
+    <AppShellErrorBoundary>
+      <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
       <Sidebar
         activeView={activeView}
+        onDashboardReset={resetToDashboard}
         onViewChange={(view) => {
           setNavigationTarget(null);
           changeActiveView(view);
@@ -285,10 +348,11 @@ export function App() {
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
           <PersistenceErrorBanner />
-          {activeView === 'dashboard' && (
-            <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
-          )}
+          <GlobalBusyIndicator />
           <ModuleErrorBoundary activeView={activeView}>
+            {activeView === 'dashboard' && (
+              <Suspense fallback={<div className="p-4 text-sm text-slate-500">Cargando dashboard...</div>}><DashboardCards onOpenRecord={handleDashboardOpenRecord} /></Suspense>
+            )}
             <Suspense fallback={<ModuleLoading activeView={activeView} />}>
               {activeView === 'plantilla' && <PlantillaPage />}
             {activeView === 'tareas' && (
@@ -350,6 +414,7 @@ export function App() {
         </main>
         <Footer />
       </div>
-    </div>
+      </div>
+    </AppShellErrorBoundary>
   );
 }
