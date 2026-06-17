@@ -2524,6 +2524,11 @@ export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapsho
 }
 
 
+export function getSqliteSyncTokensSnapshot(): PersistedRecordsTokenSnapshot {
+  return getPersistedRecordsTokenSnapshot();
+}
+
+
 interface EditingLockRow {
   module: string;
   record_id: string;
