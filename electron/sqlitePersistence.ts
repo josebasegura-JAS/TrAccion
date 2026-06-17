@@ -191,6 +191,10 @@ interface DatabasePreferences {
 const require = createRequire(import.meta.url);
 const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
+const TASKS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.tasks.legacy.checked';
+const SORTEOS_DRAWS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.sorteos.draws.legacy.checked';
+const SORTEOS_EXCLUSIONS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.sorteos.exclusions.legacy.checked';
+
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
 let localBackupQueue: Promise<void> = Promise.resolve();
@@ -1604,6 +1608,26 @@ function readRefreshToken(db: Database): string | null {
   return isMetadataRow(row) ? row.value : null;
 }
 
+function readMetadataValue(db: Database, key: string): string | null {
+  const row = db.prepare('SELECT value FROM app_metadata WHERE key = ?').get(key);
+  return isMetadataRow(row) ? row.value : null;
+}
+
+function isMetadataFlagEnabled(db: Database, key: string): boolean {
+  return readMetadataValue(db, key) === 'true';
+}
+
+function setMetadataFlag(db: Database, key: string): void {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO app_metadata (key, value, updated_at)
+     VALUES (?, 'true', ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = excluded.updated_at`,
+  ).run(key, now);
+}
+
 export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
   return safeDatabaseOperation(
     () => {
@@ -1765,14 +1789,20 @@ function readAllTaskRecords(db: Database): SqliteTaskRecord[] {
 }
 
 function maybeMigrateTasksFromPersistedRecord(db: Database): void {
+  if (isMetadataFlagEnabled(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY)) {
+    return;
+  }
+
   const taskCountRow = db.prepare('SELECT COUNT(*) AS count FROM task_records').get();
   const taskCount = isCountRow(taskCountRow) ? taskCountRow.count : 0;
   if (taskCount > 0) {
+    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
   const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.tareas.tasks');
   if (!legacyRecord) {
+    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
@@ -1780,10 +1810,12 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
   try {
     parsed = JSON.parse(legacyRecord.value);
   } catch {
+    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
   if (!Array.isArray(parsed)) {
+    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
@@ -1803,6 +1835,8 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
     const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
     insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
   }
+
+  setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
 }
 
 export function loadTaskRecordsSnapshot(): SqliteTaskRecordsSnapshot {
@@ -1961,19 +1995,34 @@ function getSorteosCollectionUpdatedAt(db: Database, tableName: 'sorteos_draw_re
   return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
+function getSorteosLegacyMigrationFlagKey(
+  tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
+): string {
+  return tableName === 'sorteos_draw_records'
+    ? SORTEOS_DRAWS_LEGACY_MIGRATION_CHECKED_KEY
+    : SORTEOS_EXCLUSIONS_LEGACY_MIGRATION_CHECKED_KEY;
+}
+
 function migrateSorteosArrayFromPersistedRecord(
   db: Database,
   tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
   storageKey: string,
 ): void {
+  const migrationFlagKey = getSorteosLegacyMigrationFlagKey(tableName);
+  if (isMetadataFlagEnabled(db, migrationFlagKey)) {
+    return;
+  }
+
   const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
   const count = isCountRow(countRow) ? countRow.count : 0;
   if (count > 0) {
+    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
   const legacyRecord = readPersistedRecordByKey(db, storageKey);
   if (!legacyRecord) {
+    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
@@ -1981,10 +2030,12 @@ function migrateSorteosArrayFromPersistedRecord(
   try {
     parsed = JSON.parse(legacyRecord.value);
   } catch {
+    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
   if (!Array.isArray(parsed)) {
+    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
@@ -2003,6 +2054,8 @@ function migrateSorteosArrayFromPersistedRecord(
     const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
     insert.run(item.id, JSON.stringify(item), createdAt, updatedAt);
   }
+
+  setMetadataFlag(db, migrationFlagKey);
 }
 
 function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
