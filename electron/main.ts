@@ -906,6 +906,34 @@ function normalizeRecordLockPayload(payload: unknown): { module: string; recordI
   return { module: moduleName, recordId };
 }
 
+
+type QueuedIpcOperation<T> = () => T | Promise<T>;
+
+let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcOperation<T>): Promise<Awaited<T>> {
+  const startedAt = Date.now();
+  const queuedOperation = sqliteIpcQueue.then(async () => {
+    const queuedMs = Date.now() - startedAt;
+    if (queuedMs > 100) {
+      console.warn(`[sqlite-ipc-queue] ${operationName} esperó ${queuedMs} ms en cola.`);
+    }
+
+    const operationStartedAt = Date.now();
+    try {
+      return await operation();
+    } finally {
+      const operationMs = Date.now() - operationStartedAt;
+      if (operationMs > 250) {
+        console.warn(`[sqlite-ipc-queue] ${operationName} tardó ${operationMs} ms.`);
+      }
+    }
+  });
+
+  sqliteIpcQueue = queuedOperation.catch(() => undefined);
+  return queuedOperation;
+}
+
 async function selectTaskDocumentPaths(event: IpcMainInvokeEvent): Promise<string[] | null> {
   const browserWindow = BrowserWindow.fromWebContents(event.sender);
   const options: OpenDialogOptions = {
@@ -976,9 +1004,9 @@ function registerIpcHandlers(): void {
     return changeSqliteDirectory(selectedDirectory);
   });
 
-  ipcMain.handle('database:reset-directory', () => resetSqliteDirectory());
+  ipcMain.handle('database:reset-directory', () => enqueueSqliteIpc('database:reset-directory', () => resetSqliteDirectory()));
 
-  ipcMain.handle('database:list-local-backups', () => listLocalBackups());
+  ipcMain.handle('database:list-local-backups', () => enqueueSqliteIpc('database:list-local-backups', () => listLocalBackups()));
 
   ipcMain.handle('database:restore-local-backup', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
@@ -986,10 +1014,12 @@ function registerIpcHandlers(): void {
     }
 
     const candidate = payload as { id?: unknown };
-    return restoreLocalBackup(typeof candidate.id === 'string' ? candidate.id : '');
+    return enqueueSqliteIpc('database:restore-local-backup', () =>
+      restoreLocalBackup(typeof candidate.id === 'string' ? candidate.id : ''),
+    );
   });
 
-  ipcMain.handle('database:load-persisted-records', () => loadPersistedRecordsSnapshot());
+  ipcMain.handle('database:load-persisted-records', () => enqueueSqliteIpc('database:load-persisted-records', () => loadPersistedRecordsSnapshot()));
 
   ipcMain.handle('database:get-persisted-record', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
@@ -1001,11 +1031,13 @@ function registerIpcHandlers(): void {
       return { status: getSqliteStatus(), record: null };
     }
 
-    return getPersistedRecordSnapshot(candidate.key);
+    return enqueueSqliteIpc('database:get-persisted-record', () =>
+      getPersistedRecordSnapshot(candidate.key),
+    );
   });
 
-  ipcMain.handle('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot());
-  ipcMain.handle('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot());
+  ipcMain.handle('database:get-persisted-records-token', () => enqueueSqliteIpc('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot()));
+  ipcMain.handle('database:get-sqlite-sync-tokens', () => enqueueSqliteIpc('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot()));
 
   ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
     if (
@@ -1016,7 +1048,9 @@ function registerIpcHandlers(): void {
       return getSqliteStatus();
     }
 
-    return createLocalStorageBackup(payload as { records: { key: string; value: string }[] });
+    return enqueueSqliteIpc('database:backup-local-storage', () =>
+      createLocalStorageBackup(payload as { records: { key: string; value: string }[] }),
+    );
   });
 
   ipcMain.handle('database:migrate-local-storage', (_event, payload: unknown) => {
@@ -1028,7 +1062,9 @@ function registerIpcHandlers(): void {
       return getSqliteStatus();
     }
 
-    return migrateLocalStorageSnapshot(payload as { records: { key: string; value: string }[] });
+    return enqueueSqliteIpc('database:migrate-local-storage', () =>
+      migrateLocalStorageSnapshot(payload as { records: { key: string; value: string }[] }),
+    );
   });
 
   ipcMain.handle('database:save-local-storage-record', (_event, payload: unknown) => {
@@ -1041,7 +1077,9 @@ function registerIpcHandlers(): void {
       return getSqliteStatus();
     }
 
-    return savePersistedRecord({ key: candidate.key, value: candidate.value });
+    return enqueueSqliteIpc('database:save-local-storage-record', () =>
+      savePersistedRecord({ key: candidate.key, value: candidate.value }),
+    );
   });
 
   ipcMain.handle('database:save-local-storage-record-if-unchanged', (_event, payload: unknown) => {
@@ -1068,43 +1106,45 @@ function registerIpcHandlers(): void {
       };
     }
 
-    return savePersistedRecordIfUnchanged({
-      key: candidate.key,
-      value: candidate.value,
-      expectedUpdatedAt: candidate.expectedUpdatedAt,
-    });
+    return enqueueSqliteIpc('database:save-local-storage-record-if-unchanged', () =>
+      savePersistedRecordIfUnchanged({
+        key: candidate.key,
+        value: candidate.value,
+        expectedUpdatedAt: candidate.expectedUpdatedAt,
+      }),
+    );
   });
 
   ipcMain.handle('recordLock:acquire', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? acquireRecordLock(normalized)
+      ? enqueueSqliteIpc('recordLock:acquire', () => acquireRecordLock(normalized))
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
   ipcMain.handle('recordLock:heartbeat', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? heartbeatRecordLock(normalized)
+      ? enqueueSqliteIpc('recordLock:heartbeat', () => heartbeatRecordLock(normalized))
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
   ipcMain.handle('recordLock:release', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? releaseRecordLock(normalized)
+      ? enqueueSqliteIpc('recordLock:release', () => releaseRecordLock(normalized))
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
   ipcMain.handle('recordLock:get', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? getRecordLock(normalized)
+      ? enqueueSqliteIpc('recordLock:get', () => getRecordLock(normalized))
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
 
-  ipcMain.handle('sorteos:load-records', () => loadSorteosRecordsSnapshot());
+  ipcMain.handle('sorteos:load-records', () => enqueueSqliteIpc('sorteos:load-records', () => loadSorteosRecordsSnapshot()));
 
   ipcMain.handle('sorteos:save-snapshot-if-unchanged', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
@@ -1149,15 +1189,17 @@ function registerIpcHandlers(): void {
       };
     }
 
-    return saveSorteosSnapshotIfUnchanged({
-      draws: candidate.draws,
-      exclusions: candidate.exclusions,
-      expectedDrawsUpdatedAt: candidate.expectedDrawsUpdatedAt,
-      expectedExclusionsUpdatedAt: candidate.expectedExclusionsUpdatedAt,
-    });
+    return enqueueSqliteIpc('sorteos:save-snapshot-if-unchanged', () =>
+      saveSorteosSnapshotIfUnchanged({
+        draws: candidate.draws,
+        exclusions: candidate.exclusions,
+        expectedDrawsUpdatedAt: candidate.expectedDrawsUpdatedAt,
+        expectedExclusionsUpdatedAt: candidate.expectedExclusionsUpdatedAt,
+      }),
+    );
   });
 
-  ipcMain.handle('tasks:load-records', () => loadTaskRecordsSnapshot());
+  ipcMain.handle('tasks:load-records', () => enqueueSqliteIpc('tasks:load-records', () => loadTaskRecordsSnapshot()));
 
   ipcMain.handle('tasks:save-record-if-unchanged', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
@@ -1183,11 +1225,13 @@ function registerIpcHandlers(): void {
       };
     }
 
-    return saveTaskRecordIfUnchanged({
-      id: candidate.id,
-      value: candidate.value,
-      expectedUpdatedAt: candidate.expectedUpdatedAt,
-    });
+    return enqueueSqliteIpc('tasks:save-record-if-unchanged', () =>
+      saveTaskRecordIfUnchanged({
+        id: candidate.id,
+        value: candidate.value,
+        expectedUpdatedAt: candidate.expectedUpdatedAt,
+      }),
+    );
   });
 
   ipcMain.handle('tasks:select-document', (event) => selectTaskDocumentPaths(event));
