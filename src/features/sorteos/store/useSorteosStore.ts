@@ -179,11 +179,32 @@ function hasSorteosSqliteRepository(): boolean {
   return Boolean(window.traccion?.loadSorteosRecords && window.traccion?.saveSorteosSnapshotIfUnchanged);
 }
 
+function parseSorteosRecordValue<T>(
+  record: { value: string },
+  guard: (value: unknown) => value is T,
+): T | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(record.value);
+  } catch {
+    return null;
+  }
+
+  return guard(parsed) ? parsed : null;
+}
+
 function parseSorteosRecordArray<T>(
   records: Array<{ value: string }>,
   guard: (value: unknown) => value is T,
 ): T[] {
-  return records.flatMap((record) => readArrayFromValue(`[${record.value}]`, guard));
+  return records
+    .map((record) => parseSorteosRecordValue(record, guard))
+    .filter((record): record is T => record !== null);
+}
+
+function mirrorSorteosSnapshot(draws: SorteosDraw[], exclusions: SorteosExclusion[]): void {
+  window.localStorage.setItem(DRAWS_STORAGE_KEY, JSON.stringify(draws));
+  window.localStorage.setItem(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions));
 }
 
 async function loadDirectSorteosSnapshot(): Promise<SharedSorteosSnapshot | null> {
@@ -198,9 +219,13 @@ async function loadDirectSorteosSnapshot(): Promise<SharedSorteosSnapshot | null
     return null;
   }
 
+  const draws = sortDraws(parseSorteosRecordArray(snapshot.draws, isDraw));
+  const exclusions = parseSorteosRecordArray(snapshot.exclusions, isExclusion);
+  mirrorSorteosSnapshot(draws, exclusions);
+
   return {
-    draws: sortDraws(parseSorteosRecordArray(snapshot.draws, isDraw)),
-    exclusions: parseSorteosRecordArray(snapshot.exclusions, isExclusion),
+    draws,
+    exclusions,
     drawsUpdatedAt: snapshot.drawsUpdatedAt,
     exclusionsUpdatedAt: snapshot.exclusionsUpdatedAt,
   };
@@ -230,8 +255,7 @@ async function saveDirectSorteosSnapshot(
     throw new Error(result.message ?? 'No se han podido guardar los sorteos en SQLite.');
   }
 
-  window.localStorage.setItem(DRAWS_STORAGE_KEY, JSON.stringify(draws));
-  window.localStorage.setItem(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions));
+  mirrorSorteosSnapshot(draws, exclusions);
 }
 
 async function saveSorteosSnapshot(
@@ -282,8 +306,11 @@ async function loadSingleSharedArray<T>(
 }
 
 async function loadSharedSorteosSnapshot(): Promise<SharedSorteosSnapshot> {
-  const directSnapshot = await loadDirectSorteosSnapshot();
-  if (directSnapshot) {
+  if (hasSorteosSqliteRepository()) {
+    const directSnapshot = await loadDirectSorteosSnapshot();
+    if (!directSnapshot) {
+      throw new Error('SQLite de sorteos no está activo. No se permite guardar usando el JSON legacy.');
+    }
     return directSnapshot;
   }
 
