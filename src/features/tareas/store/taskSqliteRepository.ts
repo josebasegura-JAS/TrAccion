@@ -1,6 +1,45 @@
 import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from '../../../services/persistence';
 import type { Task } from '../domain/task';
 
+const TASKS_DIRECT_STORAGE_KEY = 'traccion.v1.tareas.tasks';
+const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
+const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isTemporarySqliteBusyError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error ?? '')).toLowerCase();
+  return (
+    message.includes('base ocupada') ||
+    message.includes('bloqueo temporal') ||
+    message.includes('sqlite_busy') ||
+    message.includes('database is locked') ||
+    message.includes('temporarily unavailable')
+  );
+}
+
+async function withTemporarySqliteRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= TEMPORARY_SQLITE_BUSY_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTemporarySqliteBusyError(error) || attempt === TEMPORARY_SQLITE_BUSY_RETRIES) {
+        break;
+      }
+      await delay(TEMPORARY_SQLITE_BUSY_RETRY_MS * (attempt + 1));
+    }
+  }
+
+  throw lastError;
+}
+
 export interface TaskSqliteSaveResult {
   ok: boolean;
   message: string;
@@ -19,15 +58,13 @@ export async function loadTasksFromSqlite(
     return null;
   }
 
-  const snapshot = await loader();
+  const snapshot = await withTemporarySqliteRetry(() => loader());
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     return null;
   }
 
   return snapshot.records.flatMap((record) => parseTasks(`[${record.value}]`));
 }
-
-const TASKS_DIRECT_STORAGE_KEY = 'traccion.v1.tareas.tasks';
 
 export async function saveTaskToSqlite(
   task: Task,
@@ -42,11 +79,13 @@ export async function saveTaskToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await saver({
-      id: task.id,
-      value: JSON.stringify(task),
-      expectedUpdatedAt,
-    });
+    const result = await withTemporarySqliteRetry(() =>
+      saver({
+        id: task.id,
+        value: JSON.stringify(task),
+        expectedUpdatedAt,
+      }),
+    );
 
     clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, result.message);
 

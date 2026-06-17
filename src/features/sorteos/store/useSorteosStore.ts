@@ -26,8 +26,8 @@ export const DRAWS_STORAGE_KEY = 'traccion.v1.sorteos.draws';
 export const EXCLUSIONS_STORAGE_KEY = 'traccion.v1.sorteos.exclusions';
 
 const SORTEOS_BUSY_KEY = 'traccion.v1.sorteos.busy';
-const TEMPORARY_SQLITE_BUSY_RETRIES = 3;
-const TEMPORARY_SQLITE_BUSY_RETRY_MS = 220;
+const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
+const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
 type SharedSorteosSnapshot = {
   draws: SorteosDraw[];
@@ -137,10 +137,11 @@ async function delay(ms: number): Promise<void> {
 }
 
 function isTemporarySqliteBusyError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? '');
+  const message = (error instanceof Error ? error.message : String(error ?? '')).toLowerCase();
   return (
-    message.includes('Base ocupada temporalmente') ||
-    message.includes('SQLITE_BUSY') ||
+    message.includes('base ocupada') ||
+    message.includes('bloqueo temporal') ||
+    message.includes('sqlite_busy') ||
     message.includes('database is locked') ||
     message.includes('temporarily unavailable')
   );
