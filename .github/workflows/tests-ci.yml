@@ -13,24 +13,24 @@ jobs:
       NODE_ENV: development
       NPM_CONFIG_AUDIT: "false"
       NPM_CONFIG_FUND: "false"
-      NPM_CONFIG_PRODUCTION: "false"
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20.20.2
+          node-version: 22
 
       - name: Show toolchain and npm install mode
         shell: pwsh
         run: |
           node --version
           npm --version
-          npm config get production
           npm config get omit
+          npm config get include
+          npm config get bin-links
 
       - name: Install dependencies from lockfile
         shell: pwsh
@@ -40,7 +40,16 @@ jobs:
           # skipped intentionally: this workflow only needs TypeScript/Vite,
           # ESLint, and Vitest, while native/Electron postinstall steps can be
           # flaky on Windows and are not required to build without packaging.
-          npm ci --include=dev --ignore-scripts --no-audit --no-fund
+          # Remove the deprecated production config entirely; even
+          # NPM_CONFIG_PRODUCTION=false makes npm emit warnings and has
+          # caused npm to abort on windows-latest. Use omit/include instead.
+          Remove-Item Env:NPM_CONFIG_PRODUCTION -ErrorAction SilentlyContinue
+          Remove-Item Env:npm_config_production -ErrorAction SilentlyContinue
+          $env:NPM_CONFIG_OMIT = ""
+          $env:NPM_CONFIG_INCLUDE = "dev"
+          $env:NPM_CONFIG_BIN_LINKS = "true"
+
+          npm ci --include=dev --bin-links=true --ignore-scripts --no-audit --no-fund
 
       - name: Verify local CLI tools before lint
         shell: pwsh
