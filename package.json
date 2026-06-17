@@ -20,7 +20,10 @@
     "playwright:install": "playwright install",
     "electron:rebuild": "electron-builder install-app-deps",
     "test:e2e:electron": "playwright test -c playwright.electron.config.ts",
-    "test:e2e:electron:ci": "playwright test -c playwright.electron.config.ts"
+    "test:e2e:electron:ci": "tsc -p electron/tsconfig.json && playwright test -c playwright.electron.config.ts",
+    "test:ui": "npm run test:e2e:electron:ci",
+    "test:critical": "npm run test && npm run test:ui",
+    "test:all": "npm run lint && npm run test && npm run test:ui"
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
