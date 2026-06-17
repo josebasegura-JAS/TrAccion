@@ -351,7 +351,17 @@ export function TareasPage({
   initialTaskId?: string | null;
   navigationNonce?: number;
 } = {}) {
-  const { filters, load, remove, selectTask, setFilter, tasks } = useTaskStore();
+  const {
+    filters,
+    historicalTasksLoaded,
+    isLoadingHistoricalTasks,
+    load,
+    loadHistoricalTasks,
+    remove,
+    selectTask,
+    setFilter,
+    tasks,
+  } = useTaskStore();
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
@@ -373,6 +383,12 @@ export function TareasPage({
     loadConfiguracion();
   }, [load, loadConfiguracion]);
 
+  useEffect(() => {
+    if (isHistoricOpen) {
+      void loadHistoricalTasks();
+    }
+  }, [isHistoricOpen, loadHistoricalTasks]);
+
   const phaseFilterOptions = useMemo(
     () => taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre),
     [taskPhases],
@@ -392,8 +408,8 @@ export function TareasPage({
     [visibleTasks],
   );
   const historicGroups = useMemo(
-    () => (isHistoricOpen ? groupHistoricTasks(historicTasks) : []),
-    [historicTasks, isHistoricOpen],
+    () => (isHistoricOpen && historicalTasksLoaded ? groupHistoricTasks(historicTasks) : []),
+    [historicTasks, historicalTasksLoaded, isHistoricOpen],
   );
   const activeTasksFilterLabel = buildFilterLabel([
     ['Búsqueda', filters.search],
@@ -792,12 +808,15 @@ export function TareasPage({
             {isHistoricOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Histórico
           </span>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-            {historicTasks.length} registros
+            {historicalTasksLoaded ? historicTasks.length : 'Sin cargar'} registros
           </span>
         </button>
         {isHistoricOpen && (
           <div className="bg-metro-surface">
-            {historicGroups.length === 0 && (
+            {isLoadingHistoricalTasks && (
+              <p className="px-3 py-3 text-sm text-metro-muted">Cargando histórico…</p>
+            )}
+            {!isLoadingHistoricalTasks && historicalTasksLoaded && historicGroups.length === 0 && (
               <p className="px-3 py-3 text-sm text-metro-muted">No hay tareas cerradas.</p>
             )}
             {historicGroups.map((group) => (
