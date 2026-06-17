@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
-import { hasTaskSqliteRepository, loadTasksFromSqlite, saveTaskToSqlite } from './taskSqliteRepository';
+import { hasTaskSqliteRepository, loadTasksFromSqlite, saveTaskToSqlite, type TaskSqliteLoadMode } from './taskSqliteRepository';
 import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
@@ -127,9 +127,12 @@ interface TaskUpdateResult {
 interface TaskStateStore {
   tasks: Task[];
   selectedTaskId: string;
+  historicalTasksLoaded: boolean;
+  isLoadingHistoricalTasks: boolean;
   filters: TaskFilters;
   load: () => void;
   reloadFromStorage: () => void;
+  loadHistoricalTasks: () => Promise<void>;
   create: (draft: TaskDraft, seguimientoText?: string) => void;
   createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string) => Promise<TaskUpdateResult>;
   createManyFromImport: (
@@ -509,20 +512,24 @@ function persistTasks(tasks: Task[]): void {
   writeStorageItem(TASKS_STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
 }
 
-async function readTasksForStore(): Promise<Task[]> {
+async function readTasksForStore(mode: TaskSqliteLoadMode = 'active'): Promise<Task[]> {
   if (!hasTaskSqliteRepository()) {
     return readTasks();
   }
 
   try {
-    const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot);
+    const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot, mode);
     if (sqliteTasks) {
       const normalizedSqliteTasks = sqliteTasks.map(normalizeTask);
       const reconciledSqliteTasks = reconcileTasksWithClosedSessions(normalizedSqliteTasks);
       const previousTasksById = new Map(normalizedSqliteTasks.map((task) => [task.id, task]));
-      const migratedPeticiones = readMigratedPeticiones().filter(
-        (migratedTask) => !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
-      );
+      const migratedPeticiones = mode === 'active'
+        ? readMigratedPeticiones().filter(
+            (migratedTask) =>
+              !isTaskClosed(migratedTask) &&
+              !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
+          )
+        : [];
       const tasks = [...reconciledSqliteTasks, ...migratedPeticiones].map(normalizeTask);
 
       const normalizationPersisted = await persistTaskChangesBestEffort(
@@ -638,6 +645,8 @@ export function parseTasksSnapshot(storageValue: string | null): Task[] {
 export const useTaskStore = create<TaskStateStore>((set) => ({
   tasks: [],
   selectedTaskId: '',
+  historicalTasksLoaded: false,
+  isLoadingHistoricalTasks: false,
   filters: EMPTY_TASK_FILTERS,
   load: () => {
     if (!hasTaskSqliteRepository()) {
@@ -646,8 +655,8 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       return;
     }
 
-    void readTasksForStore().then((tasks) => {
-      set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
+    void readTasksForStore('active').then((tasks) => {
+      set({ tasks, selectedTaskId: firstActiveTaskId(tasks), historicalTasksLoaded: false });
     });
   },
   reloadFromStorage: () => {
@@ -662,14 +671,39 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       return;
     }
 
-    void readTasksForStore().then((tasks) => {
+    void readTasksForStore('active').then((tasks) => {
       set((state) => ({
         tasks,
         selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
           ? state.selectedTaskId
           : firstActiveTaskId(tasks),
+        historicalTasksLoaded: false,
       }));
     });
+  },
+
+  loadHistoricalTasks: async () => {
+    const state = useTaskStore.getState();
+    if (state.historicalTasksLoaded || state.isLoadingHistoricalTasks) {
+      return;
+    }
+
+    set({ isLoadingHistoricalTasks: true });
+    try {
+      const historicalTasks = hasTaskSqliteRepository()
+        ? await readTasksForStore('historical')
+        : readTasks().filter(isTaskClosed);
+
+      set((current) => {
+        const tasksById = new Map(current.tasks.map((task) => [task.id, task]));
+        historicalTasks.forEach((task) => tasksById.set(task.id, task));
+        const tasks = Array.from(tasksById.values()).map(normalizeTask);
+        return { tasks, historicalTasksLoaded: true, isLoadingHistoricalTasks: false };
+      });
+    } catch (error) {
+      console.warn('No se han podido cargar las tareas históricas.', error);
+      set({ isLoadingHistoricalTasks: false });
+    }
   },
   create: (draft, seguimientoText) => {
     set((state) => {
@@ -880,7 +914,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   updateWithConcurrencyCheck: async (id, draft, seguimientoText, expectedUpdatedAt) => {
     try {
       if (hasTaskSqliteRepository()) {
-        const latestTasks = await readTasksForStore();
+        const latestTasks = await readTasksForStore('all');
         const latestTask = latestTasks.find((task) => task.id === id);
         if (!latestTask) {
           return {
@@ -1027,7 +1061,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       const seguimiento = buildSeguimiento(`Tratada en ${moduleLabel} (${sessionLabel}).`, now);
 
       if (hasTaskSqliteRepository()) {
-        const latestTasks = await readTasksForStore();
+        const latestTasks = await readTasksForStore('all');
         const updatedTasks = latestTasks.map((task) => {
           if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
             return task;

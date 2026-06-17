@@ -50,15 +50,18 @@ export function hasTaskSqliteRepository(): boolean {
   return Boolean(window.traccion?.loadTaskRecords && window.traccion?.saveTaskRecordIfUnchanged);
 }
 
+export type TaskSqliteLoadMode = 'all' | 'active' | 'historical';
+
 export async function loadTasksFromSqlite(
   parseTasks: (storageValue: string | null) => Task[],
+  mode: TaskSqliteLoadMode = 'all',
 ): Promise<Task[] | null> {
   const loader = window.traccion?.loadTaskRecords;
   if (!loader) {
     return null;
   }
 
-  const snapshot = await withTemporarySqliteRetry(() => loader());
+  const snapshot = await withTemporarySqliteRetry(() => loader({ mode }));
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
     return null;
   }
