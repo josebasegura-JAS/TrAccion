@@ -40,6 +40,13 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('recordLock:release', payload),
   getRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:get', payload),
+  loadSorteosRecords: () => ipcRenderer.invoke('sorteos:load-records'),
+  saveSorteosSnapshotIfUnchanged: (snapshot: {
+    draws: Array<{ id: string; value: string }>;
+    exclusions: Array<{ id: string; value: string }>;
+    expectedDrawsUpdatedAt: string | null;
+    expectedExclusionsUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('sorteos:save-snapshot-if-unchanged', snapshot),
   loadTaskRecords: () => ipcRenderer.invoke('tasks:load-records'),
   saveTaskRecordIfUnchanged: (record: {
     id: string;

@@ -175,6 +175,88 @@ async function withSorteosBusy<T>(message: string, operation: () => Promise<T>):
   }
 }
 
+function hasSorteosSqliteRepository(): boolean {
+  return Boolean(window.traccion?.loadSorteosRecords && window.traccion?.saveSorteosSnapshotIfUnchanged);
+}
+
+function parseSorteosRecordArray<T>(
+  records: Array<{ value: string }>,
+  guard: (value: unknown) => value is T,
+): T[] {
+  return records.flatMap((record) => readArrayFromValue(`[${record.value}]`, guard));
+}
+
+async function loadDirectSorteosSnapshot(): Promise<SharedSorteosSnapshot | null> {
+  const loader = window.traccion?.loadSorteosRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await withTemporarySqliteRetry(() => loader());
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  return {
+    draws: sortDraws(parseSorteosRecordArray(snapshot.draws, isDraw)),
+    exclusions: parseSorteosRecordArray(snapshot.exclusions, isExclusion),
+    drawsUpdatedAt: snapshot.drawsUpdatedAt,
+    exclusionsUpdatedAt: snapshot.exclusionsUpdatedAt,
+  };
+}
+
+async function saveDirectSorteosSnapshot(
+  draws: SorteosDraw[],
+  exclusions: SorteosExclusion[],
+  expectedDrawsUpdatedAt: string | null,
+  expectedExclusionsUpdatedAt: string | null,
+): Promise<void> {
+  const saver = window.traccion?.saveSorteosSnapshotIfUnchanged;
+  if (!saver) {
+    throw new Error('Repositorio SQLite de sorteos no disponible.');
+  }
+
+  const result = await withTemporarySqliteRetry(() =>
+    saver({
+      draws: draws.map((draw) => ({ id: draw.id, value: JSON.stringify(draw) })),
+      exclusions: exclusions.map((exclusion) => ({ id: exclusion.id, value: JSON.stringify(exclusion) })),
+      expectedDrawsUpdatedAt,
+      expectedExclusionsUpdatedAt,
+    }),
+  );
+  publishDatabaseStatus(result.status);
+  if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
+    throw new Error(result.message ?? 'No se han podido guardar los sorteos en SQLite.');
+  }
+
+  window.localStorage.setItem(DRAWS_STORAGE_KEY, JSON.stringify(draws));
+  window.localStorage.setItem(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions));
+}
+
+async function saveSorteosSnapshot(
+  baseSnapshot: SharedSorteosSnapshot,
+  draws: SorteosDraw[],
+  exclusions: SorteosExclusion[],
+): Promise<void> {
+  if (hasSorteosSqliteRepository()) {
+    await saveDirectSorteosSnapshot(
+      draws,
+      exclusions,
+      baseSnapshot.drawsUpdatedAt,
+      baseSnapshot.exclusionsUpdatedAt,
+    );
+    return;
+  }
+
+  await saveSharedArray(DRAWS_STORAGE_KEY, JSON.stringify(draws), baseSnapshot.drawsUpdatedAt);
+  await saveSharedArray(
+    EXCLUSIONS_STORAGE_KEY,
+    JSON.stringify(exclusions),
+    baseSnapshot.exclusionsUpdatedAt,
+  );
+}
+
 async function loadSingleSharedArray<T>(
   storageKey: string,
   guard: (value: unknown) => value is T,
@@ -200,6 +282,11 @@ async function loadSingleSharedArray<T>(
 }
 
 async function loadSharedSorteosSnapshot(): Promise<SharedSorteosSnapshot> {
+  const directSnapshot = await loadDirectSorteosSnapshot();
+  if (directSnapshot) {
+    return directSnapshot;
+  }
+
   if (window.traccion?.getPersistedRecord) {
     const drawsRecord = await loadSingleSharedArray(DRAWS_STORAGE_KEY, isDraw);
     const exclusionsRecord = await loadSingleSharedArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
@@ -303,21 +390,58 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
   visibleDrawId: '',
   visibleResult: null,
   load: () => {
+    if (hasSorteosSqliteRepository()) {
+      void loadDirectSorteosSnapshot()
+        .then((snapshot) => {
+          if (!snapshot) {
+            return;
+          }
+          set({ draws: snapshot.draws, exclusions: snapshot.exclusions, visibleDrawId: '', visibleResult: null });
+        })
+        .catch(() => {
+          const draws = sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw));
+          const exclusions = readArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
+          set({ draws, exclusions, visibleDrawId: '', visibleResult: null });
+        });
+      return;
+    }
+
     const draws = sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw));
     const exclusions = readArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
     set({ draws, exclusions, visibleDrawId: '', visibleResult: null });
   },
   reloadFromStorage: () => {
-    const draws = sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw));
-    const exclusions = readArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
-    const currentVisibleDrawId = get().visibleDrawId;
-    const visibleResult = draws.find((draw) => draw.id === currentVisibleDrawId) ?? null;
-    set({
-      draws,
-      exclusions,
-      visibleDrawId: visibleResult ? visibleResult.id : '',
-      visibleResult,
-    });
+    const applySnapshot = (draws: SorteosDraw[], exclusions: SorteosExclusion[]) => {
+      const currentVisibleDrawId = get().visibleDrawId;
+      const visibleResult = draws.find((draw) => draw.id === currentVisibleDrawId) ?? null;
+      set({
+        draws,
+        exclusions,
+        visibleDrawId: visibleResult ? visibleResult.id : '',
+        visibleResult,
+      });
+    };
+
+    if (hasSorteosSqliteRepository()) {
+      void loadDirectSorteosSnapshot()
+        .then((snapshot) => {
+          if (snapshot) {
+            applySnapshot(snapshot.draws, snapshot.exclusions);
+          }
+        })
+        .catch(() => {
+          applySnapshot(
+            sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw)),
+            readArray(EXCLUSIONS_STORAGE_KEY, isExclusion),
+          );
+        });
+      return;
+    }
+
+    applySnapshot(
+      sortDraws(readArray(DRAWS_STORAGE_KEY, isDraw)),
+      readArray(EXCLUSIONS_STORAGE_KEY, isExclusion),
+    );
   },
   createDraw: (draft, people) => {
     const drawId = createId('sorteo');
@@ -367,19 +491,28 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
           timestamp,
         );
         const draws = sortDraws([result.draw, ...snapshot.draws]);
-        await saveSharedArray(
-          EXCLUSIONS_STORAGE_KEY,
-          JSON.stringify(result.exclusions),
-          snapshot.exclusionsUpdatedAt,
-        );
-        await saveNewSharedArrayRecord<SorteosDraw>({
-          storageKey: DRAWS_STORAGE_KEY,
-          newRecord: result.draw,
-          parseRecords: (value) => sortDraws(readArrayFromValue(value, isDraw)),
-          getRecordId: (record) => record.id,
-          duplicateMessage:
-            'El sorteo ya existe en la base compartida. Recarga antes de continuar.',
-        });
+        if (hasSorteosSqliteRepository()) {
+          await saveDirectSorteosSnapshot(
+            draws,
+            result.exclusions,
+            snapshot.drawsUpdatedAt,
+            snapshot.exclusionsUpdatedAt,
+          );
+        } else {
+          await saveSharedArray(
+            EXCLUSIONS_STORAGE_KEY,
+            JSON.stringify(result.exclusions),
+            snapshot.exclusionsUpdatedAt,
+          );
+          await saveNewSharedArrayRecord<SorteosDraw>({
+            storageKey: DRAWS_STORAGE_KEY,
+            newRecord: result.draw,
+            parseRecords: (value) => sortDraws(readArrayFromValue(value, isDraw)),
+            getRecordId: (record) => record.id,
+            duplicateMessage:
+              'El sorteo ya existe en la base compartida. Recarga antes de continuar.',
+          });
+        }
         set({
           draws,
           exclusions: result.exclusions,
@@ -419,11 +552,20 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
           createId('sorteo-exclusion'),
           nowIso(),
         );
-        await saveSharedArray(
-          EXCLUSIONS_STORAGE_KEY,
-          JSON.stringify(exclusions),
-          snapshot.exclusionsUpdatedAt,
-        );
+        if (hasSorteosSqliteRepository()) {
+          await saveDirectSorteosSnapshot(
+            snapshot.draws,
+            exclusions,
+            snapshot.drawsUpdatedAt,
+            snapshot.exclusionsUpdatedAt,
+          );
+        } else {
+          await saveSharedArray(
+            EXCLUSIONS_STORAGE_KEY,
+            JSON.stringify(exclusions),
+            snapshot.exclusionsUpdatedAt,
+          );
+        }
         set({ draws: snapshot.draws, exclusions });
         return { ok: true, message: 'Exclusión añadida.' };
       } catch (error) {
@@ -445,11 +587,20 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
       try {
         const snapshot = await loadSharedSorteosSnapshot();
         const exclusions = removeExclusionById(snapshot.exclusions, exclusionId);
-        await saveSharedArray(
-          EXCLUSIONS_STORAGE_KEY,
-          JSON.stringify(exclusions),
-          snapshot.exclusionsUpdatedAt,
-        );
+        if (hasSorteosSqliteRepository()) {
+          await saveDirectSorteosSnapshot(
+            snapshot.draws,
+            exclusions,
+            snapshot.drawsUpdatedAt,
+            snapshot.exclusionsUpdatedAt,
+          );
+        } else {
+          await saveSharedArray(
+            EXCLUSIONS_STORAGE_KEY,
+            JSON.stringify(exclusions),
+            snapshot.exclusionsUpdatedAt,
+          );
+        }
         set({ draws: snapshot.draws, exclusions });
         return { ok: true, message: 'Exclusión quitada.' };
       } catch (error) {
@@ -491,16 +642,7 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
           drawId,
           removeLinkedWinnerExclusions,
         );
-        await saveSharedArray(
-          DRAWS_STORAGE_KEY,
-          JSON.stringify(sortDraws(result.draws)),
-          snapshot.drawsUpdatedAt,
-        );
-        await saveSharedArray(
-          EXCLUSIONS_STORAGE_KEY,
-          JSON.stringify(result.exclusions),
-          snapshot.exclusionsUpdatedAt,
-        );
+        await saveSorteosSnapshot(snapshot, sortDraws(result.draws), result.exclusions);
         set({
           draws: sortDraws(result.draws),
           exclusions: result.exclusions,
@@ -527,11 +669,20 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
       try {
         const snapshot = await loadSharedSorteosSnapshot();
         const exclusions = resetWinnerExclusionsForDraw(snapshot.exclusions, drawId);
-        await saveSharedArray(
-          EXCLUSIONS_STORAGE_KEY,
-          JSON.stringify(exclusions),
-          snapshot.exclusionsUpdatedAt,
-        );
+        if (hasSorteosSqliteRepository()) {
+          await saveDirectSorteosSnapshot(
+            snapshot.draws,
+            exclusions,
+            snapshot.drawsUpdatedAt,
+            snapshot.exclusionsUpdatedAt,
+          );
+        } else {
+          await saveSharedArray(
+            EXCLUSIONS_STORAGE_KEY,
+            JSON.stringify(exclusions),
+            snapshot.exclusionsUpdatedAt,
+          );
+        }
         set({ draws: snapshot.draws, exclusions });
         return { ok: true, message: 'Exclusiones reseteadas.' };
       } catch (error) {
@@ -552,11 +703,20 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
     withSorteosBusy('Reseteando exclusiones…', async () => {
       try {
         const snapshot = await loadSharedSorteosSnapshot();
-        await saveSharedArray(
-          EXCLUSIONS_STORAGE_KEY,
-          JSON.stringify([]),
-          snapshot.exclusionsUpdatedAt,
-        );
+        if (hasSorteosSqliteRepository()) {
+          await saveDirectSorteosSnapshot(
+            snapshot.draws,
+            [],
+            snapshot.drawsUpdatedAt,
+            snapshot.exclusionsUpdatedAt,
+          );
+        } else {
+          await saveSharedArray(
+            EXCLUSIONS_STORAGE_KEY,
+            JSON.stringify([]),
+            snapshot.exclusionsUpdatedAt,
+          );
+        }
         set({ draws: snapshot.draws, exclusions: [] });
         return { ok: true, message: 'Exclusiones reseteadas.' };
       } catch (error) {

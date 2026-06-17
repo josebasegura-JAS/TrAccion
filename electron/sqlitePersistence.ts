@@ -18,7 +18,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -65,6 +65,37 @@ export interface ConditionalSqliteTaskSaveResult {
   ok: boolean;
   status: DatabaseStatus;
   currentUpdatedAt: string | null;
+  message: string;
+}
+
+export interface SqliteSorteosRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface SqliteSorteosRecordsSnapshot {
+  status: DatabaseStatus;
+  draws: SqliteSorteosRecord[];
+  exclusions: SqliteSorteosRecord[];
+  drawsUpdatedAt: string | null;
+  exclusionsUpdatedAt: string | null;
+}
+
+export interface ConditionalSqliteSorteosSnapshot {
+  draws: Array<{ id: string; value: string }>;
+  exclusions: Array<{ id: string; value: string }>;
+  expectedDrawsUpdatedAt: string | null;
+  expectedExclusionsUpdatedAt: string | null;
+}
+
+export interface ConditionalSqliteSorteosSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  currentDrawsUpdatedAt: string | null;
+  currentExclusionsUpdatedAt: string | null;
   message: string;
 }
 
@@ -999,11 +1030,46 @@ function migrateToVersion4(db: Database): void {
   }
 }
 
+function migrateToVersion5(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sorteos_draw_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS sorteos_exclusion_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sorteos_draw_records_updated_at
+      ON sorteos_draw_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_sorteos_exclusion_records_updated_at
+      ON sorteos_exclusion_records(updated_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 5) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      5,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
   migrateToVersion3(db);
   migrateToVersion4(db);
+  migrateToVersion5(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1233,6 +1299,14 @@ interface TaskRecordRow {
   deleted_at: string | null;
 }
 
+interface SorteosRecordRow {
+  id: string;
+  value_json: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 interface CountRow {
   count: number;
 }
@@ -1256,6 +1330,21 @@ function isTaskRecordRow(value: unknown): value is TaskRecordRow {
   }
 
   const candidate = value as Partial<TaskRecordRow>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.value_json === 'string' &&
+    typeof candidate.created_at === 'string' &&
+    typeof candidate.updated_at === 'string' &&
+    (candidate.deleted_at === null || typeof candidate.deleted_at === 'string')
+  );
+}
+
+function isSorteosRecordRow(value: unknown): value is SorteosRecordRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<SorteosRecordRow>;
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.value_json === 'string' &&
@@ -1844,6 +1933,222 @@ export function saveTaskRecordIfUnchanged(
       ok: false,
       status: nextStatus,
       currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+function mapSorteosRecordRow(row: SorteosRecordRow): SqliteSorteosRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readAllSorteosRows(db: Database, tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records'): SqliteSorteosRecord[] {
+  return db
+    .prepare(`SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName} WHERE deleted_at IS NULL ORDER BY created_at, id`)
+    .all()
+    .filter(isSorteosRecordRow)
+    .map(mapSorteosRecordRow);
+}
+
+function getSorteosCollectionUpdatedAt(db: Database, tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records'): string | null {
+  const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
+  return isUpdatedAtRow(row) ? row.updated_at : null;
+}
+
+function migrateSorteosArrayFromPersistedRecord(
+  db: Database,
+  tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
+  storageKey: string,
+): void {
+  const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
+  const count = isCountRow(countRow) ? countRow.count : 0;
+  if (count > 0) {
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, storageKey);
+  if (!legacyRecord) {
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, NULL)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithStringId(item)) {
+      continue;
+    }
+
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt);
+  }
+}
+
+function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
+  migrateSorteosArrayFromPersistedRecord(db, 'sorteos_draw_records', 'traccion.v1.sorteos.draws');
+  migrateSorteosArrayFromPersistedRecord(db, 'sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions');
+}
+
+export function loadSorteosRecordsSnapshot(): SqliteSorteosRecordsSnapshot {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, draws: [], exclusions: [], drawsUpdatedAt: null, exclusionsUpdatedAt: null };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateSorteosFromPersistedRecords(db))();
+      return {
+        status: currentStatus,
+        draws: readAllSorteosRows(db, 'sorteos_draw_records'),
+        exclusions: readAllSorteosRows(db, 'sorteos_exclusion_records'),
+        drawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
+        exclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
+      };
+    },
+    (nextStatus) => ({
+      status: nextStatus,
+      draws: [],
+      exclusions: [],
+      drawsUpdatedAt: null,
+      exclusionsUpdatedAt: null,
+    }),
+  );
+}
+
+function replaceSorteosTable(
+  db: Database,
+  tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
+  records: Array<{ id: string; value: string }>,
+  timestamp: string,
+): void {
+  const incomingIds = new Set(records.map((record) => record.id));
+  const existingRows = db
+    .prepare(`SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName}`)
+    .all();
+  const existingById = new Map<string, { value_json: string; created_at: string }>();
+
+  for (const row of existingRows) {
+    if (isSorteosRecordRow(row)) {
+      existingById.set(row.id, { value_json: row.value_json, created_at: row.created_at });
+    }
+  }
+
+  const upsert = db.prepare(
+    `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT(id) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at, deleted_at = NULL`,
+  );
+
+  for (const record of records) {
+    const existing = existingById.get(record.id);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(record.value);
+    } catch {
+      parsed = null;
+    }
+    const createdAt =
+      existing?.created_at ??
+      (parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+        ? (parsed as { createdAt: string }).createdAt
+        : timestamp);
+    upsert.run(record.id, record.value, createdAt, timestamp);
+  }
+
+  const markDeleted = db.prepare(`UPDATE ${tableName} SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`);
+  for (const id of existingById.keys()) {
+    if (!incomingIds.has(id)) {
+      markDeleted.run(timestamp, timestamp, id);
+    }
+  }
+}
+
+export function saveSorteosSnapshotIfUnchanged(
+  snapshot: ConditionalSqliteSorteosSnapshot,
+): ConditionalSqliteSorteosSaveResult {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentDrawsUpdatedAt: null,
+          currentExclusionsUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteSorteosSaveResult => {
+        maybeMigrateSorteosFromPersistedRecords(db);
+        const currentDrawsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records');
+        const currentExclusionsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records');
+
+        if (
+          currentDrawsUpdatedAt !== snapshot.expectedDrawsUpdatedAt ||
+          currentExclusionsUpdatedAt !== snapshot.expectedExclusionsUpdatedAt
+        ) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentDrawsUpdatedAt,
+            currentExclusionsUpdatedAt,
+            message:
+              'Los sorteos han cambiado mientras guardabas. Recarga antes de continuar para no sobrescribir cambios.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
+        replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
+        updateRefreshMetadata(db, now);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentDrawsUpdatedAt: now,
+          currentExclusionsUpdatedAt: now,
+          message: 'Sorteos guardados en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:sorteos_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentDrawsUpdatedAt: null,
+      currentExclusionsUpdatedAt: null,
       message,
     }),
   );

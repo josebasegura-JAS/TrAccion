@@ -184,6 +184,37 @@ interface TraccionConditionalTaskRecord {
   expectedUpdatedAt: string | null;
 }
 
+interface TraccionSorteosRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+interface TraccionSorteosRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  draws: TraccionSorteosRecord[];
+  exclusions: TraccionSorteosRecord[];
+  drawsUpdatedAt: string | null;
+  exclusionsUpdatedAt: string | null;
+}
+
+interface TraccionConditionalSorteosSnapshot {
+  draws: Array<{ id: string; value: string }>;
+  exclusions: Array<{ id: string; value: string }>;
+  expectedDrawsUpdatedAt: string | null;
+  expectedExclusionsUpdatedAt: string | null;
+}
+
+interface TraccionConditionalSorteosSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  currentDrawsUpdatedAt: string | null;
+  currentExclusionsUpdatedAt: string | null;
+  message: string;
+}
+
 interface TraccionConditionalTaskSaveResult {
   ok: boolean;
   status: TraccionDatabaseStatus;
@@ -216,6 +247,10 @@ interface TraccionApi {
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   getRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  loadSorteosRecords?: () => Promise<TraccionSorteosRecordsSnapshot>;
+  saveSorteosSnapshotIfUnchanged?: (
+    snapshot: TraccionConditionalSorteosSnapshot,
+  ) => Promise<TraccionConditionalSorteosSaveResult>;
   loadTaskRecords?: () => Promise<TraccionTaskRecordsSnapshot>;
   saveTaskRecordIfUnchanged?: (
     record: TraccionConditionalTaskRecord,

@@ -20,6 +20,7 @@ import {
   initializeSqlitePersistence,
   listLocalBackups,
   loadPersistedRecordsSnapshot,
+  loadSorteosRecordsSnapshot,
   loadTaskRecordsSnapshot,
   getPersistedRecordsTokenSnapshot,
   migrateLocalStorageSnapshot,
@@ -28,6 +29,7 @@ import {
   restoreLocalBackup,
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  saveSorteosSnapshotIfUnchanged,
   saveTaskRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
 } from './sqlitePersistence.js';
@@ -1097,6 +1099,60 @@ function registerIpcHandlers(): void {
     return normalized
       ? getRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
+  });
+
+
+  ipcMain.handle('sorteos:load-records', () => loadSorteosRecordsSnapshot());
+
+  ipcMain.handle('sorteos:save-snapshot-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentDrawsUpdatedAt: null,
+        currentExclusionsUpdatedAt: null,
+        message: 'Payload de sorteos inválido.',
+      };
+    }
+
+    const candidate = payload as {
+      draws?: unknown;
+      exclusions?: unknown;
+      expectedDrawsUpdatedAt?: unknown;
+      expectedExclusionsUpdatedAt?: unknown;
+    };
+
+    const isRecordArray = (value: unknown): value is Array<{ id: string; value: string }> =>
+      Array.isArray(value) &&
+      value.every((item) => {
+        if (!item || typeof item !== 'object') {
+          return false;
+        }
+        const record = item as { id?: unknown; value?: unknown };
+        return typeof record.id === 'string' && typeof record.value === 'string';
+      });
+
+    if (
+      !isRecordArray(candidate.draws) ||
+      !isRecordArray(candidate.exclusions) ||
+      (typeof candidate.expectedDrawsUpdatedAt !== 'string' && candidate.expectedDrawsUpdatedAt !== null) ||
+      (typeof candidate.expectedExclusionsUpdatedAt !== 'string' && candidate.expectedExclusionsUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentDrawsUpdatedAt: null,
+        currentExclusionsUpdatedAt: null,
+        message: 'Payload de sorteos inválido.',
+      };
+    }
+
+    return saveSorteosSnapshotIfUnchanged({
+      draws: candidate.draws,
+      exclusions: candidate.exclusions,
+      expectedDrawsUpdatedAt: candidate.expectedDrawsUpdatedAt,
+      expectedExclusionsUpdatedAt: candidate.expectedExclusionsUpdatedAt,
+    });
   });
 
   ipcMain.handle('tasks:load-records', () => loadTaskRecordsSnapshot());
