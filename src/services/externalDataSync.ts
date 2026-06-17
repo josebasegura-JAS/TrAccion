@@ -22,12 +22,6 @@ type ExternalDataSyncState = {
 
 type ExternalDataSyncListener = () => void;
 
-type SqliteSyncTokens = {
-  persistedRecordsToken: string | null;
-  taskRecordsToken: string | null;
-  sorteosRecordsToken: string | null;
-};
-
 const listeners = new Set<ExternalDataSyncListener>();
 let state: ExternalDataSyncState = {
   status: 'idle',
@@ -39,7 +33,10 @@ let state: ExternalDataSyncState = {
 let timerId: number | null = null;
 let isPolling = false;
 let lastSeenRefreshToken: string | null = null;
-let lastSeenSqliteSyncTokens: SqliteSyncTokens | null = null;
+let lastSeenPersistedRecordsUpdatedAt: string | null = null;
+let lastSeenTaskRecordsUpdatedAt: string | null = null;
+let lastSeenSorteosDrawsUpdatedAt: string | null = null;
+let lastSeenSorteosExclusionsUpdatedAt: string | null = null;
 let unsubscribeSharedEditingActivity: (() => void) | null = null;
 let unsubscribePersistenceFeedback: (() => void) | null = null;
 let persistenceWriteInProgress = false;
@@ -71,35 +68,54 @@ function subscribe(listener: ExternalDataSyncListener): () => void {
   return () => listeners.delete(listener);
 }
 
-function reloadIntegratedStores(): void {
-  reloadRegisteredSyncableStores();
+function reloadIntegratedStores(storeIds?: string[]): void {
+  reloadRegisteredSyncableStores(storeIds);
 }
 
 function canPollStatus(status: TraccionDatabaseStatus): boolean {
   return status.ready && status.phase !== 'fallback' && status.phase !== 'error' && status.phase !== 'locked';
 }
 
-function hasTokenChanged(remoteToken: string | null, localToken: string | null): boolean {
-  return Boolean(remoteToken && remoteToken !== localToken);
+function valueChanged(lastSeenValue: string | null, nextValue: string | null | undefined): boolean {
+  if (!lastSeenValue || !nextValue) {
+    return false;
+  }
+
+  return nextValue !== lastSeenValue;
 }
 
-function readInitialPersistedRecordsToken(): string | null {
-  return lastSeenRefreshToken ?? readHydrationMetadata()?.refreshToken ?? null;
+function collectChangedDirectStores(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): string[] {
+  const changedStoreIds = new Set<string>();
+
+  if (valueChanged(lastSeenTaskRecordsUpdatedAt, tokenSnapshot.taskRecordsUpdatedAt)) {
+    changedStoreIds.add('tareas');
+  }
+
+  if (
+    valueChanged(lastSeenSorteosDrawsUpdatedAt, tokenSnapshot.sorteosDrawsUpdatedAt) ||
+    valueChanged(lastSeenSorteosExclusionsUpdatedAt, tokenSnapshot.sorteosExclusionsUpdatedAt)
+  ) {
+    changedStoreIds.add('sorteos');
+  }
+
+  return Array.from(changedStoreIds);
 }
 
-function syncTokensFromSnapshot(snapshot: TraccionSqliteSyncTokensSnapshot): SqliteSyncTokens {
-  return {
-    persistedRecordsToken: snapshot.persistedRecordsToken,
-    taskRecordsToken: snapshot.taskRecordsToken,
-    sorteosRecordsToken: snapshot.sorteosRecordsToken,
-  };
+function updateSeenTokens(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): void {
+  lastSeenRefreshToken = tokenSnapshot.refreshToken;
+  lastSeenPersistedRecordsUpdatedAt = tokenSnapshot.latestUpdatedAt ?? null;
+  lastSeenTaskRecordsUpdatedAt = tokenSnapshot.taskRecordsUpdatedAt ?? null;
+  lastSeenSorteosDrawsUpdatedAt = tokenSnapshot.sorteosDrawsUpdatedAt ?? null;
+  lastSeenSorteosExclusionsUpdatedAt = tokenSnapshot.sorteosExclusionsUpdatedAt ?? null;
 }
 
-function directSqliteTokensChanged(nextTokens: SqliteSyncTokens, previousTokens: SqliteSyncTokens): boolean {
-  return (
-    hasTokenChanged(nextTokens.taskRecordsToken, previousTokens.taskRecordsToken) ||
-    hasTokenChanged(nextTokens.sorteosRecordsToken, previousTokens.sorteosRecordsToken)
-  );
+function persistedRecordsChanged(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
+  return valueChanged(lastSeenPersistedRecordsUpdatedAt, tokenSnapshot.latestUpdatedAt);
+}
+
+function refreshTokenChangedWithoutKnownStoreChange(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
+  const localToken = lastSeenRefreshToken ?? readHydrationMetadata()?.refreshToken ?? null;
+  return Boolean(localToken && tokenSnapshot.refreshToken && tokenSnapshot.refreshToken !== localToken);
 }
 
 async function pollOnce(): Promise<void> {
@@ -132,81 +148,6 @@ async function pollOnce(): Promise<void> {
   setState({ status: 'checking', message: 'Comprobando cambios compartidos…', lastCheckedAt: checkedAt });
 
   try {
-    if (window.traccion.getSqliteSyncTokens) {
-      const tokenSnapshot = await window.traccion.getSqliteSyncTokens();
-      if (!canPollStatus(tokenSnapshot.status)) {
-        setState({
-          status: tokenSnapshot.status.phase === 'locked' ? 'disabled' : 'error',
-          message: tokenSnapshot.status.message ?? 'SQLite no disponible; se mantiene localStorage.',
-          lastError: tokenSnapshot.status.message ?? null,
-        });
-        stopExternalDataSyncPolling();
-        return;
-      }
-
-      const nextTokens = syncTokensFromSnapshot(tokenSnapshot);
-      const previousTokens = lastSeenSqliteSyncTokens ?? {
-        persistedRecordsToken: readInitialPersistedRecordsToken(),
-        taskRecordsToken: null,
-        sorteosRecordsToken: null,
-      };
-      const persistedRecordsChanged = hasTokenChanged(
-        nextTokens.persistedRecordsToken,
-        previousTokens.persistedRecordsToken,
-      );
-      const directTablesChanged = directSqliteTokensChanged(nextTokens, previousTokens);
-
-      if (!persistedRecordsChanged && !directTablesChanged) {
-        const flushedCount = await flushPendingSqliteWrites();
-        lastSeenSqliteSyncTokens = nextTokens;
-        lastSeenRefreshToken = nextTokens.persistedRecordsToken;
-        if (flushedCount > 0) {
-          setState({
-            status: 'applied',
-            message: `Cambios locales pendientes sincronizados (${flushedCount}).`,
-            lastCheckedAt: checkedAt,
-            lastAppliedAt: new Date().toISOString(),
-            lastError: null,
-          });
-          return;
-        }
-
-        setState({
-          status: 'synced',
-          message: 'Datos actualizados.',
-          lastCheckedAt: checkedAt,
-          lastError: null,
-        });
-        return;
-      }
-
-      if (hasActiveSharedEditing()) {
-        setState({
-          status: 'synced',
-          message: 'Cambios compartidos detectados; refresco aplazado mientras hay una edición abierta.',
-          lastCheckedAt: checkedAt,
-          lastError: null,
-        });
-        return;
-      }
-
-      if (!persistedRecordsChanged && directTablesChanged) {
-        await flushPendingSqliteWrites();
-        lastSeenSqliteSyncTokens = nextTokens;
-        lastSeenRefreshToken = nextTokens.persistedRecordsToken;
-        reloadIntegratedStores();
-        const appliedAt = new Date().toISOString();
-        setState({
-          status: 'applied',
-          message: 'Cambios SQLite directos aplicados.',
-          lastCheckedAt: checkedAt,
-          lastAppliedAt: appliedAt,
-          lastError: null,
-        });
-        return;
-      }
-    }
-
     const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
     if (!canPollStatus(tokenSnapshot.status)) {
       setState({
@@ -218,15 +159,13 @@ async function pollOnce(): Promise<void> {
       return;
     }
 
-    if (!hasTokenChanged(tokenSnapshot.refreshToken, readInitialPersistedRecordsToken())) {
+    const changedDirectStoreIds = collectChangedDirectStores(tokenSnapshot);
+    const hasPersistedRecordsChanged = persistedRecordsChanged(tokenSnapshot);
+    const hasOnlyRefreshTokenChanged = refreshTokenChangedWithoutKnownStoreChange(tokenSnapshot);
+
+    if (!hasPersistedRecordsChanged && changedDirectStoreIds.length === 0) {
       const flushedCount = await flushPendingSqliteWrites();
-      lastSeenRefreshToken = tokenSnapshot.refreshToken;
-      if (lastSeenSqliteSyncTokens) {
-        lastSeenSqliteSyncTokens = {
-          ...lastSeenSqliteSyncTokens,
-          persistedRecordsToken: tokenSnapshot.refreshToken,
-        };
-      }
+      updateSeenTokens(tokenSnapshot);
       if (flushedCount > 0) {
         setState({
           status: 'applied',
@@ -240,18 +179,23 @@ async function pollOnce(): Promise<void> {
 
       setState({
         status: 'synced',
-        message: 'Datos actualizados.',
+        message: hasOnlyRefreshTokenChanged ? 'Marcador compartido actualizado sin recarga necesaria.' : 'Datos actualizados.',
         lastCheckedAt: checkedAt,
         lastError: null,
       });
       return;
     }
 
-    if (hasActiveSharedEditing()) {
+    if (changedDirectStoreIds.length > 0 && !hasPersistedRecordsChanged) {
+      await flushPendingSqliteWrites();
+      updateSeenTokens(tokenSnapshot);
+      reloadIntegratedStores(changedDirectStoreIds);
+      const appliedAt = new Date().toISOString();
       setState({
-        status: 'synced',
-        message: 'Cambios compartidos detectados; refresco aplazado mientras hay una edición abierta.',
+        status: 'applied',
+        message: `Cambios externos aplicados en ${changedDirectStoreIds.join(', ')}.`,
         lastCheckedAt: checkedAt,
+        lastAppliedAt: appliedAt,
         lastError: null,
       });
       return;
@@ -270,13 +214,7 @@ async function pollOnce(): Promise<void> {
 
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
     await flushPendingSqliteWrites();
-    lastSeenRefreshToken = snapshot.refreshToken;
-    if (lastSeenSqliteSyncTokens) {
-      lastSeenSqliteSyncTokens = {
-        ...lastSeenSqliteSyncTokens,
-        persistedRecordsToken: snapshot.refreshToken,
-      };
-    }
+    updateSeenTokens(snapshot);
     reloadIntegratedStores();
     const appliedAt = new Date().toISOString();
     setState({
@@ -305,7 +243,6 @@ function handleDatabaseConnectivityRecovered(): void {
 
 function handleSharedEditingActivityChanged(): void {
   if (!hasActiveSharedEditing()) {
-    postponePolling(750);
     void pollOnce();
   }
 }
@@ -317,6 +254,10 @@ export function startExternalDataSyncPolling(): void {
 
   const metadata = readHydrationMetadata();
   lastSeenRefreshToken = metadata?.refreshToken ?? null;
+  lastSeenPersistedRecordsUpdatedAt = null;
+  lastSeenTaskRecordsUpdatedAt = null;
+  lastSeenSorteosDrawsUpdatedAt = null;
+  lastSeenSorteosExclusionsUpdatedAt = null;
   void pollOnce();
   timerId = window.setInterval(() => {
     void pollOnce();
@@ -326,12 +267,12 @@ export function startExternalDataSyncPolling(): void {
   unsubscribePersistenceFeedback = subscribeToPersistenceFeedback((feedback) => {
     if (feedback.kind === 'saving') {
       persistenceWriteInProgress = true;
-      postponePolling(3_000);
+      postponePolling(2_000);
       return;
     }
 
     persistenceWriteInProgress = false;
-    postponePolling(1_500);
+    postponePolling(1_000);
   });
 }
 
@@ -349,7 +290,10 @@ export function stopExternalDataSyncPolling(): void {
   unsubscribePersistenceFeedback = null;
   persistenceWriteInProgress = false;
   postponePollingUntil = 0;
-  lastSeenSqliteSyncTokens = null;
+  lastSeenPersistedRecordsUpdatedAt = null;
+  lastSeenTaskRecordsUpdatedAt = null;
+  lastSeenSorteosDrawsUpdatedAt = null;
+  lastSeenSorteosExclusionsUpdatedAt = null;
 }
 
 export function useExternalDataSyncStatus(): ExternalDataSyncState {

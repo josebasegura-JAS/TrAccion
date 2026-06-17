@@ -107,17 +107,13 @@ export interface PersistedRecordsTokenSnapshot {
   status: DatabaseStatus;
   refreshToken: string | null;
   latestUpdatedAt: string | null;
+  taskRecordsUpdatedAt: string | null;
+  sorteosDrawsUpdatedAt: string | null;
+  sorteosExclusionsUpdatedAt: string | null;
 }
 
 export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot {
   records: PersistedStorageRecordSnapshot[];
-}
-
-export interface SqliteSyncTokensSnapshot {
-  status: DatabaseStatus;
-  persistedRecordsToken: string | null;
-  taskRecordsToken: string | null;
-  sorteosRecordsToken: string | null;
 }
 
 export interface PersistedRecordSnapshot {
@@ -197,12 +193,6 @@ interface DatabasePreferences {
 
 const require = createRequire(import.meta.url);
 const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
-
-const TASKS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.tasks.legacy.checked';
-const TASK_RECORDS_REFRESH_TOKEN_KEY = 'task_records_refresh_token';
-const SORTEOS_RECORDS_REFRESH_TOKEN_KEY = 'sorteos_records_refresh_token';
-const SORTEOS_DRAWS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.sorteos.draws.legacy.checked';
-const SORTEOS_EXCLUSIONS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.sorteos.exclusions.legacy.checked';
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
@@ -1599,52 +1589,22 @@ export async function createShutdownLocalBackup(): Promise<void> {
   await writeShutdownLocalBackupArtifacts();
 }
 
-function updateMetadataRefreshToken(db: Database, key: string, updatedAt: string): void {
+function updateRefreshMetadata(db: Database, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
   db.prepare(
     `INSERT INTO app_metadata (key, value, updated_at)
-     VALUES (?, ?, ?)
+     VALUES ('persisted_records_refresh_token', ?, ?)
      ON CONFLICT(key) DO UPDATE SET
        value = excluded.value,
        updated_at = excluded.updated_at`,
-  ).run(key, token, updatedAt);
-}
-
-function updateRefreshMetadata(db: Database, updatedAt: string): void {
-  updateMetadataRefreshToken(db, 'persisted_records_refresh_token', updatedAt);
-}
-
-function updateDirectSqliteRefreshMetadata(db: Database, key: string, updatedAt: string): void {
-  updateMetadataRefreshToken(db, key, updatedAt);
+  ).run(token, updatedAt);
 }
 
 function readRefreshToken(db: Database): string | null {
-  return readMetadataRefreshToken(db, 'persisted_records_refresh_token');
-}
-
-function readMetadataRefreshToken(db: Database, key: string): string | null {
-  const row = db.prepare('SELECT value FROM app_metadata WHERE key = ?').get(key);
+  const row = db
+    .prepare("SELECT value FROM app_metadata WHERE key = 'persisted_records_refresh_token'")
+    .get();
   return isMetadataRow(row) ? row.value : null;
-}
-
-function readMetadataValue(db: Database, key: string): string | null {
-  const row = db.prepare('SELECT value FROM app_metadata WHERE key = ?').get(key);
-  return isMetadataRow(row) ? row.value : null;
-}
-
-function isMetadataFlagEnabled(db: Database, key: string): boolean {
-  return readMetadataValue(db, key) === 'true';
-}
-
-function setMetadataFlag(db: Database, key: string): void {
-  const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO app_metadata (key, value, updated_at)
-     VALUES (?, 'true', ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value,
-       updated_at = excluded.updated_at`,
-  ).run(key, now);
 }
 
 export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
@@ -1808,20 +1768,14 @@ function readAllTaskRecords(db: Database): SqliteTaskRecord[] {
 }
 
 function maybeMigrateTasksFromPersistedRecord(db: Database): void {
-  if (isMetadataFlagEnabled(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY)) {
-    return;
-  }
-
   const taskCountRow = db.prepare('SELECT COUNT(*) AS count FROM task_records').get();
   const taskCount = isCountRow(taskCountRow) ? taskCountRow.count : 0;
   if (taskCount > 0) {
-    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
   const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.tareas.tasks');
   if (!legacyRecord) {
-    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
@@ -1829,12 +1783,10 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
   try {
     parsed = JSON.parse(legacyRecord.value);
   } catch {
-    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
   if (!Array.isArray(parsed)) {
-    setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
     return;
   }
 
@@ -1854,8 +1806,6 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
     const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
     insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
   }
-
-  setMetadataFlag(db, TASKS_LEGACY_MIGRATION_CHECKED_KEY);
 }
 
 export function loadTaskRecordsSnapshot(): SqliteTaskRecordsSnapshot {
@@ -1966,7 +1916,7 @@ export function saveTaskRecordIfUnchanged(
           }
         }
 
-        updateDirectSqliteRefreshMetadata(db, TASK_RECORDS_REFRESH_TOKEN_KEY, updatedAt);
+        updateRefreshMetadata(db, updatedAt);
 
         return {
           ok: true,
@@ -2014,12 +1964,9 @@ function getSorteosCollectionUpdatedAt(db: Database, tableName: 'sorteos_draw_re
   return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
-function getSorteosLegacyMigrationFlagKey(
-  tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
-): string {
-  return tableName === 'sorteos_draw_records'
-    ? SORTEOS_DRAWS_LEGACY_MIGRATION_CHECKED_KEY
-    : SORTEOS_EXCLUSIONS_LEGACY_MIGRATION_CHECKED_KEY;
+function getTaskRecordsUpdatedAt(db: Database): string | null {
+  const row = db.prepare('SELECT MAX(updated_at) AS updated_at FROM task_records').get();
+  return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
 function migrateSorteosArrayFromPersistedRecord(
@@ -2027,21 +1974,14 @@ function migrateSorteosArrayFromPersistedRecord(
   tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
   storageKey: string,
 ): void {
-  const migrationFlagKey = getSorteosLegacyMigrationFlagKey(tableName);
-  if (isMetadataFlagEnabled(db, migrationFlagKey)) {
-    return;
-  }
-
   const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
   const count = isCountRow(countRow) ? countRow.count : 0;
   if (count > 0) {
-    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
   const legacyRecord = readPersistedRecordByKey(db, storageKey);
   if (!legacyRecord) {
-    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
@@ -2049,12 +1989,10 @@ function migrateSorteosArrayFromPersistedRecord(
   try {
     parsed = JSON.parse(legacyRecord.value);
   } catch {
-    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
   if (!Array.isArray(parsed)) {
-    setMetadataFlag(db, migrationFlagKey);
     return;
   }
 
@@ -2073,8 +2011,6 @@ function migrateSorteosArrayFromPersistedRecord(
     const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
     insert.run(item.id, JSON.stringify(item), createdAt, updatedAt);
   }
-
-  setMetadataFlag(db, migrationFlagKey);
 }
 
 function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
@@ -2199,7 +2135,7 @@ export function saveSorteosSnapshotIfUnchanged(
         const now = new Date().toISOString();
         replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
         replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
-        updateDirectSqliteRefreshMetadata(db, SORTEOS_RECORDS_REFRESH_TOKEN_KEY, now);
+        updateRefreshMetadata(db, now);
 
         return {
           ok: true,
@@ -2491,7 +2427,15 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
     () => {
       const currentStatus = getSqliteStatus();
       if (!currentStatus.ready || currentStatus.phase === 'locked') {
-        return { status: currentStatus, records: [], refreshToken: null, latestUpdatedAt: null };
+        return {
+          status: currentStatus,
+          records: [],
+          refreshToken: null,
+          latestUpdatedAt: null,
+          taskRecordsUpdatedAt: null,
+          sorteosDrawsUpdatedAt: null,
+          sorteosExclusionsUpdatedAt: null,
+        };
       }
 
       const db = requireDatabase();
@@ -2516,9 +2460,20 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
         records,
         refreshToken: readRefreshToken(db),
         latestUpdatedAt,
+        taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
+        sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
+        sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
       };
     },
-    (nextStatus) => ({ status: nextStatus, records: [], refreshToken: null, latestUpdatedAt: null }),
+    (nextStatus) => ({
+      status: nextStatus,
+      records: [],
+      refreshToken: null,
+      latestUpdatedAt: null,
+      taskRecordsUpdatedAt: null,
+      sorteosDrawsUpdatedAt: null,
+      sorteosExclusionsUpdatedAt: null,
+    }),
   );
 }
 
@@ -2527,7 +2482,14 @@ export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapsho
     () => {
       const currentStatus = getSqliteStatus();
       if (!currentStatus.ready || currentStatus.phase === 'locked') {
-        return { status: currentStatus, refreshToken: null, latestUpdatedAt: null };
+        return {
+          status: currentStatus,
+          refreshToken: null,
+          latestUpdatedAt: null,
+          taskRecordsUpdatedAt: null,
+          sorteosDrawsUpdatedAt: null,
+          sorteosExclusionsUpdatedAt: null,
+        };
       }
 
       const db = requireDatabase();
@@ -2545,9 +2507,19 @@ export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapsho
         status: currentStatus,
         refreshToken: readRefreshToken(db),
         latestUpdatedAt,
+        taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
+        sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
+        sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
       };
     },
-    (nextStatus) => ({ status: nextStatus, refreshToken: null, latestUpdatedAt: null }),
+    (nextStatus) => ({
+      status: nextStatus,
+      refreshToken: null,
+      latestUpdatedAt: null,
+      taskRecordsUpdatedAt: null,
+      sorteosDrawsUpdatedAt: null,
+      sorteosExclusionsUpdatedAt: null,
+    }),
   );
 }
 
@@ -2661,36 +2633,6 @@ function readConflictingEditingLock(
     )
     .get(moduleName, ownerId, normalizedRecordId, MODULE_LOCK_RECORD_ID, MODULE_LOCK_RECORD_ID);
   return isEditingLockRow(row) ? row : null;
-}
-
-export function getSqliteSyncTokensSnapshot(): SqliteSyncTokensSnapshot {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return {
-          status: currentStatus,
-          persistedRecordsToken: null,
-          taskRecordsToken: null,
-          sorteosRecordsToken: null,
-        };
-      }
-
-      const db = requireDatabase();
-      return {
-        status: currentStatus,
-        persistedRecordsToken: readRefreshToken(db),
-        taskRecordsToken: readMetadataRefreshToken(db, TASK_RECORDS_REFRESH_TOKEN_KEY),
-        sorteosRecordsToken: readMetadataRefreshToken(db, SORTEOS_RECORDS_REFRESH_TOKEN_KEY),
-      };
-    },
-    (nextStatus) => ({
-      status: nextStatus,
-      persistedRecordsToken: null,
-      taskRecordsToken: null,
-      sorteosRecordsToken: null,
-    }),
-  );
 }
 
 export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult {

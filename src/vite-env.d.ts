@@ -100,17 +100,13 @@ interface TraccionPersistedRecordsTokenSnapshot {
   status: TraccionDatabaseStatus;
   refreshToken: string | null;
   latestUpdatedAt: string | null;
+  taskRecordsUpdatedAt?: string | null;
+  sorteosDrawsUpdatedAt?: string | null;
+  sorteosExclusionsUpdatedAt?: string | null;
 }
 
 interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsTokenSnapshot {
   records: TraccionStorageRecordSnapshot[];
-}
-
-interface TraccionSqliteSyncTokensSnapshot {
-  status: TraccionDatabaseStatus;
-  persistedRecordsToken: string | null;
-  taskRecordsToken: string | null;
-  sorteosRecordsToken: string | null;
 }
 
 interface TraccionPersistedRecordSnapshot {
@@ -241,7 +237,6 @@ interface TraccionApi {
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;
   getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
-  getSqliteSyncTokens?: () => Promise<TraccionSqliteSyncTokensSnapshot>;
   onDatabaseConnectivityIssue?: (
     listener: (payload: TraccionDatabaseConnectivityIssue) => void,
   ) => () => void;

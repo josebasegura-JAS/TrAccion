@@ -13,8 +13,14 @@ export function getRegisteredSyncableStores(): SyncableStoreRegistration[] {
   return Array.from(syncableStores.values());
 }
 
-export function reloadRegisteredSyncableStores(): void {
+export function reloadRegisteredSyncableStores(storeIds?: string[]): void {
+  const requestedStoreIds = storeIds ? new Set(storeIds) : null;
+
   getRegisteredSyncableStores().forEach((store) => {
+    if (requestedStoreIds && !requestedStoreIds.has(store.id)) {
+      return;
+    }
+
     store.reloadFromStorage();
   });
 }
