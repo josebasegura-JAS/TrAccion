@@ -13,6 +13,10 @@ jobs:
       NODE_ENV: development
       NPM_CONFIG_AUDIT: "false"
       NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_PRODUCTION: "false"
+      NPM_CONFIG_OMIT: ""
+      NPM_CONFIG_INCLUDE: "dev"
+      NPM_CONFIG_BIN_LINKS: "true"
 
     steps:
       - name: Checkout repository
@@ -40,15 +44,6 @@ jobs:
           # skipped intentionally: this workflow only needs TypeScript/Vite,
           # ESLint, and Vitest, while native/Electron postinstall steps can be
           # flaky on Windows and are not required to build without packaging.
-          # Remove the deprecated production config entirely; even
-          # NPM_CONFIG_PRODUCTION=false makes npm emit warnings and has
-          # caused npm to abort on windows-latest. Use omit/include instead.
-          Remove-Item Env:NPM_CONFIG_PRODUCTION -ErrorAction SilentlyContinue
-          Remove-Item Env:npm_config_production -ErrorAction SilentlyContinue
-          $env:NPM_CONFIG_OMIT = ""
-          $env:NPM_CONFIG_INCLUDE = "dev"
-          $env:NPM_CONFIG_BIN_LINKS = "true"
-
           npm ci --include=dev --bin-links=true --ignore-scripts --no-audit --no-fund
 
       - name: Verify local CLI tools before lint
