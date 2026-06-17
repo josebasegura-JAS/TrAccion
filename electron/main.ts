@@ -913,7 +913,7 @@ let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
 
 function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcOperation<T>): Promise<Awaited<T>> {
   const startedAt = Date.now();
-  const queuedOperation: Promise<Awaited<T>> = sqliteIpcQueue.then(async () => {
+  const queuedOperation = sqliteIpcQueue.then(async (): Promise<Awaited<T>> => {
     const queuedMs = Date.now() - startedAt;
     if (queuedMs > 100) {
       console.warn(`[sqlite-ipc-queue] ${operationName} esperó ${queuedMs} ms en cola.`);
@@ -921,7 +921,7 @@ function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcOperatio
 
     const operationStartedAt = Date.now();
     try {
-      return await operation();
+      return (await operation()) as Awaited<T>;
     } finally {
       const operationMs = Date.now() - operationStartedAt;
       if (operationMs > 250) {
