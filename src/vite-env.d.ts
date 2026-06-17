@@ -106,6 +106,13 @@ interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsToken
   records: TraccionStorageRecordSnapshot[];
 }
 
+interface TraccionSqliteSyncTokensSnapshot {
+  status: TraccionDatabaseStatus;
+  persistedRecordsToken: string | null;
+  taskRecordsToken: string | null;
+  sorteosRecordsToken: string | null;
+}
+
 interface TraccionPersistedRecordSnapshot {
   status: TraccionDatabaseStatus;
   record: TraccionStorageRecordSnapshot | null;
@@ -234,6 +241,7 @@ interface TraccionApi {
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;
   getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
+  getSqliteSyncTokens?: () => Promise<TraccionSqliteSyncTokensSnapshot>;
   onDatabaseConnectivityIssue?: (
     listener: (payload: TraccionDatabaseConnectivityIssue) => void,
   ) => () => void;

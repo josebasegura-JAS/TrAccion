@@ -23,6 +23,7 @@ import {
   loadSorteosRecordsSnapshot,
   loadTaskRecordsSnapshot,
   getPersistedRecordsTokenSnapshot,
+  getSqliteSyncTokensSnapshot,
   migrateLocalStorageSnapshot,
   releaseRecordLock,
   resetSqliteDirectory,
@@ -1004,6 +1005,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot());
+  ipcMain.handle('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot());
 
   ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
     if (

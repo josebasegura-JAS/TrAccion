@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('traccion', {
   getPersistedRecord: (key: string) =>
     ipcRenderer.invoke('database:get-persisted-record', { key }),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
+  getSqliteSyncTokens: () => ipcRenderer.invoke('database:get-sqlite-sync-tokens'),
   onDatabaseConnectivityIssue: (listener: (payload: unknown) => void) => {
     const handler = (_event: IpcRendererEvent, payload: unknown) => listener(payload);
     ipcRenderer.on('database:connectivity-issue', handler);

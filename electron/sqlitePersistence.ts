@@ -113,6 +113,13 @@ export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot 
   records: PersistedStorageRecordSnapshot[];
 }
 
+export interface SqliteSyncTokensSnapshot {
+  status: DatabaseStatus;
+  persistedRecordsToken: string | null;
+  taskRecordsToken: string | null;
+  sorteosRecordsToken: string | null;
+}
+
 export interface PersistedRecordSnapshot {
   status: DatabaseStatus;
   record: PersistedStorageRecordSnapshot | null;
@@ -192,6 +199,8 @@ const require = createRequire(import.meta.url);
 const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
 const TASKS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.tasks.legacy.checked';
+const TASK_RECORDS_REFRESH_TOKEN_KEY = 'task_records_refresh_token';
+const SORTEOS_RECORDS_REFRESH_TOKEN_KEY = 'sorteos_records_refresh_token';
 const SORTEOS_DRAWS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.sorteos.draws.legacy.checked';
 const SORTEOS_EXCLUSIONS_LEGACY_MIGRATION_CHECKED_KEY = 'migration.sorteos.exclusions.legacy.checked';
 
@@ -1590,21 +1599,31 @@ export async function createShutdownLocalBackup(): Promise<void> {
   await writeShutdownLocalBackupArtifacts();
 }
 
-function updateRefreshMetadata(db: Database, updatedAt: string): void {
+function updateMetadataRefreshToken(db: Database, key: string, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
   db.prepare(
     `INSERT INTO app_metadata (key, value, updated_at)
-     VALUES ('persisted_records_refresh_token', ?, ?)
+     VALUES (?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET
        value = excluded.value,
        updated_at = excluded.updated_at`,
-  ).run(token, updatedAt);
+  ).run(key, token, updatedAt);
+}
+
+function updateRefreshMetadata(db: Database, updatedAt: string): void {
+  updateMetadataRefreshToken(db, 'persisted_records_refresh_token', updatedAt);
+}
+
+function updateDirectSqliteRefreshMetadata(db: Database, key: string, updatedAt: string): void {
+  updateMetadataRefreshToken(db, key, updatedAt);
 }
 
 function readRefreshToken(db: Database): string | null {
-  const row = db
-    .prepare("SELECT value FROM app_metadata WHERE key = 'persisted_records_refresh_token'")
-    .get();
+  return readMetadataRefreshToken(db, 'persisted_records_refresh_token');
+}
+
+function readMetadataRefreshToken(db: Database, key: string): string | null {
+  const row = db.prepare('SELECT value FROM app_metadata WHERE key = ?').get(key);
   return isMetadataRow(row) ? row.value : null;
 }
 
@@ -1947,7 +1966,7 @@ export function saveTaskRecordIfUnchanged(
           }
         }
 
-        updateRefreshMetadata(db, updatedAt);
+        updateDirectSqliteRefreshMetadata(db, TASK_RECORDS_REFRESH_TOKEN_KEY, updatedAt);
 
         return {
           ok: true,
@@ -2180,7 +2199,7 @@ export function saveSorteosSnapshotIfUnchanged(
         const now = new Date().toISOString();
         replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
         replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
-        updateRefreshMetadata(db, now);
+        updateDirectSqliteRefreshMetadata(db, SORTEOS_RECORDS_REFRESH_TOKEN_KEY, now);
 
         return {
           ok: true,
@@ -2642,6 +2661,36 @@ function readConflictingEditingLock(
     )
     .get(moduleName, ownerId, normalizedRecordId, MODULE_LOCK_RECORD_ID, MODULE_LOCK_RECORD_ID);
   return isEditingLockRow(row) ? row : null;
+}
+
+export function getSqliteSyncTokensSnapshot(): SqliteSyncTokensSnapshot {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return {
+          status: currentStatus,
+          persistedRecordsToken: null,
+          taskRecordsToken: null,
+          sorteosRecordsToken: null,
+        };
+      }
+
+      const db = requireDatabase();
+      return {
+        status: currentStatus,
+        persistedRecordsToken: readRefreshToken(db),
+        taskRecordsToken: readMetadataRefreshToken(db, TASK_RECORDS_REFRESH_TOKEN_KEY),
+        sorteosRecordsToken: readMetadataRefreshToken(db, SORTEOS_RECORDS_REFRESH_TOKEN_KEY),
+      };
+    },
+    (nextStatus) => ({
+      status: nextStatus,
+      persistedRecordsToken: null,
+      taskRecordsToken: null,
+      sorteosRecordsToken: null,
+    }),
+  );
 }
 
 export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult {

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('traccion', {
   getPersistedRecord: (key: string) =>
     ipcRenderer.invoke('database:get-persisted-record', { key }),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
+  getSqliteSyncTokens: () => ipcRenderer.invoke('database:get-sqlite-sync-tokens'),
   backupLocalStorage: (records: { key: string; value: string }[]) =>
     ipcRenderer.invoke('database:backup-local-storage', { records }),
   migrateLocalStorage: (records: { key: string; value: string }[]) =>
