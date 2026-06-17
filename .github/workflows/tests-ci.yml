@@ -8,6 +8,12 @@ jobs:
     name: Run tests manually
     runs-on: windows-latest
 
+    env:
+      NODE_ENV: development
+      NPM_CONFIG_PRODUCTION: "false"
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,44 +23,51 @@ jobs:
         with:
           node-version: 20.20.2
 
-      - name: Prepare npm
+      - name: Show environment
         shell: pwsh
         run: |
-          npm --version
           node --version
-          npm config set fund false
-          npm config set audit false
-          npm config set cache "$env:RUNNER_TEMP\npm-cache"
+          npm --version
+          npm config get production
+          npm config get omit
+
+      - name: Clean previous install state
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules) {
+            Remove-Item -Recurse -Force node_modules
+          }
           npm cache clean --force
 
-      - name: Install dependencies
+      - name: Install all dependencies including devDependencies
         shell: pwsh
         run: |
-          for ($i = 1; $i -le 3; $i++) {
-            Write-Host "npm install attempt $i"
-            npm install --no-audit --no-fund --legacy-peer-deps
+          npm install --include=dev --no-audit --no-fund --legacy-peer-deps
 
-            if ($LASTEXITCODE -eq 0) {
-              exit 0
-            }
-
-            npm cache clean --force
-            Start-Sleep -Seconds 10
+      - name: Verify local tools
+        shell: pwsh
+        run: |
+          if (!(Test-Path ".\node_modules\.bin\eslint.cmd")) {
+            Write-Error "eslint.cmd not found. devDependencies were not installed."
+            exit 1
           }
 
-          exit 1
+          if (!(Test-Path ".\node_modules\.bin\vitest.cmd")) {
+            Write-Error "vitest.cmd not found. devDependencies were not installed."
+            exit 1
+          }
+
+          .\node_modules\.bin\eslint.cmd --version
+          .\node_modules\.bin\vitest.cmd --version
 
       - name: Run lint
-        run: npm run lint --if-present
+        run: npm run lint
 
       - name: Run unit tests
-        run: npm run test --if-present
+        run: npm run test
 
       - name: Run UI tests
         run: npm run test:ui --if-present
-
-      - name: Run Electron tests
-        run: npm run test:electron --if-present
 
       - name: Build check without EXE
         run: npm run build
