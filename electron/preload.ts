@@ -45,6 +45,12 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('recordLock:release', payload),
   getRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:get', payload),
+  loadTaskRecords: () => ipcRenderer.invoke('tasks:load-records'),
+  saveTaskRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('tasks:save-record-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),

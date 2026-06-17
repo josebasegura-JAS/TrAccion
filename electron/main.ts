@@ -20,6 +20,7 @@ import {
   initializeSqlitePersistence,
   listLocalBackups,
   loadPersistedRecordsSnapshot,
+  loadTaskRecordsSnapshot,
   getPersistedRecordsTokenSnapshot,
   migrateLocalStorageSnapshot,
   releaseRecordLock,
@@ -27,6 +28,7 @@ import {
   restoreLocalBackup,
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  saveTaskRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
@@ -1095,6 +1097,39 @@ function registerIpcHandlers(): void {
     return normalized
       ? getRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
+  });
+
+  ipcMain.handle('tasks:load-records', () => loadTaskRecordsSnapshot());
+
+  ipcMain.handle('tasks:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de tarea inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de tarea inválido.',
+      };
+    }
+
+    return saveTaskRecordIfUnchanged({
+      id: candidate.id,
+      value: candidate.value,
+      expectedUpdatedAt: candidate.expectedUpdatedAt,
+    });
   });
 
   ipcMain.handle('tasks:select-document', (event) => selectTaskDocumentPaths(event));

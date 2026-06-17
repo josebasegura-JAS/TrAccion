@@ -165,6 +165,32 @@ interface TraccionDatabaseConnectivityIssue {
   updatedAt: string;
 }
 
+interface TraccionTaskRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+interface TraccionTaskRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTaskRecord[];
+}
+
+interface TraccionConditionalTaskRecord {
+  id: string;
+  value: string;
+  expectedUpdatedAt: string | null;
+}
+
+interface TraccionConditionalTaskSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  currentUpdatedAt: string | null;
+  message: string;
+}
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -190,6 +216,10 @@ interface TraccionApi {
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   getRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
+  loadTaskRecords?: () => Promise<TraccionTaskRecordsSnapshot>;
+  saveTaskRecordIfUnchanged?: (
+    record: TraccionConditionalTaskRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;
   selectTeletrabajoTemplate: () => Promise<string | null>;

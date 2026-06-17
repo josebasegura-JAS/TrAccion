@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { hasTaskSqliteRepository, loadTasksFromSqlite, saveTaskToSqlite } from './taskSqliteRepository';
 import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
@@ -508,6 +509,36 @@ function persistTasks(tasks: Task[]): void {
   writeStorageItem(TASKS_STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
 }
 
+async function readTasksForStore(): Promise<Task[]> {
+  if (!hasTaskSqliteRepository()) {
+    return readTasks();
+  }
+
+  try {
+    const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot);
+    if (sqliteTasks) {
+      return reconcileTasksWithClosedSessions(sqliteTasks.map(normalizeTask));
+    }
+  } catch (error) {
+    console.warn('No se han podido cargar tareas desde SQLite directo. Se usa compatibilidad JSON.', error);
+  }
+
+  return readTasks();
+}
+
+async function persistTaskDirectly(task: Task, expectedUpdatedAt: string | null): Promise<TaskUpdateResult> {
+  if (!hasTaskSqliteRepository()) {
+    return { ok: false, message: 'Repositorio SQLite directo de tareas no disponible.' };
+  }
+
+  const result = await saveTaskToSqlite(normalizeTask(task), expectedUpdatedAt);
+  if (!result) {
+    return { ok: false, message: 'Repositorio SQLite directo de tareas no disponible.' };
+  }
+
+  return { ok: result.ok, message: result.message, recordId: task.id };
+}
+
 function firstActiveTaskId(tasks: Task[]): string {
   return tasks.find((task) => !task.deletedAt && !isTaskClosed(task))?.id ?? '';
 }
@@ -560,17 +591,19 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   selectedTaskId: '',
   filters: EMPTY_TASK_FILTERS,
   load: () => {
-    const tasks = readTasks();
-    set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
+    void readTasksForStore().then((tasks) => {
+      set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
+    });
   },
   reloadFromStorage: () => {
-    const tasks = readTasks();
-    set((state) => ({
-      tasks,
-      selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
-        ? state.selectedTaskId
-        : firstActiveTaskId(tasks),
-    }));
+    void readTasksForStore().then((tasks) => {
+      set((state) => ({
+        tasks,
+        selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
+          ? state.selectedTaskId
+          : firstActiveTaskId(tasks),
+      }));
+    });
   },
   create: (draft, seguimientoText) => {
     set((state) => {
@@ -595,7 +628,13 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         changes: [],
       });
       const tasks = [...state.tasks, task];
-      persistTasks(tasks);
+      if (hasTaskSqliteRepository()) {
+        void persistTaskDirectly(task, null).catch((error: unknown) => {
+          console.warn('No se ha podido crear la tarea en SQLite directo.', error);
+        });
+      } else {
+        persistTasks(tasks);
+      }
       return {
         tasks,
         selectedTaskId: isTaskClosed(task) ? firstActiveTaskId(tasks) : task.id,
@@ -618,6 +657,31 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
     };
 
     try {
+      if (hasTaskSqliteRepository()) {
+        const saveResult = await persistTaskDirectly(task, null);
+        if (!saveResult.ok) {
+          return saveResult;
+        }
+
+        enqueueAuditEvent({
+          module: 'tareas',
+          entityId: task.id,
+          action: 'created',
+          summary: 'Registro creado',
+          changes: [],
+        });
+
+        set((state) => {
+          const tasks = [...state.tasks.filter((record) => record.id !== task.id), task].map(normalizeTask);
+          return {
+            tasks,
+            selectedTaskId: isTaskClosed(task) ? firstActiveTaskId(tasks) : task.id,
+          };
+        });
+
+        return { ok: true, message: 'Tarea creada.', recordId: task.id };
+      }
+
       const { records, newRecord } = await saveNewSharedArrayRecord<Task>({
         storageKey: TASKS_STORAGE_KEY,
         newRecord: task,
@@ -700,7 +764,22 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       }
 
       const tasks = [...tasksWithNormalizedExistingImports, ...importedTasks];
-      persistTasks(tasks);
+      if (hasTaskSqliteRepository()) {
+        importedTasks.forEach((task) => {
+          void persistTaskDirectly(task, null).catch((error: unknown) => {
+            console.warn('No se ha podido guardar una tarea importada en SQLite directo.', error);
+          });
+        });
+        if (changedExistingTasks) {
+          tasksWithNormalizedExistingImports.forEach((task) => {
+            void persistTaskDirectly(task, task.updatedAt).catch((error: unknown) => {
+              console.warn('No se ha podido normalizar una tarea existente en SQLite directo.', error);
+            });
+          });
+        }
+      } else {
+        persistTasks(tasks);
+      }
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
 
@@ -708,11 +787,24 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
   update: (id, draft, seguimientoText) => {
     set((state) => {
-      const tasks = state.tasks.map((task) =>
-        task.id === id ? buildUpdatedTask(task, draft, seguimientoText) : task,
-      );
-      persistTasks(tasks);
-      const updatedTask = tasks.find((task) => task.id === id);
+      let updatedTask: Task | undefined;
+      let previousUpdatedAt: string | null = null;
+      const tasks = state.tasks.map((task) => {
+        if (task.id !== id) {
+          return task;
+        }
+
+        previousUpdatedAt = task.updatedAt;
+        updatedTask = buildUpdatedTask(task, draft, seguimientoText);
+        return updatedTask;
+      });
+      if (updatedTask && hasTaskSqliteRepository()) {
+        void persistTaskDirectly(updatedTask, previousUpdatedAt).catch((error: unknown) => {
+          console.warn('No se ha podido actualizar la tarea en SQLite directo.', error);
+        });
+      } else {
+        persistTasks(tasks);
+      }
       return {
         tasks,
         selectedTaskId: updatedTask && isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
@@ -721,6 +813,41 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
   updateWithConcurrencyCheck: async (id, draft, seguimientoText, expectedUpdatedAt) => {
     try {
+      if (hasTaskSqliteRepository()) {
+        const latestTasks = await readTasksForStore();
+        const latestTask = latestTasks.find((task) => task.id === id);
+        if (!latestTask) {
+          return {
+            ok: false,
+            message: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
+          };
+        }
+
+        if (latestTask.updatedAt !== expectedUpdatedAt) {
+          return {
+            ok: false,
+            message:
+              'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+          };
+        }
+
+        const updatedTask = normalizeTask(buildUpdatedTask(latestTask, draft, seguimientoText));
+        const saveResult = await persistTaskDirectly(updatedTask, expectedUpdatedAt);
+        if (!saveResult.ok) {
+          return saveResult;
+        }
+
+        set((state) => {
+          const tasks = state.tasks.map((task) => (task.id === id ? updatedTask : task));
+          return {
+            tasks,
+            selectedTaskId: isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
+          };
+        });
+
+        return { ok: true, message: 'Tarea guardada.', recordId: id };
+      }
+
       const { records, updatedRecord } = await saveSharedArrayRecord<Task>({
         storageKey: TASKS_STORAGE_KEY,
         recordId: id,
@@ -766,7 +893,15 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         });
         return { ...task, deletedAt: now, updatedAt: now };
       });
-      persistTasks(tasks);
+      const deletedTask = tasks.find((task) => task.id === id);
+      if (deletedTask && hasTaskSqliteRepository()) {
+        const previousTask = state.tasks.find((task) => task.id === id);
+        void persistTaskDirectly(deletedTask, previousTask?.updatedAt ?? null).catch((error: unknown) => {
+          console.warn('No se ha podido eliminar la tarea en SQLite directo.', error);
+        });
+      } else {
+        persistTasks(tasks);
+      }
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
   },
@@ -803,7 +938,18 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           updatedAt: now,
         };
       });
-      persistTasks(tasks);
+      if (hasTaskSqliteRepository()) {
+        tasks.forEach((task) => {
+          const previousTask = state.tasks.find((candidate) => candidate.id === task.id);
+          if (previousTask && previousTask.updatedAt !== task.updatedAt) {
+            void persistTaskDirectly(task, previousTask.updatedAt).catch((error: unknown) => {
+              console.warn('No se ha podido cerrar una tarea de sesión en SQLite directo.', error);
+            });
+          }
+        });
+      } else {
+        persistTasks(tasks);
+      }
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
   },
@@ -813,6 +959,54 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       const now = new Date().toISOString();
       const taskIdSet = new Set(taskIds);
       const seguimiento = buildSeguimiento(`Tratada en ${moduleLabel} (${sessionLabel}).`, now);
+
+      if (hasTaskSqliteRepository()) {
+        const latestTasks = await readTasksForStore();
+        const updatedTasks = latestTasks.map((task) => {
+          if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
+            return task;
+          }
+
+          enqueueAuditEvent({
+            module: 'tareas',
+            entityId: task.id,
+            action: 'status_changed',
+            summary: `Estado cambiado: ${task.estado} → cerrada`,
+            changes: [
+              { field: 'estado', label: 'Estado', before: task.estado, after: 'cerrada' },
+              { field: 'fase', label: 'Fase', before: task.fase, after: CLOSED_TASK_PHASE },
+            ],
+          });
+
+          return normalizeTask({
+            ...task,
+            estado: 'cerrada' as const,
+            fase: CLOSED_TASK_PHASE,
+            seguimiento: [...seguimiento, ...task.seguimiento],
+            closedAt: task.closedAt ?? now,
+            updatedAt: now,
+          });
+        });
+
+        const saveResults = await Promise.all(
+          updatedTasks.map((task) => {
+            const previousTask = latestTasks.find((candidate) => candidate.id === task.id);
+            if (!previousTask || previousTask.updatedAt === task.updatedAt) {
+              return Promise.resolve({ ok: true, message: 'Sin cambios.' });
+            }
+
+            return persistTaskDirectly(task, previousTask.updatedAt);
+          }),
+        );
+        const failedSave = saveResults.find((result) => !result.ok);
+        if (failedSave) {
+          return { ok: false, message: failedSave.message };
+        }
+
+        set({ tasks: updatedTasks, selectedTaskId: firstActiveTaskId(updatedTasks) });
+        return { ok: true, message: 'Puntos tratados cerrados.' };
+      }
+
       const result = await saveSharedArrayMutation<Task>({
         storageKey: TASKS_STORAGE_KEY,
         parseRecords: parseTasksSnapshot,

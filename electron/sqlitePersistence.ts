@@ -18,7 +18,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -40,6 +40,32 @@ export interface PersistedStorageRecord {
 
 export interface ConditionalPersistedStorageRecord extends PersistedStorageRecord {
   expectedUpdatedAt: string | null;
+}
+
+export interface SqliteTaskRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface SqliteTaskRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteTaskRecord[];
+}
+
+export interface ConditionalSqliteTaskRecord {
+  id: string;
+  value: string;
+  expectedUpdatedAt: string | null;
+}
+
+export interface ConditionalSqliteTaskSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  currentUpdatedAt: string | null;
+  message: string;
 }
 
 export interface PersistedStorageRecordSnapshot extends PersistedStorageRecord {
@@ -947,10 +973,37 @@ function migrateToVersion3(db: Database): void {
   }
 }
 
+function migrateToVersion4(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_records_updated_at
+      ON task_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_task_records_deleted_at
+      ON task_records(deleted_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 4) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      4,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
   migrateToVersion3(db);
+  migrateToVersion4(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1172,6 +1225,18 @@ interface UpdatedAtRow {
   updated_at: string;
 }
 
+interface TaskRecordRow {
+  id: string;
+  value_json: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface CountRow {
+  count: number;
+}
+
 function isPersistedRecordRow(value: unknown): value is PersistedRecordRow {
   if (!value || typeof value !== 'object') {
     return false;
@@ -1183,6 +1248,39 @@ function isPersistedRecordRow(value: unknown): value is PersistedRecordRow {
     typeof candidate.value_json === 'string' &&
     typeof candidate.updated_at === 'string'
   );
+}
+
+function isTaskRecordRow(value: unknown): value is TaskRecordRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<TaskRecordRow>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.value_json === 'string' &&
+    typeof candidate.created_at === 'string' &&
+    typeof candidate.updated_at === 'string' &&
+    (candidate.deleted_at === null || typeof candidate.deleted_at === 'string')
+  );
+}
+
+function isCountRow(value: unknown): value is CountRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<CountRow>;
+  return typeof candidate.count === 'number';
+}
+
+function isJsonObjectWithStringId(value: unknown): value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { id?: unknown };
+  return typeof candidate.id === 'string' && candidate.id.trim().length > 0;
 }
 
 function isMetadataRow(value: unknown): value is MetadataRow {
@@ -1546,6 +1644,198 @@ export function savePersistedRecordIfUnchanged(
 
       if (result.ok) {
         enqueueLocalBackup(`save:${record.key}`);
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+function mapTaskRecordRow(row: TaskRecordRow): SqliteTaskRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readAllTaskRecords(db: Database): SqliteTaskRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records ORDER BY created_at, id')
+    .all()
+    .filter(isTaskRecordRow)
+    .map(mapTaskRecordRow);
+}
+
+function maybeMigrateTasksFromPersistedRecord(db: Database): void {
+  const taskCountRow = db.prepare('SELECT COUNT(*) AS count FROM task_records').get();
+  const taskCount = isCountRow(taskCountRow) ? taskCountRow.count : 0;
+  if (taskCount > 0) {
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.tareas.tasks');
+  if (!legacyRecord) {
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithStringId(item)) {
+      continue;
+    }
+
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
+  }
+}
+
+export function loadTaskRecordsSnapshot(): SqliteTaskRecordsSnapshot {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, records: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateTasksFromPersistedRecord(db))();
+      return { status: currentStatus, records: readAllTaskRecords(db) };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [] }),
+  );
+}
+
+export function saveTaskRecordIfUnchanged(
+  record: ConditionalSqliteTaskRecord,
+): ConditionalSqliteTaskSaveResult {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateTasksFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM task_records WHERE id = ?').get(record.id);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message:
+              'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+        const createdAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+            ? (parsed as { createdAt: string }).createdAt
+            : now;
+        const updatedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+            ? (parsed as { updatedAt: string }).updatedAt
+            : now;
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO task_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM task_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message:
+                'La tarea ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE task_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM task_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message:
+                'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, updatedAt);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Tarea guardada en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:task_records');
       }
 
       return result;
