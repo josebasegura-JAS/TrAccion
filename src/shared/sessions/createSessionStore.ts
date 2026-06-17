@@ -102,8 +102,17 @@ function readSessions(config: SessionModuleConfig): ManagedSession[] {
 function filterSessionsForState(
   sessions: ManagedSession[],
   includeHistorical: boolean,
+  keepVisibleSessionIds: ReadonlySet<string> = new Set(),
 ): ManagedSession[] {
-  return includeHistorical ? sessions : sessions.filter((session) => session.status === 'open');
+  return includeHistorical
+    ? sessions
+    : sessions.filter(
+        (session) => session.status === 'open' || keepVisibleSessionIds.has(session.id),
+      );
+}
+
+function getVisibleSessionIds(sessions: ManagedSession[]): Set<string> {
+  return new Set(sessions.map((session) => session.id));
 }
 
 function getSessionId(session: ManagedSession): string {
@@ -214,7 +223,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       }),
     reloadFromStorage: () =>
       set({
-        sessions: filterSessionsForState(readSessions(config), get().hasLoadedHistoricalSessions),
+        sessions: filterSessionsForState(
+          readSessions(config),
+          get().hasLoadedHistoricalSessions,
+          getVisibleSessionIds(get().sessions),
+        ),
       }),
     create: (draft) => {
       const session = buildSessionFromDraft(config, draft);
@@ -235,7 +248,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('createSession', error));
@@ -261,7 +278,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Sesión creada.', sessionId: session.id };
       } catch (error) {
@@ -273,6 +294,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     },
     importSessions: (drafts) => {
       let estimatedImportedCount = 0;
+      const importedSessionIds = new Set<string>();
 
       void saveSharedArrayMutation<ManagedSession>({
         storageKey: config.storageKey,
@@ -303,8 +325,10 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
             const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
 
+            const importedSessionId = createSessionId(config.moduleId);
+            importedSessionIds.add(importedSessionId);
             importedSessions.push({
-              id: createSessionId(config.moduleId),
+              id: importedSessionId,
               date: draft.date,
               code: draft.code.trim(),
               title: draft.title.trim() || `${config.newSessionDefaultTitle} ${draft.date}`.trim(),
@@ -327,7 +351,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              new Set([...getVisibleSessionIds(state.sessions), ...importedSessionIds]),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('importSessions', error));
@@ -337,6 +365,7 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     importSessionsWithConcurrencyCheck: async (drafts) => {
       try {
         let importedCount = 0;
+        const importedSessionIds = new Set<string>();
         const result = await saveSharedArrayMutation<ManagedSession>({
           storageKey: config.storageKey,
           parseRecords: (storageValue) =>
@@ -366,8 +395,10 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
 
               const closedAt = draft.date ? `${draft.date}T00:00:00.000Z` : now;
 
+              const importedSessionId = createSessionId(config.moduleId);
+              importedSessionIds.add(importedSessionId);
               importedSessions.push({
-                id: createSessionId(config.moduleId),
+                id: importedSessionId,
                 date: draft.date,
                 code: draft.code.trim(),
                 title:
@@ -391,7 +422,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+            result.records,
+            state.hasLoadedHistoricalSessions,
+            new Set([...getVisibleSessionIds(state.sessions), ...importedSessionIds]),
+          ),
         }));
         return { ok: true, message: 'Sesiones importadas.', importedCount };
       } catch (error) {
@@ -418,7 +453,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('removeSession', error));
@@ -440,7 +479,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Sesión eliminada.' };
       } catch (error) {
@@ -466,7 +509,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('updateSession', error));
@@ -490,7 +537,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Sesión guardada.', session: result.updatedRecord };
       } catch (error) {
@@ -516,7 +567,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('addSessionTask', error));
@@ -539,7 +594,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Punto añadido.', session: result.updatedRecord };
       } catch (error) {
@@ -565,7 +624,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('removeSessionTask', error));
@@ -588,7 +651,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Punto quitado.', session: result.updatedRecord };
       } catch (error) {
@@ -614,7 +681,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('moveSessionTask', error));
@@ -637,7 +708,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Orden actualizado.', session: result.updatedRecord };
       } catch (error) {
@@ -686,7 +761,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
       })
         .then((result) =>
           set((state) => ({
-            sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+            sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
           })),
         )
         .catch((error) => logSessionPersistenceError('closeSession', error));
@@ -741,7 +820,11 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         });
 
         set((state) => ({
-          sessions: filterSessionsForState(result.records, state.hasLoadedHistoricalSessions),
+          sessions: filterSessionsForState(
+              result.records,
+              state.hasLoadedHistoricalSessions,
+              getVisibleSessionIds(state.sessions),
+            ),
         }));
         return { ok: true, message: 'Sesión cerrada.', session: closedSession };
       } catch (error) {
