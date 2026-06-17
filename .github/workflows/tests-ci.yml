@@ -1,56 +1,60 @@
 name: Tests CI
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-test:
-runs-on: windows-latest
+  tests:
+    name: Run tests manually
+    runs-on: windows-latest
 
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
-  - name: Setup Node
-    uses: actions/setup-node@v4
-    with:
-      node-version: 20
-  - name: Configure npm
-    shell: pwsh
-    run: |
-      npm config set cache "$env:RUNNER_TEMP\npm-cache" --global
-      npm config set fund false --global
-      npm config set audit false --global
-  - name: Clean npm cache
-    shell: pwsh
-    run: |
-      npm cache clean --force
-  - name: Install dependencies (retry)
-    shell: pwsh
-    run: |
-      $ok = $false
-      for ($i = 1; $i -le 3; $i++) {
-        Write-Host "Install attempt $i"
-        try {
-          npm install --no-audit --no-fund --legacy-peer-deps
-          if ($LASTEXITCODE -eq 0) {
-            $ok = $true
-            break
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20.20.2
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+
+      - name: Prepare npm
+        shell: pwsh
+        run: |
+          npm --version
+          node --version
+          npm config set fund false
+          npm config set audit false
+          npm config set cache "$env:RUNNER_TEMP\npm-cache"
+          npm cache clean --force
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            Write-Host "npm install attempt $i"
+            npm install --no-audit --no-fund --legacy-peer-deps
+
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+
+            npm cache clean --force
+            Start-Sleep -Seconds 10
           }
-        }
-        catch {}
-        Start-Sleep -Seconds 10
-        npm cache clean --force
-      }
-      if (-not $ok) {
-        throw "npm install failed after 3 attempts"
-      }
-  - name: Lint
-    run: npm run lint --if-present
-  - name: Unit tests
-    run: npm run test --if-present
-  - name: UI tests
-    run: npm run test:ui --if-present
-  - name: Electron tests
-    run: npm run test:electron --if-present
-  - name: Build verification
-    run: npm run build
+
+          exit 1
+
+      - name: Run lint
+        run: npm run lint --if-present
+
+      - name: Run unit tests
+        run: npm run test --if-present
+
+      - name: Run UI tests
+        run: npm run test:ui --if-present
+
+      - name: Run Electron tests
+        run: npm run test:electron --if-present
+
+      - name: Build check without EXE
+        run: npm run build
