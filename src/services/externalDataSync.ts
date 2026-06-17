@@ -12,6 +12,11 @@ import {
 const POLLING_INTERVAL_MS = 30_000;
 const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-recovered';
 
+const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
+  'traccion.v1.teletrabajo.solicitudes': 'teletrabajo',
+  'traccion.v1.teletrabajo.puestos': 'teletrabajo',
+};
+
 type ExternalDataSyncState = {
   status: 'idle' | 'checking' | 'synced' | 'applied' | 'error' | 'disabled';
   message: string;
@@ -96,6 +101,27 @@ function collectChangedDirectStores(tokenSnapshot: TraccionPersistedRecordsToken
     valueChanged(lastSeenSorteosExclusionsUpdatedAt, tokenSnapshot.sorteosExclusionsUpdatedAt)
   ) {
     changedStoreIds.add('sorteos');
+  }
+
+  return Array.from(changedStoreIds);
+}
+
+function collectChangedLegacyStores(snapshot: TraccionPersistedRecordsSnapshot): string[] | null {
+  const changedStoreIds = new Set<string>();
+
+  for (const record of snapshot.records) {
+    const storeId = LEGACY_STORAGE_STORE_IDS[record.key];
+    const localValue = window.localStorage.getItem(record.key);
+
+    if (localValue === record.value) {
+      continue;
+    }
+
+    if (!storeId) {
+      return null;
+    }
+
+    changedStoreIds.add(storeId);
   }
 
   return Array.from(changedStoreIds);
@@ -212,14 +238,18 @@ async function pollOnce(): Promise<void> {
       return;
     }
 
+    const changedLegacyStoreIds = collectChangedLegacyStores(snapshot);
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
     await flushPendingSqliteWrites();
     updateSeenTokens(snapshot);
-    reloadIntegratedStores();
+    reloadIntegratedStores(changedLegacyStoreIds ?? undefined);
     const appliedAt = new Date().toISOString();
     setState({
       status: 'applied',
-      message: 'Cambios externos aplicados.',
+      message:
+        changedLegacyStoreIds && changedLegacyStoreIds.length > 0
+          ? `Cambios externos aplicados en ${changedLegacyStoreIds.join(', ')}.`
+          : 'Cambios externos aplicados.',
       lastCheckedAt: checkedAt,
       lastAppliedAt: appliedAt,
       lastError: null,
