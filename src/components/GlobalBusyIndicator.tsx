@@ -4,7 +4,7 @@ import {
   type PersistenceFeedback,
 } from '../services/persistence';
 
-const SHOW_DELAY_MS = 350;
+const SHOW_DELAY_MS = 100;
 const MAX_OPERATION_VISIBLE_MS = 12000;
 const UNKNOWN_OPERATION_KEY = '__global__';
 
