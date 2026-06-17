@@ -640,11 +640,28 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   selectedTaskId: '',
   filters: EMPTY_TASK_FILTERS,
   load: () => {
+    if (!hasTaskSqliteRepository()) {
+      const tasks = readTasks();
+      set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
+      return;
+    }
+
     void readTasksForStore().then((tasks) => {
       set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
     });
   },
   reloadFromStorage: () => {
+    if (!hasTaskSqliteRepository()) {
+      const tasks = readTasks();
+      set((state) => ({
+        tasks,
+        selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
+          ? state.selectedTaskId
+          : firstActiveTaskId(tasks),
+      }));
+      return;
+    }
+
     void readTasksForStore().then((tasks) => {
       set((state) => ({
         tasks,
