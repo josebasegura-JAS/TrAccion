@@ -181,6 +181,12 @@ interface TraccionTaskRecordsSnapshot {
   records: TraccionTaskRecord[];
 }
 
+type TraccionTaskRecordsMode = 'all' | 'active' | 'historical';
+
+interface TraccionTaskRecordsFilter {
+  mode?: TraccionTaskRecordsMode;
+}
+
 interface TraccionConditionalTaskRecord {
   id: string;
   value: string;
@@ -254,7 +260,7 @@ interface TraccionApi {
   saveSorteosSnapshotIfUnchanged?: (
     snapshot: TraccionConditionalSorteosSnapshot,
   ) => Promise<TraccionConditionalSorteosSaveResult>;
-  loadTaskRecords?: () => Promise<TraccionTaskRecordsSnapshot>;
+  loadTaskRecords?: (filter?: TraccionTaskRecordsFilter) => Promise<TraccionTaskRecordsSnapshot>;
   saveTaskRecordIfUnchanged?: (
     record: TraccionConditionalTaskRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
