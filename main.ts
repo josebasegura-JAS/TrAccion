@@ -22,6 +22,7 @@ import {
   loadPersistedRecordsSnapshot,
   loadSorteosRecordsSnapshot,
   loadTaskRecordsSnapshot,
+  type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   migrateLocalStorageSnapshot,
   releaseRecordLock,
@@ -1156,7 +1157,13 @@ function registerIpcHandlers(): void {
     });
   });
 
-  ipcMain.handle('tasks:load-records', () => loadTaskRecordsSnapshot());
+  ipcMain.handle('tasks:load-records', (_event, payload: unknown) => {
+  const filter: SqliteTaskRecordsFilter =
+    payload && typeof payload === 'object' && 'mode' in payload
+      ? { mode: (payload as { mode?: SqliteTaskRecordsFilter['mode'] }).mode }
+      : {};
+  return loadTaskRecordsSnapshot(filter);
+});
 
   ipcMain.handle('tasks:save-record-if-unchanged', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
