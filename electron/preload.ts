@@ -53,7 +53,8 @@ contextBridge.exposeInMainWorld('traccion', {
     expectedDrawsUpdatedAt: string | null;
     expectedExclusionsUpdatedAt: string | null;
   }) => ipcRenderer.invoke('sorteos:save-snapshot-if-unchanged', snapshot),
-  loadTaskRecords: () => ipcRenderer.invoke('tasks:load-records'),
+  loadTaskRecords: (filter?: { mode?: 'all' | 'active' | 'historical' }) =>
+    ipcRenderer.invoke('tasks:load-records', filter),
   saveTaskRecordIfUnchanged: (record: {
     id: string;
     value: string;

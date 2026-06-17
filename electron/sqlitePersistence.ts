@@ -55,6 +55,10 @@ export interface SqliteTaskRecordsSnapshot {
   records: SqliteTaskRecord[];
 }
 
+export interface SqliteTaskRecordsFilter {
+  mode?: 'all' | 'active' | 'historical';
+}
+
 export interface ConditionalSqliteTaskRecord {
   id: string;
   value: string;
@@ -1759,9 +1763,17 @@ function mapTaskRecordRow(row: TaskRecordRow): SqliteTaskRecord {
   };
 }
 
-function readAllTaskRecords(db: Database): SqliteTaskRecord[] {
+function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecord[] {
+  const mode = filter.mode ?? 'all';
+  const whereClause =
+    mode === 'active'
+      ? "WHERE deleted_at IS NULL AND COALESCE(json_extract(value_json, '$.closedAt'), '') = '' AND json_extract(value_json, '$.estado') <> 'cerrada'"
+      : mode === 'historical'
+        ? "WHERE deleted_at IS NULL AND (COALESCE(json_extract(value_json, '$.closedAt'), '') <> '' OR json_extract(value_json, '$.estado') = 'cerrada')"
+        : '';
+
   return db
-    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records ORDER BY created_at, id')
+    .prepare(`SELECT id, value_json, created_at, updated_at, deleted_at FROM task_records ${whereClause} ORDER BY created_at, id`)
     .all()
     .filter(isTaskRecordRow)
     .map(mapTaskRecordRow);
@@ -1808,7 +1820,7 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
   }
 }
 
-export function loadTaskRecordsSnapshot(): SqliteTaskRecordsSnapshot {
+export function loadTaskRecordsSnapshot(filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecordsSnapshot {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -1818,7 +1830,7 @@ export function loadTaskRecordsSnapshot(): SqliteTaskRecordsSnapshot {
 
       const db = requireDatabase();
       db.transaction(() => maybeMigrateTasksFromPersistedRecord(db))();
-      return { status: currentStatus, records: readAllTaskRecords(db) };
+      return { status: currentStatus, records: readTaskRecords(db, filter) };
     },
     (nextStatus) => ({ status: nextStatus, records: [] }),
   );
