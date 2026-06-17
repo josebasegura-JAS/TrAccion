@@ -165,6 +165,32 @@ function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
   );
 }
 
+export function publishPersistenceBusy(key: string, message: string): void {
+  emitPersistenceFeedback({
+    kind: 'saving',
+    updatedAt: new Date().toISOString(),
+    key,
+    message,
+  });
+}
+
+export function clearPersistenceBusy(key: string, message = 'Operación finalizada.'): void {
+  emitPersistenceFeedback({
+    kind: 'saved',
+    updatedAt: new Date().toISOString(),
+    key,
+    message,
+  });
+}
+
+export function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 export function subscribeToPersistenceFeedback(
   listener: (feedback: PersistenceFeedback) => void,
 ): () => void {
@@ -642,6 +668,7 @@ export async function writeSharedStorageItemAsync(
     key,
     message: 'Guardando en SQLite...',
   });
+  await waitForNextPaint();
 
   try {
     const expectedUpdatedAt = await resolveExpectedUpdatedAtForWrite(key, previousValue);

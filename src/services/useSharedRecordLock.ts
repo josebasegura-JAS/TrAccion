@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from './persistence';
 import { markSharedEditingActive, markSharedEditingInactive } from './sharedEditingActivity';
 
 type SharedRecordLockStatus = 'idle' | 'acquired' | 'locked' | 'error';
@@ -19,6 +20,8 @@ interface SharedRecordLockState {
 const HEARTBEAT_MS = 10 * 1000;
 const RETRY_AFTER_TEMPORARY_LOCK_MS = 750;
 const TEMPORARY_LOCK_NOTICE_DELAY_MS = 2_000;
+const LOCK_BUSY_MESSAGE = 'Abriendo registro…';
+const TEMPORARY_LOCK_BUSY_MESSAGE = 'Base ocupada, reintentando…';
 
 const idleState: SharedRecordLockState = {
   status: 'idle',
@@ -133,6 +136,7 @@ export function useSharedRecordLock({
     let noticeTimeoutId: number | null = null;
     const traccionApi = window.traccion;
     const activeLockPayload: TraccionRecordLockPayload = lockPayload;
+    const lockBusyKey = `record-lock:${activeLockPayload.module}:${activeLockPayload.recordId}`;
 
     const clearRetry = (): void => {
       if (retryTimeoutId !== null) {
@@ -154,6 +158,7 @@ export function useSharedRecordLock({
     };
 
     if (!traccionApi?.acquireRecordLock) {
+      clearPersistenceBusy(lockBusyKey);
       setState({
         status: 'error',
         lockedBy: null,
@@ -188,6 +193,7 @@ export function useSharedRecordLock({
     };
 
     const waitForTemporarySqliteLock = (): void => {
+      publishPersistenceBusy(lockBusyKey, TEMPORARY_LOCK_BUSY_MESSAGE);
       setState((current) => (current.message ? current : hiddenWaitingForSharedDatabaseState()));
       scheduleTemporaryLockNotice();
       scheduleAcquireRetry();
@@ -204,6 +210,7 @@ export function useSharedRecordLock({
       }
 
       clearTemporaryLockTimers();
+      clearPersistenceBusy(lockBusyKey);
       setAcquired(result.status === 'acquired');
       setState(stateFromResult(result));
     };
@@ -219,6 +226,7 @@ export function useSharedRecordLock({
         return;
       }
 
+      clearPersistenceBusy(lockBusyKey);
       setState({
         status: 'error',
         lockedBy: null,
@@ -233,7 +241,18 @@ export function useSharedRecordLock({
         return;
       }
 
-      traccionApi.acquireRecordLock(activeLockPayload).then(applyResult).catch(handleAcquireError);
+      publishPersistenceBusy(lockBusyKey, LOCK_BUSY_MESSAGE);
+      void waitForNextPaint()
+        .then(() => traccionApi.acquireRecordLock?.(activeLockPayload))
+        .then((result) => {
+          if (!result) {
+            handleAcquireError(new Error('IPC de bloqueo compartido no disponible.'));
+            return;
+          }
+
+          applyResult(result);
+        })
+        .catch(handleAcquireError);
     }
 
     acquireLock();
@@ -289,6 +308,7 @@ export function useSharedRecordLock({
     return () => {
       cancelled = true;
       clearTemporaryLockTimers();
+      clearPersistenceBusy(lockBusyKey);
       window.clearInterval(heartbeatId);
       if (acquired) {
         setAcquired(false);
