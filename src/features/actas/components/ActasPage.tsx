@@ -444,7 +444,9 @@ export function ActasPage() {
   const {
     actas,
     actaTypes,
+    hasLoadedHistoricalActas,
     load,
+    loadHistoricalActas,
     createWithConcurrencyCheck,
     updateWithConcurrencyCheck,
     removeWithConcurrencyCheck,
@@ -500,6 +502,19 @@ export function ActasPage() {
     load();
     loadConfiguracion();
   }, [load, loadConfiguracion]);
+
+  useEffect(() => {
+    if (hasLoadedHistoricalActas) {
+      return;
+    }
+
+    const needsHistoricalActas = Boolean(
+      search.trim() || yearFilter || Object.values(openHistoryYears).some(Boolean),
+    );
+    if (needsHistoricalActas) {
+      loadHistoricalActas();
+    }
+  }, [hasLoadedHistoricalActas, loadHistoricalActas, openHistoryYears, search, yearFilter]);
 
   useEffect(() => {
     setOutlookTemplate(loadActasOutlookTemplate());
@@ -666,86 +681,91 @@ export function ActasPage() {
     }
   };
 
-  const createActaOutlookDraft = useCallback(async (acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>) => {
-    setOutlookDraftStatus('');
-    setOutlookDraftStatusIsError(false);
+  const createActaOutlookDraft = useCallback(
+    async (acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>) => {
+      setOutlookDraftStatus('');
+      setOutlookDraftStatusIsError(false);
 
-    const storedTemplate = loadActasOutlookTemplate();
-    const effectiveTemplate = isMeaningfulHtml(outlookTemplate.bodyHtml)
-      ? outlookTemplate
-      : storedTemplate;
-    const subjectTemplate = effectiveTemplate.subject.trim() || buildDefaultActaOutlookSubject(acta);
-    const subject = replaceActaTemplateMarkers(subjectTemplate, acta, 'plain').trim();
-    const html = replaceActaTemplateMarkers(effectiveTemplate.bodyHtml, acta, 'html').trim();
+      const storedTemplate = loadActasOutlookTemplate();
+      const effectiveTemplate = isMeaningfulHtml(outlookTemplate.bodyHtml)
+        ? outlookTemplate
+        : storedTemplate;
+      const subjectTemplate =
+        effectiveTemplate.subject.trim() || buildDefaultActaOutlookSubject(acta);
+      const subject = replaceActaTemplateMarkers(subjectTemplate, acta, 'plain').trim();
+      const html = replaceActaTemplateMarkers(effectiveTemplate.bodyHtml, acta, 'html').trim();
 
-    if (!isMeaningfulHtml(html)) {
-      setOutlookDraftStatus('Configura primero el cuerpo de la plantilla Outlook de Actas.');
-      setOutlookDraftStatusIsError(true);
-      setIsOutlookTemplateOpen(true);
-      return;
-    }
+      if (!isMeaningfulHtml(html)) {
+        setOutlookDraftStatus('Configura primero el cuerpo de la plantilla Outlook de Actas.');
+        setOutlookDraftStatusIsError(true);
+        setIsOutlookTemplateOpen(true);
+        return;
+      }
 
-    const api = window.traccion?.createOutlookDraft ?? window.rrllOutlook?.createDraft;
-    if (!api) {
-      setOutlookDraftStatus('Outlook no está disponible en este entorno.');
-      setOutlookDraftStatusIsError(true);
-      return;
-    }
+      const api = window.traccion?.createOutlookDraft ?? window.rrllOutlook?.createDraft;
+      if (!api) {
+        setOutlookDraftStatus('Outlook no está disponible en este entorno.');
+        setOutlookDraftStatusIsError(true);
+        return;
+      }
 
-    try {
-      const result = await api({ subject, html, to: [], cc: [] });
-      setOutlookDraftStatus(
-        result.message ||
-          (result.ok ? 'Borrador Outlook abierto.' : 'No se ha podido abrir Outlook.'),
-      );
-      setOutlookDraftStatusIsError(!result.ok);
-    } catch (error) {
-      setOutlookDraftStatus(
-        error instanceof Error ? error.message : 'No se ha podido abrir Outlook.',
-      );
-      setOutlookDraftStatusIsError(true);
-    }
-  }, [outlookTemplate]);
+      try {
+        const result = await api({ subject, html, to: [], cc: [] });
+        setOutlookDraftStatus(
+          result.message ||
+            (result.ok ? 'Borrador Outlook abierto.' : 'No se ha podido abrir Outlook.'),
+        );
+        setOutlookDraftStatusIsError(!result.ok);
+      } catch (error) {
+        setOutlookDraftStatus(
+          error instanceof Error ? error.message : 'No se ha podido abrir Outlook.',
+        );
+        setOutlookDraftStatusIsError(true);
+      }
+    },
+    [outlookTemplate],
+  );
 
-  const createActaOutlookCalendar = useCallback(async (
-    acta: Pick<Acta, 'titulo' | 'fechaLimite'>,
-  ) => {
-    setOutlookDraftStatus('');
-    setOutlookDraftStatusIsError(false);
+  const createActaOutlookCalendar = useCallback(
+    async (acta: Pick<Acta, 'titulo' | 'fechaLimite'>) => {
+      setOutlookDraftStatus('');
+      setOutlookDraftStatusIsError(false);
 
-    if (!acta.fechaLimite) {
-      setOutlookDraftStatus('El acta no tiene fecha límite para crear la cita de calendario.');
-      setOutlookDraftStatusIsError(true);
-      return;
-    }
+      if (!acta.fechaLimite) {
+        setOutlookDraftStatus('El acta no tiene fecha límite para crear la cita de calendario.');
+        setOutlookDraftStatusIsError(true);
+        return;
+      }
 
-    const api = window.traccion?.createOutlookCalendar ?? window.rrllOutlook?.createCalendar;
-    if (!api) {
-      setOutlookDraftStatus('Outlook no está disponible en este entorno.');
-      setOutlookDraftStatusIsError(true);
-      return;
-    }
+      const api = window.traccion?.createOutlookCalendar ?? window.rrllOutlook?.createCalendar;
+      if (!api) {
+        setOutlookDraftStatus('Outlook no está disponible en este entorno.');
+        setOutlookDraftStatusIsError(true);
+        return;
+      }
 
-    try {
-      const result = await api({
-        subject: `FIN ALEGACIONES ${acta.titulo}`.trim(),
-        date: acta.fechaLimite,
-        startTime: '09:00',
-        endTime: '09:30',
-        requiredAttendees: ['jasegura@metrobilbao.eus', 'acabrera@metrobilbao.eus'],
-      });
-      setOutlookDraftStatus(
-        result.message ||
-          (result.ok ? 'Cita de Outlook abierta.' : 'No se ha podido abrir la cita de Outlook.'),
-      );
-      setOutlookDraftStatusIsError(!result.ok);
-    } catch (error) {
-      setOutlookDraftStatus(
-        error instanceof Error ? error.message : 'No se ha podido abrir la cita de Outlook.',
-      );
-      setOutlookDraftStatusIsError(true);
-    }
-  }, []);
+      try {
+        const result = await api({
+          subject: `FIN ALEGACIONES ${acta.titulo}`.trim(),
+          date: acta.fechaLimite,
+          startTime: '09:00',
+          endTime: '09:30',
+          requiredAttendees: ['jasegura@metrobilbao.eus', 'acabrera@metrobilbao.eus'],
+        });
+        setOutlookDraftStatus(
+          result.message ||
+            (result.ok ? 'Cita de Outlook abierta.' : 'No se ha podido abrir la cita de Outlook.'),
+        );
+        setOutlookDraftStatusIsError(!result.ok);
+      } catch (error) {
+        setOutlookDraftStatus(
+          error instanceof Error ? error.message : 'No se ha podido abrir la cita de Outlook.',
+        );
+        setOutlookDraftStatusIsError(true);
+      }
+    },
+    [],
+  );
 
   const columns = useMemo<Array<DataTableColumn<Acta, ActaColumnId>>>(
     () => [
@@ -1197,7 +1217,12 @@ export function ActasPage() {
         <h3 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
           Histórico de actas
         </h3>
-        {closedActasByYear.length === 0 && (
+        {!hasLoadedHistoricalActas && !search.trim() && !yearFilter && (
+          <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
+            El histórico se cargará al buscar, filtrar por año o abrir un ejercicio.
+          </p>
+        )}
+        {closedActasByYear.length === 0 && hasLoadedHistoricalActas && (
           <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
             No hay actas cerradas con los filtros actuales.
           </p>
@@ -1214,7 +1239,10 @@ export function ActasPage() {
                 if (search || yearFilter) {
                   return;
                 }
-                setOpenHistoryYears((current) => ({ ...current, [year]: event.currentTarget.open }));
+                setOpenHistoryYears((current) => ({
+                  ...current,
+                  [year]: event.currentTarget.open,
+                }));
               }}
               open={isYearOpen}
             >
@@ -1400,7 +1428,9 @@ export function ActasPage() {
                           <DeleteConfirmDialog
                             label={`el tipo de acta «${type.nombre}»`}
                             onCancel={() => setPendingDeleteActaTypeId(null)}
-                            onConfirm={() => { void deleteActaType(type.id); }}
+                            onConfirm={() => {
+                              void deleteActaType(type.id);
+                            }}
                           />
                         </div>
                       ) : (
