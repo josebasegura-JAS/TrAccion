@@ -913,7 +913,7 @@ let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
 
 function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcOperation<T>): Promise<Awaited<T>> {
   const startedAt = Date.now();
-  const queuedOperation = sqliteIpcQueue.then(async () => {
+  const queuedOperation: Promise<Awaited<T>> = sqliteIpcQueue.then(async () => {
     const queuedMs = Date.now() - startedAt;
     if (queuedMs > 100) {
       console.warn(`[sqlite-ipc-queue] ${operationName} esperó ${queuedMs} ms en cola.`);
@@ -1031,8 +1031,9 @@ function registerIpcHandlers(): void {
       return { status: getSqliteStatus(), record: null };
     }
 
+    const key = candidate.key;
     return enqueueSqliteIpc('database:get-persisted-record', () =>
-      getPersistedRecordSnapshot(candidate.key),
+      getPersistedRecordSnapshot(key),
     );
   });
 
@@ -1077,8 +1078,10 @@ function registerIpcHandlers(): void {
       return getSqliteStatus();
     }
 
+    const key = candidate.key;
+    const value = candidate.value;
     return enqueueSqliteIpc('database:save-local-storage-record', () =>
-      savePersistedRecord({ key: candidate.key, value: candidate.value }),
+      savePersistedRecord({ key, value }),
     );
   });
 
@@ -1106,11 +1109,14 @@ function registerIpcHandlers(): void {
       };
     }
 
+    const key = candidate.key;
+    const value = candidate.value;
+    const expectedUpdatedAt = candidate.expectedUpdatedAt;
     return enqueueSqliteIpc('database:save-local-storage-record-if-unchanged', () =>
       savePersistedRecordIfUnchanged({
-        key: candidate.key,
-        value: candidate.value,
-        expectedUpdatedAt: candidate.expectedUpdatedAt,
+        key,
+        value,
+        expectedUpdatedAt,
       }),
     );
   });
@@ -1189,12 +1195,16 @@ function registerIpcHandlers(): void {
       };
     }
 
+    const draws = candidate.draws;
+    const exclusions = candidate.exclusions;
+    const expectedDrawsUpdatedAt = candidate.expectedDrawsUpdatedAt;
+    const expectedExclusionsUpdatedAt = candidate.expectedExclusionsUpdatedAt;
     return enqueueSqliteIpc('sorteos:save-snapshot-if-unchanged', () =>
       saveSorteosSnapshotIfUnchanged({
-        draws: candidate.draws,
-        exclusions: candidate.exclusions,
-        expectedDrawsUpdatedAt: candidate.expectedDrawsUpdatedAt,
-        expectedExclusionsUpdatedAt: candidate.expectedExclusionsUpdatedAt,
+        draws,
+        exclusions,
+        expectedDrawsUpdatedAt,
+        expectedExclusionsUpdatedAt,
       }),
     );
   });
@@ -1225,11 +1235,14 @@ function registerIpcHandlers(): void {
       };
     }
 
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = candidate.expectedUpdatedAt;
     return enqueueSqliteIpc('tasks:save-record-if-unchanged', () =>
       saveTaskRecordIfUnchanged({
-        id: candidate.id,
-        value: candidate.value,
-        expectedUpdatedAt: candidate.expectedUpdatedAt,
+        id,
+        value,
+        expectedUpdatedAt,
       }),
     );
   });
