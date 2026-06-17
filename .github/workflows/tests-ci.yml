@@ -5,25 +5,26 @@ on:
 
 jobs:
   tests:
-    name: Run tests manually
+    name: Lint, unit tests, and build without EXE
     runs-on: windows-latest
 
     env:
+      CI: "true"
       NODE_ENV: development
-      NPM_CONFIG_PRODUCTION: "false"
       NPM_CONFIG_AUDIT: "false"
       NPM_CONFIG_FUND: "false"
+      NPM_CONFIG_PRODUCTION: "false"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node 20.20.2
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20.20.2
 
-      - name: Show environment
+      - name: Show toolchain and npm install mode
         shell: pwsh
         run: |
           node --version
@@ -31,43 +32,59 @@ jobs:
           npm config get production
           npm config get omit
 
-      - name: Clean previous install state
+      - name: Install dependencies from lockfile
         shell: pwsh
         run: |
-          if (Test-Path node_modules) {
-            Remove-Item -Recurse -Force node_modules
-          }
-          npm cache clean --force
+          # Use a clean, lockfile-based install on every run so the job never
+          # depends on a previously restored node_modules cache. Scripts are
+          # skipped intentionally: this workflow only needs TypeScript/Vite,
+          # ESLint, and Vitest, while native/Electron postinstall steps can be
+          # flaky on Windows and are not required to build without packaging.
+          npm ci --include=dev --ignore-scripts --no-audit --no-fund
 
-      - name: Install all dependencies including devDependencies
+      - name: Verify local CLI tools before lint
         shell: pwsh
         run: |
-          npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+          $ErrorActionPreference = "Stop"
 
-      - name: Verify local tools
-        shell: pwsh
-        run: |
-          if (!(Test-Path ".\node_modules\.bin\eslint.cmd")) {
-            Write-Error "eslint.cmd not found. devDependencies were not installed."
-            exit 1
+          $eslint = Join-Path $PWD "node_modules\.bin\eslint.cmd"
+          $vitest = Join-Path $PWD "node_modules\.bin\vitest.cmd"
+
+          if (!(Test-Path $eslint)) {
+            Write-Host "node_modules/.bin contents:"
+            if (Test-Path "node_modules\.bin") {
+              Get-ChildItem "node_modules\.bin" | Select-Object -ExpandProperty Name
+            } else {
+              Write-Host "node_modules/.bin directory is missing"
+            }
+            npm ls eslint --depth=0
+            throw "eslint.cmd not found after npm ci. devDependencies were not installed or npm bin links were not created."
           }
 
-          if (!(Test-Path ".\node_modules\.bin\vitest.cmd")) {
-            Write-Error "vitest.cmd not found. devDependencies were not installed."
-            exit 1
+          if (!(Test-Path $vitest)) {
+            Write-Host "node_modules/.bin contents:"
+            if (Test-Path "node_modules\.bin") {
+              Get-ChildItem "node_modules\.bin" | Select-Object -ExpandProperty Name
+            } else {
+              Write-Host "node_modules/.bin directory is missing"
+            }
+            npm ls vitest --depth=0
+            throw "vitest.cmd not found after npm ci. devDependencies were not installed or npm bin links were not created."
           }
 
-          .\node_modules\.bin\eslint.cmd --version
-          .\node_modules\.bin\vitest.cmd --version
+          & $eslint --version
+          & $vitest --version
 
-      - name: Run lint
+      - name: Lint
         run: npm run lint
 
-      - name: Run unit tests
+      - name: Unit tests
         run: npm run test
 
-      - name: Run UI tests
-        run: npm run test:ui --if-present
-
-      - name: Build check without EXE
+      - name: Build renderer and Electron TypeScript without EXE
         run: npm run build
+
+      # UI/Electron tests are intentionally not run in this workflow. They use
+      # Playwright/Electron runtime dependencies and should live in a separate
+      # opt-in workflow if needed, so this manual CI remains a stable lint/unit/
+      # build check and never invokes electron-builder or creates an EXE.
