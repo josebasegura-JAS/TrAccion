@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from 'react';
-import './syncableStoreRegistrations';
 import { reloadRegisteredSyncableStores } from './syncableStoreRegistry';
 import { hasActiveSharedEditing, subscribeSharedEditingActivity } from './sharedEditingActivity';
 import {
@@ -36,6 +35,7 @@ let state: ExternalDataSyncState = {
   lastError: null,
 };
 let timerId: number | null = null;
+let syncableStoreRegistrationsPromise: Promise<unknown> | null = null;
 let isPolling = false;
 let lastSeenRefreshToken: string | null = null;
 let lastSeenPersistedRecordsUpdatedAt: string | null = null;
@@ -71,6 +71,12 @@ function getSnapshot(): ExternalDataSyncState {
 function subscribe(listener: ExternalDataSyncListener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+
+function ensureSyncableStoresRegistered(): Promise<unknown> {
+  syncableStoreRegistrationsPromise ??= import('./syncableStoreRegistrations');
+  return syncableStoreRegistrationsPromise;
 }
 
 function reloadIntegratedStores(storeIds?: string[]): void {
@@ -281,6 +287,10 @@ export function startExternalDataSyncPolling(): void {
   if (typeof window === 'undefined' || timerId !== null) {
     return;
   }
+
+  void ensureSyncableStoresRegistered().catch((error) => {
+    console.error('No se han podido registrar los stores sincronizables.', error);
+  });
 
   const metadata = readHydrationMetadata();
   lastSeenRefreshToken = metadata?.refreshToken ?? null;
