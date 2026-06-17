@@ -1,6 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { DashboardCards } from './components/DashboardCards';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -18,6 +17,9 @@ import {
   type PersistenceFeedback,
 } from './services/persistence';
 
+const DashboardCards = lazy(() =>
+  import('./components/DashboardCards').then((module) => ({ default: module.DashboardCards })),
+);
 const AjustesPage = lazy(() =>
   import('./components/AjustesPage').then((module) => ({ default: module.AjustesPage })),
 );
@@ -301,9 +303,13 @@ export function App() {
   useEffect(() => {
     bootstrapSqlitePersistence();
     startDatabaseConnectivityIssueListener();
-    startExternalDataSyncPolling();
+
+    const syncTimer = window.setTimeout(() => {
+      startExternalDataSyncPolling();
+    }, 1_500);
 
     return () => {
+      window.clearTimeout(syncTimer);
       stopExternalDataSyncPolling();
       stopDatabaseConnectivityIssueListener();
     };
@@ -346,10 +352,10 @@ export function App() {
           <PersistenceErrorBanner />
           <GlobalBusyIndicator />
           <ModuleErrorBoundary activeView={activeView}>
-            {activeView === 'dashboard' && (
-              <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
-            )}
             <Suspense fallback={<ModuleLoading activeView={activeView} />}>
+              {activeView === 'dashboard' && (
+                <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
+              )}
               {activeView === 'plantilla' && <PlantillaPage />}
             {activeView === 'tareas' && (
               <TareasPage
