@@ -6,6 +6,7 @@ import {
   applyPersistedRecordsSnapshotToLocalStorage,
   flushPendingSqliteWrites,
   readHydrationMetadata,
+  subscribeToPersistenceFeedback,
 } from './persistence';
 
 const POLLING_INTERVAL_MS = 30_000;
@@ -33,6 +34,17 @@ let timerId: number | null = null;
 let isPolling = false;
 let lastSeenRefreshToken: string | null = null;
 let unsubscribeSharedEditingActivity: (() => void) | null = null;
+let unsubscribePersistenceFeedback: (() => void) | null = null;
+let persistenceWriteInProgress = false;
+let postponePollingUntil = 0;
+
+function postponePolling(ms = 1_500): void {
+  postponePollingUntil = Math.max(postponePollingUntil, Date.now() + ms);
+}
+
+function shouldPostponePollingForInteractiveWork(): boolean {
+  return hasActiveSharedEditing() || persistenceWriteInProgress || Date.now() < postponePollingUntil;
+}
 
 function emit(): void {
   listeners.forEach((listener) => listener());
@@ -84,8 +96,18 @@ async function pollOnce(): Promise<void> {
     return;
   }
 
-  isPolling = true;
   const checkedAt = new Date().toISOString();
+  if (shouldPostponePollingForInteractiveWork()) {
+    setState({
+      status: 'synced',
+      message: 'Sincronización aplazada mientras hay edición o guardado activo.',
+      lastCheckedAt: checkedAt,
+      lastError: null,
+    });
+    return;
+  }
+
+  isPolling = true;
   setState({ status: 'checking', message: 'Comprobando cambios compartidos…', lastCheckedAt: checkedAt });
 
   try {
@@ -192,6 +214,16 @@ export function startExternalDataSyncPolling(): void {
   }, POLLING_INTERVAL_MS);
   window.addEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
   unsubscribeSharedEditingActivity = subscribeSharedEditingActivity(handleSharedEditingActivityChanged);
+  unsubscribePersistenceFeedback = subscribeToPersistenceFeedback((feedback) => {
+    if (feedback.kind === 'saving') {
+      persistenceWriteInProgress = true;
+      postponePolling(2_000);
+      return;
+    }
+
+    persistenceWriteInProgress = false;
+    postponePolling(1_000);
+  });
 }
 
 export function stopExternalDataSyncPolling(): void {
@@ -204,6 +236,10 @@ export function stopExternalDataSyncPolling(): void {
   window.removeEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
   unsubscribeSharedEditingActivity?.();
   unsubscribeSharedEditingActivity = null;
+  unsubscribePersistenceFeedback?.();
+  unsubscribePersistenceFeedback = null;
+  persistenceWriteInProgress = false;
+  postponePollingUntil = 0;
 }
 
 export function useExternalDataSyncStatus(): ExternalDataSyncState {

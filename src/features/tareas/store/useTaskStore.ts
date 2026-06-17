@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
-import { addAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
+import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   CLOSED_TASK_PHASE,
   DEFAULT_TASK_PHASE,
@@ -73,7 +73,7 @@ function registerTaskUpdateAudit(previousTask: Task, draft: TaskDraft): void {
     return;
   }
 
-  addAuditEvent({
+  enqueueAuditEvent({
     module: 'tareas',
     entityId: previousTask.id,
     action: changes.some((change) => change.field === 'estado') ? 'status_changed' : 'updated',
@@ -587,7 +587,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         deletedAt: null,
         closedAt: isTaskClosed(draft) ? now : null,
       };
-      addAuditEvent({
+      enqueueAuditEvent({
         module: 'tareas',
         entityId: task.id,
         action: 'created',
@@ -627,7 +627,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           'La tarea ya existe en la base compartida. Recarga antes de continuar.',
       });
 
-      addAuditEvent({
+      enqueueAuditEvent({
         module: 'tareas',
         entityId: newRecord.id,
         action: 'created',
@@ -757,7 +757,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           return task;
         }
 
-        addAuditEvent({
+        enqueueAuditEvent({
           module: 'tareas',
           entityId: task.id,
           action: 'deleted',
@@ -783,7 +783,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
           return task;
         }
 
-        addAuditEvent({
+        enqueueAuditEvent({
           module: 'tareas',
           entityId: task.id,
           action: 'status_changed',
@@ -822,7 +822,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
               return task;
             }
 
-            addAuditEvent({
+            enqueueAuditEvent({
               module: 'tareas',
               entityId: task.id,
               action: 'status_changed',

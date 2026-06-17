@@ -89,6 +89,23 @@ export function addAuditEvent(event: Omit<AuditEvent, 'id' | 'user' | 'createdAt
   persistAuditEvents([nextEvent, ...readAuditEvents()]);
 }
 
+export function enqueueAuditEvent(event: Omit<AuditEvent, 'id' | 'user' | 'createdAt'>): void {
+  const run = () => {
+    try {
+      addAuditEvent(event);
+    } catch (error) {
+      console.warn('No se ha podido registrar la auditoría en segundo plano.', error);
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.setTimeout(run, 0);
+    return;
+  }
+
+  setTimeout(run, 0);
+}
+
 export function getAuditEventsForRecord(module: AuditModule, entityId: string): AuditEvent[] {
   return readAuditEvents()
     .filter((event) => event.module === module && event.entityId === entityId)
