@@ -17,6 +17,9 @@ import {
   type PersistenceFeedback,
 } from './services/persistence';
 
+const DashboardCards = lazy(() =>
+  import('./components/DashboardCards').then((module) => ({ default: module.DashboardCards })),
+);
 const AjustesPage = lazy(() =>
   import('./components/AjustesPage').then((module) => ({ default: module.AjustesPage })),
 );
@@ -68,10 +71,6 @@ const TicketRestaurantePage = lazy(() =>
     default: module.TicketRestaurantePage,
   })),
 );
-const DashboardCards = lazy(() =>
-  import('./components/DashboardCards').then((module) => ({ default: module.DashboardCards })),
-);
-
 const VinculogramaPage = lazy(() =>
   import('./features/vinculograma/components/VinculogramaPage').then((module) => ({
     default: module.VinculogramaPage,
@@ -304,7 +303,10 @@ export function App() {
   useEffect(() => {
     bootstrapSqlitePersistence();
     startDatabaseConnectivityIssueListener();
-    const syncTimer = window.setTimeout(() => startExternalDataSyncPolling(), 1500);
+
+    const syncTimer = window.setTimeout(() => {
+      startExternalDataSyncPolling();
+    }, 1_500);
 
     return () => {
       window.clearTimeout(syncTimer);
@@ -350,10 +352,10 @@ export function App() {
           <PersistenceErrorBanner />
           <GlobalBusyIndicator />
           <ModuleErrorBoundary activeView={activeView}>
-            {activeView === 'dashboard' && (
-              <Suspense fallback={<div className="p-4 text-sm text-slate-500">Cargando dashboard...</div>}><DashboardCards onOpenRecord={handleDashboardOpenRecord} /></Suspense>
-            )}
             <Suspense fallback={<ModuleLoading activeView={activeView} />}>
+              {activeView === 'dashboard' && (
+                <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
+              )}
               {activeView === 'plantilla' && <PlantillaPage />}
             {activeView === 'tareas' && (
               <TareasPage
