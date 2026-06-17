@@ -35,7 +35,11 @@ import {
 } from './session';
 
 const sessionExportColumns: ExportColumn<ManagedSession>[] = [
-  { key: 'status', header: 'Estado', value: (session) => (session.status === 'closed' ? 'Cerrada' : 'Abierta') },
+  {
+    key: 'status',
+    header: 'Estado',
+    value: (session) => (session.status === 'closed' ? 'Cerrada' : 'Abierta'),
+  },
   { key: 'code', header: 'Código', value: (session) => session.code },
   { key: 'date', header: 'Fecha', value: (session) => session.date || null },
   { key: 'title', header: 'Título', value: (session) => session.title },
@@ -75,7 +79,6 @@ interface SessionManagementPageProps {
   helpSections?: ModuleHelpSection[];
 }
 
-
 function sortOpenSessions(sessions: ManagedSession[]): ManagedSession[] {
   return [...sessions].sort(
     (first, second) =>
@@ -96,7 +99,11 @@ function normalizeSessionSearch(value: string): string {
     .trim();
 }
 
-function getSessionSearchHaystack(session: ManagedSession, tasksById: Map<string, Task>, config: SessionModuleConfig): string {
+function getSessionSearchHaystack(
+  session: ManagedSession,
+  tasksById: Map<string, Task>,
+  config: SessionModuleConfig,
+): string {
   const taskValues = session.items.flatMap((taskId) => {
     const task = tasksById.get(taskId);
     if (!task) {
@@ -120,20 +127,22 @@ function getSessionSearchHaystack(session: ManagedSession, tasksById: Map<string
     ];
   });
 
-  return normalizeSessionSearch([
-    config.title,
-    config.shortTitle,
-    session.id,
-    session.code,
-    session.date,
-    session.title,
-    session.notes,
-    session.status,
-    session.closedAt ?? '',
-    ...session.treatedTaskIds,
-    ...session.untreatedTaskIds,
-    ...taskValues,
-  ].join(' '));
+  return normalizeSessionSearch(
+    [
+      config.title,
+      config.shortTitle,
+      session.id,
+      session.code,
+      session.date,
+      session.title,
+      session.notes,
+      session.status,
+      session.closedAt ?? '',
+      ...session.treatedTaskIds,
+      ...session.untreatedTaskIds,
+      ...taskValues,
+    ].join(' '),
+  );
 }
 
 function matchesSessionSearch(
@@ -156,7 +165,9 @@ function getSessionHistoryYear(session: ManagedSession): string {
   return year ?? 'Sin año';
 }
 
-function groupClosedSessionsByYear(sessions: ManagedSession[]): Array<{ year: string; sessions: ManagedSession[] }> {
+function groupClosedSessionsByYear(
+  sessions: ManagedSession[],
+): Array<{ year: string; sessions: ManagedSession[] }> {
   const groups = new Map<string, ManagedSession[]>();
 
   sessions.forEach((session) => {
@@ -165,7 +176,9 @@ function groupClosedSessionsByYear(sessions: ManagedSession[]): Array<{ year: st
   });
 
   return Array.from(groups.entries())
-    .sort(([firstYear], [secondYear]) => secondYear.localeCompare(firstYear, 'es', { numeric: true }))
+    .sort(([firstYear], [secondYear]) =>
+      secondYear.localeCompare(firstYear, 'es', { numeric: true }),
+    )
     .map(([year, yearSessions]) => ({
       year,
       sessions: yearSessions.sort(
@@ -222,7 +235,10 @@ function getSessionPointStatus(session: ManagedSession, taskId: string): string 
   return 'Sin clasificar';
 }
 
-function buildSessionPointRows(session: ManagedSession, tasksById: Map<string, Task>): SessionPointRow[] {
+function buildSessionPointRows(
+  session: ManagedSession,
+  tasksById: Map<string, Task>,
+): SessionPointRow[] {
   return session.items.map((taskId, index) => {
     const task = tasksById.get(taskId);
 
@@ -275,7 +291,9 @@ export function SessionManagementPage({
 }: SessionManagementPageProps) {
   const {
     sessions,
+    hasLoadedHistoricalSessions,
     load,
+    loadHistoricalSessions,
     createWithConcurrencyCheck,
     importSessionsWithConcurrencyCheck,
     removeWithConcurrencyCheck,
@@ -285,7 +303,12 @@ export function SessionManagementPage({
     moveTaskWithConcurrencyCheck,
     closeSessionWithConcurrencyCheck,
   } = useSessionStore();
-  const { tasks, load: loadTasks, closeTasksFromSessionWithConcurrencyCheck, createManyFromImport } = useTaskStore();
+  const {
+    tasks,
+    load: loadTasks,
+    closeTasksFromSessionWithConcurrencyCheck,
+    createManyFromImport,
+  } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -307,6 +330,16 @@ export function SessionManagementPage({
     loadTasks();
   }, [load, loadTasks]);
 
+  useEffect(() => {
+    if (hasLoadedHistoricalSessions) {
+      return;
+    }
+
+    if (sessionSearch.trim().length >= 2 || openPanel === 'history') {
+      loadHistoricalSessions();
+    }
+  }, [hasLoadedHistoricalSessions, loadHistoricalSessions, openPanel, sessionSearch]);
+
   const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const openSessions = useMemo(
     () => sortOpenSessions(sessions.filter((session) => session.status === 'open')),
@@ -319,18 +352,27 @@ export function SessionManagementPage({
   const hasSessionSearch = sessionSearch.trim().length >= 2;
   const effectiveSessionSearch = hasSessionSearch ? sessionSearch : '';
   const filteredOpenSessions = useMemo(
-    () => openSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch)),
+    () =>
+      openSessions.filter((session) =>
+        matchesSessionSearch(session, tasksById, config, effectiveSessionSearch),
+      ),
     [config, effectiveSessionSearch, openSessions, tasksById],
   );
   const shouldRenderClosedSessions = hasSessionSearch || openPanel === 'history';
   const filteredClosedSessions = useMemo(
     () =>
       shouldRenderClosedSessions
-        ? closedSessions.filter((session) => matchesSessionSearch(session, tasksById, config, effectiveSessionSearch))
+        ? closedSessions.filter((session) =>
+            matchesSessionSearch(session, tasksById, config, effectiveSessionSearch),
+          )
         : [],
     [closedSessions, config, effectiveSessionSearch, shouldRenderClosedSessions, tasksById],
   );
-  const closedSessionCount = shouldRenderClosedSessions ? filteredClosedSessions.length : closedSessions.length;
+  const closedSessionCount = shouldRenderClosedSessions
+    ? filteredClosedSessions.length
+    : hasLoadedHistoricalSessions
+      ? closedSessions.length
+      : 0;
   const closedSessionGroups = useMemo(
     () => (shouldRenderClosedSessions ? groupClosedSessionsByYear(filteredClosedSessions) : []),
     [filteredClosedSessions, shouldRenderClosedSessions],
@@ -343,13 +385,16 @@ export function SessionManagementPage({
     [config.taskPhase, tasks],
   );
   const closingSession = closingSessionId
-    ? sessions.find((session) => session.id === closingSessionId) ?? null
+    ? (sessions.find((session) => session.id === closingSessionId) ?? null)
     : null;
   const editingSession = editingSessionId
-    ? sessions.find((session) => session.id === editingSessionId) ?? null
+    ? (sessions.find((session) => session.id === editingSessionId) ?? null)
     : null;
   const canEditSessions = config.moduleId === 'comite';
-  const sessionFilterLabel = buildFilterLabel([['Módulo', config.title], ['Búsqueda', sessionSearch]]);
+  const sessionFilterLabel = buildFilterLabel([
+    ['Módulo', config.title],
+    ['Búsqueda', sessionSearch],
+  ]);
   const moduleImportKind = config.moduleId === 'paritaria' ? 'paritaria' : 'comite';
   const relevantImportSessions = useMemo(
     () => importPreview?.sessions.filter((session) => session.kind === moduleImportKind) ?? [],
@@ -360,7 +405,8 @@ export function SessionManagementPage({
     [relevantImportSessions],
   );
   const relevantImportTasks = useMemo(
-    () => importPreview?.tasks.filter((task) => relevantTaskExternalKeys.has(task.externalKey)) ?? [],
+    () =>
+      importPreview?.tasks.filter((task) => relevantTaskExternalKeys.has(task.externalKey)) ?? [],
     [importPreview, relevantTaskExternalKeys],
   );
 
@@ -383,11 +429,17 @@ export function SessionManagementPage({
     processedNavigationNonceRef.current = navigationNonce;
   }, [initialSessionId, navigationNonce, sessions]);
 
-  const updateDraft = <K extends keyof ManagedSessionDraft>(key: K, value: ManagedSessionDraft[K]) => {
+  const updateDraft = <K extends keyof ManagedSessionDraft>(
+    key: K,
+    value: ManagedSessionDraft[K],
+  ) => {
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
-  const updateEditDraft = <K extends keyof ManagedSessionDraft>(key: K, value: ManagedSessionDraft[K]) => {
+  const updateEditDraft = <K extends keyof ManagedSessionDraft>(
+    key: K,
+    value: ManagedSessionDraft[K],
+  ) => {
     setEditDraft((current) => ({ ...current, [key]: value }));
   };
 
@@ -410,7 +462,9 @@ export function SessionManagementPage({
         setExpandedSessionId(result.sessionId);
       });
     } catch (error) {
-      await alert(error instanceof Error ? error.message : 'No se ha podido crear la sesión.', { type: 'error' });
+      await alert(error instanceof Error ? error.message : 'No se ha podido crear la sesión.', {
+        type: 'error',
+      });
     }
   };
 
@@ -462,7 +516,9 @@ export function SessionManagementPage({
         cancelEditSession();
       });
     } catch (error) {
-      await alert(error instanceof Error ? error.message : 'No se ha podido guardar la sesión.', { type: 'error' });
+      await alert(error instanceof Error ? error.message : 'No se ha podido guardar la sesión.', {
+        type: 'error',
+      });
     }
   };
 
@@ -479,33 +535,47 @@ export function SessionManagementPage({
         }
       });
     } catch (error) {
-      await alert(error instanceof Error ? error.message : 'No se ha podido eliminar la sesión.', { type: 'error' });
+      await alert(error instanceof Error ? error.message : 'No se ha podido eliminar la sesión.', {
+        type: 'error',
+      });
     }
   };
 
   const handleAddTaskToSession = async (session: ManagedSession, taskId: string) => {
     try {
       await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
-        const result = await addTaskWithConcurrencyCheck(session.id, taskId, session.updatedAt ?? null);
+        const result = await addTaskWithConcurrencyCheck(
+          session.id,
+          taskId,
+          session.updatedAt ?? null,
+        );
         if (!result.ok) {
           throw new Error(result.message);
         }
       });
     } catch (error) {
-      await alert(error instanceof Error ? error.message : 'No se ha podido añadir el punto.', { type: 'error' });
+      await alert(error instanceof Error ? error.message : 'No se ha podido añadir el punto.', {
+        type: 'error',
+      });
     }
   };
 
   const handleRemoveTaskFromSession = async (session: ManagedSession, taskId: string) => {
     try {
       await withSharedModuleLocks([{ module: config.moduleId, label: config.title }], async () => {
-        const result = await removeTaskWithConcurrencyCheck(session.id, taskId, session.updatedAt ?? null);
+        const result = await removeTaskWithConcurrencyCheck(
+          session.id,
+          taskId,
+          session.updatedAt ?? null,
+        );
         if (!result.ok) {
           throw new Error(result.message);
         }
       });
     } catch (error) {
-      await alert(error instanceof Error ? error.message : 'No se ha podido quitar el punto.', { type: 'error' });
+      await alert(error instanceof Error ? error.message : 'No se ha podido quitar el punto.', {
+        type: 'error',
+      });
     }
   };
 
@@ -527,7 +597,9 @@ export function SessionManagementPage({
         }
       });
     } catch (error) {
-      await alert(error instanceof Error ? error.message : 'No se ha podido reordenar el punto.', { type: 'error' });
+      await alert(error instanceof Error ? error.message : 'No se ha podido reordenar el punto.', {
+        type: 'error',
+      });
     }
   };
 
@@ -568,7 +640,12 @@ export function SessionManagementPage({
             throw new Error(closeTasksResult.message);
           }
 
-          if (await confirm('¿Desea crear un registro en Actas?', { confirmLabel: 'Crear acta', title: 'Crear acta' })) {
+          if (
+            await confirm('¿Desea crear un registro en Actas?', {
+              confirmLabel: 'Crear acta',
+              title: 'Crear acta',
+            })
+          ) {
             await onClosedSession?.(closeSessionResult.session, treatedTasks);
           }
           setClosingSessionId(null);
@@ -618,13 +695,19 @@ export function SessionManagementPage({
 
       const preview = parseSessionImportText(text, moduleImportKind);
       setImportPreview(preview);
-      const matchingSessions = preview.sessions.filter((session) => session.kind === moduleImportKind);
+      const matchingSessions = preview.sessions.filter(
+        (session) => session.kind === moduleImportKind,
+      );
       if (matchingSessions.length === 0) {
-        setImportError(`El documento se ha leído, pero no se han detectado sesiones para ${config.title}.`);
+        setImportError(
+          `El documento se ha leído, pero no se han detectado sesiones para ${config.title}.`,
+        );
       }
     } catch (error) {
       setImportPreview(null);
-      setImportError(error instanceof Error ? error.message : 'No se ha podido importar el documento.');
+      setImportError(
+        error instanceof Error ? error.message : 'No se ha podido importar el documento.',
+      );
     } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -654,13 +737,18 @@ export function SessionManagementPage({
                 existingSession.date === session.draft.date,
             );
           });
-          const importableTaskKeys = new Set(importableSessions.flatMap((session) => session.taskExternalKeys));
+          const importableTaskKeys = new Set(
+            importableSessions.flatMap((session) => session.taskExternalKeys),
+          );
           const closedAtByTaskExternalKey = new Map(
             importableSessions.flatMap((session) =>
-              session.taskExternalKeys.map((externalKey) => [
-                externalKey,
-                session.draft.date ? `${session.draft.date}T00:00:00.000Z` : null,
-              ] as const),
+              session.taskExternalKeys.map(
+                (externalKey) =>
+                  [
+                    externalKey,
+                    session.draft.date ? `${session.draft.date}T00:00:00.000Z` : null,
+                  ] as const,
+              ),
             ),
           );
           const importableTasks = relevantImportTasks
@@ -705,7 +793,10 @@ export function SessionManagementPage({
   };
 
   return (
-    <section className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card" id={config.moduleId}>
+    <section
+      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      id={config.moduleId}
+    >
       <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
@@ -720,7 +811,8 @@ export function SessionManagementPage({
             ) : null}
           </div>
           <p className="mt-0.5 text-base text-metro-muted">
-            Alta de sesiones, orden del día y cierre automático de tareas en fase {config.taskPhase}.
+            Alta de sesiones, orden del día y cierre automático de tareas en fase {config.taskPhase}
+            .
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -801,7 +893,10 @@ export function SessionManagementPage({
       )}
 
       <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel/80 p-3">
-        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted" htmlFor={`${config.moduleId}-session-search`}>
+        <label
+          className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted"
+          htmlFor={`${config.moduleId}-session-search`}
+        >
           <Search size={14} className="text-metro-red" /> Buscar en {config.shortTitle}
         </label>
         <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-center">
@@ -837,7 +932,9 @@ export function SessionManagementPage({
         >
           {filteredOpenSessions.length === 0 && (
             <p className="text-sm text-metro-muted">
-              {hasSessionSearch ? 'No hay sesiones abiertas que coincidan con la búsqueda.' : 'No hay sesiones abiertas.'}
+              {hasSessionSearch
+                ? 'No hay sesiones abiertas que coincidan con la búsqueda.'
+                : 'No hay sesiones abiertas.'}
             </p>
           )}
           {filteredOpenSessions.map((session) => (
@@ -851,7 +948,9 @@ export function SessionManagementPage({
               onClose={openCloseModal}
               onEdit={canEditSessions ? openEditModal : undefined}
               onRemove={handleRemoveSession}
-              onToggle={() => setExpandedSessionId((current) => (current === session.id ? null : session.id))}
+              onToggle={() =>
+                setExpandedSessionId((current) => (current === session.id ? null : session.id))
+              }
               removeTask={handleRemoveTaskFromSession}
               session={session}
               tasksById={tasksById}
@@ -865,19 +964,31 @@ export function SessionManagementPage({
           label="Histórico de sesiones"
           onToggle={() => setOpenPanel(openPanel === 'history' ? 'open' : 'history')}
         >
-          {closedSessionCount === 0 && (
+          {!hasLoadedHistoricalSessions && !hasSessionSearch && (
             <p className="text-sm text-metro-muted">
-              {hasSessionSearch ? 'No hay sesiones cerradas que coincidan con la búsqueda.' : 'No hay sesiones cerradas.'}
+              El histórico se cargará al abrir este panel o buscar sesiones cerradas.
+            </p>
+          )}
+          {closedSessionCount === 0 && hasLoadedHistoricalSessions && (
+            <p className="text-sm text-metro-muted">
+              {hasSessionSearch
+                ? 'No hay sesiones cerradas que coincidan con la búsqueda.'
+                : 'No hay sesiones cerradas.'}
             </p>
           )}
           {closedSessionGroups.map((group) => {
             const isYearOpen = hasSessionSearch || (openHistoryYears[group.year] ?? false);
 
             return (
-              <div className="overflow-hidden rounded-xl border border-metro-border" key={group.year}>
+              <div
+                className="overflow-hidden rounded-xl border border-metro-border"
+                key={group.year}
+              >
                 <button
                   className="flex w-full items-center justify-between bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
-                  onClick={() => setOpenHistoryYears((current) => ({ ...current, [group.year]: !isYearOpen }))}
+                  onClick={() =>
+                    setOpenHistoryYears((current) => ({ ...current, [group.year]: !isYearOpen }))
+                  }
                   type="button"
                 >
                   <span className="flex items-center gap-2">
@@ -918,9 +1029,12 @@ export function SessionManagementPage({
       {importPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="max-h-[86vh] w-full max-w-4xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">Previsualización de importación · {config.title}</h3>
+            <h3 className="text-lg font-bold text-metro-text">
+              Previsualización de importación · {config.title}
+            </h3>
             <p className="mt-1 text-sm text-metro-muted">
-              Se importarán solo las sesiones compatibles con este módulo. Las sesiones con el mismo código y fecha se omiten.
+              Se importarán solo las sesiones compatibles con este módulo. Las sesiones con el mismo
+              código y fecha se omiten.
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <ImportMetric label="Sesiones detectadas" value={relevantImportSessions.length} />
@@ -941,11 +1055,18 @@ export function SessionManagementPage({
                   {relevantImportSessions.map((session) => (
                     <tr key={session.externalKey}>
                       <td className="px-3 py-2 text-metro-muted">{session.draft.date || '—'}</td>
-                      <td className="px-3 py-2 font-semibold text-metro-text">{session.draft.code}</td>
-                      <td className="truncate px-3 py-2 text-metro-muted" title={session.draft.title}>
+                      <td className="px-3 py-2 font-semibold text-metro-text">
+                        {session.draft.code}
+                      </td>
+                      <td
+                        className="truncate px-3 py-2 text-metro-muted"
+                        title={session.draft.title}
+                      >
                         {session.draft.title}
                       </td>
-                      <td className="px-3 py-2 text-right font-bold text-metro-text">{session.taskExternalKeys.length}</td>
+                      <td className="px-3 py-2 text-right font-bold text-metro-text">
+                        {session.taskExternalKeys.length}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -975,9 +1096,12 @@ export function SessionManagementPage({
       {editingSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">Editar sesión de {config.shortTitle}</h3>
+            <h3 className="text-lg font-bold text-metro-text">
+              Editar sesión de {config.shortTitle}
+            </h3>
             <p className="mt-1 text-sm text-metro-muted">
-              Modifica la fecha, el código documental, el título o las notas. El estado de la sesión no se cambia.
+              Modifica la fecha, el código documental, el título o las notas. El estado de la sesión
+              no se cambia.
             </p>
             <div className="mt-4 grid gap-2 xl:grid-cols-[150px_180px_minmax(220px,1fr)]">
               <input
@@ -1028,9 +1152,12 @@ export function SessionManagementPage({
       {closingSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">Cerrar sesión de {config.shortTitle}</h3>
+            <h3 className="text-lg font-bold text-metro-text">
+              Cerrar sesión de {config.shortTitle}
+            </h3>
             <p className="mt-1 text-sm text-metro-muted">
-              Revisa los puntos tratados. Desmarca los no tratados para mantener sus tareas abiertas.
+              Revisa los puntos tratados. Desmarca los no tratados para mantener sus tareas
+              abiertas.
             </p>
             <div className="mt-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-sm text-metro-muted">
               <strong className="text-metro-text">{closingSession.title}</strong>
@@ -1055,7 +1182,10 @@ export function SessionManagementPage({
                       checked={treatedTaskIds[taskId] ?? true}
                       className="mt-1 h-4 w-4"
                       onChange={(event) =>
-                        setTreatedTaskIds((current) => ({ ...current, [taskId]: event.target.checked }))
+                        setTreatedTaskIds((current) => ({
+                          ...current,
+                          [taskId]: event.target.checked,
+                        }))
                       }
                       type="checkbox"
                     />
@@ -1063,7 +1193,9 @@ export function SessionManagementPage({
                       <span className="block font-semibold text-metro-text">
                         {index + 1}. {getTaskTitle(tasksById, taskId)}
                       </span>
-                      <span className="mt-1 block text-xs text-metro-muted">{describeTask(task)}</span>
+                      <span className="mt-1 block text-xs text-metro-muted">
+                        {describeTask(task)}
+                      </span>
                     </span>
                   </label>
                 );
@@ -1126,9 +1258,13 @@ function SessionPanel({
           {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           {label}
         </span>
-        <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">{count}</span>
+        <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
+          {count}
+        </span>
       </button>
-      {isOpen && <div className="max-h-[640px] space-y-3 overflow-auto bg-metro-surface p-3">{children}</div>}
+      {isOpen && (
+        <div className="max-h-[640px] space-y-3 overflow-auto bg-metro-surface p-3">{children}</div>
+      )}
     </div>
   );
 }
@@ -1151,7 +1287,11 @@ function SessionCard({
   availableTasks: Task[];
   config: SessionModuleConfig;
   isExpanded: boolean;
-  moveTask: (session: ManagedSession, taskId: string, direction: 'up' | 'down') => void | Promise<void>;
+  moveTask: (
+    session: ManagedSession,
+    taskId: string,
+    direction: 'up' | 'down',
+  ) => void | Promise<void>;
   onClose: (session: ManagedSession) => void;
   onEdit?: (session: ManagedSession) => void;
   onRemove: (session: ManagedSession) => void | Promise<void>;
@@ -1170,7 +1310,13 @@ function SessionCard({
   const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
   const sessionPrintBuilder =
     config.moduleId === 'comite'
-      ? () => buildPrintableCommitteeSessionHtml({ session, tasksById, config, generatedAt: new Date() })
+      ? () =>
+          buildPrintableCommitteeSessionHtml({
+            session,
+            tasksById,
+            config,
+            generatedAt: new Date(),
+          })
       : undefined;
 
   return (
@@ -1193,7 +1339,9 @@ function SessionCard({
               className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!isExpanded || isReadOnly}
               onClick={() => onEdit(session)}
-              title={!isExpanded ? 'Abre la sesión para bloquearla antes de editarla' : 'Editar sesión'}
+              title={
+                !isExpanded ? 'Abre la sesión para bloquearla antes de editarla' : 'Editar sesión'
+              }
               type="button"
             >
               <Pencil size={14} /> Editar
@@ -1223,11 +1371,13 @@ function SessionCard({
       {isExpanded && (
         <div className="mt-3 rounded-xl border border-metro-border bg-metro-app/40 p-3">
           {recordLock.message && (
-            <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
-              isReadOnly
-                ? 'border-red-400/40 bg-red-950/20 text-red-100'
-                : 'border-metro-border bg-metro-surface text-metro-muted'
-            }`}>
+            <p
+              className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                isReadOnly
+                  ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                  : 'border-metro-border bg-metro-surface text-metro-muted'
+              }`}
+            >
               {recordLock.message}
             </p>
           )}
@@ -1271,7 +1421,10 @@ function SessionCard({
                 >
                   <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-metro-text" title={getTaskTitle(tasksById, taskId)}>
+                    <p
+                      className="truncate text-sm font-semibold text-metro-text"
+                      title={getTaskTitle(tasksById, taskId)}
+                    >
                       {getTaskTitle(tasksById, taskId)}
                     </p>
                     <p className="truncate text-xs text-metro-muted" title={describeTask(task)}>
@@ -1325,14 +1478,23 @@ function HistoricSessionCard({
   config: SessionModuleConfig;
   onEdit?: (session: ManagedSession) => void;
   onRemove: (session: ManagedSession) => void | Promise<void>;
-  onConfirm: (message: string, options?: { cancelLabel?: string; confirmLabel?: string; danger?: boolean; title?: string }) => Promise<boolean>;
+  onConfirm: (
+    message: string,
+    options?: { cancelLabel?: string; confirmLabel?: string; danger?: boolean; title?: string },
+  ) => Promise<boolean>;
   session: ManagedSession;
   tasksById: Map<string, Task>;
 }) {
   const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
   const sessionPrintBuilder =
     config.moduleId === 'comite'
-      ? () => buildPrintableCommitteeSessionHtml({ session, tasksById, config, generatedAt: new Date() })
+      ? () =>
+          buildPrintableCommitteeSessionHtml({
+            session,
+            tasksById,
+            config,
+            generatedAt: new Date(),
+          })
       : undefined;
 
   return (
@@ -1386,7 +1548,9 @@ function HistoricSessionCard({
             <ClipboardList size={14} /> Tratadas ({session.treatedTaskIds.length})
           </p>
           <ol className="space-y-1 text-sm text-metro-text">
-            {session.treatedTaskIds.length === 0 && <li className="text-metro-muted">Sin tareas tratadas.</li>}
+            {session.treatedTaskIds.length === 0 && (
+              <li className="text-metro-muted">Sin tareas tratadas.</li>
+            )}
             {session.treatedTaskIds.map((taskId, index) => (
               <li className="truncate" key={taskId} title={getTaskTitle(tasksById, taskId)}>
                 {index + 1}. {getTaskTitle(tasksById, taskId)}
@@ -1399,7 +1563,9 @@ function HistoricSessionCard({
             No tratadas ({session.untreatedTaskIds.length})
           </p>
           <ol className="space-y-1 text-sm text-metro-text">
-            {session.untreatedTaskIds.length === 0 && <li className="text-metro-muted">Sin pendientes.</li>}
+            {session.untreatedTaskIds.length === 0 && (
+              <li className="text-metro-muted">Sin pendientes.</li>
+            )}
             {session.untreatedTaskIds.map((taskId, index) => (
               <li className="truncate" key={taskId} title={getTaskTitle(tasksById, taskId)}>
                 {index + 1}. {getTaskTitle(tasksById, taskId)}
