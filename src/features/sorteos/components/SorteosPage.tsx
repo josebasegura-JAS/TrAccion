@@ -137,12 +137,13 @@ export function SorteosPage() {
   const [exclusionsOpen, setExclusionsOpen] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const isSorteosEditing = Boolean(
     draft.title.trim() ||
-      draft.date !== today ||
-      draft.winnersCount !== 1 ||
-      search.trim() ||
-      pendingConfirmation,
+    draft.date !== today ||
+    draft.winnersCount !== 1 ||
+    search.trim() ||
+    pendingConfirmation,
   );
   const moduleLock = useSharedRecordLock({
     module: 'sorteos',
@@ -150,6 +151,7 @@ export function SorteosPage() {
     enabled: isSorteosEditing,
   });
   const isReadOnly = moduleLock.isReadOnly;
+  const isActionDisabled = isReadOnly || busyAction !== null;
 
   useEffect(() => {
     loadEmployees();
@@ -184,10 +186,15 @@ export function SorteosPage() {
     }
 
     void (async () => {
-      const result = await createDrawWithConcurrencyCheck(draft, people);
-      setErrors(result.errors);
-      if (result.valid) {
-        setDraft({ title: '', date: today, winnersCount: 1 });
+      setBusyAction('draw');
+      try {
+        const result = await createDrawWithConcurrencyCheck(draft, people);
+        setErrors(result.errors);
+        if (result.valid) {
+          setDraft({ title: '', date: today, winnersCount: 1 });
+        }
+      } finally {
+        setBusyAction(null);
       }
     })();
   };
@@ -219,15 +226,20 @@ export function SorteosPage() {
     }
 
     void (async () => {
-      const result = await deleteDrawWithConcurrencyCheck(
-        pendingConfirmation.drawId,
-        removeLinkedWinnerExclusions,
-      );
-      if (!result.ok) {
-        setErrors([result.message]);
-        return;
+      setBusyAction('delete-draw');
+      try {
+        const result = await deleteDrawWithConcurrencyCheck(
+          pendingConfirmation.drawId,
+          removeLinkedWinnerExclusions,
+        );
+        if (!result.ok) {
+          setErrors([result.message]);
+          return;
+        }
+        setPendingConfirmation(null);
+      } finally {
+        setBusyAction(null);
       }
-      setPendingConfirmation(null);
     })();
   };
 
@@ -236,12 +248,17 @@ export function SorteosPage() {
       return;
     }
     void (async () => {
-      const result = await resetAllExclusionsWithConcurrencyCheck();
-      if (!result.ok) {
-        setErrors([result.message]);
-        return;
+      setBusyAction('reset-all-exclusions');
+      try {
+        const result = await resetAllExclusionsWithConcurrencyCheck();
+        if (!result.ok) {
+          setErrors([result.message]);
+          return;
+        }
+        setPendingConfirmation(null);
+      } finally {
+        setBusyAction(null);
       }
-      setPendingConfirmation(null);
     })();
   };
 
@@ -252,7 +269,8 @@ export function SorteosPage() {
     >
       {moduleLock.status === 'locked' && moduleLock.lockedBy && (
         <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
-          📖 Modo consulta — editando: {moduleLock.lockedBy.ownerName}@{moduleLock.lockedBy.machineName}
+          📖 Modo consulta — editando: {moduleLock.lockedBy.ownerName}@
+          {moduleLock.lockedBy.machineName}
         </div>
       )}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -266,7 +284,9 @@ export function SorteosPage() {
               sections={SORTEOS_HELP_SECTIONS}
             />
           </div>
-          <p className="mt-0.5 text-sm text-metro-muted">Gestión compacta de sorteos, exclusiones e histórico de resultados.</p>
+          <p className="mt-0.5 text-sm text-metro-muted">
+            Gestión compacta de sorteos, exclusiones e histórico de resultados.
+          </p>
         </div>
       </div>
 
@@ -287,7 +307,7 @@ export function SorteosPage() {
               <input
                 className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => handleDraftChange('title', event.target.value)}
-                disabled={isReadOnly}
+                disabled={isActionDisabled}
                 value={draft.title}
               />
             </label>
@@ -297,7 +317,7 @@ export function SorteosPage() {
                 className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => handleDraftChange('date', event.target.value)}
                 type="date"
-                disabled={isReadOnly}
+                disabled={isActionDisabled}
                 value={draft.date}
               />
             </label>
@@ -308,13 +328,13 @@ export function SorteosPage() {
                 min="1"
                 onChange={(event) => handleDraftChange('winnersCount', Number(event.target.value))}
                 type="number"
-                disabled={isReadOnly}
+                disabled={isActionDisabled}
                 value={draft.winnersCount}
               />
             </label>
             <button
               className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 md:w-auto md:self-end"
-              disabled={isReadOnly}
+              disabled={isActionDisabled}
               onClick={handleDraw}
               type="button"
             >
@@ -425,15 +445,21 @@ export function SorteosPage() {
                         className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
                         onClick={() => {
                           void (async () => {
-                            const result = await addExclusionWithConcurrencyCheck(person);
-                            if (!result.ok) {
-                              setErrors([result.message]);
+                            setBusyAction(`exclude-${person.empleado}`);
+                            try {
+                              const result = await addExclusionWithConcurrencyCheck(person);
+                              if (!result.ok) {
+                                setErrors([result.message]);
+                              }
+                            } finally {
+                              setBusyAction(null);
                             }
                           })();
                         }}
+                        disabled={isActionDisabled}
                         type="button"
                       >
-                        Excluir
+                        {busyAction === `exclude-${person.empleado}` ? 'Excluyendo…' : 'Excluir'}
                       </button>
                     </div>
                   ))}
@@ -458,7 +484,7 @@ export function SorteosPage() {
                   />
                   <button
                     className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-bold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={exclusions.length === 0}
+                    disabled={isActionDisabled || exclusions.length === 0}
                     onClick={requestResetAllExclusions}
                     type="button"
                   >
@@ -490,15 +516,25 @@ export function SorteosPage() {
                               className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
                               onClick={() => {
                                 void (async () => {
-                                  const result = await removeExclusionWithConcurrencyCheck(exclusion.id);
-                                  if (!result.ok) {
-                                    setErrors([result.message]);
+                                  setBusyAction(`remove-exclusion-${exclusion.id}`);
+                                  try {
+                                    const result = await removeExclusionWithConcurrencyCheck(
+                                      exclusion.id,
+                                    );
+                                    if (!result.ok) {
+                                      setErrors([result.message]);
+                                    }
+                                  } finally {
+                                    setBusyAction(null);
                                   }
                                 })();
                               }}
+                              disabled={isActionDisabled}
                               type="button"
                             >
-                              Quitar
+                              {busyAction === `remove-exclusion-${exclusion.id}`
+                                ? 'Quitando…'
+                                : 'Quitar'}
                             </button>
                           </td>
                         </tr>
@@ -528,6 +564,7 @@ export function SorteosPage() {
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+              disabled={isActionDisabled}
               onClick={() => confirmDeleteDraw(true)}
               type="button"
             >
@@ -535,6 +572,7 @@ export function SorteosPage() {
             </button>
             <button
               className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              disabled={isActionDisabled}
               onClick={() => confirmDeleteDraw(false)}
               type="button"
             >
@@ -560,6 +598,7 @@ export function SorteosPage() {
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+              disabled={isActionDisabled}
               onClick={confirmResetAllExclusions}
               type="button"
             >
@@ -636,18 +675,28 @@ export function SorteosPage() {
                             className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
                             onClick={() => {
                               void (async () => {
-                                const result = await resetDrawWinnerExclusionsWithConcurrencyCheck(draw.id);
-                                if (!result.ok) {
-                                  setErrors([result.message]);
+                                setBusyAction(`reset-draw-exclusions-${draw.id}`);
+                                try {
+                                  const result =
+                                    await resetDrawWinnerExclusionsWithConcurrencyCheck(draw.id);
+                                  if (!result.ok) {
+                                    setErrors([result.message]);
+                                  }
+                                } finally {
+                                  setBusyAction(null);
                                 }
                               })();
                             }}
+                            disabled={isActionDisabled}
                             type="button"
                           >
-                            Resetear exclusiones por sorteo
+                            {busyAction === `reset-draw-exclusions-${draw.id}`
+                              ? 'Reseteando…'
+                              : 'Resetear exclusiones por sorteo'}
                           </button>
                           <button
                             className="inline-flex items-center gap-1 rounded-lg border border-red-400/40 px-2 py-1 text-xs font-semibold text-red-100 hover:border-red-300"
+                            disabled={isActionDisabled}
                             onClick={() => requestDeleteDraw(draw.id)}
                             type="button"
                           >

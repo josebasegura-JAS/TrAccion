@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import {
+  clearPersistenceBusy,
+  publishPersistenceBusy,
+  readStorageItem,
+  waitForNextPaint,
+  writeStorageItem,
+} from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import { saveNewSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
@@ -19,6 +25,17 @@ import {
 export const DRAWS_STORAGE_KEY = 'traccion.v1.sorteos.draws';
 export const EXCLUSIONS_STORAGE_KEY = 'traccion.v1.sorteos.exclusions';
 
+const SORTEOS_BUSY_KEY = 'traccion.v1.sorteos.busy';
+const TEMPORARY_SQLITE_BUSY_RETRIES = 3;
+const TEMPORARY_SQLITE_BUSY_RETRY_MS = 220;
+
+type SharedSorteosSnapshot = {
+  draws: SorteosDraw[];
+  exclusions: SorteosExclusion[];
+  drawsUpdatedAt: string | null;
+  exclusionsUpdatedAt: string | null;
+};
+
 interface SorteosStoreState {
   draws: SorteosDraw[];
   exclusions: SorteosExclusion[];
@@ -27,16 +44,28 @@ interface SorteosStoreState {
   load: () => void;
   reloadFromStorage: () => void;
   createDraw: (draft: SorteosDraft, people: SorteosPerson[]) => SorteosValidationResult;
-  createDrawWithConcurrencyCheck: (draft: SorteosDraft, people: SorteosPerson[]) => Promise<SorteosValidationResult>;
+  createDrawWithConcurrencyCheck: (
+    draft: SorteosDraft,
+    people: SorteosPerson[],
+  ) => Promise<SorteosValidationResult>;
   addExclusion: (person: SorteosPerson) => void;
-  addExclusionWithConcurrencyCheck: (person: SorteosPerson) => Promise<{ ok: boolean; message: string }>;
+  addExclusionWithConcurrencyCheck: (
+    person: SorteosPerson,
+  ) => Promise<{ ok: boolean; message: string }>;
   removeExclusion: (exclusionId: string) => void;
-  removeExclusionWithConcurrencyCheck: (exclusionId: string) => Promise<{ ok: boolean; message: string }>;
+  removeExclusionWithConcurrencyCheck: (
+    exclusionId: string,
+  ) => Promise<{ ok: boolean; message: string }>;
   viewDraw: (drawId: string) => void;
   deleteDraw: (drawId: string, removeLinkedWinnerExclusions: boolean) => void;
-  deleteDrawWithConcurrencyCheck: (drawId: string, removeLinkedWinnerExclusions: boolean) => Promise<{ ok: boolean; message: string }>;
+  deleteDrawWithConcurrencyCheck: (
+    drawId: string,
+    removeLinkedWinnerExclusions: boolean,
+  ) => Promise<{ ok: boolean; message: string }>;
   resetDrawWinnerExclusions: (drawId: string) => void;
-  resetDrawWinnerExclusionsWithConcurrencyCheck: (drawId: string) => Promise<{ ok: boolean; message: string }>;
+  resetDrawWinnerExclusionsWithConcurrencyCheck: (
+    drawId: string,
+  ) => Promise<{ ok: boolean; message: string }>;
   resetAllExclusions: () => void;
   resetAllExclusionsWithConcurrencyCheck: () => Promise<{ ok: boolean; message: string }>;
 }
@@ -101,18 +130,104 @@ function readArray<T>(storageKey: string, guard: (value: unknown) => value is T)
   return parsed.filter(guard);
 }
 
-async function loadSharedSorteosSnapshot(): Promise<{ draws: SorteosDraw[]; exclusions: SorteosExclusion[]; drawsUpdatedAt: string | null; exclusionsUpdatedAt: string | null }> {
-  const snapshot = await window.traccion?.loadPersistedRecords?.();
-  if (!snapshot) {
-    throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isTemporarySqliteBusyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return (
+    message.includes('Base ocupada temporalmente') ||
+    message.includes('SQLITE_BUSY') ||
+    message.includes('database is locked') ||
+    message.includes('temporarily unavailable')
+  );
+}
+
+async function withTemporarySqliteRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= TEMPORARY_SQLITE_BUSY_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTemporarySqliteBusyError(error) || attempt === TEMPORARY_SQLITE_BUSY_RETRIES) {
+        break;
+      }
+      await delay(TEMPORARY_SQLITE_BUSY_RETRY_MS * (attempt + 1));
+    }
   }
+
+  throw lastError;
+}
+
+async function withSorteosBusy<T>(message: string, operation: () => Promise<T>): Promise<T> {
+  publishPersistenceBusy(SORTEOS_BUSY_KEY, message);
+  await waitForNextPaint();
+  try {
+    return await operation();
+  } finally {
+    clearPersistenceBusy(SORTEOS_BUSY_KEY);
+  }
+}
+
+async function loadSingleSharedArray<T>(
+  storageKey: string,
+  guard: (value: unknown) => value is T,
+): Promise<{ values: T[]; updatedAt: string | null }> {
+  const getPersistedRecord = window.traccion?.getPersistedRecord;
+  if (!getPersistedRecord) {
+    throw new Error('Lectura por registro no disponible.');
+  }
+
+  const snapshot = await withTemporarySqliteRetry(() => getPersistedRecord(storageKey));
   publishDatabaseStatus(snapshot.status);
   if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    throw new Error(snapshot.status.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.');
+    throw new Error(
+      snapshot.status.message ??
+        'SQLite no está activo. No se permite guardar sin base compartida.',
+    );
+  }
+
+  return {
+    values: readArrayFromValue(snapshot.record?.value ?? null, guard),
+    updatedAt: snapshot.record?.updatedAt ?? null,
+  };
+}
+
+async function loadSharedSorteosSnapshot(): Promise<SharedSorteosSnapshot> {
+  if (window.traccion?.getPersistedRecord) {
+    const drawsRecord = await loadSingleSharedArray(DRAWS_STORAGE_KEY, isDraw);
+    const exclusionsRecord = await loadSingleSharedArray(EXCLUSIONS_STORAGE_KEY, isExclusion);
+
+    return {
+      draws: sortDraws(drawsRecord.values),
+      exclusions: exclusionsRecord.values,
+      drawsUpdatedAt: drawsRecord.updatedAt,
+      exclusionsUpdatedAt: exclusionsRecord.updatedAt,
+    };
+  }
+
+  const loadPersistedRecords = window.traccion?.loadPersistedRecords;
+  if (!loadPersistedRecords) {
+    throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
+  }
+
+  const snapshot = await withTemporarySqliteRetry(() => loadPersistedRecords());
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    throw new Error(
+      snapshot.status.message ??
+        'SQLite no está activo. No se permite guardar sin base compartida.',
+    );
   }
 
   const drawsRecord = snapshot.records.find((record) => record.key === DRAWS_STORAGE_KEY) ?? null;
-  const exclusionsRecord = snapshot.records.find((record) => record.key === EXCLUSIONS_STORAGE_KEY) ?? null;
+  const exclusionsRecord =
+    snapshot.records.find((record) => record.key === EXCLUSIONS_STORAGE_KEY) ?? null;
   return {
     draws: sortDraws(readArrayFromValue(drawsRecord?.value ?? null, isDraw)),
     exclusions: readArrayFromValue(exclusionsRecord?.value ?? null, isExclusion),
@@ -121,7 +236,10 @@ async function loadSharedSorteosSnapshot(): Promise<{ draws: SorteosDraw[]; excl
   };
 }
 
-function readArrayFromValue<T>(storageValue: string | null, guard: (value: unknown) => value is T): T[] {
+function readArrayFromValue<T>(
+  storageValue: string | null,
+  guard: (value: unknown) => value is T,
+): T[] {
   if (!storageValue) {
     return [];
   }
@@ -134,12 +252,21 @@ function readArrayFromValue<T>(storageValue: string | null, guard: (value: unkno
   return parsed.filter(guard);
 }
 
-async function saveSharedArray(storageKey: string, value: string, expectedUpdatedAt: string | null): Promise<void> {
-  const result = await window.traccion?.saveLocalStorageRecordIfUnchanged?.({
-    key: storageKey,
-    value,
-    expectedUpdatedAt,
-  });
+async function saveSharedArray(
+  storageKey: string,
+  value: string,
+  expectedUpdatedAt: string | null,
+): Promise<void> {
+  const saveLocalStorageRecordIfUnchanged = window.traccion?.saveLocalStorageRecordIfUnchanged;
+  const result = saveLocalStorageRecordIfUnchanged
+    ? await withTemporarySqliteRetry(() =>
+        saveLocalStorageRecordIfUnchanged({
+          key: storageKey,
+          value,
+          expectedUpdatedAt,
+        }),
+      )
+    : undefined;
   if (!result) {
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
@@ -216,60 +343,95 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
     } catch (error) {
       return {
         valid: false,
-        errors: error instanceof Error ? error.message.split('\n') : ['No se ha podido realizar el sorteo.'],
+        errors:
+          error instanceof Error
+            ? error.message.split('\n')
+            : ['No se ha podido realizar el sorteo.'],
       };
     }
   },
-  createDrawWithConcurrencyCheck: async (draft, people) => {
-    const drawId = createId('sorteo');
-    const timestamp = nowIso();
+  createDrawWithConcurrencyCheck: async (draft, people) =>
+    withSorteosBusy('Realizando sorteo…', async () => {
+      const drawId = createId('sorteo');
+      const timestamp = nowIso();
 
-    try {
-      const snapshot = await loadSharedSorteosSnapshot();
-      const result = runSorteo(
-        draft,
-        people,
-        snapshot.exclusions,
-        drawId,
-        (position) => `${drawId}-winner-${position}`,
-        timestamp,
-      );
-      const draws = sortDraws([result.draw, ...snapshot.draws]);
-      await saveSharedArray(EXCLUSIONS_STORAGE_KEY, JSON.stringify(result.exclusions), snapshot.exclusionsUpdatedAt);
-      await saveNewSharedArrayRecord<SorteosDraw>({
-        storageKey: DRAWS_STORAGE_KEY,
-        newRecord: result.draw,
-        parseRecords: (value) => sortDraws(readArrayFromValue(value, isDraw)),
-        getRecordId: (record) => record.id,
-        duplicateMessage: 'El sorteo ya existe en la base compartida. Recarga antes de continuar.',
-      });
-      set({ draws, exclusions: result.exclusions, visibleDrawId: result.draw.id, visibleResult: result.draw });
-      return { valid: true, errors: [] };
-    } catch (error) {
-      return {
-        valid: false,
-        errors: error instanceof Error ? error.message.split('\n') : ['No se ha podido realizar el sorteo.'],
-      };
-    }
-  },
+      try {
+        const snapshot = await loadSharedSorteosSnapshot();
+        const result = runSorteo(
+          draft,
+          people,
+          snapshot.exclusions,
+          drawId,
+          (position) => `${drawId}-winner-${position}`,
+          timestamp,
+        );
+        const draws = sortDraws([result.draw, ...snapshot.draws]);
+        await saveSharedArray(
+          EXCLUSIONS_STORAGE_KEY,
+          JSON.stringify(result.exclusions),
+          snapshot.exclusionsUpdatedAt,
+        );
+        await saveNewSharedArrayRecord<SorteosDraw>({
+          storageKey: DRAWS_STORAGE_KEY,
+          newRecord: result.draw,
+          parseRecords: (value) => sortDraws(readArrayFromValue(value, isDraw)),
+          getRecordId: (record) => record.id,
+          duplicateMessage:
+            'El sorteo ya existe en la base compartida. Recarga antes de continuar.',
+        });
+        set({
+          draws,
+          exclusions: result.exclusions,
+          visibleDrawId: result.draw.id,
+          visibleResult: result.draw,
+        });
+        return { valid: true, errors: [] };
+      } catch (error) {
+        return {
+          valid: false,
+          errors:
+            error instanceof Error
+              ? error.message.split('\n')
+              : ['No se ha podido realizar el sorteo.'],
+        };
+      }
+    }),
   addExclusion: (person) => {
     set((state) => {
-      const exclusions = addManualExclusion(state.exclusions, person, createId('sorteo-exclusion'), nowIso());
+      const exclusions = addManualExclusion(
+        state.exclusions,
+        person,
+        createId('sorteo-exclusion'),
+        nowIso(),
+      );
       persist(state.draws, exclusions);
       return { exclusions };
     });
   },
-  addExclusionWithConcurrencyCheck: async (person) => {
-    try {
-      const snapshot = await loadSharedSorteosSnapshot();
-      const exclusions = addManualExclusion(snapshot.exclusions, person, createId('sorteo-exclusion'), nowIso());
-      await saveSharedArray(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions), snapshot.exclusionsUpdatedAt);
-      set({ draws: snapshot.draws, exclusions });
-      return { ok: true, message: 'Exclusión añadida.' };
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido añadir la exclusión.' };
-    }
-  },
+  addExclusionWithConcurrencyCheck: async (person) =>
+    withSorteosBusy('Añadiendo exclusión…', async () => {
+      try {
+        const snapshot = await loadSharedSorteosSnapshot();
+        const exclusions = addManualExclusion(
+          snapshot.exclusions,
+          person,
+          createId('sorteo-exclusion'),
+          nowIso(),
+        );
+        await saveSharedArray(
+          EXCLUSIONS_STORAGE_KEY,
+          JSON.stringify(exclusions),
+          snapshot.exclusionsUpdatedAt,
+        );
+        set({ draws: snapshot.draws, exclusions });
+        return { ok: true, message: 'Exclusión añadida.' };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido añadir la exclusión.',
+        };
+      }
+    }),
   removeExclusion: (exclusionId) => {
     set((state) => {
       const exclusions = removeExclusionById(state.exclusions, exclusionId);
@@ -277,24 +439,37 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
       return { exclusions };
     });
   },
-  removeExclusionWithConcurrencyCheck: async (exclusionId) => {
-    try {
-      const snapshot = await loadSharedSorteosSnapshot();
-      const exclusions = removeExclusionById(snapshot.exclusions, exclusionId);
-      await saveSharedArray(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions), snapshot.exclusionsUpdatedAt);
-      set({ draws: snapshot.draws, exclusions });
-      return { ok: true, message: 'Exclusión quitada.' };
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido quitar la exclusión.' };
-    }
-  },
+  removeExclusionWithConcurrencyCheck: async (exclusionId) =>
+    withSorteosBusy('Quitando exclusión…', async () => {
+      try {
+        const snapshot = await loadSharedSorteosSnapshot();
+        const exclusions = removeExclusionById(snapshot.exclusions, exclusionId);
+        await saveSharedArray(
+          EXCLUSIONS_STORAGE_KEY,
+          JSON.stringify(exclusions),
+          snapshot.exclusionsUpdatedAt,
+        );
+        set({ draws: snapshot.draws, exclusions });
+        return { ok: true, message: 'Exclusión quitada.' };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido quitar la exclusión.',
+        };
+      }
+    }),
   viewDraw: (drawId) => {
     const draw = get().draws.find((candidate) => candidate.id === drawId) ?? null;
     set({ visibleDrawId: draw?.id ?? '', visibleResult: draw });
   },
   deleteDraw: (drawId, removeLinkedWinnerExclusions) => {
     set((state) => {
-      const result = deleteSorteo(state.draws, state.exclusions, drawId, removeLinkedWinnerExclusions);
+      const result = deleteSorteo(
+        state.draws,
+        state.exclusions,
+        drawId,
+        removeLinkedWinnerExclusions,
+      );
       persist(result.draws, result.exclusions);
       const shouldClearVisibleResult = state.visibleDrawId === drawId;
       return {
@@ -305,18 +480,40 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
       };
     });
   },
-  deleteDrawWithConcurrencyCheck: async (drawId, removeLinkedWinnerExclusions) => {
-    try {
-      const snapshot = await loadSharedSorteosSnapshot();
-      const result = deleteSorteo(snapshot.draws, snapshot.exclusions, drawId, removeLinkedWinnerExclusions);
-      await saveSharedArray(DRAWS_STORAGE_KEY, JSON.stringify(sortDraws(result.draws)), snapshot.drawsUpdatedAt);
-      await saveSharedArray(EXCLUSIONS_STORAGE_KEY, JSON.stringify(result.exclusions), snapshot.exclusionsUpdatedAt);
-      set({ draws: sortDraws(result.draws), exclusions: result.exclusions, visibleDrawId: '', visibleResult: null });
-      return { ok: true, message: 'Sorteo eliminado.' };
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar el sorteo.' };
-    }
-  },
+  deleteDrawWithConcurrencyCheck: async (drawId, removeLinkedWinnerExclusions) =>
+    withSorteosBusy('Eliminando sorteo…', async () => {
+      try {
+        const snapshot = await loadSharedSorteosSnapshot();
+        const result = deleteSorteo(
+          snapshot.draws,
+          snapshot.exclusions,
+          drawId,
+          removeLinkedWinnerExclusions,
+        );
+        await saveSharedArray(
+          DRAWS_STORAGE_KEY,
+          JSON.stringify(sortDraws(result.draws)),
+          snapshot.drawsUpdatedAt,
+        );
+        await saveSharedArray(
+          EXCLUSIONS_STORAGE_KEY,
+          JSON.stringify(result.exclusions),
+          snapshot.exclusionsUpdatedAt,
+        );
+        set({
+          draws: sortDraws(result.draws),
+          exclusions: result.exclusions,
+          visibleDrawId: '',
+          visibleResult: null,
+        });
+        return { ok: true, message: 'Sorteo eliminado.' };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido eliminar el sorteo.',
+        };
+      }
+    }),
   resetDrawWinnerExclusions: (drawId) => {
     set((state) => {
       const exclusions = resetWinnerExclusionsForDraw(state.exclusions, drawId);
@@ -324,31 +521,49 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
       return { exclusions };
     });
   },
-  resetDrawWinnerExclusionsWithConcurrencyCheck: async (drawId) => {
-    try {
-      const snapshot = await loadSharedSorteosSnapshot();
-      const exclusions = resetWinnerExclusionsForDraw(snapshot.exclusions, drawId);
-      await saveSharedArray(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions), snapshot.exclusionsUpdatedAt);
-      set({ draws: snapshot.draws, exclusions });
-      return { ok: true, message: 'Exclusiones reseteadas.' };
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.' };
-    }
-  },
+  resetDrawWinnerExclusionsWithConcurrencyCheck: async (drawId) =>
+    withSorteosBusy('Reseteando exclusiones…', async () => {
+      try {
+        const snapshot = await loadSharedSorteosSnapshot();
+        const exclusions = resetWinnerExclusionsForDraw(snapshot.exclusions, drawId);
+        await saveSharedArray(
+          EXCLUSIONS_STORAGE_KEY,
+          JSON.stringify(exclusions),
+          snapshot.exclusionsUpdatedAt,
+        );
+        set({ draws: snapshot.draws, exclusions });
+        return { ok: true, message: 'Exclusiones reseteadas.' };
+      } catch (error) {
+        return {
+          ok: false,
+          message:
+            error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.',
+        };
+      }
+    }),
   resetAllExclusions: () => {
     set((state) => {
       persist(state.draws, []);
       return { exclusions: [] };
     });
   },
-  resetAllExclusionsWithConcurrencyCheck: async () => {
-    try {
-      const snapshot = await loadSharedSorteosSnapshot();
-      await saveSharedArray(EXCLUSIONS_STORAGE_KEY, JSON.stringify([]), snapshot.exclusionsUpdatedAt);
-      set({ draws: snapshot.draws, exclusions: [] });
-      return { ok: true, message: 'Exclusiones reseteadas.' };
-    } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.' };
-    }
-  },
+  resetAllExclusionsWithConcurrencyCheck: async () =>
+    withSorteosBusy('Reseteando exclusiones…', async () => {
+      try {
+        const snapshot = await loadSharedSorteosSnapshot();
+        await saveSharedArray(
+          EXCLUSIONS_STORAGE_KEY,
+          JSON.stringify([]),
+          snapshot.exclusionsUpdatedAt,
+        );
+        set({ draws: snapshot.draws, exclusions: [] });
+        return { ok: true, message: 'Exclusiones reseteadas.' };
+      } catch (error) {
+        return {
+          ok: false,
+          message:
+            error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.',
+        };
+      }
+    }),
 }));
