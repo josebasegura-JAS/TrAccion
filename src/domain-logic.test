@@ -1,0 +1,538 @@
+import { describe, expect, it } from 'vitest';
+
+// ─── plantilla: derived ───────────────────────────────────────────────────────
+
+import {
+  normalizeDni,
+  buildResidenciaEus,
+  buildDireccionTeletrabajo,
+  getEmployeeDerivedFields,
+} from '../../../features/plantilla/domain/derived';
+
+describe('plantilla — derived', () => {
+  describe('normalizeDni', () => {
+    it('elimina prefijo ES (mayúsculas y minúsculas)', () => {
+      expect(normalizeDni('ES12345678Z')).toBe('12345678Z');
+      expect(normalizeDni('es87654321X')).toBe('87654321X');
+    });
+
+    it('elimina espacios internos y convierte a mayúsculas', () => {
+      expect(normalizeDni(' 12 345 678 Z ')).toBe('12345678Z');
+    });
+
+    it('NIF sin prefijo sale intacto en mayúsculas', () => {
+      expect(normalizeDni('12345678z')).toBe('12345678Z');
+    });
+  });
+
+  describe('buildResidenciaEus', () => {
+    it('traduce los tres centros conocidos', () => {
+      expect(buildResidenciaEus('Oficinas Centrales')).toBe('Bulego Nagusiak');
+      expect(buildResidenciaEus('Sopela Taller')).toBe('Sopela Tailerra');
+      expect(buildResidenciaEus('Ariz Taller')).toBe('Ariz Tailerra');
+    });
+
+    it('devuelve el valor original para centros desconocidos', () => {
+      expect(buildResidenciaEus('Centro Nuevo')).toBe('Centro Nuevo');
+    });
+  });
+
+  describe('buildDireccionTeletrabajo', () => {
+    it('concatena solo partes no vacías', () => {
+      expect(
+        buildDireccionTeletrabajo({
+          calle: 'Calle Mayor',
+          numero: '5',
+          piso: '',
+          codigoPostal: '48001',
+          poblacion: 'Bilbao',
+          provincia: 'Bizkaia',
+        }),
+      ).toBe('Calle Mayor 5 48001 Bilbao Bizkaia');
+    });
+
+    it('todos vacíos → string vacío', () => {
+      expect(
+        buildDireccionTeletrabajo({
+          calle: '',
+          numero: '',
+          piso: '',
+          codigoPostal: '',
+          poblacion: '',
+          provincia: '',
+        }),
+      ).toBe('');
+    });
+  });
+
+  describe('getEmployeeDerivedFields', () => {
+    it('compone correctamente todos los campos derivados', () => {
+      const draft = {
+        nif: 'ES12345678Z',
+        residencia: 'Ariz Taller',
+        calle: 'Av. Test',
+        numero: '1',
+        piso: '2A',
+        codigoPostal: '48900',
+        poblacion: 'Getxo',
+        provincia: 'Bizkaia',
+      };
+      const derived = getEmployeeDerivedFields(draft as Parameters<typeof getEmployeeDerivedFields>[0]);
+      expect(derived.dni).toBe('12345678Z');
+      expect(derived.residenciaCast).toBe('Ariz Taller');
+      expect(derived.residenciaEus).toBe('Ariz Tailerra');
+      expect(derived.direccionTeletrabajo).toBe('Av. Test 1 2A 48900 Getxo Bizkaia');
+    });
+  });
+});
+
+// ─── plantilla: filters ───────────────────────────────────────────────────────
+
+import {
+  filterEmployees,
+  uniqueSorted,
+} from '../../../features/plantilla/domain/filters';
+import type { Employee } from '../../../features/plantilla/domain/employee';
+
+function employee(overrides: Partial<Employee> = {}): Employee {
+  return {
+    empleado: '1',
+    nombreApellidos: 'Persona Prueba',
+    puestoNomina: '',
+    puestoOrganizativo: '',
+    residencia: 'Oficinas Centrales',
+    nivelRetributivo: 'N3',
+    sexo: '',
+    calle: '',
+    numero: '',
+    piso: '',
+    codigoPostal: '',
+    poblacion: '',
+    provincia: '',
+    nif: '',
+    dni: '',
+    residenciaCast: '',
+    residenciaEus: '',
+    direccionTeletrabajo: '',
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+describe('plantilla — filterEmployees', () => {
+  it('excluye siempre los empleados con deletedAt', () => {
+    const list = [
+      employee({ empleado: 'ok' }),
+      employee({ empleado: 'del', deletedAt: '2026-01-01T00:00:00.000Z' }),
+    ];
+    expect(filterEmployees(list, { search: '', residencia: '', nivelRetributivo: '' })).toHaveLength(1);
+  });
+
+  it('busca por nombre case-insensitive', () => {
+    const list = [
+      employee({ empleado: '10', nombreApellidos: 'Ana García' }),
+      employee({ empleado: '20', nombreApellidos: 'Jon López' }),
+    ];
+    expect(
+      filterEmployees(list, { search: 'ANA', residencia: '', nivelRetributivo: '' }),
+    ).toHaveLength(1);
+  });
+
+  it('busca por número de empleado', () => {
+    const list = [
+      employee({ empleado: '10', nombreApellidos: 'Ana' }),
+      employee({ empleado: '20', nombreApellidos: 'Jon' }),
+    ];
+    expect(
+      filterEmployees(list, { search: '10', residencia: '', nivelRetributivo: '' }),
+    ).toHaveLength(1);
+  });
+
+  it('filtra por residencia', () => {
+    const list = [
+      employee({ empleado: '1', residencia: 'Oficinas Centrales' }),
+      employee({ empleado: '2', residencia: 'Sopela Taller' }),
+    ];
+    expect(
+      filterEmployees(list, { search: '', residencia: 'Sopela Taller', nivelRetributivo: '' }),
+    ).toHaveLength(1);
+  });
+
+  it('filtra por nivel retributivo', () => {
+    const list = [
+      employee({ empleado: '1', nivelRetributivo: 'N3' }),
+      employee({ empleado: '2', nivelRetributivo: 'N5' }),
+    ];
+    expect(
+      filterEmployees(list, { search: '', residencia: '', nivelRetributivo: 'N3' }),
+    ).toHaveLength(1);
+  });
+});
+
+describe('uniqueSorted', () => {
+  it('elimina duplicados y ordena alfabéticamente', () => {
+    expect(uniqueSorted(['Bilbao', 'Getxo', 'Bilbao', 'Algorta'])).toEqual([
+      'Algorta',
+      'Bilbao',
+      'Getxo',
+    ]);
+  });
+
+  it('elimina strings vacíos del resultado', () => {
+    expect(uniqueSorted(['A', '', 'B', ''])).toEqual(['A', 'B']);
+  });
+
+  it('array vacío → array vacío', () => {
+    expect(uniqueSorted([])).toEqual([]);
+  });
+});
+
+// ─── configuracion: taskOrigins ───────────────────────────────────────────────
+
+import {
+  normalizeTaskOriginName,
+  createTaskOriginIdFromName,
+  DEFAULT_TASK_ORIGINS,
+} from '../../../features/configuracion/domain/taskOrigins';
+
+describe('configuracion — taskOrigins', () => {
+  it('normalizeTaskOriginName hace trim y colapsa espacios internos', () => {
+    expect(normalizeTaskOriginName('  LAB  ')).toBe('LAB');
+  });
+
+  it('createTaskOriginIdFromName genera id kebab sin acentos ni mayúsculas', () => {
+    expect(createTaskOriginIdFromName('Prevención')).toBe('prevencion');
+    expect(createTaskOriginIdFromName('Gestión del Servicio')).toBe('gestion-del-servicio');
+    expect(createTaskOriginIdFromName('RRHH')).toBe('rrhh');
+  });
+
+  it('todos los orígenes por defecto tienen id, nombre y tipo válidos', () => {
+    expect(DEFAULT_TASK_ORIGINS.length).toBeGreaterThan(0);
+    DEFAULT_TASK_ORIGINS.forEach((origin) => {
+      expect(origin.id).toBeTruthy();
+      expect(origin.nombre).toBeTruthy();
+      expect(['sindicato', 'empresa', 'otro']).toContain(origin.tipo);
+    });
+  });
+
+  it('los sindicatos por defecto incluyen ELA, CCOO y LAB', () => {
+    const sindicatos = DEFAULT_TASK_ORIGINS.filter((o) => o.tipo === 'sindicato').map((o) => o.nombre);
+    expect(sindicatos).toContain('ELA');
+    expect(sindicatos).toContain('CCOO');
+    expect(sindicatos).toContain('LAB');
+  });
+
+  it('no hay ids duplicados en los orígenes por defecto', () => {
+    const ids = DEFAULT_TASK_ORIGINS.map((o) => o.id);
+    expect(ids.length).toBe(new Set(ids).size);
+  });
+});
+
+// ─── configuracion: taskPhases ────────────────────────────────────────────────
+
+import {
+  createTaskPhaseIdFromName,
+  normalizeTaskPhaseName,
+  DEFAULT_TASK_PHASES,
+} from '../../../features/configuracion/domain/taskPhases';
+
+describe('configuracion — taskPhases', () => {
+  it('createTaskPhaseIdFromName genera id kebab sin acentos', () => {
+    expect(createTaskPhaseIdFromName('Sesión Comité')).toBe('sesion-comite');
+    expect(createTaskPhaseIdFromName('tarea')).toBe('tarea');
+  });
+
+  it('normalizeTaskPhaseName: trim + lowercase', () => {
+    expect(normalizeTaskPhaseName('  COMITÉ  ')).toBe('comité');
+    expect(normalizeTaskPhaseName('Paritaria')).toBe('paritaria');
+  });
+
+  it('fases por defecto incluyen tarea, comite y cerrada', () => {
+    const nombres = DEFAULT_TASK_PHASES.map((p) => p.nombre);
+    expect(nombres).toContain('tarea');
+    expect(nombres).toContain('comite');
+    expect(nombres).toContain('cerrada');
+  });
+
+  it('no hay ids duplicados en las fases por defecto', () => {
+    const ids = DEFAULT_TASK_PHASES.map((p) => p.id);
+    expect(ids.length).toBe(new Set(ids).size);
+  });
+});
+
+// ─── criterios-rrll: filters + sort ──────────────────────────────────────────
+
+import {
+  filterCriteriosRrll,
+  EMPTY_CRITERIO_RRLL_FILTERS,
+} from '../../../features/criterios-rrll/domain/filters';
+import {
+  sortCriteriosRrllByDefault,
+  sortCriteriosRrllByColumn,
+} from '../../../features/criterios-rrll/domain/sort';
+import type { CriterioRrll } from '../../../features/criterios-rrll/domain/criterioRrll';
+
+const ts = '2026-06-17T08:00:00.000Z';
+
+function criterio(overrides: Partial<CriterioRrll> = {}): CriterioRrll {
+  return {
+    id: 'c-1',
+    tema: 'Vacaciones',
+    criterio: 'Criterio base',
+    estado: 'vigente',
+    sentido: 'aprobado',
+    fecha: '2026-01-01',
+    responsable: 'RRHH',
+    observaciones: '',
+    createdAt: ts,
+    updatedAt: ts,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+describe('criterios-rrll — filterCriteriosRrll', () => {
+  it('excluye criterios con deletedAt', () => {
+    const list = [criterio({ id: 'ok' }), criterio({ id: 'del', deletedAt: ts })];
+    expect(filterCriteriosRrll(list, EMPTY_CRITERIO_RRLL_FILTERS)).toHaveLength(1);
+  });
+
+  it('busca en tema, criterio, sentido y observaciones', () => {
+    const list = [
+      criterio({ id: 'vac', tema: 'Vacaciones anuales' }),
+      criterio({ id: 'per', tema: 'Permisos', observaciones: 'ver vacaciones' }),
+      criterio({ id: 'jub', tema: 'Jubilación' }),
+    ];
+    expect(
+      filterCriteriosRrll(list, { ...EMPTY_CRITERIO_RRLL_FILTERS, search: 'vacaciones' }).map((c) => c.id),
+    ).toEqual(['vac', 'per']);
+  });
+
+  it('filtra por estado y sentido combinados', () => {
+    const list = [
+      criterio({ id: 'a', estado: 'vigente', sentido: 'aprobado' }),
+      criterio({ id: 'b', estado: 'archivado', sentido: 'aprobado' }),
+      criterio({ id: 'c', estado: 'vigente', sentido: 'denegado' }),
+    ];
+    expect(
+      filterCriteriosRrll(list, {
+        ...EMPTY_CRITERIO_RRLL_FILTERS,
+        estado: 'vigente',
+        sentido: 'aprobado',
+      }).map((c) => c.id),
+    ).toEqual(['a']);
+  });
+});
+
+describe('criterios-rrll — sort', () => {
+  it('sortCriteriosRrllByDefault: con fecha primero (más reciente), sin fecha al final', () => {
+    const list = [
+      criterio({ id: 'sin', fecha: '' }),
+      criterio({ id: 'ant', fecha: '2025-01-01' }),
+      criterio({ id: 'rec', fecha: '2026-06-01' }),
+    ];
+    const sorted = sortCriteriosRrllByDefault(list);
+    expect(sorted[0].id).toBe('rec');
+    expect(sorted[1].id).toBe('ant');
+    expect(sorted[sorted.length - 1].id).toBe('sin');
+  });
+
+  it('sortCriteriosRrllByColumn tema asc/desc', () => {
+    const list = [criterio({ id: 'z', tema: 'Zzz' }), criterio({ id: 'a', tema: 'Aaa' })];
+    expect(sortCriteriosRrllByColumn(list, 'tema', 'asc')[0].id).toBe('a');
+    expect(sortCriteriosRrllByColumn(list, 'tema', 'desc')[0].id).toBe('z');
+  });
+
+  it('sortCriteriosRrllByColumn fecha asc: vacíos al final', () => {
+    const list = [
+      criterio({ id: 'sin', fecha: '' }),
+      criterio({ id: 'pronto', fecha: '2026-01-01' }),
+      criterio({ id: 'tarde', fecha: '2026-12-01' }),
+    ];
+    const sorted = sortCriteriosRrllByColumn(list, 'fecha', 'asc');
+    expect(sorted[0].id).toBe('pronto');
+    expect(sorted[sorted.length - 1].id).toBe('sin');
+  });
+});
+
+// ─── teletrabajo: filters + sort ─────────────────────────────────────────────
+
+import {
+  filterTeletrabajoSolicitudes,
+  EMPTY_TELETRABAJO_FILTERS,
+} from '../../../features/teletrabajo/domain/filters';
+import {
+  sortTeletrabajoByDefault,
+  sortTeletrabajoByColumn,
+} from '../../../features/teletrabajo/domain/sort';
+import type { TeletrabajoSolicitud } from '../../../features/teletrabajo/domain/solicitud';
+
+function solicitud(overrides: Partial<TeletrabajoSolicitud> = {}): TeletrabajoSolicitud {
+  return {
+    id: 'sol-1',
+    empleado: '1',
+    nombreApellidos: 'Persona Prueba',
+    puestoNomina: '',
+    puestoOrganizativo: '',
+    residencia: '',
+    dni: '',
+    direccionTeletrabajo: '',
+    estado: 'pendiente',
+    tipoSolicitud: 'nueva',
+    diasTeletrabajo: ['martes'],
+    fechaSolicitud: '',
+    fechaOrdenador: '',
+    fechaCascos: '',
+    periodo: '2026',
+    observaciones: '',
+    validacionSeguridadInformatica: false,
+    validacionPrevencion: false,
+    validacionJefatura: false,
+    revisado: false,
+    createdAt: ts,
+    updatedAt: ts,
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+describe('teletrabajo — filterTeletrabajoSolicitudes', () => {
+  it('excluye solicitudes con deletedAt', () => {
+    const list = [solicitud({ id: 'ok' }), solicitud({ id: 'del', deletedAt: ts })];
+    expect(filterTeletrabajoSolicitudes(list, EMPTY_TELETRABAJO_FILTERS)).toHaveLength(1);
+  });
+
+  it('busca por nombre y número de empleado', () => {
+    const list = [
+      solicitud({ id: 'a', empleado: '10', nombreApellidos: 'Ana García' }),
+      solicitud({ id: 'b', empleado: '20', nombreApellidos: 'Jon López' }),
+    ];
+    expect(
+      filterTeletrabajoSolicitudes(list, { ...EMPTY_TELETRABAJO_FILTERS, search: 'ana' }).map((s) => s.id),
+    ).toEqual(['a']);
+    expect(
+      filterTeletrabajoSolicitudes(list, { ...EMPTY_TELETRABAJO_FILTERS, search: '20' }).map((s) => s.id),
+    ).toEqual(['b']);
+  });
+
+  it('filtra por estado, tipoSolicitud y periodo combinados', () => {
+    const list = [
+      solicitud({ id: 'match', estado: 'aprobada', tipoSolicitud: 'renovacion', periodo: '2025' }),
+      solicitud({ id: 'no', estado: 'pendiente', tipoSolicitud: 'nueva', periodo: '2026' }),
+    ];
+    expect(
+      filterTeletrabajoSolicitudes(list, {
+        ...EMPTY_TELETRABAJO_FILTERS,
+        estado: 'aprobada',
+        tipoSolicitud: 'renovacion',
+        periodo: '2025',
+      }).map((s) => s.id),
+    ).toEqual(['match']);
+  });
+});
+
+describe('teletrabajo — sort', () => {
+  it('sortTeletrabajoByDefault: periodo desc, luego empleado numérico asc', () => {
+    const list = [
+      solicitud({ id: 'a', empleado: '10', periodo: '2025' }),
+      solicitud({ id: 'b', empleado: '2', periodo: '2026' }),
+      solicitud({ id: 'c', empleado: '1', periodo: '2026' }),
+    ];
+    expect(sortTeletrabajoByDefault(list).map((s) => s.id)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('sortTeletrabajoByColumn empleado: orden numérico (1 < 2 < 10)', () => {
+    const list = [
+      solicitud({ id: '10', empleado: '10' }),
+      solicitud({ id: '2', empleado: '2' }),
+      solicitud({ id: '1', empleado: '1' }),
+    ];
+    expect(
+      sortTeletrabajoByColumn(list, 'empleado', 'asc').map((s) => s.id),
+    ).toEqual(['1', '2', '10']);
+  });
+});
+
+// ─── audit: buildAuditChanges + buildUpdateSummary ───────────────────────────
+
+import {
+  buildAuditChanges,
+  buildUpdateSummary,
+} from '../../../shared/audit/auditTrail';
+
+describe('audit — buildAuditChanges', () => {
+  it('detecta campos modificados y los mapea con etiqueta', () => {
+    const before = { titulo: 'Antes', estado: 'pendiente', prioridad: 'media' };
+    const after = { titulo: 'Después', estado: 'en curso', prioridad: 'media' };
+    const changes = buildAuditChanges(
+      before as Record<string, unknown>,
+      after as Record<string, unknown>,
+      { titulo: 'Título', estado: 'Estado', prioridad: 'Prioridad' },
+      ['titulo', 'estado', 'prioridad'],
+    );
+    expect(changes).toHaveLength(2);
+    expect(changes.find((c) => c.field === 'titulo')).toMatchObject({
+      before: 'Antes',
+      after: 'Después',
+      label: 'Título',
+    });
+  });
+
+  it('no genera cambio si el valor es idéntico', () => {
+    const obj = { campo: 'igual' } as Record<string, unknown>;
+    expect(buildAuditChanges(obj, obj, { campo: 'Campo' }, ['campo'])).toHaveLength(0);
+  });
+
+  it('compara arrays por contenido ordenado (no por referencia)', () => {
+    const before = { tags: ['a', 'b'] } as Record<string, unknown>;
+    const after = { tags: ['b', 'a'] } as Record<string, unknown>;
+    expect(buildAuditChanges(before, after, { tags: 'Etiquetas' }, ['tags'])).toHaveLength(0);
+  });
+
+  it('formatea null como "—"', () => {
+    const changes = buildAuditChanges(
+      { campo: null } as Record<string, unknown>,
+      { campo: 'Valor' } as Record<string, unknown>,
+      { campo: 'Campo' },
+      ['campo'],
+    );
+    expect(changes[0].before).toBe('—');
+  });
+
+  it('formatea booleanos correctamente (true → "Sí", false → "No")', () => {
+    const changes = buildAuditChanges(
+      { activo: false } as Record<string, unknown>,
+      { activo: true } as Record<string, unknown>,
+      { activo: 'Activo' },
+      ['activo'],
+    );
+    expect(changes[0].before).toBe('No');
+    expect(changes[0].after).toBe('Sí');
+  });
+});
+
+describe('audit — buildUpdateSummary', () => {
+  it('prioriza el cambio de estado en el resumen', () => {
+    const changes = [
+      { field: 'titulo', label: 'Título', before: 'A', after: 'B' },
+      { field: 'estado', label: 'Estado', before: 'pendiente', after: 'en curso' },
+    ];
+    expect(buildUpdateSummary(changes)).toBe('Estado cambiado: pendiente → en curso');
+  });
+
+  it('lista los primeros 4 campos con sufijo "y N más" cuando hay más de 4', () => {
+    const changes = [1, 2, 3, 4, 5].map((n) => ({
+      field: `f${n}`,
+      label: `Campo${n}`,
+      before: '',
+      after: 'x',
+    }));
+    const summary = buildUpdateSummary(changes);
+    expect(summary).toContain('Editado:');
+    expect(summary).toContain('y 1 más');
+  });
+
+  it('devuelve mensaje neutral cuando no hay campos', () => {
+    expect(buildUpdateSummary([])).toBe('Editado sin cambios relevantes');
+  });
+});
