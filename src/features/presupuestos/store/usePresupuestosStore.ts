@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import {
   normalizeBudgetActual,
   normalizeBudgetNumber,
@@ -65,11 +65,37 @@ function readJsonArray<T>(storageKey: string, guard: (value: unknown) => value i
   }
 }
 
-function persist(state: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>): void {
-  writeStorageItem(BUDGET_SCENARIOS_STORAGE_KEY, JSON.stringify(state.scenarios));
-  writeStorageItem(BUDGET_MANUAL_ITEMS_STORAGE_KEY, JSON.stringify(state.manualItems));
-  writeStorageItem(BUDGET_TICKET_GROUPS_STORAGE_KEY, JSON.stringify(state.ticketGroups));
-  writeStorageItem(BUDGET_ACTUALS_STORAGE_KEY, JSON.stringify(state.actuals));
+async function persist(state: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>): Promise<void> {
+  const writes = [
+    [BUDGET_SCENARIOS_STORAGE_KEY, state.scenarios],
+    [BUDGET_MANUAL_ITEMS_STORAGE_KEY, state.manualItems],
+    [BUDGET_TICKET_GROUPS_STORAGE_KEY, state.ticketGroups],
+    [BUDGET_ACTUALS_STORAGE_KEY, state.actuals],
+  ] as const;
+
+  for (const [storageKey, value] of writes) {
+    const result = await writeJsonStorageAsync(storageKey, value);
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+  }
+}
+
+type PresupuestosPatch = Partial<Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId'>>;
+
+function commitPresupuestosState(
+  set: (partial: PresupuestosPatch) => void,
+  nextState: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>,
+  patch: PresupuestosPatch,
+): void {
+  void (async () => {
+    try {
+      await persist(nextState);
+      set(patch);
+    } catch (error) {
+      console.warn('Presupuestos no guardado en SQLite.', error);
+    }
+  })();
 }
 
 function isScenario(value: unknown): value is BudgetScenario {
@@ -146,7 +172,7 @@ function loadState(): Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' |
   };
 }
 
-export const usePresupuestosStore = create<PresupuestosStoreState>((set) => ({
+export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) => ({
   scenarios: [],
   manualItems: [],
   ticketGroups: [],
@@ -161,106 +187,171 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set) => ({
     if (!validation.valid) return validation;
     const id = scenarioId ?? createId('budget-scenario');
     const timestamp = nowIso();
-    set((state) => {
-      const previous = state.scenarios.find((scenario) => scenario.id === id);
-      const scenario: BudgetScenario = { id, ...normalized, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp, deletedAt: previous?.deletedAt ?? null };
-      const scenarios = previous ? state.scenarios.map((item) => (item.id === id ? scenario : item)) : [...state.scenarios, scenario];
-      persist({ ...state, scenarios });
-      return { scenarios, activeScenarioId: id };
-    });
+    const state = get();
+    const previous = state.scenarios.find((scenario) => scenario.id === id);
+    const scenario: BudgetScenario = {
+      id,
+      ...normalized,
+      createdAt: previous?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+      deletedAt: previous?.deletedAt ?? null,
+    };
+    const scenarios = previous
+      ? state.scenarios.map((item) => (item.id === id ? scenario : item))
+      : [...state.scenarios, scenario];
+    commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: id });
     return { ...validation, id };
   },
   duplicateScenario: (scenarioId) => {
     const id = createId('budget-scenario');
     const timestamp = nowIso();
-    let duplicatedId: string | null = null;
-    set((state) => {
-      const scenario = state.scenarios.find((item) => item.id === scenarioId && !item.deletedAt);
-      if (!scenario) return state;
-      const duplicate: BudgetScenario = { ...scenario, id, name: `${scenario.name} (copia)`, createdAt: timestamp, updatedAt: timestamp, deletedAt: null };
-      const manualItems = [
-        ...state.manualItems,
-        ...state.manualItems.filter((item) => item.scenarioId === scenarioId && !item.deletedAt).map((item) => ({ ...item, id: createId('budget-manual'), scenarioId: id, createdAt: timestamp, updatedAt: timestamp, deletedAt: null })),
-      ];
-      const ticketGroups = [
-        ...state.ticketGroups,
-        ...state.ticketGroups.filter((group) => group.scenarioId === scenarioId && !group.deletedAt).map((group) => ({ ...group, id: createId('budget-ticket'), scenarioId: id, createdAt: timestamp, updatedAt: timestamp, deletedAt: null })),
-      ];
-      const scenarios = [...state.scenarios, duplicate];
-      duplicatedId = id;
-      persist({ ...state, scenarios, manualItems, ticketGroups });
-      return { scenarios, manualItems, ticketGroups, activeScenarioId: id };
-    });
-    return duplicatedId;
+    const state = get();
+    const scenario = state.scenarios.find((item) => item.id === scenarioId && !item.deletedAt);
+    if (!scenario) return null;
+    const duplicate: BudgetScenario = {
+      ...scenario,
+      id,
+      name: `${scenario.name} (copia)`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+    };
+    const manualItems = [
+      ...state.manualItems,
+      ...state.manualItems
+        .filter((item) => item.scenarioId === scenarioId && !item.deletedAt)
+        .map((item) => ({
+          ...item,
+          id: createId('budget-manual'),
+          scenarioId: id,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          deletedAt: null,
+        })),
+    ];
+    const ticketGroups = [
+      ...state.ticketGroups,
+      ...state.ticketGroups
+        .filter((group) => group.scenarioId === scenarioId && !group.deletedAt)
+        .map((group) => ({
+          ...group,
+          id: createId('budget-ticket'),
+          scenarioId: id,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          deletedAt: null,
+        })),
+    ];
+    const scenarios = [...state.scenarios, duplicate];
+    commitPresupuestosState(
+      set,
+      { ...state, scenarios, manualItems, ticketGroups },
+      { scenarios, manualItems, ticketGroups, activeScenarioId: id },
+    );
+    return id;
   },
-  removeScenario: (scenarioId) => set((state) => {
+  removeScenario: (scenarioId) => {
+    const state = get();
     const timestamp = nowIso();
-    const scenarios = state.scenarios.map((scenario) => (scenario.id === scenarioId ? { ...scenario, deletedAt: timestamp, updatedAt: timestamp } : scenario));
-    persist({ ...state, scenarios });
-    return { scenarios, activeScenarioId: scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null };
-  }),
+    const scenarios = state.scenarios.map((scenario) =>
+      scenario.id === scenarioId ? { ...scenario, deletedAt: timestamp, updatedAt: timestamp } : scenario,
+    );
+    commitPresupuestosState(
+      set,
+      { ...state, scenarios },
+      { scenarios, activeScenarioId: scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null },
+    );
+  },
   upsertManualItem: (draft, itemId) => {
     const normalized = normalizeManualDraft(draft);
     const validation = validateBudgetManualItem(normalized);
     if (!validation.valid) return validation;
     const id = itemId ?? createId('budget-manual');
     const timestamp = nowIso();
-    set((state) => {
-      const previous = state.manualItems.find((item) => item.id === id);
-      const displayOrder = previous?.displayOrder ?? state.manualItems.filter((item) => item.scenarioId === draft.scenarioId).length + 1;
-      const manualItem: BudgetManualItem = { id, ...normalized, displayOrder, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp, deletedAt: previous?.deletedAt ?? null };
-      const manualItems = previous ? state.manualItems.map((item) => (item.id === id ? manualItem : item)) : [...state.manualItems, manualItem];
-      persist({ ...state, manualItems });
-      return { manualItems };
-    });
+    const state = get();
+    const previous = state.manualItems.find((item) => item.id === id);
+    const displayOrder =
+      previous?.displayOrder ?? state.manualItems.filter((item) => item.scenarioId === draft.scenarioId).length + 1;
+    const manualItem: BudgetManualItem = {
+      id,
+      ...normalized,
+      displayOrder,
+      createdAt: previous?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+      deletedAt: previous?.deletedAt ?? null,
+    };
+    const manualItems = previous
+      ? state.manualItems.map((item) => (item.id === id ? manualItem : item))
+      : [...state.manualItems, manualItem];
+    commitPresupuestosState(set, { ...state, manualItems }, { manualItems });
     return { ...validation, id };
   },
-  removeManualItem: (itemId) => set((state) => {
+  removeManualItem: (itemId) => {
+    const state = get();
     const timestamp = nowIso();
-    const manualItems = state.manualItems.map((item) => (item.id === itemId ? { ...item, deletedAt: timestamp, updatedAt: timestamp } : item));
-    persist({ ...state, manualItems });
-    return { manualItems };
-  }),
+    const manualItems = state.manualItems.map((item) =>
+      item.id === itemId ? { ...item, deletedAt: timestamp, updatedAt: timestamp } : item,
+    );
+    commitPresupuestosState(set, { ...state, manualItems }, { manualItems });
+  },
   upsertTicketGroup: (draft, groupId) => {
     const normalized = normalizeTicketDraft(draft);
     const validation = validateBudgetTicketGroup(normalized);
     if (!validation.valid) return validation;
     const id = groupId ?? createId('budget-ticket');
     const timestamp = nowIso();
-    set((state) => {
-      const previous = state.ticketGroups.find((group) => group.id === id);
-      const displayOrder = previous?.displayOrder ?? state.ticketGroups.filter((group) => group.scenarioId === draft.scenarioId).length + 1;
-      const ticketGroup: BudgetTicketGroup = { id, ...normalized, displayOrder, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp, deletedAt: previous?.deletedAt ?? null };
-      const ticketGroups = previous ? state.ticketGroups.map((group) => (group.id === id ? ticketGroup : group)) : [...state.ticketGroups, ticketGroup];
-      persist({ ...state, ticketGroups });
-      return { ticketGroups };
-    });
+    const state = get();
+    const previous = state.ticketGroups.find((group) => group.id === id);
+    const displayOrder =
+      previous?.displayOrder ?? state.ticketGroups.filter((group) => group.scenarioId === draft.scenarioId).length + 1;
+    const ticketGroup: BudgetTicketGroup = {
+      id,
+      ...normalized,
+      displayOrder,
+      createdAt: previous?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+      deletedAt: previous?.deletedAt ?? null,
+    };
+    const ticketGroups = previous
+      ? state.ticketGroups.map((group) => (group.id === id ? ticketGroup : group))
+      : [...state.ticketGroups, ticketGroup];
+    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups });
     return { ...validation, id };
   },
-  removeTicketGroup: (groupId) => set((state) => {
+  removeTicketGroup: (groupId) => {
+    const state = get();
     const timestamp = nowIso();
-    const ticketGroups = state.ticketGroups.map((group) => (group.id === groupId ? { ...group, deletedAt: timestamp, updatedAt: timestamp } : group));
-    persist({ ...state, ticketGroups });
-    return { ticketGroups };
-  }),
+    const ticketGroups = state.ticketGroups.map((group) =>
+      group.id === groupId ? { ...group, deletedAt: timestamp, updatedAt: timestamp } : group,
+    );
+    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups });
+  },
   upsertActual: (draft, actualId) => {
     const validation = validateBudgetActual(draft);
     if (!validation.valid) return validation;
     const id = actualId ?? createId('budget-actual');
     const timestamp = nowIso();
-    set((state) => {
-      const previous = state.actuals.find((actual) => actual.id === id);
-      const actual = normalizeBudgetActual({ id, ...draft, createdAt: previous?.createdAt ?? timestamp, updatedAt: timestamp, deletedAt: previous?.deletedAt ?? null });
-      const actuals = previous ? state.actuals.map((item) => (item.id === id ? actual : item)) : [...state.actuals, actual];
-      persist({ ...state, actuals });
-      return { actuals };
+    const state = get();
+    const previous = state.actuals.find((actual) => actual.id === id);
+    const actual = normalizeBudgetActual({
+      id,
+      ...draft,
+      createdAt: previous?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+      deletedAt: previous?.deletedAt ?? null,
     });
+    const actuals = previous
+      ? state.actuals.map((item) => (item.id === id ? actual : item))
+      : [...state.actuals, actual];
+    commitPresupuestosState(set, { ...state, actuals }, { actuals });
     return { ...validation, id };
   },
-  removeActual: (actualId) => set((state) => {
+  removeActual: (actualId) => {
+    const state = get();
     const timestamp = nowIso();
-    const actuals = state.actuals.map((actual) => (actual.id === actualId ? { ...actual, deletedAt: timestamp, updatedAt: timestamp } : actual));
-    persist({ ...state, actuals });
-    return { actuals };
-  }),
+    const actuals = state.actuals.map((actual) =>
+      actual.id === actualId ? { ...actual, deletedAt: timestamp, updatedAt: timestamp } : actual,
+    );
+    commitPresupuestosState(set, { ...state, actuals }, { actuals });
+  },
 }));

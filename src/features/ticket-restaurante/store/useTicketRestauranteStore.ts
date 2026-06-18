@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import {
   buildTicketCalendar,
   calculateTicketContribution,
@@ -269,8 +269,32 @@ function recalculateDebtLedger(
   );
 }
 
-function persist<T>(storageKey: string, value: T): void {
-  writeStorageItem(storageKey, JSON.stringify(value));
+async function persist<T>(storageKey: string, value: T): Promise<void> {
+  const result = await writeJsonStorageAsync(storageKey, value);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
+}
+
+type TicketStatePatch = Partial<Pick<TicketRestauranteState, 'calendars' | 'absences' | 'people' | 'config' | 'debtLedger' | 'manutenciones'>>;
+
+type TicketWrite = readonly [storageKey: string, value: unknown];
+
+function commitTicketState(
+  set: (partial: TicketStatePatch) => void,
+  patch: TicketStatePatch,
+  writes: TicketWrite[],
+): void {
+  void (async () => {
+    try {
+      for (const [storageKey, value] of writes) {
+        await persist(storageKey, value);
+      }
+      set(patch);
+    } catch (error) {
+      console.warn('Ticket Restaurante no guardado en SQLite.', error);
+    }
+  })();
 }
 
 function nowIso(): string {
@@ -283,7 +307,7 @@ function createId(prefix: string): string {
     : `${prefix}-${Date.now()}`;
 }
 
-export const useTicketRestauranteStore = create<TicketRestauranteState>((set) => ({
+export const useTicketRestauranteStore = create<TicketRestauranteState>((set, get) => ({
   calendars: [],
   absences: [],
   people: [],
@@ -320,250 +344,199 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set) =>
   },
   createCalendar: (draft) => {
     const id = createId('ticket-calendar');
-    set((state) => {
-      const calendars = [...state.calendars, buildTicketCalendar(draft, nowIso(), id)];
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        calendars,
-        state.absences,
-        state.config,
-      );
-      persist(CALENDARS_STORAGE_KEY, calendars);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { calendars, debtLedger };
-    });
+    const state = get();
+    const calendars = [...state.calendars, buildTicketCalendar(draft, nowIso(), id)];
+    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+    commitTicketState(set, { calendars, debtLedger }, [
+      [CALENDARS_STORAGE_KEY, calendars],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
     return id;
   },
   updateCalendar: (id, draft) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const calendars = state.calendars.map((calendar) =>
-        calendar.id === id ? buildTicketCalendar(draft, updatedAt, id, calendar) : calendar,
-      );
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        calendars,
-        state.absences,
-        state.config,
-      );
-      persist(CALENDARS_STORAGE_KEY, calendars);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { calendars, debtLedger };
-    });
+    const state = get();
+    const updatedAt = nowIso();
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === id ? buildTicketCalendar(draft, updatedAt, id, calendar) : calendar,
+    );
+    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+    commitTicketState(set, { calendars, debtLedger }, [
+      [CALENDARS_STORAGE_KEY, calendars],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   toggleCalendarActive: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const calendars = state.calendars.map((calendar) =>
-        calendar.id === id ? { ...calendar, activo: !calendar.activo, updatedAt } : calendar,
-      );
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        calendars,
-        state.absences,
-        state.config,
-      );
-      persist(CALENDARS_STORAGE_KEY, calendars);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { calendars, debtLedger };
-    });
+    const state = get();
+    const updatedAt = nowIso();
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === id ? { ...calendar, activo: !calendar.activo, updatedAt } : calendar,
+    );
+    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+    commitTicketState(set, { calendars, debtLedger }, [
+      [CALENDARS_STORAGE_KEY, calendars],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   removeCalendar: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const calendars = state.calendars.map((calendar) =>
-        calendar.id === id
-          ? { ...calendar, activo: false, updatedAt, deletedAt: updatedAt }
-          : calendar,
-      );
-      const people = state.people.map((person) =>
-        person.calendarId === id && !person.deletedAt
-          ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
-          : person,
-      );
-      persist(CALENDARS_STORAGE_KEY, calendars);
-      const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
-      persist(PEOPLE_STORAGE_KEY, people);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { calendars, people, debtLedger };
-    });
+    const state = get();
+    const updatedAt = nowIso();
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === id
+        ? { ...calendar, activo: false, updatedAt, deletedAt: updatedAt }
+        : calendar,
+    );
+    const people = state.people.map((person) =>
+      person.calendarId === id && !person.deletedAt
+        ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
+        : person,
+    );
+    const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
+    commitTicketState(set, { calendars, people, debtLedger }, [
+      [CALENDARS_STORAGE_KEY, calendars],
+      [PEOPLE_STORAGE_KEY, people],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   toggleDay: (calendarId, fecha) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const calendars = state.calendars.map((calendar) =>
-        calendar.id === calendarId
-          ? { ...toggleDiaSinTicket(calendar, fecha), updatedAt }
-          : calendar,
-      );
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        calendars,
-        state.absences,
-        state.config,
-      );
-      persist(CALENDARS_STORAGE_KEY, calendars);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { calendars, debtLedger };
-    });
+    const state = get();
+    const updatedAt = nowIso();
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === calendarId
+        ? { ...toggleDiaSinTicket(calendar, fecha), updatedAt }
+        : calendar,
+    );
+    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+    commitTicketState(set, { calendars, debtLedger }, [
+      [CALENDARS_STORAGE_KEY, calendars],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   saveAbsences: (absences) => {
-    set((state) => {
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        state.calendars,
-        absences,
-        state.config,
-      );
-      persist(ABSENCES_STORAGE_KEY, absences);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { absences, debtLedger };
-    });
+    const state = get();
+    const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
+    commitTicketState(set, { absences, debtLedger }, [
+      [ABSENCES_STORAGE_KEY, absences],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   removeAbsence: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const absences = state.absences.map((absence) =>
-        absence.id === id ? { ...absence, updatedAt, deletedAt: updatedAt } : absence,
-      );
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        state.calendars,
-        absences,
-        state.config,
-      );
-      persist(ABSENCES_STORAGE_KEY, absences);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { absences, debtLedger };
-    });
+    const state = get();
+    const updatedAt = nowIso();
+    const absences = state.absences.map((absence) =>
+      absence.id === id ? { ...absence, updatedAt, deletedAt: updatedAt } : absence,
+    );
+    const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
+    commitTicketState(set, { absences, debtLedger }, [
+      [ABSENCES_STORAGE_KEY, absences],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   upsertPerson: (draft) => {
-    set((state) => {
-      const now = nowIso();
-      const previous = state.people.find((person) => person.empleado === draft.empleado);
-      const people = previous
-        ? state.people.map((person) =>
-            person.empleado === draft.empleado ? buildTicketPerson(draft, now, person) : person,
-          )
-        : [...state.people, buildTicketPerson(draft, now)];
-      const debtLedger = recalculateDebtLedger(
-        people,
-        state.calendars,
-        state.absences,
-        state.config,
-      );
-      persist(PEOPLE_STORAGE_KEY, people);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { people, debtLedger };
-    });
+    const state = get();
+    const now = nowIso();
+    const previous = state.people.find((person) => person.empleado === draft.empleado);
+    const people = previous
+      ? state.people.map((person) =>
+          person.empleado === draft.empleado ? buildTicketPerson(draft, now, person) : person,
+        )
+      : [...state.people, buildTicketPerson(draft, now)];
+    const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
+    commitTicketState(set, { people, debtLedger }, [
+      [PEOPLE_STORAGE_KEY, people],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
-
   importPeople: (drafts) => {
     let result = { imported: 0, createdCalendars: 0 };
-    set((state) => {
-      const now = nowIso();
-      const calendars = [...state.calendars];
-      const calendarIdByName = new Map(
-        calendars
-          .filter((calendar) => !calendar.deletedAt)
-          .map((calendar) => [normalizeCalendarName(calendar.nombre), calendar.id]),
-      );
-      const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
+    const state = get();
+    const now = nowIso();
+    const calendars = [...state.calendars];
+    const calendarIdByName = new Map(
+      calendars
+        .filter((calendar) => !calendar.deletedAt)
+        .map((calendar) => [normalizeCalendarName(calendar.nombre), calendar.id]),
+    );
+    const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
 
-      drafts.forEach((draft) => {
-        const normalizedCalendarName = normalizeCalendarName(draft.calendarName);
-        let calendarId = draft.calendarId || calendarIdByName.get(normalizedCalendarName) || '';
+    drafts.forEach((draft) => {
+      const normalizedCalendarName = normalizeCalendarName(draft.calendarName);
+      let calendarId = draft.calendarId || calendarIdByName.get(normalizedCalendarName) || '';
 
-        if (!calendarId) {
-          calendarId = createId('ticket-calendar');
-          calendars.push(
-            buildTicketCalendar(
-              { nombre: draft.calendarName, activo: true, diasSinTicket: [] },
-              now,
-              calendarId,
-            ),
-          );
-          calendarIdByName.set(normalizedCalendarName, calendarId);
-          result = { ...result, createdCalendars: result.createdCalendars + 1 };
-        }
-
-        const previous = peopleByEmployee.get(draft.empleado);
-        peopleByEmployee.set(
-          draft.empleado,
-          buildTicketPerson({ ...draft, calendarId }, now, previous),
+      if (!calendarId) {
+        calendarId = createId('ticket-calendar');
+        calendars.push(
+          buildTicketCalendar(
+            { nombre: draft.calendarName, activo: true, diasSinTicket: [] },
+            now,
+            calendarId,
+          ),
         );
-        result = { ...result, imported: result.imported + 1 };
-      });
+        calendarIdByName.set(normalizedCalendarName, calendarId);
+        result = { ...result, createdCalendars: result.createdCalendars + 1 };
+      }
 
-      const people = Array.from(peopleByEmployee.values());
-      persist(CALENDARS_STORAGE_KEY, calendars);
-      const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
-      persist(PEOPLE_STORAGE_KEY, people);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { calendars, people, debtLedger };
+      const previous = peopleByEmployee.get(draft.empleado);
+      peopleByEmployee.set(draft.empleado, buildTicketPerson({ ...draft, calendarId }, now, previous));
+      result = { ...result, imported: result.imported + 1 };
     });
+
+    const people = Array.from(peopleByEmployee.values());
+    const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
+    commitTicketState(set, { calendars, people, debtLedger }, [
+      [CALENDARS_STORAGE_KEY, calendars],
+      [PEOPLE_STORAGE_KEY, people],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
     return result;
   },
   removePerson: (empleado) => {
-    set((state) => {
-      const people = state.people.filter((person) => person.empleado !== empleado);
-      const debtLedger = recalculateDebtLedger(
-        people,
-        state.calendars,
-        state.absences,
-        state.config,
-      );
-      persist(PEOPLE_STORAGE_KEY, people);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { people, debtLedger };
-    });
+    const state = get();
+    const people = state.people.filter((person) => person.empleado !== empleado);
+    const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
+    commitTicketState(set, { people, debtLedger }, [
+      [PEOPLE_STORAGE_KEY, people],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   updateConfig: (config) => {
-    set((state) => {
-      const debtLedger = recalculateDebtLedger(
-        state.people,
-        state.calendars,
-        state.absences,
-        config,
-      );
-      persist(CONFIG_STORAGE_KEY, config);
-      persist(DEBT_LEDGER_STORAGE_KEY, debtLedger);
-      return { config, debtLedger };
-    });
+    const state = get();
+    const debtLedger = recalculateDebtLedger(state.people, state.calendars, state.absences, config);
+    commitTicketState(set, { config, debtLedger }, [
+      [CONFIG_STORAGE_KEY, config],
+      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
+    ]);
   },
   saveManutenciones: (drafts) => {
-    set((state) => {
-      const now = nowIso();
-      const result = state.manutenciones.filter((row) => !row.deletedAt).map((row) => ({ ...row }));
-      const existingKeys = new Set(result.map((row) => `${row.empleado}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`));
+    const state = get();
+    const now = nowIso();
+    const result = state.manutenciones.filter((row) => !row.deletedAt).map((row) => ({ ...row }));
+    const existingKeys = new Set(
+      result.map((row) => `${row.empleado}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`),
+    );
 
-      drafts.forEach((draft) => {
-        const key = `${draft.empleado}|${draft.fechaGasto}|${draft.imputacionYear}|${draft.imputacionMonth}`;
-        if (existingKeys.has(key)) {
-          return;
-        }
-        existingKeys.add(key);
-        result.push(
-          buildTicketManutencion(
-            draft,
-            now,
-            `ticket-manutencion-${draft.empleado}-${draft.fechaGasto}-${result.length + 1}`,
-          ),
-        );
-      });
-
-      persist(MANUTENCIONES_STORAGE_KEY, result);
-      return { manutenciones: result };
+    drafts.forEach((draft) => {
+      const key = `${draft.empleado}|${draft.fechaGasto}|${draft.imputacionYear}|${draft.imputacionMonth}`;
+      if (existingKeys.has(key)) {
+        return;
+      }
+      existingKeys.add(key);
+      result.push(
+        buildTicketManutencion(
+          draft,
+          now,
+          `ticket-manutencion-${draft.empleado}-${draft.fechaGasto}-${result.length + 1}`,
+        ),
+      );
     });
+
+    commitTicketState(set, { manutenciones: result }, [[MANUTENCIONES_STORAGE_KEY, result]]);
   },
   removeManutencion: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const manutenciones = state.manutenciones.map((row) =>
-        row.id === id ? { ...row, updatedAt, deletedAt: updatedAt } : row,
-      );
-      persist(MANUTENCIONES_STORAGE_KEY, manutenciones);
-      return { manutenciones };
-    });
+    const state = get();
+    const updatedAt = nowIso();
+    const manutenciones = state.manutenciones.map((row) =>
+      row.id === id ? { ...row, updatedAt, deletedAt: updatedAt } : row,
+    );
+    commitTicketState(set, { manutenciones }, [[MANUTENCIONES_STORAGE_KEY, manutenciones]]);
   },
 }));

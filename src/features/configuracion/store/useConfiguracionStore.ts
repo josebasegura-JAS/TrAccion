@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { normalizeTemplatePath } from '../domain/teletrabajoTemplate';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import {
   createTaskPhaseIdFromName,
   DEFAULT_TASK_PHASES,
@@ -135,8 +135,22 @@ function readConfiguracion(): ConfiguracionState {
   };
 }
 
-function persistConfiguracion(configuracion: ConfiguracionState): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(configuracion));
+async function persistConfiguracionConfirmed(configuracion: ConfiguracionState): Promise<void> {
+  const result = await writeJsonStorageAsync(STORAGE_KEY, configuracion);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
+}
+
+function commitConfiguracion(set: (partial: ConfiguracionState) => void, configuracion: ConfiguracionState): void {
+  void (async () => {
+    try {
+      await persistConfiguracionConfirmed(configuracion);
+      set(configuracion);
+    } catch (error) {
+      console.warn('Configuración no guardada en SQLite.', error);
+    }
+  })();
 }
 
 const initialConfiguracion = readConfiguracion();
@@ -148,24 +162,22 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
   taskOrigins: initialConfiguracion.taskOrigins,
   load: () => set(readConfiguracion()),
   reloadFromStorage: () => set(readConfiguracion()),
-  setRutaPlantillaTeletrabajo: (ruta) =>
-    set((state) => {
-      const configuracion = {
-        ...state,
-        rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta),
-      };
-      persistConfiguracion(configuracion);
-      return configuracion;
-    }),
-  setRutaPlantillaLicenciaSinSueldo: (ruta) =>
-    set((state) => {
-      const configuracion = {
-        ...state,
-        rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta),
-      };
-      persistConfiguracion(configuracion);
-      return configuracion;
-    }),
+  setRutaPlantillaTeletrabajo: (ruta) => {
+    const state = useConfiguracionStore.getState();
+    const configuracion = {
+      ...state,
+      rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta),
+    };
+    commitConfiguracion(set, configuracion);
+  },
+  setRutaPlantillaLicenciaSinSueldo: (ruta) => {
+    const state = useConfiguracionStore.getState();
+    const configuracion = {
+      ...state,
+      rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta),
+    };
+    commitConfiguracion(set, configuracion);
+  },
   addTaskPhase: (nombre) =>
     set((state) => {
       const normalizedName = normalizeTaskPhaseName(nombre);
@@ -182,8 +194,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
         updatedAt: now,
       };
       const configuracion = { ...state, taskPhases: [...state.taskPhases, phase] };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
   updateTaskPhase: (id, nombre) =>
     set((state) => {
@@ -199,8 +211,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
           phase.id === id ? { ...phase, nombre: normalizedName, updatedAt: now } : phase,
         ),
       };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
   toggleTaskPhase: (id) =>
     set((state) => {
@@ -211,8 +223,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
           phase.id === id ? { ...phase, active: !phase.active, updatedAt: now } : phase,
         ),
       };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
   addTaskOrigin: (nombre, tipo) =>
     set((state) => {
@@ -231,8 +243,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
         updatedAt: now,
       };
       const configuracion = { ...state, taskOrigins: [...state.taskOrigins, origin] };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
   updateTaskOrigin: (id, nombre, tipo) =>
     set((state) => {
@@ -248,8 +260,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
           origin.id === id ? { ...origin, nombre: normalizedName, tipo, updatedAt: now } : origin,
         ),
       };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
   toggleTaskOrigin: (id) =>
     set((state) => {
@@ -260,8 +272,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
           origin.id === id ? { ...origin, active: !origin.active, updatedAt: now } : origin,
         ),
       };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
   deleteTaskOrigin: (id) =>
     set((state) => {
@@ -274,7 +286,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
             : origin,
         ),
       };
-      persistConfiguracion(configuracion);
-      return configuracion;
+      commitConfiguracion(set, configuracion);
+      return state;
     }),
 }));
