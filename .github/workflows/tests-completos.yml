@@ -30,10 +30,10 @@ jobs:
         run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
 
       - name: tsc renderer — noEmit
-        run: npx tsc --noEmit
+        run: ./node_modules/.bin/tsc --noEmit
 
       - name: tsc electron — noEmit
-        run: npx tsc -p electron/tsconfig.json --noEmit
+        run: ./node_modules/.bin/tsc -p electron/tsconfig.json --noEmit
 
       - name: ESLint (0 warnings tolerados)
         run: npx eslint . --max-warnings=0
@@ -89,7 +89,7 @@ jobs:
         run: npx vite build
 
       - name: Transpilar Electron main + preload
-        run: npx tsc -p electron/tsconfig.json
+        run: ./node_modules/.bin/tsc -p electron/tsconfig.json
 
       - name: Verificar artefactos de build
         run: |
