@@ -15,58 +15,38 @@ jobs:
     env:
       CI: "true"
       NODE_ENV: development
-      NPM_CONFIG_AUDIT: "false"
-      NPM_CONFIG_FUND: "false"
-      NPM_CONFIG_BIN_LINKS: "true"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js estable
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20.11.1
 
-      - name: Show toolchain
-        shell: pwsh
-        run: |
-          node --version
-          npm --version
-
-      - name: Clean npm config and cache
+      - name: Limpiar configuración npm
         shell: pwsh
         run: |
           npm config delete production
           npm config delete omit
+          npm config set fund false
+          npm config set audit false
           npm cache clean --force
 
-      - name: Install dependencies
+      - name: Instalar dependencias
         shell: pwsh
         run: |
-          npm install --include=dev --bin-links=true --ignore-scripts --no-audit --no-fund
+          npm install --production=false --include=dev --bin-links=true --no-audit --no-fund
 
-      - name: Verify local tools
+      - name: Diagnóstico de dependencias críticas
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-
-          $tools = @(
-            "node_modules\.bin\tsc.cmd",
-            "node_modules\.bin\eslint.cmd",
-            "node_modules\.bin\vitest.cmd",
-            "node_modules\.bin\vite.cmd"
-          )
-
-          foreach ($tool in $tools) {
-            if (!(Test-Path $tool)) {
-              Write-Host "Missing tool: $tool"
-              if (Test-Path "node_modules\.bin") {
-                Get-ChildItem "node_modules\.bin" | Select-Object -ExpandProperty Name
-              }
-              throw "Required local CLI tool is missing."
-            }
-          }
+          npm ls typescript eslint vitest vite --depth=0
+          npm exec -- tsc --version
+          npm exec -- eslint --version
+          npm exec -- vitest --version
+          npm exec -- vite --version
 
       - name: TypeScript renderer
         run: npm exec -- tsc --noEmit
@@ -80,5 +60,5 @@ jobs:
       - name: Unit tests
         run: npm run test
 
-      - name: Build renderer and Electron without EXE
+      - name: Build renderer y Electron sin EXE
         run: npm run build
