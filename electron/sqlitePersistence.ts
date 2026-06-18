@@ -216,6 +216,7 @@ interface SchemaMigrationRow {
 
 interface DatabasePreferences {
   customDirectoryPath: string | null;
+  secondaryBackupDirectoryPath: string | null;
 }
 
 const require = createRequire(import.meta.url);
@@ -456,7 +457,7 @@ async function readDatabasePreferences(): Promise<DatabasePreferences> {
     const raw = await readFile(getPreferencesPath(), 'utf8');
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
-      return { customDirectoryPath: null };
+      return { customDirectoryPath: null, secondaryBackupDirectoryPath: null };
     }
 
     const candidate = parsed as Partial<DatabasePreferences>;
@@ -465,9 +466,14 @@ async function readDatabasePreferences(): Promise<DatabasePreferences> {
         typeof candidate.customDirectoryPath === 'string' && candidate.customDirectoryPath.trim()
           ? candidate.customDirectoryPath
           : null,
+      secondaryBackupDirectoryPath:
+        typeof candidate.secondaryBackupDirectoryPath === 'string' &&
+        candidate.secondaryBackupDirectoryPath.trim()
+          ? candidate.secondaryBackupDirectoryPath
+          : null,
     };
   } catch {
-    return { customDirectoryPath: null };
+    return { customDirectoryPath: null, secondaryBackupDirectoryPath: null };
   }
 }
 
@@ -1024,6 +1030,19 @@ function openDatabase(databasePath: string): Database {
   // añadiendo 50-500 ms de latencia SMB por operación.
   db.pragma('synchronous = NORMAL');
   db.pragma('foreign_keys = ON');
+
+  // Protección contra downgrade: si la base tiene un schema más nuevo que esta
+  // versión del ejecutable, rechazar la apertura con un mensaje claro. Abrir una
+  // base con schema superior podría ignorar tablas o columnas nuevas y corromper datos.
+  const existingVersion = readCurrentSchemaVersion(db);
+  if (existingVersion > CURRENT_SCHEMA_VERSION) {
+    db.close();
+    throw new Error(
+      `La base de datos tiene schema v${existingVersion} pero esta versión de TrAccion solo soporta hasta v${CURRENT_SCHEMA_VERSION}. ` +
+      `Actualiza TrAccion antes de continuar.`,
+    );
+  }
+
   applyMigrations(db);
   return db;
 }
@@ -1469,6 +1488,38 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
       await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
     } catch (error) {
       console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
+    }
+
+    // Copia opcional en carpeta secundaria configurada por el usuario (p.ej. red o USB).
+    try {
+      const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
+      if (secondaryDir) {
+        await mkdir(secondaryDir, { recursive: true });
+        await writeFile(
+          path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME),
+          serializedPayload,
+          'utf8',
+        );
+        if (shouldRotateBackup) {
+          await writeFile(
+            path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.json`),
+            serializedPayload,
+            'utf8',
+          );
+        }
+        await copyFile(
+          currentStatus.path,
+          path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME),
+        );
+        if (shouldRotateBackup) {
+          await copyFile(
+            currentStatus.path,
+            path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.sqlite`),
+          );
+        }
+      }
+    } catch (error) {
+      console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
     }
   } finally {
     clearInterval(backupLockHeartbeat);
@@ -3077,7 +3128,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
         false,
         previousDatabasePath,
       );
-      await writeDatabasePreferences({ customDirectoryPath: normalizedDirectoryPath });
+      await writeDatabasePreferences({ customDirectoryPath: normalizedDirectoryPath, secondaryBackupDirectoryPath: (await readDatabasePreferences()).secondaryBackupDirectoryPath });
       return nextStatus;
     } catch (changeError) {
       if (previousStatus.ready) {
@@ -3122,7 +3173,7 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
     }
     await closeDatabaseAndReleaseLock();
     const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
-    await writeDatabasePreferences({ customDirectoryPath: null });
+    await writeDatabasePreferences({ customDirectoryPath: null, secondaryBackupDirectoryPath: (await readDatabasePreferences()).secondaryBackupDirectoryPath });
     return nextStatus;
   } catch (error) {
     try {
@@ -3150,4 +3201,25 @@ function errorMessage(error: unknown): string {
 export async function closeSqlitePersistence(): Promise<void> {
   await createShutdownLocalBackup();
   await closeDatabaseAndReleaseLock();
+}
+
+export async function getSecondaryBackupDirectory(): Promise<string | null> {
+  const preferences = await readDatabasePreferences();
+  return preferences.secondaryBackupDirectoryPath;
+}
+
+export async function setSecondaryBackupDirectory(directoryPath: string): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({
+    ...preferences,
+    secondaryBackupDirectoryPath: path.resolve(directoryPath),
+  });
+}
+
+export async function clearSecondaryBackupDirectory(): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({
+    ...preferences,
+    secondaryBackupDirectoryPath: null,
+  });
 }

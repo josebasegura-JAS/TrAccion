@@ -334,6 +334,8 @@ function writePendingSqliteWrites(writes: PendingSqliteWrite[]): void {
   window.localStorage.setItem(SQLITE_PENDING_WRITES_KEY, JSON.stringify(writes));
 }
 
+const MAX_PENDING_WRITE_ATTEMPTS = 20;
+
 function upsertPendingSqliteWrite(
   key: string,
   value: string,
@@ -347,12 +349,28 @@ function upsertPendingSqliteWrite(
   const now = new Date().toISOString();
   const writes = readPendingSqliteWrites();
   const existingIndex = writes.findIndex((write) => write.key === key);
+  const attempts = existingIndex >= 0 ? writes[existingIndex].attempts + 1 : 1;
+
+  // Si supera el límite de reintentos, descartar el write pendiente para no
+  // acumular ruido indefinidamente. Puede ocurrir si la clave ya no existe en
+  // el schema o si hay un conflicto persistente que no se puede resolver.
+  if (attempts > MAX_PENDING_WRITE_ATTEMPTS) {
+    console.warn(
+      `[pending-writes] Descartando write pendiente tras ${attempts} intentos fallidos. Clave: ${key}. Último error: ${lastError}`,
+    );
+    if (existingIndex >= 0) {
+      writes.splice(existingIndex, 1);
+      writePendingSqliteWrites(writes);
+    }
+    return;
+  }
+
   const nextWrite: PendingSqliteWrite = {
     key,
     value,
     updatedAt: now,
     expectedUpdatedAt,
-    attempts: existingIndex >= 0 ? writes[existingIndex].attempts + 1 : 1,
+    attempts,
     lastError,
   };
 

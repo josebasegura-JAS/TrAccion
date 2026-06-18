@@ -264,6 +264,9 @@ interface TraccionApi {
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
+  getSecondaryBackupDirectory?: () => Promise<string | null>;
+  setSecondaryBackupDirectory?: () => Promise<{ ok: boolean; path: string | null }>;
+  clearSecondaryBackupDirectory?: () => Promise<{ ok: boolean }>;
   listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;

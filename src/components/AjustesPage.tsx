@@ -93,6 +93,8 @@ export function AjustesPage() {
   const [localBackups, setLocalBackups] = useState<TraccionLocalBackupEntry[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [secondaryBackupPath, setSecondaryBackupPath] = useState<string | null>(null);
+  const [secondaryBackupStatus, setSecondaryBackupStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const { confirm, dialogNode } = useAppDialog();
 
@@ -126,6 +128,33 @@ export function AjustesPage() {
   useEffect(() => {
     void refreshLocalBackups();
   }, [refreshLocalBackups]);
+
+  useEffect(() => {
+    window.traccion?.getSecondaryBackupDirectory?.()
+      .then((p) => setSecondaryBackupPath(p ?? null))
+      .catch(() => undefined);
+  }, []);
+
+  const handleSetSecondaryBackupDirectory = async () => {
+    setSecondaryBackupStatus('');
+    if (!window.traccion?.setSecondaryBackupDirectory) {
+      setSecondaryBackupStatus('Solo disponible en escritorio.');
+      return;
+    }
+    const result = await window.traccion.setSecondaryBackupDirectory();
+    if (result.ok && result.path) {
+      setSecondaryBackupPath(result.path);
+      setSecondaryBackupStatus('Carpeta de respaldo secundario guardada.');
+    }
+  };
+
+  const handleClearSecondaryBackupDirectory = async () => {
+    setSecondaryBackupStatus('');
+    if (!window.traccion?.clearSecondaryBackupDirectory) return;
+    await window.traccion.clearSecondaryBackupDirectory();
+    setSecondaryBackupPath(null);
+    setSecondaryBackupStatus('Carpeta de respaldo secundario eliminada.');
+  };
 
   const handleRestoreLocalBackup = async (backup: TraccionLocalBackupEntry) => {
     if (!window.traccion?.restoreLocalBackup) {
@@ -430,6 +459,46 @@ export function AjustesPage() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            Carpeta de respaldo secundario
+          </p>
+          <p className="mt-1 text-xs text-metro-muted">
+            TrAccion copiará los respaldos automáticos también a esta carpeta (red, USB u otro equipo).
+            Protege frente a pérdida del equipo principal.
+          </p>
+          {secondaryBackupPath ? (
+            <p className="mt-2 break-all text-xs font-medium text-metro-text">
+              {secondaryBackupPath}
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-metro-muted">Sin carpeta secundaria configurada.</p>
+          )}
+          {secondaryBackupStatus && (
+            <p className="mt-1 text-xs text-metro-success">{secondaryBackupStatus}</p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-semibold text-white hover:bg-metro-dark"
+              onClick={() => void handleSetSecondaryBackupDirectory()}
+              type="button"
+            >
+              <Database size={14} />
+              {secondaryBackupPath ? 'Cambiar carpeta' : 'Seleccionar carpeta'}
+            </button>
+            {secondaryBackupPath && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red"
+                onClick={() => void handleClearSecondaryBackupDirectory()}
+                type="button"
+              >
+                <RotateCcw size={14} />
+                Eliminar
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

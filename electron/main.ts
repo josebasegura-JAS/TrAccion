@@ -36,6 +36,9 @@ import {
   saveSorteosSnapshotIfUnchanged,
   saveTaskRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
+  getSecondaryBackupDirectory,
+  setSecondaryBackupDirectory,
+  clearSecondaryBackupDirectory,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir, userInfo } from 'node:os';
@@ -1008,6 +1011,31 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('database:reset-directory', () => enqueueSqliteIpc('database:reset-directory', () => resetSqliteDirectory()));
+
+  ipcMain.handle('database:get-secondary-backup-directory', () => getSecondaryBackupDirectory());
+
+  ipcMain.handle('database:set-secondary-backup-directory', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar carpeta de respaldo secundario',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || !result.filePaths[0]) {
+      return { ok: false, path: null };
+    }
+
+    await setSecondaryBackupDirectory(result.filePaths[0]);
+    return { ok: true, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle('database:clear-secondary-backup-directory', async () => {
+    await clearSecondaryBackupDirectory();
+    return { ok: true };
+  });
 
   ipcMain.handle('database:list-local-backups', () => enqueueSqliteIpc('database:list-local-backups', () => listLocalBackups()));
 

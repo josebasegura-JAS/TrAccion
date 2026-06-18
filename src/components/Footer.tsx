@@ -1,6 +1,7 @@
 import { Database } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  getPendingSqliteWriteCount,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
@@ -64,15 +65,29 @@ function feedbackLabel(feedback: PersistenceFeedback): string {
 
 export function Footer() {
   const [feedback, setFeedback] = useState<PersistenceFeedback>(() => defaultFeedback());
+  const [pendingCount, setPendingCount] = useState(0);
   const databaseStatus = useDatabaseStatus();
   const databaseBadge = useMemo(() => buildDatabaseStatusBadge(databaseStatus), [databaseStatus]);
 
-  useEffect(() => subscribeToPersistenceFeedback(setFeedback), []);
+  useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
+    setFeedback(nextFeedback);
+    setPendingCount(getPendingSqliteWriteCount());
+  }), []);
 
   return (
     <footer className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
       <span className="shrink-0">TrAccion 1.0.{build}</span>
       <div className="flex min-w-0 items-center gap-3">
+        {pendingCount > 0 && (
+          <StatusBadge
+            className="shrink-0"
+            size="xs"
+            tone="warning"
+            title={`${pendingCount} cambio${pendingCount > 1 ? 's' : ''} pendiente${pendingCount > 1 ? 's' : ''} de sincronizar con SQLite`}
+          >
+            ⏳ {pendingCount} pendiente{pendingCount > 1 ? 's' : ''}
+          </StatusBadge>
+        )}
         <StatusBadge
           className="max-w-[15rem]"
           icon={<Database size={12} aria-hidden="true" />}
