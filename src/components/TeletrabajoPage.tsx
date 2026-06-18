@@ -83,6 +83,7 @@ const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
 
 type TeletrabajoTableColumnId =
   | 'revisado'
+  | 'estado'
   | 'empleado'
   | 'nombreApellidos'
   | 'puestoNomina'
@@ -90,7 +91,6 @@ type TeletrabajoTableColumnId =
   | 'residencia'
   | 'tipoSolicitud'
   | 'diasTeletrabajo'
-  | 'estado'
   | 'periodo'
   | 'actions';
 
@@ -99,6 +99,7 @@ const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY =
   'traccion.v1.teletrabajo.puestos.translationAliases';
 const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
   'revisado',
+  'estado',
   'empleado',
   'nombreApellidos',
   'puestoNomina',
@@ -106,7 +107,6 @@ const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
   'residencia',
   'tipoSolicitud',
   'diasTeletrabajo',
-  'estado',
   'periodo',
   'actions',
 ];
@@ -117,6 +117,10 @@ const defaultTeletrabajoTablePreferences: TableViewPreferences<TeletrabajoTableC
 
 const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
   { key: 'revisado', header: 'Revisado', value: (solicitud) => solicitud.revisado ? 'Sí' : 'No' },
+  { key: 'estado', header: 'Estado', value: (solicitud) => {
+    const labels: Record<string, string> = { pendiente: 'Pendiente', analizada: 'Analizada', aprobada: 'Aprobada', denegada: 'Rechazada' };
+    return labels[solicitud.estado] ?? solicitud.estado;
+  }},
   { key: 'empleado', header: 'Empleado', value: (solicitud) => solicitud.empleado },
   {
     key: 'nombreApellidos',
@@ -136,7 +140,6 @@ const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
     header: 'Días',
     value: (solicitud) => solicitud.diasTeletrabajo.join(', '),
   },
-  { key: 'estado', header: 'Estado', value: (solicitud) => solicitud.estado },
   { key: 'periodo', header: 'Periodo', value: (solicitud) => solicitud.periodo },
 ];
 
@@ -415,6 +418,40 @@ export function TeletrabajoPage({
         className: 'text-center',
       },
       {
+        id: 'estado',
+        header: 'Estado',
+        accessor: (s) => s.estado,
+        render: (s) => {
+          const estadoStyles: Record<string, string> = {
+            pendiente: 'border-amber-400/40 bg-amber-500/15 text-amber-200',
+            analizada: 'border-blue-400/40 bg-blue-500/15 text-blue-200',
+            aprobada: 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200',
+            denegada: 'border-red-400/40 bg-red-500/15 text-red-200',
+          };
+          const estadoLabels: Record<string, string> = {
+            pendiente: 'Pendiente',
+            analizada: 'Analizada',
+            aprobada: 'Aprobada',
+            denegada: 'Rechazada',
+          };
+          const className = estadoStyles[s.estado] ?? 'border-metro-border bg-metro-surface text-metro-muted';
+          const label = estadoLabels[s.estado] ?? s.estado;
+          return (
+            <span
+              className={`inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-bold ${className}`}
+              title={label}
+            >
+              {label}
+            </span>
+          );
+        },
+        width: 110,
+        minWidth: 90,
+        maxWidth: 180,
+        sortable: true,
+        className: 'text-center',
+      },
+      {
         id: 'empleado',
         header: 'Empleado',
         accessor: (s) => Number(s.empleado) || s.empleado,
@@ -514,17 +551,6 @@ export function TeletrabajoPage({
         width: 150,
         minWidth: 110,
         maxWidth: 240,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'estado',
-        header: 'Estado',
-        accessor: (s) => s.estado,
-        render: (s) => s.estado,
-        width: 110,
-        minWidth: 90,
-        maxWidth: 180,
         sortable: true,
         className: 'text-metro-muted',
       },

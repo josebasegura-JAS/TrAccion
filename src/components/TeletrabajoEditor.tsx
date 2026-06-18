@@ -347,11 +347,19 @@ export function TeletrabajoEditor({
                 }
                 value={draft.estado}
               >
-                {TELETRABAJO_ESTADOS.map((estado) => (
-                  <option key={estado} value={estado}>
-                    {estado}
-                  </option>
-                ))}
+                {TELETRABAJO_ESTADOS.map((estado) => {
+                  const labels: Record<string, string> = {
+                    pendiente: 'Pendiente',
+                    analizada: 'Analizada',
+                    aprobada: 'Aprobada',
+                    denegada: 'Rechazada',
+                  };
+                  return (
+                    <option key={estado} value={estado}>
+                      {labels[estado] ?? estado}
+                    </option>
+                  );
+                })}
               </select>
             </label>
 
