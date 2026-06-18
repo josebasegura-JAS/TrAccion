@@ -6,6 +6,7 @@ import { buildStableExportFilename } from '../../../shared/export/tableExport';
 
 const YES = 'SI';
 const NO = 'NO';
+const ROTIS_FONT = 'TrueRotisSemiSansLightTwo';
 
 function toExcelColor(hex: string): { argb: string } {
   return { argb: `FF${hex.replace('#', '').toUpperCase()}` };
@@ -21,12 +22,42 @@ function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBu
   return copy.buffer;
 }
 
+function normalizeEmployeeKey(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const numeric = Number(trimmed.replace(/\D/g, ''));
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return String(numeric);
+  }
+
+  return trimmed.toLocaleLowerCase('es-ES');
+}
+
 function buildEmployeeMap(employees: readonly Employee[]): Map<string, Employee> {
-  return new Map(
-    employees
-      .filter((employee) => !employee.deletedAt)
-      .map((employee) => [employee.empleado.trim(), employee]),
-  );
+  const employeesById = new Map<string, Employee>();
+
+  employees
+    .filter((employee) => !employee.deletedAt)
+    .forEach((employee) => {
+      const rawKey = employee.empleado.trim();
+      const normalizedKey = normalizeEmployeeKey(employee.empleado);
+
+      if (rawKey) {
+        employeesById.set(rawKey, employee);
+      }
+      if (normalizedKey) {
+        employeesById.set(normalizedKey, employee);
+      }
+    });
+
+  return employeesById;
+}
+
+function findEmployee(employeesById: Map<string, Employee>, empleado: string): Employee | undefined {
+  return employeesById.get(empleado.trim()) ?? employeesById.get(normalizeEmployeeKey(empleado));
 }
 
 function hasDia(solicitud: TeletrabajoSolicitud, dia: 'martes' | 'miercoles' | 'jueves'): string {
@@ -47,18 +78,30 @@ function buildTitle(rows: readonly TeletrabajoSolicitud[], selectedPeriodo?: str
   return 'Solicitudes Teletrabajo';
 }
 
-function setBooleanCellStyle(cell: ExcelJS.Cell, value: boolean): void {
+function setValidationCellStyle(cell: ExcelJS.Cell, value: boolean): void {
   cell.value = value ? YES : NO;
   cell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: toExcelColor(value ? '#C6EFCE' : '#FFC7CE'),
+    fgColor: toExcelColor(value ? '#92D050' : '#FF0000'),
   };
   cell.font = {
+    name: ROTIS_FONT,
+    size: 11,
     bold: true,
-    color: toExcelColor(value ? '#006100' : '#9C0006'),
+    color: toExcelColor(value ? '#006100' : '#FFFFFF'),
   };
   cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  cell.border = buildDottedBorder();
+}
+
+function buildDottedBorder(): Partial<ExcelJS.Borders> {
+  return {
+    top: { style: 'dotted' },
+    left: { style: 'dotted' },
+    bottom: { style: 'dotted' },
+    right: { style: 'dotted' },
+  };
 }
 
 async function openWorkbookInExcel(
@@ -98,97 +141,98 @@ export async function exportTeletrabajoDireccionToExcel({
   const employeesById = buildEmployeeMap(employees);
 
   worksheet.columns = [
-    { key: 'nivel', width: 9 },
-    { key: 'empleado', width: 12 },
-    { key: 'nombre', width: 34 },
-    { key: 'puesto', width: 28 },
-    { key: 'direccion', width: 28 },
-    { key: 'martes', width: 10 },
-    { key: 'miercoles', width: 12 },
-    { key: 'jueves', width: 10 },
-    { key: 'periodo', width: 14 },
-    { key: 'cumplimiento', width: 22 },
-    { key: 'informe', width: 18 },
-    { key: 'anoAnterior', width: 18 },
-    { key: 'validacionJefatura', width: 18 },
-    { key: 'validacionDireccion', width: 22 },
-    { key: 'validacionSeptiembre', width: 18 },
-    { key: 'peticionMartes', width: 10 },
-    { key: 'peticionMiercoles', width: 12 },
-    { key: 'peticionJueves', width: 10 },
-    { key: 'cambiosFueraPlazo', width: 24 },
-    { key: 'observaciones', width: 42 },
+    { key: 'nivel', width: 2.27 },
+    { key: 'empleado', width: 8.27 },
+    { key: 'nombre', width: 30 },
+    { key: 'puesto', width: 36 },
+    { key: 'direccion', width: 26.82 },
+    { key: 'martes', width: 6.09 },
+    { key: 'miercoles', width: 8.09 },
+    { key: 'jueves', width: 5.63 },
+    { key: 'periodo', width: 10.45 },
+    { key: 'cumplimiento', width: 13.82 },
+    { key: 'informe', width: 11.09 },
+    { key: 'anoAnterior', width: 14 },
+    { key: 'validacionJefatura', width: 16.18 },
+    { key: 'validacionDireccion', width: 38.54 },
+    { key: 'validacionSeptiembre', width: 31.36 },
+    { key: 'peticionMartes', width: 8.27 },
+    { key: 'peticionMiercoles', width: 8.09 },
+    { key: 'peticionJueves', width: 5.63 },
+    { key: 'cambiosFueraPlazo', width: 52.09 },
+    { key: 'observaciones', width: 40.73 },
   ];
 
-  worksheet.mergeCells('A2:T2');
-  const titleCell = worksheet.getCell('A2');
+  worksheet.mergeCells('B2:D2');
+  const titleCell = worksheet.getCell('B2');
   titleCell.value = buildTitle(rows, periodo);
-  titleCell.font = { bold: true, size: 14 };
-  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  worksheet.getRow(2).height = 24;
+  titleCell.font = { name: 'Calibri', size: 11, bold: false };
+  titleCell.alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(2).height = 20.5;
 
-  worksheet.mergeCells('A4:E4');
+  worksheet.mergeCells('B4:C4');
+  worksheet.mergeCells('D4:E4');
   worksheet.mergeCells('F4:H4');
-  worksheet.mergeCells('J4:K4');
   worksheet.mergeCells('P4:R4');
-  worksheet.getCell('A4').value = 'Datos de la persona';
-  worksheet.getCell('F4').value = 'Días solicitados';
-  worksheet.getCell('I4').value = 'Periodo';
-  worksheet.getCell('J4').value = 'Revisión RRLL';
-  worksheet.getCell('L4').value = 'Año anterior';
-  worksheet.getCell('M4').value = 'Jefatura';
-  worksheet.getCell('N4').value = 'Dirección';
-  worksheet.getCell('O4').value = '22 septiembre';
+
+  worksheet.getCell('B4').value = 'Solicitante';
+  worksheet.getCell('D4').value = 'Puesto de Trabajo';
+  worksheet.getCell('F4').value = 'Petición original';
+  worksheet.getCell('I4').value = 'Periodo 2025-2026';
+  worksheet.getCell('J4').value = 'Cumplimiento Condiciones Presencialidad';
+  worksheet.getCell('K4').value = 'Informe Favorable';
+  worksheet.getCell('L4').value = 'Año Anterior Teletrabajado';
+  worksheet.getCell('M4').value = 'Validación Jefatura de Unidad a Repetir ';
+  worksheet.getCell('N4').value = 'Validación ordinaria de la Dirección ';
+  worksheet.getCell('O4').value = 'Validación 22 septiembre 2022';
   worksheet.getCell('P4').value = 'Petición II';
   worksheet.getCell('S4').value = 'Cambios fuera de plazo ordinario';
   worksheet.getCell('T4').value = 'Observaciones';
 
-  const headers = [
-    'Nivel',
-    'Nº Empleado',
-    'Nombre y apellidos',
-    'Detalle del puesto',
+  worksheet.getRow(5).values = [
+    '',
+    'Nº Empl',
+    'Nombre',
+    'Detalle',
     'Dirección',
     'Martes',
     'Miércoles',
     'Jueves',
-    'Periodo',
-    'Cumplimiento Condiciones Presencialidad',
-    'Informe Favorable',
-    'Año Anterior Teletrabajado',
-    'Validación Jefatura',
-    'Validación ordinaria de la Dirección',
-    'Validación 22 septiembre',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
     'Martes',
     'Miércoles',
     'Jueves',
-    'Cambios fuera de plazo ordinario',
-    'Observaciones',
+    '',
+    '',
   ];
-  worksheet.getRow(5).values = headers;
+
+  worksheet.getRow(4).height = 42.5;
 
   [4, 5].forEach((rowNumber) => {
     const row = worksheet.getRow(rowNumber);
-    row.height = rowNumber === 5 ? 34 : 22;
-    row.eachCell((cell) => {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      if (colNumber === 1) {
+        return;
+      }
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: toExcelColor('#D9EAF7'),
+        fgColor: toExcelColor('#FF0000'),
       };
-      cell.font = { bold: true };
+      cell.font = { name: ROTIS_FONT, size: 11, bold: true };
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
-      };
+      cell.border = buildDottedBorder();
     });
   });
 
   rows.forEach((solicitud, index) => {
-    const employee = employeesById.get(solicitud.empleado.trim());
+    const employee = findEmployee(employeesById, solicitud.empleado);
     const rowNumber = 6 + index;
     const row = worksheet.getRow(rowNumber);
 
@@ -215,27 +259,21 @@ export async function exportTeletrabajoDireccionToExcel({
       solicitud.observaciones,
     ];
 
-    setBooleanCellStyle(row.getCell(10), solicitud.revisado);
-    setBooleanCellStyle(row.getCell(11), solicitud.validacionJefatura);
-    setBooleanCellStyle(row.getCell(13), solicitud.validacionJefatura);
-
-    row.eachCell((cell, colNumber) => {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.font = { name: ROTIS_FONT, size: 11 };
       cell.alignment = {
-        horizontal: [1, 2, 6, 7, 8, 9, 10, 11, 12, 13].includes(colNumber) ? 'center' : 'left',
+        horizontal: [1, 2, 6, 7, 8, 9, 12].includes(colNumber) ? 'center' : 'left',
         vertical: 'middle',
         wrapText: true,
       };
-      cell.border = {
-        top: { style: 'thin', color: toExcelColor('#D9D9D9') },
-        left: { style: 'thin', color: toExcelColor('#D9D9D9') },
-        bottom: { style: 'thin', color: toExcelColor('#D9D9D9') },
-        right: { style: 'thin', color: toExcelColor('#D9D9D9') },
-      };
     });
+
+    setValidationCellStyle(row.getCell(10), solicitud.revisado);
+    setValidationCellStyle(row.getCell(11), solicitud.validacionJefatura);
   });
 
   worksheet.autoFilter = {
-    from: 'A5',
+    from: 'B5',
     to: 'T5',
   };
 
