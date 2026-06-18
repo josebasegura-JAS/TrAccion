@@ -499,11 +499,16 @@ export async function flushPendingSqliteWrites(): Promise<number> {
     return 0;
   }
 
-  let flushedCount = 0;
-  for (const pendingWrite of pendingWrites.sort(
+  // Lanzar todas las escrituras en paralelo. La cola enqueueSqliteIpc del proceso
+  // principal las serializa internamente, así que no hay riesgo de corrupción.
+  // El beneficio es visible cuando hay N claves pendientes tras una desconexión
+  // SMB breve: en lugar de esperar N round-trips en serie, se solapan.
+  const sorted = pendingWrites.sort(
     (left, right) => Date.parse(left.updatedAt) - Date.parse(right.updatedAt),
-  )) {
-    try {
+  );
+
+  const results = await Promise.allSettled(
+    sorted.map(async (pendingWrite) => {
       const savedUpdatedAt = await saveRecordToSqliteIfUnchanged(
         { key: pendingWrite.key, value: pendingWrite.value },
         pendingWrite.expectedUpdatedAt,
@@ -517,14 +522,23 @@ export async function flushPendingSqliteWrites(): Promise<number> {
         strategy: 'sqlite',
       });
       removePendingSqliteWrite(pendingWrite.key);
+      return pendingWrite.key;
+    }),
+  );
+
+  let flushedCount = 0;
+  for (let i = 0; i < results.length; i += 1) {
+    const result = results[i];
+    const pendingWrite = sorted[i];
+    if (result.status === 'fulfilled') {
       flushedCount += 1;
-    } catch (error) {
+    } else {
       const message =
-        error instanceof Error ? error.message : 'No se ha podido sincronizar un cambio pendiente.';
+        result.reason instanceof Error
+          ? result.reason.message
+          : 'No se ha podido sincronizar un cambio pendiente.';
       // Tanto conflictos de concurrencia como errores de red se mantienen en la cola
-      // para reintentarlos en el siguiente ciclo. El conflicto de concurrencia indica
-      // que otro usuario modificó el mismo registro; se reintentará con el token
-      // actualizado en la siguiente sync. No se descarta silenciosamente.
+      // para reintentarlos en el siguiente ciclo.
       upsertPendingSqliteWrite(
         pendingWrite.key,
         pendingWrite.value,
@@ -541,7 +555,6 @@ export async function flushPendingSqliteWrites(): Promise<number> {
             : `SQLite pendiente: ${message}`,
         });
       }
-      break;
     }
   }
 
