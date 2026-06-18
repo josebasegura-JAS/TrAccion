@@ -1482,43 +1482,58 @@ function registerIpcHandlers(): void {
   });
 }
 
-app.whenReady().then(async () => {
-  app.setAppUserModelId('com.metro.rrll.traccion');
-  Menu.setApplicationMenu(null);
-  const splashStartedAt = Date.now();
-  const splashWindow = createSplashWindow();
-  await waitForSplashPaint(splashWindow);
-  await initializeSqlitePersistence();
-  registerIpcHandlers();
-  createWindow(splashWindow, splashStartedAt);
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const windows = BrowserWindow.getAllWindows();
+    const mainWindow = windows[0];
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
     }
   });
-});
 
-let isQuitAfterSqlitePersistenceClosed = false;
+  app.whenReady().then(async () => {
+    app.setAppUserModelId('com.metro.rrll.traccion');
+    Menu.setApplicationMenu(null);
+    const splashStartedAt = Date.now();
+    const splashWindow = createSplashWindow();
+    await waitForSplashPaint(splashWindow);
+    await initializeSqlitePersistence();
+    registerIpcHandlers();
+    createWindow(splashWindow, splashStartedAt);
 
-app.on('before-quit', (event) => {
-  if (isQuitAfterSqlitePersistenceClosed) {
-    return;
-  }
-
-  event.preventDefault();
-  closeSqlitePersistence()
-    .catch((error: unknown) => {
-      console.warn('No se ha podido crear la copia de cierre antes de salir.', error);
-    })
-    .finally(() => {
-      isQuitAfterSqlitePersistenceClosed = true;
-      app.quit();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
     });
-});
+  });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+  let isQuitAfterSqlitePersistenceClosed = false;
+
+  app.on('before-quit', (event) => {
+    if (isQuitAfterSqlitePersistenceClosed) {
+      return;
+    }
+
+    event.preventDefault();
+    closeSqlitePersistence()
+      .catch((error: unknown) => {
+        console.warn('No se ha podido crear la copia de cierre antes de salir.', error);
+      })
+      .finally(() => {
+        isQuitAfterSqlitePersistenceClosed = true;
+        app.quit();
+      });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+}

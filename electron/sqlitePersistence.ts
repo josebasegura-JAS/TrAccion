@@ -3091,10 +3091,36 @@ export async function acquireRecordLock(payload: RecordLockPayload): Promise<Rec
       const now = new Date();
       const nowIso = now.toISOString();
       const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
-      deleteExpiredRecordLocks(db, nowIso);
-      const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
 
-      if (conflictingLock) {
+      type AcquireTxResult =
+        | { conflictingLock: EditingLockRow }
+        | { acquiredLock: EditingLockRow | null };
+
+      const txResult = db.transaction((): AcquireTxResult => {
+        deleteExpiredRecordLocks(db, nowIso);
+        const conflicting = readConflictingEditingLock(db, moduleName, recordId);
+        if (conflicting) {
+          return { conflictingLock: conflicting };
+        }
+        const existingLock = readRecordLockRow(db, moduleName, recordId);
+        if (existingLock) {
+          db.prepare(
+            `UPDATE editing_locks
+             SET owner_name = ?, machine_name = ?, expires_at = ?
+             WHERE module = ? AND record_id = ? AND owner_id = ?`,
+          ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
+        } else {
+          db.prepare(
+            `INSERT INTO editing_locks
+             (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
+        }
+        return { acquiredLock: readRecordLockRow(db, moduleName, recordId) };
+      })();
+
+      if ('conflictingLock' in txResult) {
+        const { conflictingLock } = txResult;
         const isModuleLock = conflictingLock.record_id === MODULE_LOCK_RECORD_ID;
         return {
           ok: false,
@@ -3106,27 +3132,10 @@ export async function acquireRecordLock(payload: RecordLockPayload): Promise<Rec
         };
       }
 
-      const existingLock = readRecordLockRow(db, moduleName, recordId);
-
-      if (existingLock) {
-        db.prepare(
-          `UPDATE editing_locks
-           SET owner_name = ?, machine_name = ?, expires_at = ?
-           WHERE module = ? AND record_id = ? AND owner_id = ?`,
-        ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
-      } else {
-        db.prepare(
-          `INSERT INTO editing_locks
-           (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
-      }
-
-      const lock = readRecordLockRow(db, moduleName, recordId);
       return {
         ok: true,
         status: 'acquired',
-        lock: lock ? lockOwnerFromRow(lock) : null,
+        lock: txResult.acquiredLock ? lockOwnerFromRow(txResult.acquiredLock) : null,
         message: 'Bloqueo adquirido.',
       };
     } catch (error) {
@@ -3155,47 +3164,51 @@ export async function heartbeatRecordLock(payload: RecordLockPayload): Promise<R
       const now = new Date();
       const nowIso = now.toISOString();
       const expiresAt = new Date(now.getTime() + RECORD_LOCK_TTL_MS).toISOString();
-      deleteExpiredRecordLocks(db, nowIso);
-      const existingLock = readRecordLockRow(db, moduleName, recordId);
 
-      if (existingLock && existingLock.owner_id !== ownerId) {
+      type HeartbeatTxResult =
+        | { conflictingLock: EditingLockRow }
+        | { acquiredLock: EditingLockRow | null };
+
+      const txResult = db.transaction((): HeartbeatTxResult => {
+        deleteExpiredRecordLocks(db, nowIso);
+        const existingLock = readRecordLockRow(db, moduleName, recordId);
+        if (existingLock && existingLock.owner_id !== ownerId) {
+          return { conflictingLock: existingLock };
+        }
+        if (existingLock) {
+          db.prepare(
+            `UPDATE editing_locks
+             SET owner_name = ?, machine_name = ?, expires_at = ?
+             WHERE module = ? AND record_id = ? AND owner_id = ?`,
+          ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
+        } else {
+          const conflicting = readConflictingEditingLock(db, moduleName, recordId);
+          if (conflicting) {
+            return { conflictingLock: conflicting };
+          }
+          db.prepare(
+            `INSERT INTO editing_locks
+             (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
+        }
+        return { acquiredLock: readRecordLockRow(db, moduleName, recordId) };
+      })();
+
+      if ('conflictingLock' in txResult) {
+        const { conflictingLock } = txResult;
         return {
           ok: false,
           status: 'locked',
-          lock: lockOwnerFromRow(existingLock),
-          message: `Registro bloqueado por ${existingLock.owner_name}@${existingLock.machine_name}.`,
+          lock: lockOwnerFromRow(conflictingLock),
+          message: `Registro bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`,
         };
       }
-
-      if (existingLock) {
-        db.prepare(
-          `UPDATE editing_locks
-           SET owner_name = ?, machine_name = ?, expires_at = ?
-           WHERE module = ? AND record_id = ? AND owner_id = ?`,
-        ).run(currentOwnerName(), hostname(), expiresAt, moduleName, recordId, ownerId);
-      } else {
-        const conflictingLock = readConflictingEditingLock(db, moduleName, recordId);
-        if (conflictingLock) {
-          return {
-            ok: false,
-            status: 'locked',
-            lock: lockOwnerFromRow(conflictingLock),
-            message: `Registro bloqueado por ${conflictingLock.owner_name}@${conflictingLock.machine_name}.`,
-          };
-        }
-        db.prepare(
-          `INSERT INTO editing_locks
-           (module, record_id, owner_id, owner_name, machine_name, acquired_at, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(moduleName, recordId, ownerId, currentOwnerName(), hostname(), nowIso, expiresAt);
-      }
-
-      const lock = readRecordLockRow(db, moduleName, recordId);
 
       return {
         ok: true,
         status: 'acquired',
-        lock: lock ? lockOwnerFromRow(lock) : null,
+        lock: txResult.acquiredLock ? lockOwnerFromRow(txResult.acquiredLock) : null,
         message: 'Bloqueo renovado.',
       };
     } catch (error) {

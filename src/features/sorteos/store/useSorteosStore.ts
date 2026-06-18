@@ -158,7 +158,7 @@ async function withTemporarySqliteRetry<T>(operation: () => Promise<T>): Promise
       if (!isTemporarySqliteBusyError(error) || attempt === TEMPORARY_SQLITE_BUSY_RETRIES) {
         break;
       }
-      await delay(TEMPORARY_SQLITE_BUSY_RETRY_MS * (attempt + 1));
+      await delay(Math.min(TEMPORARY_SQLITE_BUSY_RETRY_MS * (2 ** attempt) + Math.trunc(Math.random() * 100), 3000));
     }
   }
 
