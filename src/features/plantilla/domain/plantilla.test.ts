@@ -12,6 +12,8 @@ const existingEmployee = hydrateEmployee({
   puestoOrganizativo: 'Gestión Laboral',
   residencia: 'Oficinas Centrales',
   nivelRetributivo: '12',
+  direccionOrganizativa: 'Capital Humano',
+  antiguedadPuesto: '2020-01-01',
   sexo: 'F',
   calle: 'Gran Vía',
   numero: '12',
