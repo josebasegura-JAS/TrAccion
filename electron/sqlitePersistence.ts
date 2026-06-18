@@ -1,7 +1,5 @@
 import { app } from 'electron';
-import { copyFile, mkdir, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
-import { constants, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { access } from 'node:fs/promises';
+import { constants, copyFile, mkdir, readFile, readdir, rmdir, stat, unlink, writeFile, access } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
@@ -24,7 +22,6 @@ const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
-const SQLITE_OPERATION_LOCK_WAIT_MS = 5 * 1000;
 const SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS = 15 * 1000;
 const SQLITE_RECORD_LOCK_WAIT_MS = 750;
 const SQLITE_OPERATION_LOCK_RETRY_MS = 50;
@@ -233,6 +230,10 @@ let activeDatabaseLock: { lockPath: string; lock: DatabaseLockInfo; heartbeat: R
 let databaseWriteBlockedByHeartbeat = false;
 let heartbeatConsecutiveFailureCount = 0;
 let notifyDatabaseConnectivityIssue: ((payload: DatabaseConnectivityIssuePayload) => void) | null = null;
+// Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
+let tasksMigrationDone = false;
+let employeesMigrationDone = false;
+let sorteosMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -551,36 +552,7 @@ async function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
   }
 }
 
-function readLockSync(lockPath: string): DatabaseLockInfo | null {
-  try {
-    const raw = readFileSync(getLockInfoPath(lockPath), 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    return isDatabaseLockInfo(parsed) ? parsed : null;
-  } catch {
-    try {
-      const raw = readFileSync(lockPath, 'utf8');
-      const parsed: unknown = JSON.parse(raw);
-      return isDatabaseLockInfo(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-}
 
-
-function writeLockSync(lockPath: string, lock: DatabaseLockInfo): void {
-  // En SMB, crear un directorio es más fiable que openSync(..., 'wx') sobre fichero.
-  // La adquisición se basa en mkdir exclusivo: si dos procesos compiten, solo uno
-  // debería poder crear el directorio .lockdir. El owner.json solo identifica al dueño.
-  mkdirSync(lockPath);
-  writeFileSync(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), 'utf8');
-
-  const confirmedLock = readLockSync(lockPath);
-  if (confirmedLock?.ownerId !== lock.ownerId) {
-    removeLockSync(lockPath, lock.ownerId);
-    throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
-  }
-}
 
 async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   await mkdir(lockPath);
@@ -593,42 +565,6 @@ async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void
   }
 }
 
-function removeLockSync(lockPath: string, expectedOwnerId: string): void {
-  const lock = readLockSync(lockPath);
-  if (lock?.ownerId === expectedOwnerId) {
-    try {
-      rmSync(lockPath, { recursive: true, force: true });
-    } catch {
-      // El lock puede haber sido eliminado por un proceso que se adelantó; no es crítico.
-    }
-  }
-}
-
-function removeStaleLockSync(lockPath: string, staleLock: DatabaseLockInfo): void {
-  const currentLock = readLockSync(lockPath);
-  if (currentLock?.ownerId !== staleLock.ownerId || !isLockStale(currentLock)) {
-    return;
-  }
-
-  try {
-    rmSync(lockPath, { recursive: true, force: true });
-  } catch {
-    // Otro proceso puede haber limpiado el lock antes.
-  }
-}
-
-function removeCorruptStaleLockSync(lockPath: string): void {
-  try {
-    const metadata = statSync(lockPath);
-    if (Date.now() - metadata.mtimeMs <= LOCK_TTL_MS) {
-      return;
-    }
-
-    rmSync(lockPath, { recursive: true, force: true });
-  } catch {
-    // Si no existe o no se puede leer, dejamos que el bucle normal reintente.
-  }
-}
 
 async function removeStaleLock(lockPath: string, staleLock: DatabaseLockInfo): Promise<void> {
   const currentLock = await readLock(lockPath);
@@ -1097,6 +1033,9 @@ function closeDatabase(): void {
     database.close();
     database = null;
   }
+  tasksMigrationDone = false;
+  employeesMigrationDone = false;
+  sorteosMigrationDone = false;
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -1104,6 +1043,9 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
     database.close();
     database = null;
   }
+  tasksMigrationDone = false;
+  employeesMigrationDone = false;
+  sorteosMigrationDone = false;
 
   await releaseActiveSessionLock();
 }
@@ -1806,14 +1748,20 @@ function readTaskRecords(db: Database, filter: SqliteTaskRecordsFilter = {}): Sq
 }
 
 function maybeMigrateTasksFromPersistedRecord(db: Database): void {
+  if (tasksMigrationDone) {
+    return;
+  }
+
   const taskCountRow = db.prepare('SELECT COUNT(*) AS count FROM task_records').get();
   const taskCount = isCountRow(taskCountRow) ? taskCountRow.count : 0;
   if (taskCount > 0) {
+    tasksMigrationDone = true;
     return;
   }
 
   const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.tareas.tasks');
   if (!legacyRecord) {
+    tasksMigrationDone = true;
     return;
   }
 
@@ -1821,10 +1769,12 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
   try {
     parsed = JSON.parse(legacyRecord.value);
   } catch {
+    tasksMigrationDone = true;
     return;
   }
 
   if (!Array.isArray(parsed)) {
+    tasksMigrationDone = true;
     return;
   }
 
@@ -1844,6 +1794,8 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
     const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
     insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
   }
+
+  tasksMigrationDone = true;
 }
 
 
@@ -1867,14 +1819,20 @@ function isJsonObjectWithEmpleado(value: unknown): value is { empleado: string; 
 }
 
 function maybeMigrateEmployeesFromPersistedRecord(db: Database): void {
+  if (employeesMigrationDone) {
+    return;
+  }
+
   const employeeCountRow = db.prepare('SELECT COUNT(*) AS count FROM employee_records').get();
   const employeeCount = isCountRow(employeeCountRow) ? employeeCountRow.count : 0;
   if (employeeCount > 0) {
+    employeesMigrationDone = true;
     return;
   }
 
   const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.plantilla.employees');
   if (!legacyRecord) {
+    employeesMigrationDone = true;
     return;
   }
 
@@ -1882,10 +1840,12 @@ function maybeMigrateEmployeesFromPersistedRecord(db: Database): void {
   try {
     parsed = JSON.parse(legacyRecord.value);
   } catch {
+    employeesMigrationDone = true;
     return;
   }
 
   if (!Array.isArray(parsed)) {
+    employeesMigrationDone = true;
     return;
   }
 
@@ -1903,6 +1863,8 @@ function maybeMigrateEmployeesFromPersistedRecord(db: Database): void {
     const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
     insert.run(item.empleado, JSON.stringify(item), now, now, deletedAt);
   }
+
+  employeesMigrationDone = true;
 }
 
 function readEmployeeRecords(db: Database): SqliteEmployeeRecord[] {
@@ -2249,8 +2211,13 @@ function migrateSorteosArrayFromPersistedRecord(
 }
 
 function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
+  if (sorteosMigrationDone) {
+    return;
+  }
+
   migrateSorteosArrayFromPersistedRecord(db, 'sorteos_draw_records', 'traccion.v1.sorteos.draws');
   migrateSorteosArrayFromPersistedRecord(db, 'sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions');
+  sorteosMigrationDone = true;
 }
 
 export async function loadSorteosRecordsSnapshot(): Promise<SqliteSorteosRecordsSnapshot> {
