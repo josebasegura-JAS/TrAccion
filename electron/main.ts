@@ -33,6 +33,7 @@ import {
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
   saveEmployeeRecordIfUnchanged,
+  saveEmployeeRecordsIfUnchanged,
   saveSorteosSnapshotIfUnchanged,
   saveTaskRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
@@ -1277,6 +1278,59 @@ function registerIpcHandlers(): void {
         value,
         expectedValue,
       }),
+    );
+  });
+
+
+  ipcMain.handle('plantilla:save-records-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { records?: unknown }).records)) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentValue: null,
+        message: 'Payload de importación de plantilla inválido.',
+        saved: 0,
+      };
+    }
+
+    const records = (payload as { records: unknown[] }).records;
+    const normalizedRecords = [] as Array<{ id: string; value: string; expectedValue: string | null }>;
+
+    for (const record of records) {
+      if (!record || typeof record !== 'object') {
+        return {
+          ok: false,
+          status: getSqliteStatus(),
+          currentValue: null,
+          message: 'Payload de importación de plantilla inválido.',
+          saved: 0,
+        };
+      }
+
+      const candidate = record as { id?: unknown; value?: unknown; expectedValue?: unknown };
+      if (
+        typeof candidate.id !== 'string' ||
+        typeof candidate.value !== 'string' ||
+        (typeof candidate.expectedValue !== 'string' && candidate.expectedValue !== null)
+      ) {
+        return {
+          ok: false,
+          status: getSqliteStatus(),
+          currentValue: null,
+          message: 'Payload de importación de plantilla inválido.',
+          saved: 0,
+        };
+      }
+
+      normalizedRecords.push({
+        id: candidate.id,
+        value: candidate.value,
+        expectedValue: candidate.expectedValue,
+      });
+    }
+
+    return enqueueSqliteIpc('plantilla:save-records-if-unchanged', () =>
+      saveEmployeeRecordsIfUnchanged(normalizedRecords),
     );
   });
 

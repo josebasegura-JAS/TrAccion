@@ -50,6 +50,10 @@ export function hasEmployeeSqliteRepository(): boolean {
   return Boolean(window.traccion?.loadEmployeeRecords && window.traccion?.saveEmployeeRecordIfUnchanged);
 }
 
+export function hasEmployeeSqliteBatchRepository(): boolean {
+  return Boolean(window.traccion?.loadEmployeeRecords && window.traccion?.saveEmployeeRecordsIfUnchanged);
+}
+
 export async function loadEmployeesFromSqlite(
   parseEmployees: (storageValue: string | null) => Employee[],
 ): Promise<Employee[] | null> {
@@ -96,6 +100,41 @@ export async function saveEmployeeToSqlite(
     };
   } catch (error) {
     clearPersistenceBusy(EMPLOYEES_DIRECT_STORAGE_KEY, 'No se ha podido guardar la persona en SQLite.');
+    throw error;
+  }
+}
+
+export async function saveEmployeesToSqlite(
+  employees: Array<{ employee: Employee; expectedValue: string | null }>,
+): Promise<{ ok: boolean; message: string; saved: number } | null> {
+  const saver = window.traccion?.saveEmployeeRecordsIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  publishPersistenceBusy(EMPLOYEES_DIRECT_STORAGE_KEY, `Importando ${employees.length} personas en SQLite…`);
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver(
+        employees.map(({ employee, expectedValue }) => ({
+          id: employee.empleado,
+          value: JSON.stringify(employee),
+          expectedValue,
+        })),
+      ),
+    );
+
+    clearPersistenceBusy(EMPLOYEES_DIRECT_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      saved: result.saved,
+    };
+  } catch (error) {
+    clearPersistenceBusy(EMPLOYEES_DIRECT_STORAGE_KEY, 'No se ha podido importar la plantilla en SQLite.');
     throw error;
   }
 }

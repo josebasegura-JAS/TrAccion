@@ -54,6 +54,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedValue: string | null;
   }) => ipcRenderer.invoke('plantilla:save-record-if-unchanged', record),
+  saveEmployeeRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedValue: string | null;
+  }>) => ipcRenderer.invoke('plantilla:save-records-if-unchanged', { records }),
   loadTaskRecords: (filter?: { mode?: 'all' | 'active' | 'historical' }) =>
     ipcRenderer.invoke('tasks:load-records', filter),
   saveTaskRecordIfUnchanged: (record: {

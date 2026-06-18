@@ -202,6 +202,14 @@ interface TraccionConditionalEmployeeSaveResult {
   message: string;
 }
 
+interface TraccionConditionalEmployeeBatchSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  currentValue: string | null;
+  message: string;
+  saved: number;
+}
+
 interface TraccionTaskRecordsSnapshot {
   status: TraccionDatabaseStatus;
   records: TraccionTaskRecord[];
@@ -293,6 +301,9 @@ interface TraccionApi {
   saveEmployeeRecordIfUnchanged?: (
     record: TraccionConditionalEmployeeRecord,
   ) => Promise<TraccionConditionalEmployeeSaveResult>;
+  saveEmployeeRecordsIfUnchanged?: (
+    records: TraccionConditionalEmployeeRecord[],
+  ) => Promise<TraccionConditionalEmployeeBatchSaveResult>;
   loadTaskRecords?: (filter?: TraccionTaskRecordsFilter) => Promise<TraccionTaskRecordsSnapshot>;
   saveTaskRecordIfUnchanged?: (
     record: TraccionConditionalTaskRecord,

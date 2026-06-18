@@ -95,6 +95,14 @@ export interface ConditionalSqliteEmployeeSaveResult {
   message: string;
 }
 
+export interface ConditionalSqliteEmployeeBatchSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  currentValue: string | null;
+  message: string;
+  saved: number;
+}
+
 export interface SqliteSorteosRecord {
   id: string;
   value: string;
@@ -2052,6 +2060,131 @@ export async function saveEmployeeRecordIfUnchanged(
       status: nextStatus,
       currentValue: null,
       message,
+    }),
+  );
+}
+
+
+export async function saveEmployeeRecordsIfUnchanged(
+  records: ConditionalSqliteEmployeeRecord[],
+): Promise<ConditionalSqliteEmployeeBatchSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentValue: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+          saved: 0,
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteEmployeeBatchSaveResult => {
+        maybeMigrateEmployeesFromPersistedRecord(db);
+        const selectCurrent = db.prepare('SELECT value_json FROM employee_records WHERE id = ?');
+        const insertRecord = db.prepare(
+          `INSERT OR IGNORE INTO employee_records (id, value_json, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        );
+        const updateRecord = db.prepare(
+          `UPDATE employee_records
+           SET value_json = ?, updated_at = ?, deleted_at = ?
+           WHERE id = ? AND value_json = ?`,
+        );
+
+        const now = new Date().toISOString();
+        let saved = 0;
+
+        for (const record of records) {
+          const row = selectCurrent.get(record.id);
+          const currentValue = row && typeof row === 'object' && typeof (row as { value_json?: unknown }).value_json === 'string'
+            ? (row as { value_json: string }).value_json
+            : null;
+
+          if (currentValue !== record.expectedValue) {
+            return {
+              ok: false,
+              status: currentStatus,
+              currentValue,
+              message:
+                'La plantilla ha sido modificada por otro usuario durante la importación. Recarga antes de volver a importar.',
+              saved: 0,
+            };
+          }
+
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(record.value);
+          } catch {
+            parsed = null;
+          }
+          const deletedAt =
+            parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+              ? (parsed as { deletedAt: string }).deletedAt
+              : null;
+
+          if (currentValue === null) {
+            const insertResult = insertRecord.run(record.id, record.value, now, now, deletedAt);
+            if (insertResult.changes !== 1) {
+              const latest = selectCurrent.get(record.id);
+              return {
+                ok: false,
+                status: currentStatus,
+                currentValue: latest && typeof latest === 'object' && typeof (latest as { value_json?: unknown }).value_json === 'string'
+                  ? (latest as { value_json: string }).value_json
+                  : null,
+                message: 'La persona ya existe en la base compartida. Recarga antes de volver a importar.',
+                saved: 0,
+              };
+            }
+          } else {
+            const updateResult = updateRecord.run(record.value, now, deletedAt, record.id, currentValue);
+            if (updateResult.changes !== 1) {
+              const latest = selectCurrent.get(record.id);
+              return {
+                ok: false,
+                status: currentStatus,
+                currentValue: latest && typeof latest === 'object' && typeof (latest as { value_json?: unknown }).value_json === 'string'
+                  ? (latest as { value_json: string }).value_json
+                  : null,
+                message:
+                  'La plantilla ha sido modificada por otro usuario durante la importación. Recarga antes de volver a importar.',
+                saved: 0,
+              };
+            }
+          }
+
+          saved += 1;
+        }
+
+        updateRefreshMetadata(db, now);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentValue: null,
+          message: `${saved} personas importadas en SQLite.`,
+          saved,
+        };
+      })();
+
+      if (result.ok && result.saved > 0) {
+        enqueueLocalBackup('batch-save:employee_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentValue: null,
+      message,
+      saved: 0,
     }),
   );
 }

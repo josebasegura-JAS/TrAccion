@@ -63,7 +63,7 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EmployeeField, readonly string[]]>
     ],
   ],
   ['sexo', ['sexo', 'género', 'genero']],
-  ['calle', ['calle', 'direccion', 'dirección', 'domicilio']],
+  ['calle', ['calle', 'domicilio', 'direccion postal', 'dirección postal', 'direccion particular', 'dirección particular']],
   ['numero', ['numero', 'número', 'num', 'nº', 'n']],
   ['piso', ['piso', 'planta', 'puerta']],
   ['codigoPostal', ['codigoPostal', 'codigo postal', 'código postal', 'cp', 'c.p.']],

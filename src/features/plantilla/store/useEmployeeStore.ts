@@ -8,7 +8,13 @@ import { normalizeJobPosition, type JobPositionTranslation } from '../domain/job
 import type { Employee, EmployeeDraft } from '../domain/employee';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
-import { hasEmployeeSqliteRepository, loadEmployeesFromSqlite, saveEmployeeToSqlite } from './employeeSqliteRepository';
+import {
+  hasEmployeeSqliteBatchRepository,
+  hasEmployeeSqliteRepository,
+  loadEmployeesFromSqlite,
+  saveEmployeesToSqlite,
+  saveEmployeeToSqlite,
+} from './employeeSqliteRepository';
 
 export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
 const STORAGE_KEY = EMPLOYEES_STORAGE_KEY;
@@ -391,6 +397,22 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     const drafts = await importEmployeesFromFile(file);
     const currentEmployees = get().employees;
     const employees = upsertEmployees(currentEmployees, drafts);
+    if (hasEmployeeSqliteBatchRepository()) {
+      const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
+      const result = await saveEmployeesToSqlite(
+        employees.map((employee) => ({
+          employee,
+          expectedValue: previousById.get(employee.empleado) ?? null,
+        })),
+      );
+      if (result && !result.ok) {
+        throw new Error(result.message);
+      }
+      const reloadedEmployees = await readEmployeesShared();
+      set({ employees: reloadedEmployees, selectedEmployeeId: firstVisibleEmployeeId(reloadedEmployees) });
+      return;
+    }
+
     if (hasEmployeeSqliteRepository()) {
       const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
       for (const employee of employees) {
