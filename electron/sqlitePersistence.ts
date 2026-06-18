@@ -567,11 +567,6 @@ function readLockSync(lockPath: string): DatabaseLockInfo | null {
   }
 }
 
-function sleepSync(milliseconds: number): void {
-  const buffer = new SharedArrayBuffer(4);
-  const view = new Int32Array(buffer);
-  Atomics.wait(view, 0, 0, milliseconds);
-}
 
 function writeLockSync(lockPath: string, lock: DatabaseLockInfo): void {
   // En SMB, crear un directorio es más fiable que openSync(..., 'wx') sobre fichero.
@@ -663,60 +658,7 @@ async function removeCorruptStaleLock(lockPath: string): Promise<void> {
   }
 }
 
-function acquireOperationLockSync(databasePath: string, waitMs = SQLITE_OPERATION_LOCK_WAIT_MS): DatabaseLockInfo {
-  const lockPath = getLockPath(databasePath);
-  mkdirSync(path.dirname(lockPath), { recursive: true });
-  const startedAt = Date.now();
-  let lastLock: DatabaseLockInfo | null = null;
 
-  while (Date.now() - startedAt <= waitMs) {
-    const existingLock = readLockSync(lockPath);
-    lastLock = existingLock;
-
-    if (existingLock && isLockStale(existingLock)) {
-      removeStaleLockSync(lockPath, existingLock);
-    }
-
-    if (!existingLock) {
-      removeCorruptStaleLockSync(lockPath);
-    }
-
-    if (!existingLock || isLockStale(existingLock)) {
-      const lock = createLockInfo();
-      try {
-        writeLockSync(lockPath, lock);
-        return lock;
-      } catch {
-        lastLock = readLockSync(lockPath);
-      }
-    }
-
-    sleepSync(SQLITE_OPERATION_LOCK_RETRY_MS);
-  }
-
-  if (lastLock) {
-    throw new Error(
-      `Base ocupada temporalmente por ${lastLock.username}@${lastLock.hostname} (PID ${lastLock.pid}). Inténtalo de nuevo en unos segundos.`,
-    );
-  }
-
-  throw new Error('No se ha podido adquirir el bloqueo temporal de operación SQLite.');
-}
-
-function withDatabaseOperationLockSync<T>(operation: () => T, waitMs = SQLITE_OPERATION_LOCK_WAIT_MS): T {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase !== 'active') {
-    return operation();
-  }
-
-  const lockPath = getLockPath(currentStatus.path);
-  const operationLock = acquireOperationLockSync(currentStatus.path, waitMs);
-  try {
-    return operation();
-  } finally {
-    removeLockSync(lockPath, operationLock.ownerId);
-  }
-}
 
 async function withDatabaseOperationLock<T>(
   databasePath: string,
