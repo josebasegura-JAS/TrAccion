@@ -6,7 +6,7 @@ import {
   Search,
   SlidersHorizontal,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { EmployeeEditor } from './EmployeeEditor';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -119,13 +119,15 @@ export function PlantillaPage() {
     load();
   }, [load]);
 
+  const deferredFilters = useDeferredValue(filters);
+
   const visibleEmployees = useMemo(
     () => employees.filter((employee) => !employee.deletedAt),
     [employees],
   );
   const filteredEmployees = useMemo(
-    () => filterEmployees(employees, filters),
-    [employees, filters],
+    () => filterEmployees(employees, deferredFilters),
+    [employees, deferredFilters],
   );
   const editorEmployee =
     editorMode === 'edit'

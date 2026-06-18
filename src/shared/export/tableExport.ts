@@ -1,5 +1,3 @@
-import ExcelJS from 'exceljs';
-
 import type { ExportCellValue, ExportTablePayload } from './types';
 
 const DANGEROUS_EXCEL_PREFIXES = ['=', '+', '-', '@'];
@@ -129,7 +127,9 @@ async function openWorkbookInExcel(
   }
 }
 
-export function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAlert?: (message: string) => void): void {
+export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAlert?: (message: string) => void): Promise<void> {
+  try {
+  const { default: ExcelJS } = await import('exceljs');
   const generatedAt = payload.generatedAt ?? new Date();
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'TrAccion';
@@ -239,18 +239,15 @@ export function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAlert?: 
     worksheet.getColumn(columnIndex + 1).width = width;
   });
 
-  void workbook.xlsx
-    .writeBuffer()
-    .then((buffer) =>
-      openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt)),
-    )
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : 'No se ha podido abrir Excel.';
-      console.error('Error al abrir Excel:', error);
-      if (onAlert) {
-        onAlert(message);
-      } else {
-        window.alert(message);
-      }
-    });
+  const buffer = await workbook.xlsx.writeBuffer();
+  await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'No se ha podido abrir Excel.';
+    console.error('Error al abrir Excel:', error);
+    if (onAlert) {
+      onAlert(message);
+    } else {
+      window.alert(message);
+    }
+  }
 }

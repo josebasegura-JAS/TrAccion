@@ -293,22 +293,31 @@ function asStringArray(value: unknown): string[] {
 
 type LinkedSessionMatch = { module: string; moduleView: AppView; session: UnknownRecord };
 
-function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
-  const lookup = new Map<string, LinkedSessionMatch>();
-  const sessionModules = [
-    {
-      module: 'Comité de Empresa',
-      moduleView: 'comite' as AppView,
-      storageKey: 'traccion.v1.comite.sessions',
-    },
-    {
-      module: 'Comisión Paritaria',
-      moduleView: 'paritaria' as AppView,
-      storageKey: 'traccion.v1.paritaria.sessions',
-    },
-  ];
+const SESSION_MODULES = [
+  {
+    module: 'Comité de Empresa',
+    moduleView: 'comite' as AppView,
+    storageKey: 'traccion.v1.comite.sessions',
+  },
+  {
+    module: 'Comisión Paritaria',
+    moduleView: 'paritaria' as AppView,
+    storageKey: 'traccion.v1.paritaria.sessions',
+  },
+] as const;
 
-  for (const sessionModule of sessionModules) {
+let linkedSessionLookupCache: Map<string, LinkedSessionMatch> | null = null;
+let linkedSessionLookupCacheKey = '';
+
+function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
+  const cacheKey = SESSION_MODULES.map((m) => readStorageItem(m.storageKey) ?? '').join('\0');
+  if (linkedSessionLookupCache !== null && linkedSessionLookupCacheKey === cacheKey) {
+    return linkedSessionLookupCache;
+  }
+
+  const lookup = new Map<string, LinkedSessionMatch>();
+
+  for (const sessionModule of SESSION_MODULES) {
     for (const session of readArray(sessionModule.storageKey)) {
       for (const taskId of asStringArray(session.items)) {
         if (!lookup.has(taskId)) {
@@ -318,6 +327,8 @@ function buildLinkedSessionLookup(): Map<string, LinkedSessionMatch> {
     }
   }
 
+  linkedSessionLookupCache = lookup;
+  linkedSessionLookupCacheKey = cacheKey;
   return lookup;
 }
 
@@ -450,6 +461,11 @@ function getWeightedMatch(
   const status = result.status ?? firstText(record, ['estado', 'status']);
   const description = firstText(record, ['descripcion', 'description', 'observaciones', 'notes', 'criterio', 'tema']);
 
+  const normalizedCode = normalizeText(code);
+  const normalizedPerson = normalizeText(person);
+  const normalizedEmployeeNumber = normalizeText(employeeNumber);
+  const normalizedStatus = normalizeText(status);
+
   if (parsedQuery.filters.moduleView && parsedQuery.filters.moduleView !== moduleView) {
     return null;
   }
@@ -458,47 +474,46 @@ function getWeightedMatch(
     return null;
   }
 
-  if (parsedQuery.filters.status && !normalizeText(status).includes(parsedQuery.filters.status)) {
+  if (parsedQuery.filters.status && !normalizedStatus.includes(parsedQuery.filters.status)) {
     return null;
   }
 
-  if (parsedQuery.filters.code && !normalizeText(code).includes(parsedQuery.filters.code)) {
+  if (parsedQuery.filters.code && !normalizedCode.includes(parsedQuery.filters.code)) {
     return null;
   }
 
-  if (parsedQuery.filters.person && !normalizeText(person).includes(parsedQuery.filters.person)) {
+  if (parsedQuery.filters.person && !normalizedPerson.includes(parsedQuery.filters.person)) {
     return null;
   }
 
-  if (parsedQuery.filters.employeeNumber && !normalizeText(employeeNumber).includes(parsedQuery.filters.employeeNumber)) {
+  if (parsedQuery.filters.employeeNumber && !normalizedEmployeeNumber.includes(parsedQuery.filters.employeeNumber)) {
     return null;
   }
 
-  if (parsedQuery.filters.statusFilter === 'open' && isClosedStatus(status)) {
+  const closedStatus = isClosedStatus(status);
+  if (parsedQuery.filters.statusFilter === 'open' && closedStatus) {
     return null;
   }
 
-  if (parsedQuery.filters.statusFilter === 'closed' && !isClosedStatus(status)) {
+  if (parsedQuery.filters.statusFilter === 'closed' && !closedStatus) {
     return null;
   }
 
-  if (parsedQuery.filters.statusFilter === 'overdue' && (!isPastDate(result.date) || isClosedStatus(status))) {
+  if (parsedQuery.filters.statusFilter === 'overdue' && (!isPastDate(result.date) || closedStatus)) {
     return null;
   }
 
   const weightedFields = [
-    { label: 'título', value: result.title, weight: 100 },
-    { label: 'código', value: code, weight: 95 },
-    { label: 'nº empleado', value: employeeNumber, weight: 92 },
-    { label: 'persona', value: person, weight: 85 },
-    { label: 'estado', value: status, weight: 55 },
-    { label: 'fecha', value: result.date, weight: 50 },
-    { label: 'módulo', value: moduleName, weight: 45 },
-    { label: 'detalle', value: result.subtitle, weight: 40 },
-    { label: 'descripción', value: description, weight: 35 },
-  ]
-    .map((field) => ({ ...field, normalizedValue: normalizeText(field.value) }))
-    .filter((field) => field.normalizedValue);
+    { label: 'título', value: result.title, normalizedValue: normalizeText(result.title), weight: 100 },
+    { label: 'código', value: code, normalizedValue: normalizedCode, weight: 95 },
+    { label: 'nº empleado', value: employeeNumber, normalizedValue: normalizedEmployeeNumber, weight: 92 },
+    { label: 'persona', value: person, normalizedValue: normalizedPerson, weight: 85 },
+    { label: 'estado', value: status, normalizedValue: normalizedStatus, weight: 55 },
+    { label: 'fecha', value: result.date, normalizedValue: normalizeText(result.date), weight: 50 },
+    { label: 'módulo', value: moduleName, normalizedValue: normalizeText(moduleName), weight: 45 },
+    { label: 'detalle', value: result.subtitle, normalizedValue: normalizeText(result.subtitle), weight: 40 },
+    { label: 'descripción', value: description, normalizedValue: normalizeText(description), weight: 35 },
+  ].filter((field) => field.normalizedValue);
 
   const primitiveValues = Object.values(record).flatMap(extractPrimitiveValues).map(normalizeText).filter(Boolean);
   const allValues = [...weightedFields.map((field) => field.normalizedValue), ...primitiveValues];
@@ -569,14 +584,22 @@ function extractPrimitiveValues(value: unknown): string[] {
   return text ? [text] : [];
 }
 
+const haystackCache = new WeakMap<UnknownRecord, string>();
+
 function buildHaystack(
   moduleName: string,
   result: SearchableResultDraft,
   record: UnknownRecord,
 ): string {
-  const primitiveValues = Object.values(record).flatMap(extractPrimitiveValues);
+  const cached = haystackCache.get(record);
+  if (cached !== undefined) {
+    return cached;
+  }
 
-  return normalizeText([moduleName, result.title, result.subtitle, result.date, result.year, ...primitiveValues].join(' '));
+  const primitiveValues = Object.values(record).flatMap(extractPrimitiveValues);
+  const haystack = normalizeText([moduleName, result.title, result.subtitle, result.date, result.year, ...primitiveValues].join(' '));
+  haystackCache.set(record, haystack);
+  return haystack;
 }
 
 function makeResult(
