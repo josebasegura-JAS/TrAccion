@@ -2559,7 +2559,7 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
       enqueueLocalBackup(`pre-restore:${safeFileName}`);
     }
 
-    const nextStatus = migrateLocalStorageSnapshot({ records });
+    const nextStatus = await migrateLocalStorageSnapshot({ records });
     return {
       ok: nextStatus.ready && nextStatus.phase === 'active',
       status: nextStatus,
