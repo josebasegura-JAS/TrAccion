@@ -97,10 +97,17 @@ export function DataTable<Row, ColumnId extends string>({
     [columnWidths, columns],
   );
 
-  const sortedRows = useMemo(
-    () => sortDataTableRows(rows, visibleColumns, sort),
-    [rows, sort, visibleColumns],
-  );
+  // Con arrays pequeños ordenamos todo y luego recortamos.
+  // Con arrays grandes (>DEFAULT_RENDER_BATCH_SIZE), recortamos primero y ordenamos
+  // solo las filas visibles para no bloquear el render thread en módulos con muchos registros.
+  const sortedRows = useMemo(() => {
+    if (rows.length <= DEFAULT_RENDER_BATCH_SIZE) {
+      return sortDataTableRows(rows, visibleColumns, sort);
+    }
+
+    const sliced = rows.slice(0, renderLimit + RENDER_BATCH_INCREMENT);
+    return sortDataTableRows(sliced, visibleColumns, sort);
+  }, [rows, sort, visibleColumns, renderLimit]);
 
   const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_BATCH_SIZE);
 
