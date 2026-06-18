@@ -40,6 +40,7 @@ const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
   // plantilla y tareas tienen tabla propia (collectChangedDirectStores las gestiona)
   // auditTrail no tiene store sincronizable registrado
   'traccion.v1.plantilla.jobPositionTranslations': 'plantilla',
+  'traccion.v1.plantilla.employees': 'plantilla',
   'traccion.v1.peticiones.peticiones': 'tareas',
 };
 
