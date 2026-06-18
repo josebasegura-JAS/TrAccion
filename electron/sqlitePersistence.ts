@@ -1301,9 +1301,13 @@ function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
   return status;
 }
 
-function safeDatabaseOperation<T>(operation: () => T, fallback: (status: DatabaseStatus, message: string) => T): T {
+async function safeDatabaseOperation<T>(
+  operation: () => T,
+  fallback: (status: DatabaseStatus, message: string) => T,
+): Promise<T> {
+  const currentStatus = getSqliteStatus();
   try {
-    return withDatabaseOperationLockSync(operation);
+    return await withDatabaseOperationLock(currentStatus.path, async () => operation());
   } catch (error) {
     if (isSqliteCorruptionError(error)) {
       const nextStatus = markDatabaseAsCorrupted(error);
@@ -1687,7 +1691,7 @@ function readRefreshToken(db: Database): string | null {
   return isMetadataRow(row) ? row.value : null;
 }
 
-export function savePersistedRecord(record: PersistedStorageRecord): DatabaseStatus {
+export async function savePersistedRecord(record: PersistedStorageRecord): Promise<DatabaseStatus> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -1725,9 +1729,9 @@ export interface ConditionalPersistedRecordSaveResult {
   message: string;
 }
 
-export function savePersistedRecordIfUnchanged(
+export async function savePersistedRecordIfUnchanged(
   record: ConditionalPersistedStorageRecord,
-): ConditionalPersistedRecordSaveResult {
+): Promise<ConditionalPersistedRecordSaveResult> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -1963,7 +1967,7 @@ function readEmployeeRecords(db: Database): SqliteEmployeeRecord[] {
     .map(mapEmployeeRecordRow);
 }
 
-export function loadEmployeeRecordsSnapshot(): SqliteEmployeeRecordsSnapshot {
+export async function loadEmployeeRecordsSnapshot(): Promise<SqliteEmployeeRecordsSnapshot> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -1979,9 +1983,9 @@ export function loadEmployeeRecordsSnapshot(): SqliteEmployeeRecordsSnapshot {
   );
 }
 
-export function saveEmployeeRecordIfUnchanged(
+export async function saveEmployeeRecordIfUnchanged(
   record: ConditionalSqliteEmployeeRecord,
-): ConditionalSqliteEmployeeSaveResult {
+): Promise<ConditionalSqliteEmployeeSaveResult> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2093,7 +2097,7 @@ export function saveEmployeeRecordIfUnchanged(
   );
 }
 
-export function loadTaskRecordsSnapshot(filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecordsSnapshot {
+export async function loadTaskRecordsSnapshot(filter: SqliteTaskRecordsFilter = {}): Promise<SqliteTaskRecordsSnapshot> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2109,9 +2113,9 @@ export function loadTaskRecordsSnapshot(filter: SqliteTaskRecordsFilter = {}): S
   );
 }
 
-export function saveTaskRecordIfUnchanged(
+export async function saveTaskRecordIfUnchanged(
   record: ConditionalSqliteTaskRecord,
-): ConditionalSqliteTaskSaveResult {
+): Promise<ConditionalSqliteTaskSaveResult> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2303,7 +2307,7 @@ function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
   migrateSorteosArrayFromPersistedRecord(db, 'sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions');
 }
 
-export function loadSorteosRecordsSnapshot(): SqliteSorteosRecordsSnapshot {
+export async function loadSorteosRecordsSnapshot(): Promise<SqliteSorteosRecordsSnapshot> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2379,9 +2383,9 @@ function replaceSorteosTable(
   }
 }
 
-export function saveSorteosSnapshotIfUnchanged(
+export async function saveSorteosSnapshotIfUnchanged(
   snapshot: ConditionalSqliteSorteosSnapshot,
-): ConditionalSqliteSorteosSaveResult {
+): Promise<ConditionalSqliteSorteosSaveResult> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2447,14 +2451,14 @@ export function saveSorteosSnapshotIfUnchanged(
   );
 }
 
-export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): DatabaseStatus {
+export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
   const currentStatus = getSqliteStatus();
   if (!currentStatus.ready || currentStatus.phase === 'locked' || databaseWriteBlockedByHeartbeat) {
     return currentStatus;
   }
 
   assertDatabaseWritesAllowed();
-  return withDatabaseOperationLockSync(() => {
+  return withDatabaseOperationLock(currentStatus.path, async () => {
     const db = requireDatabase();
     const now = new Date().toISOString();
     const records = payload.records.filter(
@@ -2494,7 +2498,7 @@ export function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload):
   });
 }
 
-export function createLocalStorageBackup(payload: LocalStorageBackupPayload): DatabaseStatus {
+export async function createLocalStorageBackup(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
   return safeDatabaseOperation(
     () => {
       assertDatabaseWritesAllowed();
@@ -2692,7 +2696,7 @@ export async function restoreLocalBackup(fileName: string): Promise<RestoreLocal
   }
 }
 
-export function getPersistedRecordSnapshot(key: string): PersistedRecordSnapshot {
+export async function getPersistedRecordSnapshot(key: string): Promise<PersistedRecordSnapshot> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2707,7 +2711,7 @@ export function getPersistedRecordSnapshot(key: string): PersistedRecordSnapshot
   );
 }
 
-export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
+export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSnapshot> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2762,7 +2766,7 @@ export function loadPersistedRecordsSnapshot(): PersistedRecordsSnapshot {
   );
 }
 
-export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapshot {
+export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
@@ -2809,7 +2813,7 @@ export function getPersistedRecordsTokenSnapshot(): PersistedRecordsTokenSnapsho
 }
 
 
-export function getSqliteSyncTokensSnapshot(): PersistedRecordsTokenSnapshot {
+export async function getSqliteSyncTokensSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
   return getPersistedRecordsTokenSnapshot();
 }
 
@@ -2925,12 +2929,13 @@ function readConflictingEditingLock(
   return isEditingLockRow(row) ? row : null;
 }
 
-export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult {
+export async function acquireRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
   if (!validateRecordLockPayload(payload)) {
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  return withDatabaseOperationLockSync(() => {
+  const currentStatus = getSqliteStatus();
+  return withDatabaseOperationLock(currentStatus.path, async () => {
     try {
       const db = ensureRecordLockDatabase();
       if (!db) {
@@ -2988,12 +2993,13 @@ export function acquireRecordLock(payload: RecordLockPayload): RecordLockResult 
   }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
-export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResult {
+export async function heartbeatRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
   if (!validateRecordLockPayload(payload)) {
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  return withDatabaseOperationLockSync(() => {
+  const currentStatus = getSqliteStatus();
+  return withDatabaseOperationLock(currentStatus.path, async () => {
     try {
       const db = ensureRecordLockDatabase();
       if (!db) {
@@ -3056,12 +3062,13 @@ export function heartbeatRecordLock(payload: RecordLockPayload): RecordLockResul
   }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
-export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult {
+export async function releaseRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
   if (!validateRecordLockPayload(payload)) {
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  return withDatabaseOperationLockSync(() => {
+  const currentStatus = getSqliteStatus();
+  return withDatabaseOperationLock(currentStatus.path, async () => {
     try {
       const db = ensureRecordLockDatabase();
       if (!db) {
@@ -3083,12 +3090,13 @@ export function releaseRecordLock(payload: RecordLockPayload): RecordLockResult 
   }, SQLITE_RECORD_LOCK_WAIT_MS);
 }
 
-export function getRecordLock(payload: RecordLockPayload): RecordLockResult {
+export async function getRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
   if (!validateRecordLockPayload(payload)) {
     return recordLockError('Identificador de bloqueo inválido.');
   }
 
-  return withDatabaseOperationLockSync(() => {
+  const currentStatus = getSqliteStatus();
+  return withDatabaseOperationLock(currentStatus.path, async () => {
     try {
       const db = ensureRecordLockDatabase();
       if (!db) {
