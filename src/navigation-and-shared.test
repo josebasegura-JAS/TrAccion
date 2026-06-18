@@ -1,0 +1,203 @@
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+
+// ─── navigation ───────────────────────────────────────────────────────────────
+
+import {
+  getGroupForView,
+  getNavigationBreadcrumb,
+  navigationGroups,
+} from '../../../navigation/navigation';
+
+describe('navigation', () => {
+  it('todos los items del sidebar tienen view asignado', () => {
+    const allItems = navigationGroups.flatMap((g) => g.items);
+    expect(allItems.every((item) => item.view !== undefined)).toBe(true);
+  });
+
+  it('no hay vistas duplicadas en el sidebar', () => {
+    const views = navigationGroups.flatMap((g) => g.items.map((i) => i.view)).filter(Boolean);
+    expect(views.length).toBe(new Set(views).size);
+  });
+
+  it('getGroupForView → null para dashboard y ajustes', () => {
+    expect(getGroupForView('dashboard')).toBeNull();
+    expect(getGroupForView('ajustes')).toBeNull();
+  });
+
+  it('getGroupForView asigna grupos correctos a vistas conocidas', () => {
+    expect(getGroupForView('tareas')).toBe('operativa');
+    expect(getGroupForView('actas')).toBe('operativa');
+    expect(getGroupForView('plantilla')).toBe('personas');
+    expect(getGroupForView('teletrabajo')).toBe('personas');
+    expect(getGroupForView('ticket-restaurante')).toBe('herramientas');
+    expect(getGroupForView('sorteos')).toBe('herramientas');
+  });
+
+  it('getNavigationBreadcrumb construye ruta con grupo › vista', () => {
+    expect(getNavigationBreadcrumb('dashboard')).toBe('Inicio');
+    expect(getNavigationBreadcrumb('ajustes')).toBe('Sistema › Ajustes');
+    const bc = getNavigationBreadcrumb('tareas');
+    expect(bc).toContain('›');
+    expect(bc).toContain('Tareas');
+  });
+});
+
+// ─── filterLabel ──────────────────────────────────────────────────────────────
+
+import { buildFilterLabel } from '../../../shared/export/filterLabel';
+
+describe('buildFilterLabel', () => {
+  it('devuelve undefined si no hay filtros activos', () => {
+    expect(buildFilterLabel([])).toBeUndefined();
+    expect(buildFilterLabel([['Estado', ''], ['Tipo', null], ['Fase', undefined]])).toBeUndefined();
+    expect(buildFilterLabel([['Campo', '   ']])).toBeUndefined();
+  });
+
+  it('genera etiqueta con los filtros activos separados por ·', () => {
+    const label = buildFilterLabel([
+      ['Estado', 'pendiente'],
+      ['Tipo', ''],
+      ['Prioridad', 'alta'],
+    ]);
+    expect(label).toBe('Estado: pendiente · Prioridad: alta');
+  });
+
+  it('convierte números y booleanos a string', () => {
+    expect(buildFilterLabel([['Año', 2026], ['Activo', true]])).toBe('Año: 2026 · Activo: true');
+  });
+
+  it('con un único filtro activo no añade ·', () => {
+    expect(buildFilterLabel([['Estado', 'cerrada']])).toBe('Estado: cerrada');
+  });
+});
+
+// ─── tableSorting ─────────────────────────────────────────────────────────────
+
+import { sortDataTableRows } from '../../../shared/table/tableSorting';
+import type { DataTableColumn } from '../../../shared/table/DataTable';
+
+interface Row {
+  id: string;
+  nombre: string;
+  valor: number | null;
+}
+
+const columns: Array<DataTableColumn<Row, 'nombre' | 'valor'>> = [
+  {
+    id: 'nombre',
+    header: 'Nombre',
+    sortable: true,
+    accessor: (r) => r.nombre,
+    render: (r) => r.nombre,
+  },
+  {
+    id: 'valor',
+    header: 'Valor',
+    sortable: true,
+    accessor: (r) => r.valor,
+    render: (r) => String(r.valor),
+  },
+];
+
+const rows: Row[] = [
+  { id: 'c', nombre: 'Carlos', valor: 30 },
+  { id: 'a', nombre: 'Ana', valor: null },
+  { id: 'b', nombre: 'Bea', valor: 10 },
+];
+
+describe('sortDataTableRows', () => {
+  it('sin sort devuelve el array intacto', () => {
+    expect(sortDataTableRows(rows, columns, null).map((r) => r.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('ordena alfabéticamente por nombre asc', () => {
+    expect(
+      sortDataTableRows(rows, columns, { columnId: 'nombre', direction: 'asc' }).map((r) => r.id),
+    ).toEqual(['a', 'b', 'c']);
+  });
+
+  it('ordena alfabéticamente por nombre desc', () => {
+    expect(
+      sortDataTableRows(rows, columns, { columnId: 'nombre', direction: 'desc' }).map((r) => r.id),
+    ).toEqual(['c', 'b', 'a']);
+  });
+
+  it('null/undefined van al final en orden asc', () => {
+    const sorted = sortDataTableRows(rows, columns, { columnId: 'valor', direction: 'asc' });
+    expect(sorted[sorted.length - 1].id).toBe('a');
+  });
+
+  it('es estable: preserva orden relativo de empates', () => {
+    const tieRows: Row[] = [
+      { id: 'x', nombre: 'Igual', valor: 1 },
+      { id: 'y', nombre: 'Igual', valor: 1 },
+    ];
+    expect(
+      sortDataTableRows(tieRows, columns, { columnId: 'nombre', direction: 'asc' }).map((r) => r.id),
+    ).toEqual(['x', 'y']);
+  });
+});
+
+// ─── relativeDate ─────────────────────────────────────────────────────────────
+
+import { relativeDate } from '../../../utils/relativeDate';
+
+describe('relativeDate', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-17T12:00:00.000Z'));
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('devuelve vacío para string vacío o fecha inválida', () => {
+    expect(relativeDate('')).toBe('');
+    expect(relativeDate('no-es-fecha')).toBe('');
+  });
+
+  it('devuelve "hoy" para la fecha actual', () => {
+    expect(relativeDate('2026-06-17')).toBe('hoy');
+  });
+
+  it('devuelve referencia de mañana para D+1', () => {
+    expect(relativeDate('2026-06-18')).toContain('mañana');
+  });
+
+  it('devuelve referencia de ayer para D-1', () => {
+    expect(relativeDate('2026-06-16')).toContain('ayer');
+  });
+
+  it('devuelve semanas para 7-29 días de diferencia', () => {
+    expect(relativeDate('2026-06-24')).toMatch(/semana/);
+    expect(relativeDate('2026-07-14')).toMatch(/semana/);
+  });
+
+  it('devuelve meses para diferencias >= 30 días', () => {
+    expect(relativeDate('2026-09-17')).toMatch(/mes/);
+  });
+});
+
+// ─── persistenceKeys ──────────────────────────────────────────────────────────
+
+import {
+  isPersistedStorageKey,
+  PERSISTED_STORAGE_KEYS,
+} from '../../../services/persistenceKeys';
+
+describe('isPersistedStorageKey', () => {
+  it('reconoce todas las claves del catálogo como persistidas', () => {
+    PERSISTED_STORAGE_KEYS.forEach((key) => {
+      expect(isPersistedStorageKey(key), `Clave no reconocida: ${key}`).toBe(true);
+    });
+  });
+
+  it('rechaza claves SQLite internas', () => {
+    expect(isPersistedStorageKey('traccion.v1.sqlite.hydrationMetadata')).toBe(false);
+    expect(isPersistedStorageKey('traccion.v1.sqlite.pendingWrites')).toBe(false);
+  });
+
+  it('rechaza claves arbitrarias no registradas', () => {
+    expect(isPersistedStorageKey('clave-inventada')).toBe(false);
+    expect(isPersistedStorageKey('')).toBe(false);
+  });
+});
