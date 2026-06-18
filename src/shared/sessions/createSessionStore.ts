@@ -541,8 +541,8 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
         const previousSession = result.records.find((s) => s.id === sessionId);
         if (previousSession) {
           const changes = buildAuditChanges(
-            previousSession,
-            updatedSession,
+            previousSession as unknown as Record<string, unknown>,
+            updatedSession as unknown as Record<string, unknown>,
             { title: 'Título', date: 'Fecha', code: 'Código' },
             ['title', 'date', 'code'],
           );
