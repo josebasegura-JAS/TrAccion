@@ -8,7 +8,7 @@ import {
   subscribeToPersistenceFeedback,
 } from './persistence';
 
-const POLLING_INTERVAL_MS = 30_000;
+const POLLING_INTERVAL_MS = 12_000;
 const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-recovered';
 
 const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
