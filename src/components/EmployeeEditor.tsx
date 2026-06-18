@@ -44,6 +44,8 @@ function toDraft(employee: Employee | null): EmployeeDraft {
     puestoEus: employee.puestoEus,
     residencia: employee.residencia,
     nivelRetributivo: employee.nivelRetributivo,
+    direccionOrganizativa: employee.direccionOrganizativa,
+    antiguedadPuesto: employee.antiguedadPuesto,
     sexo: employee.sexo,
     calle: employee.calle,
     numero: employee.numero,

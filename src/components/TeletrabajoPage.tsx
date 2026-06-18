@@ -30,6 +30,7 @@ import {
 
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
+import { exportTeletrabajoDireccionToExcel } from '../features/teletrabajo/domain/exportDireccion';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
 import {
   normalizeTeletrabajoPuesto,
@@ -670,6 +671,24 @@ export function TeletrabajoPage({
     setFilter('periodo', '');
   };
 
+
+  const handleExportDireccion = useCallback(async () => {
+    try {
+      await exportTeletrabajoDireccionToExcel({
+        rows: sortedSolicitudes,
+        employees,
+        periodo: filters.periodo,
+      });
+      setWordStatus('Excel Dirección generado y abierto correctamente.');
+    } catch (error) {
+      setWordStatus(
+        error instanceof Error
+          ? `No se pudo generar el Excel Dirección: ${error.message}`
+          : 'No se pudo generar el Excel Dirección.',
+      );
+    }
+  }, [employees, filters.periodo, sortedSolicitudes]);
+
   const openEditor = (solicitud: TeletrabajoSolicitud) => {
     selectSolicitud(solicitud.id);
     setEditingSolicitudId(solicitud.id);
@@ -942,6 +961,13 @@ export function TeletrabajoPage({
                 filterLabel: teletrabajoFilterLabel,
               }}
             />
+            <ActionButton
+              disabled={sortedSolicitudes.length === 0}
+              onClick={() => void handleExportDireccion()}
+              variant="excel"
+            >
+              Exportar Dirección
+            </ActionButton>
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredSolicitudes.length} registros
