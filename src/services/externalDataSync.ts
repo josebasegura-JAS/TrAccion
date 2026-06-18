@@ -14,6 +14,33 @@ const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-re
 const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
   'traccion.v1.teletrabajo.solicitudes': 'teletrabajo',
   'traccion.v1.teletrabajo.puestos': 'teletrabajo',
+  'traccion.v1.teletrabajo.puestos.translationAliases': 'teletrabajo',
+  'traccion.v1.actas.records': 'actas',
+  'traccion.v1.actas.types': 'actas',
+  'traccion.v1.actas.outlookTemplate': 'actas',
+  'traccion.v1.actas.table': 'actas',
+  'traccion.v1.comite.sessions': 'comite-sesiones',
+  'traccion.v1.paritaria.sessions': 'paritaria-sesiones',
+  'traccion.v1.licenciasSinSueldo.records': 'licencias-sin-sueldo',
+  'traccion.v1.presupuestos.scenarios': 'presupuestos',
+  'traccion.v1.presupuestos.manualItems': 'presupuestos',
+  'traccion.v1.presupuestos.ticketGroups': 'presupuestos',
+  'traccion.v1.presupuestos.actuals': 'presupuestos',
+  'traccion.v1.ticketRestaurante.calendars': 'ticket-restaurante',
+  'traccion.v1.ticketRestaurante.absences': 'ticket-restaurante',
+  'traccion.v1.ticketRestaurante.people': 'ticket-restaurante',
+  'traccion.v1.ticketRestaurante.config': 'ticket-restaurante',
+  'traccion.v1.ticketRestaurante.debtLedger': 'ticket-restaurante',
+  'traccion.v1.ticketRestaurante.manutenciones': 'ticket-restaurante',
+  'traccion.v1.criterios-rrll.criterios': 'criterios-rrll',
+  'traccion.v1.vinculograma.records': 'vinculograma',
+  'traccion.v1.vinculograma.showExpired': 'vinculograma',
+  'traccion.v1.configuracion': 'configuracion',
+  'rrll_especiales_destinatarios': 'especiales',
+  // plantilla y tareas tienen tabla propia (collectChangedDirectStores las gestiona)
+  // auditTrail no tiene store sincronizable registrado
+  'traccion.v1.plantilla.jobPositionTranslations': 'plantilla',
+  'traccion.v1.peticiones.peticiones': 'tareas',
 };
 
 type ExternalDataSyncState = {
@@ -294,7 +321,12 @@ export function startExternalDataSyncPolling(): void {
 
   const metadata = readHydrationMetadata();
   lastSeenRefreshToken = metadata?.refreshToken ?? null;
-  lastSeenPersistedRecordsUpdatedAt = null;
+  // Si la hidratación fue satisfactoria (refreshToken presente), el localStorage
+  // ya está al día. Inicializar los tokens de tareas/sorteos a un valor centinela
+  // distinto de null para que el primer poll no los recargue si no han cambiado.
+  // El valor real se actualiza en el primer updateSeenTokens.
+  const hasValidCache = Boolean(metadata?.refreshToken && metadata.strategy === 'sqlite');
+  lastSeenPersistedRecordsUpdatedAt = hasValidCache ? (metadata?.lastUpdatedAt ?? null) : null;
   lastSeenTaskRecordsUpdatedAt = null;
   lastSeenSorteosDrawsUpdatedAt = null;
   lastSeenSorteosExclusionsUpdatedAt = null;

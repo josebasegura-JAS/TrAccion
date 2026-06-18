@@ -13,6 +13,11 @@ export function getRegisteredSyncableStores(): SyncableStoreRegistration[] {
   return Array.from(syncableStores.values());
 }
 
+// Timers de debounce por store — evita recargar el mismo store varias veces
+// cuando el polling detecta cambios en múltiples claves del mismo módulo.
+const pendingReloadTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const RELOAD_DEBOUNCE_MS = 50;
+
 export function reloadRegisteredSyncableStores(storeIds?: string[]): void {
   const requestedStoreIds = storeIds ? new Set(storeIds) : null;
 
@@ -21,6 +26,17 @@ export function reloadRegisteredSyncableStores(storeIds?: string[]): void {
       return;
     }
 
-    store.reloadFromStorage();
+    // Cancelar recarga previa pendiente del mismo store
+    const existingTimer = pendingReloadTimers.get(store.id);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      pendingReloadTimers.delete(store.id);
+      store.reloadFromStorage();
+    }, RELOAD_DEBOUNCE_MS);
+
+    pendingReloadTimers.set(store.id, timer);
   });
 }
