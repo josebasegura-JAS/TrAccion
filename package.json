@@ -13,7 +13,7 @@
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run electron:start\"",
     "electron:start": "tsc -p electron/tsconfig.json && electron dist-electron/main.js",
     "electron:build": "npm run build && electron-builder --win portable",
-    "test": "vitest run",
+    "test": "vitest run --fileParallelism=false",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
