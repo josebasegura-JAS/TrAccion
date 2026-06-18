@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('traccion', {
     expectedDrawsUpdatedAt: string | null;
     expectedExclusionsUpdatedAt: string | null;
   }) => ipcRenderer.invoke('sorteos:save-snapshot-if-unchanged', snapshot),
+  loadEmployeeRecords: () => ipcRenderer.invoke('plantilla:load-records'),
+  saveEmployeeRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedValue: string | null;
+  }) => ipcRenderer.invoke('plantilla:save-record-if-unchanged', record),
   loadTaskRecords: (filter?: { mode?: 'all' | 'active' | 'historical' }) =>
     ipcRenderer.invoke('tasks:load-records', filter),
   saveTaskRecordIfUnchanged: (record: {

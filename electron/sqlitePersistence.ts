@@ -18,7 +18,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -69,6 +69,32 @@ export interface ConditionalSqliteTaskSaveResult {
   ok: boolean;
   status: DatabaseStatus;
   currentUpdatedAt: string | null;
+  message: string;
+}
+
+export interface SqliteEmployeeRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface SqliteEmployeeRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteEmployeeRecord[];
+}
+
+export interface ConditionalSqliteEmployeeRecord {
+  id: string;
+  value: string;
+  expectedValue: string | null;
+}
+
+export interface ConditionalSqliteEmployeeSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  currentValue: string | null;
   message: string;
 }
 
@@ -1071,12 +1097,39 @@ function migrateToVersion5(db: Database): void {
   }
 }
 
+function migrateToVersion6(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS employee_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_employee_records_updated_at
+      ON employee_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_employee_records_deleted_at
+      ON employee_records(deleted_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 6) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      6,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
   migrateToVersion3(db);
   migrateToVersion4(db);
   migrateToVersion5(db);
+  migrateToVersion6(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1314,6 +1367,14 @@ interface SorteosRecordRow {
   deleted_at: string | null;
 }
 
+interface EmployeeRecordRow {
+  id: string;
+  value_json: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 interface CountRow {
   count: number;
 }
@@ -1352,6 +1413,21 @@ function isSorteosRecordRow(value: unknown): value is SorteosRecordRow {
   }
 
   const candidate = value as Partial<SorteosRecordRow>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.value_json === 'string' &&
+    typeof candidate.created_at === 'string' &&
+    typeof candidate.updated_at === 'string' &&
+    (candidate.deleted_at === null || typeof candidate.deleted_at === 'string')
+  );
+}
+
+function isEmployeeRecordRow(value: unknown): value is EmployeeRecordRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<EmployeeRecordRow>;
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.value_json === 'string' &&
@@ -1818,6 +1894,203 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
     const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
     insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
   }
+}
+
+
+function mapEmployeeRecordRow(row: EmployeeRecordRow): SqliteEmployeeRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function isJsonObjectWithEmpleado(value: unknown): value is { empleado: string; deletedAt?: unknown } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { empleado?: unknown };
+  return typeof candidate.empleado === 'string' && candidate.empleado.trim().length > 0;
+}
+
+function maybeMigrateEmployeesFromPersistedRecord(db: Database): void {
+  const employeeCountRow = db.prepare('SELECT COUNT(*) AS count FROM employee_records').get();
+  const employeeCount = isCountRow(employeeCountRow) ? employeeCountRow.count : 0;
+  if (employeeCount > 0) {
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.plantilla.employees');
+  if (!legacyRecord) {
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO employee_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithEmpleado(item)) {
+      continue;
+    }
+
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.empleado, JSON.stringify(item), now, now, deletedAt);
+  }
+}
+
+function readEmployeeRecords(db: Database): SqliteEmployeeRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM employee_records ORDER BY id')
+    .all()
+    .filter(isEmployeeRecordRow)
+    .map(mapEmployeeRecordRow);
+}
+
+export function loadEmployeeRecordsSnapshot(): SqliteEmployeeRecordsSnapshot {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, records: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateEmployeesFromPersistedRecord(db))();
+      return { status: currentStatus, records: readEmployeeRecords(db) };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [] }),
+  );
+}
+
+export function saveEmployeeRecordIfUnchanged(
+  record: ConditionalSqliteEmployeeRecord,
+): ConditionalSqliteEmployeeSaveResult {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentValue: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteEmployeeSaveResult => {
+        maybeMigrateEmployeesFromPersistedRecord(db);
+        const row = db.prepare('SELECT value_json FROM employee_records WHERE id = ?').get(record.id);
+        const currentValue = row && typeof row === 'object' && typeof (row as { value_json?: unknown }).value_json === 'string'
+          ? (row as { value_json: string }).value_json
+          : null;
+
+        if (currentValue !== record.expectedValue) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentValue,
+            message:
+              'Esta persona ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+
+        if (currentValue === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO employee_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, now, now, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT value_json FROM employee_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentValue: latest && typeof latest === 'object' && typeof (latest as { value_json?: unknown }).value_json === 'string'
+                ? (latest as { value_json: string }).value_json
+                : null,
+              message: 'La persona ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE employee_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND value_json = ?`,
+            )
+            .run(record.value, now, deletedAt, record.id, currentValue);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT value_json FROM employee_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentValue: latest && typeof latest === 'object' && typeof (latest as { value_json?: unknown }).value_json === 'string'
+                ? (latest as { value_json: string }).value_json
+                : null,
+              message:
+                'Esta persona ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, now);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentValue: record.value,
+          message: 'Persona guardada en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:employee_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentValue: null,
+      message,
+    }),
+  );
 }
 
 export function loadTaskRecordsSnapshot(filter: SqliteTaskRecordsFilter = {}): SqliteTaskRecordsSnapshot {

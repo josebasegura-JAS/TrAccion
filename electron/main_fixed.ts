@@ -19,6 +19,7 @@ import {
   heartbeatRecordLock,
   initializeSqlitePersistence,
   listLocalBackups,
+  loadEmployeeRecordsSnapshot,
   loadPersistedRecordsSnapshot,
   loadSorteosRecordsSnapshot,
   loadTaskRecordsSnapshot,
@@ -31,6 +32,7 @@ import {
   restoreLocalBackup,
   savePersistedRecord,
   savePersistedRecordIfUnchanged,
+  saveEmployeeRecordIfUnchanged,
   saveSorteosSnapshotIfUnchanged,
   saveTaskRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
@@ -1206,6 +1208,46 @@ function registerIpcHandlers(): void {
         exclusions,
         expectedDrawsUpdatedAt,
         expectedExclusionsUpdatedAt,
+      }),
+    );
+  });
+
+  ipcMain.handle('plantilla:load-records', () =>
+    enqueueSqliteIpc('plantilla:load-records', () => loadEmployeeRecordsSnapshot()),
+  );
+
+  ipcMain.handle('plantilla:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentValue: null,
+        message: 'Payload de plantilla inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedValue?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedValue !== 'string' && candidate.expectedValue !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentValue: null,
+        message: 'Payload de plantilla inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedValue = candidate.expectedValue;
+    return enqueueSqliteIpc('plantilla:save-record-if-unchanged', () =>
+      saveEmployeeRecordIfUnchanged({
+        id,
+        value,
+        expectedValue,
       }),
     );
   });

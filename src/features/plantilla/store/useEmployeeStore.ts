@@ -8,6 +8,7 @@ import { normalizeJobPosition, type JobPositionTranslation } from '../domain/job
 import type { Employee, EmployeeDraft } from '../domain/employee';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { hasEmployeeSqliteRepository, loadEmployeesFromSqlite, saveEmployeeToSqlite } from './employeeSqliteRepository';
 
 export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
 const STORAGE_KEY = EMPLOYEES_STORAGE_KEY;
@@ -57,6 +58,17 @@ function readEmployees(): Employee[] {
   return parsed.filter(isEmployee).map((employee) => hydrateEmployee(employee, employee.deletedAt));
 }
 
+async function readEmployeesShared(): Promise<Employee[]> {
+  if (hasEmployeeSqliteRepository()) {
+    const sqliteEmployees = await loadEmployeesFromSqlite(parseEmployeesSnapshot);
+    if (sqliteEmployees) {
+      return sqliteEmployees;
+    }
+  }
+
+  return readEmployees();
+}
+
 function parseEmployeesSnapshot(storageValue: string | null): Employee[] {
   if (!storageValue) {
     return mockEmployees;
@@ -79,6 +91,42 @@ async function persistEmployeesConfirmed(employees: Employee[]): Promise<void> {
   if (!result.ok) {
     throw new Error(result.message);
   }
+}
+
+async function persistEmployeeDirectOrFallback(
+  employee: Employee,
+  expectedSnapshot: string | null,
+): Promise<{ ok: boolean; message: string } | null> {
+  if (!hasEmployeeSqliteRepository()) {
+    return null;
+  }
+
+  const result = await saveEmployeeToSqlite(employee, expectedSnapshot);
+  if (!result) {
+    return null;
+  }
+
+  return { ok: result.ok, message: result.message };
+}
+
+async function persistEmployeesShared(
+  employees: Employee[],
+  previousEmployees: Employee[],
+): Promise<Employee[]> {
+  if (hasEmployeeSqliteRepository()) {
+    const previousById = new Map(previousEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
+    for (const employee of employees) {
+      const expectedSnapshot = previousById.get(employee.empleado) ?? null;
+      const result = await persistEmployeeDirectOrFallback(employee, expectedSnapshot);
+      if (result && !result.ok) {
+        throw new Error(result.message);
+      }
+    }
+    return readEmployeesShared();
+  }
+
+  await persistEmployeesConfirmed(employees);
+  return employees;
 }
 
 function isJobPositionTranslation(value: unknown): value is JobPositionTranslation {
@@ -185,34 +233,49 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   filters: EMPTY_EMPLOYEE_FILTERS,
   jobPositionTranslations: [],
   load: () => {
-    const employees = readEmployees();
-    const jobPositionTranslations = readJobPositionTranslations();
-    set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+    void (async () => {
+      const employees = await readEmployeesShared();
+      const jobPositionTranslations = readJobPositionTranslations();
+      set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+    })();
   },
   reloadFromStorage: () => {
-    const employees = readEmployees();
-    const jobPositionTranslations = readJobPositionTranslations();
-    set((state) => ({
-      employees,
-      jobPositionTranslations,
-      selectedEmployeeId: employees.some((employee) => employee.empleado === state.selectedEmployeeId)
-        ? state.selectedEmployeeId
-        : firstVisibleEmployeeId(employees),
-    }));
+    void (async () => {
+      const employees = await readEmployeesShared();
+      const jobPositionTranslations = readJobPositionTranslations();
+      set((state) => ({
+        employees,
+        jobPositionTranslations,
+        selectedEmployeeId: employees.some((employee) => employee.empleado === state.selectedEmployeeId)
+          ? state.selectedEmployeeId
+          : firstVisibleEmployeeId(employees),
+      }));
+    })();
   },
   save: () => {
-    void persistEmployeesConfirmed(get().employees);
+    void persistEmployeesShared(get().employees, get().employees);
   },
   create: (draft) => {
     void (async () => {
-      const employees = upsertEmployees(get().employees, [draft]);
-      await persistEmployeesConfirmed(employees);
-      set({ employees, selectedEmployeeId: draft.empleado });
+      const currentEmployees = get().employees;
+      const employees = upsertEmployees(currentEmployees, [draft]);
+      const persistedEmployees = await persistEmployeesShared(employees, currentEmployees);
+      set({ employees: persistedEmployees, selectedEmployeeId: draft.empleado });
     })();
   },
   createWithConcurrencyCheck: async (draft) => {
     try {
       const newEmployee = hydrateEmployee(draft, null);
+      const directResult = await persistEmployeeDirectOrFallback(newEmployee, null);
+      if (directResult) {
+        if (!directResult.ok) {
+          return directResult;
+        }
+        const employees = await readEmployeesShared();
+        set({ employees, selectedEmployeeId: newEmployee.empleado });
+        return { ok: true, message: directResult.message, recordId: newEmployee.empleado };
+      }
+
       const result = await saveNewSharedArrayRecord<Employee>({
         storageKey: STORAGE_KEY,
         newRecord: newEmployee,
@@ -228,15 +291,37 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   },
   update: (empleado, draft) => {
     void (async () => {
-      const employees = get().employees.map((employee) =>
+      const currentEmployees = get().employees;
+      const employees = currentEmployees.map((employee) =>
         employee.empleado === empleado ? hydrateEmployee(draft, employee.deletedAt) : employee,
       );
-      await persistEmployeesConfirmed(employees);
-      set({ employees, selectedEmployeeId: draft.empleado });
+      const persistedEmployees = await persistEmployeesShared(employees, currentEmployees);
+      set({ employees: persistedEmployees, selectedEmployeeId: draft.empleado });
     })();
   },
   updateWithConcurrencyCheck: async (empleado, draft, expectedSnapshot) => {
     try {
+      if (hasEmployeeSqliteRepository()) {
+        if (draft.empleado !== empleado) {
+          return { ok: false, message: 'No se puede cambiar el número de empleado porque es el identificador compartido. Crea una persona nueva si el número ha cambiado.' };
+        }
+        const latestEmployees = await readEmployeesShared();
+        const latestEmployee = latestEmployees.find((employee) => employee.empleado === empleado);
+        if (!latestEmployee) {
+          return { ok: false, message: 'La persona ya no existe en la base compartida. Recarga antes de continuar.' };
+        }
+        const updatedEmployee = hydrateEmployee(draft, latestEmployee.deletedAt);
+        const directResult = await persistEmployeeDirectOrFallback(updatedEmployee, expectedSnapshot);
+        if (directResult) {
+          if (!directResult.ok) {
+            return directResult;
+          }
+          const employees = await readEmployeesShared();
+          set({ employees, selectedEmployeeId: updatedEmployee.empleado });
+          return { ok: true, message: directResult.message };
+        }
+      }
+
       const result = await saveSharedArrayRecord<Employee>({
         storageKey: STORAGE_KEY,
         recordId: empleado,
@@ -256,16 +341,35 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   },
   remove: (empleado) => {
     void (async () => {
-      const employees = get().employees.map((employee) =>
+      const currentEmployees = get().employees;
+      const employees = currentEmployees.map((employee) =>
         employee.empleado === empleado ? { ...employee, deletedAt: new Date().toISOString() } : employee,
       );
-      await persistEmployeesConfirmed(employees);
-      set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+      const persistedEmployees = await persistEmployeesShared(employees, currentEmployees);
+      set({ employees: persistedEmployees, selectedEmployeeId: firstVisibleEmployeeId(persistedEmployees) });
     })();
   },
   removeWithConcurrencyCheck: async (empleado, expectedSnapshot) => {
     try {
       const deletedAt = new Date().toISOString();
+      if (hasEmployeeSqliteRepository()) {
+        const latestEmployees = await readEmployeesShared();
+        const latestEmployee = latestEmployees.find((employee) => employee.empleado === empleado);
+        if (!latestEmployee) {
+          return { ok: false, message: 'La persona ya no existe en la base compartida. Recarga antes de continuar.' };
+        }
+        const deletedEmployee = { ...latestEmployee, deletedAt };
+        const directResult = await persistEmployeeDirectOrFallback(deletedEmployee, expectedSnapshot);
+        if (directResult) {
+          if (!directResult.ok) {
+            return directResult;
+          }
+          const employees = await readEmployeesShared();
+          set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+          return { ok: true, message: directResult.message };
+        }
+      }
+
       const result = await saveSharedArrayRecord<Employee>({
         storageKey: STORAGE_KEY,
         recordId: empleado,
@@ -285,7 +389,22 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   },
   importExcel: async (file) => {
     const drafts = await importEmployeesFromFile(file);
-    const employees = upsertEmployees(get().employees, drafts);
+    const currentEmployees = get().employees;
+    const employees = upsertEmployees(currentEmployees, drafts);
+    if (hasEmployeeSqliteRepository()) {
+      const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
+      for (const employee of employees) {
+        const expectedSnapshot = previousById.get(employee.empleado) ?? null;
+        const result = await persistEmployeeDirectOrFallback(employee, expectedSnapshot);
+        if (result && !result.ok) {
+          throw new Error(result.message);
+        }
+      }
+      const reloadedEmployees = await readEmployeesShared();
+      set({ employees: reloadedEmployees, selectedEmployeeId: firstVisibleEmployeeId(reloadedEmployees) });
+      return;
+    }
+
     await persistEmployeesConfirmed(employees);
     set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
   },
@@ -320,8 +439,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     });
 
     if (updated > 0) {
-      await persistEmployeesConfirmed(nextEmployees);
-      set({ employees: nextEmployees });
+      const persistedEmployees = await persistEmployeesShared(nextEmployees, employees);
+      set({ employees: persistedEmployees });
     }
 
     return { updated, missing };

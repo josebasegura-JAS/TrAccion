@@ -176,6 +176,32 @@ interface TraccionTaskRecord {
   deletedAt: string | null;
 }
 
+interface TraccionEmployeeRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+interface TraccionEmployeeRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionEmployeeRecord[];
+}
+
+interface TraccionConditionalEmployeeRecord {
+  id: string;
+  value: string;
+  expectedValue: string | null;
+}
+
+interface TraccionConditionalEmployeeSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  currentValue: string | null;
+  message: string;
+}
+
 interface TraccionTaskRecordsSnapshot {
   status: TraccionDatabaseStatus;
   records: TraccionTaskRecord[];
@@ -260,6 +286,10 @@ interface TraccionApi {
   saveSorteosSnapshotIfUnchanged?: (
     snapshot: TraccionConditionalSorteosSnapshot,
   ) => Promise<TraccionConditionalSorteosSaveResult>;
+  loadEmployeeRecords?: () => Promise<TraccionEmployeeRecordsSnapshot>;
+  saveEmployeeRecordIfUnchanged?: (
+    record: TraccionConditionalEmployeeRecord,
+  ) => Promise<TraccionConditionalEmployeeSaveResult>;
   loadTaskRecords?: (filter?: TraccionTaskRecordsFilter) => Promise<TraccionTaskRecordsSnapshot>;
   saveTaskRecordIfUnchanged?: (
     record: TraccionConditionalTaskRecord,
