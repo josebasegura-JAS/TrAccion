@@ -104,9 +104,34 @@ export function DataTable<Row, ColumnId extends string>({
 
   const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_BATCH_SIZE);
 
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Resetear renderLimit y volver al inicio cuando cambian los datos o el sort
   useEffect(() => {
     setRenderLimit(DEFAULT_RENDER_BATCH_SIZE);
+    scrollContainerRef.current?.scrollTo(0, 0);
   }, [rows, sort]);
+
+  // Cargar más filas automáticamente al hacer scroll hasta el final (IntersectionObserver)
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setRenderLimit((current) => current + RENDER_BATCH_INCREMENT);
+        }
+      },
+      { root: scrollContainerRef.current, threshold: 0.1 },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sortedRows]);
 
   const visibleRows = useMemo(
     () => sortedRows.slice(0, renderLimit),
@@ -178,7 +203,10 @@ export function DataTable<Row, ColumnId extends string>({
           </button>
         </div>
       )}
-      <div className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}>
+      <div
+        className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}
+        ref={scrollContainerRef}
+      >
       <table
         aria-label={ariaLabel}
         className="w-full table-fixed text-left text-xs"
@@ -291,6 +319,9 @@ export function DataTable<Row, ColumnId extends string>({
           )}
         </tbody>
       </table>
+      {hasHiddenRows && (
+        <div aria-hidden="true" ref={sentinelRef} style={{ height: 1 }} />
+      )}
       </div>
       {hasHiddenRows && (
         <div className="flex items-center justify-between rounded-xl border border-metro-border bg-metro-panel/45 px-3 py-2 text-xs text-metro-muted">
