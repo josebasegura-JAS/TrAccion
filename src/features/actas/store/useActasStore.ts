@@ -6,6 +6,7 @@ import {
   saveSharedArrayMutation,
   saveSharedArrayRecord,
 } from '../../../services/sharedRecordPersistence';
+import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
@@ -402,6 +403,25 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
         conflictMessage:
           'Esta acta ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
+      const updatedActa = result.updatedRecord;
+      const previousActa = result.records.find((a) => a.id === actaId);
+      if (previousActa) {
+        const changes = buildAuditChanges(
+          previousActa,
+          updatedActa,
+          { titulo: 'Título', tipo: 'Tipo', estado: 'Estado', fechaSesion: 'Fecha sesión', fechaLimite: 'Fecha límite' },
+          ['titulo', 'tipo', 'estado', 'fechaSesion', 'fechaLimite'],
+        );
+        if (changes.length > 0) {
+          enqueueAuditEvent({
+            module: 'actas',
+            entityId: actaId,
+            action: changes.some((c) => c.field === 'estado') ? 'status_changed' : 'updated',
+            summary: buildUpdateSummary(changes),
+            changes,
+          });
+        }
+      }
       set((state) => ({
         actas: sortActasForState(
           selectVisibleActasForState(result.records, state.hasLoadedHistoricalActas),
