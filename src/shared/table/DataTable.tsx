@@ -97,6 +97,11 @@ export function DataTable<Row, ColumnId extends string>({
     [columnWidths, columns],
   );
 
+  const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_BATCH_SIZE);
+
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
   // Con arrays pequeños ordenamos todo y luego recortamos.
   // Con arrays grandes (>DEFAULT_RENDER_BATCH_SIZE), recortamos primero y ordenamos
   // solo las filas visibles para no bloquear el render thread en módulos con muchos registros.
@@ -108,11 +113,6 @@ export function DataTable<Row, ColumnId extends string>({
     const sliced = rows.slice(0, renderLimit + RENDER_BATCH_INCREMENT);
     return sortDataTableRows(sliced, visibleColumns, sort);
   }, [rows, sort, visibleColumns, renderLimit]);
-
-  const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_BATCH_SIZE);
-
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Resetear renderLimit y volver al inicio cuando cambian los datos o el sort
   useEffect(() => {
