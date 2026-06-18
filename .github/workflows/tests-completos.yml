@@ -1,11 +1,11 @@
 name: TrAcción · Batería de tests
 
 on:
+  workflow_dispatch:
   push:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-  workflow_dispatch:
 
 jobs:
   tests:
@@ -17,9 +17,6 @@ jobs:
       NODE_ENV: development
       NPM_CONFIG_AUDIT: "false"
       NPM_CONFIG_FUND: "false"
-      NPM_CONFIG_PRODUCTION: "false"
-      NPM_CONFIG_OMIT: ""
-      NPM_CONFIG_INCLUDE: "dev"
       NPM_CONFIG_BIN_LINKS: "true"
 
     steps:
@@ -29,21 +26,25 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Show toolchain
         shell: pwsh
         run: |
           node --version
           npm --version
-          npm config get omit
-          npm config get include
-          npm config get bin-links
+
+      - name: Clean npm config and cache
+        shell: pwsh
+        run: |
+          npm config delete production
+          npm config delete omit
+          npm cache clean --force
 
       - name: Install dependencies
         shell: pwsh
         run: |
-          npm ci --include=dev --bin-links=true --ignore-scripts --no-audit --no-fund
+          npm install --include=dev --bin-links=true --ignore-scripts --no-audit --no-fund
 
       - name: Verify local tools
         shell: pwsh
@@ -60,9 +61,10 @@ jobs:
           foreach ($tool in $tools) {
             if (!(Test-Path $tool)) {
               Write-Host "Missing tool: $tool"
-              Write-Host "node_modules/.bin contents:"
-              Get-ChildItem "node_modules\.bin" | Select-Object -ExpandProperty Name
-              throw "Required local CLI tool is missing after npm ci."
+              if (Test-Path "node_modules\.bin") {
+                Get-ChildItem "node_modules\.bin" | Select-Object -ExpandProperty Name
+              }
+              throw "Required local CLI tool is missing."
             }
           }
 
