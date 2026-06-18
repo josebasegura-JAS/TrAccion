@@ -23,26 +23,51 @@ jobs:
       - name: Setup Node.js estable
         uses: actions/setup-node@v4
         with:
-          node-version: 20.11.1
+          node-version: 22.13.1
 
-      - name: Limpiar configuración npm
+      - name: Limpiar npm y forzar registry público
         shell: pwsh
         run: |
           npm config delete production
           npm config delete omit
+          npm config set registry https://registry.npmjs.org/
           npm config set fund false
           npm config set audit false
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
           npm cache clean --force
 
-      - name: Instalar dependencias
+      - name: Corregir package-lock con registry público
         shell: pwsh
         run: |
-          npm install --production=false --include=dev --bin-links=true --no-audit --no-fund
+          $lock = "package-lock.json"
+
+          if (!(Test-Path $lock)) {
+            throw "No existe package-lock.json"
+          }
+
+          $content = Get-Content $lock -Raw
+          $content = $content.Replace(
+            "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
+            "https://registry.npmjs.org/"
+          )
+
+          Set-Content $lock $content -NoNewline
+
+      - name: Instalar dependencias limpias desde lockfile
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules) {
+            Remove-Item node_modules -Recurse -Force
+          }
+
+          npm ci --include=dev --ignore-scripts --no-audit --no-fund
 
       - name: Diagnóstico de dependencias críticas
         shell: pwsh
         run: |
-          npm ls typescript eslint vitest vite --depth=0
+          npm ls typescript eslint vitest vite zustand --depth=0
           npm exec -- tsc --version
           npm exec -- eslint --version
           npm exec -- vitest --version
