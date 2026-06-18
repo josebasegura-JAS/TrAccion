@@ -19,6 +19,7 @@ interface SharedRecordLockState {
 
 const HEARTBEAT_MS = 10 * 1000;
 const RETRY_AFTER_TEMPORARY_LOCK_MS = 300;
+const MAX_CONSECUTIVE_TEMPORARY_HEARTBEAT_FAILURES = 2;
 const TEMPORARY_LOCK_NOTICE_DELAY_MS = 1_000;
 const LOCK_BUSY_MESSAGE = 'Abriendo registro…';
 const TEMPORARY_LOCK_BUSY_MESSAGE = 'Base ocupada, reintentando…';
@@ -134,6 +135,7 @@ export function useSharedRecordLock({
     };
     let retryTimeoutId: number | null = null;
     let noticeTimeoutId: number | null = null;
+    let consecutiveTemporaryHeartbeatFailures = 0;
     const traccionApi = window.traccion;
     const activeLockPayload: TraccionRecordLockPayload = lockPayload;
     const lockBusyKey = `record-lock:${activeLockPayload.module}:${activeLockPayload.recordId}`;
@@ -270,15 +272,22 @@ export function useSharedRecordLock({
           }
 
           if (result.status === 'error' && isTemporarySqliteLockMessage(result.message)) {
-            // La base estaba ocupada durante la renovación. No degradamos a modo consulta:
-            // el lock de edición aún tiene TTL y se intentará renovar en el siguiente ciclo.
-            setState((current) => ({
-              ...current,
-              message: current.message || '',
-            }));
+            consecutiveTemporaryHeartbeatFailures += 1;
+            if (consecutiveTemporaryHeartbeatFailures >= MAX_CONSECUTIVE_TEMPORARY_HEARTBEAT_FAILURES) {
+              setAcquired(false);
+              setState({
+                status: 'error',
+                lockedBy: null,
+                message: 'Modo consulta — La base compartida lleva inaccesible más de un ciclo. El bloqueo puede haber expirado. Edición desactivada para evitar conflictos.',
+                isReadOnly: true,
+              });
+            } else {
+              setState((current) => ({ ...current, message: current.message || '' }));
+            }
             return;
           }
 
+          consecutiveTemporaryHeartbeatFailures = 0;
           applyResult(result);
         })
         .catch((error: unknown) => {
@@ -288,13 +297,22 @@ export function useSharedRecordLock({
 
           const message = error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo.';
           if (isTemporarySqliteLockMessage(message)) {
-            setState((current) => ({
-              ...current,
-              message: current.message || '',
-            }));
+            consecutiveTemporaryHeartbeatFailures += 1;
+            if (consecutiveTemporaryHeartbeatFailures >= MAX_CONSECUTIVE_TEMPORARY_HEARTBEAT_FAILURES) {
+              setAcquired(false);
+              setState({
+                status: 'error',
+                lockedBy: null,
+                message: 'Modo consulta — La base compartida lleva inaccesible más de un ciclo. El bloqueo puede haber expirado. Edición desactivada para evitar conflictos.',
+                isReadOnly: true,
+              });
+            } else {
+              setState((current) => ({ ...current, message: current.message || '' }));
+            }
             return;
           }
 
+          consecutiveTemporaryHeartbeatFailures = 0;
           setAcquired(false);
           setState({
             status: 'error',
