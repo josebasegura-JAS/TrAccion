@@ -503,20 +503,24 @@ export async function flushPendingSqliteWrites(): Promise<number> {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'No se ha podido sincronizar un cambio pendiente.';
-      if (!isConcurrencyConflictMessage(message)) {
-        upsertPendingSqliteWrite(
-          pendingWrite.key,
-          pendingWrite.value,
-          message,
-          pendingWrite.expectedUpdatedAt,
-        );
-      }
+      // Tanto conflictos de concurrencia como errores de red se mantienen en la cola
+      // para reintentarlos en el siguiente ciclo. El conflicto de concurrencia indica
+      // que otro usuario modificó el mismo registro; se reintentará con el token
+      // actualizado en la siguiente sync. No se descarta silenciosamente.
+      upsertPendingSqliteWrite(
+        pendingWrite.key,
+        pendingWrite.value,
+        message,
+        pendingWrite.expectedUpdatedAt,
+      );
       if (!isTemporarySqliteLockMessage(message)) {
         emitPersistenceFeedback({
           kind: 'error',
           updatedAt: new Date().toISOString(),
           key: pendingWrite.key,
-          message: `SQLite pendiente: ${message}`,
+          message: isConcurrencyConflictMessage(message)
+            ? `Conflicto al sincronizar cambio pendiente — otro usuario modificó el mismo dato. Se reintentará automáticamente. Clave: ${pendingWrite.key}.`
+            : `SQLite pendiente: ${message}`,
         });
       }
       break;

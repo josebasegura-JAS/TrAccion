@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
 import {
+  flushPendingSqliteWrites,
+  getPendingSqliteWriteCount,
   hydrateLocalStorageFromSqlite,
   reportStartupHydrationResult,
 } from './services/persistence';
@@ -88,4 +90,22 @@ startApp().catch((error: unknown) => {
     console.error('No se ha podido arrancar TrAccion.', renderError);
     renderFatalError(renderError);
   });
+});
+
+// Antes de cerrar la ventana, intentar sincronizar cualquier cambio pendiente.
+// Si quedan writes pendientes tras el intento, el diálogo nativo de Electron
+// da al usuario la oportunidad de cancelar el cierre.
+window.addEventListener('beforeunload', (event) => {
+  const pending = getPendingSqliteWriteCount();
+  if (pending === 0) {
+    return;
+  }
+
+  // Intentar flush en background — puede completarse si SQLite responde rápido.
+  void flushPendingSqliteWrites().catch(() => undefined);
+
+  // Mostrar confirmación nativa para que el usuario pueda esperar o cancelar.
+  event.preventDefault();
+  // returnValue es necesario para que Electron muestre el diálogo de confirmación.
+  event.returnValue = `Hay ${pending} cambio${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''} de sincronizar con la base de datos compartida. ¿Cerrar de todas formas?`;
 });

@@ -180,7 +180,20 @@ function PersistenceErrorBanner() {
 
   useEffect(() => {
     return subscribeToPersistenceFeedback((nextFeedback) => {
-      setFeedback(nextFeedback.kind === 'error' ? nextFeedback : null);
+      if (nextFeedback.kind === 'error') {
+        // Mostrar el error y recordar la clave afectada.
+        setFeedback(nextFeedback);
+      } else if (nextFeedback.kind === 'saved') {
+        // Limpiar solo si el guardado exitoso corresponde a la misma clave que falló,
+        // o si no hay clave concreta (error global). Un guardado de otra clave no
+        // indica que el problema anterior se haya resuelto.
+        setFeedback((current) => {
+          if (!current) return null;
+          const sameKey = !current.key || !nextFeedback.key || current.key === nextFeedback.key;
+          return sameKey ? null : current;
+        });
+      }
+      // 'saving' no toca el banner — el error permanece visible mientras se reintenta.
     });
   }, []);
 
