@@ -1140,7 +1140,11 @@ function openDatabase(databasePath: string): Database {
   // La concurrencia se coordina con un lock corto por operación, así que usamos
   // rollback journal clásico, más compatible con red que WAL/-shm.
   db.pragma('journal_mode = DELETE');
-  db.pragma('synchronous = FULL');
+  // NORMAL es suficiente con journal_mode=DELETE y 2-3 usuarios: solo se
+  // perdería una transacción en un apagado abrupto justo en el fsync, algo
+  // improbable en uso normal. FULL hacía un fsync de red en cada escritura,
+  // añadiendo 50-500 ms de latencia SMB por operación.
+  db.pragma('synchronous = NORMAL');
   db.pragma('foreign_keys = ON');
   applyMigrations(db);
   return db;
