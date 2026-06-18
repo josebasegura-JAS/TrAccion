@@ -1,4 +1,5 @@
 import { readStorageItem, writeStorageItem } from '../../services/persistence';
+import { publishDatabaseStatus } from '../../services/databaseStatus';
 
 export const AUDIT_TRAIL_STORAGE_KEY = 'traccion.v1.auditTrail.events';
 
@@ -112,6 +113,44 @@ export function getAuditEventsForRecord(module: AuditModule, entityId: string): 
   return readAuditEvents()
     .filter((event) => event.module === module && event.entityId === entityId)
     .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+}
+
+/**
+ * Lee el audit trail del SQLite compartido para que ambos usuarios vean
+ * los eventos registrados por el otro. Fusiona con los eventos locales
+ * para no perder los que aún no han sido sincronizados.
+ */
+export async function getAuditEventsForRecordShared(
+  module: AuditModule,
+  entityId: string,
+): Promise<AuditEvent[]> {
+  const localEvents = getAuditEventsForRecord(module, entityId);
+
+  try {
+    const getPersistedRecord = window.traccion?.getPersistedRecord;
+    if (!getPersistedRecord) {
+      return localEvents;
+    }
+
+    const snapshot = await getPersistedRecord(AUDIT_TRAIL_STORAGE_KEY);
+    publishDatabaseStatus(snapshot.status);
+
+    if (!snapshot.record) {
+      return localEvents;
+    }
+
+    const parsed: unknown = JSON.parse(snapshot.record.value);
+    const sharedEvents: AuditEvent[] = Array.isArray(parsed) ? parsed.filter(isAuditEvent) : [];
+
+    // Fusionar: usar los compartidos como base y añadir los locales que no estén aún
+    const sharedIds = new Set(sharedEvents.map((e) => e.id));
+    const onlyLocal = localEvents.filter((e) => !sharedIds.has(e.id));
+    return [...sharedEvents, ...onlyLocal]
+      .filter((event) => event.module === module && event.entityId === entityId)
+      .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  } catch {
+    return localEvents;
+  }
 }
 
 function formatValue(value: unknown): string {

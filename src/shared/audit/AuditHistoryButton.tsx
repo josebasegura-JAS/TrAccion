@@ -1,8 +1,8 @@
 import { X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActionButton } from '../../components/ui/ActionButton';
 import {
-  getAuditEventsForRecord,
+  getAuditEventsForRecordShared,
   type AuditEvent,
   type AuditModule,
 } from './auditTrail';
@@ -39,10 +39,20 @@ export function AuditHistoryButton({
   className?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const events = useMemo(
-    () => (isOpen ? getAuditEventsForRecord(module, entityId) : []),
-    [entityId, isOpen, module],
-  );
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setIsLoading(true);
+    getAuditEventsForRecordShared(module, entityId)
+      .then(setEvents)
+      .catch(() => setEvents([]))
+      .finally(() => setIsLoading(false));
+  }, [isOpen, module, entityId]);
 
   return (
     <>
@@ -69,7 +79,7 @@ export function AuditHistoryButton({
                   Historial de cambios
                 </p>
                 <h3 className="mt-1 truncate text-base font-bold text-metro-text">{entityTitle}</h3>
-                <p className="text-xs text-metro-muted">{events.length} evento(s) registrados.</p>
+                <p className="text-xs text-metro-muted">{isLoading ? 'Cargando…' : `${events.length} evento(s) registrados.`}</p>
               </div>
               <button
                 aria-label="Cerrar historial"
@@ -82,7 +92,11 @@ export function AuditHistoryButton({
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-metro-border bg-metro-surface p-3">
-              {events.length === 0 ? (
+              {isLoading ? (
+                <p className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-muted">
+                  Cargando historial compartido…
+                </p>
+              ) : events.length === 0 ? (
                 <p className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-muted">
                   No hay cambios registrados todavía. Se empezarán a registrar desde esta versión.
                 </p>
