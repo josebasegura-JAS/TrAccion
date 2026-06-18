@@ -1008,7 +1008,7 @@ function registerIpcHandlers(): void {
       return getSqliteStatus();
     }
 
-    return changeSqliteDirectory(selectedDirectory);
+    return enqueueSqliteIpc('database:select-directory', () => changeSqliteDirectory(selectedDirectory));
   });
 
   ipcMain.handle('database:reset-directory', () => enqueueSqliteIpc('database:reset-directory', () => resetSqliteDirectory()));
@@ -1162,8 +1162,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('recordLock:heartbeat', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
+    // Los heartbeats son idempotentes y el TTL de 30s tolera alguno perdido;
+    // se ejecutan fuera de la cola para no bloquear escrituras de datos.
     return normalized
-      ? enqueueSqliteIpc('recordLock:heartbeat', () => heartbeatRecordLock(normalized))
+      ? heartbeatRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
