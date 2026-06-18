@@ -51,7 +51,8 @@ type SortKey =
   | 'puestoNomina'
   | 'puestoEus'
   | 'residencia'
-  | 'nivelRetributivo';
+  | 'nivelRetributivo'
+  | 'direccionOrganizativa';
 
 type EmployeeTableColumnId = SortKey | 'actions';
 
@@ -66,6 +67,7 @@ const defaultPlantillaTablePreferences: TableViewPreferences<EmployeeTableColumn
     puestoEus: 190,
     residencia: 120,
     nivelRetributivo: 95,
+    direccionOrganizativa: 180,
     actions: 92,
   },
 };
@@ -77,6 +79,7 @@ const plantillaTableColumnIds: EmployeeTableColumnId[] = [
   'puestoEus',
   'residencia',
   'nivelRetributivo',
+  'direccionOrganizativa',
   'actions',
 ];
 
@@ -91,6 +94,8 @@ const employeeExportColumns: ExportColumn<Employee>[] = [
   { key: 'puestoEus', header: 'Puesto EUS', value: (employee) => employee.puestoEus || null },
   { key: 'residencia', header: 'Residencia', value: (employee) => employee.residencia },
   { key: 'nivelRetributivo', header: 'Nivel', value: (employee) => employee.nivelRetributivo },
+  { key: 'direccionOrganizativa', header: 'Dirección organizativa', value: (employee) => employee.direccionOrganizativa || null },
+  { key: 'antiguedadPuesto', header: 'Antigüedad puesto', value: (employee) => employee.antiguedadPuesto || null },
 ];
 
 export function PlantillaPage() {
@@ -145,6 +150,7 @@ export function PlantillaPage() {
 
   const residencias = uniqueSorted(visibleEmployees.map((employee) => employee.residencia));
   const niveles = uniqueSorted(visibleEmployees.map((employee) => employee.nivelRetributivo));
+  const direcciones = uniqueSorted(visibleEmployees.map((employee) => employee.direccionOrganizativa));
   const emptyPuestoEusCount = visibleEmployees.filter(
     (employee) => !employee.puestoEus.trim(),
   ).length;
@@ -152,6 +158,7 @@ export function PlantillaPage() {
     ['Búsqueda', filters.search],
     ['Residencia', filters.residencia],
     ['Nivel retributivo', filters.nivelRetributivo],
+    ['Dirección', filters.direccionOrganizativa],
   ]);
   const activeFilterChips: ActiveFilterChip[] = [
     filters.search.trim()
@@ -163,12 +170,16 @@ export function PlantillaPage() {
     filters.nivelRetributivo
       ? { key: 'nivelRetributivo', label: 'Nivel retributivo', value: filters.nivelRetributivo, onClear: () => setFilter('nivelRetributivo', '') }
       : null,
+    filters.direccionOrganizativa
+      ? { key: 'direccionOrganizativa', label: 'Dirección', value: filters.direccionOrganizativa, onClear: () => setFilter('direccionOrganizativa', '') }
+      : null,
   ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
   const clearActiveFilters = () => {
     setFilter('search', '');
     setFilter('residencia', '');
     setFilter('nivelRetributivo', '');
+    setFilter('direccionOrganizativa', '');
   };
 
   const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
@@ -246,6 +257,17 @@ export function PlantillaPage() {
         width: 95,
         minWidth: 75,
         maxWidth: 160,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'direccionOrganizativa',
+        header: 'Dirección',
+        accessor: (employee) => employee.direccionOrganizativa,
+        render: (employee) => employee.direccionOrganizativa || '—',
+        width: 180,
+        minWidth: 130,
+        maxWidth: 300,
         sortable: true,
         className: 'text-metro-muted',
       },
@@ -397,6 +419,12 @@ export function PlantillaPage() {
           onChange={(value) => setFilter('nivelRetributivo', value)}
           options={niveles}
           value={filters.nivelRetributivo}
+        />
+        <SelectFilter
+          label="Dirección"
+          onChange={(value) => setFilter('direccionOrganizativa', value)}
+          options={direcciones}
+          value={filters.direccionOrganizativa}
         />
       </div>
 

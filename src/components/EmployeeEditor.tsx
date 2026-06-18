@@ -19,6 +19,8 @@ const employeeFormFields: Array<{ field: EmployeeField; label: string; required?
   { field: 'puestoEus', label: 'Puesto EUS' },
   { field: 'residencia', label: 'Residencia' },
   { field: 'nivelRetributivo', label: 'Nivel retributivo' },
+  { field: 'direccionOrganizativa', label: 'Dirección organizativa' },
+  { field: 'antiguedadPuesto', label: 'Antigüedad en el puesto' },
   { field: 'sexo', label: 'Sexo' },
   { field: 'calle', label: 'Calle' },
   { field: 'numero', label: 'Número' },
