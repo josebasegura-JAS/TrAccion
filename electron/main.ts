@@ -53,7 +53,7 @@ const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
-const splashMinimumVisibleMs = 1_400;
+const splashMinimumVisibleMs = 700;
 const splashMaximumVisibleMs = 25_000;
 
 function createContextMenu(mainWindow: BrowserWindow): void {
@@ -99,7 +99,7 @@ function createSplashWindow(): BrowserWindow {
   return splashWindow;
 }
 
-function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promise<void> {
+function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 250): Promise<void> {
   if (splashWindow.isDestroyed()) {
     return Promise.resolve();
   }
@@ -1069,8 +1069,10 @@ function registerIpcHandlers(): void {
     );
   });
 
-  ipcMain.handle('database:get-persisted-records-token', () => enqueueSqliteIpc('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot()));
-  ipcMain.handle('database:get-sqlite-sync-tokens', () => enqueueSqliteIpc('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot()));
+  // Estas dos operaciones son SELECT puros; SQLite WAL permite lecturas concurrentes
+  // sin esperar a escrituras pendientes en la cola.
+  ipcMain.handle('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot());
+  ipcMain.handle('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot());
 
   ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
     if (
@@ -1153,17 +1155,18 @@ function registerIpcHandlers(): void {
     );
   });
 
+  // Todas las operaciones de record lock usan una base de datos SQLite separada
+  // (ensureRecordLockDatabase) con su propio withDatabaseOperationLock, por lo que
+  // no necesitan esperar en la cola de datos. Igual que los heartbeats.
   ipcMain.handle('recordLock:acquire', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? enqueueSqliteIpc('recordLock:acquire', () => acquireRecordLock(normalized))
+      ? acquireRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
   ipcMain.handle('recordLock:heartbeat', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
-    // Los heartbeats son idempotentes y el TTL de 30s tolera alguno perdido;
-    // se ejecutan fuera de la cola para no bloquear escrituras de datos.
     return normalized
       ? heartbeatRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
@@ -1172,14 +1175,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle('recordLock:release', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? enqueueSqliteIpc('recordLock:release', () => releaseRecordLock(normalized))
+      ? releaseRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
   ipcMain.handle('recordLock:get', (_event, payload: unknown) => {
     const normalized = normalizeRecordLockPayload(payload);
     return normalized
-      ? enqueueSqliteIpc('recordLock:get', () => getRecordLock(normalized))
+      ? getRecordLock(normalized)
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 

@@ -186,7 +186,7 @@ export function clearPersistenceBusy(key: string, message = 'Operación finaliza
 export function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => {
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => resolve());
+      window.setTimeout(resolve, 0);
     });
   });
 }
