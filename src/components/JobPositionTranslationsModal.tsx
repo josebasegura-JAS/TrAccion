@@ -149,9 +149,16 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
             <button
               className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
               onClick={() => {
-                const { updated, missing } = updateEmptyEmployeeJobPositionTranslations();
-                setError('');
-                setMessage(`Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`);
+                void (async () => {
+                  try {
+                    const { updated, missing } = await updateEmptyEmployeeJobPositionTranslations();
+                    setError('');
+                    setMessage(`Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`);
+                  } catch (error) {
+                    setMessage('');
+                    setError(error instanceof Error ? error.message : 'No se pudieron actualizar los puestos EUS.');
+                  }
+                })();
               }}
               type="button"
             >

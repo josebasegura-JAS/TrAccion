@@ -99,7 +99,7 @@ export function PlantillaPage() {
     filters,
     importExcel,
     load,
-    remove,
+    removeWithConcurrencyCheck,
     selectEmployee,
     setFilter,
     updateEmptyEmployeeJobPositionTranslations,
@@ -257,7 +257,10 @@ export function PlantillaPage() {
             className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
             onClick={(event) => {
               event.stopPropagation();
-              remove(employee.empleado);
+              void (async () => {
+                const result = await removeWithConcurrencyCheck(employee.empleado, JSON.stringify(employee));
+                setImportMessage(result.message);
+              })();
             }}
             type="button"
           >
@@ -272,7 +275,7 @@ export function PlantillaPage() {
         className: 'whitespace-nowrap',
       },
     ],
-    [remove],
+    [removeWithConcurrencyCheck],
   );
 
   const sortedEmployees = useMemo(
@@ -280,11 +283,15 @@ export function PlantillaPage() {
     [employeeTableColumns, filteredEmployees, preferences.sort],
   );
 
-  const handleGlobalJobPositionUpdate = () => {
-    const { updated, missing } = updateEmptyEmployeeJobPositionTranslations();
-    setImportMessage(
-      `Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`,
-    );
+  const handleGlobalJobPositionUpdate = async () => {
+    try {
+      const { updated, missing } = await updateEmptyEmployeeJobPositionTranslations();
+      setImportMessage(
+        `Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`,
+      );
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : 'No se han podido actualizar los puestos EUS.');
+    }
   };
 
   return (
@@ -317,9 +324,14 @@ export function PlantillaPage() {
                 return;
               }
 
-              await importExcel(file);
-              setImportMessage(`Importación completada: ${file.name}`);
-              event.target.value = '';
+              try {
+                await importExcel(file);
+                setImportMessage(`Importación completada: ${file.name}`);
+              } catch (error) {
+                setImportMessage(error instanceof Error ? error.message : 'No se ha podido importar la plantilla.');
+              } finally {
+                event.target.value = '';
+              }
             }}
             ref={fileInputRef}
             type="file"
@@ -334,7 +346,7 @@ export function PlantillaPage() {
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
             disabled={emptyPuestoEusCount === 0}
-            onClick={handleGlobalJobPositionUpdate}
+            onClick={() => { void handleGlobalJobPositionUpdate(); }}
             title={
               emptyPuestoEusCount === 0
                 ? 'No hay puestos EUS pendientes'

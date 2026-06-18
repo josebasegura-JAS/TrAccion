@@ -6,7 +6,7 @@ import { importEmployeesFromFile } from '../domain/importExcel';
 import { importJobPositionTranslationsFromFile } from '../domain/importJobPositionTranslations';
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft } from '../domain/employee';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 
 export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
@@ -29,7 +29,7 @@ interface EmployeeState {
   removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   importExcel: (file: File) => Promise<void>;
   importJobPositionTranslations: (file: File) => Promise<number>;
-  updateEmptyEmployeeJobPositionTranslations: () => { updated: number; missing: number };
+  updateEmptyEmployeeJobPositionTranslations: () => Promise<{ updated: number; missing: number }>;
   selectEmployee: (employeeId: string) => void;
   setFilter: <K extends keyof EmployeeFilters>(key: K, value: EmployeeFilters[K]) => void;
 }
@@ -74,8 +74,11 @@ function employeeSnapshot(employee: Employee): string {
   return JSON.stringify(employee);
 }
 
-function persistEmployees(employees: Employee[]): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(employees));
+async function persistEmployeesConfirmed(employees: Employee[]): Promise<void> {
+  const result = await writeJsonStorageAsync(STORAGE_KEY, employees);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
 }
 
 function isJobPositionTranslation(value: unknown): value is JobPositionTranslation {
@@ -101,8 +104,13 @@ function readJobPositionTranslations(): JobPositionTranslation[] {
   return parsed.filter(isJobPositionTranslation);
 }
 
-function persistJobPositionTranslations(translations: JobPositionTranslation[]): void {
-  writeStorageItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, JSON.stringify(translations));
+async function persistJobPositionTranslationsConfirmed(
+  translations: JobPositionTranslation[],
+): Promise<void> {
+  const result = await writeJsonStorageAsync(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, translations);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
 }
 
 function upsertJobPositionTranslations(
@@ -192,13 +200,15 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         : firstVisibleEmployeeId(employees),
     }));
   },
-  save: () => persistEmployees(get().employees),
+  save: () => {
+    void persistEmployeesConfirmed(get().employees);
+  },
   create: (draft) => {
-    set((state) => {
-      const employees = upsertEmployees(state.employees, [draft]);
-      persistEmployees(employees);
-      return { employees, selectedEmployeeId: draft.empleado };
-    });
+    void (async () => {
+      const employees = upsertEmployees(get().employees, [draft]);
+      await persistEmployeesConfirmed(employees);
+      set({ employees, selectedEmployeeId: draft.empleado });
+    })();
   },
   createWithConcurrencyCheck: async (draft) => {
     try {
@@ -217,13 +227,13 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     }
   },
   update: (empleado, draft) => {
-    set((state) => {
-      const employees = state.employees.map((employee) =>
+    void (async () => {
+      const employees = get().employees.map((employee) =>
         employee.empleado === empleado ? hydrateEmployee(draft, employee.deletedAt) : employee,
       );
-      persistEmployees(employees);
-      return { employees, selectedEmployeeId: draft.empleado };
-    });
+      await persistEmployeesConfirmed(employees);
+      set({ employees, selectedEmployeeId: draft.empleado });
+    })();
   },
   updateWithConcurrencyCheck: async (empleado, draft, expectedSnapshot) => {
     try {
@@ -245,13 +255,13 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     }
   },
   remove: (empleado) => {
-    set((state) => {
-      const employees = state.employees.map((employee) =>
+    void (async () => {
+      const employees = get().employees.map((employee) =>
         employee.empleado === empleado ? { ...employee, deletedAt: new Date().toISOString() } : employee,
       );
-      persistEmployees(employees);
-      return { employees, selectedEmployeeId: firstVisibleEmployeeId(employees) };
-    });
+      await persistEmployeesConfirmed(employees);
+      set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+    })();
   },
   removeWithConcurrencyCheck: async (empleado, expectedSnapshot) => {
     try {
@@ -275,25 +285,21 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   },
   importExcel: async (file) => {
     const drafts = await importEmployeesFromFile(file);
-    set((state) => {
-      const employees = upsertEmployees(state.employees, drafts);
-      persistEmployees(employees);
-      return { employees, selectedEmployeeId: firstVisibleEmployeeId(employees) };
-    });
+    const employees = upsertEmployees(get().employees, drafts);
+    await persistEmployeesConfirmed(employees);
+    set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
   },
   importJobPositionTranslations: async (file) => {
     const importedTranslations = await importJobPositionTranslationsFromFile(file);
-    set((state) => {
-      const jobPositionTranslations = upsertJobPositionTranslations(
-        state.jobPositionTranslations,
-        importedTranslations,
-      );
-      persistJobPositionTranslations(jobPositionTranslations);
-      return { jobPositionTranslations };
-    });
+    const jobPositionTranslations = upsertJobPositionTranslations(
+      get().jobPositionTranslations,
+      importedTranslations,
+    );
+    await persistJobPositionTranslationsConfirmed(jobPositionTranslations);
+    set({ jobPositionTranslations });
     return importedTranslations.length;
   },
-  updateEmptyEmployeeJobPositionTranslations: () => {
+  updateEmptyEmployeeJobPositionTranslations: async () => {
     const { employees, jobPositionTranslations } = get();
     let updated = 0;
     let missing = 0;
@@ -314,7 +320,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     });
 
     if (updated > 0) {
-      persistEmployees(nextEmployees);
+      await persistEmployeesConfirmed(nextEmployees);
       set({ employees: nextEmployees });
     }
 
