@@ -407,8 +407,8 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       const previousActa = result.records.find((a) => a.id === actaId);
       if (previousActa) {
         const changes = buildAuditChanges(
-          previousActa,
-          updatedActa,
+          previousActa as unknown as Record<string, unknown>,
+          updatedActa as unknown as Record<string, unknown>,
           { titulo: 'Título', tipo: 'Tipo', estado: 'Estado', fechaSesion: 'Fecha sesión', fechaLimite: 'Fecha límite' },
           ['titulo', 'tipo', 'estado', 'fechaSesion', 'fechaLimite'],
         );
