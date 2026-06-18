@@ -778,12 +778,46 @@ export async function writeJsonStorageAsync<T>(
   return writeSharedStorageItemAsync(key, JSON.stringify(value));
 }
 
+interface AppliedPersistedRecordsStats {
+  applied: number;
+  skippedUnchanged: number;
+  removed: number;
+}
+
+function hasFreshHydrationCache(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
+  const metadata = readHydrationMetadata();
+  if (!metadata || metadata.strategy !== 'sqlite') {
+    return false;
+  }
+
+  if (readPendingSqliteWrites().length > 0) {
+    return false;
+  }
+
+  const sqlitePath = tokenSnapshot.status.path ?? null;
+  if (metadata.sqlitePath !== sqlitePath) {
+    return false;
+  }
+
+  if (tokenSnapshot.refreshToken) {
+    return metadata.refreshToken === tokenSnapshot.refreshToken;
+  }
+
+  return Boolean(
+    tokenSnapshot.latestUpdatedAt && metadata.lastUpdatedAt === tokenSnapshot.latestUpdatedAt,
+  );
+}
+
 export function applyPersistedRecordsSnapshotToLocalStorage(
   snapshot: TraccionPersistedRecordsSnapshot,
   options: { preservePendingWrites?: boolean } = {},
-): void {
+): AppliedPersistedRecordsStats {
   void options;
   const sqliteRecords = snapshot.records.filter((record) => isPersistedStorageKey(record.key));
+  let applied = 0;
+  let skippedUnchanged = 0;
+  let removed = 0;
+
   replaceSqliteRecordMetadata(sqliteRecords);
 
   for (const record of sqliteRecords) {
@@ -793,14 +827,24 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
         existingValue !== null &&
         isRecoverablePersistedValue(record.key, existingValue, 'localStorage')
       ) {
+        skippedUnchanged += 1;
         continue;
       }
 
-      window.localStorage.removeItem(record.key);
+      if (existingValue !== null) {
+        window.localStorage.removeItem(record.key);
+        removed += 1;
+      }
+      continue;
+    }
+
+    if (window.localStorage.getItem(record.key) === record.value) {
+      skippedUnchanged += 1;
       continue;
     }
 
     window.localStorage.setItem(record.key, record.value);
+    applied += 1;
   }
 
   writeHydrationMetadata({
@@ -809,6 +853,8 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
     refreshToken: snapshot.refreshToken,
     strategy: 'sqlite',
   });
+
+  return { applied, skippedUnchanged, removed };
 }
 
 export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> {
@@ -818,6 +864,36 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
 
   try {
     const hydrationStartedAt = performance.now();
+
+    if (window.traccion.getPersistedRecordsToken) {
+      const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
+      publishDatabaseStatus(tokenSnapshot.status);
+      if (!tokenSnapshot.status.ready || tokenSnapshot.status.phase === 'locked') {
+        return {
+          status: 'sqlite-unavailable',
+          reason: tokenSnapshot.status.message ?? 'SQLite no preparado.',
+        };
+      }
+
+      if (hasFreshHydrationCache(tokenSnapshot)) {
+        logPersistenceMetric('hidratación SQLite: omitida por token sin cambios', {
+          elapsedMs: Math.round(performance.now() - hydrationStartedAt),
+          refreshToken: tokenSnapshot.refreshToken,
+          latestUpdatedAt: tokenSnapshot.latestUpdatedAt,
+        });
+        writeHydrationMetadata({
+          lastUpdatedAt: tokenSnapshot.latestUpdatedAt ?? new Date().toISOString(),
+          sqlitePath: tokenSnapshot.status.path ?? null,
+          refreshToken: tokenSnapshot.refreshToken,
+          strategy: 'sqlite',
+        });
+        return {
+          status: 'hydrated-from-sqlite',
+          reason: 'SQLite sin cambios desde la última hidratación; se mantiene la caché local.',
+        };
+      }
+    }
+
     const snapshot = await window.traccion.loadPersistedRecords();
     publishDatabaseStatus(snapshot.status);
     if (!snapshot.status.ready || snapshot.status.phase === 'locked') {
@@ -857,9 +933,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     }
 
     const applyStartedAt = performance.now();
-    applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    const applyStats = applyPersistedRecordsSnapshotToLocalStorage(snapshot);
     logPersistenceMetric('hidratación SQLite: localStorage actualizado', {
       records: sqliteRecords.length,
+      applied: applyStats.applied,
+      skippedUnchanged: applyStats.skippedUnchanged,
+      removed: applyStats.removed,
       elapsedMs: Math.round(performance.now() - applyStartedAt),
     });
     await flushPendingSqliteWrites();
