@@ -3,7 +3,7 @@ import { publishDatabaseStatus } from '../../services/databaseStatus';
 
 export const AUDIT_TRAIL_STORAGE_KEY = 'traccion.v1.auditTrail.events';
 
-export type AuditModule = 'tareas' | 'licencias-sin-sueldo' | 'teletrabajo';
+export type AuditModule = 'tareas' | 'licencias-sin-sueldo' | 'teletrabajo' | 'actas' | 'comite' | 'paritaria';
 export type AuditAction = 'created' | 'updated' | 'deleted' | 'status_changed';
 
 export interface AuditChange {
