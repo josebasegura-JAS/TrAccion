@@ -228,7 +228,42 @@ interface DatabasePreferences {
 }
 
 const require = createRequire(import.meta.url);
-const ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
+
+const OWNER_ID_FILE_NAME = 'traccion-owner-id.json';
+
+function getOwnerIdFilePath(): string {
+  return path.join(app.getPath('userData'), OWNER_ID_FILE_NAME);
+}
+
+/**
+ * Lee o crea un ownerId estable en userData. Reutilizarlo entre reinicios
+ * permite limpiar los editing_locks propios al arrancar (crash recovery),
+ * en lugar de esperar a que expiren por TTL (30s).
+ */
+async function resolveStableOwnerId(): Promise<string> {
+  const filePath = getOwnerIdFilePath();
+  try {
+    const raw = await readFile(filePath, 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && typeof (parsed as { id?: unknown }).id === 'string') {
+      return (parsed as { id: string }).id;
+    }
+  } catch {
+    // Fichero no existe o corrupto — crear uno nuevo.
+  }
+
+  const newId = `${hostname()}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await writeFile(filePath, JSON.stringify({ id: newId }), 'utf8');
+  } catch {
+    // Si no se puede escribir, el id volátil sigue siendo válido para esta sesión.
+  }
+  return newId;
+}
+
+// Se inicializa de forma síncrona con un valor temporal; se sobreescribe en
+// initializeSqlitePersistence antes de abrir la base de datos.
+let ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
@@ -1114,6 +1149,14 @@ async function activateDatabase(
   try {
     await prepareDatabaseAtPath(databasePath, sourceDatabasePath);
     const db = openDatabase(databasePath);
+    // Limpiar los editing_locks que este proceso dejó sin liberar en un reinicio
+    // o crash anterior. Al tener ownerId estable, podemos eliminarlos activamente
+    // sin esperar al TTL de 30s.
+    try {
+      db.prepare('DELETE FROM editing_locks WHERE owner_id = ?').run(ownerId);
+    } catch {
+      // No bloquear el arranque si la tabla aún no existe (base nueva).
+    }
     database = db;
     status = {
       ready: true,
@@ -1138,6 +1181,10 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
   if (status) {
     return status;
   }
+
+  // Resolver el ownerId estable antes de cualquier operación con la base.
+  // Esto permite limpiar los editing_locks propios de sesiones anteriores.
+  ownerId = await resolveStableOwnerId();
 
   const configured = await getConfiguredDatabaseDirectory();
   const databasePath = getDatabasePathForDirectory(configured.directoryPath);
