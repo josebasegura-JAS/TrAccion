@@ -5,6 +5,7 @@ import {
   saveSharedArrayMutation,
   saveSharedArrayRecord,
 } from '../../services/sharedRecordPersistence';
+import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../shared/audit/auditTrail';
 import {
   EMPTY_MANAGED_SESSION_DRAFT,
   isManagedSession,
@@ -535,6 +536,26 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
           conflictMessage:
             'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
         });
+
+        const updatedSession = result.updatedRecord;
+        const previousSession = result.records.find((s) => s.id === sessionId);
+        if (previousSession) {
+          const changes = buildAuditChanges(
+            previousSession,
+            updatedSession,
+            { title: 'Título', date: 'Fecha', code: 'Código' },
+            ['title', 'date', 'code'],
+          );
+          if (changes.length > 0) {
+            enqueueAuditEvent({
+              module: config.moduleId as 'comite' | 'paritaria',
+              entityId: sessionId,
+              action: 'updated',
+              summary: buildUpdateSummary(changes),
+              changes,
+            });
+          }
+        }
 
         set((state) => ({
           sessions: filterSessionsForState(
