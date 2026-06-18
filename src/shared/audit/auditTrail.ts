@@ -74,8 +74,10 @@ function readAuditEvents(): AuditEvent[] {
   }
 }
 
+const MAX_AUDIT_EVENTS = 500;
+
 function persistAuditEvents(events: AuditEvent[]): void {
-  writeStorageItem(AUDIT_TRAIL_STORAGE_KEY, JSON.stringify(events));
+  writeStorageItem(AUDIT_TRAIL_STORAGE_KEY, JSON.stringify(events.slice(0, MAX_AUDIT_EVENTS)));
 }
 
 export function addAuditEvent(event: Omit<AuditEvent, 'id' | 'user' | 'createdAt'>): void {

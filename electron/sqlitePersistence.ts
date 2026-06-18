@@ -688,7 +688,7 @@ function markHeartbeatFailure(error: unknown): void {
   heartbeatConsecutiveFailureCount += 1;
   console.warn('No se ha podido renovar el bloqueo SQLite de sesión.', error);
 
-  if (heartbeatConsecutiveFailureCount < 3) {
+  if (heartbeatConsecutiveFailureCount < 5) {
     return;
   }
 

@@ -18,8 +18,8 @@ interface SharedRecordLockState {
 }
 
 const HEARTBEAT_MS = 10 * 1000;
-const RETRY_AFTER_TEMPORARY_LOCK_MS = 750;
-const TEMPORARY_LOCK_NOTICE_DELAY_MS = 2_000;
+const RETRY_AFTER_TEMPORARY_LOCK_MS = 300;
+const TEMPORARY_LOCK_NOTICE_DELAY_MS = 1_000;
 const LOCK_BUSY_MESSAGE = 'Abriendo registro…';
 const TEMPORARY_LOCK_BUSY_MESSAGE = 'Base ocupada, reintentando…';
 
