@@ -78,6 +78,9 @@ async function startApp(): Promise<void> {
   reportStartupHydrationResult(hydrationResult);
   renderBootScreen('Preparando módulos...');
   await renderApp();
+  // Flush de writes pendientes en background, después de que la App ya es visible.
+  // No bloquea el arranque — el polling lo reintentará si falla.
+  void flushPendingSqliteWrites().catch(() => undefined);
 }
 
 startApp().catch((error: unknown) => {
