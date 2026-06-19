@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
+  deleteCriterioRrllInSqlite,
+  hasCriteriosRrllSqliteRepository,
+  loadCriteriosRrllFromSqlite,
+  loadCriteriosRrllRecordsFromSqlite,
+  saveCriterioRrllToSqlite,
+} from './criteriosRrllSqliteRepository';
+import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
   CRITERIO_RRLL_SENTIDOS,
@@ -18,8 +25,8 @@ interface CriteriosRrllStateStore {
   criterios: CriterioRrll[];
   selectedCriterioId: string;
   filters: CriterioRrllFilters;
-  load: () => void;
-  reloadFromStorage: () => void;
+  load: () => Promise<void>;
+  reloadFromStorage: () => Promise<void>;
   create: (draft: CriterioRrllDraft) => void;
   createWithConcurrencyCheck: (draft: CriterioRrllDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   update: (id: string, draft: CriterioRrllDraft) => void;
@@ -27,7 +34,7 @@ interface CriteriosRrllStateStore {
   remove: (id: string) => void;
   removeWithConcurrencyCheck: (id: string, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
   importExcel: (file: File) => Promise<void>;
-  importDrafts: (drafts: CriterioRrllDraft[]) => void;
+  importDrafts: (drafts: CriterioRrllDraft[]) => Promise<void>;
   selectCriterio: (criterioId: string) => void;
   setFilter: <K extends keyof CriterioRrllFilters>(key: K, value: CriterioRrllFilters[K]) => void;
 }
@@ -109,6 +116,10 @@ function persistCriteriosRrll(criterios: CriterioRrll[]): void {
   writeStorageItem(STORAGE_KEY, JSON.stringify(criterios));
 }
 
+function mirrorCriteriosRrll(criterios: CriterioRrll[]): void {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(criterios));
+}
+
 function firstActiveCriterioId(criterios: CriterioRrll[]): string {
   return criterios.find((criterio) => !criterio.deletedAt)?.id ?? '';
 }
@@ -152,17 +163,27 @@ function upsertImportedCriterios(criterios: CriterioRrll[], drafts: CriterioRrll
   return [...updated, ...created];
 }
 
-export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
+export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) => ({
   criterios: [],
   selectedCriterioId: '',
   filters: EMPTY_CRITERIO_RRLL_FILTERS,
-  load: () => {
+  load: async () => {
+    try {
+      const sqliteCriterios = await loadCriteriosRrllFromSqlite(parseCriteriosRrllSnapshot);
+      if (sqliteCriterios) {
+        mirrorCriteriosRrll(sqliteCriterios);
+        set({ criterios: sqliteCriterios, selectedCriterioId: firstActiveCriterioId(sqliteCriterios) });
+        return;
+      }
+    } catch {
+      // Si SQLite no está disponible, se conserva la lectura legacy como fallback de arranque.
+    }
+
     const criterios = readCriteriosRrll();
     set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
   },
-  reloadFromStorage: () => {
-    const criterios = readCriteriosRrll();
-    set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
+  reloadFromStorage: async () => {
+    await get().load();
   },
   create: (draft) => {
     set((state) => {
@@ -174,9 +195,29 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
     });
   },
   createWithConcurrencyCheck: async (draft) => {
+    const now = new Date().toISOString();
+    const criterio = buildCriterioFromDraft(draft, now);
+
+    if (hasCriteriosRrllSqliteRepository()) {
+      try {
+        const result = await saveCriterioRrllToSqlite(criterio, null);
+        if (!result?.ok) {
+          return { ok: false, message: result?.message ?? 'No se ha podido crear el criterio.' };
+        }
+
+        const records = await loadCriteriosRrllRecordsFromSqlite();
+        const criterios = records
+          ? records.flatMap((record) => parseCriteriosRrllSnapshot(`[${record.value}]`))
+          : [...get().criterios, criterio];
+        mirrorCriteriosRrll(criterios);
+        set({ criterios, selectedCriterioId: criterio.id });
+        return { ok: true, message: result.message, recordId: criterio.id };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el criterio.' };
+      }
+    }
+
     try {
-      const now = new Date().toISOString();
-      const criterio = buildCriterioFromDraft(draft, now);
       const result = await saveNewSharedArrayRecord<CriterioRrll>({
         storageKey: STORAGE_KEY,
         newRecord: criterio,
@@ -201,6 +242,34 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
     });
   },
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
+    if (hasCriteriosRrllSqliteRepository()) {
+      try {
+        const currentRecord = get().criterios.find((criterio) => criterio.id === id);
+        if (!currentRecord) {
+          return {
+            ok: false,
+            message: 'El criterio ya no existe en la base compartida. Recarga antes de continuar.',
+          };
+        }
+
+        const criterio = buildCriterioFromDraft(draft, new Date().toISOString(), id, currentRecord);
+        const result = await saveCriterioRrllToSqlite(criterio, expectedUpdatedAt);
+        if (!result?.ok) {
+          return { ok: false, message: result?.message ?? 'No se ha podido guardar el criterio.' };
+        }
+
+        const records = await loadCriteriosRrllRecordsFromSqlite();
+        const criterios = records
+          ? records.flatMap((record) => parseCriteriosRrllSnapshot(`[${record.value}]`))
+          : get().criterios.map((current) => (current.id === id ? criterio : current));
+        mirrorCriteriosRrll(criterios);
+        set({ criterios, selectedCriterioId: id });
+        return { ok: true, message: result.message };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el criterio.' };
+      }
+    }
+
     try {
       const result = await saveSharedArrayRecord<CriterioRrll>({
         storageKey: STORAGE_KEY,
@@ -230,6 +299,33 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
     });
   },
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    if (hasCriteriosRrllSqliteRepository()) {
+      try {
+        const currentRecord = get().criterios.find((criterio) => criterio.id === id);
+        if (!currentRecord) {
+          return {
+            ok: false,
+            message: 'El criterio ya no existe en la base compartida. Recarga antes de continuar.',
+          };
+        }
+
+        const result = await deleteCriterioRrllInSqlite(currentRecord, expectedUpdatedAt);
+        if (!result?.ok) {
+          return { ok: false, message: result?.message ?? 'No se ha podido eliminar el criterio.' };
+        }
+
+        const records = await loadCriteriosRrllRecordsFromSqlite();
+        const criterios = records
+          ? records.flatMap((record) => parseCriteriosRrllSnapshot(`[${record.value}]`))
+          : get().criterios.filter((criterio) => criterio.id !== id);
+        mirrorCriteriosRrll(criterios);
+        set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
+        return { ok: true, message: result.message };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar el criterio.' };
+      }
+    }
+
     try {
       const deletedAt = new Date().toISOString();
       const result = await saveSharedArrayRecord<CriterioRrll>({
@@ -251,18 +347,31 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set) => ({
   },
   importExcel: async (file) => {
     const drafts = await importCriteriosRrllFromFile(file);
-    set((state) => {
-      const criterios = upsertImportedCriterios(state.criterios, drafts);
-      persistCriteriosRrll(criterios);
-      return { criterios, selectedCriterioId: firstActiveCriterioId(criterios) };
-    });
+    await get().importDrafts(drafts);
   },
-  importDrafts: (drafts) => {
-    set((state) => {
-      const criterios = upsertImportedCriterios(state.criterios, drafts);
-      persistCriteriosRrll(criterios);
-      return { criterios, selectedCriterioId: firstActiveCriterioId(criterios) };
-    });
+  importDrafts: async (drafts) => {
+    const criterios = upsertImportedCriterios(get().criterios, drafts);
+
+    if (hasCriteriosRrllSqliteRepository()) {
+      for (const criterio of criterios) {
+        const current = get().criterios.find((item) => item.id === criterio.id);
+        const result = await saveCriterioRrllToSqlite(criterio, current?.updatedAt ?? null);
+        if (!result?.ok) {
+          throw new Error(result?.message ?? 'No se ha podido importar criterios en SQLite.');
+        }
+      }
+
+      const records = await loadCriteriosRrllRecordsFromSqlite();
+      const sqliteCriterios = records
+        ? records.flatMap((record) => parseCriteriosRrllSnapshot(`[${record.value}]`))
+        : criterios;
+      mirrorCriteriosRrll(sqliteCriterios);
+      set({ criterios: sqliteCriterios, selectedCriterioId: firstActiveCriterioId(sqliteCriterios) });
+      return;
+    }
+
+    persistCriteriosRrll(criterios);
+    set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
   },
   selectCriterio: (criterioId) => set({ selectedCriterioId: criterioId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),

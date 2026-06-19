@@ -90,6 +90,12 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('vinculograma:save-record-if-unchanged', record),
+  loadCriteriosRrllRecords: () => ipcRenderer.invoke('criterios-rrll:load-records'),
+  saveCriteriosRrllRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('criterios-rrll:save-record-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   loadTeletrabajoRecords: () => ipcRenderer.invoke('teletrabajo:load-records'),

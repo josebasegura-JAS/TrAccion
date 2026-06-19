@@ -245,17 +245,21 @@ export function CriteriosRrllPage() {
     );
   };
 
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (!importPreview) {
       return;
     }
 
     const selectedDrafts = importPreview.rows.filter((row) => row.selected).map((row) => row.draft);
-    importDrafts(selectedDrafts);
-    setImportMessage(
-      `Importación completada: ${selectedDrafts.length} de ${importPreview.rows.length} registros de ${importPreview.fileName}`,
-    );
-    setImportPreview(null);
+    try {
+      await importDrafts(selectedDrafts);
+      setImportMessage(
+        `Importación completada: ${selectedDrafts.length} de ${importPreview.rows.length} registros de ${importPreview.fileName}`,
+      );
+      setImportPreview(null);
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : 'No se ha podido completar la importación.');
+    }
   };
 
   const handleTemplateDownload = async () => {
@@ -568,7 +572,9 @@ export function CriteriosRrllPage() {
               <button
                 className="rounded-xl bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={selectedImportRows.length === 0}
-                onClick={confirmImport}
+                onClick={() => {
+                  void confirmImport();
+                }}
                 type="button"
               >
                 Importar seleccionados

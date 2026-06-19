@@ -329,6 +329,15 @@ interface TraccionLicenciaSinSueldoRecordsSnapshot {
 
 type TraccionConditionalLicenciaSinSueldoRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionCriterioRrllRecord = TraccionComiteSessionRecord;
+
+interface TraccionCriteriosRrllRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionCriterioRrllRecord[];
+}
+
+type TraccionConditionalCriterioRrllRecord = TraccionConditionalComiteSessionRecord;
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -395,6 +404,10 @@ interface TraccionApi {
   loadLicenciaSinSueldoRecords?: () => Promise<TraccionLicenciaSinSueldoRecordsSnapshot>;
   saveLicenciaSinSueldoRecordIfUnchanged?: (
     record: TraccionConditionalLicenciaSinSueldoRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadCriteriosRrllRecords?: () => Promise<TraccionCriteriosRrllRecordsSnapshot>;
+  saveCriteriosRrllRecordIfUnchanged?: (
+    record: TraccionConditionalCriterioRrllRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;

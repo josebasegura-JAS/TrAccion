@@ -29,6 +29,7 @@ import {
   loadTeletrabajoRecordsSnapshot,
   loadVinculogramaRecordsSnapshot,
   loadLicenciaSinSueldoRecordsSnapshot,
+  loadCriteriosRrllRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -48,6 +49,7 @@ import {
   saveTeletrabajoRecordIfUnchanged,
   saveVinculogramaRecordIfUnchanged,
   saveLicenciaSinSueldoRecordIfUnchanged,
+  saveCriteriosRrllRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1555,6 +1557,49 @@ function registerIpcHandlers(): void {
       : null;
     return enqueueSqliteIpc('vinculograma:save-record-if-unchanged', () =>
       saveVinculogramaRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
+
+
+  ipcMain.handle('criterios-rrll:load-records', () =>
+    enqueueSqliteIpc('criterios-rrll:load-records', () => loadCriteriosRrllRecordsSnapshot()),
+  );
+
+  ipcMain.handle('criterios-rrll:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de criterio RRLL inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de criterio RRLL inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
+      ? candidate.expectedUpdatedAt
+      : null;
+    return enqueueSqliteIpc('criterios-rrll:save-record-if-unchanged', () =>
+      saveCriteriosRrllRecordIfUnchanged({
         id,
         value,
         expectedUpdatedAt,
