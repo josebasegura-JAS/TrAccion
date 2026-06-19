@@ -94,6 +94,12 @@ contextBridge.exposeInMainWorld('traccion', {
   }) => ipcRenderer.invoke('actas:save-record-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
+  loadTeletrabajoRecords: () => ipcRenderer.invoke('teletrabajo:load-records'),
+  saveTeletrabajoRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('teletrabajo:save-record-if-unchanged', record),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   selectLicenciaSinSueldoTemplate: () =>

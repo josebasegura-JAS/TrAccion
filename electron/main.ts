@@ -26,6 +26,7 @@ import {
   loadComiteSessionRecordsSnapshot,
   loadParitariaSessionRecordsSnapshot,
   loadActaRecordsSnapshot,
+  loadTeletrabajoRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -42,6 +43,7 @@ import {
   saveComiteSessionRecordIfUnchanged,
   saveParitariaSessionRecordIfUnchanged,
   saveActaRecordIfUnchanged,
+  saveTeletrabajoRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1505,6 +1507,47 @@ function registerIpcHandlers(): void {
     const expectedUpdatedAt = candidate.expectedUpdatedAt;
     return enqueueSqliteIpc('actas:save-record-if-unchanged', () =>
       saveActaRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
+
+
+  ipcMain.handle('teletrabajo:load-records', () =>
+    enqueueSqliteIpc('teletrabajo:load-records', () => loadTeletrabajoRecordsSnapshot()),
+  );
+
+  ipcMain.handle('teletrabajo:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de solicitud de Teletrabajo inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de solicitud de Teletrabajo inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = candidate.expectedUpdatedAt;
+    return enqueueSqliteIpc('teletrabajo:save-record-if-unchanged', () =>
+      saveTeletrabajoRecordIfUnchanged({
         id,
         value,
         expectedUpdatedAt,

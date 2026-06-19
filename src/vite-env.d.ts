@@ -302,6 +302,15 @@ interface TraccionActaRecordsSnapshot {
 
 type TraccionConditionalActaRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionTeletrabajoRecord = TraccionComiteSessionRecord;
+
+interface TraccionTeletrabajoRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTeletrabajoRecord[];
+}
+
+type TraccionConditionalTeletrabajoRecord = TraccionConditionalComiteSessionRecord;
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -356,6 +365,10 @@ interface TraccionApi {
   loadActaRecords?: () => Promise<TraccionActaRecordsSnapshot>;
   saveActaRecordIfUnchanged?: (
     record: TraccionConditionalActaRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadTeletrabajoRecords?: () => Promise<TraccionTeletrabajoRecordsSnapshot>;
+  saveTeletrabajoRecordIfUnchanged?: (
+    record: TraccionConditionalTeletrabajoRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;

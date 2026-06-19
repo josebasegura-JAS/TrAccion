@@ -22,6 +22,13 @@ import {
 } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
+  deleteTeletrabajoSolicitudInSqlite,
+  hasTeletrabajoSqliteRepository,
+  loadTeletrabajoRecordsFromSqlite,
+  loadTeletrabajoSolicitudesFromSqlite,
+  saveTeletrabajoSolicitudToSqlite,
+} from './teletrabajoSqliteRepository';
+import {
   enqueueAuditEvent,
   buildAuditChanges,
   buildUpdateSummary,
@@ -223,6 +230,14 @@ function readSolicitudes(): TeletrabajoSolicitud[] {
   return parseSolicitudes(readStorageItem(STORAGE_KEY));
 }
 
+function parseSingleSolicitud(storageValue: string): TeletrabajoSolicitud | null {
+  try {
+    return parseSolicitudes(`[${storageValue}]`)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function persistSolicitudes(solicitudes: TeletrabajoSolicitud[]): void {
   writeStorageItem(STORAGE_KEY, JSON.stringify(solicitudes));
 }
@@ -359,6 +374,35 @@ async function withTeletrabajoBusy<T>(message: string, operation: () => Promise<
   }
 }
 
+function buildTeletrabajoState(
+  solicitudes: TeletrabajoSolicitud[],
+  puestosTeletrabajo: TeletrabajoPuesto[],
+  selectedSolicitudId?: string,
+): Pick<TeletrabajoStateStore, 'solicitudes' | 'puestosTeletrabajo' | 'selectedSolicitudId'> {
+  return {
+    solicitudes,
+    puestosTeletrabajo,
+    selectedSolicitudId: selectedSolicitudId && solicitudes.some((solicitud) => solicitud.id === selectedSolicitudId)
+      ? selectedSolicitudId
+      : firstVisibleSolicitudId(solicitudes),
+  };
+}
+
+async function loadSolicitudesFromSqliteOrStorage(): Promise<TeletrabajoSolicitud[]> {
+  if (hasTeletrabajoSqliteRepository()) {
+    const sqliteSolicitudes = await loadTeletrabajoSolicitudesFromSqlite(parseSolicitudes);
+    if (sqliteSolicitudes !== null) {
+      return sqliteSolicitudes;
+    }
+  }
+
+  return readSolicitudes();
+}
+
+function logTeletrabajoPersistenceError(action: string, error: unknown): void {
+  console.error(`[${action}] No se ha podido acceder a Teletrabajo en SQLite.`, error);
+}
+
 export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => ({
   solicitudes: [],
   puestosTeletrabajo: [],
@@ -367,24 +411,22 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   load: () => {
     const solicitudes = readSolicitudes();
     const puestosTeletrabajo = readPuestosTeletrabajo();
-    set({
-      solicitudes,
-      puestosTeletrabajo,
-      selectedSolicitudId: firstVisibleSolicitudId(solicitudes),
-    });
+    set(buildTeletrabajoState(solicitudes, puestosTeletrabajo));
+    void loadSolicitudesFromSqliteOrStorage()
+      .then((nextSolicitudes) =>
+        set((state) => buildTeletrabajoState(nextSolicitudes, state.puestosTeletrabajo, state.selectedSolicitudId)),
+      )
+      .catch((error) => logTeletrabajoPersistenceError('loadTeletrabajo', error));
   },
   reloadFromStorage: () => {
     const solicitudes = readSolicitudes();
     const puestosTeletrabajo = readPuestosTeletrabajo();
-    set((state) => ({
-      solicitudes,
-      puestosTeletrabajo,
-      selectedSolicitudId: solicitudes.some(
-        (solicitud) => solicitud.id === state.selectedSolicitudId,
+    set((state) => buildTeletrabajoState(solicitudes, puestosTeletrabajo, state.selectedSolicitudId));
+    void loadSolicitudesFromSqliteOrStorage()
+      .then((nextSolicitudes) =>
+        set((state) => buildTeletrabajoState(nextSolicitudes, state.puestosTeletrabajo, state.selectedSolicitudId)),
       )
-        ? state.selectedSolicitudId
-        : firstVisibleSolicitudId(solicitudes),
-    }));
+      .catch((error) => logTeletrabajoPersistenceError('reloadTeletrabajoFromStorage', error));
   },
   create: (draft) => {
     set((state) => {
@@ -420,6 +462,35 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
 
     try {
       return await withTeletrabajoBusy('Guardando solicitud de Teletrabajo...', async () => {
+        if (hasTeletrabajoSqliteRepository()) {
+          const records = await loadTeletrabajoRecordsFromSqlite();
+          if (records !== null) {
+            if (records.some((record) => record.id === solicitud.id)) {
+              throw new Error('La solicitud ya existe en la base compartida. Recarga antes de continuar.');
+            }
+
+            const saveResult = await saveTeletrabajoSolicitudToSqlite(solicitud, null);
+            if (!saveResult?.ok) {
+              throw new Error(saveResult?.message ?? 'No se ha podido crear la solicitud.');
+            }
+
+            enqueueAuditEvent({
+              module: 'teletrabajo',
+              entityId: solicitud.id,
+              action: 'created',
+              summary: 'Registro creado',
+              changes: [],
+            });
+
+            const solicitudes = [
+              ...records.flatMap((record) => parseSolicitudes(`[${record.value}]`)),
+              solicitud,
+            ];
+            set({ solicitudes, selectedSolicitudId: solicitud.id });
+            return { ok: true, message: 'Solicitud creada.', recordId: solicitud.id };
+          }
+        }
+
         const result = await saveNewSharedArrayRecord<TeletrabajoSolicitud>({
           storageKey: STORAGE_KEY,
           newRecord: solicitud,
@@ -471,6 +542,41 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
 
     try {
       return await withTeletrabajoBusy('Guardando solicitud de Teletrabajo...', async () => {
+        if (hasTeletrabajoSqliteRepository()) {
+          const records = await loadTeletrabajoRecordsFromSqlite();
+          if (records !== null) {
+            const currentRecord = records.find((record) => record.id === id);
+            const latestSolicitud = currentRecord ? parseSingleSolicitud(currentRecord.value) : null;
+            if (!currentRecord || !latestSolicitud) {
+              throw new Error('La solicitud ya no existe en la base compartida. Recarga antes de continuar.');
+            }
+
+            if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
+              throw new Error('Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.');
+            }
+
+            registerTeletrabajoUpdateAudit(latestSolicitud, normalizedDraft);
+            const updatedSolicitud: TeletrabajoSolicitud = {
+              ...latestSolicitud,
+              ...normalizedDraft,
+              updatedAt: new Date().toISOString(),
+            };
+            const saveResult = await saveTeletrabajoSolicitudToSqlite(
+              updatedSolicitud,
+              currentRecord.updatedAt,
+            );
+            if (!saveResult?.ok) {
+              throw new Error(saveResult?.message ?? 'No se ha podido guardar la solicitud.');
+            }
+
+            const solicitudes = records.flatMap((record) =>
+              record.id === id ? [updatedSolicitud] : parseSolicitudes(`[${record.value}]`),
+            );
+            set({ solicitudes, selectedSolicitudId: id });
+            return { ok: true, message: 'Solicitud guardada.' };
+          }
+        }
+
         const result = await saveSharedArrayRecord<TeletrabajoSolicitud>({
           storageKey: STORAGE_KEY,
           recordId: id,
@@ -498,10 +604,32 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     }
   },
   importEncuesta: async (file, employees, options = {}) => {
-    const result = await importEncuestaFromFile(file, employees, get().solicitudes, options);
+    const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
+    const result = await importEncuestaFromFile(file, employees, baseSolicitudes, options);
 
     if (result.diagnostics.unresolvedPuestos.length > 0) {
       return result;
+    }
+
+    if (hasTeletrabajoSqliteRepository()) {
+      const records = await loadTeletrabajoRecordsFromSqlite();
+      if (records !== null) {
+        const expectedUpdatedAtById = new Map(records.map((record) => [record.id, record.updatedAt]));
+        for (const solicitud of result.solicitudes) {
+          const saveResult = await saveTeletrabajoSolicitudToSqlite(
+            solicitud,
+            expectedUpdatedAtById.get(solicitud.id) ?? null,
+          );
+          if (!saveResult?.ok) {
+            throw new Error(saveResult?.message ?? 'No se ha podido importar la encuesta en SQLite.');
+          }
+        }
+        set({
+          solicitudes: result.solicitudes,
+          selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
+        });
+        return result;
+      }
     }
 
     set(() => {
@@ -590,6 +718,46 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     try {
       return await withTeletrabajoBusy('Eliminando solicitud de Teletrabajo...', async () => {
+        if (hasTeletrabajoSqliteRepository()) {
+          const records = await loadTeletrabajoRecordsFromSqlite();
+          if (records !== null) {
+            const currentRecord = records.find((record) => record.id === id);
+            const latestSolicitud = currentRecord ? parseSingleSolicitud(currentRecord.value) : null;
+            if (!currentRecord || !latestSolicitud) {
+              throw new Error('La solicitud ya no existe en la base compartida. Recarga antes de continuar.');
+            }
+
+            if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
+              throw new Error('Esta solicitud ha sido modificada por otro usuario. Recarga antes de eliminarla.');
+            }
+
+            const saveResult = await deleteTeletrabajoSolicitudInSqlite(
+              latestSolicitud,
+              currentRecord.updatedAt,
+            );
+            if (!saveResult?.ok) {
+              throw new Error(saveResult?.message ?? 'No se ha podido eliminar la solicitud.');
+            }
+
+            enqueueAuditEvent({
+              module: 'teletrabajo',
+              entityId: latestSolicitud.id,
+              action: 'deleted',
+              summary: 'Registro eliminado',
+              changes: [],
+            });
+
+            const solicitudes = records
+              .filter((record) => record.id !== id)
+              .flatMap((record) => parseSolicitudes(`[${record.value}]`));
+            set({
+              solicitudes,
+              selectedSolicitudId: firstVisibleSolicitudId(solicitudes),
+            });
+            return { ok: true, message: 'Solicitud eliminada.' };
+          }
+        }
+
         const deletedAt = new Date().toISOString();
         const result = await saveSharedArrayRecord<TeletrabajoSolicitud>({
           storageKey: STORAGE_KEY,
