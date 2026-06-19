@@ -534,7 +534,7 @@ export function TeletrabajoPage({
       },
       {
         id: 'teletrabajable',
-        header: 'TT',
+        header: 'Cumplimiento',
         accessor: (s) =>
           getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado).status,
         render: (s) => {
