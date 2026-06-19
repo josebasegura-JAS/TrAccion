@@ -4,13 +4,7 @@ import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
-import {
-  latestUpdatedAtFromJsonTables,
-  maybeMigrateJsonArrayRecordsFromPersistedRecord,
-  readActiveJsonRecords,
-  syncJsonRecordTable,
-} from './persistence/jsonRecordRepository.js';
-import { createSimpleJsonModuleRepository } from './persistence/simpleJsonModuleRepository.js';
+import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './persistence/jsonRecordRepository';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -23,7 +17,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 12;
+const CURRENT_SCHEMA_VERSION = 10;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -122,96 +116,6 @@ export interface SqliteTeletrabajoRecordsSnapshot {
 
 export type ConditionalSqliteTeletrabajoRecord = ConditionalSqliteComiteSessionRecord;
 
-export type SqliteVinculogramaRecord = SqliteComiteSessionRecord;
-
-export interface SqliteVinculogramaRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteVinculogramaRecord[];
-}
-
-export type ConditionalSqliteVinculogramaRecord = ConditionalSqliteComiteSessionRecord;
-
-export type SqliteLicenciaSinSueldoRecord = SqliteComiteSessionRecord;
-
-export interface SqliteLicenciaSinSueldoRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteLicenciaSinSueldoRecord[];
-}
-
-export type ConditionalSqliteLicenciaSinSueldoRecord = ConditionalSqliteComiteSessionRecord;
-
-export type SqliteCriterioRrllRecord = SqliteComiteSessionRecord;
-
-export interface SqliteCriteriosRrllRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteCriterioRrllRecord[];
-}
-
-export type ConditionalSqliteCriterioRrllRecord = ConditionalSqliteComiteSessionRecord;
-
-export type SqliteEspecialesRecipientRecord = SqliteComiteSessionRecord;
-
-export interface SqliteEspecialesRecipientRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteEspecialesRecipientRecord[];
-}
-
-export type ConditionalSqliteEspecialesRecipientRecord = ConditionalSqliteComiteSessionRecord;
-
-export type SqliteTeletrabajoPuestoRecord = SqliteComiteSessionRecord;
-
-export interface SqliteTeletrabajoPuestoRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteTeletrabajoPuestoRecord[];
-}
-
-export type ConditionalSqliteTeletrabajoPuestoRecord = ConditionalSqliteComiteSessionRecord;
-
-export type SqliteJobPositionTranslationRecord = SqliteComiteSessionRecord;
-
-export interface SqliteJobPositionTranslationRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteJobPositionTranslationRecord[];
-}
-
-export type ConditionalSqliteJobPositionTranslationRecord = ConditionalSqliteComiteSessionRecord;
-
-export interface SqliteConfiguracionSnapshot {
-  status: DatabaseStatus;
-  value: string | null;
-  updatedAt: string | null;
-}
-
-export interface ConditionalSqliteConfiguracionRecord {
-  value: string;
-  expectedUpdatedAt: string | null;
-}
-
-export type SqlitePresupuestoRecord = SqliteComiteSessionRecord;
-
-export interface SqlitePresupuestosRecordsSnapshot {
-  status: DatabaseStatus;
-  scenarios: SqlitePresupuestoRecord[];
-  manualItems: SqlitePresupuestoRecord[];
-  ticketGroups: SqlitePresupuestoRecord[];
-  actuals: SqlitePresupuestoRecord[];
-}
-
-export interface ConditionalSqlitePresupuestosSnapshot {
-  scenarios: Array<{ id: string; value: string }>;
-  manualItems: Array<{ id: string; value: string }>;
-  ticketGroups: Array<{ id: string; value: string }>;
-  actuals: Array<{ id: string; value: string }>;
-  expectedUpdatedAt: string | null;
-}
-
-export interface ConditionalSqliteSnapshotSaveResult {
-  ok: boolean;
-  status: DatabaseStatus;
-  currentUpdatedAt: string | null;
-  message: string;
-}
-
 export interface SqliteEmployeeRecord {
   id: string;
   value: string;
@@ -288,22 +192,7 @@ export interface PersistedRecordsTokenSnapshot {
   taskRecordsUpdatedAt: string | null;
   sorteosDrawsUpdatedAt: string | null;
   sorteosExclusionsUpdatedAt: string | null;
-  actaRecordsUpdatedAt: string | null;
-  comiteSessionRecordsUpdatedAt: string | null;
-  paritariaSessionRecordsUpdatedAt: string | null;
-  criteriosRrllRecordsUpdatedAt: string | null;
-  especialesRecipientRecordsUpdatedAt: string | null;
-  licenciaSinSueldoRecordsUpdatedAt: string | null;
-  presupuestoScenarioRecordsUpdatedAt: string | null;
-  presupuestoManualItemRecordsUpdatedAt: string | null;
-  presupuestoTicketGroupRecordsUpdatedAt: string | null;
-  presupuestoActualRecordsUpdatedAt: string | null;
-  teletrabajoSolicitudRecordsUpdatedAt: string | null;
-  teletrabajoPuestoRecordsUpdatedAt: string | null;
-  vinculogramaRecordsUpdatedAt: string | null;
-  plantillaJobPositionTranslationRecordsUpdatedAt: string | null;
-  employeeRecordsUpdatedAt: string | null;
-  configuracionStateUpdatedAt: string | null;
+  directStoreUpdatedAt: Record<string, string | null>;
 }
 
 export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot {
@@ -441,14 +330,6 @@ let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
-let vinculogramaMigrationDone = false;
-let licenciaSinSueldoMigrationDone = false;
-let criteriosRrllMigrationDone = false;
-let especialesRecipientsMigrationDone = false;
-let presupuestosMigrationDone = false;
-let configuracionMigrationDone = false;
-let teletrabajoPuestosMigrationDone = false;
-let jobPositionTranslationsMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -1313,136 +1194,6 @@ function migrateToVersion10(db: Database): void {
   }
 }
 
-
-function migrateToVersion11(db: Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS vinculograma_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_vinculograma_records_updated_at
-      ON vinculograma_records(updated_at);
-
-    CREATE TABLE IF NOT EXISTS licencia_sin_sueldo_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_licencia_sin_sueldo_records_updated_at
-      ON licencia_sin_sueldo_records(updated_at);
-
-    CREATE TABLE IF NOT EXISTS criterios_rrll_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_criterios_rrll_records_updated_at
-      ON criterios_rrll_records(updated_at);
-
-    CREATE TABLE IF NOT EXISTS especiales_recipient_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_especiales_recipient_records_updated_at
-      ON especiales_recipient_records(updated_at);
-
-    CREATE TABLE IF NOT EXISTS presupuesto_scenario_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS presupuesto_manual_item_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS presupuesto_ticket_group_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS presupuesto_actual_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS configuracion_state (
-      id TEXT PRIMARY KEY CHECK (id = 'main'),
-      value_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `);
-
-  const currentVersion = readCurrentSchemaVersion(db);
-  if (currentVersion < 11) {
-    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
-      11,
-      new Date().toISOString(),
-    );
-  }
-}
-
-
-function migrateToVersion12(db: Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS teletrabajo_puesto_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_teletrabajo_puesto_records_updated_at
-      ON teletrabajo_puesto_records(updated_at);
-
-    CREATE TABLE IF NOT EXISTS plantilla_job_position_translation_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_plantilla_job_position_translation_records_updated_at
-      ON plantilla_job_position_translation_records(updated_at);
-  `);
-
-  const currentVersion = readCurrentSchemaVersion(db);
-  if (currentVersion < 12) {
-    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
-      12,
-      new Date().toISOString(),
-    );
-  }
-}
-
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1454,8 +1205,6 @@ function applyMigrations(db: Database): void {
   migrateToVersion8(db);
   migrateToVersion9(db);
   migrateToVersion10(db);
-  migrateToVersion11(db);
-  migrateToVersion12(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1501,14 +1250,6 @@ function closeDatabase(): void {
   paritariaSessionsMigrationDone = false;
   actasMigrationDone = false;
   teletrabajoMigrationDone = false;
-  vinculogramaMigrationDone = false;
-  licenciaSinSueldoMigrationDone = false;
-  criteriosRrllMigrationDone = false;
-  especialesRecipientsMigrationDone = false;
-  presupuestosMigrationDone = false;
-  configuracionMigrationDone = false;
-  teletrabajoPuestosMigrationDone = false;
-  jobPositionTranslationsMigrationDone = false;
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -1523,14 +1264,6 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   paritariaSessionsMigrationDone = false;
   actasMigrationDone = false;
   teletrabajoMigrationDone = false;
-  vinculogramaMigrationDone = false;
-  licenciaSinSueldoMigrationDone = false;
-  criteriosRrllMigrationDone = false;
-  especialesRecipientsMigrationDone = false;
-  presupuestosMigrationDone = false;
-  configuracionMigrationDone = false;
-  teletrabajoPuestosMigrationDone = false;
-  jobPositionTranslationsMigrationDone = false;
 
   await releaseActiveSessionLock();
 }
@@ -2789,380 +2522,6 @@ export async function saveTeletrabajoRecordIfUnchanged(
   );
 }
 
-
-const simpleJsonModuleRepositoryDependencies = {
-  safeDatabaseOperation,
-  getSqliteStatus,
-  requireDatabase,
-  isUpdatedAtRow,
-  updateRefreshMetadata,
-  enqueueLocalBackup,
-  assertDatabaseWritesAllowed,
-  isDatabaseWriteBlockedByHeartbeat: () => databaseWriteBlockedByHeartbeat,
-};
-
-const vinculogramaRepository = createSimpleJsonModuleRepository(
-  {
-    tableName: 'vinculograma_records',
-    legacyKey: 'traccion.v1.vinculograma.records',
-    moduleLabel: 'El vínculo',
-    getMigrationDone: () => vinculogramaMigrationDone,
-    setMigrationDone: (value) => { vinculogramaMigrationDone = value; },
-  },
-  simpleJsonModuleRepositoryDependencies,
-);
-
-const licenciaSinSueldoRepository = createSimpleJsonModuleRepository(
-  {
-    tableName: 'licencia_sin_sueldo_records',
-    legacyKey: 'traccion.v1.licenciasSinSueldo.records',
-    moduleLabel: 'La licencia sin sueldo',
-    getMigrationDone: () => licenciaSinSueldoMigrationDone,
-    setMigrationDone: (value) => { licenciaSinSueldoMigrationDone = value; },
-  },
-  simpleJsonModuleRepositoryDependencies,
-);
-
-const criteriosRrllRepository = createSimpleJsonModuleRepository(
-  {
-    tableName: 'criterios_rrll_records',
-    legacyKey: 'traccion.v1.criterios-rrll.criterios',
-    moduleLabel: 'El criterio RRLL',
-    getMigrationDone: () => criteriosRrllMigrationDone,
-    setMigrationDone: (value) => { criteriosRrllMigrationDone = value; },
-  },
-  simpleJsonModuleRepositoryDependencies,
-);
-
-const especialesRecipientsRepository = createSimpleJsonModuleRepository(
-  {
-    tableName: 'especiales_recipient_records',
-    legacyKey: 'rrll_especiales_destinatarios',
-    moduleLabel: 'El destinatario',
-    getMigrationDone: () => especialesRecipientsMigrationDone,
-    setMigrationDone: (value) => { especialesRecipientsMigrationDone = value; },
-  },
-  simpleJsonModuleRepositoryDependencies,
-);
-
-const teletrabajoPuestosRepository = createSimpleJsonModuleRepository(
-  {
-    tableName: 'teletrabajo_puesto_records',
-    legacyKey: 'traccion.v1.teletrabajo.puestos',
-    moduleLabel: 'El puesto teletrabajable',
-    getMigrationDone: () => teletrabajoPuestosMigrationDone,
-    setMigrationDone: (value) => { teletrabajoPuestosMigrationDone = value; },
-  },
-  simpleJsonModuleRepositoryDependencies,
-);
-
-const jobPositionTranslationsRepository = createSimpleJsonModuleRepository(
-  {
-    tableName: 'plantilla_job_position_translation_records',
-    legacyKey: 'traccion.v1.plantilla.jobPositionTranslations',
-    moduleLabel: 'La traducción de puesto',
-    getMigrationDone: () => jobPositionTranslationsMigrationDone,
-    setMigrationDone: (value) => { jobPositionTranslationsMigrationDone = value; },
-  },
-  simpleJsonModuleRepositoryDependencies,
-);
-
-export async function loadVinculogramaRecordsSnapshot(): Promise<SqliteVinculogramaRecordsSnapshot> {
-  return vinculogramaRepository.loadSnapshot();
-}
-
-export async function saveVinculogramaRecordIfUnchanged(
-  record: ConditionalSqliteVinculogramaRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return vinculogramaRepository.saveIfUnchanged(record);
-}
-
-export async function loadLicenciaSinSueldoRecordsSnapshot(): Promise<SqliteLicenciaSinSueldoRecordsSnapshot> {
-  return licenciaSinSueldoRepository.loadSnapshot();
-}
-
-export async function saveLicenciaSinSueldoRecordIfUnchanged(
-  record: ConditionalSqliteLicenciaSinSueldoRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return licenciaSinSueldoRepository.saveIfUnchanged(record);
-}
-
-export async function loadCriteriosRrllRecordsSnapshot(): Promise<SqliteCriteriosRrllRecordsSnapshot> {
-  return criteriosRrllRepository.loadSnapshot();
-}
-
-export async function saveCriteriosRrllRecordIfUnchanged(
-  record: ConditionalSqliteCriterioRrllRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return criteriosRrllRepository.saveIfUnchanged(record);
-}
-
-export async function loadEspecialesRecipientRecordsSnapshot(): Promise<SqliteEspecialesRecipientRecordsSnapshot> {
-  return especialesRecipientsRepository.loadSnapshot();
-}
-
-export async function saveEspecialesRecipientRecordIfUnchanged(
-  record: ConditionalSqliteEspecialesRecipientRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return especialesRecipientsRepository.saveIfUnchanged(record);
-}
-
-export async function loadTeletrabajoPuestoRecordsSnapshot(): Promise<SqliteTeletrabajoPuestoRecordsSnapshot> {
-  return teletrabajoPuestosRepository.loadSnapshot();
-}
-
-export async function saveTeletrabajoPuestoRecordIfUnchanged(
-  record: ConditionalSqliteTeletrabajoPuestoRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return teletrabajoPuestosRepository.saveIfUnchanged(record);
-}
-
-export async function loadJobPositionTranslationRecordsSnapshot(): Promise<SqliteJobPositionTranslationRecordsSnapshot> {
-  return jobPositionTranslationsRepository.loadSnapshot();
-}
-
-export async function saveJobPositionTranslationRecordIfUnchanged(
-  record: ConditionalSqliteJobPositionTranslationRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return jobPositionTranslationsRepository.saveIfUnchanged(record);
-}
-
-
-function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
-  if (configuracionMigrationDone) {
-    return;
-  }
-
-  const countRow = db.prepare('SELECT COUNT(*) AS count FROM configuracion_state').get();
-  const count = isCountRow(countRow) ? countRow.count : 0;
-  if (count > 0) {
-    configuracionMigrationDone = true;
-    return;
-  }
-
-  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.configuracion');
-  if (legacyRecord) {
-    db.prepare(
-      `INSERT OR IGNORE INTO configuracion_state (id, value_json, updated_at)
-       VALUES ('main', ?, ?)`,
-    ).run(legacyRecord.value, legacyRecord.updatedAt);
-  }
-
-  configuracionMigrationDone = true;
-}
-
-export async function loadConfiguracionSnapshot(): Promise<SqliteConfiguracionSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, value: null, updatedAt: null };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateConfiguracionFromPersistedRecord(db))();
-      const row = db.prepare('SELECT value_json, updated_at FROM configuracion_state WHERE id = \'main\'').get();
-      if (
-        !row ||
-        typeof row !== 'object' ||
-        typeof (row as { value_json?: unknown }).value_json !== 'string' ||
-        typeof (row as { updated_at?: unknown }).updated_at !== 'string'
-      ) {
-        return { status: currentStatus, value: null, updatedAt: null };
-      }
-
-      return {
-        status: currentStatus,
-        value: (row as { value_json: string }).value_json,
-        updatedAt: (row as { updated_at: string }).updated_at,
-      };
-    },
-    (nextStatus) => ({ status: nextStatus, value: null, updatedAt: null }),
-  );
-}
-
-export async function saveConfiguracionIfUnchanged(
-  record: ConditionalSqliteConfiguracionRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
-        maybeMigrateConfiguracionFromPersistedRecord(db);
-        const row = db.prepare('SELECT updated_at FROM configuracion_state WHERE id = \'main\'').get();
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message: 'La configuración ha sido modificada por otro usuario. Recarga antes de guardar.',
-          };
-        }
-
-        const updatedAt = new Date().toISOString();
-        db.prepare(
-          `INSERT INTO configuracion_state (id, value_json, updated_at)
-           VALUES ('main', ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             value_json = excluded.value_json,
-             updated_at = excluded.updated_at`,
-        ).run(record.value, updatedAt);
-        updateRefreshMetadata(db, updatedAt);
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Configuración guardada en SQLite.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup('save:configuracion_state');
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
-
-function maybeMigratePresupuestosFromPersistedRecords(db: Database): void {
-  if (presupuestosMigrationDone) {
-    return;
-  }
-
-  maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'presupuesto_scenario_records',
-    legacyKey: 'traccion.v1.presupuestos.scenarios',
-    migrationDone: false,
-  });
-  maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'presupuesto_manual_item_records',
-    legacyKey: 'traccion.v1.presupuestos.manualItems',
-    migrationDone: false,
-  });
-  maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'presupuesto_ticket_group_records',
-    legacyKey: 'traccion.v1.presupuestos.ticketGroups',
-    migrationDone: false,
-  });
-  maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'presupuesto_actual_records',
-    legacyKey: 'traccion.v1.presupuestos.actuals',
-    migrationDone: false,
-  });
-
-  presupuestosMigrationDone = true;
-}
-
-export async function loadPresupuestosRecordsSnapshot(): Promise<SqlitePresupuestosRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [] };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigratePresupuestosFromPersistedRecords(db))();
-      return {
-        status: currentStatus,
-        scenarios: readActiveJsonRecords(db, 'presupuesto_scenario_records'),
-        manualItems: readActiveJsonRecords(db, 'presupuesto_manual_item_records'),
-        ticketGroups: readActiveJsonRecords(db, 'presupuesto_ticket_group_records'),
-        actuals: readActiveJsonRecords(db, 'presupuesto_actual_records'),
-      };
-    },
-    (nextStatus) => ({ status: nextStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [] }),
-  );
-}
-
-export async function savePresupuestosSnapshotIfUnchanged(
-  snapshot: ConditionalSqlitePresupuestosSnapshot,
-): Promise<ConditionalSqliteSnapshotSaveResult> {
-  const tableNames = [
-    'presupuesto_scenario_records',
-    'presupuesto_manual_item_records',
-    'presupuesto_ticket_group_records',
-    'presupuesto_actual_records',
-  ];
-
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteSnapshotSaveResult => {
-        maybeMigratePresupuestosFromPersistedRecords(db);
-        const currentUpdatedAt = latestUpdatedAtFromJsonTables(db, tableNames);
-        if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message: 'Presupuestos ha sido modificado por otro usuario. Recarga antes de guardar.',
-          };
-        }
-
-        const updatedAt = new Date().toISOString();
-        syncJsonRecordTable(db, 'presupuesto_scenario_records', snapshot.scenarios, updatedAt);
-        syncJsonRecordTable(db, 'presupuesto_manual_item_records', snapshot.manualItems, updatedAt);
-        syncJsonRecordTable(db, 'presupuesto_ticket_group_records', snapshot.ticketGroups, updatedAt);
-        syncJsonRecordTable(db, 'presupuesto_actual_records', snapshot.actuals, updatedAt);
-        updateRefreshMetadata(db, updatedAt);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Presupuestos guardado en SQLite.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup('save:presupuestos');
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
-
-
 function mapEmployeeRecordRow(row: EmployeeRecordRow): SqliteEmployeeRecord {
   return {
     id: row.id,
@@ -3759,6 +3118,31 @@ function readAllSorteosRows(db: Database, tableName: 'sorteos_draw_records' | 's
     .map(mapSorteosRecordRow);
 }
 
+
+const DIRECT_STORE_UPDATED_AT_TABLES: Record<string, string> = {
+  plantilla: 'employee_records',
+  teletrabajo: 'teletrabajo_solicitud_records',
+  actas: 'acta_records',
+  'comite-sesiones': 'comite_session_records',
+  'paritaria-sesiones': 'paritaria_session_records',
+  tareas: 'task_records',
+  sorteos: 'sorteos_draw_records',
+};
+
+function getJsonRecordTableUpdatedAt(db: Database, tableName: string): string | null {
+  const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
+  return isUpdatedAtRow(row) ? row.updated_at : null;
+}
+
+function getDirectStoreUpdatedAtSnapshot(db: Database): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.entries(DIRECT_STORE_UPDATED_AT_TABLES).map(([storeId, tableName]) => [
+      storeId,
+      getJsonRecordTableUpdatedAt(db, tableName),
+    ]),
+  );
+}
+
 function getSorteosCollectionUpdatedAt(db: Database, tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records'): string | null {
   const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
   return isUpdatedAtRow(row) ? row.updated_at : null;
@@ -3766,49 +3150,6 @@ function getSorteosCollectionUpdatedAt(db: Database, tableName: 'sorteos_draw_re
 
 function getTaskRecordsUpdatedAt(db: Database): string | null {
   const row = db.prepare('SELECT MAX(updated_at) AS updated_at FROM task_records').get();
-  return isUpdatedAtRow(row) ? row.updated_at : null;
-}
-
-/**
- * Lista cerrada de tablas nativas cuyo MAX(updated_at) se expone en el
- * token snapshot para que externalDataSync detecte cambios de otros
- * usuarios. Whitelist explícita: nunca se interpola un nombre de tabla
- * que no esté aquí, evitando inyección SQL por construcción dinámica.
- */
-const NATIVE_RECORD_TABLE_NAMES = [
-  'acta_records',
-  'comite_session_records',
-  'paritaria_session_records',
-  'criterios_rrll_records',
-  'especiales_recipient_records',
-  'licencia_sin_sueldo_records',
-  'presupuesto_scenario_records',
-  'presupuesto_manual_item_records',
-  'presupuesto_ticket_group_records',
-  'presupuesto_actual_records',
-  'teletrabajo_solicitud_records',
-  'teletrabajo_puesto_records',
-  'vinculograma_records',
-  'plantilla_job_position_translation_records',
-  'employee_records',
-] as const;
-
-type NativeRecordTableName = (typeof NATIVE_RECORD_TABLE_NAMES)[number];
-
-function isNativeRecordTableName(value: string): value is NativeRecordTableName {
-  return (NATIVE_RECORD_TABLE_NAMES as readonly string[]).includes(value);
-}
-
-function getRecordsTableMaxUpdatedAt(db: Database, tableName: NativeRecordTableName): string | null {
-  if (!isNativeRecordTableName(tableName)) {
-    return null;
-  }
-  const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
-  return isUpdatedAtRow(row) ? row.updated_at : null;
-}
-
-function getConfiguracionStateUpdatedAt(db: Database): string | null {
-  const row = db.prepare("SELECT updated_at FROM configuracion_state WHERE id = 'main'").get();
   return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
@@ -4283,22 +3624,7 @@ export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSn
           taskRecordsUpdatedAt: null,
           sorteosDrawsUpdatedAt: null,
           sorteosExclusionsUpdatedAt: null,
-          actaRecordsUpdatedAt: null,
-          comiteSessionRecordsUpdatedAt: null,
-          paritariaSessionRecordsUpdatedAt: null,
-          criteriosRrllRecordsUpdatedAt: null,
-          especialesRecipientRecordsUpdatedAt: null,
-          licenciaSinSueldoRecordsUpdatedAt: null,
-          presupuestoScenarioRecordsUpdatedAt: null,
-          presupuestoManualItemRecordsUpdatedAt: null,
-          presupuestoTicketGroupRecordsUpdatedAt: null,
-          presupuestoActualRecordsUpdatedAt: null,
-          teletrabajoSolicitudRecordsUpdatedAt: null,
-          teletrabajoPuestoRecordsUpdatedAt: null,
-          vinculogramaRecordsUpdatedAt: null,
-          plantillaJobPositionTranslationRecordsUpdatedAt: null,
-          employeeRecordsUpdatedAt: null,
-          configuracionStateUpdatedAt: null,
+          directStoreUpdatedAt: {},
         };
       }
 
@@ -4327,25 +3653,7 @@ export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSn
         taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
         sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
         sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
-        actaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'acta_records'),
-        comiteSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'comite_session_records'),
-        paritariaSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'paritaria_session_records'),
-        criteriosRrllRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'criterios_rrll_records'),
-        especialesRecipientRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'especiales_recipient_records'),
-        licenciaSinSueldoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'licencia_sin_sueldo_records'),
-        presupuestoScenarioRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_scenario_records'),
-        presupuestoManualItemRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_manual_item_records'),
-        presupuestoTicketGroupRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_ticket_group_records'),
-        presupuestoActualRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_actual_records'),
-        teletrabajoSolicitudRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_solicitud_records'),
-        teletrabajoPuestoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_puesto_records'),
-        vinculogramaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'vinculograma_records'),
-        plantillaJobPositionTranslationRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(
-          db,
-          'plantilla_job_position_translation_records',
-        ),
-        employeeRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'employee_records'),
-        configuracionStateUpdatedAt: getConfiguracionStateUpdatedAt(db),
+        directStoreUpdatedAt: getDirectStoreUpdatedAtSnapshot(db),
       };
     },
     (nextStatus) => ({
@@ -4356,22 +3664,7 @@ export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSn
       taskRecordsUpdatedAt: null,
       sorteosDrawsUpdatedAt: null,
       sorteosExclusionsUpdatedAt: null,
-      actaRecordsUpdatedAt: null,
-      comiteSessionRecordsUpdatedAt: null,
-      paritariaSessionRecordsUpdatedAt: null,
-      criteriosRrllRecordsUpdatedAt: null,
-      especialesRecipientRecordsUpdatedAt: null,
-      licenciaSinSueldoRecordsUpdatedAt: null,
-      presupuestoScenarioRecordsUpdatedAt: null,
-      presupuestoManualItemRecordsUpdatedAt: null,
-      presupuestoTicketGroupRecordsUpdatedAt: null,
-      presupuestoActualRecordsUpdatedAt: null,
-      teletrabajoSolicitudRecordsUpdatedAt: null,
-      teletrabajoPuestoRecordsUpdatedAt: null,
-      vinculogramaRecordsUpdatedAt: null,
-      plantillaJobPositionTranslationRecordsUpdatedAt: null,
-      employeeRecordsUpdatedAt: null,
-      configuracionStateUpdatedAt: null,
+      directStoreUpdatedAt: {},
     }),
   );
 }
@@ -4388,22 +3681,7 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
           taskRecordsUpdatedAt: null,
           sorteosDrawsUpdatedAt: null,
           sorteosExclusionsUpdatedAt: null,
-          actaRecordsUpdatedAt: null,
-          comiteSessionRecordsUpdatedAt: null,
-          paritariaSessionRecordsUpdatedAt: null,
-          criteriosRrllRecordsUpdatedAt: null,
-          especialesRecipientRecordsUpdatedAt: null,
-          licenciaSinSueldoRecordsUpdatedAt: null,
-          presupuestoScenarioRecordsUpdatedAt: null,
-          presupuestoManualItemRecordsUpdatedAt: null,
-          presupuestoTicketGroupRecordsUpdatedAt: null,
-          presupuestoActualRecordsUpdatedAt: null,
-          teletrabajoSolicitudRecordsUpdatedAt: null,
-          teletrabajoPuestoRecordsUpdatedAt: null,
-          vinculogramaRecordsUpdatedAt: null,
-          plantillaJobPositionTranslationRecordsUpdatedAt: null,
-          employeeRecordsUpdatedAt: null,
-          configuracionStateUpdatedAt: null,
+          directStoreUpdatedAt: {},
         };
       }
 
@@ -4425,25 +3703,7 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
         taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
         sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
         sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
-        actaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'acta_records'),
-        comiteSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'comite_session_records'),
-        paritariaSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'paritaria_session_records'),
-        criteriosRrllRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'criterios_rrll_records'),
-        especialesRecipientRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'especiales_recipient_records'),
-        licenciaSinSueldoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'licencia_sin_sueldo_records'),
-        presupuestoScenarioRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_scenario_records'),
-        presupuestoManualItemRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_manual_item_records'),
-        presupuestoTicketGroupRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_ticket_group_records'),
-        presupuestoActualRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_actual_records'),
-        teletrabajoSolicitudRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_solicitud_records'),
-        teletrabajoPuestoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_puesto_records'),
-        vinculogramaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'vinculograma_records'),
-        plantillaJobPositionTranslationRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(
-          db,
-          'plantilla_job_position_translation_records',
-        ),
-        employeeRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'employee_records'),
-        configuracionStateUpdatedAt: getConfiguracionStateUpdatedAt(db),
+        directStoreUpdatedAt: getDirectStoreUpdatedAtSnapshot(db),
       };
     },
     (nextStatus) => ({
@@ -4453,22 +3713,7 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
       taskRecordsUpdatedAt: null,
       sorteosDrawsUpdatedAt: null,
       sorteosExclusionsUpdatedAt: null,
-      actaRecordsUpdatedAt: null,
-      comiteSessionRecordsUpdatedAt: null,
-      paritariaSessionRecordsUpdatedAt: null,
-      criteriosRrllRecordsUpdatedAt: null,
-      especialesRecipientRecordsUpdatedAt: null,
-      licenciaSinSueldoRecordsUpdatedAt: null,
-      presupuestoScenarioRecordsUpdatedAt: null,
-      presupuestoManualItemRecordsUpdatedAt: null,
-      presupuestoTicketGroupRecordsUpdatedAt: null,
-      presupuestoActualRecordsUpdatedAt: null,
-      teletrabajoSolicitudRecordsUpdatedAt: null,
-      teletrabajoPuestoRecordsUpdatedAt: null,
-      vinculogramaRecordsUpdatedAt: null,
-      plantillaJobPositionTranslationRecordsUpdatedAt: null,
-      employeeRecordsUpdatedAt: null,
-      configuracionStateUpdatedAt: null,
+      directStoreUpdatedAt: {},
     }),
   );
 }

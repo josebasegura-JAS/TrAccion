@@ -103,22 +103,7 @@ interface TraccionPersistedRecordsTokenSnapshot {
   taskRecordsUpdatedAt?: string | null;
   sorteosDrawsUpdatedAt?: string | null;
   sorteosExclusionsUpdatedAt?: string | null;
-  actaRecordsUpdatedAt?: string | null;
-  comiteSessionRecordsUpdatedAt?: string | null;
-  paritariaSessionRecordsUpdatedAt?: string | null;
-  criteriosRrllRecordsUpdatedAt?: string | null;
-  especialesRecipientRecordsUpdatedAt?: string | null;
-  licenciaSinSueldoRecordsUpdatedAt?: string | null;
-  presupuestoScenarioRecordsUpdatedAt?: string | null;
-  presupuestoManualItemRecordsUpdatedAt?: string | null;
-  presupuestoTicketGroupRecordsUpdatedAt?: string | null;
-  presupuestoActualRecordsUpdatedAt?: string | null;
-  teletrabajoSolicitudRecordsUpdatedAt?: string | null;
-  teletrabajoPuestoRecordsUpdatedAt?: string | null;
-  vinculogramaRecordsUpdatedAt?: string | null;
-  plantillaJobPositionTranslationRecordsUpdatedAt?: string | null;
-  employeeRecordsUpdatedAt?: string | null;
-  configuracionStateUpdatedAt?: string | null;
+  directStoreUpdatedAt?: Record<string, string | null>;
 }
 
 interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsTokenSnapshot {
@@ -363,24 +348,6 @@ interface TraccionEspecialRecipientRecordsSnapshot {
 
 type TraccionConditionalEspecialRecipientRecord = TraccionConditionalComiteSessionRecord;
 
-type TraccionTeletrabajoPuestoRecord = TraccionComiteSessionRecord;
-
-interface TraccionTeletrabajoPuestoRecordsSnapshot {
-  status: TraccionDatabaseStatus;
-  records: TraccionTeletrabajoPuestoRecord[];
-}
-
-type TraccionConditionalTeletrabajoPuestoRecord = TraccionConditionalComiteSessionRecord;
-
-type TraccionJobPositionTranslationRecord = TraccionComiteSessionRecord;
-
-interface TraccionJobPositionTranslationRecordsSnapshot {
-  status: TraccionDatabaseStatus;
-  records: TraccionJobPositionTranslationRecord[];
-}
-
-type TraccionConditionalJobPositionTranslationRecord = TraccionConditionalComiteSessionRecord;
-
 interface TraccionConfiguracionSnapshot {
   status: TraccionDatabaseStatus;
   value: string | null;
@@ -488,14 +455,6 @@ interface TraccionApi {
   loadEspecialesRecipientRecords?: () => Promise<TraccionEspecialRecipientRecordsSnapshot>;
   saveEspecialesRecipientRecordIfUnchanged?: (
     record: TraccionConditionalEspecialRecipientRecord,
-  ) => Promise<TraccionConditionalTaskSaveResult>;
-  loadTeletrabajoPuestoRecords?: () => Promise<TraccionTeletrabajoPuestoRecordsSnapshot>;
-  saveTeletrabajoPuestoRecordIfUnchanged?: (
-    record: TraccionConditionalTeletrabajoPuestoRecord,
-  ) => Promise<TraccionConditionalTaskSaveResult>;
-  loadJobPositionTranslationRecords?: () => Promise<TraccionJobPositionTranslationRecordsSnapshot>;
-  saveJobPositionTranslationRecordIfUnchanged?: (
-    record: TraccionConditionalJobPositionTranslationRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   loadConfiguracion?: () => Promise<TraccionConfiguracionSnapshot>;
   saveConfiguracionIfUnchanged?: (

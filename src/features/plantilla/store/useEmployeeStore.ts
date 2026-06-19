@@ -19,8 +19,6 @@ export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
 const STORAGE_KEY = EMPLOYEES_STORAGE_KEY;
 const JOB_POSITION_TRANSLATIONS_STORAGE_KEY = 'traccion.v1.plantilla.jobPositionTranslations';
 
-let latestJobPositionTranslationsUpdatedAtById = new Map<string, string>();
-
 interface EmployeeImportResult {
   totalRows: number;
   updated: number;
@@ -154,11 +152,6 @@ function isJobPositionTranslation(value: unknown): value is JobPositionTranslati
   return typeof candidate.puestoCastellano === 'string' && typeof candidate.puestoEuskera === 'string';
 }
 
-
-function jobPositionTranslationRecordId(translation: JobPositionTranslation): string {
-  return normalizeJobPosition(translation.puestoCastellano) || translation.puestoCastellano.trim();
-}
-
 function readJobPositionTranslations(): JobPositionTranslation[] {
   const stored = readStorageItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY);
   if (!stored) {
@@ -173,66 +166,9 @@ function readJobPositionTranslations(): JobPositionTranslation[] {
   return parsed.filter(isJobPositionTranslation);
 }
 
-
-async function readJobPositionTranslationsFromSqlite(): Promise<JobPositionTranslation[] | null> {
-  const loader = window.traccion?.loadJobPositionTranslationRecords;
-  if (!loader) {
-    return null;
-  }
-
-  const snapshot = await loader();
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
-    return null;
-  }
-
-  latestJobPositionTranslationsUpdatedAtById = new Map(
-    snapshot.records.map((record) => [record.id, record.updatedAt]),
-  );
-
-  const translations = snapshot.records
-    .map((record): JobPositionTranslation | null => {
-      try {
-        const parsed: unknown = JSON.parse(record.value);
-        return isJobPositionTranslation(parsed) ? parsed : null;
-      } catch {
-        return null;
-      }
-    })
-    .filter((translation): translation is JobPositionTranslation => Boolean(translation))
-    .sort((first, second) =>
-      first.puestoCastellano.localeCompare(second.puestoCastellano, 'es', {
-        numeric: true,
-        sensitivity: 'base',
-      }),
-    );
-
-  window.localStorage.setItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, JSON.stringify(translations));
-  return translations;
-}
-
 async function persistJobPositionTranslationsConfirmed(
   translations: JobPositionTranslation[],
 ): Promise<void> {
-  const sqliteSaver = window.traccion?.saveJobPositionTranslationRecordIfUnchanged;
-  if (sqliteSaver) {
-    for (const translation of translations) {
-      const id = jobPositionTranslationRecordId(translation);
-      const result = await sqliteSaver({
-        id,
-        value: JSON.stringify(translation),
-        expectedUpdatedAt: latestJobPositionTranslationsUpdatedAtById.get(id) ?? null,
-      });
-      if (!result.ok) {
-        throw new Error(result.message);
-      }
-      if (result.currentUpdatedAt) {
-        latestJobPositionTranslationsUpdatedAtById.set(id, result.currentUpdatedAt);
-      }
-    }
-    window.localStorage.setItem(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, JSON.stringify(translations));
-    return;
-  }
-
   const result = await writeJsonStorageAsync(JOB_POSITION_TRANSLATIONS_STORAGE_KEY, translations);
   if (!result.ok) {
     throw new Error(result.message);
@@ -358,24 +294,13 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   load: () => {
     set({ isLoading: true });
     void (async () => {
-      try {
-        const employees = await readEmployeesShared();
-        const jobPositionTranslations = readJobPositionTranslations();
-        set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees), isLoading: false });
-        void readJobPositionTranslationsFromSqlite()
-          .then((sqliteTranslations) => {
-            if (sqliteTranslations) {
-              set({ jobPositionTranslations: sqliteTranslations });
-            }
-          })
-          .catch((error) => console.warn('Traducciones de puesto no cargadas desde SQLite.', error));
-      } catch (error) {
-        console.warn('Plantilla no cargada.', error);
-        set({ isLoading: false });
-      }
-    })();
+      const employees = await readEmployeesShared();
+      const jobPositionTranslations = readJobPositionTranslations();
+      set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees), isLoading: false });
+    })().catch(() => set({ isLoading: false }));
   },
   reloadFromStorage: () => {
+    set({ isLoading: true });
     void (async () => {
       const employees = await readEmployeesShared();
       const jobPositionTranslations = readJobPositionTranslations();
@@ -385,15 +310,9 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         selectedEmployeeId: employees.some((employee) => employee.empleado === state.selectedEmployeeId)
           ? state.selectedEmployeeId
           : firstVisibleEmployeeId(employees),
+        isLoading: false,
       }));
-      void readJobPositionTranslationsFromSqlite()
-        .then((sqliteTranslations) => {
-          if (sqliteTranslations) {
-            set({ jobPositionTranslations: sqliteTranslations });
-          }
-        })
-        .catch((error) => console.warn('Traducciones de puesto no recargadas desde SQLite.', error));
-    })();
+    })().catch(() => set({ isLoading: false }));
   },
   save: () => {
     void persistEmployeesShared(get().employees, get().employees);

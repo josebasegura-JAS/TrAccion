@@ -730,11 +730,14 @@ export async function writeSharedStorageItemAsync(
     if (isConcurrencyConflictMessage(message)) {
       const conflictMessage =
         'Cambio no guardado — otro usuario modificó estos datos. Recarga la página para ver la versión actual antes de volver a editar.';
+      // Un conflicto de versión no es una caída de persistencia: es protección multiusuario.
+      // El resultado sigue devolviendo ok=false para que el módulo muestre el aviso contextual,
+      // pero no se pinta el banner global rojo como si la BBDD estuviera fallando.
       emitPersistenceFeedback({
-        kind: 'error',
+        kind: 'saved',
         updatedAt: new Date().toISOString(),
         key,
-        message: conflictMessage,
+        message: 'Conflicto de versión detectado; no se ha sobrescrito el cambio compartido.',
       });
       return { ok: false, message: conflictMessage, updatedAt: null };
     }
