@@ -84,6 +84,12 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('actas:save-record-if-unchanged', record),
+  loadVinculogramaRecords: () => ipcRenderer.invoke('vinculograma:load-records'),
+  saveVinculogramaRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('vinculograma:save-record-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   loadTeletrabajoRecords: () => ipcRenderer.invoke('teletrabajo:load-records'),

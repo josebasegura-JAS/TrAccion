@@ -27,6 +27,7 @@ import {
   loadParitariaSessionRecordsSnapshot,
   loadActaRecordsSnapshot,
   loadTeletrabajoRecordsSnapshot,
+  loadVinculogramaRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -44,6 +45,7 @@ import {
   saveParitariaSessionRecordIfUnchanged,
   saveActaRecordIfUnchanged,
   saveTeletrabajoRecordIfUnchanged,
+  saveVinculogramaRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1514,6 +1516,49 @@ function registerIpcHandlers(): void {
     );
   });
 
+
+
+  ipcMain.handle('vinculograma:load-records', () =>
+    enqueueSqliteIpc('vinculograma:load-records', () => loadVinculogramaRecordsSnapshot()),
+  );
+
+  ipcMain.handle('vinculograma:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de vinculograma inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de vinculograma inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
+      ? candidate.expectedUpdatedAt
+      : null;
+    return enqueueSqliteIpc('vinculograma:save-record-if-unchanged', () =>
+      saveVinculogramaRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
 
   ipcMain.handle('teletrabajo:load-records', () =>
     enqueueSqliteIpc('teletrabajo:load-records', () => loadTeletrabajoRecordsSnapshot()),

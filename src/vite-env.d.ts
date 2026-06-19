@@ -311,6 +311,15 @@ interface TraccionTeletrabajoRecordsSnapshot {
 
 type TraccionConditionalTeletrabajoRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionVinculogramaRecord = TraccionComiteSessionRecord;
+
+interface TraccionVinculogramaRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionVinculogramaRecord[];
+}
+
+type TraccionConditionalVinculogramaRecord = TraccionConditionalComiteSessionRecord;
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -369,6 +378,10 @@ interface TraccionApi {
   loadTeletrabajoRecords?: () => Promise<TraccionTeletrabajoRecordsSnapshot>;
   saveTeletrabajoRecordIfUnchanged?: (
     record: TraccionConditionalTeletrabajoRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadVinculogramaRecords?: () => Promise<TraccionVinculogramaRecordsSnapshot>;
+  saveVinculogramaRecordIfUnchanged?: (
+    record: TraccionConditionalVinculogramaRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;

@@ -16,7 +16,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 10;
+const CURRENT_SCHEMA_VERSION = 11;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -114,6 +114,15 @@ export interface SqliteTeletrabajoRecordsSnapshot {
 }
 
 export type ConditionalSqliteTeletrabajoRecord = ConditionalSqliteComiteSessionRecord;
+
+export type SqliteVinculogramaRecord = SqliteComiteSessionRecord;
+
+export interface SqliteVinculogramaRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteVinculogramaRecord[];
+}
+
+export type ConditionalSqliteVinculogramaRecord = ConditionalSqliteComiteSessionRecord;
 
 export interface SqliteEmployeeRecord {
   id: string;
@@ -326,6 +335,7 @@ let comiteSessionsMigrationDone = false;
 let paritariaSessionsMigrationDone = false;
 let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
+let vinculogramaMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
 
@@ -1192,6 +1202,32 @@ function migrateToVersion10(db: Database): void {
   }
 }
 
+function migrateToVersion11(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vinculograma_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vinculograma_records_updated_at
+      ON vinculograma_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_vinculograma_records_deleted_at
+      ON vinculograma_records(deleted_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 11) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      11,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1203,6 +1239,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion8(db);
   migrateToVersion9(db);
   migrateToVersion10(db);
+  migrateToVersion11(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1248,6 +1285,7 @@ function closeDatabase(): void {
   paritariaSessionsMigrationDone = false;
   actasMigrationDone = false;
   teletrabajoMigrationDone = false;
+  vinculogramaMigrationDone = false;
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -1262,6 +1300,7 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   paritariaSessionsMigrationDone = false;
   actasMigrationDone = false;
   teletrabajoMigrationDone = false;
+  vinculogramaMigrationDone = false;
 
   await releaseActiveSessionLock();
 }
@@ -2758,6 +2797,205 @@ export async function saveTeletrabajoRecordIfUnchanged(
 
       if (result.ok) {
         enqueueLocalBackup('save:teletrabajo_solicitud_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+function mapVinculogramaRecordRow(row: ComiteSessionRecordRow): SqliteVinculogramaRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readVinculogramaRecords(db: Database): SqliteVinculogramaRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM vinculograma_records WHERE deleted_at IS NULL ORDER BY created_at, id')
+    .all()
+    .filter(isComiteSessionRecordRow)
+    .map(mapVinculogramaRecordRow);
+}
+
+function maybeMigrateVinculogramaFromPersistedRecord(db: Database): void {
+  if (vinculogramaMigrationDone) {
+    return;
+  }
+
+  const countRow = db.prepare('SELECT COUNT(*) AS count FROM vinculograma_records').get();
+  const count = isCountRow(countRow) ? countRow.count : 0;
+  if (count > 0) {
+    vinculogramaMigrationDone = true;
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.vinculograma.records');
+  if (!legacyRecord) {
+    vinculogramaMigrationDone = true;
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    vinculogramaMigrationDone = true;
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    vinculogramaMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO vinculograma_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithStringId(item)) {
+      continue;
+    }
+
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
+  }
+
+  vinculogramaMigrationDone = true;
+}
+
+export async function loadVinculogramaRecordsSnapshot(): Promise<SqliteVinculogramaRecordsSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, records: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateVinculogramaFromPersistedRecord(db))();
+      return { status: currentStatus, records: readVinculogramaRecords(db) };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [] }),
+  );
+}
+
+export async function saveVinculogramaRecordIfUnchanged(
+  record: ConditionalSqliteVinculogramaRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateVinculogramaFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM vinculograma_records WHERE id = ?').get(record.id);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'El vínculo ha sido modificado por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+        const createdAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+            ? (parsed as { createdAt: string }).createdAt
+            : now;
+        const updatedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+            ? (parsed as { updatedAt: string }).updatedAt
+            : now;
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO vinculograma_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM vinculograma_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'El vínculo ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE vinculograma_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM vinculograma_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'El vínculo ha sido modificado por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, updatedAt);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Vínculo guardado en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:vinculograma_records');
       }
 
       return result;

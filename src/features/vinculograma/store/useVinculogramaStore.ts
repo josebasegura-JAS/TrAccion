@@ -6,6 +6,13 @@ import {
   type Vinculograma,
   type VinculogramaDraft,
 } from '../domain/vinculograma';
+import {
+  deleteVinculogramaInSqlite,
+  hasVinculogramaSqliteRepository,
+  loadVinculogramaRecordsFromSqlite,
+  loadVinculogramasFromSqlite,
+  saveVinculogramaToSqlite,
+} from './vinculogramaSqliteRepository';
 
 const STORAGE_KEY = 'traccion.v1.vinculograma.records';
 
@@ -17,8 +24,8 @@ interface VinculogramaUpdateResult {
 
 interface VinculogramaState {
   records: Vinculograma[];
-  load: () => void;
-  reloadFromStorage: () => void;
+  load: () => Promise<void>;
+  reloadFromStorage: () => Promise<void>;
   create: (draft: VinculogramaDraft) => string;
   createWithConcurrencyCheck: (draft: VinculogramaDraft) => Promise<VinculogramaUpdateResult>;
   update: (id: string, draft: VinculogramaDraft) => void;
@@ -74,6 +81,10 @@ function persistRecords(records: Vinculograma[]): void {
   writeStorageItem(STORAGE_KEY, JSON.stringify(records));
 }
 
+function mirrorRecords(records: Vinculograma[]): void {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -84,13 +95,24 @@ function createId(): string {
     : `vinculograma-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export const useVinculogramaStore = create<VinculogramaState>((set) => ({
+export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
   records: [],
-  load: () => {
+  load: async () => {
+    try {
+      const sqliteRecords = await loadVinculogramasFromSqlite(parseRecords);
+      if (sqliteRecords) {
+        mirrorRecords(sqliteRecords);
+        set({ records: sqliteRecords });
+        return;
+      }
+    } catch {
+      // Si SQLite no está disponible, se conserva la lectura legacy como fallback de arranque.
+    }
+
     set({ records: readRecords() });
   },
-  reloadFromStorage: () => {
-    set({ records: readRecords() });
+  reloadFromStorage: async () => {
+    await get().load();
   },
   create: (draft) => {
     const id = createId();
@@ -104,6 +126,26 @@ export const useVinculogramaStore = create<VinculogramaState>((set) => ({
   createWithConcurrencyCheck: async (draft) => {
     const id = createId();
     const record = buildVinculograma(draft, nowIso(), id);
+
+    if (hasVinculogramaSqliteRepository()) {
+      try {
+        const result = await saveVinculogramaToSqlite(record, null);
+        if (!result?.ok) {
+          return { ok: false, message: result?.message ?? 'No se ha podido crear el vínculo.' };
+        }
+
+        const records = await loadVinculogramaRecordsFromSqlite();
+        const parsedRecords = records
+          ? records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`))
+          : [...get().records, record];
+        mirrorRecords(parsedRecords);
+        set({ records: parsedRecords });
+        return { ok: true, message: result.message, recordId: record.id };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido crear el vínculo.';
+        return { ok: false, message };
+      }
+    }
 
     try {
       const result = await saveNewSharedArrayRecord<Vinculograma>({
@@ -133,6 +175,35 @@ export const useVinculogramaStore = create<VinculogramaState>((set) => ({
     });
   },
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
+    if (hasVinculogramaSqliteRepository()) {
+      try {
+        const currentRecord = get().records.find((record) => record.id === id);
+        if (!currentRecord) {
+          return {
+            ok: false,
+            message: 'El vínculo ya no existe en la base compartida. Recarga antes de continuar.',
+          };
+        }
+
+        const record = buildVinculograma(draft, nowIso(), id, currentRecord);
+        const result = await saveVinculogramaToSqlite(record, expectedUpdatedAt);
+        if (!result?.ok) {
+          return { ok: false, message: result?.message ?? 'No se ha podido guardar el vínculo.' };
+        }
+
+        const records = await loadVinculogramaRecordsFromSqlite();
+        const parsedRecords = records
+          ? records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`))
+          : get().records.map((current) => (current.id === id ? record : current));
+        mirrorRecords(parsedRecords);
+        set({ records: parsedRecords });
+        return { ok: true, message: result.message };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido guardar el vínculo.';
+        return { ok: false, message };
+      }
+    }
+
     try {
       const result = await saveSharedArrayRecord<Vinculograma>({
         storageKey: STORAGE_KEY,
@@ -153,6 +224,34 @@ export const useVinculogramaStore = create<VinculogramaState>((set) => ({
     }
   },
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    if (hasVinculogramaSqliteRepository()) {
+      try {
+        const currentRecord = get().records.find((record) => record.id === id);
+        if (!currentRecord) {
+          return {
+            ok: false,
+            message: 'El vínculo ya no existe en la base compartida. Recarga antes de continuar.',
+          };
+        }
+
+        const result = await deleteVinculogramaInSqlite(currentRecord, expectedUpdatedAt);
+        if (!result?.ok) {
+          return { ok: false, message: result?.message ?? 'No se ha podido eliminar el vínculo.' };
+        }
+
+        const records = await loadVinculogramaRecordsFromSqlite();
+        const parsedRecords = records
+          ? records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`))
+          : get().records.filter((record) => record.id !== id);
+        mirrorRecords(parsedRecords);
+        set({ records: parsedRecords });
+        return { ok: true, message: result.message };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido eliminar el vínculo.';
+        return { ok: false, message };
+      }
+    }
+
     try {
       const deletedAt = nowIso();
       const result = await saveSharedArrayRecord<Vinculograma>({
