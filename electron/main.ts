@@ -1662,12 +1662,17 @@ function registerIpcHandlers(): void {
       };
     }
 
+    const scenarios = candidate.scenarios as Array<{ id: string; value: string }>;
+    const manualItems = candidate.manualItems as Array<{ id: string; value: string }>;
+    const ticketGroups = candidate.ticketGroups as Array<{ id: string; value: string }>;
+    const actuals = candidate.actuals as Array<{ id: string; value: string }>;
+
     return enqueueSqliteIpc('presupuestos:save-snapshot-if-unchanged', () =>
       savePresupuestosSnapshotIfUnchanged({
-        scenarios: candidate.scenarios,
-        manualItems: candidate.manualItems,
-        ticketGroups: candidate.ticketGroups,
-        actuals: candidate.actuals,
+        scenarios,
+        manualItems,
+        ticketGroups,
+        actuals,
         expectedUpdatedAt:
           typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
       }),
