@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Configurar npm y forzar registry público
+      - name: Configurar npm y registry público
         shell: pwsh
         run: |
           npm config delete production
@@ -64,22 +64,28 @@ jobs:
             Remove-Item node_modules -Recurse -Force
           }
 
-          npm ci --include=dev --ignore-scripts --no-audit --no-fund
+          npm ci --include=dev --no-audit --no-fund
+
+      - name: Reconstruir Electron
+        shell: pwsh
+        run: |
+          npm rebuild electron
+          npm exec -- electron --version
 
       - name: Diagnóstico
         shell: pwsh
         run: |
           node --version
           npm --version
-          npm ls typescript eslint vitest vite playwright electron --depth=0
+          npm ls electron playwright typescript vite --depth=0
           npm exec -- playwright --version
           npm exec -- electron --version
           npm exec -- tsc --version
 
-      - name: Compile Electron main process
+      - name: Compilar Electron main process
         run: npx tsc -p electron/tsconfig.json
 
-      - name: Run UI tests
+      - name: Ejecutar UI tests
         run: npm run test:e2e:electron
 
       - name: Upload Playwright report
