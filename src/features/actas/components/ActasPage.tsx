@@ -25,6 +25,7 @@ import {
 } from '../domain/acta';
 import { useActasStore } from '../store/useActasStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { relativeDate } from '../../../utils/relativeDate';
 import { readStorageItem, writeSharedStorageItemAsync } from '../../../services/persistence';
@@ -1470,13 +1471,15 @@ export function ActasPage() {
             className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl"
             role="dialog"
           >
-            <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
-              <div>
+            <div className="flex items-center justify-between gap-3 border-b border-metro-border px-4 py-3">
+              <div className="min-w-0">
                 <h3 className="text-lg font-bold text-metro-text" id="actas-editor-title">
                   {editingActaId ? 'Editar acta' : 'Nueva acta'}
                 </h3>
                 <p className="text-xs text-metro-muted">Estado actual: {draft.estado}</p>
               </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <ModalDatabaseStatus />
               <button
                 className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
                 onClick={() => setIsEditorOpen(false)}
@@ -1485,6 +1488,7 @@ export function ActasPage() {
               >
                 <X size={16} />
               </button>
+              </div>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
