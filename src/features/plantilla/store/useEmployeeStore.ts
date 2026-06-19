@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { mockEmployees } from '../../../data/mockEmployees';
 import { hydrateEmployee } from '../domain/derived';
 import { EMPTY_EMPLOYEE_FILTERS, filterEmployees, type EmployeeFilters } from '../domain/filters';
 import { importEmployeesFromFile } from '../domain/importExcel';
@@ -35,6 +34,7 @@ interface EmployeeState {
   selectedEmployeeId: string;
   filters: EmployeeFilters;
   jobPositionTranslations: JobPositionTranslation[];
+  isLoading: boolean;
   load: () => void;
   reloadFromStorage: () => void;
   save: () => void;
@@ -63,12 +63,12 @@ function isEmployee(value: unknown): value is Employee {
 function readEmployees(): Employee[] {
   const stored = readStorageItem(STORAGE_KEY);
   if (!stored) {
-    return mockEmployees;
+    return [];
   }
 
   const parsed: unknown = JSON.parse(stored);
   if (!Array.isArray(parsed)) {
-    return mockEmployees;
+    return [];
   }
 
   return parsed.filter(isEmployee).map((employee) => hydrateEmployee(employee, employee.deletedAt));
@@ -87,12 +87,12 @@ async function readEmployeesShared(): Promise<Employee[]> {
 
 function parseEmployeesSnapshot(storageValue: string | null): Employee[] {
   if (!storageValue) {
-    return mockEmployees;
+    return [];
   }
 
   const parsed: unknown = JSON.parse(storageValue);
   if (!Array.isArray(parsed)) {
-    return mockEmployees;
+    return [];
   }
 
   return parsed.filter(isEmployee).map((employee) => hydrateEmployee(employee, employee.deletedAt));
@@ -350,22 +350,29 @@ function firstVisibleEmployeeId(employees: Employee[]): string {
 }
 
 export const useEmployeeStore = create<EmployeeState>((set, get) => ({
-  employees: mockEmployees,
-  selectedEmployeeId: firstVisibleEmployeeId(mockEmployees),
+  employees: [],
+  selectedEmployeeId: '',
   filters: EMPTY_EMPLOYEE_FILTERS,
   jobPositionTranslations: [],
+  isLoading: false,
   load: () => {
+    set({ isLoading: true });
     void (async () => {
-      const employees = await readEmployeesShared();
-      const jobPositionTranslations = readJobPositionTranslations();
-      set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees) });
-      void readJobPositionTranslationsFromSqlite()
-        .then((sqliteTranslations) => {
-          if (sqliteTranslations) {
-            set({ jobPositionTranslations: sqliteTranslations });
-          }
-        })
-        .catch((error) => console.warn('Traducciones de puesto no cargadas desde SQLite.', error));
+      try {
+        const employees = await readEmployeesShared();
+        const jobPositionTranslations = readJobPositionTranslations();
+        set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees), isLoading: false });
+        void readJobPositionTranslationsFromSqlite()
+          .then((sqliteTranslations) => {
+            if (sqliteTranslations) {
+              set({ jobPositionTranslations: sqliteTranslations });
+            }
+          })
+          .catch((error) => console.warn('Traducciones de puesto no cargadas desde SQLite.', error));
+      } catch (error) {
+        console.warn('Plantilla no cargada.', error);
+        set({ isLoading: false });
+      }
     })();
   },
   reloadFromStorage: () => {

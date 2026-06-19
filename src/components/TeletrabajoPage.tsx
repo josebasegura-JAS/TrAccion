@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   FileText,
+  Loader2,
   Plus,
   RotateCcw,
   Search,
@@ -328,6 +329,7 @@ export function TeletrabajoPage({
     solicitudes,
   } = useTeletrabajoStore();
   const employees = useEmployeeStore((state) => state.employees);
+  const isEmployeesLoading = useEmployeeStore((state) => state.isLoading);
   const loadEmployees = useEmployeeStore((state) => state.load);
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
@@ -987,6 +989,13 @@ export function TeletrabajoPage({
       {wordStatus && (
         <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text">
           {wordStatus}
+        </div>
+      )}
+
+      {isEmployeesLoading && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100">
+          <Loader2 className="animate-spin" size={16} />
+          Cargando datos de Plantilla para completar Teletrabajo…
         </div>
       )}
 

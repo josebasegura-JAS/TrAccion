@@ -349,15 +349,13 @@ async function persistPuestosTeletrabajoInSqlite(puestosTeletrabajo: Teletrabajo
 }
 
 function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): void {
+  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
+
   void (async () => {
     try {
-      const savedInSqlite = await persistPuestosTeletrabajoInSqlite(puestosTeletrabajo);
-      if (!savedInSqlite) {
-        writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
-      }
+      await persistPuestosTeletrabajoInSqlite(puestosTeletrabajo);
     } catch (error) {
       console.warn('Puestos teletrabajables no guardados en SQLite.', error);
-      writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
     }
   })();
 }
