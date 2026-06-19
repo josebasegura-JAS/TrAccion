@@ -24,6 +24,7 @@ import {
   loadSorteosRecordsSnapshot,
   loadTaskRecordsSnapshot,
   loadComiteSessionRecordsSnapshot,
+  loadParitariaSessionRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -38,6 +39,7 @@ import {
   saveSorteosSnapshotIfUnchanged,
   saveTaskRecordIfUnchanged,
   saveComiteSessionRecordIfUnchanged,
+  saveParitariaSessionRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1392,6 +1394,10 @@ function registerIpcHandlers(): void {
     enqueueSqliteIpc('comite:load-records', () => loadComiteSessionRecordsSnapshot()),
   );
 
+  ipcMain.handle('paritaria:load-records', () =>
+    enqueueSqliteIpc('paritaria:load-records', () => loadParitariaSessionRecordsSnapshot()),
+  );
+
   ipcMain.handle('comite:save-record-if-unchanged', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
       return {
@@ -1421,6 +1427,42 @@ function registerIpcHandlers(): void {
     const expectedUpdatedAt = candidate.expectedUpdatedAt;
     return enqueueSqliteIpc('comite:save-record-if-unchanged', () =>
       saveComiteSessionRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
+
+  ipcMain.handle('paritaria:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de sesión inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de sesión inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = candidate.expectedUpdatedAt;
+    return enqueueSqliteIpc('paritaria:save-record-if-unchanged', () =>
+      saveParitariaSessionRecordIfUnchanged({
         id,
         value,
         expectedUpdatedAt,

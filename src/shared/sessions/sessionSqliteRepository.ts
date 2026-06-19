@@ -59,7 +59,7 @@ export interface SessionSqliteSaveResult {
  * registro individual, con concurrencia fina (expectedUpdatedAt por sesión,
  * no por blob completo).
  *
- * Hoy mismo solo 'comite' tiene tabla nativa (comite_session_records).
+ * Comité y Paritaria tienen tabla nativa propia.
  * Para módulos sin tabla nativa, hasSessionSqliteRepository devuelve false
  * y el store cae al patrón de blob compartido (saveSharedArrayRecord).
  */
@@ -84,8 +84,15 @@ function resolveBindings(moduleId: SessionSqliteModuleId): SessionSqliteBindings
     return { load, save };
   }
 
-  // Paritaria todavía no tiene tabla nativa propia; se añadirá en un
-  // incremental posterior siguiendo el mismo patrón que comité.
+  if (moduleId === 'paritaria') {
+    const load = window.traccion?.loadParitariaSessionRecords;
+    const save = window.traccion?.saveParitariaSessionRecordIfUnchanged;
+    if (!load || !save) {
+      return null;
+    }
+    return { load, save };
+  }
+
   return null;
 }
 
