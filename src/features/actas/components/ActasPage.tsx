@@ -1464,10 +1464,15 @@ export function ActasPage() {
 
       {isEditorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
+          <div
+            aria-labelledby="actas-editor-title"
+            aria-modal="true"
+            className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl"
+            role="dialog"
+          >
             <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
               <div>
-                <h3 className="text-lg font-bold text-metro-text">
+                <h3 className="text-lg font-bold text-metro-text" id="actas-editor-title">
                   {editingActaId ? 'Editar acta' : 'Nueva acta'}
                 </h3>
                 <p className="text-xs text-metro-muted">Estado actual: {draft.estado}</p>
