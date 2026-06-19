@@ -285,6 +285,17 @@ function firstVisibleEmployeeId(employees: Employee[]): string {
   return employees.find((employee) => !employee.deletedAt)?.empleado ?? '';
 }
 
+function areEmployeesEquivalent(left: Employee[], right: Employee[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function areJobPositionTranslationsEquivalent(
+  left: JobPositionTranslation[],
+  right: JobPositionTranslation[],
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   employees: [],
   selectedEmployeeId: '',
@@ -300,18 +311,29 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     })().catch(() => set({ isLoading: false }));
   },
   reloadFromStorage: () => {
-    set({ isLoading: true });
     void (async () => {
       const employees = await readEmployeesShared();
       const jobPositionTranslations = readJobPositionTranslations();
-      set((state) => ({
-        employees,
-        jobPositionTranslations,
-        selectedEmployeeId: employees.some((employee) => employee.empleado === state.selectedEmployeeId)
-          ? state.selectedEmployeeId
-          : firstVisibleEmployeeId(employees),
-        isLoading: false,
-      }));
+      set((state) => {
+        const hasEmployeesChanged = !areEmployeesEquivalent(state.employees, employees);
+        const hasTranslationsChanged = !areJobPositionTranslationsEquivalent(
+          state.jobPositionTranslations,
+          jobPositionTranslations,
+        );
+
+        if (!hasEmployeesChanged && !hasTranslationsChanged && !state.isLoading) {
+          return state;
+        }
+
+        return {
+          employees,
+          jobPositionTranslations,
+          selectedEmployeeId: employees.some((employee) => employee.empleado === state.selectedEmployeeId)
+            ? state.selectedEmployeeId
+            : firstVisibleEmployeeId(employees),
+          isLoading: false,
+        };
+      });
     })().catch(() => set({ isLoading: false }));
   },
   save: () => {
