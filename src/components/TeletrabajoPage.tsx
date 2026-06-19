@@ -150,6 +150,16 @@ function uniqueSorted(values: string[]): string[] {
   );
 }
 
+function suggestNextPeriodo(periodos: readonly string[]): string {
+  const current = periodos[0]?.trim() ?? '';
+  const match = /^(\d{4})\D+(\d{4})$/.exec(current);
+  if (!match) {
+    return '';
+  }
+
+  return `${Number(match[1]) + 1}-${Number(match[2]) + 1}`;
+}
+
 type TeletrabajoSemaforoStatus = 'ok' | 'review' | 'blocked';
 
 interface TeletrabajoSemaforo {
@@ -285,6 +295,7 @@ export function TeletrabajoPage({
   navigationNonce?: number;
 } = {}) {
   const {
+    createPeriodo,
     filters,
     importEncuesta,
     load,
@@ -298,6 +309,11 @@ export function TeletrabajoPage({
   const loadEmployees = useEmployeeStore((state) => state.load);
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
+  const [isPeriodoModalOpen, setIsPeriodoModalOpen] = useState(false);
+  const [newPeriodoName, setNewPeriodoName] = useState('');
+  const [sourcePeriodo, setSourcePeriodo] = useState('');
+  const [copyFromPreviousPeriodo, setCopyFromPreviousPeriodo] = useState(true);
+  const [periodoStatus, setPeriodoStatus] = useState('');
   const [editingSolicitudId, setEditingSolicitudId] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string>('');
   const [pendingEncuestaImport, setPendingEncuestaImport] = useState<PendingEncuestaImport | null>(
@@ -671,6 +687,28 @@ export function TeletrabajoPage({
     setFilter('periodo', '');
   };
 
+  const openPeriodoModal = () => {
+    const defaultSourcePeriodo = filters.periodo || periodos[0] || '';
+    setNewPeriodoName(suggestNextPeriodo(periodos));
+    setSourcePeriodo(defaultSourcePeriodo);
+    setCopyFromPreviousPeriodo(Boolean(defaultSourcePeriodo));
+    setPeriodoStatus('');
+    setIsPeriodoModalOpen(true);
+  };
+
+  const handleCreatePeriodo = async () => {
+    const result = await createPeriodo({
+      periodo: newPeriodoName,
+      sourcePeriodo,
+      copyFromPrevious: copyFromPreviousPeriodo,
+    });
+    setPeriodoStatus(result.message);
+    if (result.ok) {
+      setIsPeriodoModalOpen(false);
+      setImportSummary(result.message);
+    }
+  };
+
 
   const handleExportDireccion = useCallback(async () => {
     try {
@@ -887,6 +925,13 @@ export function TeletrabajoPage({
             <BriefcaseBusiness size={16} /> Puestos Teletrabajo
           </button>
           <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={openPeriodoModal}
+            type="button"
+          >
+            <Plus size={16} /> Nuevo periodo
+          </button>
+          <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}
             type="button"
@@ -998,6 +1043,99 @@ export function TeletrabajoPage({
           sort={preferences.sort}
         />
       </div>
+
+
+      {isPeriodoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <section className="w-full max-w-xl rounded-2xl border border-metro-border bg-metro-surface shadow-card">
+            <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+                  Teletrabajo
+                </p>
+                <h3 className="text-xl font-bold text-metro-text">Nuevo periodo</h3>
+                <p className="mt-1 text-sm text-metro-muted">
+                  Crea una nueva campaña sin modificar las solicitudes del periodo anterior.
+                </p>
+              </div>
+              <button
+                aria-label="Cerrar creación de periodo"
+                className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setIsPeriodoModalOpen(false)}
+                type="button"
+              >
+                <XCircle size={18} />
+              </button>
+            </header>
+            <div className="space-y-4 p-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                Nombre del nuevo periodo
+                <input
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => setNewPeriodoName(event.target.value)}
+                  placeholder="2027-2028"
+                  type="text"
+                  value={newPeriodoName}
+                />
+              </label>
+              <label className="flex items-start gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 text-sm font-semibold text-metro-text">
+                <input
+                  checked={copyFromPreviousPeriodo}
+                  className="mt-1"
+                  disabled={periodos.length === 0}
+                  onChange={(event) => setCopyFromPreviousPeriodo(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  Generar renovaciones desde un periodo anterior
+                  <span className="mt-1 block text-xs font-normal text-metro-muted">
+                    Copia solicitudes aprobadas o analizadas, las marca como renovación, las deja pendientes y limpia revisión y validaciones.
+                  </span>
+                </span>
+              </label>
+              {copyFromPreviousPeriodo && (
+                <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                  Periodo origen
+                  <select
+                    className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => setSourcePeriodo(event.target.value)}
+                    value={sourcePeriodo}
+                  >
+                    <option value="">Selecciona periodo...</option>
+                    {periodos.map((periodo) => (
+                      <option key={periodo} value={periodo}>
+                        {periodo}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {periodoStatus && (
+                <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
+                  {periodoStatus}
+                </div>
+              )}
+            </div>
+            <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
+              <button
+                className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                onClick={() => setIsPeriodoModalOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!newPeriodoName.trim() || (copyFromPreviousPeriodo && !sourcePeriodo.trim())}
+                onClick={() => void handleCreatePeriodo()}
+                type="button"
+              >
+                Crear periodo
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {pendingEncuestaImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">

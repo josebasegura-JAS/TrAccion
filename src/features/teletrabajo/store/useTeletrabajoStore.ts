@@ -129,6 +129,17 @@ interface TeletrabajoUpdateResult {
   recordId?: string;
 }
 
+interface TeletrabajoPeriodoCreationResult extends TeletrabajoUpdateResult {
+  created: number;
+  ignored: number;
+}
+
+interface CreateTeletrabajoPeriodoOptions {
+  periodo: string;
+  sourcePeriodo: string;
+  copyFromPrevious: boolean;
+}
+
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
   puestosTeletrabajo: TeletrabajoPuesto[];
@@ -149,6 +160,7 @@ interface TeletrabajoStateStore {
     employees: readonly Employee[],
     options?: EncuestaParseOptions,
   ) => Promise<ImportEncuestaResult>;
+  createPeriodo: (options: CreateTeletrabajoPeriodoOptions) => Promise<TeletrabajoPeriodoCreationResult>;
   createPuestoTeletrabajo: (draft: TeletrabajoPuestoDraft) => void;
   updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
   removePuestoTeletrabajo: (id: string) => void;
@@ -325,6 +337,65 @@ function firstVisibleSolicitudId(solicitudes: TeletrabajoSolicitud[]): string {
 
 function createSolicitudId(): string {
   return `teletrabajo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getSolicitudPeriodoKey(solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'periodo'>): string {
+  return `${solicitud.empleado.trim()}::${solicitud.periodo.trim()}`;
+}
+
+function buildSolicitudesForNewPeriodo(
+  solicitudes: readonly TeletrabajoSolicitud[],
+  options: CreateTeletrabajoPeriodoOptions,
+): { created: TeletrabajoSolicitud[]; ignored: number } {
+  const periodo = options.periodo.trim();
+  const sourcePeriodo = options.sourcePeriodo.trim();
+  const existingKeys = new Set(
+    solicitudes
+      .filter((solicitud) => !solicitud.deletedAt)
+      .map((solicitud) => getSolicitudPeriodoKey(solicitud)),
+  );
+
+  if (!options.copyFromPrevious || !sourcePeriodo) {
+    return { created: [], ignored: 0 };
+  }
+
+  const now = new Date().toISOString();
+  const sourceSolicitudes = solicitudes.filter(
+    (solicitud) =>
+      !solicitud.deletedAt &&
+      solicitud.periodo.trim() === sourcePeriodo &&
+      (solicitud.estado === 'aprobada' || solicitud.estado === 'analizada'),
+  );
+
+  const created: TeletrabajoSolicitud[] = [];
+  let ignored = 0;
+
+  sourceSolicitudes.forEach((solicitud) => {
+    const candidate: TeletrabajoSolicitud = {
+      ...solicitud,
+      id: createSolicitudId(),
+      periodo,
+      estado: 'pendiente',
+      tipoSolicitud: 'renovacion',
+      fechaSolicitud: '',
+      revisado: false,
+      validacionSeguridadInformatica: false,
+      validacionPrevencion: false,
+      validacionJefatura: false,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    const key = getSolicitudPeriodoKey(candidate);
+    if (existingKeys.has(key)) {
+      ignored += 1;
+      return;
+    }
+    existingKeys.add(key);
+    created.push(candidate);
+  });
+
+  return { created, ignored };
 }
 
 function normalizeDraft(draft: TeletrabajoDraft): TeletrabajoDraft {
@@ -640,6 +711,98 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       };
     });
     return result;
+  },
+  createPeriodo: async (options) => {
+    const periodo = options.periodo.trim();
+    const sourcePeriodo = options.sourcePeriodo.trim();
+
+    if (!periodo) {
+      return { ok: false, message: 'Indica el nombre del nuevo periodo.', created: 0, ignored: 0 };
+    }
+
+    if (options.copyFromPrevious && !sourcePeriodo) {
+      return { ok: false, message: 'Selecciona el periodo origen.', created: 0, ignored: 0 };
+    }
+
+    try {
+      return await withTeletrabajoBusy('Creando nuevo periodo de Teletrabajo...', async () => {
+        const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
+        const { created, ignored } = buildSolicitudesForNewPeriodo(baseSolicitudes, {
+          periodo,
+          sourcePeriodo,
+          copyFromPrevious: options.copyFromPrevious,
+        });
+
+        if (options.copyFromPrevious && created.length === 0) {
+          const message = ignored > 0
+            ? `No se han creado solicitudes nuevas: ya existían ${ignored} empleado${ignored === 1 ? '' : 's'} en el periodo ${periodo}.`
+            : `No hay solicitudes aprobadas o analizadas en el periodo ${sourcePeriodo}.`;
+          return { ok: false, message, created: 0, ignored };
+        }
+
+        if (hasTeletrabajoSqliteRepository()) {
+          const records = await loadTeletrabajoRecordsFromSqlite();
+          if (records !== null) {
+            for (const solicitud of created) {
+              const saveResult = await saveTeletrabajoSolicitudToSqlite(solicitud, null);
+              if (!saveResult?.ok) {
+                throw new Error(saveResult?.message ?? 'No se ha podido crear el periodo en SQLite.');
+              }
+              enqueueAuditEvent({
+                module: 'teletrabajo',
+                entityId: solicitud.id,
+                action: 'created',
+                summary: `Registro creado para el periodo ${periodo}`,
+                changes: [],
+              });
+            }
+
+            const solicitudes = [...baseSolicitudes, ...created];
+            set((state) => ({
+              solicitudes,
+              selectedSolicitudId: created[0]?.id ?? state.selectedSolicitudId,
+              filters: { ...state.filters, periodo },
+            }));
+            return {
+              ok: true,
+              message: created.length > 0
+                ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
+                : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
+              created: created.length,
+              ignored,
+            };
+          }
+        }
+
+        const solicitudes = [...baseSolicitudes, ...created];
+        persistSolicitudes(solicitudes);
+        created.forEach((solicitud) => {
+          enqueueAuditEvent({
+            module: 'teletrabajo',
+            entityId: solicitud.id,
+            action: 'created',
+            summary: `Registro creado para el periodo ${periodo}`,
+            changes: [],
+          });
+        });
+        set((state) => ({
+          solicitudes,
+          selectedSolicitudId: created[0]?.id ?? state.selectedSolicitudId,
+          filters: { ...state.filters, periodo },
+        }));
+        return {
+          ok: true,
+          message: created.length > 0
+            ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
+            : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
+          created: created.length,
+          ignored,
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se ha podido crear el periodo.';
+      return { ok: false, message, created: 0, ignored: 0 };
+    }
   },
   createPuestoTeletrabajo: (draft) => {
     set((state) => {
