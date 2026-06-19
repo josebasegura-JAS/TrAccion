@@ -151,6 +151,47 @@ describe('plantilla import', () => {
     ]);
   });
 
+  it('reconoce antigüedad a secas y convierte fechas numéricas de Excel', () => {
+    expect(
+      rowsToEmployeeDrafts([
+        ['empleado', 'antigüedad'],
+        ['100', '45180'],
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        empleado: '100',
+        antiguedadPuesto: '2023-09-11',
+      }),
+    ]);
+  });
+
+  it('actualiza solo antigüedad cuando el fichero trae empleado y antigüedad sin vaciar el resto de datos', async () => {
+    const file: File = new NodeFile(
+      ['empleado;antigüedad\n100;2023-09-11\n999;2023-10-01'],
+      'antiguedad.csv',
+      { type: 'text/csv' },
+    );
+
+    const result = await useEmployeeStore.getState().importExcel(file);
+
+    expect(result).toEqual({
+      totalRows: 2,
+      updated: 1,
+      created: 0,
+      ignored: 1,
+      mode: 'antiguedadPuesto',
+    });
+    expect(useEmployeeStore.getState().employees).toEqual([
+      expect.objectContaining({
+        empleado: '100',
+        nombreApellidos: 'Ane Bilbao',
+        puestoNomina: 'Técnica RRLL',
+        residencia: 'Oficinas Centrales',
+        antiguedadPuesto: '2023-09-11',
+      }),
+    ]);
+  });
+
   it('actualiza por empleado al importar sin duplicar registros y recalcula derivados', async () => {
     const file: File = new NodeFile(
       ['empleado;nombreApellidos;residencia;nif\n100;Ane Bilbao Actualizada;Sopela Taller;72451233H'],

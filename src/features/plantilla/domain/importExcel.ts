@@ -54,6 +54,8 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EmployeeField, readonly string[]]>
     'antiguedadPuesto',
     [
       'antiguedadPuesto',
+      'antiguedad',
+      'antigüedad',
       'antiguedad puesto',
       'antigüedad puesto',
       'antiguedad en el puesto',
@@ -109,7 +111,7 @@ export function rowsToEmployeeDrafts(rows: TabularRow[]): EmployeeDraft[] {
 
     fieldByColumn.forEach((field, index) => {
       if (field) {
-        draft[field] = row[index]?.trim() ?? '';
+        draft[field] = normalizeEmployeeCellValue(field, row[index]?.trim() ?? '');
       }
     });
 
@@ -120,6 +122,41 @@ export function rowsToEmployeeDrafts(rows: TabularRow[]): EmployeeDraft[] {
   });
 
   return Array.from(draftsByEmpleado.values());
+}
+
+function normalizeEmployeeCellValue(field: EmployeeField, value: string): string {
+  if (field !== 'antiguedadPuesto') {
+    return value;
+  }
+
+  return normalizeExcelDateValue(value);
+}
+
+function normalizeExcelDateValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const dateMatch = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (dateMatch) {
+    const [, day, month, year] = dateMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const serial = Number(trimmed);
+    if (Number.isFinite(serial) && serial >= 20000 && serial <= 80000) {
+      const date = new Date(Date.UTC(1899, 11, 30 + Math.floor(serial)));
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
+  return trimmed;
 }
 
 function normalizeHeader(header: string): string {

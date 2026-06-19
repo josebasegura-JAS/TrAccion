@@ -20,6 +20,14 @@ export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
 const STORAGE_KEY = EMPLOYEES_STORAGE_KEY;
 const JOB_POSITION_TRANSLATIONS_STORAGE_KEY = 'traccion.v1.plantilla.jobPositionTranslations';
 
+interface EmployeeImportResult {
+  totalRows: number;
+  updated: number;
+  created: number;
+  ignored: number;
+  mode: 'full' | 'antiguedadPuesto';
+}
+
 interface EmployeeState {
   employees: Employee[];
   selectedEmployeeId: string;
@@ -34,7 +42,7 @@ interface EmployeeState {
   updateWithConcurrencyCheck: (empleado: string, draft: EmployeeDraft, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   remove: (empleado: string) => void;
   removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
-  importExcel: (file: File) => Promise<void>;
+  importExcel: (file: File) => Promise<EmployeeImportResult>;
   importJobPositionTranslations: (file: File) => Promise<number>;
   updateEmptyEmployeeJobPositionTranslations: () => Promise<{ updated: number; missing: number }>;
   selectEmployee: (employeeId: string) => void;
@@ -214,19 +222,63 @@ function resolveEmployeeJobPositionTranslation(
   return '';
 }
 
-function upsertEmployees(current: Employee[], drafts: EmployeeDraft[]): Employee[] {
+function isAntiguedadPuestoOnlyDraft(draft: EmployeeDraft): boolean {
+  return Object.entries(draft).every(([field, value]) =>
+    field === 'empleado' || field === 'antiguedadPuesto' ? true : value.trim() === '',
+  );
+}
+
+function buildEmployeeImport(current: Employee[], drafts: EmployeeDraft[]): { employees: Employee[]; result: EmployeeImportResult } {
   const employeesById = new Map(current.map((employee) => [employee.empleado, employee]));
+  const isAntiguedadOnlyImport = drafts.length > 0 && drafts.every(isAntiguedadPuestoOnlyDraft);
+  let updated = 0;
+  let created = 0;
+  let ignored = 0;
 
   drafts.forEach((draft) => {
     const previous = employeesById.get(draft.empleado);
+
+    if (isAntiguedadOnlyImport) {
+      if (!previous || !draft.antiguedadPuesto.trim()) {
+        ignored += 1;
+        return;
+      }
+
+      employeesById.set(draft.empleado, {
+        ...previous,
+        antiguedadPuesto: draft.antiguedadPuesto,
+      });
+      updated += 1;
+      return;
+    }
+
     const nextDraft = {
       ...draft,
       puestoEus: draft.puestoEus.trim() || previous?.puestoEus || '',
     };
     employeesById.set(draft.empleado, hydrateEmployee(nextDraft, previous?.deletedAt ?? null));
+
+    if (previous) {
+      updated += 1;
+    } else {
+      created += 1;
+    }
   });
 
-  return Array.from(employeesById.values());
+  return {
+    employees: Array.from(employeesById.values()),
+    result: {
+      totalRows: drafts.length,
+      updated,
+      created,
+      ignored,
+      mode: isAntiguedadOnlyImport ? 'antiguedadPuesto' : 'full',
+    },
+  };
+}
+
+function upsertEmployees(current: Employee[], drafts: EmployeeDraft[]): Employee[] {
+  return buildEmployeeImport(current, drafts).employees;
 }
 
 function firstVisibleEmployeeId(employees: Employee[]): string {
@@ -396,7 +448,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   importExcel: async (file) => {
     const drafts = await importEmployeesFromFile(file);
     const currentEmployees = get().employees;
-    const employees = upsertEmployees(currentEmployees, drafts);
+    const { employees, result: importResult } = buildEmployeeImport(currentEmployees, drafts);
     if (hasEmployeeSqliteBatchRepository()) {
       const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
       const result = await saveEmployeesToSqlite(
@@ -410,7 +462,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       }
       const reloadedEmployees = await readEmployeesShared();
       set({ employees: reloadedEmployees, selectedEmployeeId: firstVisibleEmployeeId(reloadedEmployees) });
-      return;
+      return importResult;
     }
 
     if (hasEmployeeSqliteRepository()) {
@@ -424,11 +476,12 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       }
       const reloadedEmployees = await readEmployeesShared();
       set({ employees: reloadedEmployees, selectedEmployeeId: firstVisibleEmployeeId(reloadedEmployees) });
-      return;
+      return importResult;
     }
 
     await persistEmployeesConfirmed(employees);
     set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+    return importResult;
   },
   importJobPositionTranslations: async (file) => {
     const importedTranslations = await importJobPositionTranslationsFromFile(file);

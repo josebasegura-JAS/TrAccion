@@ -349,8 +349,12 @@ export function PlantillaPage() {
               }
 
               try {
-                await importExcel(file);
-                setImportMessage(`Importación completada: ${file.name}`);
+                const result = await importExcel(file);
+                setImportMessage(
+                  result.mode === 'antiguedadPuesto'
+                    ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
+                    : `Importación completada: ${file.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
+                );
               } catch (error) {
                 setImportMessage(error instanceof Error ? error.message : 'No se ha podido importar la plantilla.');
               } finally {
