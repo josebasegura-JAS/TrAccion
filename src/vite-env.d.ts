@@ -265,6 +265,25 @@ interface TraccionConditionalTaskSaveResult {
   message: string;
 }
 
+interface TraccionComiteSessionRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+interface TraccionComiteSessionRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionComiteSessionRecord[];
+}
+
+interface TraccionConditionalComiteSessionRecord {
+  id: string;
+  value: string;
+  expectedUpdatedAt: string | null;
+}
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -307,6 +326,10 @@ interface TraccionApi {
   loadTaskRecords?: (filter?: TraccionTaskRecordsFilter) => Promise<TraccionTaskRecordsSnapshot>;
   saveTaskRecordIfUnchanged?: (
     record: TraccionConditionalTaskRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadComiteSessionRecords?: () => Promise<TraccionComiteSessionRecordsSnapshot>;
+  saveComiteSessionRecordIfUnchanged?: (
+    record: TraccionConditionalComiteSessionRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;

@@ -23,6 +23,7 @@ import {
   loadPersistedRecordsSnapshot,
   loadSorteosRecordsSnapshot,
   loadTaskRecordsSnapshot,
+  loadComiteSessionRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -36,6 +37,7 @@ import {
   saveEmployeeRecordsIfUnchanged,
   saveSorteosSnapshotIfUnchanged,
   saveTaskRecordIfUnchanged,
+  saveComiteSessionRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1385,6 +1387,46 @@ function registerIpcHandlers(): void {
   ipcMain.handle('tasks:open-document', (_event, filePath: unknown) =>
     openTaskDocumentPath(filePath),
   );
+
+  ipcMain.handle('comite:load-records', () =>
+    enqueueSqliteIpc('comite:load-records', () => loadComiteSessionRecordsSnapshot()),
+  );
+
+  ipcMain.handle('comite:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de sesión inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de sesión inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = candidate.expectedUpdatedAt;
+    return enqueueSqliteIpc('comite:save-record-if-unchanged', () =>
+      saveComiteSessionRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
 
   ipcMain.handle('teletrabajo:select-template', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);

@@ -16,7 +16,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 7;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -67,6 +67,25 @@ export interface ConditionalSqliteTaskSaveResult {
   status: DatabaseStatus;
   currentUpdatedAt: string | null;
   message: string;
+}
+
+export interface SqliteComiteSessionRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface SqliteComiteSessionRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteComiteSessionRecord[];
+}
+
+export interface ConditionalSqliteComiteSessionRecord {
+  id: string;
+  value: string;
+  expectedUpdatedAt: string | null;
 }
 
 export interface SqliteEmployeeRecord {
@@ -276,6 +295,7 @@ let heartbeatConsecutiveFailureCount = 0;
 let notifyDatabaseConnectivityIssue: ((payload: DatabaseConnectivityIssuePayload) => void) | null = null;
 // Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
 let tasksMigrationDone = false;
+let comiteSessionsMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
 
@@ -1050,6 +1070,29 @@ function migrateToVersion6(db: Database): void {
   }
 }
 
+function migrateToVersion7(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS comite_session_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_comite_session_records_updated_at
+      ON comite_session_records(updated_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 7) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      7,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1057,6 +1100,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion4(db);
   migrateToVersion5(db);
   migrateToVersion6(db);
+  migrateToVersion7(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1333,6 +1377,14 @@ interface SorteosRecordRow {
   deleted_at: string | null;
 }
 
+interface ComiteSessionRecordRow {
+  id: string;
+  value_json: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 interface EmployeeRecordRow {
   id: string;
   value_json: string;
@@ -1379,6 +1431,21 @@ function isSorteosRecordRow(value: unknown): value is SorteosRecordRow {
   }
 
   const candidate = value as Partial<SorteosRecordRow>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.value_json === 'string' &&
+    typeof candidate.created_at === 'string' &&
+    typeof candidate.updated_at === 'string' &&
+    (candidate.deleted_at === null || typeof candidate.deleted_at === 'string')
+  );
+}
+
+function isComiteSessionRecordRow(value: unknown): value is ComiteSessionRecordRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<ComiteSessionRecordRow>;
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.value_json === 'string' &&
@@ -1902,6 +1969,208 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
   }
 
   tasksMigrationDone = true;
+}
+
+
+function mapComiteSessionRecordRow(row: ComiteSessionRecordRow): SqliteComiteSessionRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readComiteSessionRecords(db: Database): SqliteComiteSessionRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM comite_session_records WHERE deleted_at IS NULL ORDER BY created_at, id')
+    .all()
+    .filter(isComiteSessionRecordRow)
+    .map(mapComiteSessionRecordRow);
+}
+
+function maybeMigrateComiteSessionsFromPersistedRecord(db: Database): void {
+  if (comiteSessionsMigrationDone) {
+    return;
+  }
+
+  const countRow = db.prepare('SELECT COUNT(*) AS count FROM comite_session_records').get();
+  const count = isCountRow(countRow) ? countRow.count : 0;
+  if (count > 0) {
+    comiteSessionsMigrationDone = true;
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.comite.sessions');
+  if (!legacyRecord) {
+    comiteSessionsMigrationDone = true;
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    comiteSessionsMigrationDone = true;
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    comiteSessionsMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO comite_session_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithStringId(item)) {
+      continue;
+    }
+
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
+  }
+
+  comiteSessionsMigrationDone = true;
+}
+
+export async function loadComiteSessionRecordsSnapshot(): Promise<SqliteComiteSessionRecordsSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, records: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateComiteSessionsFromPersistedRecord(db))();
+      return { status: currentStatus, records: readComiteSessionRecords(db) };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [] }),
+  );
+}
+
+export async function saveComiteSessionRecordIfUnchanged(
+  record: ConditionalSqliteComiteSessionRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateComiteSessionsFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message:
+              'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+        const createdAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+            ? (parsed as { createdAt: string }).createdAt
+            : now;
+        const updatedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+            ? (parsed as { updatedAt: string }).updatedAt
+            : now;
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO comite_session_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'La sesión ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE comite_session_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message:
+                'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, updatedAt);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Sesión de comité guardada en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:comite_session_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
 }
 
 

@@ -74,6 +74,12 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('tasks:save-record-if-unchanged', record),
+  loadComiteSessionRecords: () => ipcRenderer.invoke('comite:load-records'),
+  saveComiteSessionRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('comite:save-record-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
