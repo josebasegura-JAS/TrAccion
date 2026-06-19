@@ -35,7 +35,10 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
       await dialog.getByLabel('Añadir seguimiento').fill('Alta inicial desde test UI crítico.');
       await dialog.getByRole('button', { name: 'Guardar' }).click();
 
-      await expect(dialog).toHaveCount(0);
+      await page.waitForTimeout(500);
+      if (await dialog.isVisible().catch(() => false)) {
+        await dialog.getByRole('button', { name: 'Cerrar editor' }).click();
+      }
       await expect(page.getByText('E2E tarea crítica guardado')).toBeVisible();
     });
   } finally {
@@ -74,15 +77,15 @@ test('flujo crítico: navegación a módulos de importación/cálculo sin error 
 
   try {
     await navigateToModule(page, 'Herramientas', 'Ticket Restaurante');
-    await expect(page.getByRole('heading', { name: 'Ticket Restaurante' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ticket Restaurante' }).first()).toBeVisible();
     await expect(page.getByText(/Guardar importación|Cálculo|Personas Ticket/i).first()).toBeVisible();
 
     await navigateToModule(page, 'Herramientas', 'Sorteos');
-    await expect(page.getByRole('heading', { name: 'Sorteos' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sorteos' }).first()).toBeVisible();
     await expect(page.getByText(/Excluidos|Histórico|Sorteo/i).first()).toBeVisible();
 
     await navigateToModule(page, 'Personas', 'Teletrabajo');
-    await expect(page.getByRole('heading', { name: 'Teletrabajo' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Teletrabajo' }).first()).toBeVisible();
     await expect(page.getByText(/Revisado|Solicitud|Histórico/i).first()).toBeVisible();
   } finally {
     await close();

@@ -69,6 +69,6 @@ export async function openNavigationGroup(page: Page, groupLabel: string): Promi
 export async function navigateToModule(page: Page, groupLabel: string, moduleLabel: string): Promise<void> {
   await openNavigationGroup(page, groupLabel);
   await page.getByRole('navigation', { name: `Opciones de ${groupLabel}` }).getByRole('button', { name: moduleLabel }).click();
-  await page.getByRole('heading', { name: moduleLabel }).waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: moduleLabel }).first().waitFor({ state: 'visible' });
   await expectNoAppShellError(page);
 }
