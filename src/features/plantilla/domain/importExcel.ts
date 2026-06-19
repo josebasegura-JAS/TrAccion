@@ -142,7 +142,7 @@ function normalizeExcelDateValue(value: string): string {
     return trimmed;
   }
 
-  const dateMatch = trimmed.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  const dateMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (dateMatch) {
     const [, day, month, year] = dateMatch;
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
