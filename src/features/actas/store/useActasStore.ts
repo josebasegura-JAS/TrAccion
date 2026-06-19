@@ -8,6 +8,13 @@ import {
 } from '../../../services/sharedRecordPersistence';
 import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
 import {
+  deleteActaInSqlite,
+  hasActaSqliteRepository,
+  loadActaRecordsFromSqlite,
+  loadActasFromSqlite,
+  saveActaToSqlite,
+} from './actaSqliteRepository';
+import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
   buildActaObservacionesFromSession,
@@ -228,6 +235,14 @@ function parseActasSnapshot(storageValue: string | null): Acta[] {
   return Array.isArray(parsed) ? parsed.filter(isActa).map(normalizeActa) : [];
 }
 
+function parseSingleActa(storageValue: string): Acta | null {
+  try {
+    return parseActasSnapshot(`[${storageValue}]`)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function buildUpdatedActaFromDraft(acta: Acta, draft: ActaDraft, now: string): Acta {
   return {
     ...acta,
@@ -316,10 +331,10 @@ function selectVisibleActasForState(
   return visibleActas;
 }
 
-function loadActasState(
+function buildActasState(
+  allActas: Acta[],
   includeHistorical: boolean,
 ): Pick<ActasStateStore, 'actas' | 'actaTypes' | 'hasLoadedHistoricalActas'> {
-  const allActas = readActas();
   const actas = includeHistorical ? allActas : allActas.filter(isOpenActa);
   return {
     actas: sortActasForState(actas),
@@ -328,13 +343,52 @@ function loadActasState(
   };
 }
 
+function loadActasState(
+  includeHistorical: boolean,
+): Pick<ActasStateStore, 'actas' | 'actaTypes' | 'hasLoadedHistoricalActas'> {
+  return buildActasState(readActas(), includeHistorical);
+}
+
+async function loadActasStateFromSqliteOrStorage(
+  includeHistorical: boolean,
+): Promise<Pick<ActasStateStore, 'actas' | 'actaTypes' | 'hasLoadedHistoricalActas'>> {
+  if (hasActaSqliteRepository()) {
+    const sqliteActas = await loadActasFromSqlite(parseActasSnapshot);
+    if (sqliteActas !== null) {
+      return buildActasState(sqliteActas, includeHistorical);
+    }
+  }
+
+  return loadActasState(includeHistorical);
+}
+
+function logActaPersistenceError(action: string, error: unknown): void {
+  console.error(`[${action}] No se ha podido guardar el acta compartida.`, error);
+}
+
 export const useActasStore = create<ActasStateStore>((set, get) => ({
   actas: [],
   actaTypes: [],
   hasLoadedHistoricalActas: false,
-  load: () => set(loadActasState(false)),
-  loadHistoricalActas: () => set(loadActasState(true)),
-  reloadFromStorage: () => set(loadActasState(get().hasLoadedHistoricalActas)),
+  load: () => {
+    set(loadActasState(false));
+    void loadActasStateFromSqliteOrStorage(false)
+      .then((nextState) => set(nextState))
+      .catch((error) => logActaPersistenceError('loadActas', error));
+  },
+  loadHistoricalActas: () => {
+    set(loadActasState(true));
+    void loadActasStateFromSqliteOrStorage(true)
+      .then((nextState) => set(nextState))
+      .catch((error) => logActaPersistenceError('loadHistoricalActas', error));
+  },
+  reloadFromStorage: () => {
+    const includeHistorical = get().hasLoadedHistoricalActas;
+    set(loadActasState(includeHistorical));
+    void loadActasStateFromSqliteOrStorage(includeHistorical)
+      .then((nextState) => set(nextState))
+      .catch((error) => logActaPersistenceError('reloadActasFromStorage', error));
+  },
   create: (draft) => {
     const acta = buildActaFromDraft(draft, null);
     set((state) => {
@@ -351,6 +405,30 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
   createWithConcurrencyCheck: async (draft) => {
     try {
       const acta = buildActaFromDraft(draft, null);
+
+      if (hasActaSqliteRepository()) {
+        const records = await loadActaRecordsFromSqlite();
+        if (records !== null) {
+          if (records.some((record) => record.id === acta.id)) {
+            throw new Error('El acta ya existe en la base compartida. Recarga antes de continuar.');
+          }
+
+          const saveResult = await saveActaToSqlite(acta, null);
+          if (!saveResult?.ok) {
+            throw new Error(saveResult?.message ?? 'No se ha podido crear el acta.');
+          }
+
+          const allActas = [acta, ...records.flatMap((record) => parseActasSnapshot(`[${record.value}]`))];
+          set((state) => ({
+            actas: sortActasForState(
+              selectVisibleActasForState(allActas, state.hasLoadedHistoricalActas, acta.id),
+            ),
+            actaTypes: readActaTypes(allActas),
+          }));
+          return { ok: true, message: 'Acta creada.', recordId: acta.id };
+        }
+      }
+
       const result = await saveNewSharedArrayRecord<Acta>({
         storageKey: STORAGE_KEY,
         newRecord: acta,
@@ -390,6 +468,53 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
   },
   updateWithConcurrencyCheck: async (actaId, draft, expectedUpdatedAt) => {
     try {
+      if (hasActaSqliteRepository()) {
+        const records = await loadActaRecordsFromSqlite();
+        if (records !== null) {
+          const currentRecord = records.find((record) => record.id === actaId);
+          const latestActa = currentRecord ? parseSingleActa(currentRecord.value) : null;
+          if (!currentRecord || !latestActa) {
+            throw new Error('El acta ya no existe en la base compartida. Recarga antes de continuar.');
+          }
+
+          if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
+            throw new Error('Esta acta ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.');
+          }
+
+          const updatedActa = buildUpdatedActaFromDraft(latestActa, draft, new Date().toISOString());
+          const saveResult = await saveActaToSqlite(updatedActa, currentRecord.updatedAt);
+          if (!saveResult?.ok) {
+            throw new Error(saveResult?.message ?? 'No se ha podido guardar el acta.');
+          }
+
+          const allActas = records.flatMap((record) =>
+            record.id === actaId ? [updatedActa] : parseActasSnapshot(`[${record.value}]`),
+          );
+          const changes = buildAuditChanges(
+            latestActa as unknown as Record<string, unknown>,
+            updatedActa as unknown as Record<string, unknown>,
+            { titulo: 'Título', tipo: 'Tipo', estado: 'Estado', fechaSesion: 'Fecha sesión', fechaLimite: 'Fecha límite' },
+            ['titulo', 'tipo', 'estado', 'fechaSesion', 'fechaLimite'],
+          );
+          if (changes.length > 0) {
+            enqueueAuditEvent({
+              module: 'actas',
+              entityId: actaId,
+              action: changes.some((c) => c.field === 'estado') ? 'status_changed' : 'updated',
+              summary: buildUpdateSummary(changes),
+              changes,
+            });
+          }
+          set((state) => ({
+            actas: sortActasForState(
+              selectVisibleActasForState(allActas, state.hasLoadedHistoricalActas, actaId),
+            ),
+            actaTypes: readActaTypes(allActas),
+          }));
+          return { ok: true, message: 'Acta guardada.' };
+        }
+      }
+
       const result = await saveSharedArrayRecord<Acta>({
         storageKey: STORAGE_KEY,
         recordId: actaId,
@@ -501,6 +626,37 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
   },
   removeWithConcurrencyCheck: async (actaId, expectedUpdatedAt) => {
     try {
+      if (hasActaSqliteRepository()) {
+        const records = await loadActaRecordsFromSqlite();
+        if (records !== null) {
+          const currentRecord = records.find((record) => record.id === actaId);
+          const latestActa = currentRecord ? parseSingleActa(currentRecord.value) : null;
+          if (!currentRecord || !latestActa) {
+            throw new Error('El acta ya no existe en la base compartida. Recarga antes de continuar.');
+          }
+
+          if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
+            throw new Error('Esta acta ha sido modificada por otro usuario. Recarga antes de eliminarla.');
+          }
+
+          const saveResult = await deleteActaInSqlite(latestActa, currentRecord.updatedAt);
+          if (!saveResult?.ok) {
+            throw new Error(saveResult?.message ?? 'No se ha podido eliminar el acta.');
+          }
+
+          const allActas = records
+            .filter((record) => record.id !== actaId)
+            .flatMap((record) => parseActasSnapshot(`[${record.value}]`));
+          set((state) => ({
+            actas: sortActasForState(
+              selectVisibleActasForState(allActas, state.hasLoadedHistoricalActas),
+            ),
+            actaTypes: readActaTypes(allActas),
+          }));
+          return { ok: true, message: 'Acta eliminada.' };
+        }
+      }
+
       const result = await deleteSharedArrayRecord<Acta>({
         storageKey: STORAGE_KEY,
         recordId: actaId,
@@ -550,6 +706,48 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
   createFromSessionWithConcurrencyCheck: async (input) => {
     try {
       let recordId = '';
+
+      if (hasActaSqliteRepository()) {
+        const records = await loadActaRecordsFromSqlite();
+        if (records !== null) {
+          const latestActas = records.flatMap((record) => parseActasSnapshot(`[${record.value}]`));
+          const existing = latestActas.find((acta) => acta.sourceSessionId === input.session.id);
+          if (existing) {
+            recordId = existing.id;
+            set((state) => ({
+              actas: sortActasForState(
+                selectVisibleActasForState(latestActas, state.hasLoadedHistoricalActas, recordId),
+              ),
+              actaTypes: readActaTypes(latestActas),
+            }));
+            return { ok: true, message: 'Acta creada desde la sesión.', recordId };
+          }
+
+          const draft: ActaDraft = {
+            ...EMPTY_ACTA_DRAFT,
+            titulo: input.session.title,
+            tipo: input.tipo,
+            fechaSesion: input.session.date,
+            observaciones: buildActaObservacionesFromSession(input.session, input.treatedTasks),
+          };
+          const acta = buildActaFromDraft(draft, input.session.id);
+          recordId = acta.id;
+          const saveResult = await saveActaToSqlite(acta, null);
+          if (!saveResult?.ok) {
+            throw new Error(saveResult?.message ?? 'No se ha podido crear el acta desde la sesión.');
+          }
+
+          const allActas = [acta, ...latestActas];
+          set((state) => ({
+            actas: sortActasForState(
+              selectVisibleActasForState(allActas, state.hasLoadedHistoricalActas, recordId),
+            ),
+            actaTypes: readActaTypes(allActas),
+          }));
+          return { ok: true, message: 'Acta creada desde la sesión.', recordId };
+        }
+      }
+
       const result = await saveSharedArrayMutation<Acta>({
         storageKey: STORAGE_KEY,
         parseRecords: parseActasSnapshot,

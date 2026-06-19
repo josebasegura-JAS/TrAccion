@@ -25,6 +25,7 @@ import {
   loadTaskRecordsSnapshot,
   loadComiteSessionRecordsSnapshot,
   loadParitariaSessionRecordsSnapshot,
+  loadActaRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -40,6 +41,7 @@ import {
   saveTaskRecordIfUnchanged,
   saveComiteSessionRecordIfUnchanged,
   saveParitariaSessionRecordIfUnchanged,
+  saveActaRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1398,6 +1400,10 @@ function registerIpcHandlers(): void {
     enqueueSqliteIpc('paritaria:load-records', () => loadParitariaSessionRecordsSnapshot()),
   );
 
+  ipcMain.handle('actas:load-records', () =>
+    enqueueSqliteIpc('actas:load-records', () => loadActaRecordsSnapshot()),
+  );
+
   ipcMain.handle('comite:save-record-if-unchanged', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
       return {
@@ -1463,6 +1469,42 @@ function registerIpcHandlers(): void {
     const expectedUpdatedAt = candidate.expectedUpdatedAt;
     return enqueueSqliteIpc('paritaria:save-record-if-unchanged', () =>
       saveParitariaSessionRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
+
+  ipcMain.handle('actas:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de acta inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de acta inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = candidate.expectedUpdatedAt;
+    return enqueueSqliteIpc('actas:save-record-if-unchanged', () =>
+      saveActaRecordIfUnchanged({
         id,
         value,
         expectedUpdatedAt,
