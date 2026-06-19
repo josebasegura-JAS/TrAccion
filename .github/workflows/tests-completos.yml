@@ -73,10 +73,12 @@ jobs:
           npm exec -- vite --version
 
       - name: TypeScript renderer
-        run: npx tsc --noEmit
+        shell: pwsh
+        run: node node_modules/typescript/bin/tsc --noEmit
 
       - name: TypeScript Electron
-        run: npx tsc -p electron/tsconfig.json --noEmit
+        shell: pwsh
+        run: node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit
 
       - name: ESLint
         run: npm run lint
