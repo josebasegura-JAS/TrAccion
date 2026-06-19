@@ -23,9 +23,10 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
       await navigateToModule(page, 'Operativa diaria', 'Tareas');
       await page.getByRole('button', { name: /Nueva tarea/ }).click();
 
-      const dialog = page.getByRole('dialog');
-      await expect(dialog.getByRole('heading', { name: 'Nueva tarea' })).toBeVisible();
-      await expect(dialog.getByRole('button', { name: /Estado de base de datos:/ })).toBeVisible();
+      const dialog = page.getByRole('dialog', { name: 'Nueva tarea' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText('Nueva tarea');
+      await expect(dialog.getByLabel('Estado de base de datos del popup')).toBeVisible();
 
       await dialog.getByLabel('Título').fill('E2E tarea crítica guardado');
       await dialog.getByLabel('Responsable').fill('RRLL');
@@ -48,8 +49,9 @@ test('flujo crítico: abrir modales con semáforo BBDD en módulos sensibles', a
   try {
     await navigateToModule(page, 'Operativa diaria', 'Actas');
     await page.getByRole('button', { name: 'Nueva acta' }).click();
-    await expect(page.getByRole('dialog').getByRole('heading', { name: /Nueva acta|Editar acta/ })).toBeVisible();
-    await expect(page.getByRole('dialog').getByRole('button', { name: /Estado de base de datos:/ })).toBeVisible();
+    const actaDialog = page.getByRole('dialog', { name: /Nueva acta|Editar acta/ });
+    await expect(actaDialog).toBeVisible();
+    await expect(actaDialog.getByLabel('Estado de base de datos del popup')).toBeVisible();
     await page.locator('button[title="Cerrar"]').last().click();
 
     await navigateToModule(page, 'Personas', 'Licencias sin sueldo');

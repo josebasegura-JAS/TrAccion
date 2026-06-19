@@ -52,8 +52,10 @@ test('abre modales críticos de Tareas y Actas', async () => {
   try {
     await navigateToModule(page, 'Operativa diaria', 'Tareas');
     await page.getByRole('button', { name: /Nueva tarea/ }).click();
-    await expect(page.getByRole('heading', { name: /Nueva tarea|Editar tarea/ })).toBeVisible();
-    await page.getByRole('button', { name: 'Cerrar editor' }).click();
+    const taskDialog = page.getByRole('dialog', { name: /Nueva tarea|Editar tarea/ });
+    await expect(taskDialog).toBeVisible();
+    await expect(taskDialog).toContainText(/Nueva tarea|Editar tarea/);
+    await taskDialog.getByRole('button', { name: 'Cerrar editor' }).click();
 
     await page.getByRole('button', { name: 'Orígenes' }).click();
     await expect(page.getByRole('dialog')).toContainText('Orígenes de tareas');
@@ -61,7 +63,7 @@ test('abre modales críticos de Tareas y Actas', async () => {
 
     await navigateToModule(page, 'Operativa diaria', 'Actas');
     await page.getByRole('button', { name: 'Nueva acta' }).click();
-    await expect(page.getByRole('heading', { name: /Nueva acta|Editar acta/ })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: /Nueva acta|Editar acta/ })).toBeVisible();
   } finally {
     await close();
   }
