@@ -17,6 +17,7 @@ async function expectNoConsoleErrors(page: Page, action: () => Promise<void>): P
 
 test('flujo crítico: crear una tarea desde UI y verificar que queda visible', async () => {
   const { page, close } = await launchTraccionElectron();
+  const taskTitle = `E2E tarea crítica guardado ${Date.now()}`;
 
   try {
     await expectNoConsoleErrors(page, async () => {
@@ -28,18 +29,17 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
       await expect(dialog).toContainText('Nueva tarea');
       await expect(dialog.getByLabel('Estado de base de datos del popup')).toBeVisible();
 
-      await dialog.getByLabel('Título').fill('E2E tarea crítica guardado');
+      await dialog.getByLabel('Título').fill(taskTitle);
       await dialog.getByLabel('Responsable').fill('RRLL');
       await dialog.getByLabel('Fecha límite').fill('2026-06-30');
       await dialog.getByLabel('Descripción').fill('Prueba E2E de creación sin generar EXE.');
       await dialog.getByLabel('Añadir seguimiento').fill('Alta inicial desde test UI crítico.');
       await dialog.getByRole('button', { name: 'Guardar' }).click();
 
-      await page.waitForTimeout(500);
-      if (await dialog.isVisible().catch(() => false)) {
-        await dialog.getByRole('button', { name: 'Cerrar editor' }).click();
-      }
-      await expect(page.getByText('E2E tarea crítica guardado')).toBeVisible();
+      await expect(dialog).toBeHidden({ timeout: 10_000 });
+
+      await page.getByPlaceholder('Buscar...').first().fill(taskTitle);
+      await expect(page.getByText(taskTitle).first()).toBeVisible();
     });
   } finally {
     await close();
@@ -65,7 +65,7 @@ test('flujo crítico: abrir modales con semáforo BBDD en módulos sensibles', a
 
     await navigateToModule(page, 'Personas', 'Vinculograma');
     await page.getByRole('button', { name: /Nuevo vínculo/ }).click();
-    await expect(page.getByText(/Nuevo vínculo|Editar vínculo/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Nuevo vínculo|Editar vínculo/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Estado de base de datos:/ }).last()).toBeVisible();
   } finally {
     await close();
