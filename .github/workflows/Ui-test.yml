@@ -66,20 +66,19 @@ jobs:
 
           npm ci --include=dev --no-audit --no-fund
 
-      - name: Reconstruir Electron
+      - name: Reconstruir dependencias nativas para Electron
         shell: pwsh
         run: |
-          npm rebuild electron
-          npm exec -- electron --version
+          npm run electron:rebuild
 
       - name: Diagnóstico
         shell: pwsh
         run: |
           node --version
           npm --version
-          npm ls electron playwright typescript vite --depth=0
-          npm exec -- playwright --version
+          npm ls electron better-sqlite3 playwright typescript vite --depth=0
           npm exec -- electron --version
+          npm exec -- playwright --version
           npm exec -- tsc --version
 
       - name: Compilar Electron main process
