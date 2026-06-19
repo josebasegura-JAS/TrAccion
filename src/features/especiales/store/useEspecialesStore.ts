@@ -119,11 +119,11 @@ async function loadRecipientsFromSqlite(): Promise<Array<EspecialRecipient & { s
   }
 
   const recipients = snapshot.records
-    .map((record) => {
+    .map((record): (EspecialRecipient & { sqliteUpdatedAt: string | null }) | null => {
       const recipient = normalizeStoredRecipient(JSON.parse(record.value));
       return recipient ? { ...recipient, sqliteUpdatedAt: record.updatedAt } : null;
     })
-    .filter((recipient): recipient is EspecialRecipient & { sqliteUpdatedAt: string | null } => !!recipient);
+    .filter((recipient): recipient is EspecialRecipient & { sqliteUpdatedAt: string | null } => recipient !== null);
 
   mirrorRecipients(recipients);
   return recipients;
