@@ -4,7 +4,13 @@ import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
-import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './persistence/jsonRecordRepository.js';
+import {
+  extractJsonRecordTimestamps,
+  latestUpdatedAtFromJsonTables,
+  maybeMigrateJsonArrayRecordsFromPersistedRecord,
+  readActiveJsonRecords,
+  syncJsonRecordTable,
+} from './persistence/jsonRecordRepository.js';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -2768,50 +2774,6 @@ export async function saveTeletrabajoRecordIfUnchanged(
 }
 
 
-function extractJsonRecordTimestamps(value: string): {
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-} {
-  const now = new Date().toISOString();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    parsed = null;
-  }
-
-  const createdAt =
-    parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
-      ? (parsed as { createdAt: string }).createdAt
-      : now;
-  const updatedAt =
-    parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
-      ? (parsed as { updatedAt: string }).updatedAt
-      : now;
-  const deletedAt =
-    parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
-      ? (parsed as { deletedAt: string }).deletedAt
-      : null;
-
-  return { createdAt, updatedAt, deletedAt };
-}
-
-function latestUpdatedAtFromTables(db: Database, tableNames: string[]): string | null {
-  return tableNames.reduce<string | null>((latest, tableName) => {
-    const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
-    const updatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-    if (!updatedAt) {
-      return latest;
-    }
-    return !latest || updatedAt > latest ? updatedAt : latest;
-  }, null);
-}
-
-function readJsonModuleRecords(db: Database, tableName: string): SqliteComiteSessionRecord[] {
-  return readActiveJsonRecords(db, tableName);
-}
-
 function maybeMigrateJsonModuleRecords(
   db: Database,
   tableName: string,
@@ -2912,7 +2874,7 @@ function loadGenericJsonModuleSnapshot(
 
       const db = requireDatabase();
       db.transaction(() => maybeMigrateJsonModuleRecords(db, tableName, legacyKey, migrationDone, setMigrationDone))();
-      return { status: currentStatus, records: readJsonModuleRecords(db, tableName) };
+      return { status: currentStatus, records: readActiveJsonRecords(db, tableName) };
     },
     (nextStatus) => ({ status: nextStatus, records: [] }),
   );
@@ -3259,44 +3221,14 @@ export async function loadPresupuestosRecordsSnapshot(): Promise<SqlitePresupues
       db.transaction(() => maybeMigratePresupuestosFromPersistedRecords(db))();
       return {
         status: currentStatus,
-        scenarios: readJsonModuleRecords(db, 'presupuesto_scenario_records'),
-        manualItems: readJsonModuleRecords(db, 'presupuesto_manual_item_records'),
-        ticketGroups: readJsonModuleRecords(db, 'presupuesto_ticket_group_records'),
-        actuals: readJsonModuleRecords(db, 'presupuesto_actual_records'),
+        scenarios: readActiveJsonRecords(db, 'presupuesto_scenario_records'),
+        manualItems: readActiveJsonRecords(db, 'presupuesto_manual_item_records'),
+        ticketGroups: readActiveJsonRecords(db, 'presupuesto_ticket_group_records'),
+        actuals: readActiveJsonRecords(db, 'presupuesto_actual_records'),
       };
     },
     (nextStatus) => ({ status: nextStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [] }),
   );
-}
-
-function syncJsonRecordTable(
-  db: Database,
-  tableName: string,
-  records: Array<{ id: string; value: string }>,
-  updatedAt: string,
-): void {
-  const incomingIds = new Set(records.map((record) => record.id));
-  const markDeleted = db.prepare(`UPDATE ${tableName} SET updated_at = ?, deleted_at = ? WHERE deleted_at IS NULL AND id = ?`);
-  const existing = db.prepare(`SELECT id FROM ${tableName} WHERE deleted_at IS NULL`).all();
-  for (const row of existing) {
-    if (row && typeof row === 'object' && typeof (row as { id?: unknown }).id === 'string' && !incomingIds.has((row as { id: string }).id)) {
-      markDeleted.run(updatedAt, updatedAt, (row as { id: string }).id);
-    }
-  }
-
-  const upsert = db.prepare(
-    `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, NULL)
-     ON CONFLICT(id) DO UPDATE SET
-       value_json = excluded.value_json,
-       updated_at = excluded.updated_at,
-       deleted_at = NULL`,
-  );
-
-  for (const record of records) {
-    const { createdAt } = extractJsonRecordTimestamps(record.value);
-    upsert.run(record.id, record.value, createdAt, updatedAt);
-  }
 }
 
 export async function savePresupuestosSnapshotIfUnchanged(
@@ -3326,7 +3258,7 @@ export async function savePresupuestosSnapshotIfUnchanged(
       const db = requireDatabase();
       const result = db.transaction((): ConditionalSqliteSnapshotSaveResult => {
         maybeMigratePresupuestosFromPersistedRecords(db);
-        const currentUpdatedAt = latestUpdatedAtFromTables(db, tableNames);
+        const currentUpdatedAt = latestUpdatedAtFromJsonTables(db, tableNames);
         if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
           return {
             ok: false,

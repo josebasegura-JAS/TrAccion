@@ -166,3 +166,90 @@ export function maybeMigrateJsonArrayRecordsFromPersistedRecord(
 
   return true;
 }
+
+
+interface UpdatedAtRow {
+  updated_at: string | null;
+}
+
+function isUpdatedAtRow(value: unknown): value is UpdatedAtRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<UpdatedAtRow>;
+  return candidate.updated_at === null || typeof candidate.updated_at === 'string';
+}
+
+export function extractJsonRecordTimestamps(value: string): {
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+} {
+  const now = new Date().toISOString();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    parsed = null;
+  }
+
+  const createdAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+      ? (parsed as { createdAt: string }).createdAt
+      : now;
+  const updatedAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+      ? (parsed as { updatedAt: string }).updatedAt
+      : now;
+  const deletedAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+      ? (parsed as { deletedAt: string }).deletedAt
+      : null;
+
+  return { createdAt, updatedAt, deletedAt };
+}
+
+export function latestUpdatedAtFromJsonTables(db: Database, tableNames: string[]): string | null {
+  return tableNames.reduce<string | null>((latest, tableName) => {
+    assertSafeSqlIdentifier(tableName);
+    const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
+    const updatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+    if (!updatedAt) {
+      return latest;
+    }
+    return !latest || updatedAt > latest ? updatedAt : latest;
+  }, null);
+}
+
+export function syncJsonRecordTable(
+  db: Database,
+  tableName: string,
+  records: Array<{ id: string; value: string }>,
+  updatedAt: string,
+): void {
+  assertSafeSqlIdentifier(tableName);
+
+  const incomingIds = new Set(records.map((record) => record.id));
+  const markDeleted = db.prepare(`UPDATE ${tableName} SET updated_at = ?, deleted_at = ? WHERE deleted_at IS NULL AND id = ?`);
+  const existing = db.prepare(`SELECT id FROM ${tableName} WHERE deleted_at IS NULL`).all();
+  for (const row of existing) {
+    if (row && typeof row === 'object' && typeof (row as { id?: unknown }).id === 'string' && !incomingIds.has((row as { id: string }).id)) {
+      markDeleted.run(updatedAt, updatedAt, (row as { id: string }).id);
+    }
+  }
+
+  const upsert = db.prepare(
+    `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT(id) DO UPDATE SET
+       value_json = excluded.value_json,
+       updated_at = excluded.updated_at,
+       deleted_at = NULL`,
+  );
+
+  for (const record of records) {
+    const { createdAt } = extractJsonRecordTimestamps(record.value);
+    upsert.run(record.id, record.value, createdAt, updatedAt);
+  }
+}
