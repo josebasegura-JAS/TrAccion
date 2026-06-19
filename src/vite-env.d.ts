@@ -103,6 +103,22 @@ interface TraccionPersistedRecordsTokenSnapshot {
   taskRecordsUpdatedAt?: string | null;
   sorteosDrawsUpdatedAt?: string | null;
   sorteosExclusionsUpdatedAt?: string | null;
+  actaRecordsUpdatedAt?: string | null;
+  comiteSessionRecordsUpdatedAt?: string | null;
+  paritariaSessionRecordsUpdatedAt?: string | null;
+  criteriosRrllRecordsUpdatedAt?: string | null;
+  especialesRecipientRecordsUpdatedAt?: string | null;
+  licenciaSinSueldoRecordsUpdatedAt?: string | null;
+  presupuestoScenarioRecordsUpdatedAt?: string | null;
+  presupuestoManualItemRecordsUpdatedAt?: string | null;
+  presupuestoTicketGroupRecordsUpdatedAt?: string | null;
+  presupuestoActualRecordsUpdatedAt?: string | null;
+  teletrabajoSolicitudRecordsUpdatedAt?: string | null;
+  teletrabajoPuestoRecordsUpdatedAt?: string | null;
+  vinculogramaRecordsUpdatedAt?: string | null;
+  plantillaJobPositionTranslationRecordsUpdatedAt?: string | null;
+  employeeRecordsUpdatedAt?: string | null;
+  configuracionStateUpdatedAt?: string | null;
 }
 
 interface TraccionPersistedRecordsSnapshot extends TraccionPersistedRecordsTokenSnapshot {

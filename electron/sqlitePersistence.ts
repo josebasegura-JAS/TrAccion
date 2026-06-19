@@ -288,6 +288,22 @@ export interface PersistedRecordsTokenSnapshot {
   taskRecordsUpdatedAt: string | null;
   sorteosDrawsUpdatedAt: string | null;
   sorteosExclusionsUpdatedAt: string | null;
+  actaRecordsUpdatedAt: string | null;
+  comiteSessionRecordsUpdatedAt: string | null;
+  paritariaSessionRecordsUpdatedAt: string | null;
+  criteriosRrllRecordsUpdatedAt: string | null;
+  especialesRecipientRecordsUpdatedAt: string | null;
+  licenciaSinSueldoRecordsUpdatedAt: string | null;
+  presupuestoScenarioRecordsUpdatedAt: string | null;
+  presupuestoManualItemRecordsUpdatedAt: string | null;
+  presupuestoTicketGroupRecordsUpdatedAt: string | null;
+  presupuestoActualRecordsUpdatedAt: string | null;
+  teletrabajoSolicitudRecordsUpdatedAt: string | null;
+  teletrabajoPuestoRecordsUpdatedAt: string | null;
+  vinculogramaRecordsUpdatedAt: string | null;
+  plantillaJobPositionTranslationRecordsUpdatedAt: string | null;
+  employeeRecordsUpdatedAt: string | null;
+  configuracionStateUpdatedAt: string | null;
 }
 
 export interface PersistedRecordsSnapshot extends PersistedRecordsTokenSnapshot {
@@ -3905,6 +3921,49 @@ function getTaskRecordsUpdatedAt(db: Database): string | null {
   return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
+/**
+ * Lista cerrada de tablas nativas cuyo MAX(updated_at) se expone en el
+ * token snapshot para que externalDataSync detecte cambios de otros
+ * usuarios. Whitelist explícita: nunca se interpola un nombre de tabla
+ * que no esté aquí, evitando inyección SQL por construcción dinámica.
+ */
+const NATIVE_RECORD_TABLE_NAMES = [
+  'acta_records',
+  'comite_session_records',
+  'paritaria_session_records',
+  'criterios_rrll_records',
+  'especiales_recipient_records',
+  'licencia_sin_sueldo_records',
+  'presupuesto_scenario_records',
+  'presupuesto_manual_item_records',
+  'presupuesto_ticket_group_records',
+  'presupuesto_actual_records',
+  'teletrabajo_solicitud_records',
+  'teletrabajo_puesto_records',
+  'vinculograma_records',
+  'plantilla_job_position_translation_records',
+  'employee_records',
+] as const;
+
+type NativeRecordTableName = (typeof NATIVE_RECORD_TABLE_NAMES)[number];
+
+function isNativeRecordTableName(value: string): value is NativeRecordTableName {
+  return (NATIVE_RECORD_TABLE_NAMES as readonly string[]).includes(value);
+}
+
+function getRecordsTableMaxUpdatedAt(db: Database, tableName: NativeRecordTableName): string | null {
+  if (!isNativeRecordTableName(tableName)) {
+    return null;
+  }
+  const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
+  return isUpdatedAtRow(row) ? row.updated_at : null;
+}
+
+function getConfiguracionStateUpdatedAt(db: Database): string | null {
+  const row = db.prepare("SELECT updated_at FROM configuracion_state WHERE id = 'main'").get();
+  return isUpdatedAtRow(row) ? row.updated_at : null;
+}
+
 function migrateSorteosArrayFromPersistedRecord(
   db: Database,
   tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
@@ -4376,6 +4435,22 @@ export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSn
           taskRecordsUpdatedAt: null,
           sorteosDrawsUpdatedAt: null,
           sorteosExclusionsUpdatedAt: null,
+          actaRecordsUpdatedAt: null,
+          comiteSessionRecordsUpdatedAt: null,
+          paritariaSessionRecordsUpdatedAt: null,
+          criteriosRrllRecordsUpdatedAt: null,
+          especialesRecipientRecordsUpdatedAt: null,
+          licenciaSinSueldoRecordsUpdatedAt: null,
+          presupuestoScenarioRecordsUpdatedAt: null,
+          presupuestoManualItemRecordsUpdatedAt: null,
+          presupuestoTicketGroupRecordsUpdatedAt: null,
+          presupuestoActualRecordsUpdatedAt: null,
+          teletrabajoSolicitudRecordsUpdatedAt: null,
+          teletrabajoPuestoRecordsUpdatedAt: null,
+          vinculogramaRecordsUpdatedAt: null,
+          plantillaJobPositionTranslationRecordsUpdatedAt: null,
+          employeeRecordsUpdatedAt: null,
+          configuracionStateUpdatedAt: null,
         };
       }
 
@@ -4404,6 +4479,25 @@ export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSn
         taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
         sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
         sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
+        actaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'acta_records'),
+        comiteSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'comite_session_records'),
+        paritariaSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'paritaria_session_records'),
+        criteriosRrllRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'criterios_rrll_records'),
+        especialesRecipientRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'especiales_recipient_records'),
+        licenciaSinSueldoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'licencia_sin_sueldo_records'),
+        presupuestoScenarioRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_scenario_records'),
+        presupuestoManualItemRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_manual_item_records'),
+        presupuestoTicketGroupRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_ticket_group_records'),
+        presupuestoActualRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_actual_records'),
+        teletrabajoSolicitudRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_solicitud_records'),
+        teletrabajoPuestoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_puesto_records'),
+        vinculogramaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'vinculograma_records'),
+        plantillaJobPositionTranslationRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(
+          db,
+          'plantilla_job_position_translation_records',
+        ),
+        employeeRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'employee_records'),
+        configuracionStateUpdatedAt: getConfiguracionStateUpdatedAt(db),
       };
     },
     (nextStatus) => ({
@@ -4414,6 +4508,22 @@ export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSn
       taskRecordsUpdatedAt: null,
       sorteosDrawsUpdatedAt: null,
       sorteosExclusionsUpdatedAt: null,
+      actaRecordsUpdatedAt: null,
+      comiteSessionRecordsUpdatedAt: null,
+      paritariaSessionRecordsUpdatedAt: null,
+      criteriosRrllRecordsUpdatedAt: null,
+      especialesRecipientRecordsUpdatedAt: null,
+      licenciaSinSueldoRecordsUpdatedAt: null,
+      presupuestoScenarioRecordsUpdatedAt: null,
+      presupuestoManualItemRecordsUpdatedAt: null,
+      presupuestoTicketGroupRecordsUpdatedAt: null,
+      presupuestoActualRecordsUpdatedAt: null,
+      teletrabajoSolicitudRecordsUpdatedAt: null,
+      teletrabajoPuestoRecordsUpdatedAt: null,
+      vinculogramaRecordsUpdatedAt: null,
+      plantillaJobPositionTranslationRecordsUpdatedAt: null,
+      employeeRecordsUpdatedAt: null,
+      configuracionStateUpdatedAt: null,
     }),
   );
 }
@@ -4430,6 +4540,22 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
           taskRecordsUpdatedAt: null,
           sorteosDrawsUpdatedAt: null,
           sorteosExclusionsUpdatedAt: null,
+          actaRecordsUpdatedAt: null,
+          comiteSessionRecordsUpdatedAt: null,
+          paritariaSessionRecordsUpdatedAt: null,
+          criteriosRrllRecordsUpdatedAt: null,
+          especialesRecipientRecordsUpdatedAt: null,
+          licenciaSinSueldoRecordsUpdatedAt: null,
+          presupuestoScenarioRecordsUpdatedAt: null,
+          presupuestoManualItemRecordsUpdatedAt: null,
+          presupuestoTicketGroupRecordsUpdatedAt: null,
+          presupuestoActualRecordsUpdatedAt: null,
+          teletrabajoSolicitudRecordsUpdatedAt: null,
+          teletrabajoPuestoRecordsUpdatedAt: null,
+          vinculogramaRecordsUpdatedAt: null,
+          plantillaJobPositionTranslationRecordsUpdatedAt: null,
+          employeeRecordsUpdatedAt: null,
+          configuracionStateUpdatedAt: null,
         };
       }
 
@@ -4451,6 +4577,25 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
         taskRecordsUpdatedAt: getTaskRecordsUpdatedAt(db),
         sorteosDrawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
         sorteosExclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
+        actaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'acta_records'),
+        comiteSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'comite_session_records'),
+        paritariaSessionRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'paritaria_session_records'),
+        criteriosRrllRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'criterios_rrll_records'),
+        especialesRecipientRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'especiales_recipient_records'),
+        licenciaSinSueldoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'licencia_sin_sueldo_records'),
+        presupuestoScenarioRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_scenario_records'),
+        presupuestoManualItemRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_manual_item_records'),
+        presupuestoTicketGroupRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_ticket_group_records'),
+        presupuestoActualRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'presupuesto_actual_records'),
+        teletrabajoSolicitudRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_solicitud_records'),
+        teletrabajoPuestoRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'teletrabajo_puesto_records'),
+        vinculogramaRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'vinculograma_records'),
+        plantillaJobPositionTranslationRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(
+          db,
+          'plantilla_job_position_translation_records',
+        ),
+        employeeRecordsUpdatedAt: getRecordsTableMaxUpdatedAt(db, 'employee_records'),
+        configuracionStateUpdatedAt: getConfiguracionStateUpdatedAt(db),
       };
     },
     (nextStatus) => ({
@@ -4460,6 +4605,22 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
       taskRecordsUpdatedAt: null,
       sorteosDrawsUpdatedAt: null,
       sorteosExclusionsUpdatedAt: null,
+      actaRecordsUpdatedAt: null,
+      comiteSessionRecordsUpdatedAt: null,
+      paritariaSessionRecordsUpdatedAt: null,
+      criteriosRrllRecordsUpdatedAt: null,
+      especialesRecipientRecordsUpdatedAt: null,
+      licenciaSinSueldoRecordsUpdatedAt: null,
+      presupuestoScenarioRecordsUpdatedAt: null,
+      presupuestoManualItemRecordsUpdatedAt: null,
+      presupuestoTicketGroupRecordsUpdatedAt: null,
+      presupuestoActualRecordsUpdatedAt: null,
+      teletrabajoSolicitudRecordsUpdatedAt: null,
+      teletrabajoPuestoRecordsUpdatedAt: null,
+      vinculogramaRecordsUpdatedAt: null,
+      plantillaJobPositionTranslationRecordsUpdatedAt: null,
+      employeeRecordsUpdatedAt: null,
+      configuracionStateUpdatedAt: null,
     }),
   );
 }

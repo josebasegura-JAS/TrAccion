@@ -70,6 +70,22 @@ let lastSeenPersistedRecordsUpdatedAt: string | null = null;
 let lastSeenTaskRecordsUpdatedAt: string | null = null;
 let lastSeenSorteosDrawsUpdatedAt: string | null = null;
 let lastSeenSorteosExclusionsUpdatedAt: string | null = null;
+let lastSeenActaRecordsUpdatedAt: string | null = null;
+let lastSeenComiteSessionRecordsUpdatedAt: string | null = null;
+let lastSeenParitariaSessionRecordsUpdatedAt: string | null = null;
+let lastSeenCriteriosRrllRecordsUpdatedAt: string | null = null;
+let lastSeenEspecialesRecipientRecordsUpdatedAt: string | null = null;
+let lastSeenLicenciaSinSueldoRecordsUpdatedAt: string | null = null;
+let lastSeenPresupuestoScenarioRecordsUpdatedAt: string | null = null;
+let lastSeenPresupuestoManualItemRecordsUpdatedAt: string | null = null;
+let lastSeenPresupuestoTicketGroupRecordsUpdatedAt: string | null = null;
+let lastSeenPresupuestoActualRecordsUpdatedAt: string | null = null;
+let lastSeenTeletrabajoSolicitudRecordsUpdatedAt: string | null = null;
+let lastSeenTeletrabajoPuestoRecordsUpdatedAt: string | null = null;
+let lastSeenVinculogramaRecordsUpdatedAt: string | null = null;
+let lastSeenPlantillaJobPositionTranslationRecordsUpdatedAt: string | null = null;
+let lastSeenEmployeeRecordsUpdatedAt: string | null = null;
+let lastSeenConfiguracionStateUpdatedAt: string | null = null;
 let unsubscribeSharedEditingActivity: (() => void) | null = null;
 let unsubscribePersistenceFeedback: (() => void) | null = null;
 let persistenceWriteInProgress = false;
@@ -137,6 +153,77 @@ function collectChangedDirectStores(tokenSnapshot: TraccionPersistedRecordsToken
     changedStoreIds.add('sorteos');
   }
 
+  if (valueChanged(lastSeenActaRecordsUpdatedAt, tokenSnapshot.actaRecordsUpdatedAt)) {
+    changedStoreIds.add('actas');
+  }
+
+  if (valueChanged(lastSeenComiteSessionRecordsUpdatedAt, tokenSnapshot.comiteSessionRecordsUpdatedAt)) {
+    changedStoreIds.add('comite-sesiones');
+  }
+
+  if (valueChanged(lastSeenParitariaSessionRecordsUpdatedAt, tokenSnapshot.paritariaSessionRecordsUpdatedAt)) {
+    changedStoreIds.add('paritaria-sesiones');
+  }
+
+  if (valueChanged(lastSeenCriteriosRrllRecordsUpdatedAt, tokenSnapshot.criteriosRrllRecordsUpdatedAt)) {
+    changedStoreIds.add('criterios-rrll');
+  }
+
+  if (
+    valueChanged(lastSeenEspecialesRecipientRecordsUpdatedAt, tokenSnapshot.especialesRecipientRecordsUpdatedAt)
+  ) {
+    changedStoreIds.add('especiales');
+  }
+
+  if (
+    valueChanged(lastSeenLicenciaSinSueldoRecordsUpdatedAt, tokenSnapshot.licenciaSinSueldoRecordsUpdatedAt)
+  ) {
+    changedStoreIds.add('licencias-sin-sueldo');
+  }
+
+  if (
+    valueChanged(lastSeenPresupuestoScenarioRecordsUpdatedAt, tokenSnapshot.presupuestoScenarioRecordsUpdatedAt) ||
+    valueChanged(
+      lastSeenPresupuestoManualItemRecordsUpdatedAt,
+      tokenSnapshot.presupuestoManualItemRecordsUpdatedAt,
+    ) ||
+    valueChanged(
+      lastSeenPresupuestoTicketGroupRecordsUpdatedAt,
+      tokenSnapshot.presupuestoTicketGroupRecordsUpdatedAt,
+    ) ||
+    valueChanged(lastSeenPresupuestoActualRecordsUpdatedAt, tokenSnapshot.presupuestoActualRecordsUpdatedAt)
+  ) {
+    changedStoreIds.add('presupuestos');
+  }
+
+  if (
+    valueChanged(
+      lastSeenTeletrabajoSolicitudRecordsUpdatedAt,
+      tokenSnapshot.teletrabajoSolicitudRecordsUpdatedAt,
+    ) ||
+    valueChanged(lastSeenTeletrabajoPuestoRecordsUpdatedAt, tokenSnapshot.teletrabajoPuestoRecordsUpdatedAt)
+  ) {
+    changedStoreIds.add('teletrabajo');
+  }
+
+  if (valueChanged(lastSeenVinculogramaRecordsUpdatedAt, tokenSnapshot.vinculogramaRecordsUpdatedAt)) {
+    changedStoreIds.add('vinculograma');
+  }
+
+  if (
+    valueChanged(
+      lastSeenPlantillaJobPositionTranslationRecordsUpdatedAt,
+      tokenSnapshot.plantillaJobPositionTranslationRecordsUpdatedAt,
+    ) ||
+    valueChanged(lastSeenEmployeeRecordsUpdatedAt, tokenSnapshot.employeeRecordsUpdatedAt)
+  ) {
+    changedStoreIds.add('plantilla');
+  }
+
+  if (valueChanged(lastSeenConfiguracionStateUpdatedAt, tokenSnapshot.configuracionStateUpdatedAt)) {
+    changedStoreIds.add('configuracion');
+  }
+
   return Array.from(changedStoreIds);
 }
 
@@ -167,6 +254,23 @@ function updateSeenTokens(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot):
   lastSeenTaskRecordsUpdatedAt = tokenSnapshot.taskRecordsUpdatedAt ?? null;
   lastSeenSorteosDrawsUpdatedAt = tokenSnapshot.sorteosDrawsUpdatedAt ?? null;
   lastSeenSorteosExclusionsUpdatedAt = tokenSnapshot.sorteosExclusionsUpdatedAt ?? null;
+  lastSeenActaRecordsUpdatedAt = tokenSnapshot.actaRecordsUpdatedAt ?? null;
+  lastSeenComiteSessionRecordsUpdatedAt = tokenSnapshot.comiteSessionRecordsUpdatedAt ?? null;
+  lastSeenParitariaSessionRecordsUpdatedAt = tokenSnapshot.paritariaSessionRecordsUpdatedAt ?? null;
+  lastSeenCriteriosRrllRecordsUpdatedAt = tokenSnapshot.criteriosRrllRecordsUpdatedAt ?? null;
+  lastSeenEspecialesRecipientRecordsUpdatedAt = tokenSnapshot.especialesRecipientRecordsUpdatedAt ?? null;
+  lastSeenLicenciaSinSueldoRecordsUpdatedAt = tokenSnapshot.licenciaSinSueldoRecordsUpdatedAt ?? null;
+  lastSeenPresupuestoScenarioRecordsUpdatedAt = tokenSnapshot.presupuestoScenarioRecordsUpdatedAt ?? null;
+  lastSeenPresupuestoManualItemRecordsUpdatedAt = tokenSnapshot.presupuestoManualItemRecordsUpdatedAt ?? null;
+  lastSeenPresupuestoTicketGroupRecordsUpdatedAt = tokenSnapshot.presupuestoTicketGroupRecordsUpdatedAt ?? null;
+  lastSeenPresupuestoActualRecordsUpdatedAt = tokenSnapshot.presupuestoActualRecordsUpdatedAt ?? null;
+  lastSeenTeletrabajoSolicitudRecordsUpdatedAt = tokenSnapshot.teletrabajoSolicitudRecordsUpdatedAt ?? null;
+  lastSeenTeletrabajoPuestoRecordsUpdatedAt = tokenSnapshot.teletrabajoPuestoRecordsUpdatedAt ?? null;
+  lastSeenVinculogramaRecordsUpdatedAt = tokenSnapshot.vinculogramaRecordsUpdatedAt ?? null;
+  lastSeenPlantillaJobPositionTranslationRecordsUpdatedAt =
+    tokenSnapshot.plantillaJobPositionTranslationRecordsUpdatedAt ?? null;
+  lastSeenEmployeeRecordsUpdatedAt = tokenSnapshot.employeeRecordsUpdatedAt ?? null;
+  lastSeenConfiguracionStateUpdatedAt = tokenSnapshot.configuracionStateUpdatedAt ?? null;
 }
 
 function persistedRecordsChanged(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
@@ -331,6 +435,22 @@ export function startExternalDataSyncPolling(): void {
   lastSeenTaskRecordsUpdatedAt = null;
   lastSeenSorteosDrawsUpdatedAt = null;
   lastSeenSorteosExclusionsUpdatedAt = null;
+  lastSeenActaRecordsUpdatedAt = null;
+  lastSeenComiteSessionRecordsUpdatedAt = null;
+  lastSeenParitariaSessionRecordsUpdatedAt = null;
+  lastSeenCriteriosRrllRecordsUpdatedAt = null;
+  lastSeenEspecialesRecipientRecordsUpdatedAt = null;
+  lastSeenLicenciaSinSueldoRecordsUpdatedAt = null;
+  lastSeenPresupuestoScenarioRecordsUpdatedAt = null;
+  lastSeenPresupuestoManualItemRecordsUpdatedAt = null;
+  lastSeenPresupuestoTicketGroupRecordsUpdatedAt = null;
+  lastSeenPresupuestoActualRecordsUpdatedAt = null;
+  lastSeenTeletrabajoSolicitudRecordsUpdatedAt = null;
+  lastSeenTeletrabajoPuestoRecordsUpdatedAt = null;
+  lastSeenVinculogramaRecordsUpdatedAt = null;
+  lastSeenPlantillaJobPositionTranslationRecordsUpdatedAt = null;
+  lastSeenEmployeeRecordsUpdatedAt = null;
+  lastSeenConfiguracionStateUpdatedAt = null;
   void pollOnce();
   timerId = window.setInterval(() => {
     void pollOnce();
@@ -367,6 +487,22 @@ export function stopExternalDataSyncPolling(): void {
   lastSeenTaskRecordsUpdatedAt = null;
   lastSeenSorteosDrawsUpdatedAt = null;
   lastSeenSorteosExclusionsUpdatedAt = null;
+  lastSeenActaRecordsUpdatedAt = null;
+  lastSeenComiteSessionRecordsUpdatedAt = null;
+  lastSeenParitariaSessionRecordsUpdatedAt = null;
+  lastSeenCriteriosRrllRecordsUpdatedAt = null;
+  lastSeenEspecialesRecipientRecordsUpdatedAt = null;
+  lastSeenLicenciaSinSueldoRecordsUpdatedAt = null;
+  lastSeenPresupuestoScenarioRecordsUpdatedAt = null;
+  lastSeenPresupuestoManualItemRecordsUpdatedAt = null;
+  lastSeenPresupuestoTicketGroupRecordsUpdatedAt = null;
+  lastSeenPresupuestoActualRecordsUpdatedAt = null;
+  lastSeenTeletrabajoSolicitudRecordsUpdatedAt = null;
+  lastSeenTeletrabajoPuestoRecordsUpdatedAt = null;
+  lastSeenVinculogramaRecordsUpdatedAt = null;
+  lastSeenPlantillaJobPositionTranslationRecordsUpdatedAt = null;
+  lastSeenEmployeeRecordsUpdatedAt = null;
+  lastSeenConfiguracionStateUpdatedAt = null;
 }
 
 export function useExternalDataSyncStatus(): ExternalDataSyncState {
