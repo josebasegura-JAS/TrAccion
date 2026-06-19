@@ -347,6 +347,24 @@ interface TraccionEspecialRecipientRecordsSnapshot {
 
 type TraccionConditionalEspecialRecipientRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionTeletrabajoPuestoRecord = TraccionComiteSessionRecord;
+
+interface TraccionTeletrabajoPuestoRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTeletrabajoPuestoRecord[];
+}
+
+type TraccionConditionalTeletrabajoPuestoRecord = TraccionConditionalComiteSessionRecord;
+
+type TraccionJobPositionTranslationRecord = TraccionComiteSessionRecord;
+
+interface TraccionJobPositionTranslationRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionJobPositionTranslationRecord[];
+}
+
+type TraccionConditionalJobPositionTranslationRecord = TraccionConditionalComiteSessionRecord;
+
 interface TraccionConfiguracionSnapshot {
   status: TraccionDatabaseStatus;
   value: string | null;
@@ -454,6 +472,14 @@ interface TraccionApi {
   loadEspecialesRecipientRecords?: () => Promise<TraccionEspecialRecipientRecordsSnapshot>;
   saveEspecialesRecipientRecordIfUnchanged?: (
     record: TraccionConditionalEspecialRecipientRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadTeletrabajoPuestoRecords?: () => Promise<TraccionTeletrabajoPuestoRecordsSnapshot>;
+  saveTeletrabajoPuestoRecordIfUnchanged?: (
+    record: TraccionConditionalTeletrabajoPuestoRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadJobPositionTranslationRecords?: () => Promise<TraccionJobPositionTranslationRecordsSnapshot>;
+  saveJobPositionTranslationRecordIfUnchanged?: (
+    record: TraccionConditionalJobPositionTranslationRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   loadConfiguracion?: () => Promise<TraccionConfiguracionSnapshot>;
   saveConfiguracionIfUnchanged?: (

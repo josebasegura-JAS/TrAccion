@@ -118,6 +118,18 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('especiales:save-recipient-record-if-unchanged', record),
+  loadTeletrabajoPuestoRecords: () => ipcRenderer.invoke('teletrabajo-puestos:load-records'),
+  saveTeletrabajoPuestoRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('teletrabajo-puestos:save-record-if-unchanged', record),
+  loadJobPositionTranslationRecords: () => ipcRenderer.invoke('plantilla-job-translations:load-records'),
+  saveJobPositionTranslationRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('plantilla-job-translations:save-record-if-unchanged', record),
   loadConfiguracion: () => ipcRenderer.invoke('configuracion:load'),
   saveConfiguracionIfUnchanged: (record: {
     value: string;

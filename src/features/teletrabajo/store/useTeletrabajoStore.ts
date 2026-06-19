@@ -45,6 +45,8 @@ import {
 const STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
 const PUESTOS_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos';
 
+let latestPuestosTeletrabajoUpdatedAtById = new Map<string, string>();
+
 const TELETRABAJO_AUDIT_LABELS = {
   empleado: 'Empleado',
   nombreApellidos: 'Nombre y apellidos',
@@ -292,8 +294,72 @@ function readPuestosTeletrabajo(): TeletrabajoPuesto[] {
   return parsed.filter(isTeletrabajoPuesto).map(normalizePuestoTeletrabajo);
 }
 
+
+async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] | null> {
+  const loader = window.traccion?.loadTeletrabajoPuestoRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await loader();
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  latestPuestosTeletrabajoUpdatedAtById = new Map(
+    snapshot.records.map((record) => [record.id, record.updatedAt]),
+  );
+
+  const puestos = snapshot.records
+    .map((record): TeletrabajoPuesto | null => {
+      try {
+        const parsed: unknown = JSON.parse(record.value);
+        return isTeletrabajoPuesto(parsed) ? normalizePuestoTeletrabajo(parsed) : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((puesto): puesto is TeletrabajoPuesto => Boolean(puesto));
+
+  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestos));
+  return puestos;
+}
+
+async function persistPuestosTeletrabajoInSqlite(puestosTeletrabajo: TeletrabajoPuesto[]): Promise<boolean> {
+  const saver = window.traccion?.saveTeletrabajoPuestoRecordIfUnchanged;
+  if (!saver) {
+    return false;
+  }
+
+  for (const puesto of puestosTeletrabajo) {
+    const result = await saver({
+      id: puesto.id,
+      value: JSON.stringify(puesto),
+      expectedUpdatedAt: latestPuestosTeletrabajoUpdatedAtById.get(puesto.id) ?? null,
+    });
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    if (result.currentUpdatedAt) {
+      latestPuestosTeletrabajoUpdatedAtById.set(puesto.id, result.currentUpdatedAt);
+    }
+  }
+
+  return true;
+}
+
 function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): void {
-  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
+  void (async () => {
+    try {
+      const savedInSqlite = await persistPuestosTeletrabajoInSqlite(puestosTeletrabajo);
+      if (!savedInSqlite) {
+        writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
+      }
+    } catch (error) {
+      console.warn('Puestos teletrabajables no guardados en SQLite.', error);
+      writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
+    }
+  })();
 }
 
 function createPuestoTeletrabajoId(): string {
@@ -483,6 +549,13 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     const solicitudes = readSolicitudes();
     const puestosTeletrabajo = readPuestosTeletrabajo();
     set(buildTeletrabajoState(solicitudes, puestosTeletrabajo));
+    void readPuestosTeletrabajoFromSqlite()
+      .then((sqlitePuestos) => {
+        if (sqlitePuestos) {
+          set((state) => buildTeletrabajoState(state.solicitudes, sqlitePuestos, state.selectedSolicitudId));
+        }
+      })
+      .catch((error) => console.warn('Puestos teletrabajables no cargados desde SQLite.', error));
     void loadSolicitudesFromSqliteOrStorage()
       .then((nextSolicitudes) =>
         set((state) => buildTeletrabajoState(nextSolicitudes, state.puestosTeletrabajo, state.selectedSolicitudId)),
@@ -493,6 +566,13 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     const solicitudes = readSolicitudes();
     const puestosTeletrabajo = readPuestosTeletrabajo();
     set((state) => buildTeletrabajoState(solicitudes, puestosTeletrabajo, state.selectedSolicitudId));
+    void readPuestosTeletrabajoFromSqlite()
+      .then((sqlitePuestos) => {
+        if (sqlitePuestos) {
+          set((state) => buildTeletrabajoState(state.solicitudes, sqlitePuestos, state.selectedSolicitudId));
+        }
+      })
+      .catch((error) => console.warn('Puestos teletrabajables no recargados desde SQLite.', error));
     void loadSolicitudesFromSqliteOrStorage()
       .then((nextSolicitudes) =>
         set((state) => buildTeletrabajoState(nextSolicitudes, state.puestosTeletrabajo, state.selectedSolicitudId)),

@@ -17,7 +17,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 11;
+const CURRENT_SCHEMA_VERSION = 12;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -151,6 +151,24 @@ export interface SqliteEspecialesRecipientRecordsSnapshot {
 }
 
 export type ConditionalSqliteEspecialesRecipientRecord = ConditionalSqliteComiteSessionRecord;
+
+export type SqliteTeletrabajoPuestoRecord = SqliteComiteSessionRecord;
+
+export interface SqliteTeletrabajoPuestoRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteTeletrabajoPuestoRecord[];
+}
+
+export type ConditionalSqliteTeletrabajoPuestoRecord = ConditionalSqliteComiteSessionRecord;
+
+export type SqliteJobPositionTranslationRecord = SqliteComiteSessionRecord;
+
+export interface SqliteJobPositionTranslationRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteJobPositionTranslationRecord[];
+}
+
+export type ConditionalSqliteJobPositionTranslationRecord = ConditionalSqliteComiteSessionRecord;
 
 export interface SqliteConfiguracionSnapshot {
   status: DatabaseStatus;
@@ -407,6 +425,8 @@ let criteriosRrllMigrationDone = false;
 let especialesRecipientsMigrationDone = false;
 let presupuestosMigrationDone = false;
 let configuracionMigrationDone = false;
+let teletrabajoPuestosMigrationDone = false;
+let jobPositionTranslationsMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -1366,6 +1386,41 @@ function migrateToVersion11(db: Database): void {
   }
 }
 
+
+function migrateToVersion12(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS teletrabajo_puesto_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_teletrabajo_puesto_records_updated_at
+      ON teletrabajo_puesto_records(updated_at);
+
+    CREATE TABLE IF NOT EXISTS plantilla_job_position_translation_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_plantilla_job_position_translation_records_updated_at
+      ON plantilla_job_position_translation_records(updated_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 12) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      12,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1378,6 +1433,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion9(db);
   migrateToVersion10(db);
   migrateToVersion11(db);
+  migrateToVersion12(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1429,6 +1485,8 @@ function closeDatabase(): void {
   especialesRecipientsMigrationDone = false;
   presupuestosMigrationDone = false;
   configuracionMigrationDone = false;
+  teletrabajoPuestosMigrationDone = false;
+  jobPositionTranslationsMigrationDone = false;
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -1449,6 +1507,8 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   especialesRecipientsMigrationDone = false;
   presupuestosMigrationDone = false;
   configuracionMigrationDone = false;
+  teletrabajoPuestosMigrationDone = false;
+  jobPositionTranslationsMigrationDone = false;
 
   await releaseActiveSessionLock();
 }
@@ -2994,6 +3054,51 @@ export async function saveEspecialesRecipientRecordIfUnchanged(
     (value) => { especialesRecipientsMigrationDone = value; },
     record,
     'El destinatario',
+  );
+}
+
+
+export async function loadTeletrabajoPuestoRecordsSnapshot(): Promise<SqliteTeletrabajoPuestoRecordsSnapshot> {
+  return loadGenericJsonModuleSnapshot(
+    'teletrabajo_puesto_records',
+    'traccion.v1.teletrabajo.puestos',
+    teletrabajoPuestosMigrationDone,
+    (value) => { teletrabajoPuestosMigrationDone = value; },
+  );
+}
+
+export async function saveTeletrabajoPuestoRecordIfUnchanged(
+  record: ConditionalSqliteTeletrabajoPuestoRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return saveGenericJsonModuleRecordIfUnchanged(
+    'teletrabajo_puesto_records',
+    'traccion.v1.teletrabajo.puestos',
+    teletrabajoPuestosMigrationDone,
+    (value) => { teletrabajoPuestosMigrationDone = value; },
+    record,
+    'El puesto teletrabajable',
+  );
+}
+
+export async function loadJobPositionTranslationRecordsSnapshot(): Promise<SqliteJobPositionTranslationRecordsSnapshot> {
+  return loadGenericJsonModuleSnapshot(
+    'plantilla_job_position_translation_records',
+    'traccion.v1.plantilla.jobPositionTranslations',
+    jobPositionTranslationsMigrationDone,
+    (value) => { jobPositionTranslationsMigrationDone = value; },
+  );
+}
+
+export async function saveJobPositionTranslationRecordIfUnchanged(
+  record: ConditionalSqliteJobPositionTranslationRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return saveGenericJsonModuleRecordIfUnchanged(
+    'plantilla_job_position_translation_records',
+    'traccion.v1.plantilla.jobPositionTranslations',
+    jobPositionTranslationsMigrationDone,
+    (value) => { jobPositionTranslationsMigrationDone = value; },
+    record,
+    'La traducción de puesto',
   );
 }
 

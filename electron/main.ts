@@ -33,6 +33,8 @@ import {
   loadEspecialesRecipientRecordsSnapshot,
   loadConfiguracionSnapshot,
   loadPresupuestosRecordsSnapshot,
+  loadTeletrabajoPuestoRecordsSnapshot,
+  loadJobPositionTranslationRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -56,6 +58,8 @@ import {
   saveEspecialesRecipientRecordIfUnchanged,
   saveConfiguracionIfUnchanged,
   savePresupuestosSnapshotIfUnchanged,
+  saveTeletrabajoPuestoRecordIfUnchanged,
+  saveJobPositionTranslationRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1712,6 +1716,94 @@ function registerIpcHandlers(): void {
         id: candidate.id as string,
         value: candidate.value as string,
         expectedUpdatedAt: typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
+      }),
+    );
+  });
+
+
+  const validateJsonRecordPayload = (
+    payload: unknown,
+    invalidMessage: string,
+  ): { ok: true; id: string; value: string; expectedUpdatedAt: string | null } | {
+    ok: false;
+    result: {
+      ok: false;
+      status: ReturnType<typeof getSqliteStatus>;
+      currentUpdatedAt: null;
+      message: string;
+    };
+  } => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          status: getSqliteStatus(),
+          currentUpdatedAt: null,
+          message: invalidMessage,
+        },
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          status: getSqliteStatus(),
+          currentUpdatedAt: null,
+          message: invalidMessage,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      id: candidate.id,
+      value: candidate.value,
+      expectedUpdatedAt: typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
+    };
+  };
+
+  ipcMain.handle('teletrabajo-puestos:load-records', () =>
+    enqueueSqliteIpc('teletrabajo-puestos:load-records', () => loadTeletrabajoPuestoRecordsSnapshot()),
+  );
+
+  ipcMain.handle('teletrabajo-puestos:save-record-if-unchanged', (_event, payload: unknown) => {
+    const record = validateJsonRecordPayload(payload, 'Payload de puesto teletrabajable inválido.');
+    if (!record.ok) {
+      return record.result;
+    }
+
+    return enqueueSqliteIpc('teletrabajo-puestos:save-record-if-unchanged', () =>
+      saveTeletrabajoPuestoRecordIfUnchanged({
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
+      }),
+    );
+  });
+
+  ipcMain.handle('plantilla-job-translations:load-records', () =>
+    enqueueSqliteIpc('plantilla-job-translations:load-records', () => loadJobPositionTranslationRecordsSnapshot()),
+  );
+
+  ipcMain.handle('plantilla-job-translations:save-record-if-unchanged', (_event, payload: unknown) => {
+    const record = validateJsonRecordPayload(payload, 'Payload de traducción de puesto inválido.');
+    if (!record.ok) {
+      return record.result;
+    }
+
+    return enqueueSqliteIpc('plantilla-job-translations:save-record-if-unchanged', () =>
+      saveJobPositionTranslationRecordIfUnchanged({
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
