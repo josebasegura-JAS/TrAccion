@@ -961,13 +961,15 @@ export function TeletrabajoPage({
                 filterLabel: teletrabajoFilterLabel,
               }}
             />
-            <ActionButton
+            <button
+              className="inline-flex items-center justify-center rounded-xl border border-transparent bg-[#1a5c38] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#217346] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={sortedSolicitudes.length === 0}
               onClick={() => void handleExportDireccion()}
-              variant="excel"
+              title="Exportar a Dirección"
+              type="button"
             >
-              Exportar Dirección
-            </ActionButton>
+              Dirección
+            </button>
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
             {filteredSolicitudes.length} registros

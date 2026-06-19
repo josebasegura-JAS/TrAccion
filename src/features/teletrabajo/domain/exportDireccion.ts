@@ -7,6 +7,10 @@ import { buildStableExportFilename } from '../../../shared/export/tableExport';
 const YES = 'SI';
 const NO = 'NO';
 const ROTIS_FONT = 'TrueRotisSemiSansLightTwo';
+const SOFT_GREEN = '#E2F0D9';
+const SOFT_RED = '#FFC7CE';
+const SOFT_RED_TEXT = '#9C0006';
+const SOFT_GREEN_TEXT = '#006100';
 
 function toExcelColor(hex: string): { argb: string } {
   return { argb: `FF${hex.replace('#', '').toUpperCase()}` };
@@ -83,13 +87,41 @@ function setValidationCellStyle(cell: ExcelJS.Cell, value: boolean): void {
   cell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: toExcelColor(value ? '#92D050' : '#FF0000'),
+    fgColor: toExcelColor(value ? SOFT_GREEN : SOFT_RED),
   };
   cell.font = {
     name: ROTIS_FONT,
     size: 11,
     bold: true,
-    color: toExcelColor(value ? '#006100' : '#FFFFFF'),
+    color: toExcelColor(value ? SOFT_GREEN_TEXT : SOFT_RED_TEXT),
+  };
+  cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  cell.border = buildDottedBorder();
+}
+
+function setManualValidationCellStyle(cell: ExcelJS.Cell): void {
+  cell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: toExcelColor(SOFT_GREEN),
+  };
+  cell.font = { name: ROTIS_FONT, size: 11 };
+  cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  cell.border = buildDottedBorder();
+}
+
+function setAnoAnteriorCellStyle(cell: ExcelJS.Cell, value: string): void {
+  const isPreviousTeletrabajo = value === YES;
+  cell.value = value;
+  cell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: toExcelColor(isPreviousTeletrabajo ? SOFT_RED : SOFT_GREEN),
+  };
+  cell.font = {
+    name: ROTIS_FONT,
+    size: 11,
+    color: toExcelColor(isPreviousTeletrabajo ? SOFT_RED_TEXT : SOFT_GREEN_TEXT),
   };
   cell.alignment = { horizontal: 'center', vertical: 'middle' };
   cell.border = buildDottedBorder();
@@ -270,6 +302,8 @@ export async function exportTeletrabajoDireccionToExcel({
 
     setValidationCellStyle(row.getCell(10), solicitud.revisado);
     setValidationCellStyle(row.getCell(11), solicitud.validacionJefatura);
+    setAnoAnteriorCellStyle(row.getCell(12), solicitud.tipoSolicitud === 'renovacion' ? YES : NO);
+    [13, 14, 15].forEach((columnNumber) => setManualValidationCellStyle(row.getCell(columnNumber)));
   });
 
   worksheet.autoFilter = {
