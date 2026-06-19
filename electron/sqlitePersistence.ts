@@ -5,7 +5,6 @@ import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import {
-  extractJsonRecordTimestamps,
   latestUpdatedAtFromJsonTables,
   maybeMigrateJsonArrayRecordsFromPersistedRecord,
   readActiveJsonRecords,
