@@ -22,6 +22,7 @@ import { ActionButton } from './ui/ActionButton';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
+import { evaluateTeletrabajoAntiguedad } from '../features/teletrabajo/domain/antiguedad';
 import {
   TELETRABAJO_ESTADOS,
   TELETRABAJO_TIPOS_SOLICITUD,
@@ -44,6 +45,7 @@ import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+import type { Employee } from '../features/plantilla/domain/employee';
 
 
 const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -254,7 +256,27 @@ function getTeletrabajoSemaforo(
   solicitud: TeletrabajoSolicitud,
   puestosByKey: Map<string, TeletrabajoPuesto>,
   solicitudesByPuestoCount: Map<string, number>,
+  employeesByEmpleado: Map<string, Employee>,
 ): TeletrabajoSemaforo {
+  const antiguedad = evaluateTeletrabajoAntiguedad(
+    solicitud,
+    employeesByEmpleado.get(solicitud.empleado.trim()),
+  );
+
+  if (antiguedad.status === 'no-cumple') {
+    return {
+      status: 'blocked',
+      title: antiguedad.title,
+    };
+  }
+
+  if (antiguedad.status === 'sin-dato') {
+    return {
+      status: 'review',
+      title: antiguedad.title,
+    };
+  }
+
   const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
   if (!puestoKey) {
     return {
@@ -393,6 +415,15 @@ export function TeletrabajoPage({
     [solicitudes],
   );
   const puestosByKey = useMemo(() => buildPuestosByKey(puestosTeletrabajo), [puestosTeletrabajo]);
+  const employeesByEmpleado = useMemo(
+    () =>
+      new Map(
+        employees
+          .filter((employee) => !employee.deletedAt)
+          .map((employee): [string, Employee] => [employee.empleado.trim(), employee]),
+      ),
+    [employees],
+  );
   const solicitudesByPuestoCount = useMemo(
     () => buildSolicitudesByPuestoCount(solicitudes),
     [solicitudes],
@@ -504,9 +535,15 @@ export function TeletrabajoPage({
       {
         id: 'teletrabajable',
         header: 'TT',
-        accessor: (s) => getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount).status,
+        accessor: (s) =>
+          getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado).status,
         render: (s) => {
-          const semaforo = getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount);
+          const semaforo = getTeletrabajoSemaforo(
+            s,
+            puestosByKey,
+            solicitudesByPuestoCount,
+            employeesByEmpleado,
+          );
           const className =
             semaforo.status === 'ok'
               ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
@@ -622,7 +659,7 @@ export function TeletrabajoPage({
         className: 'whitespace-nowrap',
       },
     ],
-    [generatingWordId, handleGenerateWord, puestosByKey, remove, solicitudesByPuestoCount],
+    [employeesByEmpleado, generatingWordId, handleGenerateWord, puestosByKey, remove, solicitudesByPuestoCount],
   );
 
   const sortedSolicitudes = useMemo(
@@ -1040,6 +1077,14 @@ export function TeletrabajoPage({
           onRowClick={openEditor}
           onSortChange={setSort}
           rows={filteredSolicitudes}
+          rowClassName={(solicitud) =>
+            evaluateTeletrabajoAntiguedad(
+              solicitud,
+              employeesByEmpleado.get(solicitud.empleado.trim()),
+            ).status === 'no-cumple'
+              ? 'border-l-4 border-red-400 bg-red-950/30 text-red-100 hover:bg-red-950/40'
+              : ''
+          }
           sort={preferences.sort}
         />
       </div>

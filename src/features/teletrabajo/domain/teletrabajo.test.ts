@@ -6,6 +6,7 @@ import {
   filterTeletrabajoSolicitudes,
   type TeletrabajoFilters,
 } from './filters';
+import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import { importEncuestaRows } from './importEncuesta';
 import { sortTeletrabajoByDefault } from './sort';
 import { normalizeDiasTeletrabajo, type TeletrabajoSolicitud } from './solicitud';
@@ -171,6 +172,8 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     puestoEus: 'Puesto Euskera Plantilla',
     residencia: 'Bilbao',
     nivelRetributivo: 'N1',
+    direccionOrganizativa: 'Dirección Plantilla',
+    antiguedadPuesto: '2024-01-01',
     sexo: 'M',
     calle: 'Calle Plantilla',
     numero: '1',
@@ -187,6 +190,48 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     ...overrides,
   };
 }
+
+
+
+describe('antigüedad mínima para teletrabajo', () => {
+  it('marca como no cumple cuando la solicitud se realiza antes de cumplir un año en el puesto', () => {
+    const solicitud = buildSolicitud({ fechaSolicitud: '2026-09-10' });
+    const employee = buildEmployee({ antiguedadPuesto: '2025-09-11' });
+
+    expect(evaluateTeletrabajoAntiguedad(solicitud, employee)).toMatchObject({
+      status: 'no-cumple',
+      antiguedadPuesto: '2025-09-11',
+      fechaReferencia: '2026-09-10',
+    });
+  });
+
+  it('marca como cumple desde el día exacto en que alcanza un año en el puesto', () => {
+    const solicitud = buildSolicitud({ fechaSolicitud: '2026-09-11' });
+    const employee = buildEmployee({ antiguedadPuesto: '2025-09-11' });
+
+    expect(evaluateTeletrabajoAntiguedad(solicitud, employee)).toMatchObject({
+      status: 'cumple',
+      antiguedadPuesto: '2025-09-11',
+      fechaReferencia: '2026-09-11',
+    });
+  });
+
+  it('devuelve sin dato cuando falta empleado, antigüedad o fecha de solicitud válida', () => {
+    expect(evaluateTeletrabajoAntiguedad(buildSolicitud({}), null).status).toBe('sin-dato');
+    expect(
+      evaluateTeletrabajoAntiguedad(
+        buildSolicitud({ fechaSolicitud: '2026-09-11' }),
+        buildEmployee({ antiguedadPuesto: '' }),
+      ).status,
+    ).toBe('sin-dato');
+    expect(
+      evaluateTeletrabajoAntiguedad(
+        buildSolicitud({ fechaSolicitud: '' }),
+        buildEmployee({ antiguedadPuesto: '2025-09-11' }),
+      ).status,
+    ).toBe('sin-dato');
+  });
+});
 
 describe('importador de encuesta de teletrabajo', () => {
   it('detecta cabecera desplazada y solo importa respuestas Sí del formato real', () => {
