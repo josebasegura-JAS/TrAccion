@@ -4,7 +4,13 @@ import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { Database, DatabaseConstructor } from 'better-sqlite3';
-import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './persistence/jsonRecordRepository';
+import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './persistence/jsonRecordRepository.js';
+import {
+  createSimpleJsonModuleRepository,
+  type ConditionalSimpleJsonRecord,
+  type SimpleJsonRecordsSnapshot,
+  type SimpleJsonSaveResult,
+} from './persistence/simpleJsonModuleRepository.js';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -17,7 +23,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 10;
+const CURRENT_SCHEMA_VERSION = 11;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -330,6 +336,17 @@ let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
+let vinculogramaMigrationDone = false;
+let licenciaSinSueldoMigrationDone = false;
+let criteriosRrllMigrationDone = false;
+let especialesRecipientMigrationDone = false;
+let teletrabajoPuestosMigrationDone = false;
+let jobPositionTranslationsMigrationDone = false;
+let presupuestosScenariosMigrationDone = false;
+let presupuestosManualItemsMigrationDone = false;
+let presupuestosTicketGroupsMigrationDone = false;
+let presupuestosActualsMigrationDone = false;
+let configuracionMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -828,6 +845,10 @@ function assertDatabaseWritesAllowed(): void {
   throw new Error(`Escritura bloqueada: ${DATABASE_HEARTBEAT_BLOCKED_MESSAGE}`);
 }
 
+function isDatabaseWriteBlockedByHeartbeat(): boolean {
+  return databaseWriteBlockedByHeartbeat;
+}
+
 async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   const currentLock = await readLock(lockPath);
   if (currentLock?.ownerId !== lock.ownerId) {
@@ -1194,6 +1215,118 @@ function migrateToVersion10(db: Database): void {
   }
 }
 
+function migrateToVersion11(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vinculograma_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS licencia_sin_sueldo_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS criterios_rrll_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS especiales_recipient_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS presupuesto_scenario_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS presupuesto_manual_item_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS presupuesto_ticket_group_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS presupuesto_actual_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS teletrabajo_puesto_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS job_position_translation_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS configuracion_state (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vinculograma_records_updated_at ON vinculograma_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_licencia_sin_sueldo_records_updated_at ON licencia_sin_sueldo_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_criterios_rrll_records_updated_at ON criterios_rrll_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_especiales_recipient_records_updated_at ON especiales_recipient_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_presupuesto_scenario_records_updated_at ON presupuesto_scenario_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_presupuesto_manual_item_records_updated_at ON presupuesto_manual_item_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_presupuesto_ticket_group_records_updated_at ON presupuesto_ticket_group_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_presupuesto_actual_records_updated_at ON presupuesto_actual_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_teletrabajo_puesto_records_updated_at ON teletrabajo_puesto_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_job_position_translation_records_updated_at ON job_position_translation_records(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_configuracion_state_updated_at ON configuracion_state(updated_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 11) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      11,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1205,6 +1338,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion8(db);
   migrateToVersion9(db);
   migrateToVersion10(db);
+  migrateToVersion11(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -3718,6 +3852,427 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
   );
 }
 
+
+
+type JsonRecordSnapshot = SimpleJsonRecordsSnapshot;
+type ConditionalJsonRecord = ConditionalSimpleJsonRecord;
+type JsonRecordSaveResult = SimpleJsonSaveResult;
+
+function createJsonModuleRepository(
+  tableName: string,
+  legacyKey: string,
+  moduleLabel: string,
+  getMigrationDone: () => boolean,
+  setMigrationDone: (value: boolean) => void,
+) {
+  return createSimpleJsonModuleRepository(
+    {
+      tableName,
+      legacyKey,
+      moduleLabel,
+      getMigrationDone,
+      setMigrationDone,
+    },
+    {
+      safeDatabaseOperation,
+      getSqliteStatus,
+      requireDatabase,
+      isUpdatedAtRow,
+      updateRefreshMetadata,
+      enqueueLocalBackup,
+      assertDatabaseWritesAllowed,
+      isDatabaseWriteBlockedByHeartbeat,
+    },
+  );
+}
+
+const vinculogramaRepository = createJsonModuleRepository(
+  'vinculograma_records',
+  'traccion.v1.vinculograma.records',
+  'Vinculograma',
+  () => vinculogramaMigrationDone,
+  (value) => {
+    vinculogramaMigrationDone = value;
+  },
+);
+
+const licenciaSinSueldoRepository = createJsonModuleRepository(
+  'licencia_sin_sueldo_records',
+  'traccion.v1.licenciasSinSueldo.records',
+  'Licencia sin sueldo',
+  () => licenciaSinSueldoMigrationDone,
+  (value) => {
+    licenciaSinSueldoMigrationDone = value;
+  },
+);
+
+const criteriosRrllRepository = createJsonModuleRepository(
+  'criterios_rrll_records',
+  'traccion.v1.criterios-rrll.criterios',
+  'Criterio RRLL',
+  () => criteriosRrllMigrationDone,
+  (value) => {
+    criteriosRrllMigrationDone = value;
+  },
+);
+
+const especialesRecipientRepository = createJsonModuleRepository(
+  'especiales_recipient_records',
+  'rrll_especiales_destinatarios',
+  'Destinatario especial',
+  () => especialesRecipientMigrationDone,
+  (value) => {
+    especialesRecipientMigrationDone = value;
+  },
+);
+
+const teletrabajoPuestosRepository = createJsonModuleRepository(
+  'teletrabajo_puesto_records',
+  'traccion.v1.teletrabajo.puestos',
+  'Puesto teletrabajable',
+  () => teletrabajoPuestosMigrationDone,
+  (value) => {
+    teletrabajoPuestosMigrationDone = value;
+  },
+);
+
+const jobPositionTranslationsRepository = createJsonModuleRepository(
+  'job_position_translation_records',
+  'traccion.v1.plantilla.jobPositionTranslations',
+  'Traducción de puesto',
+  () => jobPositionTranslationsMigrationDone,
+  (value) => {
+    jobPositionTranslationsMigrationDone = value;
+  },
+);
+
+const presupuestosScenariosRepository = createJsonModuleRepository(
+  'presupuesto_scenario_records',
+  'traccion.v1.presupuestos.scenarios',
+  'Escenario de presupuesto',
+  () => presupuestosScenariosMigrationDone,
+  (value) => {
+    presupuestosScenariosMigrationDone = value;
+  },
+);
+
+const presupuestosManualItemsRepository = createJsonModuleRepository(
+  'presupuesto_manual_item_records',
+  'traccion.v1.presupuestos.manualItems',
+  'Partida manual de presupuesto',
+  () => presupuestosManualItemsMigrationDone,
+  (value) => {
+    presupuestosManualItemsMigrationDone = value;
+  },
+);
+
+const presupuestosTicketGroupsRepository = createJsonModuleRepository(
+  'presupuesto_ticket_group_records',
+  'traccion.v1.presupuestos.ticketGroups',
+  'Grupo ticket de presupuesto',
+  () => presupuestosTicketGroupsMigrationDone,
+  (value) => {
+    presupuestosTicketGroupsMigrationDone = value;
+  },
+);
+
+const presupuestosActualsRepository = createJsonModuleRepository(
+  'presupuesto_actual_records',
+  'traccion.v1.presupuestos.actuals',
+  'Real de presupuesto',
+  () => presupuestosActualsMigrationDone,
+  (value) => {
+    presupuestosActualsMigrationDone = value;
+  },
+);
+
+export function loadVinculogramaRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return vinculogramaRepository.loadSnapshot();
+}
+
+export function saveVinculogramaRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return vinculogramaRepository.saveIfUnchanged(record);
+}
+
+export function loadLicenciaSinSueldoRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return licenciaSinSueldoRepository.loadSnapshot();
+}
+
+export function saveLicenciaSinSueldoRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return licenciaSinSueldoRepository.saveIfUnchanged(record);
+}
+
+export function loadCriteriosRrllRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return criteriosRrllRepository.loadSnapshot();
+}
+
+export function saveCriteriosRrllRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return criteriosRrllRepository.saveIfUnchanged(record);
+}
+
+export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return especialesRecipientRepository.loadSnapshot();
+}
+
+export function saveEspecialesRecipientRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return especialesRecipientRepository.saveIfUnchanged(record);
+}
+
+export function loadTeletrabajoPuestoRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return teletrabajoPuestosRepository.loadSnapshot();
+}
+
+export function saveTeletrabajoPuestoRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return teletrabajoPuestosRepository.saveIfUnchanged(record);
+}
+
+export function loadJobPositionTranslationRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return jobPositionTranslationsRepository.loadSnapshot();
+}
+
+export function saveJobPositionTranslationRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return jobPositionTranslationsRepository.saveIfUnchanged(record);
+}
+
+function latestUpdatedAtFromSnapshots(snapshots: JsonRecordSnapshot[]): string | null {
+  return snapshots
+    .flatMap((snapshot) => snapshot.records)
+    .reduce<string | null>((latest, record) => {
+      if (!latest || record.updatedAt > latest) {
+        return record.updatedAt;
+      }
+      return latest;
+    }, null);
+}
+
+export async function loadPresupuestosRecordsSnapshot(): Promise<{
+  status: DatabaseStatus;
+  scenarios: JsonRecordSnapshot['records'];
+  manualItems: JsonRecordSnapshot['records'];
+  ticketGroups: JsonRecordSnapshot['records'];
+  actuals: JsonRecordSnapshot['records'];
+}> {
+  const [scenarios, manualItems, ticketGroups, actuals] = await Promise.all([
+    presupuestosScenariosRepository.loadSnapshot(),
+    presupuestosManualItemsRepository.loadSnapshot(),
+    presupuestosTicketGroupsRepository.loadSnapshot(),
+    presupuestosActualsRepository.loadSnapshot(),
+  ]);
+
+  return {
+    status: scenarios.status as DatabaseStatus,
+    scenarios: scenarios.records,
+    manualItems: manualItems.records,
+    ticketGroups: ticketGroups.records,
+    actuals: actuals.records,
+  };
+}
+
+export async function savePresupuestosSnapshotIfUnchanged(snapshot: {
+  scenarios: Array<{ id: string; value: string }>;
+  manualItems: Array<{ id: string; value: string }>;
+  ticketGroups: Array<{ id: string; value: string }>;
+  actuals: Array<{ id: string; value: string }>;
+  expectedUpdatedAt: string | null;
+}): Promise<JsonRecordSaveResult> {
+  const currentSnapshot = await loadPresupuestosRecordsSnapshot();
+  const currentUpdatedAt = latestUpdatedAtFromSnapshots([
+    { status: currentSnapshot.status, records: currentSnapshot.scenarios },
+    { status: currentSnapshot.status, records: currentSnapshot.manualItems },
+    { status: currentSnapshot.status, records: currentSnapshot.ticketGroups },
+    { status: currentSnapshot.status, records: currentSnapshot.actuals },
+  ]);
+
+  if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
+    return {
+      ok: false,
+      status: currentSnapshot.status,
+      currentUpdatedAt,
+      message: 'Presupuestos ha sido modificado por otro usuario. Recarga antes de guardar.',
+    };
+  }
+
+  const updatedAt = new Date().toISOString();
+
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+      const db = requireDatabase();
+      db.transaction(() => {
+        const collections = [
+          ['presupuesto_scenario_records', snapshot.scenarios],
+          ['presupuesto_manual_item_records', snapshot.manualItems],
+          ['presupuesto_ticket_group_records', snapshot.ticketGroups],
+          ['presupuesto_actual_records', snapshot.actuals],
+        ] as const;
+
+        for (const [tableName, records] of collections) {
+          const ids = new Set(records.map((record) => record.id));
+          const existingRows = readActiveJsonRecords(db, tableName);
+          for (const row of existingRows) {
+            if (!ids.has(row.id)) {
+              db.prepare(`UPDATE ${tableName} SET updated_at = ?, deleted_at = ? WHERE id = ?`).run(
+                updatedAt,
+                updatedAt,
+                row.id,
+              );
+            }
+          }
+
+          for (const record of records) {
+            db.prepare(
+              `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, NULL)
+               ON CONFLICT(id) DO UPDATE SET
+                 value_json = excluded.value_json,
+                 updated_at = excluded.updated_at,
+                 deleted_at = NULL`,
+            ).run(record.id, record.value, updatedAt, updatedAt);
+          }
+        }
+        updateRefreshMetadata(db, updatedAt);
+      })();
+      enqueueLocalBackup('save:presupuestos');
+      return {
+        ok: true,
+        status: currentStatus,
+        currentUpdatedAt: updatedAt,
+        message: 'Presupuestos guardado en SQLite.',
+      };
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+interface ConfiguracionStateRow {
+  value_json: string;
+  updated_at: string;
+}
+
+function isConfiguracionStateRow(value: unknown): value is ConfiguracionStateRow {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<ConfiguracionStateRow>;
+  return typeof candidate.value_json === 'string' && typeof candidate.updated_at === 'string';
+}
+
+function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
+  if (configuracionMigrationDone) {
+    return;
+  }
+
+  const row = db.prepare('SELECT value_json, updated_at FROM persisted_records WHERE key = ?').get('traccion.v1.configuracion');
+  if (!isConfiguracionStateRow(row)) {
+    configuracionMigrationDone = true;
+    return;
+  }
+
+  const now = row.updated_at || new Date().toISOString();
+  db.prepare(
+    `INSERT OR IGNORE INTO configuracion_state (id, value_json, created_at, updated_at, deleted_at)
+     VALUES ('configuracion', ?, ?, ?, NULL)`,
+  ).run(row.value_json, now, now);
+  configuracionMigrationDone = true;
+}
+
+export async function loadConfiguracionSnapshot(): Promise<{
+  status: DatabaseStatus;
+  value: string | null;
+  updatedAt: string | null;
+}> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, value: null, updatedAt: null };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateConfiguracionFromPersistedRecord(db))();
+      const row = db.prepare("SELECT value_json, updated_at FROM configuracion_state WHERE id = 'configuracion' AND deleted_at IS NULL").get();
+      if (!isConfiguracionStateRow(row)) {
+        return { status: currentStatus, value: null, updatedAt: null };
+      }
+      return { status: currentStatus, value: row.value_json, updatedAt: row.updated_at };
+    },
+    (nextStatus) => ({ status: nextStatus, value: null, updatedAt: null }),
+  );
+}
+
+export async function saveConfiguracionIfUnchanged(record: {
+  value: string;
+  expectedUpdatedAt: string | null;
+}): Promise<JsonRecordSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+      const db = requireDatabase();
+      return db.transaction((): JsonRecordSaveResult => {
+        maybeMigrateConfiguracionFromPersistedRecord(db);
+        const row = db.prepare("SELECT updated_at FROM configuracion_state WHERE id = 'configuracion'").get();
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'Configuración ha sido modificada por otro usuario. Recarga antes de guardar.',
+          };
+        }
+
+        const updatedAt = new Date().toISOString();
+        db.prepare(
+          `INSERT INTO configuracion_state (id, value_json, created_at, updated_at, deleted_at)
+           VALUES ('configuracion', ?, ?, ?, NULL)
+           ON CONFLICT(id) DO UPDATE SET
+             value_json = excluded.value_json,
+             updated_at = excluded.updated_at,
+             deleted_at = NULL`,
+        ).run(record.value, updatedAt, updatedAt);
+        updateRefreshMetadata(db, updatedAt);
+        enqueueLocalBackup('save:configuracion');
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Configuración guardada en SQLite.',
+        };
+      })();
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
 
 export async function getSqliteSyncTokensSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
   return getPersistedRecordsTokenSnapshot();
