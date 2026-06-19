@@ -473,6 +473,7 @@ export function TaskEditor({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <aside
+        aria-labelledby="task-editor-title"
         aria-modal="true"
         className="flex max-h-[calc(100vh-1rem)] w-[min(1040px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
         role="dialog"
@@ -482,7 +483,7 @@ export function TaskEditor({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
               {isCreate ? 'Nueva tarea' : 'Editar tarea'}
             </p>
-            <h3 className="mt-1 truncate text-base font-bold text-metro-text">
+            <h3 className="mt-1 truncate text-base font-bold text-metro-text" id="task-editor-title">
               {isCreate ? 'Nueva tarea' : task?.titulo || 'Sin selección'}
             </h3>
             <p className="text-xs text-metro-muted">
