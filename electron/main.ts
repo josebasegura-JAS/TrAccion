@@ -28,6 +28,7 @@ import {
   loadActaRecordsSnapshot,
   loadTeletrabajoRecordsSnapshot,
   loadVinculogramaRecordsSnapshot,
+  loadLicenciaSinSueldoRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -46,6 +47,7 @@ import {
   saveActaRecordIfUnchanged,
   saveTeletrabajoRecordIfUnchanged,
   saveVinculogramaRecordIfUnchanged,
+  saveLicenciaSinSueldoRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1553,6 +1555,49 @@ function registerIpcHandlers(): void {
       : null;
     return enqueueSqliteIpc('vinculograma:save-record-if-unchanged', () =>
       saveVinculogramaRecordIfUnchanged({
+        id,
+        value,
+        expectedUpdatedAt,
+      }),
+    );
+  });
+
+
+  ipcMain.handle('licencias-sin-sueldo:load-records', () =>
+    enqueueSqliteIpc('licencias-sin-sueldo:load-records', () => loadLicenciaSinSueldoRecordsSnapshot()),
+  );
+
+  ipcMain.handle('licencias-sin-sueldo:save-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de licencia sin sueldo inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de licencia sin sueldo inválido.',
+      };
+    }
+
+    const id = candidate.id;
+    const value = candidate.value;
+    const expectedUpdatedAt = typeof candidate.expectedUpdatedAt === 'string'
+      ? candidate.expectedUpdatedAt
+      : null;
+    return enqueueSqliteIpc('licencias-sin-sueldo:save-record-if-unchanged', () =>
+      saveLicenciaSinSueldoRecordIfUnchanged({
         id,
         value,
         expectedUpdatedAt,

@@ -320,6 +320,15 @@ interface TraccionVinculogramaRecordsSnapshot {
 
 type TraccionConditionalVinculogramaRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionLicenciaSinSueldoRecord = TraccionComiteSessionRecord;
+
+interface TraccionLicenciaSinSueldoRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionLicenciaSinSueldoRecord[];
+}
+
+type TraccionConditionalLicenciaSinSueldoRecord = TraccionConditionalComiteSessionRecord;
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -382,6 +391,10 @@ interface TraccionApi {
   loadVinculogramaRecords?: () => Promise<TraccionVinculogramaRecordsSnapshot>;
   saveVinculogramaRecordIfUnchanged?: (
     record: TraccionConditionalVinculogramaRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadLicenciaSinSueldoRecords?: () => Promise<TraccionLicenciaSinSueldoRecordsSnapshot>;
+  saveLicenciaSinSueldoRecordIfUnchanged?: (
+    record: TraccionConditionalLicenciaSinSueldoRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;

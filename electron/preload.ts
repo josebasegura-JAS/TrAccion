@@ -108,6 +108,12 @@ contextBridge.exposeInMainWorld('traccion', {
   }) => ipcRenderer.invoke('teletrabajo:save-record-if-unchanged', record),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
+  loadLicenciaSinSueldoRecords: () => ipcRenderer.invoke('licencias-sin-sueldo:load-records'),
+  saveLicenciaSinSueldoRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('licencias-sin-sueldo:save-record-if-unchanged', record),
   selectLicenciaSinSueldoTemplate: () =>
     ipcRenderer.invoke('licencias-sin-sueldo:select-template'),
   readLicenciaSinSueldoTemplate: (path: string) =>

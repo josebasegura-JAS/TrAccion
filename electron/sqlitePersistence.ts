@@ -16,7 +16,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 11;
+const CURRENT_SCHEMA_VERSION = 12;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -123,6 +123,15 @@ export interface SqliteVinculogramaRecordsSnapshot {
 }
 
 export type ConditionalSqliteVinculogramaRecord = ConditionalSqliteComiteSessionRecord;
+
+export type SqliteLicenciaSinSueldoRecord = SqliteComiteSessionRecord;
+
+export interface SqliteLicenciaSinSueldoRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteLicenciaSinSueldoRecord[];
+}
+
+export type ConditionalSqliteLicenciaSinSueldoRecord = ConditionalSqliteComiteSessionRecord;
 
 export interface SqliteEmployeeRecord {
   id: string;
@@ -336,6 +345,7 @@ let paritariaSessionsMigrationDone = false;
 let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let vinculogramaMigrationDone = false;
+let licenciasSinSueldoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
 
@@ -1228,6 +1238,32 @@ function migrateToVersion11(db: Database): void {
   }
 }
 
+function migrateToVersion12(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS licencia_sin_sueldo_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_licencia_sin_sueldo_records_updated_at
+      ON licencia_sin_sueldo_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_licencia_sin_sueldo_records_deleted_at
+      ON licencia_sin_sueldo_records(deleted_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 12) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      12,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1240,6 +1276,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion9(db);
   migrateToVersion10(db);
   migrateToVersion11(db);
+  migrateToVersion12(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1286,6 +1323,7 @@ function closeDatabase(): void {
   actasMigrationDone = false;
   teletrabajoMigrationDone = false;
   vinculogramaMigrationDone = false;
+  licenciasSinSueldoMigrationDone = false;
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -1301,6 +1339,7 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   actasMigrationDone = false;
   teletrabajoMigrationDone = false;
   vinculogramaMigrationDone = false;
+  licenciasSinSueldoMigrationDone = false;
 
   await releaseActiveSessionLock();
 }
@@ -2996,6 +3035,396 @@ export async function saveVinculogramaRecordIfUnchanged(
 
       if (result.ok) {
         enqueueLocalBackup('save:vinculograma_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+function mapEmployeeRecordRow(row: EmployeeRecordRow): SqliteEmployeeRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function isJsonObjectWithEmpleado(value: unknown): value is { empleado: string; deletedAt?: unknown } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { empleado?: unknown };
+  return typeof candidate.empleado === 'string' && candidate.empleado.trim().length > 0;
+}
+
+function maybeMigrateEmployeesFromPersistedRecord(db: Database): void {
+  if (employeesMigrationDone) {
+    return;
+  }
+
+  const employeeCountRow = db.prepare('SELECT COUNT(*) AS count FROM employee_records').get();
+  const employeeCount = isCountRow(employeeCountRow) ? employeeCountRow.count : 0;
+  if (employeeCount > 0) {
+    employeesMigrationDone = true;
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.plantilla.employees');
+  if (!legacyRecord) {
+    employeesMigrationDone = true;
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    employeesMigrationDone = true;
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    employeesMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO employee_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithEmpleado(item)) {
+      continue;
+    }
+
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.empleado, JSON.stringify(item), now, now, deletedAt);
+  }
+
+  employeesMigrationDone = true;
+}
+
+function readEmployeeRecords(db: Database): SqliteEmployeeRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM employee_records ORDER BY id')
+    .all()
+    .filter(isEmployeeRecordRow)
+    .map(mapEmployeeRecordRow);
+}
+
+export async function saveActaRecordIfUnchanged(
+  record: ConditionalSqliteActaRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateActasFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'El acta ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+        const createdAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+            ? (parsed as { createdAt: string }).createdAt
+            : now;
+        const updatedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+            ? (parsed as { updatedAt: string }).updatedAt
+            : now;
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO acta_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'El acta ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE acta_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'El acta ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, updatedAt);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Acta guardada en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:acta_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+
+function mapLicenciaSinSueldoRecordRow(row: ComiteSessionRecordRow): SqliteLicenciaSinSueldoRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readLicenciaSinSueldoRecords(db: Database): SqliteLicenciaSinSueldoRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM licencia_sin_sueldo_records WHERE deleted_at IS NULL ORDER BY created_at, id')
+    .all()
+    .filter(isComiteSessionRecordRow)
+    .map(mapLicenciaSinSueldoRecordRow);
+}
+
+function maybeMigrateLicenciaSinSueldoFromPersistedRecord(db: Database): void {
+  if (licenciasSinSueldoMigrationDone) {
+    return;
+  }
+
+  const countRow = db.prepare('SELECT COUNT(*) AS count FROM licencia_sin_sueldo_records').get();
+  const count = isCountRow(countRow) ? countRow.count : 0;
+  if (count > 0) {
+    licenciasSinSueldoMigrationDone = true;
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.licenciasSinSueldo.records');
+  if (!legacyRecord) {
+    licenciasSinSueldoMigrationDone = true;
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    licenciasSinSueldoMigrationDone = true;
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    licenciasSinSueldoMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO licencia_sin_sueldo_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithStringId(item)) {
+      continue;
+    }
+
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
+  }
+
+  licenciasSinSueldoMigrationDone = true;
+}
+
+export async function loadLicenciaSinSueldoRecordsSnapshot(): Promise<SqliteLicenciaSinSueldoRecordsSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, records: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateLicenciaSinSueldoFromPersistedRecord(db))();
+      return { status: currentStatus, records: readLicenciaSinSueldoRecords(db) };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [] }),
+  );
+}
+
+export async function saveLicenciaSinSueldoRecordIfUnchanged(
+  record: ConditionalSqliteLicenciaSinSueldoRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateLicenciaSinSueldoFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM licencia_sin_sueldo_records WHERE id = ?').get(record.id);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'La solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+        const createdAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+            ? (parsed as { createdAt: string }).createdAt
+            : now;
+        const updatedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+            ? (parsed as { updatedAt: string }).updatedAt
+            : now;
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO licencia_sin_sueldo_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM licencia_sin_sueldo_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE licencia_sin_sueldo_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM licencia_sin_sueldo_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'La solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, updatedAt);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Solicitud guardada en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:licencia_sin_sueldo_records');
       }
 
       return result;
