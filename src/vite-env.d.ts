@@ -312,6 +312,15 @@ interface TraccionTeletrabajoRecordsSnapshot {
 
 type TraccionConditionalTeletrabajoRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionTeletrabajoPuestoRecord = TraccionComiteSessionRecord;
+
+interface TraccionTeletrabajoPuestoRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTeletrabajoPuestoRecord[];
+}
+
+type TraccionConditionalTeletrabajoPuestoRecord = TraccionConditionalComiteSessionRecord;
+
 type TraccionVinculogramaRecord = TraccionComiteSessionRecord;
 
 interface TraccionVinculogramaRecordsSnapshot {
@@ -435,6 +444,10 @@ interface TraccionApi {
   loadTeletrabajoRecords?: () => Promise<TraccionTeletrabajoRecordsSnapshot>;
   saveTeletrabajoRecordIfUnchanged?: (
     record: TraccionConditionalTeletrabajoRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadTeletrabajoPuestoRecords?: () => Promise<TraccionTeletrabajoPuestoRecordsSnapshot>;
+  saveTeletrabajoPuestoRecordIfUnchanged?: (
+    record: TraccionConditionalTeletrabajoPuestoRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   loadVinculogramaRecords?: () => Promise<TraccionVinculogramaRecordsSnapshot>;
   saveVinculogramaRecordIfUnchanged?: (
