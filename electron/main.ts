@@ -32,6 +32,7 @@ import {
   loadCriteriosRrllRecordsSnapshot,
   loadEspecialesRecipientRecordsSnapshot,
   loadConfiguracionSnapshot,
+  loadPresupuestosRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -54,6 +55,7 @@ import {
   saveCriteriosRrllRecordIfUnchanged,
   saveEspecialesRecipientRecordIfUnchanged,
   saveConfiguracionIfUnchanged,
+  savePresupuestosSnapshotIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1611,6 +1613,66 @@ function registerIpcHandlers(): void {
     );
   });
 
+
+
+  ipcMain.handle('presupuestos:load-records', () =>
+    enqueueSqliteIpc('presupuestos:load-records', () => loadPresupuestosRecordsSnapshot()),
+  );
+
+  ipcMain.handle('presupuestos:save-snapshot-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de presupuestos inválido.',
+      };
+    }
+
+    const candidate = payload as {
+      scenarios?: unknown;
+      manualItems?: unknown;
+      ticketGroups?: unknown;
+      actuals?: unknown;
+      expectedUpdatedAt?: unknown;
+    };
+
+    const isRecordArray = (value: unknown): value is Array<{ id: string; value: string }> =>
+      Array.isArray(value) &&
+      value.every(
+        (record) =>
+          record &&
+          typeof record === 'object' &&
+          typeof (record as { id?: unknown }).id === 'string' &&
+          typeof (record as { value?: unknown }).value === 'string',
+      );
+
+    if (
+      !isRecordArray(candidate.scenarios) ||
+      !isRecordArray(candidate.manualItems) ||
+      !isRecordArray(candidate.ticketGroups) ||
+      !isRecordArray(candidate.actuals) ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de presupuestos inválido.',
+      };
+    }
+
+    return enqueueSqliteIpc('presupuestos:save-snapshot-if-unchanged', () =>
+      savePresupuestosSnapshotIfUnchanged({
+        scenarios: candidate.scenarios,
+        manualItems: candidate.manualItems,
+        ticketGroups: candidate.ticketGroups,
+        actuals: candidate.actuals,
+        expectedUpdatedAt:
+          typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
+      }),
+    );
+  });
 
   ipcMain.handle('especiales:load-recipient-records', () =>
     enqueueSqliteIpc('especiales:load-recipient-records', () => loadEspecialesRecipientRecordsSnapshot()),

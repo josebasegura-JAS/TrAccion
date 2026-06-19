@@ -104,6 +104,14 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('criterios-rrll:save-record-if-unchanged', record),
+  loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
+  savePresupuestosSnapshotIfUnchanged: (snapshot: {
+    scenarios: Array<{ id: string; value: string }>;
+    manualItems: Array<{ id: string; value: string }>;
+    ticketGroups: Array<{ id: string; value: string }>;
+    actuals: Array<{ id: string; value: string }>;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('presupuestos:save-snapshot-if-unchanged', snapshot),
   loadEspecialesRecipientRecords: () => ipcRenderer.invoke('especiales:load-recipient-records'),
   saveEspecialesRecipientRecordIfUnchanged: (record: {
     id: string;

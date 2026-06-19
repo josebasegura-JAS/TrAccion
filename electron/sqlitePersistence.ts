@@ -16,7 +16,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 14;
+const CURRENT_SCHEMA_VERSION = 15;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -159,6 +159,24 @@ export interface SqliteConfiguracionSnapshot {
 
 export interface ConditionalSqliteConfiguracionRecord {
   value: string;
+  expectedUpdatedAt: string | null;
+}
+
+export type SqlitePresupuestoRecord = SqliteComiteSessionRecord;
+
+export interface SqlitePresupuestosRecordsSnapshot {
+  status: DatabaseStatus;
+  scenarios: SqlitePresupuestoRecord[];
+  manualItems: SqlitePresupuestoRecord[];
+  ticketGroups: SqlitePresupuestoRecord[];
+  actuals: SqlitePresupuestoRecord[];
+}
+
+export interface ConditionalSqlitePresupuestosSnapshot {
+  scenarios: Array<{ id: string; value: string }>;
+  manualItems: Array<{ id: string; value: string }>;
+  ticketGroups: Array<{ id: string; value: string }>;
+  actuals: Array<{ id: string; value: string }>;
   expectedUpdatedAt: string | null;
 }
 
@@ -378,6 +396,7 @@ let licenciasSinSueldoMigrationDone = false;
 let criteriosRrllMigrationDone = false;
 let especialesRecipientsMigrationDone = false;
 let configuracionMigrationDone = false;
+let presupuestosMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
 
@@ -1355,6 +1374,34 @@ function migrateToVersion14(db: Database): void {
   }
 }
 
+function migrateToVersion15(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS presupuesto_records (
+      kind TEXT NOT NULL,
+      id TEXT NOT NULL,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT,
+      PRIMARY KEY (kind, id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_presupuesto_records_kind_updated_at
+      ON presupuesto_records(kind, updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_presupuesto_records_kind_deleted_at
+      ON presupuesto_records(kind, deleted_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 15) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      15,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1370,6 +1417,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion12(db);
   migrateToVersion13(db);
   migrateToVersion14(db);
+  migrateToVersion15(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -3546,6 +3594,213 @@ export async function saveCriteriosRrllRecordIfUnchanged(
   );
 }
 
+
+
+type PresupuestoRecordKind = 'scenario' | 'manualItem' | 'ticketGroup' | 'actual';
+
+const PRESUPUESTOS_LEGACY_KEYS: Record<PresupuestoRecordKind, string> = {
+  scenario: 'traccion.v1.presupuestos.scenarios',
+  manualItem: 'traccion.v1.presupuestos.manualItems',
+  ticketGroup: 'traccion.v1.presupuestos.ticketGroups',
+  actual: 'traccion.v1.presupuestos.actuals',
+};
+
+function mapPresupuestoRecordRow(row: ComiteSessionRecordRow): SqlitePresupuestoRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readPresupuestoRecords(db: Database, kind: PresupuestoRecordKind): SqlitePresupuestoRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM presupuesto_records WHERE kind = ? AND deleted_at IS NULL ORDER BY created_at, id')
+    .all(kind)
+    .filter(isComiteSessionRecordRow)
+    .map(mapPresupuestoRecordRow);
+}
+
+function maybeMigratePresupuestosFromPersistedRecords(db: Database): void {
+  if (presupuestosMigrationDone) {
+    return;
+  }
+
+  const countRow = db.prepare('SELECT COUNT(*) AS count FROM presupuesto_records').get();
+  const count = isCountRow(countRow) ? countRow.count : 0;
+  if (count > 0) {
+    presupuestosMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO presupuesto_records (kind, id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+
+  for (const [kind, storageKey] of Object.entries(PRESUPUESTOS_LEGACY_KEYS) as Array<[PresupuestoRecordKind, string]>) {
+    const legacyRecord = readPersistedRecordByKey(db, storageKey);
+    if (!legacyRecord) {
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(legacyRecord.value);
+    } catch {
+      continue;
+    }
+
+    if (!Array.isArray(parsed)) {
+      continue;
+    }
+
+    for (const item of parsed) {
+      if (!isJsonObjectWithStringId(item)) {
+        continue;
+      }
+
+      const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+      const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+      const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+      insert.run(kind, item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
+    }
+  }
+
+  presupuestosMigrationDone = true;
+}
+
+function getPresupuestosLatestUpdatedAt(db: Database): string | null {
+  const row = db.prepare('SELECT MAX(updated_at) AS updated_at FROM presupuesto_records').get();
+  return isUpdatedAtRow(row) ? row.updated_at : null;
+}
+
+export async function loadPresupuestosRecordsSnapshot(): Promise<SqlitePresupuestosRecordsSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigratePresupuestosFromPersistedRecords(db))();
+      return {
+        status: currentStatus,
+        scenarios: readPresupuestoRecords(db, 'scenario'),
+        manualItems: readPresupuestoRecords(db, 'manualItem'),
+        ticketGroups: readPresupuestoRecords(db, 'ticketGroup'),
+        actuals: readPresupuestoRecords(db, 'actual'),
+      };
+    },
+    (nextStatus) => ({ status: nextStatus, scenarios: [], manualItems: [], ticketGroups: [], actuals: [] }),
+  );
+}
+
+function extractPresupuestoDates(value: string): { createdAt: string; updatedAt: string; deletedAt: string | null } {
+  const now = new Date().toISOString();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    parsed = null;
+  }
+
+  const createdAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+      ? (parsed as { createdAt: string }).createdAt
+      : now;
+  const updatedAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+      ? (parsed as { updatedAt: string }).updatedAt
+      : now;
+  const deletedAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+      ? (parsed as { deletedAt: string }).deletedAt
+      : null;
+
+  return { createdAt, updatedAt, deletedAt };
+}
+
+export async function savePresupuestosSnapshotIfUnchanged(
+  snapshot: ConditionalSqlitePresupuestosSnapshot,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigratePresupuestosFromPersistedRecords(db);
+        const currentUpdatedAt = getPresupuestosLatestUpdatedAt(db);
+
+        if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'Presupuestos ha sido modificado por otro usuario. Recarga antes de guardar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        const upsert = db.prepare(
+          `INSERT INTO presupuesto_records (kind, id, value_json, created_at, updated_at, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(kind, id) DO UPDATE SET
+             value_json = excluded.value_json,
+             updated_at = excluded.updated_at,
+             deleted_at = excluded.deleted_at`,
+        );
+
+        const saveRecords = (kind: PresupuestoRecordKind, records: Array<{ id: string; value: string }>) => {
+          for (const record of records) {
+            const dates = extractPresupuestoDates(record.value);
+            upsert.run(kind, record.id, record.value, dates.createdAt, dates.updatedAt, dates.deletedAt);
+          }
+        };
+
+        saveRecords('scenario', snapshot.scenarios);
+        saveRecords('manualItem', snapshot.manualItems);
+        saveRecords('ticketGroup', snapshot.ticketGroups);
+        saveRecords('actual', snapshot.actuals);
+        updateRefreshMetadata(db, now);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: getPresupuestosLatestUpdatedAt(db),
+          message: 'Presupuestos guardado en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:presupuesto_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
 
 function mapEspecialRecipientRecordRow(row: ComiteSessionRecordRow): SqliteEspecialRecipientRecord {
   return {

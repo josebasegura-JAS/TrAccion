@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import {
+  hasPresupuestosSqliteRepository,
+  loadPresupuestosFromSqlite,
+  savePresupuestosToSqlite,
+} from './presupuestosSqliteRepository';
+import {
   normalizeBudgetActual,
   normalizeBudgetNumber,
   normalizeBudgetRate,
@@ -32,6 +37,7 @@ interface PresupuestosStoreState {
   ticketGroups: BudgetTicketGroup[];
   actuals: BudgetActual[];
   activeScenarioId: string | null;
+  sqliteUpdatedAt: string | null;
   load: () => void;
   reloadFromStorage: () => void;
   setActiveScenario: (scenarioId: string) => void;
@@ -81,17 +87,25 @@ async function persist(state: Pick<PresupuestosStoreState, 'scenarios' | 'manual
   }
 }
 
-type PresupuestosPatch = Partial<Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId'>>;
+type PresupuestosPatch = Partial<Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId' | 'sqliteUpdatedAt'>>;
 
 function commitPresupuestosState(
   set: (partial: PresupuestosPatch) => void,
   nextState: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>,
   patch: PresupuestosPatch,
+  expectedSqliteUpdatedAt: string | null,
 ): void {
   void (async () => {
     try {
+      const sqliteResult = hasPresupuestosSqliteRepository()
+        ? await savePresupuestosToSqlite(nextState, expectedSqliteUpdatedAt)
+        : null;
+      if (sqliteResult && !sqliteResult.ok) {
+        console.warn(sqliteResult.message);
+        return;
+      }
       await persist(nextState);
-      set(patch);
+      set({ ...patch, sqliteUpdatedAt: sqliteResult?.currentUpdatedAt ?? expectedSqliteUpdatedAt });
     } catch (error) {
       console.warn('Presupuestos no guardado en SQLite.', error);
     }
@@ -161,7 +175,7 @@ function normalizeTicketDraft(draft: BudgetTicketGroupDraft): BudgetTicketGroupD
   };
 }
 
-function loadState(): Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId'> {
+function loadState(): Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId' | 'sqliteUpdatedAt'> {
   const scenarios = readJsonArray(BUDGET_SCENARIOS_STORAGE_KEY, isScenario);
   return {
     scenarios,
@@ -169,6 +183,23 @@ function loadState(): Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' |
     ticketGroups: readJsonArray(BUDGET_TICKET_GROUPS_STORAGE_KEY, isTicketGroup),
     actuals: readJsonArray(BUDGET_ACTUALS_STORAGE_KEY, isActual),
     activeScenarioId: scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null,
+    sqliteUpdatedAt: null,
+  };
+}
+
+async function loadStateFromSqlite(): Promise<Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId' | 'sqliteUpdatedAt'> | null> {
+  const sqliteState = await loadPresupuestosFromSqlite();
+  if (!sqliteState) {
+    return null;
+  }
+
+  return {
+    scenarios: sqliteState.scenarios,
+    manualItems: sqliteState.manualItems,
+    ticketGroups: sqliteState.ticketGroups,
+    actuals: sqliteState.actuals,
+    activeScenarioId: sqliteState.scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null,
+    sqliteUpdatedAt: sqliteState.updatedAt,
   };
 }
 
@@ -178,8 +209,27 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
   ticketGroups: [],
   actuals: [],
   activeScenarioId: null,
-  load: () => set(loadState()),
-  reloadFromStorage: () => set(loadState()),
+  sqliteUpdatedAt: null,
+  load: () => {
+    set(loadState());
+    void loadStateFromSqlite()
+      .then((sqliteState) => {
+        if (sqliteState) {
+          set(sqliteState);
+        }
+      })
+      .catch((error) => console.warn('Presupuestos no cargado desde SQLite.', error));
+  },
+  reloadFromStorage: () => {
+    set(loadState());
+    void loadStateFromSqlite()
+      .then((sqliteState) => {
+        if (sqliteState) {
+          set(sqliteState);
+        }
+      })
+      .catch((error) => console.warn('Presupuestos no recargado desde SQLite.', error));
+  },
   setActiveScenario: (scenarioId) => set({ activeScenarioId: scenarioId }),
   upsertScenario: (draft, scenarioId) => {
     const normalized = normalizeScenarioDraft(draft);
@@ -199,7 +249,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const scenarios = previous
       ? state.scenarios.map((item) => (item.id === id ? scenario : item))
       : [...state.scenarios, scenario];
-    commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: id });
+    commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: id }, state.sqliteUpdatedAt);
     return { ...validation, id };
   },
   duplicateScenario: (scenarioId) => {
@@ -247,6 +297,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       set,
       { ...state, scenarios, manualItems, ticketGroups },
       { scenarios, manualItems, ticketGroups, activeScenarioId: id },
+      state.sqliteUpdatedAt,
     );
     return id;
   },
@@ -260,6 +311,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       set,
       { ...state, scenarios },
       { scenarios, activeScenarioId: scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null },
+      state.sqliteUpdatedAt,
     );
   },
   upsertManualItem: (draft, itemId) => {
@@ -283,7 +335,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const manualItems = previous
       ? state.manualItems.map((item) => (item.id === id ? manualItem : item))
       : [...state.manualItems, manualItem];
-    commitPresupuestosState(set, { ...state, manualItems }, { manualItems });
+    commitPresupuestosState(set, { ...state, manualItems }, { manualItems }, state.sqliteUpdatedAt);
     return { ...validation, id };
   },
   removeManualItem: (itemId) => {
@@ -292,7 +344,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const manualItems = state.manualItems.map((item) =>
       item.id === itemId ? { ...item, deletedAt: timestamp, updatedAt: timestamp } : item,
     );
-    commitPresupuestosState(set, { ...state, manualItems }, { manualItems });
+    commitPresupuestosState(set, { ...state, manualItems }, { manualItems }, state.sqliteUpdatedAt);
   },
   upsertTicketGroup: (draft, groupId) => {
     const normalized = normalizeTicketDraft(draft);
@@ -315,7 +367,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const ticketGroups = previous
       ? state.ticketGroups.map((group) => (group.id === id ? ticketGroup : group))
       : [...state.ticketGroups, ticketGroup];
-    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups });
+    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups }, state.sqliteUpdatedAt);
     return { ...validation, id };
   },
   removeTicketGroup: (groupId) => {
@@ -324,7 +376,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const ticketGroups = state.ticketGroups.map((group) =>
       group.id === groupId ? { ...group, deletedAt: timestamp, updatedAt: timestamp } : group,
     );
-    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups });
+    commitPresupuestosState(set, { ...state, ticketGroups }, { ticketGroups }, state.sqliteUpdatedAt);
   },
   upsertActual: (draft, actualId) => {
     const validation = validateBudgetActual(draft);
@@ -343,7 +395,7 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const actuals = previous
       ? state.actuals.map((item) => (item.id === id ? actual : item))
       : [...state.actuals, actual];
-    commitPresupuestosState(set, { ...state, actuals }, { actuals });
+    commitPresupuestosState(set, { ...state, actuals }, { actuals }, state.sqliteUpdatedAt);
     return { ...validation, id };
   },
   removeActual: (actualId) => {
@@ -352,6 +404,6 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
     const actuals = state.actuals.map((actual) =>
       actual.id === actualId ? { ...actual, deletedAt: timestamp, updatedAt: timestamp } : actual,
     );
-    commitPresupuestosState(set, { ...state, actuals }, { actuals });
+    commitPresupuestosState(set, { ...state, actuals }, { actuals }, state.sqliteUpdatedAt);
   },
 }));

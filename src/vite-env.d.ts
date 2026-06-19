@@ -353,6 +353,24 @@ interface TraccionConfiguracionSnapshot {
   updatedAt: string | null;
 }
 
+type TraccionPresupuestoRecord = TraccionComiteSessionRecord;
+
+interface TraccionPresupuestosRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  scenarios: TraccionPresupuestoRecord[];
+  manualItems: TraccionPresupuestoRecord[];
+  ticketGroups: TraccionPresupuestoRecord[];
+  actuals: TraccionPresupuestoRecord[];
+}
+
+interface TraccionConditionalPresupuestosSnapshot {
+  scenarios: Array<{ id: string; value: string }>;
+  manualItems: Array<{ id: string; value: string }>;
+  ticketGroups: Array<{ id: string; value: string }>;
+  actuals: Array<{ id: string; value: string }>;
+  expectedUpdatedAt: string | null;
+}
+
 interface TraccionConditionalConfiguracionRecord {
   value: string;
   expectedUpdatedAt: string | null;
@@ -428,6 +446,10 @@ interface TraccionApi {
   loadCriteriosRrllRecords?: () => Promise<TraccionCriteriosRrllRecordsSnapshot>;
   saveCriteriosRrllRecordIfUnchanged?: (
     record: TraccionConditionalCriterioRrllRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
+  savePresupuestosSnapshotIfUnchanged?: (
+    snapshot: TraccionConditionalPresupuestosSnapshot,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   loadEspecialesRecipientRecords?: () => Promise<TraccionEspecialRecipientRecordsSnapshot>;
   saveEspecialesRecipientRecordIfUnchanged?: (
