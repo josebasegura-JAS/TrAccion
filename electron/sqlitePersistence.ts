@@ -11,6 +11,7 @@ import {
   readActiveJsonRecords,
   syncJsonRecordTable,
 } from './persistence/jsonRecordRepository.js';
+import { createSimpleJsonModuleRepository } from './persistence/simpleJsonModuleRepository.js';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -2790,295 +2791,143 @@ export async function saveTeletrabajoRecordIfUnchanged(
 }
 
 
-function maybeMigrateJsonModuleRecords(
-  db: Database,
-  tableName: string,
-  legacyKey: string,
-  migrationDone: boolean,
-  setMigrationDone: (value: boolean) => void,
-): void {
-  setMigrationDone(
-    maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-      tableName,
-      legacyKey,
-      migrationDone,
-    }),
-  );
-}
+const simpleJsonModuleRepositoryDependencies = {
+  safeDatabaseOperation,
+  getSqliteStatus,
+  requireDatabase,
+  isUpdatedAtRow,
+  updateRefreshMetadata,
+  enqueueLocalBackup,
+  assertDatabaseWritesAllowed,
+  isDatabaseWriteBlockedByHeartbeat: () => databaseWriteBlockedByHeartbeat,
+};
 
-function saveJsonModuleRecordInTransaction(
-  db: Database,
-  tableName: string,
-  record: ConditionalSqliteComiteSessionRecord,
-  currentStatus: DatabaseStatus,
-  conflictMessage: string,
-  existsMessage: string,
-): ConditionalSqliteTaskSaveResult {
-  const row = db.prepare(`SELECT updated_at FROM ${tableName} WHERE id = ?`).get(record.id);
-  const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+const vinculogramaRepository = createSimpleJsonModuleRepository(
+  {
+    tableName: 'vinculograma_records',
+    legacyKey: 'traccion.v1.vinculograma.records',
+    moduleLabel: 'El vínculo',
+    getMigrationDone: () => vinculogramaMigrationDone,
+    setMigrationDone: (value) => { vinculogramaMigrationDone = value; },
+  },
+  simpleJsonModuleRepositoryDependencies,
+);
 
-  if (currentUpdatedAt !== record.expectedUpdatedAt) {
-    return {
-      ok: false,
-      status: currentStatus,
-      currentUpdatedAt,
-      message: conflictMessage,
-    };
-  }
+const licenciaSinSueldoRepository = createSimpleJsonModuleRepository(
+  {
+    tableName: 'licencia_sin_sueldo_records',
+    legacyKey: 'traccion.v1.licenciasSinSueldo.records',
+    moduleLabel: 'La licencia sin sueldo',
+    getMigrationDone: () => licenciaSinSueldoMigrationDone,
+    setMigrationDone: (value) => { licenciaSinSueldoMigrationDone = value; },
+  },
+  simpleJsonModuleRepositoryDependencies,
+);
 
-  const { createdAt, updatedAt, deletedAt } = extractJsonRecordTimestamps(record.value);
+const criteriosRrllRepository = createSimpleJsonModuleRepository(
+  {
+    tableName: 'criterios_rrll_records',
+    legacyKey: 'traccion.v1.criterios-rrll.criterios',
+    moduleLabel: 'El criterio RRLL',
+    getMigrationDone: () => criteriosRrllMigrationDone,
+    setMigrationDone: (value) => { criteriosRrllMigrationDone = value; },
+  },
+  simpleJsonModuleRepositoryDependencies,
+);
 
-  if (currentUpdatedAt === null) {
-    const insertResult = db
-      .prepare(
-        `INSERT OR IGNORE INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+const especialesRecipientsRepository = createSimpleJsonModuleRepository(
+  {
+    tableName: 'especiales_recipient_records',
+    legacyKey: 'rrll_especiales_destinatarios',
+    moduleLabel: 'El destinatario',
+    getMigrationDone: () => especialesRecipientsMigrationDone,
+    setMigrationDone: (value) => { especialesRecipientsMigrationDone = value; },
+  },
+  simpleJsonModuleRepositoryDependencies,
+);
 
-    if (insertResult.changes !== 1) {
-      const latest = db.prepare(`SELECT updated_at FROM ${tableName} WHERE id = ?`).get(record.id);
-      return {
-        ok: false,
-        status: currentStatus,
-        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-        message: existsMessage,
-      };
-    }
-  } else {
-    const updateResult = db
-      .prepare(
-        `UPDATE ${tableName}
-         SET value_json = ?, updated_at = ?, deleted_at = ?
-         WHERE id = ? AND updated_at = ?`,
-      )
-      .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+const teletrabajoPuestosRepository = createSimpleJsonModuleRepository(
+  {
+    tableName: 'teletrabajo_puesto_records',
+    legacyKey: 'traccion.v1.teletrabajo.puestos',
+    moduleLabel: 'El puesto teletrabajable',
+    getMigrationDone: () => teletrabajoPuestosMigrationDone,
+    setMigrationDone: (value) => { teletrabajoPuestosMigrationDone = value; },
+  },
+  simpleJsonModuleRepositoryDependencies,
+);
 
-    if (updateResult.changes !== 1) {
-      const latest = db.prepare(`SELECT updated_at FROM ${tableName} WHERE id = ?`).get(record.id);
-      return {
-        ok: false,
-        status: currentStatus,
-        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-        message: conflictMessage,
-      };
-    }
-  }
-
-  updateRefreshMetadata(db, updatedAt);
-
-  return {
-    ok: true,
-    status: currentStatus,
-    currentUpdatedAt: updatedAt,
-    message: 'Registro guardado en SQLite.',
-  };
-}
-
-function loadGenericJsonModuleSnapshot(
-  tableName: string,
-  legacyKey: string,
-  migrationDone: boolean,
-  setMigrationDone: (value: boolean) => void,
-): Promise<{ status: DatabaseStatus; records: SqliteComiteSessionRecord[] }> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, records: [] };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateJsonModuleRecords(db, tableName, legacyKey, migrationDone, setMigrationDone))();
-      return { status: currentStatus, records: readActiveJsonRecords(db, tableName) };
-    },
-    (nextStatus) => ({ status: nextStatus, records: [] }),
-  );
-}
-
-function saveGenericJsonModuleRecordIfUnchanged(
-  tableName: string,
-  legacyKey: string,
-  migrationDone: boolean,
-  setMigrationDone: (value: boolean) => void,
-  record: ConditionalSqliteComiteSessionRecord,
-  moduleLabel: string,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
-        maybeMigrateJsonModuleRecords(db, tableName, legacyKey, migrationDone, setMigrationDone);
-        const saveResult = saveJsonModuleRecordInTransaction(
-          db,
-          tableName,
-          record,
-          currentStatus,
-          `${moduleLabel} ha sido modificado por otro usuario. Recarga antes de guardar.`,
-          `${moduleLabel} ya existe en la base compartida. Recarga antes de continuar.`,
-        );
-        return saveResult.ok ? { ...saveResult, message: `${moduleLabel} guardado en SQLite.` } : saveResult;
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup(`save:${tableName}`);
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
+const jobPositionTranslationsRepository = createSimpleJsonModuleRepository(
+  {
+    tableName: 'plantilla_job_position_translation_records',
+    legacyKey: 'traccion.v1.plantilla.jobPositionTranslations',
+    moduleLabel: 'La traducción de puesto',
+    getMigrationDone: () => jobPositionTranslationsMigrationDone,
+    setMigrationDone: (value) => { jobPositionTranslationsMigrationDone = value; },
+  },
+  simpleJsonModuleRepositoryDependencies,
+);
 
 export async function loadVinculogramaRecordsSnapshot(): Promise<SqliteVinculogramaRecordsSnapshot> {
-  return loadGenericJsonModuleSnapshot(
-    'vinculograma_records',
-    'traccion.v1.vinculograma.records',
-    vinculogramaMigrationDone,
-    (value) => { vinculogramaMigrationDone = value; },
-  );
+  return vinculogramaRepository.loadSnapshot();
 }
 
 export async function saveVinculogramaRecordIfUnchanged(
   record: ConditionalSqliteVinculogramaRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
-  return saveGenericJsonModuleRecordIfUnchanged(
-    'vinculograma_records',
-    'traccion.v1.vinculograma.records',
-    vinculogramaMigrationDone,
-    (value) => { vinculogramaMigrationDone = value; },
-    record,
-    'El vínculo',
-  );
+  return vinculogramaRepository.saveIfUnchanged(record);
 }
 
 export async function loadLicenciaSinSueldoRecordsSnapshot(): Promise<SqliteLicenciaSinSueldoRecordsSnapshot> {
-  return loadGenericJsonModuleSnapshot(
-    'licencia_sin_sueldo_records',
-    'traccion.v1.licenciasSinSueldo.records',
-    licenciaSinSueldoMigrationDone,
-    (value) => { licenciaSinSueldoMigrationDone = value; },
-  );
+  return licenciaSinSueldoRepository.loadSnapshot();
 }
 
 export async function saveLicenciaSinSueldoRecordIfUnchanged(
   record: ConditionalSqliteLicenciaSinSueldoRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
-  return saveGenericJsonModuleRecordIfUnchanged(
-    'licencia_sin_sueldo_records',
-    'traccion.v1.licenciasSinSueldo.records',
-    licenciaSinSueldoMigrationDone,
-    (value) => { licenciaSinSueldoMigrationDone = value; },
-    record,
-    'La licencia sin sueldo',
-  );
+  return licenciaSinSueldoRepository.saveIfUnchanged(record);
 }
 
 export async function loadCriteriosRrllRecordsSnapshot(): Promise<SqliteCriteriosRrllRecordsSnapshot> {
-  return loadGenericJsonModuleSnapshot(
-    'criterios_rrll_records',
-    'traccion.v1.criterios-rrll.criterios',
-    criteriosRrllMigrationDone,
-    (value) => { criteriosRrllMigrationDone = value; },
-  );
+  return criteriosRrllRepository.loadSnapshot();
 }
 
 export async function saveCriteriosRrllRecordIfUnchanged(
   record: ConditionalSqliteCriterioRrllRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
-  return saveGenericJsonModuleRecordIfUnchanged(
-    'criterios_rrll_records',
-    'traccion.v1.criterios-rrll.criterios',
-    criteriosRrllMigrationDone,
-    (value) => { criteriosRrllMigrationDone = value; },
-    record,
-    'El criterio RRLL',
-  );
+  return criteriosRrllRepository.saveIfUnchanged(record);
 }
 
 export async function loadEspecialesRecipientRecordsSnapshot(): Promise<SqliteEspecialesRecipientRecordsSnapshot> {
-  return loadGenericJsonModuleSnapshot(
-    'especiales_recipient_records',
-    'rrll_especiales_destinatarios',
-    especialesRecipientsMigrationDone,
-    (value) => { especialesRecipientsMigrationDone = value; },
-  );
+  return especialesRecipientsRepository.loadSnapshot();
 }
 
 export async function saveEspecialesRecipientRecordIfUnchanged(
   record: ConditionalSqliteEspecialesRecipientRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
-  return saveGenericJsonModuleRecordIfUnchanged(
-    'especiales_recipient_records',
-    'rrll_especiales_destinatarios',
-    especialesRecipientsMigrationDone,
-    (value) => { especialesRecipientsMigrationDone = value; },
-    record,
-    'El destinatario',
-  );
+  return especialesRecipientsRepository.saveIfUnchanged(record);
 }
 
-
 export async function loadTeletrabajoPuestoRecordsSnapshot(): Promise<SqliteTeletrabajoPuestoRecordsSnapshot> {
-  return loadGenericJsonModuleSnapshot(
-    'teletrabajo_puesto_records',
-    'traccion.v1.teletrabajo.puestos',
-    teletrabajoPuestosMigrationDone,
-    (value) => { teletrabajoPuestosMigrationDone = value; },
-  );
+  return teletrabajoPuestosRepository.loadSnapshot();
 }
 
 export async function saveTeletrabajoPuestoRecordIfUnchanged(
   record: ConditionalSqliteTeletrabajoPuestoRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
-  return saveGenericJsonModuleRecordIfUnchanged(
-    'teletrabajo_puesto_records',
-    'traccion.v1.teletrabajo.puestos',
-    teletrabajoPuestosMigrationDone,
-    (value) => { teletrabajoPuestosMigrationDone = value; },
-    record,
-    'El puesto teletrabajable',
-  );
+  return teletrabajoPuestosRepository.saveIfUnchanged(record);
 }
 
 export async function loadJobPositionTranslationRecordsSnapshot(): Promise<SqliteJobPositionTranslationRecordsSnapshot> {
-  return loadGenericJsonModuleSnapshot(
-    'plantilla_job_position_translation_records',
-    'traccion.v1.plantilla.jobPositionTranslations',
-    jobPositionTranslationsMigrationDone,
-    (value) => { jobPositionTranslationsMigrationDone = value; },
-  );
+  return jobPositionTranslationsRepository.loadSnapshot();
 }
 
 export async function saveJobPositionTranslationRecordIfUnchanged(
   record: ConditionalSqliteJobPositionTranslationRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
-  return saveGenericJsonModuleRecordIfUnchanged(
-    'plantilla_job_position_translation_records',
-    'traccion.v1.plantilla.jobPositionTranslations',
-    jobPositionTranslationsMigrationDone,
-    (value) => { jobPositionTranslationsMigrationDone = value; },
-    record,
-    'La traducción de puesto',
-  );
+  return jobPositionTranslationsRepository.saveIfUnchanged(record);
 }
+
 
 function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
   if (configuracionMigrationDone) {
