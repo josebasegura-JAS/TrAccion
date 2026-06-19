@@ -104,6 +104,17 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('criterios-rrll:save-record-if-unchanged', record),
+  loadEspecialesRecipientRecords: () => ipcRenderer.invoke('especiales:load-recipient-records'),
+  saveEspecialesRecipientRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('especiales:save-recipient-record-if-unchanged', record),
+  loadConfiguracion: () => ipcRenderer.invoke('configuracion:load'),
+  saveConfiguracionIfUnchanged: (record: {
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('configuracion:save-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   loadTeletrabajoRecords: () => ipcRenderer.invoke('teletrabajo:load-records'),

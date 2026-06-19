@@ -30,6 +30,8 @@ import {
   loadVinculogramaRecordsSnapshot,
   loadLicenciaSinSueldoRecordsSnapshot,
   loadCriteriosRrllRecordsSnapshot,
+  loadEspecialesRecipientRecordsSnapshot,
+  loadConfiguracionSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
   getSqliteSyncTokensSnapshot,
@@ -50,6 +52,8 @@ import {
   saveVinculogramaRecordIfUnchanged,
   saveLicenciaSinSueldoRecordIfUnchanged,
   saveCriteriosRrllRecordIfUnchanged,
+  saveEspecialesRecipientRecordIfUnchanged,
+  saveConfiguracionIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
@@ -1603,6 +1607,79 @@ function registerIpcHandlers(): void {
         id,
         value,
         expectedUpdatedAt,
+      }),
+    );
+  });
+
+
+  ipcMain.handle('especiales:load-recipient-records', () =>
+    enqueueSqliteIpc('especiales:load-recipient-records', () => loadEspecialesRecipientRecordsSnapshot()),
+  );
+
+  ipcMain.handle('especiales:save-recipient-record-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de destinatario inválido.',
+      };
+    }
+
+    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de destinatario inválido.',
+      };
+    }
+
+    return enqueueSqliteIpc('especiales:save-recipient-record-if-unchanged', () =>
+      saveEspecialesRecipientRecordIfUnchanged({
+        id: candidate.id as string,
+        value: candidate.value as string,
+        expectedUpdatedAt: typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
+      }),
+    );
+  });
+
+  ipcMain.handle('configuracion:load', () =>
+    enqueueSqliteIpc('configuracion:load', () => loadConfiguracionSnapshot()),
+  );
+
+  ipcMain.handle('configuracion:save-if-unchanged', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de configuración inválido.',
+      };
+    }
+
+    const candidate = payload as { value?: unknown; expectedUpdatedAt?: unknown };
+    if (
+      typeof candidate.value !== 'string' ||
+      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
+    ) {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        currentUpdatedAt: null,
+        message: 'Payload de configuración inválido.',
+      };
+    }
+
+    return enqueueSqliteIpc('configuracion:save-if-unchanged', () =>
+      saveConfiguracionIfUnchanged({
+        value: candidate.value as string,
+        expectedUpdatedAt: typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
       }),
     );
   });

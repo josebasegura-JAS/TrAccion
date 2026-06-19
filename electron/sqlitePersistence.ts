@@ -16,7 +16,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 14;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -141,6 +141,26 @@ export interface SqliteCriteriosRrllRecordsSnapshot {
 }
 
 export type ConditionalSqliteCriterioRrllRecord = ConditionalSqliteComiteSessionRecord;
+
+export type SqliteEspecialRecipientRecord = SqliteComiteSessionRecord;
+
+export interface SqliteEspecialRecipientsRecordsSnapshot {
+  status: DatabaseStatus;
+  records: SqliteEspecialRecipientRecord[];
+}
+
+export type ConditionalSqliteEspecialRecipientRecord = ConditionalSqliteComiteSessionRecord;
+
+export interface SqliteConfiguracionSnapshot {
+  status: DatabaseStatus;
+  value: string | null;
+  updatedAt: string | null;
+}
+
+export interface ConditionalSqliteConfiguracionRecord {
+  value: string;
+  expectedUpdatedAt: string | null;
+}
 
 export interface SqliteEmployeeRecord {
   id: string;
@@ -356,6 +376,8 @@ let teletrabajoMigrationDone = false;
 let vinculogramaMigrationDone = false;
 let licenciasSinSueldoMigrationDone = false;
 let criteriosRrllMigrationDone = false;
+let especialesRecipientsMigrationDone = false;
+let configuracionMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
 
@@ -1300,6 +1322,39 @@ function migrateToVersion13(db: Database): void {
   }
 }
 
+function migrateToVersion14(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS especiales_recipient_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_especiales_recipient_records_updated_at
+      ON especiales_recipient_records(updated_at);
+
+    CREATE INDEX IF NOT EXISTS idx_especiales_recipient_records_deleted_at
+      ON especiales_recipient_records(deleted_at);
+
+    CREATE TABLE IF NOT EXISTS configuracion_state (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 14) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      14,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1314,6 +1369,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion11(db);
   migrateToVersion12(db);
   migrateToVersion13(db);
+  migrateToVersion14(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -1362,6 +1418,8 @@ function closeDatabase(): void {
   vinculogramaMigrationDone = false;
   licenciasSinSueldoMigrationDone = false;
   criteriosRrllMigrationDone = false;
+  especialesRecipientsMigrationDone = false;
+  configuracionMigrationDone = false;
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -1379,6 +1437,8 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   vinculogramaMigrationDone = false;
   licenciasSinSueldoMigrationDone = false;
   criteriosRrllMigrationDone = false;
+  especialesRecipientsMigrationDone = false;
+  configuracionMigrationDone = false;
 
   await releaseActiveSessionLock();
 }
@@ -3473,6 +3533,337 @@ export async function saveCriteriosRrllRecordIfUnchanged(
 
       if (result.ok) {
         enqueueLocalBackup('save:criterios_rrll_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+
+function mapEspecialRecipientRecordRow(row: ComiteSessionRecordRow): SqliteEspecialRecipientRecord {
+  return {
+    id: row.id,
+    value: row.value_json,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function readEspecialRecipientRecords(db: Database): SqliteEspecialRecipientRecord[] {
+  return db
+    .prepare('SELECT id, value_json, created_at, updated_at, deleted_at FROM especiales_recipient_records WHERE deleted_at IS NULL ORDER BY created_at, id')
+    .all()
+    .filter(isComiteSessionRecordRow)
+    .map(mapEspecialRecipientRecordRow);
+}
+
+function maybeMigrateEspecialesRecipientsFromPersistedRecord(db: Database): void {
+  if (especialesRecipientsMigrationDone) {
+    return;
+  }
+
+  const countRow = db.prepare('SELECT COUNT(*) AS count FROM especiales_recipient_records').get();
+  const count = isCountRow(countRow) ? countRow.count : 0;
+  if (count > 0) {
+    especialesRecipientsMigrationDone = true;
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'rrll_especiales_destinatarios');
+  if (!legacyRecord) {
+    especialesRecipientsMigrationDone = true;
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(legacyRecord.value);
+  } catch {
+    especialesRecipientsMigrationDone = true;
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    especialesRecipientsMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO especiales_recipient_records (id, value_json, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+
+  for (const item of parsed) {
+    if (!isJsonObjectWithStringId(item)) {
+      continue;
+    }
+
+    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+    const deletedAt = typeof item.deletedAt === 'string' ? item.deletedAt : null;
+    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt, deletedAt);
+  }
+
+  especialesRecipientsMigrationDone = true;
+}
+
+export async function loadEspecialesRecipientRecordsSnapshot(): Promise<SqliteEspecialRecipientsRecordsSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, records: [] };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateEspecialesRecipientsFromPersistedRecord(db))();
+      return { status: currentStatus, records: readEspecialRecipientRecords(db) };
+    },
+    (nextStatus) => ({ status: nextStatus, records: [] }),
+  );
+}
+
+export async function saveEspecialesRecipientRecordIfUnchanged(
+  record: ConditionalSqliteEspecialRecipientRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateEspecialesRecipientsFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM especiales_recipient_records WHERE id = ?').get(record.id);
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'El destinatario ha sido modificado por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(record.value);
+        } catch {
+          parsed = null;
+        }
+        const deletedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+            ? (parsed as { deletedAt: string }).deletedAt
+            : null;
+        const createdAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+            ? (parsed as { createdAt: string }).createdAt
+            : now;
+        const updatedAt =
+          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+            ? (parsed as { updatedAt: string }).updatedAt
+            : now;
+
+        if (currentUpdatedAt === null) {
+          const insertResult = db
+            .prepare(
+              `INSERT OR IGNORE INTO especiales_recipient_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            )
+            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+          if (insertResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM especiales_recipient_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'El destinatario ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+        } else {
+          const updateResult = db
+            .prepare(
+              `UPDATE especiales_recipient_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND updated_at = ?`,
+            )
+            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM especiales_recipient_records WHERE id = ?').get(record.id);
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'El destinatario ha sido modificado por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, updatedAt);
+
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: updatedAt,
+          message: 'Destinatario guardado en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:especiales_recipient_records');
+      }
+
+      return result;
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
+  if (configuracionMigrationDone) {
+    return;
+  }
+
+  const row = db.prepare('SELECT updated_at FROM configuracion_state WHERE key = ?').get('traccion.v1.configuracion');
+  if (isUpdatedAtRow(row)) {
+    configuracionMigrationDone = true;
+    return;
+  }
+
+  const legacyRecord = readPersistedRecordByKey(db, 'traccion.v1.configuracion');
+  if (!legacyRecord) {
+    configuracionMigrationDone = true;
+    return;
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT OR IGNORE INTO configuracion_state (key, value_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?)`,
+  ).run('traccion.v1.configuracion', legacyRecord.value, legacyRecord.updatedAt ?? now, legacyRecord.updatedAt ?? now);
+
+  configuracionMigrationDone = true;
+}
+
+export async function loadConfiguracionSnapshot(): Promise<SqliteConfiguracionSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active') {
+        return { status: currentStatus, value: null, updatedAt: null };
+      }
+
+      const db = requireDatabase();
+      db.transaction(() => maybeMigrateConfiguracionFromPersistedRecord(db))();
+      const row = db.prepare('SELECT value_json, updated_at FROM configuracion_state WHERE key = ?').get('traccion.v1.configuracion');
+      if (!row || typeof row !== 'object') {
+        return { status: currentStatus, value: null, updatedAt: null };
+      }
+      const candidate = row as { value_json?: unknown; updated_at?: unknown };
+      return {
+        status: currentStatus,
+        value: typeof candidate.value_json === 'string' ? candidate.value_json : null,
+        updatedAt: typeof candidate.updated_at === 'string' ? candidate.updated_at : null,
+      };
+    },
+    (nextStatus) => ({ status: nextStatus, value: null, updatedAt: null }),
+  );
+}
+
+export async function saveConfiguracionIfUnchanged(
+  record: ConditionalSqliteConfiguracionRecord,
+): Promise<ConditionalSqliteTaskSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          currentUpdatedAt: null,
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
+        maybeMigrateConfiguracionFromPersistedRecord(db);
+        const row = db.prepare('SELECT updated_at FROM configuracion_state WHERE key = ?').get('traccion.v1.configuracion');
+        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+        if (currentUpdatedAt !== record.expectedUpdatedAt) {
+          return {
+            ok: false,
+            status: currentStatus,
+            currentUpdatedAt,
+            message: 'La configuración ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        if (currentUpdatedAt === null) {
+          db.prepare(
+            `INSERT INTO configuracion_state (key, value_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?)`,
+          ).run('traccion.v1.configuracion', record.value, now, now);
+        } else {
+          const updateResult = db.prepare(
+            `UPDATE configuracion_state
+             SET value_json = ?, updated_at = ?
+             WHERE key = ? AND updated_at = ?`,
+          ).run(record.value, now, 'traccion.v1.configuracion', currentUpdatedAt);
+
+          if (updateResult.changes !== 1) {
+            const latest = db.prepare('SELECT updated_at FROM configuracion_state WHERE key = ?').get('traccion.v1.configuracion');
+            return {
+              ok: false,
+              status: currentStatus,
+              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+              message: 'La configuración ha sido modificada por otro usuario. Recarga antes de continuar.',
+            };
+          }
+        }
+
+        updateRefreshMetadata(db, now);
+        return {
+          ok: true,
+          status: currentStatus,
+          currentUpdatedAt: now,
+          message: 'Configuración guardada en SQLite.',
+        };
+      })();
+
+      if (result.ok) {
+        enqueueLocalBackup('save:configuracion_state');
       }
 
       return result;

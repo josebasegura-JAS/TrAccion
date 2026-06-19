@@ -16,6 +16,8 @@ import {
 
 const STORAGE_KEY = 'traccion.v1.configuracion';
 
+let latestConfiguracionUpdatedAt: string | null = null;
+
 interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
   rutaPlantillaLicenciaSinSueldo: string;
@@ -112,15 +114,23 @@ function isConfiguracionState(value: unknown): value is ConfiguracionState {
   return typeof candidate.rutaPlantillaTeletrabajo === 'string';
 }
 
-function readConfiguracion(): ConfiguracionState {
-  const stored = readStorageItem(STORAGE_KEY);
+function defaultConfiguracion(): ConfiguracionState {
+  return {
+    rutaPlantillaTeletrabajo: '',
+    rutaPlantillaLicenciaSinSueldo: '',
+    taskPhases: DEFAULT_TASK_PHASES,
+    taskOrigins: DEFAULT_TASK_ORIGINS,
+  };
+}
+
+function parseConfiguracionValue(stored: string | null): ConfiguracionState {
   if (!stored) {
-    return { rutaPlantillaTeletrabajo: '', rutaPlantillaLicenciaSinSueldo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
+    return defaultConfiguracion();
   }
 
   const parsed: unknown = JSON.parse(stored);
   if (!isConfiguracionState(parsed)) {
-    return { rutaPlantillaTeletrabajo: '', rutaPlantillaLicenciaSinSueldo: '', taskPhases: DEFAULT_TASK_PHASES, taskOrigins: DEFAULT_TASK_ORIGINS };
+    return defaultConfiguracion();
   }
 
   return {
@@ -135,7 +145,39 @@ function readConfiguracion(): ConfiguracionState {
   };
 }
 
+function readConfiguracion(): ConfiguracionState {
+  return parseConfiguracionValue(readStorageItem(STORAGE_KEY));
+}
+
+async function readConfiguracionFromSqlite(): Promise<ConfiguracionState | null> {
+  const loader = window.traccion?.loadConfiguracion;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await loader();
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active' || !snapshot.value) {
+    return null;
+  }
+
+  latestConfiguracionUpdatedAt = snapshot.updatedAt;
+  window.localStorage.setItem(STORAGE_KEY, snapshot.value);
+  return parseConfiguracionValue(snapshot.value);
+}
+
 async function persistConfiguracionConfirmed(configuracion: ConfiguracionState): Promise<void> {
+  const value = JSON.stringify(configuracion);
+  const sqliteSaver = window.traccion?.saveConfiguracionIfUnchanged;
+  if (sqliteSaver) {
+    const result = await sqliteSaver({ value, expectedUpdatedAt: latestConfiguracionUpdatedAt });
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    latestConfiguracionUpdatedAt = result.currentUpdatedAt;
+    window.localStorage.setItem(STORAGE_KEY, value);
+    return;
+  }
+
   const result = await writeJsonStorageAsync(STORAGE_KEY, configuracion);
   if (!result.ok) {
     throw new Error(result.message);
@@ -160,8 +202,26 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
   rutaPlantillaLicenciaSinSueldo: initialConfiguracion.rutaPlantillaLicenciaSinSueldo,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
-  load: () => set(readConfiguracion()),
-  reloadFromStorage: () => set(readConfiguracion()),
+  load: () => {
+    set(readConfiguracion());
+    void readConfiguracionFromSqlite()
+      .then((configuracion) => {
+        if (configuracion) {
+          set(configuracion);
+        }
+      })
+      .catch((error) => console.warn('Configuración no cargada desde SQLite.', error));
+  },
+  reloadFromStorage: () => {
+    set(readConfiguracion());
+    void readConfiguracionFromSqlite()
+      .then((configuracion) => {
+        if (configuracion) {
+          set(configuracion);
+        }
+      })
+      .catch((error) => console.warn('Configuración no recargada desde SQLite.', error));
+  },
   setRutaPlantillaTeletrabajo: (ruta) => {
     const state = useConfiguracionStore.getState();
     const configuracion = {

@@ -96,6 +96,57 @@ function parseRecipientsSnapshot(storageValue: string | null): EspecialRecipient
   return parsed.map(normalizeStoredRecipient).filter((recipient): recipient is EspecialRecipient => !!recipient);
 }
 
+function mirrorRecipients(recipients: EspecialRecipient[]): void {
+  window.localStorage.setItem(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
+}
+
+function hasEspecialesSqliteRepository(): boolean {
+  return Boolean(
+    window.traccion?.loadEspecialesRecipientRecords &&
+      window.traccion?.saveEspecialesRecipientRecordIfUnchanged,
+  );
+}
+
+async function loadRecipientsFromSqlite(): Promise<Array<EspecialRecipient & { sqliteUpdatedAt: string | null }> | null> {
+  const loader = window.traccion?.loadEspecialesRecipientRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await loader();
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  const recipients = snapshot.records
+    .map((record) => {
+      const recipient = normalizeStoredRecipient(JSON.parse(record.value));
+      return recipient ? { ...recipient, sqliteUpdatedAt: record.updatedAt } : null;
+    })
+    .filter((recipient): recipient is EspecialRecipient & { sqliteUpdatedAt: string | null } => !!recipient);
+
+  mirrorRecipients(recipients);
+  return recipients;
+}
+
+async function saveRecipientToSqlite(
+  recipient: EspecialRecipient,
+  expectedUpdatedAt: string | null,
+): Promise<{ ok: boolean; message: string; currentUpdatedAt: string | null }> {
+  const saver = window.traccion?.saveEspecialesRecipientRecordIfUnchanged;
+  if (!saver) {
+    return { ok: false, message: 'Repositorio SQLite de Especiales no disponible.', currentUpdatedAt: null };
+  }
+
+  const result = await saver({
+    id: recipient.id,
+    value: JSON.stringify(recipient),
+    expectedUpdatedAt,
+  });
+
+  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+}
+
 function validateRecipientDraft(draft: EspecialRecipientDraft): string | null {
   if (!draft.name.trim()) {
     return 'Debes indicar un nombre.';
@@ -136,9 +187,23 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
   recipients: [],
   load: () => {
     set({ recipients: readRecipients() });
+    void loadRecipientsFromSqlite()
+      .then((recipients) => {
+        if (recipients) {
+          set({ recipients });
+        }
+      })
+      .catch((error) => console.warn('Destinatarios de Especiales no cargados desde SQLite.', error));
   },
   reloadFromStorage: () => {
     set({ recipients: readRecipients() });
+    void loadRecipientsFromSqlite()
+      .then((recipients) => {
+        if (recipients) {
+          set({ recipients });
+        }
+      })
+      .catch((error) => console.warn('Destinatarios de Especiales no recargados desde SQLite.', error));
   },
   createRecipient: (draft) => {
     const name = draft.name.trim();
@@ -178,6 +243,26 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
     }
 
     try {
+      if (hasEspecialesSqliteRepository()) {
+        const recipients = (await loadRecipientsFromSqlite()) ?? [];
+        const duplicate = duplicatedEmail(recipients, draft.email);
+        if (duplicate) {
+          const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
+          return { ok: false, message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.` };
+        }
+
+        const recipient = buildEspecialRecipient(draft, nowIso(), createId('especial-recipient'));
+        const result = await saveRecipientToSqlite(recipient, null);
+        if (!result.ok) {
+          return { ok: false, message: result.message };
+        }
+
+        const updatedRecipients = [...recipients, { ...recipient, sqliteUpdatedAt: result.currentUpdatedAt }];
+        mirrorRecipients(updatedRecipients);
+        set({ recipients: updatedRecipients });
+        return { ok: true, message: 'Destinatario creado.', recordId: recipient.id };
+      }
+
       const snapshot = await window.traccion?.loadPersistedRecords?.();
       const latestRecord = snapshot?.records.find((record) => record.key === RECIPIENTS_STORAGE_KEY) ?? null;
       const recipients = parseRecipientsSnapshot(latestRecord?.value ?? null);
@@ -238,6 +323,33 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
     }
 
     try {
+      if (hasEspecialesSqliteRepository()) {
+        const recipients = (await loadRecipientsFromSqlite()) ?? [];
+        const duplicate = duplicatedEmail(recipients, draft.email, id);
+        if (duplicate) {
+          const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
+          return { ok: false, message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.` };
+        }
+
+        const latestRecipient = recipients.find((recipient) => recipient.id === id);
+        if (!latestRecipient) {
+          return { ok: false, message: 'El destinatario ya no existe en la base compartida. Recarga antes de continuar.' };
+        }
+
+        const updatedRecipient = buildEspecialRecipient(draft, nowIso(), id, latestRecipient);
+        const result = await saveRecipientToSqlite(updatedRecipient, expectedUpdatedAt);
+        if (!result.ok) {
+          return { ok: false, message: result.message };
+        }
+
+        const updatedRecipients = recipients.map((recipient) =>
+          recipient.id === id ? { ...updatedRecipient, sqliteUpdatedAt: result.currentUpdatedAt } : recipient,
+        );
+        mirrorRecipients(updatedRecipients);
+        set({ recipients: updatedRecipients });
+        return { ok: true, message: 'Destinatario guardado.' };
+      }
+
       const snapshot = await window.traccion?.loadPersistedRecords?.();
       const latestRecord = snapshot?.records.find((record) => record.key === RECIPIENTS_STORAGE_KEY) ?? null;
       const recipients = parseRecipientsSnapshot(latestRecord?.value ?? null);
@@ -277,6 +389,27 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
   removeRecipientWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     try {
       const deletedAt = nowIso();
+      if (hasEspecialesSqliteRepository()) {
+        const recipients = (await loadRecipientsFromSqlite()) ?? [];
+        const latestRecipient = recipients.find((recipient) => recipient.id === id);
+        if (!latestRecipient) {
+          return { ok: false, message: 'El destinatario ya no existe en la base compartida. Recarga antes de continuar.' };
+        }
+
+        const deletedRecipient = { ...latestRecipient, updatedAt: deletedAt, deletedAt };
+        const result = await saveRecipientToSqlite(deletedRecipient, expectedUpdatedAt);
+        if (!result.ok) {
+          return { ok: false, message: result.message };
+        }
+
+        const updatedRecipients = recipients.map((recipient) =>
+          recipient.id === id ? { ...deletedRecipient, sqliteUpdatedAt: result.currentUpdatedAt } : recipient,
+        );
+        mirrorRecipients(updatedRecipients);
+        set({ recipients: updatedRecipients });
+        return { ok: true, message: 'Destinatario eliminado.' };
+      }
+
       const result = await saveSharedArrayRecord<EspecialRecipient>({
         storageKey: RECIPIENTS_STORAGE_KEY,
         recordId: id,

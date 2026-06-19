@@ -338,6 +338,26 @@ interface TraccionCriteriosRrllRecordsSnapshot {
 
 type TraccionConditionalCriterioRrllRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionEspecialRecipientRecord = TraccionComiteSessionRecord;
+
+interface TraccionEspecialRecipientRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionEspecialRecipientRecord[];
+}
+
+type TraccionConditionalEspecialRecipientRecord = TraccionConditionalComiteSessionRecord;
+
+interface TraccionConfiguracionSnapshot {
+  status: TraccionDatabaseStatus;
+  value: string | null;
+  updatedAt: string | null;
+}
+
+interface TraccionConditionalConfiguracionRecord {
+  value: string;
+  expectedUpdatedAt: string | null;
+}
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -408,6 +428,14 @@ interface TraccionApi {
   loadCriteriosRrllRecords?: () => Promise<TraccionCriteriosRrllRecordsSnapshot>;
   saveCriteriosRrllRecordIfUnchanged?: (
     record: TraccionConditionalCriterioRrllRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadEspecialesRecipientRecords?: () => Promise<TraccionEspecialRecipientRecordsSnapshot>;
+  saveEspecialesRecipientRecordIfUnchanged?: (
+    record: TraccionConditionalEspecialRecipientRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadConfiguracion?: () => Promise<TraccionConfiguracionSnapshot>;
+  saveConfiguracionIfUnchanged?: (
+    record: TraccionConditionalConfiguracionRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   selectTaskDocument?: () => Promise<string[] | null>;
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;
