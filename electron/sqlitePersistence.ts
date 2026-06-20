@@ -32,6 +32,7 @@ const SQLITE_BUSY_TIMEOUT_MS = 15_000;
 const SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS = 15 * 1000;
 const SQLITE_RECORD_LOCK_WAIT_MS = 750;
 const SQLITE_OPERATION_LOCK_RETRY_MS = 50;
+const SQLITE_BUSY_RETRY_DELAYS_MS = [100, 300, 700];
 const RECORD_LOCK_TTL_MS = 30 * 1000;
 const MODULE_LOCK_RECORD_ID = '__module__';
 const DATABASE_HEARTBEAT_BLOCKED_MESSAGE =
@@ -1530,6 +1531,18 @@ function isSqliteLockContentionError(error: unknown): boolean {
   return message.includes('base ocupada') || message.includes('bloqueo temporal');
 }
 
+function isSqliteBusyOrLockedError(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes('database is locked') || message.includes('database table is locked');
+}
+
 function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
   const previousStatus = getSqliteStatus();
   const message =
@@ -1558,16 +1571,33 @@ async function safeDatabaseOperation<T>(
   fallback: (status: DatabaseStatus, message: string) => T,
 ): Promise<T> {
   const currentStatus = getSqliteStatus();
-  try {
-    return await withDatabaseOperationLock(currentStatus.path, async () => operation());
-  } catch (error) {
-    if (isSqliteCorruptionError(error)) {
-      const nextStatus = markDatabaseAsCorrupted(error);
-      return fallback(nextStatus, nextStatus.message ?? 'Base de datos SQLite dañada.');
-    }
 
-    throw error;
+  for (let attempt = 0; attempt <= SQLITE_BUSY_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await withDatabaseOperationLock(currentStatus.path, async () => operation());
+    } catch (error) {
+      if (isSqliteCorruptionError(error)) {
+        const nextStatus = markDatabaseAsCorrupted(error);
+        return fallback(nextStatus, nextStatus.message ?? 'Base de datos SQLite dañada.');
+      }
+
+      const isLastAttempt = attempt === SQLITE_BUSY_RETRY_DELAYS_MS.length;
+      if (!isSqliteBusyOrLockedError(error) || isLastAttempt) {
+        throw error;
+      }
+
+      const delayMs = SQLITE_BUSY_RETRY_DELAYS_MS[attempt];
+      console.warn(
+        `[sqlite] Operación ocupada (intento ${attempt + 1}/${SQLITE_BUSY_RETRY_DELAYS_MS.length + 1}), reintentando en ${delayMs} ms.`,
+      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, delayMs);
+      });
+    }
   }
+
+  // Inalcanzable: el bucle siempre retorna o lanza en la última iteración.
+  throw new Error('safeDatabaseOperation: estado inesperado.');
 }
 
 export function getSqliteStatus(): DatabaseStatus {
