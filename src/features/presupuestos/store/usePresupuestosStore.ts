@@ -203,6 +203,18 @@ async function loadStateFromSqlite(): Promise<Pick<PresupuestosStoreState, 'scen
   };
 }
 
+function areBudgetCollectionsEquivalent(
+  left: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>,
+  right: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals'>,
+): boolean {
+  return (
+    JSON.stringify(left.scenarios) === JSON.stringify(right.scenarios) &&
+    JSON.stringify(left.manualItems) === JSON.stringify(right.manualItems) &&
+    JSON.stringify(left.ticketGroups) === JSON.stringify(right.ticketGroups) &&
+    JSON.stringify(left.actuals) === JSON.stringify(right.actuals)
+  );
+}
+
 export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) => ({
   scenarios: [],
   manualItems: [],
@@ -221,14 +233,47 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       .catch((error) => console.warn('Presupuestos no cargado desde SQLite.', error));
   },
   reloadFromStorage: () => {
-    set(loadState());
-    void loadStateFromSqlite()
-      .then((sqliteState) => {
-        if (sqliteState) {
-          set(sqliteState);
-        }
-      })
-      .catch((error) => console.warn('Presupuestos no recargado desde SQLite.', error));
+    // Compara las colecciones de datos (no activeScenarioId, que es selección
+    // de UI, ni sqliteUpdatedAt, que es metadato técnico) antes de actualizar
+    // el estado, para no perder la selección activa del usuario ni provocar
+    // un re-render cuando el contenido normalizado no ha cambiado realmente.
+    const applyIfChanged = (
+      nextState: Pick<PresupuestosStoreState, 'scenarios' | 'manualItems' | 'ticketGroups' | 'actuals' | 'activeScenarioId' | 'sqliteUpdatedAt'>,
+    ) => {
+      const current = get();
+      if (areBudgetCollectionsEquivalent(current, nextState)) {
+        return;
+      }
+
+      const currentActiveScenarioStillExists = current.activeScenarioId
+        ? nextState.scenarios.some(
+            (scenario) => scenario.id === current.activeScenarioId && !scenario.deletedAt,
+          )
+        : false;
+
+      set({
+        ...nextState,
+        activeScenarioId: currentActiveScenarioStillExists
+          ? current.activeScenarioId
+          : nextState.activeScenarioId,
+      });
+    };
+
+    // Si hay repositorio SQLite disponible, es la única fuente de verdad: no
+    // se aplica primero la lectura legacy de localStorage, que podría estar
+    // vacía o desactualizada y pisaría momentáneamente el estado correcto.
+    if (hasPresupuestosSqliteRepository()) {
+      void loadStateFromSqlite()
+        .then((sqliteState) => {
+          if (sqliteState) {
+            applyIfChanged(sqliteState);
+          }
+        })
+        .catch((error) => console.warn('Presupuestos no recargado desde SQLite.', error));
+      return;
+    }
+
+    applyIfChanged(loadState());
   },
   setActiveScenario: (scenarioId) => set({ activeScenarioId: scenarioId }),
   upsertScenario: (draft, scenarioId) => {
