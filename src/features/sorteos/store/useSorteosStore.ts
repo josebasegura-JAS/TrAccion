@@ -411,6 +411,14 @@ function sortDraws(draws: SorteosDraw[]): SorteosDraw[] {
   return [...draws].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+function areDrawsEquivalent(left: SorteosDraw[], right: SorteosDraw[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function areExclusionsEquivalent(left: SorteosExclusion[], right: SorteosExclusion[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
   draws: [],
   exclusions: [],
@@ -438,13 +446,27 @@ export const useSorteosStore = create<SorteosStoreState>((set, get) => ({
     set({ draws, exclusions, visibleDrawId: '', visibleResult: null });
   },
   reloadFromStorage: () => {
+    // Compara contenido antes de actualizar el estado: si el poll detecta un
+    // cambio de updatedAt pero el contenido normalizado es idéntico al que ya
+    // tenemos (por ejemplo, porque el cambio lo hicimos nosotros mismos), no
+    // se llama a set() y se evita el re-render/parpadeo de la pantalla.
     const applySnapshot = (draws: SorteosDraw[], exclusions: SorteosExclusion[]) => {
-      const currentVisibleDrawId = get().visibleDrawId;
-      const visibleResult = draws.find((draw) => draw.id === currentVisibleDrawId) ?? null;
+      const state = get();
+      const drawsChanged = !areDrawsEquivalent(state.draws, draws);
+      const exclusionsChanged = !areExclusionsEquivalent(state.exclusions, exclusions);
+
+      if (!drawsChanged && !exclusionsChanged) {
+        return;
+      }
+
+      const visibleResult = drawsChanged
+        ? draws.find((draw) => draw.id === state.visibleDrawId) ?? null
+        : state.visibleResult;
+
       set({
-        draws,
-        exclusions,
-        visibleDrawId: visibleResult ? visibleResult.id : '',
+        draws: drawsChanged ? draws : state.draws,
+        exclusions: exclusionsChanged ? exclusions : state.exclusions,
+        visibleDrawId: drawsChanged ? (visibleResult ? visibleResult.id : '') : state.visibleDrawId,
         visibleResult,
       });
     };
