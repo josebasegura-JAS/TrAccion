@@ -163,6 +163,10 @@ function upsertImportedCriterios(criterios: CriterioRrll[], drafts: CriterioRrll
   return [...updated, ...created];
 }
 
+function areCriteriosEquivalent(left: CriterioRrll[], right: CriterioRrll[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) => ({
   criterios: [],
   selectedCriterioId: '',
@@ -183,7 +187,40 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
     set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
   },
   reloadFromStorage: async () => {
-    await get().load();
+    // A diferencia de load(), aquí se compara el contenido y se conserva la
+    // selección activa del usuario si el criterio seleccionado sigue
+    // existiendo, evitando recalcular selectedCriterioId y el re-render
+    // asociado cuando el contenido normalizado no ha cambiado realmente.
+    const applyIfChanged = (criterios: CriterioRrll[]) => {
+      const current = get();
+      if (areCriteriosEquivalent(current.criterios, criterios)) {
+        return;
+      }
+
+      const currentSelectionStillExists = criterios.some(
+        (criterio) => criterio.id === current.selectedCriterioId && !criterio.deletedAt,
+      );
+
+      set({
+        criterios,
+        selectedCriterioId: currentSelectionStillExists
+          ? current.selectedCriterioId
+          : firstActiveCriterioId(criterios),
+      });
+    };
+
+    try {
+      const sqliteCriterios = await loadCriteriosRrllFromSqlite(parseCriteriosRrllSnapshot);
+      if (sqliteCriterios) {
+        mirrorCriteriosRrll(sqliteCriterios);
+        applyIfChanged(sqliteCriterios);
+        return;
+      }
+    } catch {
+      // Si SQLite no está disponible, se conserva la lectura legacy como fallback.
+    }
+
+    applyIfChanged(readCriteriosRrll());
   },
   create: (draft) => {
     set((state) => {
