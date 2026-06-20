@@ -95,6 +95,10 @@ function createId(): string {
     : `vinculograma-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function areRecordsEquivalent(left: Vinculograma[], right: Vinculograma[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
   records: [],
   load: async () => {
@@ -112,7 +116,27 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
     set({ records: readRecords() });
   },
   reloadFromStorage: async () => {
-    await get().load();
+    // A diferencia de load(), aquí se compara el contenido antes de llamar a
+    // set() para no provocar un re-render (y el parpadeo asociado) cuando el
+    // poll detecta un cambio de updatedAt pero el contenido normalizado ya
+    // coincide con el que tenemos en memoria.
+    try {
+      const sqliteRecords = await loadVinculogramasFromSqlite(parseRecords);
+      if (sqliteRecords) {
+        mirrorRecords(sqliteRecords);
+        if (!areRecordsEquivalent(get().records, sqliteRecords)) {
+          set({ records: sqliteRecords });
+        }
+        return;
+      }
+    } catch {
+      // Si SQLite no está disponible, se conserva la lectura legacy como fallback.
+    }
+
+    const records = readRecords();
+    if (!areRecordsEquivalent(get().records, records)) {
+      set({ records });
+    }
   },
   create: (draft) => {
     const id = createId();
