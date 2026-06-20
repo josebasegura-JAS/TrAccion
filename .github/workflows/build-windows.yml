@@ -7,6 +7,7 @@ jobs:
   build-windows:
     name: Build TrAccion V1 portable EXE
     runs-on: windows-latest
+
     env:
       ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
       ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
@@ -46,6 +47,29 @@ jobs:
           key: ${{ runner.os }}-electron-builder-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-builder-
+
+      - name: Configurar registro npm público
+        shell: pwsh
+        run: |
+          npm config set registry https://registry.npmjs.org/
+
+      - name: Reparar package-lock con registry público
+        shell: pwsh
+        run: |
+          $lock = "package-lock.json"
+
+          if (!(Test-Path $lock)) {
+            throw "No existe package-lock.json"
+          }
+
+          $content = Get-Content $lock -Raw
+
+          $content = $content.Replace(
+            "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
+            "https://registry.npmjs.org/"
+          )
+
+          Set-Content $lock $content -NoNewline
 
       - name: Install dependencies
         run: npm install
