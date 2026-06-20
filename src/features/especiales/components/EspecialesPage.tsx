@@ -18,7 +18,7 @@ import {
 import { useEspecialesStore } from '../store/useEspecialesStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
-import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { withSharedModuleLocks } from '../../../services/sharedModuleLock';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 
 const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -124,15 +124,6 @@ export function EspecialesPage() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [hasOutlookApi, setHasOutlookApi] = useState(() => Boolean(getOutlookDraftApi()));
-  const isRecipientEditing = Boolean(
-    editingRecipientId || recipientDraft.name.trim() || recipientDraft.email.trim(),
-  );
-  const moduleLock = useSharedRecordLock({
-    module: 'especiales',
-    recordId: '__module__',
-    enabled: isRecipientEditing,
-  });
-  const isReadOnly = moduleLock.isReadOnly;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
@@ -186,16 +177,10 @@ export function EspecialesPage() {
   }, [hasOutlookApi, recipientGroups.to.length, serviceDraft.evento]);
 
   const setField = (field: keyof EspecialServiceDraft, value: string) => {
-    if (isReadOnly) {
-      return;
-    }
     setServiceDraft((current) => ({ ...current, [field]: value }));
   };
 
   const resetPreview = () => {
-    if (isReadOnly) {
-      return;
-    }
     setHasEditedPreview(false);
     setEditedPreviewHtml(generatedPreviewHtml);
     if (previewRef.current) {
@@ -220,10 +205,6 @@ export function EspecialesPage() {
   };
 
   const saveRecipient = (type?: EspecialRecipientType) => {
-    if (isReadOnly) {
-      return;
-    }
-
     const draft = {
       ...recipientDraft,
       type: editingRecipientId ? editingRecipientType : (type ?? recipientDraft.type),
@@ -233,21 +214,30 @@ export function EspecialesPage() {
       : null;
 
     void (async () => {
-      const result = editingRecipientId
-        ? await updateRecipientWithConcurrencyCheck(editingRecipientId, draft, expectedUpdatedAt)
-        : await createRecipientWithConcurrencyCheck(draft);
+      try {
+        const result = await withSharedModuleLocks(
+          [{ module: 'especiales', label: 'Especiales' }],
+          () =>
+            editingRecipientId
+              ? updateRecipientWithConcurrencyCheck(editingRecipientId, draft, expectedUpdatedAt)
+              : createRecipientWithConcurrencyCheck(draft),
+        );
 
-      if (!result.ok) {
-        setOutlookStatus(result.message ?? 'No se ha podido guardar el destinatario.');
+        if (!result.ok) {
+          setOutlookStatus(result.message ?? 'No se ha podido guardar el destinatario.');
+          setOutlookStatusTone('error');
+          return;
+        }
+
+        setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
+        setEditingRecipientId(null);
+        setEditingRecipientType('to');
+        setOutlookStatus('');
+        setOutlookStatusTone('neutral');
+      } catch (error) {
+        setOutlookStatus(error instanceof Error ? error.message : 'No se ha podido guardar el destinatario.');
         setOutlookStatusTone('error');
-        return;
       }
-
-      setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
-      setEditingRecipientId(null);
-      setEditingRecipientType('to');
-      setOutlookStatus('');
-      setOutlookStatusTone('neutral');
     })();
   };
 
@@ -258,21 +248,26 @@ export function EspecialesPage() {
   };
 
   const deleteRecipient = (recipientId: string) => {
-    if (isReadOnly) {
-      return;
-    }
     const expectedUpdatedAt = recipients.find((recipient) => recipient.id === recipientId)?.updatedAt ?? null;
     void (async () => {
-      const result = await removeRecipientWithConcurrencyCheck(recipientId, expectedUpdatedAt);
-      if (!result.ok) {
-        setOutlookStatus(result.message);
+      try {
+        const result = await withSharedModuleLocks(
+          [{ module: 'especiales', label: 'Especiales' }],
+          () => removeRecipientWithConcurrencyCheck(recipientId, expectedUpdatedAt),
+        );
+        if (!result.ok) {
+          setOutlookStatus(result.message);
+          setOutlookStatusTone('error');
+          return;
+        }
+        if (editingRecipientId === recipientId) {
+          setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
+          setEditingRecipientId(null);
+          setEditingRecipientType('to');
+        }
+      } catch (error) {
+        setOutlookStatus(error instanceof Error ? error.message : 'No se ha podido eliminar el destinatario.');
         setOutlookStatusTone('error');
-        return;
-      }
-      if (editingRecipientId === recipientId) {
-        setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
-        setEditingRecipientId(null);
-        setEditingRecipientType('to');
       }
     })();
   };
@@ -375,11 +370,6 @@ export function EspecialesPage() {
 
   return (
     <section className="space-y-4" id="especiales">
-      {moduleLock.status === 'locked' && moduleLock.lockedBy && (
-        <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
-          📖 Modo consulta — editando: {moduleLock.lockedBy.ownerName}@{moduleLock.lockedBy.machineName}
-        </div>
-      )}
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
@@ -622,14 +612,13 @@ export function EspecialesPage() {
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className={buttonClass} disabled={isReadOnly} onClick={() => saveRecipient('to')} type="button">
+                  <button className={buttonClass} onClick={() => saveRecipient('to')} type="button">
                     <Save size={16} />
                     {editingRecipientId ? 'Guardar cambios' : 'Añadir a Para'}
                   </button>
                   {!editingRecipientId && (
                     <button
                       className={secondaryButtonClass}
-                      disabled={isReadOnly}
                       onClick={() => saveRecipient('cc')}
                       type="button"
                     >
