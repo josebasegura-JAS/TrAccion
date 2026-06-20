@@ -76,3 +76,17 @@ jobs:
         shell: pwsh
         run: |
           node node_modules/vitest/vitest.mjs run src/shared/multiusuario/multiusuario.test.ts --fileParallelism=false
+
+      - name: Ejecutar tests de concurrencia de stores
+        shell: pwsh
+        run: |
+          node node_modules/vitest/vitest.mjs run `
+            src/features/sorteos/store/useSorteosStore.concurrency.test.ts `
+            src/features/especiales/store/useEspecialesStore.concurrency.test.ts `
+            src/features/vinculograma/store/useVinculogramaStore.concurrency.test.ts `
+            src/features/configuracion/store/useConfiguracionStore.concurrency.test.ts `
+            src/features/presupuestos/store/usePresupuestosStore.concurrency.test.ts `
+            src/features/ticket-restaurante/store/useTicketRestauranteStore.concurrency.test.ts `
+            src/features/criterios-rrll/store/useCriteriosRrllStore.concurrency.test.ts `
+            src/features/plantilla/store/useEmployeeStore.concurrency.test.ts `
+            --fileParallelism=false
