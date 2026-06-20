@@ -15,7 +15,7 @@ import {
 import { useSorteosStore } from '../store/useSorteosStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
-import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { withSharedModuleLocks } from '../../../services/sharedModuleLock';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
 
 const today = new Date().toISOString().slice(0, 10);
@@ -138,20 +138,7 @@ export function SorteosPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const isSorteosEditing = Boolean(
-    draft.title.trim() ||
-    draft.date !== today ||
-    draft.winnersCount !== 1 ||
-    search.trim() ||
-    pendingConfirmation,
-  );
-  const moduleLock = useSharedRecordLock({
-    module: 'sorteos',
-    recordId: '__module__',
-    enabled: isSorteosEditing,
-  });
-  const isReadOnly = moduleLock.isReadOnly;
-  const isActionDisabled = isReadOnly || busyAction !== null;
+  const isActionDisabled = busyAction !== null;
 
   useEffect(() => {
     loadEmployees();
@@ -169,16 +156,10 @@ export function SorteosPage() {
   );
 
   const handleDraftChange = <K extends keyof SorteosDraft>(key: K, value: SorteosDraft[K]) => {
-    if (isReadOnly) {
-      return;
-    }
     setDraft((currentDraft) => ({ ...currentDraft, [key]: value }));
   };
 
   const handleDraw = () => {
-    if (isReadOnly) {
-      return;
-    }
     const validation = validateSorteosDraft(draft, people, exclusions);
     if (!validation.valid) {
       setErrors(validation.errors);
@@ -188,11 +169,16 @@ export function SorteosPage() {
     void (async () => {
       setBusyAction('draw');
       try {
-        const result = await createDrawWithConcurrencyCheck(draft, people);
+        const result = await withSharedModuleLocks(
+          [{ module: 'sorteos', label: 'Sorteos' }],
+          () => createDrawWithConcurrencyCheck(draft, people),
+        );
         setErrors(result.errors);
         if (result.valid) {
           setDraft({ title: '', date: today, winnersCount: 1 });
         }
+      } catch (error) {
+        setErrors([error instanceof Error ? error.message : 'No se ha podido realizar el sorteo.']);
       } finally {
         setBusyAction(null);
       }
@@ -200,16 +186,10 @@ export function SorteosPage() {
   };
 
   const requestDeleteDraw = (drawId: string) => {
-    if (isReadOnly) {
-      return;
-    }
     setPendingConfirmation({ type: 'delete-draw', drawId });
   };
 
   const requestResetAllExclusions = () => {
-    if (isReadOnly) {
-      return;
-    }
     setPendingConfirmation({ type: 'reset-all-exclusions' });
   };
 
@@ -218,9 +198,6 @@ export function SorteosPage() {
   };
 
   const confirmDeleteDraw = (removeLinkedWinnerExclusions: boolean) => {
-    if (isReadOnly) {
-      return;
-    }
     if (pendingConfirmation?.type !== 'delete-draw') {
       return;
     }
@@ -228,15 +205,20 @@ export function SorteosPage() {
     void (async () => {
       setBusyAction('delete-draw');
       try {
-        const result = await deleteDrawWithConcurrencyCheck(
-          pendingConfirmation.drawId,
-          removeLinkedWinnerExclusions,
+        const result = await withSharedModuleLocks(
+          [{ module: 'sorteos', label: 'Sorteos' }],
+          () => deleteDrawWithConcurrencyCheck(
+            pendingConfirmation.drawId,
+            removeLinkedWinnerExclusions,
+          ),
         );
         if (!result.ok) {
           setErrors([result.message]);
           return;
         }
         setPendingConfirmation(null);
+      } catch (error) {
+        setErrors([error instanceof Error ? error.message : 'No se ha podido eliminar el sorteo.']);
       } finally {
         setBusyAction(null);
       }
@@ -244,18 +226,20 @@ export function SorteosPage() {
   };
 
   const confirmResetAllExclusions = () => {
-    if (isReadOnly) {
-      return;
-    }
     void (async () => {
       setBusyAction('reset-all-exclusions');
       try {
-        const result = await resetAllExclusionsWithConcurrencyCheck();
+        const result = await withSharedModuleLocks(
+          [{ module: 'sorteos', label: 'Sorteos' }],
+          () => resetAllExclusionsWithConcurrencyCheck(),
+        );
         if (!result.ok) {
           setErrors([result.message]);
           return;
         }
         setPendingConfirmation(null);
+      } catch (error) {
+        setErrors([error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.']);
       } finally {
         setBusyAction(null);
       }
@@ -267,12 +251,6 @@ export function SorteosPage() {
       className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="sorteos"
     >
-      {moduleLock.status === 'locked' && moduleLock.lockedBy && (
-        <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
-          📖 Modo consulta — editando: {moduleLock.lockedBy.ownerName}@
-          {moduleLock.lockedBy.machineName}
-        </div>
-      )}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
@@ -447,10 +425,15 @@ export function SorteosPage() {
                           void (async () => {
                             setBusyAction(`exclude-${person.empleado}`);
                             try {
-                              const result = await addExclusionWithConcurrencyCheck(person);
+                              const result = await withSharedModuleLocks(
+                                [{ module: 'sorteos', label: 'Sorteos' }],
+                                () => addExclusionWithConcurrencyCheck(person),
+                              );
                               if (!result.ok) {
                                 setErrors([result.message]);
                               }
+                            } catch (error) {
+                              setErrors([error instanceof Error ? error.message : 'No se ha podido añadir la exclusión.']);
                             } finally {
                               setBusyAction(null);
                             }
@@ -518,12 +501,15 @@ export function SorteosPage() {
                                 void (async () => {
                                   setBusyAction(`remove-exclusion-${exclusion.id}`);
                                   try {
-                                    const result = await removeExclusionWithConcurrencyCheck(
-                                      exclusion.id,
+                                    const result = await withSharedModuleLocks(
+                                      [{ module: 'sorteos', label: 'Sorteos' }],
+                                      () => removeExclusionWithConcurrencyCheck(exclusion.id),
                                     );
                                     if (!result.ok) {
                                       setErrors([result.message]);
                                     }
+                                  } catch (error) {
+                                    setErrors([error instanceof Error ? error.message : 'No se ha podido quitar la exclusión.']);
                                   } finally {
                                     setBusyAction(null);
                                   }
@@ -677,11 +663,15 @@ export function SorteosPage() {
                               void (async () => {
                                 setBusyAction(`reset-draw-exclusions-${draw.id}`);
                                 try {
-                                  const result =
-                                    await resetDrawWinnerExclusionsWithConcurrencyCheck(draw.id);
+                                  const result = await withSharedModuleLocks(
+                                    [{ module: 'sorteos', label: 'Sorteos' }],
+                                    () => resetDrawWinnerExclusionsWithConcurrencyCheck(draw.id),
+                                  );
                                   if (!result.ok) {
                                     setErrors([result.message]);
                                   }
+                                } catch (error) {
+                                  setErrors([error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.']);
                                 } finally {
                                   setBusyAction(null);
                                 }
