@@ -307,6 +307,40 @@ function createId(prefix: string): string {
     : `${prefix}-${Date.now()}`;
 }
 
+type TicketRestauranteSnapshot = Pick<
+  TicketRestauranteState,
+  'calendars' | 'absences' | 'people' | 'config' | 'debtLedger' | 'manutenciones'
+>;
+
+function areTicketSnapshotsEquivalent(
+  left: TicketRestauranteSnapshot,
+  right: TicketRestauranteSnapshot,
+): boolean {
+  return (
+    JSON.stringify(left.calendars) === JSON.stringify(right.calendars) &&
+    JSON.stringify(left.absences) === JSON.stringify(right.absences) &&
+    JSON.stringify(left.people) === JSON.stringify(right.people) &&
+    JSON.stringify(left.config) === JSON.stringify(right.config) &&
+    JSON.stringify(left.debtLedger) === JSON.stringify(right.debtLedger) &&
+    JSON.stringify(left.manutenciones) === JSON.stringify(right.manutenciones)
+  );
+}
+
+function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
+  return {
+    calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
+      normalizeStoredTicketCalendar,
+    ),
+    absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
+    people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
+    config: readConfig(),
+    debtLedger: readDebtLedger(),
+    manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+      normalizeStoredTicketManutencion,
+    ),
+  };
+}
+
 export const useTicketRestauranteStore = create<TicketRestauranteState>((set, get) => ({
   calendars: [],
   absences: [],
@@ -315,32 +349,17 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   debtLedger: {},
   manutenciones: [],
   load: () => {
-    set({
-      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
-        normalizeStoredTicketCalendar,
-      ),
-      absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
-      people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
-      config: readConfig(),
-      debtLedger: readDebtLedger(),
-      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-        normalizeStoredTicketManutencion,
-      ),
-    });
+    set(readTicketRestauranteSnapshot());
   },
   reloadFromStorage: () => {
-    set({
-      calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
-        normalizeStoredTicketCalendar,
-      ),
-      absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
-      people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
-      config: readConfig(),
-      debtLedger: readDebtLedger(),
-      manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-        normalizeStoredTicketManutencion,
-      ),
-    });
+    // Compara contenido antes de actualizar el estado para evitar el
+    // re-render (y el parpadeo asociado) cuando el poll detecta cambio de
+    // updatedAt pero el contenido normalizado ya coincide con el que
+    // tenemos en memoria.
+    const nextSnapshot = readTicketRestauranteSnapshot();
+    if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
+      set(nextSnapshot);
+    }
   },
   createCalendar: (draft) => {
     const id = createId('ticket-calendar');
