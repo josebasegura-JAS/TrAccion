@@ -1,78 +1,67 @@
 name: Multiusuario Tests
 
 on:
-  workflow_dispatch:
+workflow_dispatch:
 
 jobs:
-  multiusuario-tests:
-    runs-on: windows-latest
+multiusuario-tests:
+runs-on: windows-latest
 
-    env:
-      CI: "true"
-      NODE_ENV: development
-      NPM_CONFIG_AUDIT: "false"
-      NPM_CONFIG_FUND: "false"
-      NPM_CONFIG_PRODUCTION: "false"
-      NPM_CONFIG_OMIT: ""
-      NPM_CONFIG_INCLUDE: "dev"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.13.1
-
-      - name: Configurar npm y registry público
-        shell: pwsh
-        run: |
-          npm config delete production
-          npm config delete omit
-          npm config set registry https://registry.npmjs.org/
-          npm config set fund false
-          npm config set audit false
-          npm cache clean --force
-
-      - name: Reparar package-lock con registry público
-        shell: pwsh
-        run: |
-          $lock = "package-lock.json"
-
-          if (!(Test-Path $lock)) {
-            throw "No existe package-lock.json"
-          }
-
-          $content = Get-Content $lock -Raw
-          $content = $content.Replace(
-            "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
-            "https://registry.npmjs.org/"
-          )
-
-          Set-Content $lock $content -NoNewline
-
-      - name: Instalar dependencias
-        shell: pwsh
-        run: |
-          if (Test-Path node_modules) {
-            Remove-Item node_modules -Recurse -Force
-          }
-
-          npm ci --include=dev --ignore-scripts --no-audit --no-fund
-
-      - name: Diagnóstico Vitest
-        shell: pwsh
-        run: |
-          node --version
-          npm --version
-          npm ls vitest vite @vitejs/plugin-react --depth=0
-          node node_modules/vitest/vitest.mjs --version
-
-      - name: Run external sync tests
-        shell: pwsh
-        run: node node_modules/vitest/vitest.mjs run src/shared/multiusuario/externalDataSync.test.ts --fileParallelism=false
-
-      - name: Run multiusuario tests
-        shell: pwsh
-        run: node node_modules/vitest/vitest.mjs run src/shared/multiusuario/multiusuario.test.ts --fileParallelism=false
+env:
+  CI: "true"
+  NODE_ENV: development
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_FUND: "false"
+  NPM_CONFIG_PRODUCTION: "false"
+  NPM_CONFIG_OMIT: ""
+  NPM_CONFIG_INCLUDE: "dev"
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
+  - name: Setup Node
+    uses: actions/setup-node@v4
+    with:
+      node-version: 22.13.1
+  - name: Configurar npm
+    shell: pwsh
+    run: |
+      npm config delete production
+      npm config delete omit
+      npm config set registry https://registry.npmjs.org/
+      npm config set fund false
+      npm config set audit false
+      npm cache clean --force
+  - name: Reparar package-lock
+    shell: pwsh
+    run: |
+      $lock = "package-lock.json"
+      if (!(Test-Path $lock)) {
+        throw "No existe package-lock.json"
+      }
+      $content = Get-Content $lock -Raw
+      $content = $content.Replace(
+        "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
+        "https://registry.npmjs.org/"
+      )
+      Set-Content $lock $content -NoNewline
+  - name: Instalar dependencias
+    shell: pwsh
+    run: |
+      if (Test-Path node_modules) {
+        Remove-Item node_modules -Recurse -Force
+      }
+      npm ci --include=dev --ignore-scripts --no-audit --no-fund
+  - name: Diagnostico
+    shell: pwsh
+    run: |
+      node --version
+      npm --version
+      npm ls vitest vite @vitejs/plugin-react --depth=0
+  - name: Ejecutar externalDataSync
+    shell: pwsh
+    run: |
+      node node_modules/vitest/vitest.mjs run src/services/externalDataSync.multiuser.test.ts --fileParallelism=false
+  - name: Ejecutar multiusuario
+    shell: pwsh
+    run: |
+      node node_modules/vitest/vitest.mjs run src/shared/multiusuario/multiusuario.test.ts --fileParallelism=false
