@@ -195,9 +195,13 @@ function commitConfiguracion(set: (partial: ConfiguracionState) => void, configu
   })();
 }
 
+function areConfiguracionesEquivalent(left: ConfiguracionState, right: ConfiguracionState): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 const initialConfiguracion = readConfiguracion();
 
-export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
+export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
   rutaPlantillaLicenciaSinSueldo: initialConfiguracion.rutaPlantillaLicenciaSinSueldo,
   taskPhases: initialConfiguracion.taskPhases,
@@ -213,14 +217,38 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set) => ({
       .catch((error) => console.warn('Configuración no cargada desde SQLite.', error));
   },
   reloadFromStorage: () => {
-    set(readConfiguracion());
-    void readConfiguracionFromSqlite()
-      .then((configuracion) => {
-        if (configuracion) {
-          set(configuracion);
-        }
-      })
-      .catch((error) => console.warn('Configuración no recargada desde SQLite.', error));
+    // Compara contenido antes de actualizar el estado: evita el re-render
+    // (y el parpadeo asociado) cuando el poll detecta cambio de updatedAt
+    // pero el contenido normalizado ya coincide con el que tenemos en memoria.
+    const applyIfChanged = (configuracion: ConfiguracionState) => {
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, taskPhases, taskOrigins } = get();
+      const current: ConfiguracionState = {
+        rutaPlantillaTeletrabajo,
+        rutaPlantillaLicenciaSinSueldo,
+        taskPhases,
+        taskOrigins,
+      };
+      if (!areConfiguracionesEquivalent(current, configuracion)) {
+        set(configuracion);
+      }
+    };
+
+    // Si hay repositorio SQLite disponible, es la única fuente de verdad: no
+    // se aplica primero la lectura legacy de localStorage (que podría no
+    // reflejar aún el último valor SQLite) para no pisar momentáneamente el
+    // estado correcto con uno desactualizado.
+    if (window.traccion?.loadConfiguracion) {
+      void readConfiguracionFromSqlite()
+        .then((configuracion) => {
+          if (configuracion) {
+            applyIfChanged(configuracion);
+          }
+        })
+        .catch((error) => console.warn('Configuración no recargada desde SQLite.', error));
+      return;
+    }
+
+    applyIfChanged(readConfiguracion());
   },
   setRutaPlantillaTeletrabajo: (ruta) => {
     const state = useConfiguracionStore.getState();
