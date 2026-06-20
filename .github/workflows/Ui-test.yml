@@ -5,6 +5,7 @@ on:
 
 jobs:
   multiusuario-tests:
+    name: Multiusuario Tests
     runs-on: windows-latest
 
     env:
@@ -39,14 +40,17 @@ jobs:
         shell: pwsh
         run: |
           $lock = "package-lock.json"
+
           if (!(Test-Path $lock)) {
             throw "No existe package-lock.json"
           }
+
           $content = Get-Content $lock -Raw
           $content = $content.Replace(
             "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
             "https://registry.npmjs.org/"
           )
+
           Set-Content $lock $content -NoNewline
 
       - name: Instalar dependencias
@@ -55,6 +59,7 @@ jobs:
           if (Test-Path node_modules) {
             Remove-Item node_modules -Recurse -Force
           }
+
           npm ci --include=dev --ignore-scripts --no-audit --no-fund
 
       - name: Diagnostico
