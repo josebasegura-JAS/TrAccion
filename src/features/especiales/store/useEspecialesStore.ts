@@ -183,7 +183,26 @@ function duplicatedEmail(
   );
 }
 
-export const useEspecialesStore = create<EspecialesState>((set) => ({
+function recipientsEquivalentIgnoringSqliteMetadata(
+  left: EspecialRecipient[],
+  right: EspecialRecipient[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  // sqliteUpdatedAt es metadato técnico (puede no coincidir exactamente entre
+  // lecturas) y no forma parte del contenido visible para el usuario; se
+  // ignora en la comparación para no provocar recargas innecesarias.
+  const stripSqliteMetadata = (recipient: EspecialRecipient) => {
+    const { id, name, email, type, createdAt, updatedAt, deletedAt } = recipient;
+    return { id, name, email, type, createdAt, updatedAt, deletedAt };
+  };
+
+  return JSON.stringify(left.map(stripSqliteMetadata)) === JSON.stringify(right.map(stripSqliteMetadata));
+}
+
+export const useEspecialesStore = create<EspecialesState>((set, get) => ({
   recipients: [],
   load: () => {
     set({ recipients: readRecipients() });
@@ -196,11 +215,36 @@ export const useEspecialesStore = create<EspecialesState>((set) => ({
       .catch((error) => console.warn('Destinatarios de Especiales no cargados desde SQLite.', error));
   },
   reloadFromStorage: () => {
-    set({ recipients: readRecipients() });
+    // Compara contenido antes de actualizar el estado para evitar recargas
+    // (y el parpadeo asociado) cuando el contenido normalizado no ha
+    // cambiado realmente respecto al que ya tenemos en memoria.
+    const applyIfChanged = (nextRecipients: EspecialRecipient[]) => {
+      const currentRecipients = get().recipients;
+      if (!recipientsEquivalentIgnoringSqliteMetadata(currentRecipients, nextRecipients)) {
+        set({ recipients: nextRecipients });
+      }
+    };
+
+    // Si hay repositorio SQLite disponible, es la única fuente de verdad: no
+    // se aplica primero la lectura legacy de localStorage, que podría no
+    // reflejar aún el último valor SQLite y pisaría momentáneamente el
+    // estado correcto con uno desactualizado.
+    if (hasEspecialesSqliteRepository()) {
+      void loadRecipientsFromSqlite()
+        .then((recipients) => {
+          if (recipients) {
+            applyIfChanged(recipients);
+          }
+        })
+        .catch((error) => console.warn('Destinatarios de Especiales no recargados desde SQLite.', error));
+      return;
+    }
+
+    applyIfChanged(readRecipients());
     void loadRecipientsFromSqlite()
       .then((recipients) => {
         if (recipients) {
-          set({ recipients });
+          applyIfChanged(recipients);
         }
       })
       .catch((error) => console.warn('Destinatarios de Especiales no recargados desde SQLite.', error));
