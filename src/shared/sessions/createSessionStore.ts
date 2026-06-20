@@ -164,6 +164,10 @@ function getVisibleSessionIds(sessions: ManagedSession[]): Set<string> {
   return new Set(sessions.map((session) => session.id));
 }
 
+function areManagedSessionsEquivalent(left: ManagedSession[], right: ManagedSession[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function getSessionId(session: ManagedSession): string {
   return session.id;
 }
@@ -513,15 +517,20 @@ export function createManagedSessionStore(config: SessionModuleConfig) {
     },
     reloadFromStorage: () => {
       void readSessionsFromNativeOrBlob(config)
-        .then((sessions) =>
-          set({
-            sessions: filterSessionsForState(
-              sessions,
-              get().hasLoadedHistoricalSessions,
-              getVisibleSessionIds(get().sessions),
-            ),
-          }),
-        )
+        .then((sessions) => {
+          const nextSessions = filterSessionsForState(
+            sessions,
+            get().hasLoadedHistoricalSessions,
+            getVisibleSessionIds(get().sessions),
+          );
+          // Compara contenido antes de actualizar el estado para evitar el
+          // re-render (y el parpadeo asociado) cuando el poll detecta cambio
+          // de updatedAt pero el contenido normalizado ya coincide con el
+          // que tenemos en memoria.
+          if (!areManagedSessionsEquivalent(get().sessions, nextSessions)) {
+            set({ sessions: nextSessions });
+          }
+        })
         .catch((error) => logSessionPersistenceError('reloadSessionsFromStorage', error));
     },
     create: (draft) => {
