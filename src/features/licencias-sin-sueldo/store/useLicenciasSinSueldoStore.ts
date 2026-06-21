@@ -213,26 +213,41 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
 
     if (hasLicenciaSinSueldoSqliteRepository()) {
       try {
-        const result = await saveLicenciaSinSueldoToSqlite(record, null);
-        if (!result?.ok) {
-          return { ok: false, message: result?.message ?? 'No se ha podido crear la solicitud.' };
-        }
-
-        addAuditEvent({
-          module: 'licencias-sin-sueldo',
-          entityId: record.id,
-          action: 'created',
-          summary: 'Registro creado',
-          changes: [],
-        });
-
         const records = await loadLicenciaSinSueldoRecordsFromSqlite();
-        const parsedRecords = records
-          ? records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`))
-          : [...get().records, record];
-        mirrorRecords(parsedRecords);
-        set({ records: parsedRecords });
-        return { ok: true, message: result.message, recordId: record.id };
+        if (records !== null) {
+          if (records.some((sqliteRecord) => sqliteRecord.id === id)) {
+            return {
+              ok: false,
+              message: 'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+
+          const result = await saveLicenciaSinSueldoToSqlite(record, null);
+          if (!result?.ok) {
+            return { ok: false, message: result?.message ?? 'No se ha podido crear la solicitud.' };
+          }
+
+          addAuditEvent({
+            module: 'licencias-sin-sueldo',
+            entityId: record.id,
+            action: 'created',
+            summary: 'Registro creado',
+            changes: [],
+          });
+
+          // Construimos la lista a partir de lo que ya habíamos leído de SQLite
+          // justo antes de guardar, en vez de releer aquí: si la base deja de
+          // estar disponible justo después de guardar (p.ej. SMB intermitente),
+          // evitamos mezclar un registro ya persistido con una lista basada en
+          // memoria local potencialmente desactualizada respecto a otros usuarios.
+          const parsedRecords = [
+            record,
+            ...records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`)),
+          ];
+          mirrorRecords(parsedRecords);
+          set({ records: parsedRecords });
+          return { ok: true, message: result.message, recordId: record.id };
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
         return { ok: false, message };
@@ -282,28 +297,44 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
     if (hasLicenciaSinSueldoSqliteRepository()) {
       try {
-        const currentRecord = get().records.find((record) => record.id === id);
-        if (!currentRecord) {
-          return {
-            ok: false,
-            message: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
-          };
-        }
-
-        registerLicenciaUpdateAudit(currentRecord, draft);
-        const record = buildLicenciaSinSueldoRecord(draft, nowIso(), id, currentRecord);
-        const result = await saveLicenciaSinSueldoToSqlite(record, expectedUpdatedAt);
-        if (!result?.ok) {
-          return { ok: false, message: result?.message ?? 'No se ha podido guardar la solicitud.' };
-        }
-
         const records = await loadLicenciaSinSueldoRecordsFromSqlite();
-        const parsedRecords = records
-          ? records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`))
-          : get().records.map((current) => (current.id === id ? record : current));
-        mirrorRecords(parsedRecords);
-        set({ records: parsedRecords });
-        return { ok: true, message: result.message };
+        if (records !== null) {
+          const currentSqliteRecord = records.find((sqliteRecord) => sqliteRecord.id === id);
+          const currentRecord = currentSqliteRecord
+            ? parseRecords(`[${currentSqliteRecord.value}]`)[0]
+            : null;
+          if (!currentSqliteRecord || !currentRecord) {
+            return {
+              ok: false,
+              message: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+
+          if (expectedUpdatedAt && currentSqliteRecord.updatedAt !== expectedUpdatedAt) {
+            return {
+              ok: false,
+              message: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+            };
+          }
+
+          registerLicenciaUpdateAudit(currentRecord, draft);
+          const record = buildLicenciaSinSueldoRecord(draft, nowIso(), id, currentRecord);
+          const result = await saveLicenciaSinSueldoToSqlite(record, currentSqliteRecord.updatedAt);
+          if (!result?.ok) {
+            return { ok: false, message: result?.message ?? 'No se ha podido guardar la solicitud.' };
+          }
+
+          // Igual que en createWithConcurrencyCheck: construimos la lista a
+          // partir de lo leído justo antes de guardar, sin releer después,
+          // para no mezclar un registro recién persistido con una lista
+          // basada en memoria local si SQLite deja de responder justo después.
+          const parsedRecords = records.flatMap((sqliteRecord) =>
+            sqliteRecord.id === id ? [record] : parseRecords(`[${sqliteRecord.value}]`),
+          );
+          mirrorRecords(parsedRecords);
+          set({ records: parsedRecords });
+          return { ok: true, message: result.message };
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
         return { ok: false, message };
@@ -335,34 +366,50 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     if (hasLicenciaSinSueldoSqliteRepository()) {
       try {
-        const currentRecord = get().records.find((record) => record.id === id);
-        if (!currentRecord) {
-          return {
-            ok: false,
-            message: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
-          };
-        }
-
-        const result = await deleteLicenciaSinSueldoInSqlite(currentRecord, expectedUpdatedAt);
-        if (!result?.ok) {
-          return { ok: false, message: result?.message ?? 'No se ha podido eliminar la solicitud.' };
-        }
-
-        addAuditEvent({
-          module: 'licencias-sin-sueldo',
-          entityId: currentRecord.id,
-          action: 'deleted',
-          summary: 'Registro eliminado',
-          changes: [],
-        });
-
         const records = await loadLicenciaSinSueldoRecordsFromSqlite();
-        const parsedRecords = records
-          ? records.flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`))
-          : get().records.filter((record) => record.id !== id);
-        mirrorRecords(parsedRecords);
-        set({ records: parsedRecords });
-        return { ok: true, message: result.message };
+        if (records !== null) {
+          const currentSqliteRecord = records.find((sqliteRecord) => sqliteRecord.id === id);
+          const currentRecord = currentSqliteRecord
+            ? parseRecords(`[${currentSqliteRecord.value}]`)[0]
+            : null;
+          if (!currentSqliteRecord || !currentRecord) {
+            return {
+              ok: false,
+              message: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+            };
+          }
+
+          if (expectedUpdatedAt && currentSqliteRecord.updatedAt !== expectedUpdatedAt) {
+            return {
+              ok: false,
+              message: 'Esta solicitud ha sido modificada por otro usuario. Recarga antes de eliminarla.',
+            };
+          }
+
+          const result = await deleteLicenciaSinSueldoInSqlite(currentRecord, currentSqliteRecord.updatedAt);
+          if (!result?.ok) {
+            return { ok: false, message: result?.message ?? 'No se ha podido eliminar la solicitud.' };
+          }
+
+          addAuditEvent({
+            module: 'licencias-sin-sueldo',
+            entityId: currentRecord.id,
+            action: 'deleted',
+            summary: 'Registro eliminado',
+            changes: [],
+          });
+
+          // Mismo criterio que en create/update: usamos lo leído antes de
+          // borrar, sin releer después, para no mezclar el borrado ya
+          // persistido con una lista basada en memoria local si SQLite deja
+          // de responder justo después.
+          const parsedRecords = records
+            .filter((sqliteRecord) => sqliteRecord.id !== id)
+            .flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`));
+          mirrorRecords(parsedRecords);
+          set({ records: parsedRecords });
+          return { ok: true, message: result.message };
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
         return { ok: false, message };
