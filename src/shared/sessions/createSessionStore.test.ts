@@ -106,4 +106,53 @@ describe('createManagedSessionStore', () => {
       treatedTaskIds: ['task-1'],
     });
   });
+
+  it('rechaza updateWithConcurrencyCheck cuando otro usuario ha modificado la sesión entre tanto (expectedUpdatedAt obsoleto)', async () => {
+    const created = await useCommitteeSessionStore.getState().createWithConcurrencyCheck(draft());
+    const sessionId = created.sessionId ?? '';
+    const sessionAfterCreate = useCommitteeSessionStore.getState().sessions[0];
+    const staleExpectedUpdatedAt = sessionAfterCreate.updatedAt;
+
+    // Simula que, entre que este cliente leyó la sesión y decidió guardar,
+    // otro usuario ya la modificó: el blob compartido en localStorage pasa a
+    // contener la sesión con un updatedAt distinto al que este cliente espera.
+    const storedSessions = JSON.parse(
+      window.localStorage.getItem(COMITE_SESSION_CONFIG.storageKey) ?? '[]',
+    ) as Array<Record<string, unknown>>;
+    const sessionsAfterOtherUserEdit = storedSessions.map((session) =>
+      session.id === sessionId
+        ? { ...session, title: 'Comité junio (otro usuario)', updatedAt: '2026-06-17T08:05:00.000Z' }
+        : session,
+    );
+    window.localStorage.setItem(COMITE_SESSION_CONFIG.storageKey, JSON.stringify(sessionsAfterOtherUserEdit));
+
+    const result = await useCommitteeSessionStore.getState().updateWithConcurrencyCheck(
+      sessionId,
+      draft({ title: 'Comité junio (editado)' }),
+      staleExpectedUpdatedAt,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/modificad[ao] por otro usuario/i);
+    // El cambio local NO debe haberse aplicado: el conflicto impide guardar
+    // sobre un registro que ya cambió en la base compartida. El estado en
+    // memoria conserva el valor previo a este intento (ni el cambio fallido
+    // ni la edición del otro usuario se reflejan hasta el próximo reload).
+    expect(useCommitteeSessionStore.getState().sessions[0].title).toBe('Comité junio');
+  });
+
+  it('permite updateWithConcurrencyCheck cuando expectedUpdatedAt coincide con el valor vigente', async () => {
+    const created = await useCommitteeSessionStore.getState().createWithConcurrencyCheck(draft());
+    const sessionId = created.sessionId ?? '';
+    const sessionAfterCreate = useCommitteeSessionStore.getState().sessions[0];
+
+    const result = await useCommitteeSessionStore.getState().updateWithConcurrencyCheck(
+      sessionId,
+      draft({ title: 'Comité junio (editado)' }),
+      sessionAfterCreate.updatedAt,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(useCommitteeSessionStore.getState().sessions[0].title).toBe('Comité junio (editado)');
+  });
 });
