@@ -33,6 +33,7 @@ interface EmployeeState {
   filters: EmployeeFilters;
   jobPositionTranslations: JobPositionTranslation[];
   isLoading: boolean;
+  lastLoadedAt: number | null;
   load: () => void;
   reloadFromStorage: () => void;
   save: () => void;
@@ -302,12 +303,35 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
   filters: EMPTY_EMPLOYEE_FILTERS,
   jobPositionTranslations: [],
   isLoading: false,
+  lastLoadedAt: null,
   load: () => {
+    const { isLoading, lastLoadedAt } = get();
+    // Varios módulos (Teletrabajo, Sorteos, Licencias, Ticket Restaurante,
+    // Vinculograma) llaman a load() al montar su página. Si el usuario
+    // navega entre ellos en pocos segundos, el store ya tiene la plantilla
+    // en memoria y no hace falta repetir la lectura a SQLite vía IPC: basta
+    // con evitar duplicar una carga ya en curso o recién terminada. No es
+    // un caché de larga duración — pasada esta ventana, load() vuelve a
+    // leer con normalidad para no servir datos obsoletos.
+    const EMPLOYEE_LOAD_DEDUP_WINDOW_MS = 3000;
+    if (isLoading) {
+      return;
+    }
+    if (lastLoadedAt !== null && Date.now() - lastLoadedAt < EMPLOYEE_LOAD_DEDUP_WINDOW_MS) {
+      return;
+    }
+
     set({ isLoading: true });
     void (async () => {
       const employees = await readEmployeesShared();
       const jobPositionTranslations = readJobPositionTranslations();
-      set({ employees, jobPositionTranslations, selectedEmployeeId: firstVisibleEmployeeId(employees), isLoading: false });
+      set({
+        employees,
+        jobPositionTranslations,
+        selectedEmployeeId: firstVisibleEmployeeId(employees),
+        isLoading: false,
+        lastLoadedAt: Date.now(),
+      });
     })().catch(() => set({ isLoading: false }));
   },
   reloadFromStorage: () => {
@@ -322,7 +346,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         );
 
         if (!hasEmployeesChanged && !hasTranslationsChanged && !state.isLoading) {
-          return state;
+          return { ...state, lastLoadedAt: Date.now() };
         }
 
         return {
@@ -332,6 +356,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
             ? state.selectedEmployeeId
             : firstVisibleEmployeeId(employees),
           isLoading: false,
+          lastLoadedAt: Date.now(),
         };
       });
     })().catch(() => set({ isLoading: false }));

@@ -31,7 +31,7 @@ describe('useEmployeeStore (Plantilla) concurrencia multiusuario', () => {
   beforeEach(() => {
     window.localStorage.clear();
     Object.defineProperty(window, 'traccion', { configurable: true, value: undefined });
-    useEmployeeStore.setState({ employees: [], selectedEmployeeId: '' });
+    useEmployeeStore.setState({ employees: [], selectedEmployeeId: '', lastLoadedAt: null });
   });
 
   it('rechaza el guardado cuando otro usuario ha modificado a la persona entre tanto (snapshot obsoleto)', async () => {
