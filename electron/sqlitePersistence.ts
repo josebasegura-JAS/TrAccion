@@ -21,6 +21,7 @@ const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
 const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
 const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
+const LOCAL_STORAGE_BACKUP_RETENTION_COUNT = 7;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 12;
@@ -1081,6 +1082,18 @@ function readCurrentSchemaVersion(db: Database): number {
   return isSchemaMigrationRow(row) ? row.version : 0;
 }
 
+function pruneLocalStorageBackups(db: Database): void {
+  db.prepare(
+    `DELETE FROM local_storage_backups
+     WHERE id NOT IN (
+       SELECT id
+       FROM local_storage_backups
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?
+     )`,
+  ).run(LOCAL_STORAGE_BACKUP_RETENTION_COUNT);
+}
+
 function migrateToVersion1(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -1505,6 +1518,7 @@ function openDatabase(databasePath: string): Database {
   }
 
   applyMigrations(db);
+  pruneLocalStorageBackups(db);
   return db;
 }
 
@@ -3688,6 +3702,7 @@ export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPay
     const migrateSnapshotTransaction = db.transaction(() => {
       db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
         .run(now, JSON.stringify({ records }));
+      pruneLocalStorageBackups(db);
 
       const upsert = db.prepare(
         `INSERT INTO persisted_records (key, value_json, source, created_at, updated_at)
@@ -3731,8 +3746,12 @@ export async function createLocalStorageBackup(payload: LocalStorageBackupPayloa
           typeof record.key === 'string' && typeof record.value === 'string',
       );
       const db = requireDatabase();
-      db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
-        .run(new Date().toISOString(), JSON.stringify({ records }));
+      const createBackupTransaction = db.transaction(() => {
+        db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
+          .run(new Date().toISOString(), JSON.stringify({ records }));
+        pruneLocalStorageBackups(db);
+      });
+      createBackupTransaction();
       enqueueLocalBackup('local-storage-backup');
 
       return currentStatus;
