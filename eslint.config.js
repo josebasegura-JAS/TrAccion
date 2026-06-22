@@ -25,7 +25,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ['electron/**/*.ts', '*.config.ts', 'tailwind.config.ts', 'postcss.config.js', 'eslint.config.js'],
+    files: [
+      'electron/**/*.ts',
+      'scripts/**/*.{js,mjs}',
+      '*.config.ts',
+      'tailwind.config.ts',
+      'postcss.config.js',
+      'eslint.config.js',
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },
