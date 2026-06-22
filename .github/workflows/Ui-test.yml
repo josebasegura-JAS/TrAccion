@@ -65,6 +65,7 @@ jobs:
           }
 
           npm ci --include=dev --no-audit --no-fund
+          npm rebuild better-sqlite3
 
       - name: Reconstruir dependencias nativas para Electron
         shell: pwsh

@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.13.1
 
       - name: Show toolchain and npm install mode
         shell: pwsh
@@ -62,7 +62,11 @@ jobs:
       - name: Install dependencies from lockfile
         shell: pwsh
         run: |
+          if (Test-Path node_modules) {
+            Remove-Item node_modules -Recurse -Force
+          }
           npm ci --include=dev --bin-links=true --no-audit --no-fund
+          npm rebuild better-sqlite3
 
       - name: Verify local CLI tools before lint
         shell: pwsh

@@ -59,6 +59,7 @@ jobs:
           }
 
           npm ci --include=dev --no-audit --no-fund
+          npm rebuild better-sqlite3
 
       - name: Diagnostico
         shell: pwsh

@@ -24,17 +24,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13.1
 
-      - name: Cache node_modules
+      - name: Cache npm download cache
         uses: actions/cache@v4
         with:
-          path: |
-            node_modules
-            ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-node-22.13.1-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-node-22.13.1-npm-
 
       - name: Setup Python for node-gyp
         uses: actions/setup-python@v5
@@ -74,8 +72,14 @@ jobs:
 
           Set-Content $lock $content -NoNewline
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies from lockfile
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules) {
+            Remove-Item node_modules -Recurse -Force
+          }
+          npm ci --include=dev --no-audit --no-fund
+          npm rebuild better-sqlite3
 
       - name: Lint
         run: npm run lint
