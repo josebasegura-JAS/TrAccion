@@ -27,11 +27,8 @@ interface CriteriosRrllStateStore {
   filters: CriterioRrllFilters;
   load: () => Promise<void>;
   reloadFromStorage: () => Promise<void>;
-  create: (draft: CriterioRrllDraft) => void;
   createWithConcurrencyCheck: (draft: CriterioRrllDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
-  update: (id: string, draft: CriterioRrllDraft) => void;
   updateWithConcurrencyCheck: (id: string, draft: CriterioRrllDraft, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
-  remove: (id: string) => void;
   removeWithConcurrencyCheck: (id: string, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
   importExcel: (file: File) => Promise<void>;
   importDrafts: (drafts: CriterioRrllDraft[]) => Promise<void>;
@@ -222,15 +219,6 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
 
     applyIfChanged(readCriteriosRrll());
   },
-  create: (draft) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const criterio = buildCriterioFromDraft(draft, now);
-      const criterios = [...state.criterios, criterio];
-      persistCriteriosRrll(criterios);
-      return { criterios, selectedCriterioId: criterio.id };
-    });
-  },
   createWithConcurrencyCheck: async (draft) => {
     const now = new Date().toISOString();
     const criterio = buildCriterioFromDraft(draft, now);
@@ -267,16 +255,6 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el criterio.' };
     }
-  },
-  update: (id, draft) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const criterios = state.criterios.map((criterio) =>
-        criterio.id === id ? buildCriterioFromDraft(draft, now, id, criterio) : criterio,
-      );
-      persistCriteriosRrll(criterios);
-      return { criterios, selectedCriterioId: id };
-    });
   },
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
     if (hasCriteriosRrllSqliteRepository()) {
@@ -324,16 +302,6 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el criterio.' };
     }
-  },
-  remove: (id) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const criterios = state.criterios.map((criterio) =>
-        criterio.id === id ? { ...criterio, deletedAt: now, updatedAt: now } : criterio,
-      );
-      persistCriteriosRrll(criterios);
-      return { criterios, selectedCriterioId: firstActiveCriterioId(criterios) };
-    });
   },
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     if (hasCriteriosRrllSqliteRepository()) {

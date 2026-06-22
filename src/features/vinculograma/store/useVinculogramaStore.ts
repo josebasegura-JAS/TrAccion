@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildVinculograma,
@@ -26,9 +26,7 @@ interface VinculogramaState {
   records: Vinculograma[];
   load: () => Promise<void>;
   reloadFromStorage: () => Promise<void>;
-  create: (draft: VinculogramaDraft) => string;
   createWithConcurrencyCheck: (draft: VinculogramaDraft) => Promise<VinculogramaUpdateResult>;
-  update: (id: string, draft: VinculogramaDraft) => void;
   updateWithConcurrencyCheck: (
     id: string,
     draft: VinculogramaDraft,
@@ -38,7 +36,6 @@ interface VinculogramaState {
     id: string,
     expectedUpdatedAt: string | null,
   ) => Promise<VinculogramaUpdateResult>;
-  remove: (id: string) => void;
 }
 
 function isVinculograma(value: unknown): value is Vinculograma {
@@ -75,10 +72,6 @@ function parseRecords(stored: string | null): Vinculograma[] {
 
 function readRecords(): Vinculograma[] {
   return parseRecords(readStorageItem(STORAGE_KEY));
-}
-
-function persistRecords(records: Vinculograma[]): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(records));
 }
 
 function mirrorRecords(records: Vinculograma[]): void {
@@ -138,15 +131,6 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
       set({ records });
     }
   },
-  create: (draft) => {
-    const id = createId();
-    set((state) => {
-      const records = [...state.records, buildVinculograma(draft, nowIso(), id)];
-      persistRecords(records);
-      return { records };
-    });
-    return id;
-  },
   createWithConcurrencyCheck: async (draft) => {
     const id = createId();
     const record = buildVinculograma(draft, nowIso(), id);
@@ -187,16 +171,6 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
       const message = error instanceof Error ? error.message : 'No se ha podido crear el vínculo.';
       return { ok: false, message };
     }
-  },
-  update: (id, draft) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const records = state.records.map((record) =>
-        record.id === id ? buildVinculograma(draft, updatedAt, id, record) : record,
-      );
-      persistRecords(records);
-      return { records };
-    });
   },
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
     if (hasVinculogramaSqliteRepository()) {
@@ -295,15 +269,5 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
       const message = error instanceof Error ? error.message : 'No se ha podido eliminar el vínculo.';
       return { ok: false, message };
     }
-  },
-  remove: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const records = state.records.map((record) =>
-        record.id === id ? { ...record, updatedAt, deletedAt: updatedAt } : record,
-      );
-      persistRecords(records);
-      return { records };
-    });
   },
 }));

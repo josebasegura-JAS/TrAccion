@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildEspecialRecipient,
@@ -17,11 +17,8 @@ interface EspecialesState {
   recipients: EspecialRecipient[];
   load: () => void;
   reloadFromStorage: () => void;
-  createRecipient: (draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
   createRecipientWithConcurrencyCheck: (draft: EspecialRecipientDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
-  updateRecipient: (id: string, draft: EspecialRecipientDraft) => { ok: boolean; message?: string };
   updateRecipientWithConcurrencyCheck: (id: string, draft: EspecialRecipientDraft, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
-  removeRecipient: (id: string) => void;
   removeRecipientWithConcurrencyCheck: (id: string, expectedUpdatedAt: string | null) => Promise<{ ok: boolean; message: string }>;
 }
 
@@ -157,10 +154,6 @@ function validateRecipientDraft(draft: EspecialRecipientDraft): string | null {
   return null;
 }
 
-function persist(recipients: EspecialRecipient[]): void {
-  writeStorageItem(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
-}
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -249,37 +242,6 @@ export const useEspecialesStore = create<EspecialesState>((set, get) => ({
       })
       .catch((error) => console.warn('Destinatarios de Especiales no recargados desde SQLite.', error));
   },
-  createRecipient: (draft) => {
-    const name = draft.name.trim();
-    const email = draft.email.trim();
-    if (!name) {
-      return { ok: false, message: 'Debes indicar un nombre.' };
-    }
-    if (!isValidEmail(email)) {
-      return { ok: false, message: 'El email no tiene un formato válido.' };
-    }
-
-    let result: { ok: boolean; message?: string } = { ok: true };
-    set((state) => {
-      const duplicate = duplicatedEmail(state.recipients, email);
-      if (duplicate) {
-        const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
-        result = {
-          ok: false,
-          message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.`,
-        };
-        return state;
-      }
-
-      const recipients = [
-        ...state.recipients,
-        buildEspecialRecipient(draft, nowIso(), createId('especial-recipient')),
-      ];
-      persist(recipients);
-      return { recipients };
-    });
-    return result;
-  },
   createRecipientWithConcurrencyCheck: async (draft) => {
     const validationError = validateRecipientDraft(draft);
     if (validationError) {
@@ -328,37 +290,6 @@ export const useEspecialesStore = create<EspecialesState>((set, get) => ({
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear el destinatario.' };
     }
-  },
-  updateRecipient: (id, draft) => {
-    const name = draft.name.trim();
-    const email = draft.email.trim();
-    if (!name) {
-      return { ok: false, message: 'Debes indicar un nombre.' };
-    }
-    if (!isValidEmail(email)) {
-      return { ok: false, message: 'El email no tiene un formato válido.' };
-    }
-
-    let result: { ok: boolean; message?: string } = { ok: true };
-    set((state) => {
-      const duplicate = duplicatedEmail(state.recipients, email, id);
-      if (duplicate) {
-        const duplicateType = duplicate.type === 'to' ? 'Para' : 'CC';
-        result = {
-          ok: false,
-          message: `Este email ya existe en ${duplicateType}. No se permiten duplicados entre Para y CC.`,
-        };
-        return state;
-      }
-
-      const updatedAt = nowIso();
-      const recipients = state.recipients.map((recipient) =>
-        recipient.id === id ? buildEspecialRecipient(draft, updatedAt, id, recipient) : recipient,
-      );
-      persist(recipients);
-      return { recipients };
-    });
-    return result;
   },
   updateRecipientWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
     const validationError = validateRecipientDraft(draft);
@@ -419,16 +350,6 @@ export const useEspecialesStore = create<EspecialesState>((set, get) => ({
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar el destinatario.' };
     }
-  },
-  removeRecipient: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const recipients = state.recipients.map((recipient) =>
-        recipient.id === id ? { ...recipient, updatedAt, deletedAt: updatedAt } : recipient,
-      );
-      persist(recipients);
-      return { recipients };
-    });
   },
   removeRecipientWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     try {

@@ -21,6 +21,7 @@ import { CriterioRrllEditor } from './CriterioRrllEditor';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 
 const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -171,7 +172,8 @@ function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
 }
 
 export function CriteriosRrllPage() {
-  const { criterios, filters, importDrafts, load, remove, selectCriterio, setFilter } = useCriteriosRrllStore();
+  const { criterios, filters, importDrafts, load, removeWithConcurrencyCheck, selectCriterio, setFilter } = useCriteriosRrllStore();
+  const { alert, dialogNode } = useAppDialog();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingCriterioId, setEditingCriterioId] = useState<string | null>(null);
   const [sortState, setSortState] = useState<SortState | null>(null);
@@ -436,7 +438,15 @@ export function CriteriosRrllPage() {
                       iconOnly={false}
                       onClick={(event) => {
                         event.stopPropagation();
-                        remove(criterio.id);
+                        void (async () => {
+                          const result = await removeWithConcurrencyCheck(
+                            criterio.id,
+                            criterio.updatedAt,
+                          );
+                          if (!result.ok) {
+                            await alert(result.message, { type: 'error' });
+                          }
+                        })();
                       }}
                     >
                       Eliminar
@@ -559,6 +569,8 @@ export function CriteriosRrllPage() {
       {editorMode && (
         <CriterioRrllEditor criterio={editorCriterio} mode={editorMode} onDone={closeEditor} />
       )}
+
+      {dialogNode}
     </section>
   );
 }

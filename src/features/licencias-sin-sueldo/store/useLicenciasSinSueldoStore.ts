@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   deleteLicenciaSinSueldoInSqlite,
@@ -85,9 +85,7 @@ interface LicenciasSinSueldoState {
   records: LicenciaSinSueldoRecord[];
   load: () => Promise<void>;
   reloadFromStorage: () => Promise<void>;
-  create: (draft: LicenciaSinSueldoDraft) => string;
   createWithConcurrencyCheck: (draft: LicenciaSinSueldoDraft) => Promise<LicenciaUpdateResult>;
-  update: (id: string, draft: LicenciaSinSueldoDraft) => void;
   updateWithConcurrencyCheck: (
     id: string,
     draft: LicenciaSinSueldoDraft,
@@ -97,7 +95,6 @@ interface LicenciasSinSueldoState {
     id: string,
     expectedUpdatedAt: string | null,
   ) => Promise<LicenciaUpdateResult>;
-  remove: (id: string) => void;
 }
 
 function isActualizacion(value: unknown): value is LicenciaSinSueldoActualizacion {
@@ -153,10 +150,6 @@ function readRecords(): LicenciaSinSueldoRecord[] {
   return parseRecords(readStorageItem(LICENCIA_SIN_SUELDO_STORAGE_KEY));
 }
 
-function persistRecords(records: LicenciaSinSueldoRecord[]): void {
-  writeStorageItem(LICENCIA_SIN_SUELDO_STORAGE_KEY, JSON.stringify(records));
-}
-
 function mirrorRecords(records: LicenciaSinSueldoRecord[]): void {
   window.localStorage.setItem(LICENCIA_SIN_SUELDO_STORAGE_KEY, JSON.stringify(records));
 }
@@ -189,23 +182,6 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
   },
   reloadFromStorage: async () => {
     await get().load();
-  },
-  create: (draft) => {
-    const id = createId();
-    set((state) => {
-      const record = buildLicenciaSinSueldoRecord(draft, nowIso(), id);
-      addAuditEvent({
-        module: 'licencias-sin-sueldo',
-        entityId: record.id,
-        action: 'created',
-        summary: 'Registro creado',
-        changes: [],
-      });
-      const records = [...state.records, record];
-      persistRecords(records);
-      return { records };
-    });
-    return id;
   },
   createWithConcurrencyCheck: async (draft) => {
     const id = createId();
@@ -278,21 +254,6 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
       const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
       return { ok: false, message };
     }
-  },
-  update: (id, draft) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const records = state.records.map((record) => {
-        if (record.id !== id) {
-          return record;
-        }
-
-        registerLicenciaUpdateAudit(record, draft);
-        return buildLicenciaSinSueldoRecord(draft, updatedAt, id, record);
-      });
-      persistRecords(records);
-      return { records };
-    });
   },
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
     if (hasLicenciaSinSueldoSqliteRepository()) {
@@ -444,26 +405,5 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
       const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
       return { ok: false, message };
     }
-  },
-  remove: (id) => {
-    set((state) => {
-      const updatedAt = nowIso();
-      const records = state.records.map((record) => {
-        if (record.id !== id) {
-          return record;
-        }
-
-        addAuditEvent({
-          module: 'licencias-sin-sueldo',
-          entityId: record.id,
-          action: 'deleted',
-          summary: 'Registro eliminado',
-          changes: [],
-        });
-        return { ...record, updatedAt, deletedAt: updatedAt };
-      });
-      persistRecords(records);
-      return { records };
-    });
   },
 }));
