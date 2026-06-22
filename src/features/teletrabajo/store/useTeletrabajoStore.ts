@@ -331,7 +331,6 @@ async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] |
     })
     .filter((puesto): puesto is TeletrabajoPuesto => Boolean(puesto));
 
-  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestos));
   return puestos;
 }
 
