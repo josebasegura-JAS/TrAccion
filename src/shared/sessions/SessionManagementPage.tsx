@@ -852,7 +852,7 @@ export function SessionManagementPage({
             ref={fileInputRef}
             type="file"
           />
-          <ActionButton onClick={openImporter} variant="word">
+          <ActionButton iconOnly={false} onClick={openImporter} variant="word">
             Importar Word
           </ActionButton>
           <button
