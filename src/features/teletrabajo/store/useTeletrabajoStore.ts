@@ -147,11 +147,17 @@ interface CreateTeletrabajoPeriodoOptions {
   copyFromPrevious: boolean;
 }
 
+interface PendingHistoricoImport extends ImportHistoricoTeletrabajoResult {
+  /** Solicitudes existentes en el momento de calcular la previsualización, usadas para auditoría/concurrencia al confirmar. */
+  baseSolicitudes: TeletrabajoSolicitud[];
+}
+
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
   puestosTeletrabajo: TeletrabajoPuesto[];
   selectedSolicitudId: string;
   filters: TeletrabajoFilters;
+  pendingHistoricoImport: PendingHistoricoImport | null;
   load: () => void;
   reloadFromStorage: () => void;
   create: (draft: TeletrabajoDraft) => void;
@@ -167,10 +173,12 @@ interface TeletrabajoStateStore {
     employees: readonly Employee[],
     options?: EncuestaParseOptions,
   ) => Promise<ImportEncuestaResult>;
-  importHistorico: (
+  previewImportHistorico: (
     file: File,
     employees: readonly Employee[],
   ) => Promise<ImportHistoricoTeletrabajoResult>;
+  confirmImportHistorico: () => Promise<ImportHistoricoTeletrabajoResult>;
+  cancelImportHistorico: () => void;
   createPeriodo: (
     options: CreateTeletrabajoPeriodoOptions,
   ) => Promise<TeletrabajoPeriodoCreationResult>;
@@ -576,6 +584,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   puestosTeletrabajo: [],
   selectedSolicitudId: '',
   filters: EMPTY_TELETRABAJO_FILTERS,
+  pendingHistoricoImport: null,
   load: () => {
     const solicitudes = readSolicitudes();
     const puestosTeletrabajo = readPuestosTeletrabajo();
@@ -859,69 +868,86 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     });
     return result;
   },
-  importHistorico: async (file, employees) => {
+  previewImportHistorico: async (file, employees) => {
     const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
     const result = await importHistoricoTeletrabajoFromFile(file, employees, baseSolicitudes);
-    const changedIds = new Set<string>();
-    const previousById = new Map(baseSolicitudes.map((solicitud) => [solicitud.id, solicitud]));
-
-    result.solicitudes.forEach((solicitud) => {
-      const previous = previousById.get(solicitud.id);
-      if (!previous) {
-        changedIds.add(solicitud.id);
-        enqueueAuditEvent({
-          module: 'teletrabajo',
-          entityId: solicitud.id,
-          action: 'created',
-          summary: `Registro histórico importado para el periodo ${result.periodo}`,
-          changes: [],
-        });
-        return;
+    set({ pendingHistoricoImport: { ...result, baseSolicitudes } });
+    return result;
+  },
+  cancelImportHistorico: () => {
+    set({ pendingHistoricoImport: null });
+  },
+  confirmImportHistorico: async () => {
+    return withTeletrabajoBusy('Importando histórico de Teletrabajo...', async () => {
+      const pending = get().pendingHistoricoImport;
+      if (!pending) {
+        throw new Error('No hay ninguna importación de histórico pendiente de confirmar.');
       }
 
-      if (previous.deletedAt || hasTeletrabajoDraftChanges(previous, solicitud)) {
-        changedIds.add(solicitud.id);
-        registerTeletrabajoUpdateAudit(previous, solicitud);
-      }
-    });
+      const { baseSolicitudes, ...result } = pending;
+      const changedIds = new Set<string>();
+      const previousById = new Map(baseSolicitudes.map((solicitud) => [solicitud.id, solicitud]));
 
-    if (hasTeletrabajoSqliteRepository()) {
-      const records = await loadTeletrabajoRecordsFromSqlite();
-      if (records !== null) {
-        const expectedUpdatedAtById = new Map(
-          records.map((record) => [record.id, record.updatedAt]),
-        );
-        for (const solicitud of result.solicitudes.filter((candidate) =>
-          changedIds.has(candidate.id),
-        )) {
-          const saveResult = await saveTeletrabajoSolicitudToSqlite(
-            solicitud,
-            expectedUpdatedAtById.get(solicitud.id) ?? null,
-          );
-          if (!saveResult?.ok) {
-            throw new Error(
-              saveResult?.message ?? 'No se ha podido importar el histórico en SQLite.',
-            );
-          }
+      result.solicitudes.forEach((solicitud) => {
+        const previous = previousById.get(solicitud.id);
+        if (!previous) {
+          changedIds.add(solicitud.id);
+          enqueueAuditEvent({
+            module: 'teletrabajo',
+            entityId: solicitud.id,
+            action: 'created',
+            summary: `Registro histórico importado para el periodo ${result.periodo}`,
+            changes: [],
+          });
+          return;
         }
-        set({
+
+        if (previous.deletedAt || hasTeletrabajoDraftChanges(previous, solicitud)) {
+          changedIds.add(solicitud.id);
+          registerTeletrabajoUpdateAudit(previous, solicitud);
+        }
+      });
+
+      if (hasTeletrabajoSqliteRepository()) {
+        const records = await loadTeletrabajoRecordsFromSqlite();
+        if (records !== null) {
+          const expectedUpdatedAtById = new Map(
+            records.map((record) => [record.id, record.updatedAt]),
+          );
+          for (const solicitud of result.solicitudes.filter((candidate) =>
+            changedIds.has(candidate.id),
+          )) {
+            const saveResult = await saveTeletrabajoSolicitudToSqlite(
+              solicitud,
+              expectedUpdatedAtById.get(solicitud.id) ?? null,
+            );
+            if (!saveResult?.ok) {
+              throw new Error(
+                saveResult?.message ?? 'No se ha podido importar el histórico en SQLite.',
+              );
+            }
+          }
+          set({
+            solicitudes: result.solicitudes,
+            selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
+            filters: { ...get().filters, periodo: result.periodo },
+            pendingHistoricoImport: null,
+          });
+          return result;
+        }
+      }
+
+      set(() => {
+        persistSolicitudes(result.solicitudes);
+        return {
           solicitudes: result.solicitudes,
           selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
           filters: { ...get().filters, periodo: result.periodo },
-        });
-        return result;
-      }
-    }
-
-    set(() => {
-      persistSolicitudes(result.solicitudes);
-      return {
-        solicitudes: result.solicitudes,
-        selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
-        filters: { ...get().filters, periodo: result.periodo },
-      };
+          pendingHistoricoImport: null,
+        };
+      });
+      return result;
     });
-    return result;
   },
   createPeriodo: async (options) => {
     const periodo = options.periodo.trim();

@@ -303,6 +303,13 @@ export function importHistoricoTeletrabajoRows(
     const next: TeletrabajoSolicitud = {
       ...previous,
       ...draft,
+      // El histórico importado no aporta información sobre validaciones
+      // internas (seguridad, prevención, jefatura): si la solicitud ya
+      // existía, se conservan las validaciones ya realizadas en la app en
+      // lugar de resetearlas. Solo las solicitudes nuevas arrancan en false.
+      validacionSeguridadInformatica: previous.validacionSeguridadInformatica,
+      validacionPrevencion: previous.validacionPrevencion,
+      validacionJefatura: previous.validacionJefatura,
       createdAt: previous.createdAt,
       updatedAt: now,
       deletedAt: null,

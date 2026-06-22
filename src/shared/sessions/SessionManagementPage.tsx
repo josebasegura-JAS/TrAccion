@@ -545,8 +545,8 @@ export function SessionManagementPage({
   };
 
 
-  const openEditTaskModal = async (session: ManagedSession, taskId: string) => {
-    if (session.status !== 'open') {
+  const openEditTaskModal = async (session: ManagedSession, taskId: string, isReadOnly: boolean) => {
+    if (session.status !== 'open' || isReadOnly) {
       return;
     }
 
@@ -1324,7 +1324,7 @@ function SessionCard({
   ) => void | Promise<void>;
   onClose: (session: ManagedSession) => void;
   onEdit?: (session: ManagedSession) => void;
-  onEditTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
+  onEditTask: (session: ManagedSession, taskId: string, isReadOnly: boolean) => void | Promise<void>;
   onRemove: (session: ManagedSession) => void | Promise<void>;
   onToggle: () => void;
   removeTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
@@ -1482,7 +1482,7 @@ function SessionCard({
                     <button
                       className="inline-flex items-center gap-1 rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={isReadOnly || !task}
-                      onClick={() => void onEditTask(session, taskId)}
+                      onClick={() => void onEditTask(session, taskId, isReadOnly)}
                       title={task ? 'Editar punto' : 'No se ha encontrado el punto'}
                       type="button"
                     >
