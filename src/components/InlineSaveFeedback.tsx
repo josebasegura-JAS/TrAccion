@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import {
+  isPersistenceFeedbackSilent,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
@@ -18,7 +19,11 @@ export function InlineSaveFeedback({ visibleMs = DEFAULT_VISIBLE_MS }: InlineSav
 
   useEffect(() => {
     const unsubscribe = subscribeToPersistenceFeedback((feedback: PersistenceFeedback) => {
-      if (feedback.kind !== 'saved' || feedback.updatedAt === lastSavedAtRef.current) {
+      if (
+        isPersistenceFeedbackSilent(feedback) ||
+        feedback.kind !== 'saved' ||
+        feedback.updatedAt === lastSavedAtRef.current
+      ) {
         return;
       }
 

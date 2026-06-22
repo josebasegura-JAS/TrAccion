@@ -10,12 +10,14 @@ import {
 import { getCachedDatabaseStatus, publishDatabaseStatus } from './databaseStatus';
 
 export type PersistenceFeedbackKind = 'saving' | 'saved' | 'error';
+export type PersistenceFeedbackVisibility = 'visible' | 'silent';
 
 export interface PersistenceFeedback {
   kind: PersistenceFeedbackKind;
   updatedAt: string;
   key?: string;
   message: string;
+  visibility?: PersistenceFeedbackVisibility;
 }
 
 const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
@@ -23,6 +25,7 @@ const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-re
 
 let sharedWritesBlockedByConnectivity = false;
 let latestPersistenceFeedback: PersistenceFeedback | null = null;
+let silentPersistenceFeedbackDepth = 0;
 
 let unsubscribeDatabaseConnectivityIssue: (() => void) | null = null;
 
@@ -159,27 +162,64 @@ function isRecoverablePersistedValue(
 }
 
 function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
-  latestPersistenceFeedback = feedback;
+  const effectiveFeedback: PersistenceFeedback =
+    silentPersistenceFeedbackDepth > 0 && typeof feedback.visibility === 'undefined'
+      ? { ...feedback, visibility: 'silent' }
+      : feedback;
+
+  latestPersistenceFeedback = effectiveFeedback;
   window.dispatchEvent(
-    new CustomEvent<PersistenceFeedback>(PERSISTENCE_FEEDBACK_EVENT, { detail: feedback }),
+    new CustomEvent<PersistenceFeedback>(PERSISTENCE_FEEDBACK_EVENT, { detail: effectiveFeedback }),
   );
 }
 
-export function publishPersistenceBusy(key: string, message: string): void {
+export async function runWithSilentPersistenceFeedback<T>(operation: () => Promise<T>): Promise<T> {
+  silentPersistenceFeedbackDepth += 1;
+  try {
+    return await operation();
+  } finally {
+    silentPersistenceFeedbackDepth = Math.max(0, silentPersistenceFeedbackDepth - 1);
+  }
+}
+
+export function runSyncWithSilentPersistenceFeedback<T>(operation: () => T): T {
+  silentPersistenceFeedbackDepth += 1;
+  try {
+    return operation();
+  } finally {
+    silentPersistenceFeedbackDepth = Math.max(0, silentPersistenceFeedbackDepth - 1);
+  }
+}
+
+export function isPersistenceFeedbackSilent(feedback: PersistenceFeedback): boolean {
+  return feedback.visibility === 'silent';
+}
+
+export function publishPersistenceBusy(
+  key: string,
+  message: string,
+  visibility: PersistenceFeedbackVisibility = 'visible',
+): void {
   emitPersistenceFeedback({
     kind: 'saving',
     updatedAt: new Date().toISOString(),
     key,
     message,
+    visibility,
   });
 }
 
-export function clearPersistenceBusy(key: string, message = 'Operación finalizada.'): void {
+export function clearPersistenceBusy(
+  key: string,
+  message = 'Operación finalizada.',
+  visibility: PersistenceFeedbackVisibility = 'visible',
+): void {
   emitPersistenceFeedback({
     kind: 'saved',
     updatedAt: new Date().toISOString(),
     key,
     message,
+    visibility,
   });
 }
 

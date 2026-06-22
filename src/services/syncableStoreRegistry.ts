@@ -1,3 +1,4 @@
+import { runSyncWithSilentPersistenceFeedback } from './persistence';
 export type SyncableStoreRegistration = {
   id: string;
   reloadFromStorage: () => void;
@@ -18,7 +19,10 @@ export function getRegisteredSyncableStores(): SyncableStoreRegistration[] {
 const pendingReloadTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const RELOAD_DEBOUNCE_MS = 50;
 
-export function reloadRegisteredSyncableStores(storeIds?: string[]): void {
+export function reloadRegisteredSyncableStores(
+  storeIds?: string[],
+  options: { silentPersistenceFeedback?: boolean } = {},
+): void {
   const requestedStoreIds = storeIds ? new Set(storeIds) : null;
 
   getRegisteredSyncableStores().forEach((store) => {
@@ -34,7 +38,11 @@ export function reloadRegisteredSyncableStores(storeIds?: string[]): void {
 
     const timer = setTimeout(() => {
       pendingReloadTimers.delete(store.id);
-      store.reloadFromStorage();
+      if (options.silentPersistenceFeedback) {
+        runSyncWithSilentPersistenceFeedback(store.reloadFromStorage);
+      } else {
+        store.reloadFromStorage();
+      }
     }, RELOAD_DEBOUNCE_MS);
 
     pendingReloadTimers.set(store.id, timer);

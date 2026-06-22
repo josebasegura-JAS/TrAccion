@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  isPersistenceFeedbackSilent,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
@@ -77,6 +78,10 @@ export function GlobalBusyIndicator() {
     };
 
     const unsubscribe = subscribeToPersistenceFeedback((feedback) => {
+      if (isPersistenceFeedbackSilent(feedback)) {
+        return;
+      }
+
       const operationKey = feedbackOperationKey(feedback);
 
       if (feedback.kind !== 'saving') {

@@ -2,6 +2,7 @@ import { Database } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   getPendingSqliteWriteCount,
+  isPersistenceFeedbackSilent,
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
@@ -70,7 +71,9 @@ export function Footer() {
   const databaseBadge = useMemo(() => buildDatabaseStatusBadge(databaseStatus), [databaseStatus]);
 
   useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
-    setFeedback(nextFeedback);
+    if (!isPersistenceFeedbackSilent(nextFeedback)) {
+      setFeedback(nextFeedback);
+    }
     setPendingCount(getPendingSqliteWriteCount());
   }), []);
 

@@ -194,25 +194,28 @@ export function useSharedRecordLock({
       }, TEMPORARY_LOCK_NOTICE_DELAY_MS);
     };
 
-    const waitForTemporarySqliteLock = (): void => {
-      publishPersistenceBusy(lockBusyKey, TEMPORARY_LOCK_BUSY_MESSAGE);
+    const waitForTemporarySqliteLock = (visibility: 'visible' | 'silent' = 'visible'): void => {
+      publishPersistenceBusy(lockBusyKey, TEMPORARY_LOCK_BUSY_MESSAGE, visibility);
       setState((current) => (current.message ? current : hiddenWaitingForSharedDatabaseState()));
       scheduleTemporaryLockNotice();
       scheduleAcquireRetry();
     };
 
-    const applyResult = (result: TraccionRecordLockResult): void => {
+    const applyResult = (
+      result: TraccionRecordLockResult,
+      feedbackVisibility: 'visible' | 'silent' = 'visible',
+    ): void => {
       if (cancelled) {
         return;
       }
 
       if (result.status === 'error' && isTemporarySqliteLockMessage(result.message)) {
-        waitForTemporarySqliteLock();
+        waitForTemporarySqliteLock(feedbackVisibility);
         return;
       }
 
       clearTemporaryLockTimers();
-      clearPersistenceBusy(lockBusyKey);
+      clearPersistenceBusy(lockBusyKey, 'Operación de bloqueo finalizada.', feedbackVisibility);
       setAcquired(result.status === 'acquired');
       setState(stateFromResult(result));
     };
@@ -288,7 +291,7 @@ export function useSharedRecordLock({
           }
 
           consecutiveTemporaryHeartbeatFailures = 0;
-          applyResult(result);
+          applyResult(result, 'silent');
         })
         .catch((error: unknown) => {
           if (cancelled) {

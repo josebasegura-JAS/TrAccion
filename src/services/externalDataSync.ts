@@ -4,6 +4,7 @@ import { hasActiveSharedEditing, subscribeSharedEditingActivity } from './shared
 import {
   applyPersistedRecordsSnapshotToLocalStorage,
   flushPendingSqliteWrites,
+  isPersistenceFeedbackSilent,
   readHydrationMetadata,
   subscribeToPersistenceFeedback,
 } from './persistence';
@@ -109,7 +110,7 @@ function ensureSyncableStoresRegistered(): Promise<unknown> {
 }
 
 function reloadIntegratedStores(storeIds?: string[]): void {
-  reloadRegisteredSyncableStores(storeIds);
+  reloadRegisteredSyncableStores(storeIds, { silentPersistenceFeedback: true });
 }
 
 function canPollStatus(status: TraccionDatabaseStatus): boolean {
@@ -347,6 +348,10 @@ export function startExternalDataSyncPolling(): void {
   window.addEventListener(DATABASE_CONNECTIVITY_RECOVERED_EVENT, handleDatabaseConnectivityRecovered);
   unsubscribeSharedEditingActivity = subscribeSharedEditingActivity(handleSharedEditingActivityChanged);
   unsubscribePersistenceFeedback = subscribeToPersistenceFeedback((feedback) => {
+    if (isPersistenceFeedbackSilent(feedback)) {
+      return;
+    }
+
     if (feedback.kind === 'saving') {
       persistenceWriteInProgress = true;
       postponePolling(2_000);
