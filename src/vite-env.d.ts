@@ -148,9 +148,17 @@ interface TraccionDailyLocalBackupSettings {
   directoryPath: string | null;
 }
 
+interface TraccionTableSizeBreakdownEntry {
+  table: string;
+  sizeBytes: number;
+  rowCount: number;
+  isExactSize: boolean;
+}
+
 interface TraccionVacuumStatus {
   lastVacuumAt: string | null;
   currentSizeBytes: number | null;
+  heaviestTables: TraccionTableSizeBreakdownEntry[];
 }
 
 interface TraccionVacuumResult {

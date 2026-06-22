@@ -759,6 +759,43 @@ export function AjustesPage() {
             </p>
           </div>
 
+          {vacuumStatus?.heaviestTables && vacuumStatus.heaviestTables.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+                Tablas más pesadas
+              </p>
+              <div className="mt-2 overflow-hidden rounded-lg border border-metro-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-metro-panel text-metro-muted">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-semibold">Tabla</th>
+                      <th className="px-2 py-1 text-right font-semibold">Filas</th>
+                      <th className="px-2 py-1 text-right font-semibold">Tamaño</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vacuumStatus.heaviestTables.map((entry) => (
+                      <tr className="border-t border-metro-border" key={entry.table}>
+                        <td className="px-2 py-1 font-mono text-metro-text">{entry.table}</td>
+                        <td className="px-2 py-1 text-right text-metro-text">
+                          {entry.rowCount.toLocaleString('es-ES')}
+                        </td>
+                        <td className="px-2 py-1 text-right text-metro-text">
+                          {entry.isExactSize ? formatBytesAsMb(entry.sizeBytes) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!vacuumStatus.heaviestTables[0]?.isExactSize && (
+                <p className="mt-1 text-[11px] text-metro-muted">
+                  Tamaño no disponible en este equipo; ordenado por número de filas.
+                </p>
+              )}
+            </div>
+          )}
+
           {vacuumActionStatus && (
             <p className="mt-2 text-xs text-metro-success">{vacuumActionStatus}</p>
           )}

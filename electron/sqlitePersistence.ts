@@ -613,16 +613,21 @@ async function vacuumDatabase(reason: string): Promise<VacuumResult> {
     const startedAt = Date.now();
 
     currentDatabase.exec('VACUUM');
+    // ANALYZE es rápido y no exige exclusividad como VACUUM, pero lo
+    // aprovechamos aquí porque ya tenemos el lock adquirido: actualiza las
+    // estadísticas que usa el planificador de consultas SQLite, mejorando
+    // el rendimiento de futuras consultas sin coste de coordinación extra.
+    currentDatabase.exec('ANALYZE');
 
     const durationMs = Date.now() - startedAt;
     const sizeAfterBytes = (await stat(currentStatus.path).catch(() => null))?.size ?? null;
     const completedAt = new Date().toISOString();
     writeLastVacuumAt(currentDatabase, completedAt);
 
-    console.info(`VACUUM SQLite completado (${reason}) en ${durationMs} ms.`);
+    console.info(`VACUUM + ANALYZE SQLite completado (${reason}) en ${durationMs} ms.`);
     return {
       ok: true,
-      message: 'Base de datos compactada correctamente.',
+      message: 'Base de datos compactada y optimizada correctamente.',
       sizeBeforeBytes,
       sizeAfterBytes,
       durationMs,
@@ -672,9 +677,66 @@ export async function vacuumDatabaseNow(): Promise<VacuumResult> {
   return vacuumDatabase('manual');
 }
 
+export interface TableSizeBreakdownEntry {
+  table: string;
+  /** Tamaño aproximado en bytes. Si dbstat no está disponible, se estima a partir del número de filas. */
+  sizeBytes: number;
+  rowCount: number;
+  /** false cuando el tamaño es una estimación por nº de filas, no una medida real de páginas SQLite. */
+  isExactSize: boolean;
+}
+
 export interface VacuumStatus {
   lastVacuumAt: string | null;
   currentSizeBytes: number | null;
+  heaviestTables: TableSizeBreakdownEntry[];
+}
+
+function listUserTableNames(db: Database): string[] {
+  const rows = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    )
+    .all() as Array<{ name: string }>;
+  return rows.map((row) => row.name);
+}
+
+function computeHeaviestTables(db: Database, limit = 8): TableSizeBreakdownEntry[] {
+  const tableNames = listUserTableNames(db);
+  if (tableNames.length === 0) {
+    return [];
+  }
+
+  // Intento preciso: dbstat es una tabla virtual integrada en SQLite que
+  // expone el tamaño real en páginas de cada tabla/índice. No siempre está
+  // compilada en todas las distribuciones de better-sqlite3, así que si
+  // falla, recurrimos a una estimación por nº de filas (menos exacta, pero
+  // siempre disponible y suficiente para detectar qué tabla crece más).
+  try {
+    const rows = db
+      .prepare('SELECT name, SUM(pgsize) AS sizeBytes FROM dbstat GROUP BY name')
+      .all() as Array<{ name: string; sizeBytes: number }>;
+    const sizeByTable = new Map(rows.map((row) => [row.name, row.sizeBytes]));
+
+    const entries: TableSizeBreakdownEntry[] = tableNames.map((table) => {
+      const rowCount = (db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number })
+        .c;
+      return {
+        table,
+        sizeBytes: sizeByTable.get(table) ?? 0,
+        rowCount,
+        isExactSize: true,
+      };
+    });
+    return entries.sort((a, b) => b.sizeBytes - a.sizeBytes).slice(0, limit);
+  } catch {
+    const entries: TableSizeBreakdownEntry[] = tableNames.map((table) => {
+      const rowCount = (db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number })
+        .c;
+      return { table, sizeBytes: 0, rowCount, isExactSize: false };
+    });
+    return entries.sort((a, b) => b.rowCount - a.rowCount).slice(0, limit);
+  }
 }
 
 export async function getVacuumStatus(): Promise<VacuumStatus> {
@@ -685,8 +747,10 @@ export async function getVacuumStatus(): Promise<VacuumStatus> {
   const currentSizeBytes = currentStatus.ready
     ? (await stat(currentStatus.path).catch(() => null))?.size ?? null
     : null;
+  const heaviestTables =
+    currentDatabase && currentStatus.ready ? computeHeaviestTables(currentDatabase) : [];
 
-  return { lastVacuumAt, currentSizeBytes };
+  return { lastVacuumAt, currentSizeBytes, heaviestTables };
 }
 
 /**
