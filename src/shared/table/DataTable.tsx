@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
@@ -14,6 +14,8 @@ export interface DataTableColumn<Row, ColumnId extends string> {
   maxWidth?: number;
   sortable?: boolean;
   resizable?: boolean;
+  /** false para columnas que el usuario no debe poder mover (p. ej. acciones). Por defecto true, salvo isActionColumn. */
+  reorderable?: boolean;
   className?: string;
   headerClassName?: string;
   isActionColumn?: boolean;
@@ -28,6 +30,9 @@ interface DataTableProps<Row, ColumnId extends string> {
   columnWidths: Partial<Record<ColumnId, number>>;
   onColumnWidthChange: (columnId: ColumnId, width: number) => void;
   onResetColumnWidths?: () => void;
+  /** Orden de columnas elegido por el usuario (solo ids reordenables). null = orden por defecto del array `columns`. */
+  columnOrder?: ColumnId[] | null;
+  onColumnOrderChange?: (columnOrder: ColumnId[]) => void;
   emptyMessage: string;
   onRowClick?: (row: Row) => void;
   onRowDoubleClick?: (row: Row) => void;
@@ -44,6 +49,54 @@ const RENDER_BATCH_INCREMENT = 300;
 
 function clampColumnWidth(width: number, minWidth: number, maxWidth: number): number {
   return Math.min(Math.max(width, minWidth), maxWidth);
+}
+
+function isColumnReorderable<Row, ColumnId extends string>(
+  column: DataTableColumn<Row, ColumnId>,
+): boolean {
+  return column.reorderable ?? !column.isActionColumn;
+}
+
+/**
+ * Aplica el orden guardado por el usuario, respetando qué columnas son
+ * reordenables. Las columnas no reordenables (típicamente "Acciones")
+ * mantienen siempre su posición original dentro de la secuencia: si la
+ * columna de acciones estaba al final, sigue al final aunque el usuario
+ * reordene el resto.
+ */
+function applyColumnOrder<Row, ColumnId extends string>(
+  columns: Array<DataTableColumn<Row, ColumnId>>,
+  columnOrder: ColumnId[] | null | undefined,
+): Array<DataTableColumn<Row, ColumnId>> {
+  if (!columnOrder || columnOrder.length === 0) {
+    return columns;
+  }
+
+  const columnsById = new Map(columns.map((column) => [column.id, column]));
+  const reorderableIds = new Set(
+    columns.filter((column) => isColumnReorderable(column)).map((column) => column.id),
+  );
+
+  // El orden guardado solo es válido si cubre exactamente las columnas
+  // reordenables actuales; si no coincide (cambió el módulo), se ignora y
+  // se usa el orden por defecto en vez de arriesgar un resultado raro.
+  const storedReorderableIds = columnOrder.filter((id) => reorderableIds.has(id));
+  if (
+    storedReorderableIds.length !== reorderableIds.size ||
+    new Set(storedReorderableIds).size !== storedReorderableIds.length
+  ) {
+    return columns;
+  }
+
+  let reorderableCursor = 0;
+  return columns.map((column) => {
+    if (!isColumnReorderable(column)) {
+      return column;
+    }
+    const nextId = storedReorderableIds[reorderableCursor];
+    reorderableCursor += 1;
+    return columnsById.get(nextId) ?? column;
+  });
 }
 
 function nextSortState<ColumnId extends string>(
@@ -70,6 +123,8 @@ export function DataTable<Row, ColumnId extends string>({
   columnWidths,
   onColumnWidthChange,
   onResetColumnWidths,
+  columnOrder,
+  onColumnOrderChange,
   emptyMessage,
   onRowClick,
   onRowDoubleClick,
@@ -86,15 +141,23 @@ export function DataTable<Row, ColumnId extends string>({
     previousUserSelect: string;
   } | null>(null);
 
+  const [draggedColumnId, setDraggedColumnId] = useState<ColumnId | null>(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState<ColumnId | null>(null);
+
+  const orderedColumns = useMemo(
+    () => applyColumnOrder(columns, columnOrder),
+    [columns, columnOrder],
+  );
+
   const visibleColumns = useMemo(
     () =>
-      columns.map((column) => {
+      orderedColumns.map((column) => {
         const minWidth = column.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
         const maxWidth = column.maxWidth ?? DEFAULT_MAX_COLUMN_WIDTH;
         const width = clampColumnWidth(columnWidths[column.id] ?? column.width, minWidth, maxWidth);
         return { ...column, width, minWidth, maxWidth };
       }),
-    [columnWidths, columns],
+    [columnWidths, orderedColumns],
   );
 
   const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_BATCH_SIZE);
@@ -197,6 +260,48 @@ export function DataTable<Row, ColumnId extends string>({
     window.addEventListener('pointercancel', stopResize);
   };
 
+  const handleColumnDragStart = (columnId: ColumnId) => {
+    setDraggedColumnId(columnId);
+  };
+
+  const handleColumnDragOver = (event: ReactDragEvent<HTMLTableCellElement>, columnId: ColumnId) => {
+    if (!draggedColumnId || draggedColumnId === columnId) {
+      return;
+    }
+    event.preventDefault();
+    setDragOverColumnId(columnId);
+  };
+
+  const handleColumnDrop = (event: ReactDragEvent<HTMLTableCellElement>, targetColumnId: ColumnId) => {
+    event.preventDefault();
+    setDragOverColumnId(null);
+
+    const sourceColumnId = draggedColumnId;
+    setDraggedColumnId(null);
+    if (!sourceColumnId || sourceColumnId === targetColumnId || !onColumnOrderChange) {
+      return;
+    }
+
+    const reorderableIds = orderedColumns
+      .filter((column) => isColumnReorderable(column))
+      .map((column) => column.id);
+    const sourceIndex = reorderableIds.indexOf(sourceColumnId);
+    const targetIndex = reorderableIds.indexOf(targetColumnId);
+    if (sourceIndex === -1 || targetIndex === -1) {
+      return;
+    }
+
+    const nextOrder = [...reorderableIds];
+    nextOrder.splice(sourceIndex, 1);
+    nextOrder.splice(targetIndex, 0, sourceColumnId);
+    onColumnOrderChange(nextOrder);
+  };
+
+  const handleColumnDragEnd = () => {
+    setDraggedColumnId(null);
+    setDragOverColumnId(null);
+  };
+
   return (
     <div className="space-y-2">
       {onResetColumnWidths && (
@@ -235,13 +340,37 @@ export function DataTable<Row, ColumnId extends string>({
                   : 'descending'
                 : 'none';
 
+              // El <th> entero es "draggable" cuando la columna es reordenable, incluido
+              // el botón de ordenar que pueda contener. Un click simple sigue disparando
+              // onSortChange con normalidad: los navegadores solo inician un drag HTML5
+              // tras un movimiento real del puntero, no con un click sin desplazamiento.
+              const isReorderable = isColumnReorderable(column) && Boolean(onColumnOrderChange);
+              const isDragging = draggedColumnId === column.id;
+              const isDragOver = dragOverColumnId === column.id && draggedColumnId !== column.id;
+
               return (
                 <th
                   aria-sort={canSort ? ariaSort : undefined}
-                  className={`relative px-3 py-2 ${column.headerClassName ?? ''}`}
+                  className={`relative px-3 py-2 ${column.headerClassName ?? ''} ${
+                    isDragging ? 'opacity-40' : ''
+                  } ${isDragOver ? 'bg-metro-red/10' : ''}`}
+                  draggable={isReorderable}
                   key={column.id}
+                  onDragEnd={isReorderable ? handleColumnDragEnd : undefined}
+                  onDragOver={isReorderable ? (event) => handleColumnDragOver(event, column.id) : undefined}
+                  onDragStart={isReorderable ? () => handleColumnDragStart(column.id) : undefined}
+                  onDrop={isReorderable ? (event) => handleColumnDrop(event, column.id) : undefined}
                   scope="col"
                 >
+                  {isReorderable && (
+                    <span
+                      aria-hidden="true"
+                      className="mr-1 inline-block cursor-grab align-middle text-metro-muted/60 active:cursor-grabbing"
+                      title="Arrastrar para reordenar columna"
+                    >
+                      ⠿
+                    </span>
+                  )}
                   {canSort ? (
                     <button
                       className={`flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text ${

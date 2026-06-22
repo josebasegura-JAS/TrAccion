@@ -11,12 +11,20 @@ export interface TableSortState<ColumnId extends string = string> {
 export interface TableViewPreferences<ColumnId extends string = string> {
   sort: TableSortState<ColumnId> | null;
   columnWidths: Partial<Record<ColumnId, number>>;
+  /**
+   * Orden de columnas elegido por el usuario, solo para las columnas que
+   * pueden reordenarse (las marcadas `reorderable: false`, como acciones,
+   * siempre se renderizan en su posición original). Si es null, se usa el
+   * orden por defecto definido en el array de columnas del módulo.
+   */
+  columnOrder: ColumnId[] | null;
 }
 
 interface StoredTableViewPreferences {
-  version: 1;
+  version: 2;
   sort: TableSortState | null;
   columnWidths: Record<string, number>;
+  columnOrder: string[] | null;
 }
 
 interface UseTableViewPreferencesOptions<ColumnId extends string> {
@@ -25,7 +33,7 @@ interface UseTableViewPreferencesOptions<ColumnId extends string> {
   validColumnIds: readonly ColumnId[];
 }
 
-const TABLE_VIEW_PREFERENCES_VERSION = 1;
+const TABLE_VIEW_PREFERENCES_VERSION = 2;
 const MIN_STORED_COLUMN_WIDTH = 40;
 const MAX_STORED_COLUMN_WIDTH = 1200;
 
@@ -49,7 +57,13 @@ function readStoredPreferences(storageKey: string): StoredTableViewPreferences |
 
   try {
     const parsed: unknown = JSON.parse(storedValue);
-    if (!isRecord(parsed) || parsed.version !== TABLE_VIEW_PREFERENCES_VERSION) {
+    if (!isRecord(parsed)) {
+      return null;
+    }
+
+    // v1 (sin columnOrder) y v2 (actual) comparten sort/columnWidths; v1 se
+    // migra interpretando columnOrder como null (usa el orden por defecto).
+    if (parsed.version !== 1 && parsed.version !== TABLE_VIEW_PREFERENCES_VERSION) {
       return null;
     }
 
@@ -73,10 +87,16 @@ function readStoredPreferences(storageKey: string): StoredTableViewPreferences |
       }
     }
 
+    const parsedOrder =
+      Array.isArray(parsed.columnOrder) && parsed.columnOrder.every((id) => typeof id === 'string')
+        ? (parsed.columnOrder as string[])
+        : null;
+
     return {
       version: TABLE_VIEW_PREFERENCES_VERSION,
       sort: parsedSort,
       columnWidths: parsedWidths,
+      columnOrder: parsedOrder,
     };
   } catch {
     return null;
@@ -108,7 +128,22 @@ function normalizePreferences<ColumnId extends string>(
     }
   }
 
-  return { sort, columnWidths };
+  // El orden guardado solo es válido si contiene exactamente el mismo
+  // conjunto de columnas que existen hoy. Si el módulo cambió columnas
+  // (se añadió, se quitó, se renombró un id), el orden guardado queda
+  // obsoleto y se descarta entero en lugar de dejar un array a medias:
+  // un orden parcial podría ocultar columnas nuevas sin que el usuario
+  // se dé cuenta.
+  const storedOrder = preferences.columnOrder;
+  const columnOrder =
+    storedOrder &&
+    storedOrder.length === validColumnIds.length &&
+    storedOrder.every((id) => validColumnIdSet.has(id)) &&
+    new Set(storedOrder).size === storedOrder.length
+      ? (storedOrder as ColumnId[])
+      : defaultPreferences.columnOrder;
+
+  return { sort, columnWidths, columnOrder };
 }
 
 function writeStoredPreferences<ColumnId extends string>(
@@ -128,6 +163,7 @@ function writeStoredPreferences<ColumnId extends string>(
         return typeof width === 'number' && Number.isFinite(width);
       }),
     ),
+    columnOrder: preferences.columnOrder,
   };
 
   writeStorageItem(storageKey, JSON.stringify(storedPreferences));
@@ -166,6 +202,10 @@ export function useTableViewPreferences<ColumnId extends string>({
     }));
   }, []);
 
+  const setColumnOrder = useCallback((columnOrder: ColumnId[]) => {
+    setPreferences((current) => ({ ...current, columnOrder }));
+  }, []);
+
   const resetColumnWidths = useCallback(() => {
     setPreferences((current) => ({
       ...current,
@@ -183,6 +223,7 @@ export function useTableViewPreferences<ColumnId extends string>({
     preferences,
     setSort,
     setColumnWidth,
+    setColumnOrder,
     resetColumnWidths,
     resetPreferences,
   };
