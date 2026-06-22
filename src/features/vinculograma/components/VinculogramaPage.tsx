@@ -1,7 +1,7 @@
 import { Link2, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
-import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
+import { useTableViewPreferences, type TableSortState, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
@@ -18,6 +18,7 @@ import {
 } from '../domain/vinculograma';
 import { useVinculogramaStore } from '../store/useVinculogramaStore';
 import type { ExportColumn } from '../../../shared/export/types';
+import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
@@ -59,6 +60,7 @@ const vinculogramaTableColumnIds: readonly VinculogramaTableColumnId[] = [
 const defaultVinculogramaTablePreferences: TableViewPreferences<VinculogramaTableColumnId> = {
   sort: null,
   columnWidths: {},
+  columnOrder: null,
 };
 
 const EXPIRED_VISIBILITY_KEY = 'traccion.v1.vinculograma.showExpired';
@@ -300,21 +302,25 @@ function VinculogramaTable({
   today,
   onDelete,
   onEdit,
+  preferences,
+  setSort,
+  setColumnWidth,
+  setColumnOrder,
+  resetColumnWidths,
+  resetPreferences,
 }: {
   emptyText: string;
   records: Vinculograma[];
   today: string;
   onDelete: (record: Vinculograma) => void;
   onEdit: (record: Vinculograma) => void;
-}) {
-  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
-    useTableViewPreferences<VinculogramaTableColumnId>({
-      storageKey: VINCULOGRAMA_TABLE_STORAGE_KEY,
-      defaultPreferences: defaultVinculogramaTablePreferences,
-      validColumnIds: vinculogramaTableColumnIds,
-    });
-
-  const columns = useMemo<Array<DataTableColumn<Vinculograma, VinculogramaTableColumnId>>>(
+  preferences: TableViewPreferences<VinculogramaTableColumnId>;
+  setSort: (sort: TableSortState<VinculogramaTableColumnId> | null) => void;
+  setColumnWidth: (columnId: VinculogramaTableColumnId, width: number) => void;
+  setColumnOrder: (columnOrder: VinculogramaTableColumnId[]) => void;
+  resetColumnWidths: () => void;
+  resetPreferences: () => void;
+}) {  const columns = useMemo<Array<DataTableColumn<Vinculograma, VinculogramaTableColumnId>>>(
     () => [
       {
         id: 'employeeNumber',
@@ -407,11 +413,13 @@ function VinculogramaTable({
       </div>
       <DataTable
         ariaLabel="Vinculograma"
+        columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
         columns={columns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
+        onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onRowClick={onEdit}
         onSortChange={setSort}
@@ -442,6 +450,19 @@ export function VinculogramaPage() {
     () => splitVinculogramasByStatus(records, today),
     [records, today],
   );
+
+  const {
+    preferences: tablePreferences,
+    setSort: setTableSort,
+    setColumnWidth: setTableColumnWidth,
+    setColumnOrder: setTableColumnOrder,
+    resetColumnWidths: resetTableColumnWidths,
+    resetPreferences: resetTablePreferences,
+  } = useTableViewPreferences<VinculogramaTableColumnId>({
+    storageKey: VINCULOGRAMA_TABLE_STORAGE_KEY,
+    defaultPreferences: defaultVinculogramaTablePreferences,
+    validColumnIds: vinculogramaTableColumnIds,
+  });
 
   const openCreateModal = () => {
     setDraft(EMPTY_VINCULOGRAMA_DRAFT);
@@ -551,7 +572,7 @@ export function VinculogramaPage() {
               payload={{
                 title: 'Vinculogramas vigentes',
                 filename: 'vinculogramas-vigentes',
-                columns: vinculogramaExportColumns(today),
+                columns: reorderExportColumns(vinculogramaExportColumns(today), tablePreferences.columnOrder),
                 rows: vigentes,
                 filterLabel: 'Estado: vigente',
               }}
@@ -568,6 +589,12 @@ export function VinculogramaPage() {
             onEdit={openEditModal}
             records={vigentes}
             today={today}
+            preferences={tablePreferences}
+            setSort={setTableSort}
+            setColumnWidth={setTableColumnWidth}
+            setColumnOrder={setTableColumnOrder}
+            resetColumnWidths={resetTableColumnWidths}
+            resetPreferences={resetTablePreferences}
           />
         </div>
       </div>
@@ -583,7 +610,7 @@ export function VinculogramaPage() {
               payload={{
                 title: 'Vinculogramas vencidos',
                 filename: 'vinculogramas-vencidos',
-                columns: vinculogramaExportColumns(today),
+                columns: reorderExportColumns(vinculogramaExportColumns(today), tablePreferences.columnOrder),
                 rows: vencidos,
                 filterLabel: 'Estado: vencido',
               }}
@@ -601,6 +628,12 @@ export function VinculogramaPage() {
               onEdit={openEditModal}
               records={vencidos}
               today={today}
+              preferences={tablePreferences}
+              setSort={setTableSort}
+              setColumnWidth={setTableColumnWidth}
+              setColumnOrder={setTableColumnOrder}
+              resetColumnWidths={resetTableColumnWidths}
+              resetPreferences={resetTablePreferences}
             />
           </div>
         )}
