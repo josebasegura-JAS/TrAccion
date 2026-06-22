@@ -852,7 +852,7 @@ export function PeoplePanel({
               Modelo personas
             </button>
 
-            <ActionButton onClick={onImport} size="sm" variant="import">
+            <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
               Importar personas
             </ActionButton>
             <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
@@ -1844,7 +1844,7 @@ export function AbsencesTable({
               <FileDown className="h-3.5 w-3.5" />
               Modelo ausencias
             </button>
-            <ActionButton onClick={onImport} size="sm" variant="import">
+            <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
               Importar ausencias
             </ActionButton>
           </div>
