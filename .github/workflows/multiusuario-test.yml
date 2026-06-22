@@ -58,7 +58,7 @@ jobs:
             Remove-Item node_modules -Recurse -Force
           }
 
-          npm ci --include=dev --ignore-scripts --no-audit --no-fund
+          npm ci --include=dev --no-audit --no-fund
 
       - name: Diagnostico
         shell: pwsh

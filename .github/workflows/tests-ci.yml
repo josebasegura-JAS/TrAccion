@@ -62,7 +62,7 @@ jobs:
       - name: Install dependencies from lockfile
         shell: pwsh
         run: |
-          npm ci --include=dev --bin-links=true --ignore-scripts --no-audit --no-fund
+          npm ci --include=dev --bin-links=true --no-audit --no-fund
 
       - name: Verify local CLI tools before lint
         shell: pwsh
