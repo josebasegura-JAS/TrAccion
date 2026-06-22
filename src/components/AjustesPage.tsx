@@ -1,4 +1,4 @@
-import { Database, FolderOpen, Plus, RotateCcw } from 'lucide-react';
+import { Database, FolderOpen, Plus, RotateCcw, Save } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
@@ -6,6 +6,7 @@ import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/d
 import { Notice } from './ui/Notice';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { StatusBadge } from './ui/StatusBadge';
+import { ActionButton } from './ui/ActionButton';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 
@@ -93,6 +94,7 @@ export function AjustesPage() {
   const [localBackups, setLocalBackups] = useState<TraccionLocalBackupEntry[]>([]);
   const [isLoadingBackups, setIsLoadingBackups] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [isCreatingManualBackup, setIsCreatingManualBackup] = useState(false);
   const [secondaryBackupPath, setSecondaryBackupPath] = useState<string | null>(null);
   const [secondaryBackupStatus, setSecondaryBackupStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
@@ -154,6 +156,26 @@ export function AjustesPage() {
     await window.traccion.clearSecondaryBackupDirectory();
     setSecondaryBackupPath(null);
     setSecondaryBackupStatus('Carpeta de respaldo secundario eliminada.');
+  };
+
+  const handleCreateManualBackup = async () => {
+    if (!window.traccion?.createManualBackup) {
+      setDatabaseActionStatus('La copia manual solo está disponible en escritorio.');
+      return;
+    }
+
+    setIsCreatingManualBackup(true);
+    setDatabaseActionStatus('Creando copia manual...');
+    try {
+      await window.traccion.createManualBackup();
+      setDatabaseActionStatus('Copia manual creada correctamente.');
+      await refreshLocalBackups();
+    } catch (error) {
+      console.warn('No se ha podido crear la copia manual.', error);
+      setDatabaseActionStatus('No se ha podido crear la copia manual.');
+    } finally {
+      setIsCreatingManualBackup(false);
+    }
   };
 
   const handleRestoreLocalBackup = async (backup: TraccionLocalBackupEntry) => {
@@ -412,6 +434,16 @@ export function AjustesPage() {
             <Database size={16} />
             Actualizar copias
           </button>
+          <ActionButton
+            variant="save"
+            iconOnly={false}
+            disabled={isCreatingManualBackup}
+            onClick={() => void handleCreateManualBackup()}
+            title="Crear una copia de respaldo ahora, sin esperar al guardado automático"
+          >
+            <Save size={16} />
+            {isCreatingManualBackup ? 'Creando copia...' : 'Crear copia ahora'}
+          </ActionButton>
         </div>
 
         <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
@@ -422,6 +454,9 @@ export function AjustesPage() {
               </p>
               <p className="mt-1 text-xs text-metro-muted">
                 Restaurar una copia crea antes un backup de la base activa y recarga TrAccion para aplicar los datos.
+              </p>
+              <p className="mt-1 text-xs text-metro-muted">
+                Cada copia guarda tanto la base SQLite como un JSON de emergencia. El JSON solo debe usarse si la base SQLite no es recuperable; no sustituye al backup SQLite.
               </p>
             </div>
             <span className="text-xs font-semibold text-metro-muted">

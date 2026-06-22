@@ -13,6 +13,7 @@ import {
   changeSqliteDirectory,
   closeSqlitePersistence,
   createLocalStorageBackup,
+  createManualLocalBackup,
   getPersistedRecordSnapshot,
   getRecordLock,
   getSqliteStatus,
@@ -1063,6 +1064,13 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('database:list-local-backups', () => enqueueSqliteIpc('database:list-local-backups', () => listLocalBackups()));
+
+  ipcMain.handle('database:create-manual-backup', () =>
+    enqueueSqliteIpc('database:create-manual-backup', async () => {
+      await createManualLocalBackup();
+      return { ok: true };
+    }),
+  );
 
   ipcMain.handle('database:restore-local-backup', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {

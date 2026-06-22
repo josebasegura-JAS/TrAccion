@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { FileDown, FileUp, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { FileDown, FileUp, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
 import { parseCriteriosRrllImportFile, type CriterioRrllImportPreviewRow } from '../domain/importExcel';
@@ -18,7 +18,9 @@ import {
 } from '../domain/criterioRrll';
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -277,71 +279,52 @@ export function CriteriosRrllPage() {
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="criterios-rrll"
     >
-      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-bold text-metro-text">Criterios RRLL</h2>
-            <ModuleHelpButton
-              title="Criterios RRLL"
-              subtitle="Guía rápida del repositorio de criterios, sentido, filtros e importación."
-              sections={CRITERIOS_RRLL_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-base text-metro-muted">
-            Listado de criterios con alta manual, edición, importación Excel, búsqueda y filtros.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input
-            accept=".xlsx,.xls,.csv,.tsv,.txt"
-            className="hidden"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              if (!file) {
-                return;
-              }
+      <PageHeader
+        title="Criterios RRLL"
+        subtitle="Listado de criterios con alta manual, edición, importación Excel, búsqueda y filtros."
+        helpSections={CRITERIOS_RRLL_HELP_SECTIONS}
+        helpSubtitle="Guía rápida del repositorio de criterios, sentido, filtros e importación."
+        className="mb-3"
+        actions={
+          <>
+            <input
+              accept=".xlsx,.xls,.csv,.tsv,.txt"
+              className="hidden"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) {
+                  return;
+                }
 
-              try {
-                const rows = await parseCriteriosRrllImportFile(file);
-                setImportMessage('');
-                setImportPreview({
-                  fileName: file.name,
-                  rows: rows.map((row) => ({ ...row, id: createPreviewRowId(row), selected: true })),
-                });
-              } catch (error) {
-                console.error('Error al previsualizar la importación de Criterios RRLL:', error);
-                setImportMessage('No se ha podido leer la Excel. Revisa que respete la plantilla.');
-              } finally {
-                event.target.value = '';
-              }
-            }}
-            ref={fileInputRef}
-            type="file"
-          />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={handleTemplateDownload}
-            type="button"
-          >
-            <FileDown size={16} /> Descargar plantilla
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            <FileUp size={16} /> Importar Excel
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={openCreateEditor}
-            type="button"
-          >
-            <Plus size={16} /> Nuevo criterio
-          </button>
-        </div>
-      </div>
+                try {
+                  const rows = await parseCriteriosRrllImportFile(file);
+                  setImportMessage('');
+                  setImportPreview({
+                    fileName: file.name,
+                    rows: rows.map((row) => ({ ...row, id: createPreviewRowId(row), selected: true })),
+                  });
+                } catch (error) {
+                  console.error('Error al previsualizar la importación de Criterios RRLL:', error);
+                  setImportMessage('No se ha podido leer la Excel. Revisa que respete la plantilla.');
+                } finally {
+                  event.target.value = '';
+                }
+              }}
+              ref={fileInputRef}
+              type="file"
+            />
+            <ActionButton variant="secondary" iconOnly={false} onClick={handleTemplateDownload}>
+              <FileDown size={16} /> Descargar plantilla
+            </ActionButton>
+            <ActionButton variant="secondary" iconOnly={false} onClick={() => fileInputRef.current?.click()}>
+              <FileUp size={16} /> Importar Excel
+            </ActionButton>
+            <ActionButton variant="add" iconOnly={false} onClick={openCreateEditor}>
+              Nuevo criterio
+            </ActionButton>
+          </>
+        }
+      />
 
       {importMessage && (
         <p className="mb-3 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
@@ -447,16 +430,17 @@ export function CriteriosRrllPage() {
                     {criterio.criterio}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <button
-                      className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+                    <ActionButton
+                      size="sm"
+                      variant="delete"
+                      iconOnly={false}
                       onClick={(event) => {
                         event.stopPropagation();
                         remove(criterio.id);
                       }}
-                      type="button"
                     >
                       Eliminar
-                    </button>
+                    </ActionButton>
                   </td>
                 </tr>
               ))}
@@ -495,20 +479,12 @@ export function CriteriosRrllPage() {
                 Desmarca los registros que no quieras importar. Tema y Criterio son obligatorios.
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  className="rounded-lg border border-metro-border px-3 py-1.5 font-semibold text-metro-text hover:border-metro-red"
-                  onClick={() => setAllImportRowsSelected(true)}
-                  type="button"
-                >
+                <ActionButton variant="secondary" iconOnly={false} onClick={() => setAllImportRowsSelected(true)}>
                   Marcar todos
-                </button>
-                <button
-                  className="rounded-lg border border-metro-border px-3 py-1.5 font-semibold text-metro-text hover:border-metro-red"
-                  onClick={() => setAllImportRowsSelected(false)}
-                  type="button"
-                >
+                </ActionButton>
+                <ActionButton variant="secondary" iconOnly={false} onClick={() => setAllImportRowsSelected(false)}>
                   Desmarcar todos
-                </button>
+                </ActionButton>
               </div>
             </div>
             <div className="overflow-auto">
@@ -562,23 +538,19 @@ export function CriteriosRrllPage() {
               )}
             </div>
             <div className="flex flex-wrap justify-end gap-2 border-t border-metro-border bg-metro-surface px-4 py-3">
-              <button
-                className="rounded-xl border border-metro-border px-4 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-                onClick={() => setImportPreview(null)}
-                type="button"
-              >
+              <ActionButton variant="secondary" iconOnly={false} onClick={() => setImportPreview(null)}>
                 Cancelar
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              </ActionButton>
+              <ActionButton
+                variant="save"
+                iconOnly={false}
                 disabled={selectedImportRows.length === 0}
                 onClick={() => {
                   void confirmImport();
                 }}
-                type="button"
               >
                 Importar seleccionados
-              </button>
+              </ActionButton>
             </div>
           </div>
         </div>

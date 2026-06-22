@@ -1,4 +1,4 @@
-import { Link2, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
+import { Link2, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
@@ -20,9 +20,12 @@ import { useVinculogramaStore } from '../store/useVinculogramaStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { FieldLabel, Input } from '../../../components/ui/Field';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -59,13 +62,6 @@ const defaultVinculogramaTablePreferences: TableViewPreferences<VinculogramaTabl
 };
 
 const EXPIRED_VISIBILITY_KEY = 'traccion.v1.vinculograma.showExpired';
-const inputClass =
-  'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red';
-const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-metro-muted';
-const buttonClass =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark';
-const secondaryButtonClass =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red';
 
 const vinculogramaExportColumns = (today: string): ExportColumn<Vinculograma>[] => [
   { key: 'employeeNumber', header: 'Nº empleado', value: (record) => record.employeeNumber },
@@ -193,19 +189,17 @@ function VinculogramaModal({
             </p>
           )}
           <fieldset disabled={isReadOnly} className="grid gap-4 disabled:opacity-70 md:grid-cols-2">
-          <label className={labelClass}>
+          <FieldLabel>
             Nº empleado
-            <input
-              className={inputClass}
+            <Input
               onChange={(event) => updateEmployeeNumber(event.target.value)}
               value={draft.employeeNumber}
             />
-          </label>
+          </FieldLabel>
           <div className="relative">
-            <label className={labelClass}>
+            <FieldLabel>
               Nombre
-              <input
-                className={inputClass}
+              <Input
                 onBlur={() => window.setTimeout(() => setShowSuggestions(false), 100)}
                 onChange={(event) => {
                   onChange({ ...draft, nombreCompleto: event.target.value });
@@ -214,7 +208,7 @@ function VinculogramaModal({
                 onFocus={() => setShowSuggestions(true)}
                 value={draft.nombreCompleto}
               />
-            </label>
+            </FieldLabel>
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-metro-border bg-metro-surface shadow-xl">
                 {suggestions.map((suggestion) => (
@@ -232,31 +226,29 @@ function VinculogramaModal({
               </div>
             )}
           </div>
-          <label className={labelClass}>
+          <FieldLabel>
             Persona vinculada
-            <input
-              className={inputClass}
+            <Input
               onChange={(event) => onChange({ ...draft, linkedPerson: event.target.value })}
               value={draft.linkedPerson}
             />
-          </label>
-          <label className={labelClass}>
+          </FieldLabel>
+          <FieldLabel>
             Fecha solicitud
-            <input
-              className={inputClass}
+            <Input
               onChange={(event) => onChange({ ...draft, requestDate: event.target.value })}
               type="date"
               value={draft.requestDate}
             />
-          </label>
-          <label className={labelClass}>
+          </FieldLabel>
+          <FieldLabel>
             Fecha vigencia
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text"
+            <Input
+              className="font-semibold"
               readOnly
               value={expiryDate}
             />
-          </label>
+          </FieldLabel>
           </fieldset>
         </div>
 
@@ -269,17 +261,18 @@ function VinculogramaModal({
         <div className="flex flex-wrap justify-between gap-2 border-t border-metro-border px-5 py-4">
           <div>
             {mode === 'edit' && (
-              <button className={secondaryButtonClass} disabled={isReadOnly || isSaving} onClick={onDelete} type="button">
-                <Trash2 size={16} /> Eliminar
-              </button>
+              <ActionButton variant="delete" iconOnly={false} disabled={isReadOnly || isSaving} onClick={onDelete}>
+                Eliminar
+              </ActionButton>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className={secondaryButtonClass} onClick={onClose} type="button">
+            <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>
               Cancelar
-            </button>
-            <button
-              className={buttonClass}
+            </ActionButton>
+            <ActionButton
+              variant="save"
+              iconOnly={false}
               disabled={isReadOnly || isSaving}
               onClick={() => {
                 setIsSaving(true);
@@ -290,10 +283,9 @@ function VinculogramaModal({
                   }
                 }).finally(() => setIsSaving(false));
               }}
-              type="button"
             >
-              <Save size={16} /> {isSaving ? 'Guardando…' : 'Guardar'}
-            </button>
+              {isSaving ? 'Guardando…' : 'Guardar'}
+            </ActionButton>
             <InlineSaveFeedback />
           </div>
         </div>
@@ -383,16 +375,17 @@ function VinculogramaTable({
         id: 'actions',
         header: 'Acciones',
         render: (record) => (
-          <button
-            className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+          <ActionButton
+            size="sm"
+            variant="delete"
+            iconOnly={false}
             onClick={(event) => {
               event.stopPropagation();
               onDelete(record);
             }}
-            type="button"
           >
             Eliminar
-          </button>
+          </ActionButton>
         ),
         width: 110,
         minWidth: 95,
@@ -408,13 +401,9 @@ function VinculogramaTable({
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <button
-          className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-          onClick={resetPreferences}
-          type="button"
-        >
+        <ActionButton size="sm" variant="secondary" iconOnly={false} onClick={resetPreferences}>
           <RotateCcw size={14} /> Restablecer vista
-        </button>
+        </ActionButton>
       </div>
       <DataTable
         ariaLabel="Vinculograma"
@@ -540,27 +529,18 @@ export function VinculogramaPage() {
   return (
     <section className="space-y-4" id="vinculograma">
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Módulo
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-bold text-metro-text">Vinculograma</h2>
-              <ModuleHelpButton
-                title="Vinculograma"
-                subtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
-                sections={VINCULOGRAMA_HELP_SECTIONS}
-              />
-            </div>
-            <p className="mt-0.5 text-base text-metro-muted">
-              Gestión de vínculos con cálculo automático de fecha de vigencia.
-            </p>
-          </div>
-          <button className={buttonClass} onClick={openCreateModal} type="button">
-            <Plus size={16} /> Nuevo vínculo
-          </button>
-        </div>
+        <PageHeader
+          title="Vinculograma"
+          subtitle="Gestión de vínculos con cálculo automático de fecha de vigencia."
+          helpSections={VINCULOGRAMA_HELP_SECTIONS}
+          helpSubtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
+          className="mb-0"
+          actions={
+            <ActionButton variant="add" iconOnly={false} onClick={openCreateModal}>
+              Nuevo vínculo
+            </ActionButton>
+          }
+        />
       </div>
 
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
@@ -609,9 +589,9 @@ export function VinculogramaPage() {
               }}
             />
           </div>
-          <button className={secondaryButtonClass} onClick={toggleExpired} type="button">
+          <ActionButton variant="secondary" iconOnly={false} onClick={toggleExpired}>
             {showExpired ? 'Ocultar' : 'Mostrar'}
-          </button>
+          </ActionButton>
         </div>
         {showExpired && (
           <div className="overflow-auto">

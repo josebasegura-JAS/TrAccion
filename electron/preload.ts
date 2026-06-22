@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('traccion', {
   setSecondaryBackupDirectory: () => ipcRenderer.invoke('database:set-secondary-backup-directory'),
   clearSecondaryBackupDirectory: () => ipcRenderer.invoke('database:clear-secondary-backup-directory'),
   listLocalBackups: () => ipcRenderer.invoke('database:list-local-backups'),
+  createManualBackup: () => ipcRenderer.invoke('database:create-manual-backup'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
   getPersistedRecord: (key: string) =>

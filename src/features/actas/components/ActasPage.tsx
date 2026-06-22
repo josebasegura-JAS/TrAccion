@@ -21,9 +21,11 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { relativeDate } from '../../../utils/relativeDate';
-import { ModuleHelpButton } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { Input, Select } from '../../../components/ui/Field';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import {
   ACTAS_HELP_SECTIONS,
   type ActaColumnId,
@@ -706,72 +708,57 @@ export function ActasPage() {
       className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="actas"
     >
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="flex items-center gap-2 text-2xl font-bold text-metro-text">
-              <FileText size={24} /> Actas
-            </h2>
-            <ModuleHelpButton
-              title="Actas"
-              subtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
-              sections={ACTAS_HELP_SECTIONS}
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <FileText size={24} /> Actas
+          </span>
+        }
+        helpTitle="Actas"
+        subtitle="Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e histórico."
+        helpSections={ACTAS_HELP_SECTIONS}
+        helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
+        actions={
+          <>
+            <ActionButton
+              variant="secondary"
+              iconOnly={false}
+              onClick={() => setIsTypeManagerOpen(true)}
+              title="Gestionar tipos de acta"
+            >
+              <Settings2 size={16} />
+              Nuevo tipo
+            </ActionButton>
+            <ActionButton
+              variant="secondary"
+              iconOnly={false}
+              onClick={openOutlookTemplateManager}
+              title="Configurar plantilla Outlook de Actas"
+            >
+              <Mail size={16} />
+              Outlook
+            </ActionButton>
+            <ExportPrintButtons
+              payload={{
+                title: 'Actas',
+                filename: 'actas',
+                columns: actaExportColumns,
+                rows: filteredActas,
+                filterLabel,
+              }}
             />
-          </div>
-          <p className="mt-0.5 text-base text-metro-muted">
-            Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e
-            histórico.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={() => setIsTypeManagerOpen(true)}
-            title="Gestionar tipos de acta"
-            type="button"
-          >
-            <Settings2 size={16} />
-            Nuevo tipo
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={openOutlookTemplateManager}
-            title="Configurar plantilla Outlook de Actas"
-            type="button"
-          >
-            <Mail size={16} />
-            Outlook
-          </button>
-          <ExportPrintButtons
-            payload={{
-              title: 'Actas',
-              filename: 'actas',
-              columns: actaExportColumns,
-              rows: filteredActas,
-              filterLabel,
-            }}
-          />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={() => openEditor()}
-            title="Nueva acta"
-            type="button"
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-      </div>
+            <ActionButton variant="add" onClick={() => openEditor()} title="Nueva acta" />
+          </>
+        }
+      />
 
       <div className="grid gap-2 xl:grid-cols-[minmax(220px,1fr)_220px_160px]">
-        <input
-          className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+        <Input
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar por título, estado, actualización, alegación o ruta..."
           value={search}
         />
-        <select
-          className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+        <Select
           onChange={(event) => setStateFilter(event.target.value)}
           value={stateFilter}
         >
@@ -781,9 +768,8 @@ export function ActasPage() {
               {state}
             </option>
           ))}
-        </select>
-        <select
-          className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+        </Select>
+        <Select
           onChange={(event) => setYearFilter(event.target.value)}
           value={yearFilter}
         >
@@ -793,7 +779,7 @@ export function ActasPage() {
               {year}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {outlookDraftStatus && (

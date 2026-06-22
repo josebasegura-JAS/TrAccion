@@ -12,6 +12,8 @@ import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
 
 const criterioTextFields: Array<{
   field: CriterioRrllDraftField;
@@ -131,10 +133,9 @@ export function CriterioRrllEditor({
         >
           <div className="grid min-h-0 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
             {criterioTextFields.map(({ field, label, required }) => (
-              <label className="text-xs font-semibold text-metro-muted" key={field}>
+              <FieldLabel className="text-xs font-semibold text-metro-muted" key={field}>
                 {label}
-                <input
-                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                <Input
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, [field]: event.target.value }))
                   }
@@ -143,12 +144,11 @@ export function CriterioRrllEditor({
                   type={field === 'fecha' ? 'date' : 'text'}
                   value={draft[field]}
                 />
-              </label>
+              </FieldLabel>
             ))}
-            <label className="text-xs font-semibold text-metro-muted">
+            <FieldLabel className="text-xs font-semibold text-metro-muted">
               Estado
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -163,12 +163,11 @@ export function CriterioRrllEditor({
                     {estado}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-metro-muted">
+              </Select>
+            </FieldLabel>
+            <FieldLabel className="text-xs font-semibold text-metro-muted">
               Sentido
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -183,12 +182,12 @@ export function CriterioRrllEditor({
                     {sentido}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+              </Select>
+            </FieldLabel>
+            <FieldLabel className="text-xs font-semibold text-metro-muted sm:col-span-2">
               Criterio
-              <textarea
-                className="mt-1 min-h-28 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Textarea
+                className="min-h-28"
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, criterio: event.target.value }))
                 }
@@ -196,18 +195,18 @@ export function CriterioRrllEditor({
                 required
                 value={draft.criterio}
               />
-            </label>
-            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+            </FieldLabel>
+            <FieldLabel className="text-xs font-semibold text-metro-muted sm:col-span-2">
               Observaciones
-              <textarea
-                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Textarea
+                className="min-h-20"
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, observaciones: event.target.value }))
                 }
                 disabled={isReadOnly}
                 value={draft.observaciones}
               />
-            </label>
+            </FieldLabel>
           </div>
 
           <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
@@ -216,17 +215,14 @@ export function CriterioRrllEditor({
                 {saveError}
               </p>
             )}
-            <button
-              className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmit}
-              type="submit"
-            >
+            <ActionButton disabled={!canSubmit} type="submit" variant="save">
               Guardar
-            </button>
+            </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && criterio && (
-              <button
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              <ActionButton
+                variant="delete"
+                iconOnly={false}
                 disabled={isReadOnly}
                 onClick={() => {
                   void (async () => {
@@ -239,18 +235,13 @@ export function CriterioRrllEditor({
                     onDone();
                   })();
                 }}
-                type="button"
               >
                 Eliminar
-              </button>
+              </ActionButton>
             )}
-            <button
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
-              onClick={onDone}
-              type="button"
-            >
+            <ActionButton variant="secondary" iconOnly={false} onClick={onDone}>
               Cancelar
-            </button>
+            </ActionButton>
           </div>
         </form>
       </aside>

@@ -397,6 +397,7 @@ interface TraccionApi {
   setSecondaryBackupDirectory?: () => Promise<{ ok: boolean; path: string | null }>;
   clearSecondaryBackupDirectory?: () => Promise<{ ok: boolean }>;
   listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
+  createManualBackup?: () => Promise<{ ok: boolean }>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;

@@ -2001,6 +2001,14 @@ export async function createShutdownLocalBackup(): Promise<void> {
   await writeShutdownLocalBackupArtifacts();
 }
 
+export async function createManualLocalBackup(): Promise<void> {
+  // Backup "de cierre de fase" a demanda: ignora el debounce de guardado y
+  // siempre fuerza una copia rotada (writeLocalBackupArtifacts ya marca
+  // como rotable cualquier reason que no empiece por "save:").
+  await flushPendingLocalBackup();
+  await writeLocalBackupArtifacts('manual-backup');
+}
+
 function updateRefreshMetadata(db: Database, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
   db.prepare(
