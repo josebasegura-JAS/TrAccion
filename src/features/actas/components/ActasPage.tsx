@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
+import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
@@ -100,12 +101,13 @@ export function ActasPage() {
     enabled: isEditorOpen,
   });
   const isEditorReadOnly = recordLock.isReadOnly;
-  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
     useTableViewPreferences<ActaColumnId>({
       storageKey: 'traccion.tableView.actas.main',
       defaultPreferences: {
         sort: { columnId: 'fechaSesion', direction: 'desc' },
         columnWidths: {},
+        columnOrder: null,
       },
       validColumnIds,
     });
@@ -742,7 +744,7 @@ export function ActasPage() {
               payload={{
                 title: 'Actas',
                 filename: 'actas',
-                columns: actaExportColumns,
+                columns: reorderExportColumns(actaExportColumns, preferences.columnOrder),
                 rows: filteredActas,
                 filterLabel,
               }}
@@ -796,11 +798,13 @@ export function ActasPage() {
         </h3>
         <DataTable
           ariaLabel="Actas abiertas"
+          columnOrder={preferences.columnOrder}
           columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
           columns={columns}
           emptyMessage="No hay actas abiertas con los filtros actuales."
           getRowId={(acta) => acta.id}
+          onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}
@@ -849,11 +853,13 @@ export function ActasPage() {
                 <div className="mt-3">
                   <DataTable
                     ariaLabel={`Actas históricas ${year}`}
+                    columnOrder={preferences.columnOrder}
                     columnWidths={preferences.columnWidths}
                     onResetColumnWidths={resetColumnWidths}
                     columns={columns}
                     emptyMessage="No hay actas cerradas."
                     getRowId={(acta) => acta.id}
+                    onColumnOrderChange={setColumnOrder}
                     onColumnWidthChange={setColumnWidth}
                     onRowClick={openEditor}
                     onSortChange={setSort}
