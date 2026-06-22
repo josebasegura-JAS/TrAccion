@@ -103,17 +103,28 @@ export async function loadTeletrabajoRecordsFromSqlite(): Promise<TeletrabajoSql
   return snapshot.records;
 }
 
+export interface TeletrabajoSqliteSaveOptions {
+  silentPersistenceFeedback?: boolean;
+  message?: string;
+}
+
 export async function saveTeletrabajoSolicitudToSqlite(
   solicitud: TeletrabajoSolicitud,
   expectedUpdatedAt: string | null,
+  options: TeletrabajoSqliteSaveOptions = {},
 ): Promise<TeletrabajoSqliteSaveResult | null> {
   const saver = window.traccion?.saveTeletrabajoRecordIfUnchanged;
   if (!saver) {
     return null;
   }
 
-  publishPersistenceBusy(TELETRABAJO_STORAGE_KEY, 'Guardando solicitud de Teletrabajo en SQLite…');
-  await waitForNextPaint();
+  if (!options.silentPersistenceFeedback) {
+    publishPersistenceBusy(
+      TELETRABAJO_STORAGE_KEY,
+      options.message ?? 'Guardando solicitud de Teletrabajo en SQLite…',
+    );
+    await waitForNextPaint();
+  }
 
   try {
     const result = await withTemporarySqliteRetry(() =>
@@ -125,7 +136,9 @@ export async function saveTeletrabajoSolicitudToSqlite(
     );
 
     publishDatabaseStatus(result.status);
-    clearPersistenceBusy(TELETRABAJO_STORAGE_KEY, result.message);
+    if (!options.silentPersistenceFeedback) {
+      clearPersistenceBusy(TELETRABAJO_STORAGE_KEY, result.message);
+    }
 
     return {
       ok: result.ok,
@@ -133,10 +146,12 @@ export async function saveTeletrabajoSolicitudToSqlite(
       currentUpdatedAt: result.currentUpdatedAt,
     };
   } catch (error) {
-    clearPersistenceBusy(
-      TELETRABAJO_STORAGE_KEY,
-      'No se ha podido guardar la solicitud de Teletrabajo en SQLite.',
-    );
+    if (!options.silentPersistenceFeedback) {
+      clearPersistenceBusy(
+        TELETRABAJO_STORAGE_KEY,
+        'No se ha podido guardar la solicitud de Teletrabajo en SQLite.',
+      );
+    }
     throw error;
   }
 }

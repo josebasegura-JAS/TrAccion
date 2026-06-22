@@ -2,6 +2,8 @@ import {
   AlertTriangle,
   BriefcaseBusiness,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   FileText,
   Loader2,
   Plus,
@@ -358,6 +360,8 @@ export function TeletrabajoPage({
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const historicoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
+  const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -440,10 +444,32 @@ export function TeletrabajoPage({
     () => buildSolicitudesByPuestoCount(solicitudes),
     [solicitudes],
   );
-  const filteredSolicitudes = useMemo(
-    () => filterTeletrabajoSolicitudes(solicitudes, filters),
-    [filters, solicitudes],
+  const periodos = useMemo(
+    () => uniqueSorted(visibleSolicitudes.map((solicitud) => solicitud.periodo)).reverse(),
+    [visibleSolicitudes],
   );
+
+  const currentPeriodo = periodos[0] ?? '';
+  const mainPeriodo = filters.periodo || currentPeriodo;
+  const mainFilters = useMemo(
+    () => ({ ...filters, periodo: mainPeriodo }),
+    [filters, mainPeriodo],
+  );
+  const filteredSolicitudes = useMemo(
+    () => filterTeletrabajoSolicitudes(solicitudes, mainFilters),
+    [mainFilters, solicitudes],
+  );
+  const historicoSolicitudes = useMemo(() => {
+    const historicalRows = solicitudes.filter(
+      (solicitud) => !solicitud.deletedAt && solicitud.periodo !== currentPeriodo,
+    );
+
+    if (filters.periodo) {
+      return [];
+    }
+
+    return filterTeletrabajoSolicitudes(historicalRows, { ...filters, periodo: '' });
+  }, [currentPeriodo, filters, solicitudes]);
   const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<TeletrabajoTableColumnId>({
       storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
@@ -687,16 +713,28 @@ export function TeletrabajoPage({
     () => sortDataTableRows(filteredSolicitudes, teletrabajoTableColumns, preferences.sort),
     [filteredSolicitudes, preferences.sort, teletrabajoTableColumns],
   );
+  const historicoGroups = useMemo(() => {
+    const grouped = new Map<string, TeletrabajoSolicitud[]>();
+    historicoSolicitudes.forEach((solicitud) => {
+      const periodo = solicitud.periodo || 'Sin periodo';
+      grouped.set(periodo, [...(grouped.get(periodo) ?? []), solicitud]);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([first], [second]) =>
+        second.localeCompare(first, 'es', { numeric: true, sensitivity: 'base' }),
+      )
+      .map(([periodo, rows]) => ({
+        periodo,
+        rows: sortDataTableRows(rows, teletrabajoTableColumns, preferences.sort),
+      }));
+  }, [historicoSolicitudes, preferences.sort, teletrabajoTableColumns]);
 
   const editorSolicitud =
     editorMode === 'edit'
       ? (visibleSolicitudes.find((solicitud) => solicitud.id === editingSolicitudId) ?? null)
       : null;
 
-  const periodos = useMemo(
-    () => uniqueSorted(visibleSolicitudes.map((solicitud) => solicitud.periodo)).reverse(),
-    [visibleSolicitudes],
-  );
   const teletrabajoFilterLabel = buildFilterLabel([
     ['Búsqueda', filters.search],
     ['Estado', filters.estado],
@@ -1104,7 +1142,7 @@ export function TeletrabajoPage({
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo
+            <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo · {mainPeriodo || 'Sin periodo'}
             <ExportPrintButtons
               payload={{
                 title: 'Solicitudes de teletrabajo',
@@ -1125,7 +1163,7 @@ export function TeletrabajoPage({
             </button>
           </div>
           <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-            {filteredSolicitudes.length} registros
+            {sortedSolicitudes.length} registros
           </span>
         </div>
         <div className="flex flex-wrap justify-end pb-2">
@@ -1147,7 +1185,7 @@ export function TeletrabajoPage({
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}
-          rows={filteredSolicitudes}
+          rows={sortedSolicitudes}
           rowClassName={(solicitud) =>
             evaluateTeletrabajoAntiguedad(
               solicitud,
@@ -1159,6 +1197,88 @@ export function TeletrabajoPage({
           sort={preferences.sort}
         />
       </div>
+
+      {!filters.periodo && (
+        <div className="mt-4 overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
+          <button
+            className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-metro-border px-3 py-2 text-left text-sm font-semibold text-metro-text hover:bg-metro-panel"
+            onClick={() => setIsHistoricoOpen((current) => !current)}
+            type="button"
+          >
+            <span className="inline-flex items-center gap-2">
+              {isHistoricoOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              Histórico de teletrabajo
+            </span>
+            <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
+              {historicoSolicitudes.length} registros
+            </span>
+          </button>
+
+          {isHistoricoOpen && (
+            <div className="space-y-3 p-3">
+              {historicoGroups.length === 0 ? (
+                <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
+                  No hay solicitudes históricas para los criterios seleccionados.
+                </p>
+              ) : (
+                historicoGroups.map((group) => {
+                  const isPeriodoOpen = Boolean(openHistoricoPeriodos[group.periodo]);
+                  return (
+                    <div
+                      className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel"
+                      key={group.periodo}
+                    >
+                      <button
+                        className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-metro-text hover:bg-metro-surface"
+                        onClick={() =>
+                          setOpenHistoricoPeriodos((current) => ({
+                            ...current,
+                            [group.periodo]: !current[group.periodo],
+                          }))
+                        }
+                        type="button"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          {isPeriodoOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          Periodo {group.periodo}
+                        </span>
+                        <span className="rounded-full bg-metro-surface px-3 py-1 text-xs font-bold text-metro-muted">
+                          {group.rows.length} registros
+                        </span>
+                      </button>
+                      {isPeriodoOpen && (
+                        <div className="border-t border-metro-border p-2">
+                          <DataTable
+                            ariaLabel={`Solicitudes históricas de teletrabajo ${group.periodo}`}
+                            columnWidths={preferences.columnWidths}
+                            columns={teletrabajoTableColumns}
+                            emptyMessage="No hay solicitudes históricas para este periodo."
+                            getRowId={(solicitud) => solicitud.id}
+                            onColumnWidthChange={setColumnWidth}
+                            onRowClick={openEditor}
+                            onSortChange={setSort}
+                            rows={group.rows}
+                            rowClassName={(solicitud) =>
+                              evaluateTeletrabajoAntiguedad(
+                                solicitud,
+                                employeesByEmpleado.get(solicitud.empleado.trim()),
+                              ).status === 'no-cumple'
+                                ? 'border-l-4 border-red-400 bg-red-950/30 text-red-100 hover:bg-red-950/40'
+                                : ''
+                            }
+                            sort={preferences.sort}
+                            maxHeightClassName="max-h-[360px]"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {isPeriodoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">

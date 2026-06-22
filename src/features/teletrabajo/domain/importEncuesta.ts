@@ -224,6 +224,7 @@ export function importHistoricoTeletrabajoRows(
       index,
     ]),
   );
+  const seenImportKeys = new Set<string>();
 
   let imported = 0;
   let updated = 0;
@@ -277,6 +278,12 @@ export function importHistoricoTeletrabajoRows(
     }
 
     const key = getSolicitudKey(empleado, periodo);
+    if (seenImportKeys.has(key)) {
+      ignored += 1;
+      return;
+    }
+    seenImportKeys.add(key);
+
     const existingIndex = indexByKey.get(key);
     if (existingIndex === undefined) {
       const solicitud: TeletrabajoSolicitud = {
