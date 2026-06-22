@@ -86,9 +86,61 @@ export function buildExcelTableHtml<T>(payload: ExportTablePayload<T>): string {
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SHEET_NAME = 'Exportacion';
+const EXPORT_COLORS = {
+  titleBackground: '#1f2937',
+  generatedText: '#64748b',
+  headerBackground: '#dc2626',
+  headerBorder: '#991b1b',
+  dataText: '#111827',
+  dataBackground: '#ffffff',
+  dataAlternateBackground: '#f8fafc',
+  dataBorder: '#e5e7eb',
+  statePending: '#fef3c7',
+  stateInProgress: '#dbeafe',
+  stateDone: '#dcfce7',
+  stateBlocked: '#fee2e2',
+} as const;
 
 function toExcelColor(hex: string): { argb: string } {
   return { argb: `FF${hex.replace('#', '').toUpperCase()}` };
+}
+
+function normalizeStatusToken(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function getStatusFillColor(columnHeader: string, rawValue: ExportCellValue): string | null {
+  if (normalizeStatusToken(columnHeader) !== 'estado') {
+    return null;
+  }
+
+  const value = normalizeStatusToken(normalizeCellValue(rawValue));
+
+  if (!value) {
+    return null;
+  }
+
+  if (['pendiente', 'por validar', 'pendiente de firma', 'pendiente alegaciones'].some((token) => value.includes(token))) {
+    return EXPORT_COLORS.statePending;
+  }
+
+  if (['en curso', 'abierta', 'abierto', 'nuevo', 'nueva'].some((token) => value.includes(token))) {
+    return EXPORT_COLORS.stateInProgress;
+  }
+
+  if (['resuelta', 'resuelto', 'cerrada', 'cerrado', 'aprobada', 'aprobado', 'validada', 'validado'].some((token) => value.includes(token))) {
+    return EXPORT_COLORS.stateDone;
+  }
+
+  if (['bloqueada', 'bloqueado', 'denegada', 'denegado', 'critica', 'critico', 'error'].some((token) => value.includes(token))) {
+    return EXPORT_COLORS.stateBlocked;
+  }
+
+  return null;
 }
 
 function buildWorksheetName(filename: string): string {
@@ -149,7 +201,7 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
   titleCell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: toExcelColor('#1f2937'),
+    fgColor: toExcelColor(EXPORT_COLORS.titleBackground),
   };
   titleCell.font = { color: toExcelColor('#ffffff'), bold: true, size: 13 };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -157,13 +209,13 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
 
   const generatedCell = worksheet.getCell('A2');
   generatedCell.value = `Generado: ${generatedAt.toLocaleString('es-ES')}`;
-  generatedCell.font = { color: toExcelColor('#94a3b8'), size: 9, bold: false };
+  generatedCell.font = { color: toExcelColor(EXPORT_COLORS.generatedText), size: 9, bold: false };
 
   const filterLabel = payload.filterLabel?.trim();
   if (filterLabel && columnCount > 1) {
     const filterCell = worksheet.getCell('B2');
     filterCell.value = `Filtros: ${filterLabel}`;
-    filterCell.font = { color: toExcelColor('#94a3b8'), size: 9, bold: false };
+    filterCell.font = { color: toExcelColor(EXPORT_COLORS.generatedText), size: 9, bold: false };
   } else if (filterLabel) {
     generatedCell.value = `Generado: ${generatedAt.toLocaleString('es-ES')} · Filtros: ${filterLabel}`;
   }
@@ -177,25 +229,34 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: toExcelColor('#dc2626'),
+      fgColor: toExcelColor(EXPORT_COLORS.headerBackground),
     };
     cell.font = { color: toExcelColor('#ffffff'), bold: true, size: 11 };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.border = { bottom: { style: 'thin', color: toExcelColor('#991b1b') } };
+    cell.border = { bottom: { style: 'thin', color: toExcelColor(EXPORT_COLORS.headerBorder) } };
   });
   headerRow.height = 22;
 
   payload.rows.forEach((row, rowIndex) => {
     const excelRow = worksheet.getRow(rowIndex + 5);
     const isOddDataRow = rowIndex % 2 === 0;
-    const fillColor = toExcelColor(isOddDataRow ? '#1f2937' : '#111827');
+    const rowFillColor = isOddDataRow ? EXPORT_COLORS.dataBackground : EXPORT_COLORS.dataAlternateBackground;
 
     payload.columns.forEach((column, columnIndex) => {
       const value = column.value(row);
       const cell = excelRow.getCell(columnIndex + 1);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: fillColor };
-      cell.font = { color: toExcelColor('#e5e7eb'), size: 10 };
+      const statusFillColor = getStatusFillColor(column.header, value);
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: toExcelColor(statusFillColor ?? rowFillColor),
+      };
+      cell.font = { color: toExcelColor(EXPORT_COLORS.dataText), size: 10 };
       cell.alignment = { horizontal: 'left', vertical: 'middle' };
+      cell.border = {
+        bottom: { style: 'thin', color: toExcelColor(EXPORT_COLORS.dataBorder) },
+      };
 
       if (value === null || value === undefined) {
         cell.value = null;
