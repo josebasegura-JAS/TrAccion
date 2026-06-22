@@ -215,7 +215,7 @@ export function CriterioRrllEditor({
                 {saveError}
               </p>
             )}
-            <ActionButton disabled={!canSubmit} type="submit" variant="save">
+            <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
               Guardar
             </ActionButton>
             <InlineSaveFeedback />
