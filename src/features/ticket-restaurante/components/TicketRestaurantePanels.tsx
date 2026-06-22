@@ -91,6 +91,7 @@ const defaultTicketPeopleTablePreferences: TableViewPreferences<TicketPeopleTabl
     estado: 90,
     actions: 104,
   },
+  columnOrder: null,
 };
 
 const ticketPeopleTableColumnIds: TicketPeopleTableColumnId[] = [
@@ -119,6 +120,7 @@ const defaultTicketAbsencesTablePreferences: TableViewPreferences<TicketAbsences
     afectaTicket: 105,
     actions: 82,
   },
+  columnOrder: null,
 };
 
 const ticketAbsencesTableColumnIds: TicketAbsencesTableColumnId[] = [
@@ -156,6 +158,7 @@ const defaultTicketCalculationTablePreferences: TableViewPreferences<TicketCalcu
       importeTicket: 115,
       total: 110,
     },
+    columnOrder: null,
   };
 
 const monthlyCalculationTableColumnIds: TicketCalculationTableColumnId[] = [
@@ -577,7 +580,7 @@ export function PeoplePanel({
     setIsPersonFormOpen(false);
   };
 
-  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
     useTableViewPreferences<TicketPeopleTableColumnId>({
       storageKey: TICKET_PEOPLE_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTicketPeopleTablePreferences,
@@ -862,12 +865,14 @@ export function PeoplePanel({
         </div>
         <DataTable
           ariaLabel="Personas con derecho a ticket"
+          columnOrder={preferences.columnOrder}
           columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
           columns={peopleColumns}
           emptyMessage="Añade personas manualmente para poder calcular tickets."
           getRowId={(person) => person.empleado}
           maxHeightClassName="max-h-[420px]"
+          onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={onEdit}
           onSortChange={setSort}
@@ -1197,7 +1202,7 @@ export function CalculationPanel({
   const [selectedDetailRow, setSelectedDetailRow] = useState<TicketPersonCalculation | null>(null);
   const validColumnIds =
     mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
-  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
     useTableViewPreferences<TicketCalculationTableColumnId>({
       storageKey:
         mode === 'monthly'
@@ -1414,12 +1419,14 @@ export function CalculationPanel({
             ? 'Cómputo mensual Ticket Restaurante'
             : 'Cómputo cotización Ticket Restaurante'
         }
+        columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
         onResetColumnWidths={resetColumnWidths}
         columns={calculationColumns}
         emptyMessage="No hay personas activas para calcular."
         getRowId={(row) => row.empleado}
         maxHeightClassName="max-h-[460px]"
+        onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onSortChange={setSort}
         rows={calculation.rows}
@@ -1686,7 +1693,7 @@ export function AbsencesTable({
   onYearChange: (value: string) => void;
   year: number;
 }) {
-  const { preferences, setSort, setColumnWidth, resetColumnWidths } =
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
     useTableViewPreferences<TicketAbsencesTableColumnId>({
       storageKey: TICKET_ABSENCES_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTicketAbsencesTablePreferences,
@@ -1869,12 +1876,14 @@ export function AbsencesTable({
       </div>
       <DataTable
         ariaLabel="Ausencias Ticket Restaurante"
+        columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
         columns={absenceColumns}
         emptyMessage="No hay ausencias guardadas."
         getRowId={(absence) => absence.id}
         maxHeightClassName="max-h-[420px]"
+        onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onRowClick={onEdit}
         onSortChange={setSort}
