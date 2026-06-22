@@ -46,6 +46,7 @@ import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/Acti
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
+import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import type { Employee } from '../features/plantilla/domain/employee';
@@ -118,6 +119,7 @@ const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
 const defaultTeletrabajoTablePreferences: TableViewPreferences<TeletrabajoTableColumnId> = {
   sort: null,
   columnWidths: {},
+  columnOrder: null,
 };
 
 const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
@@ -473,7 +475,7 @@ export function TeletrabajoPage({
 
     return filterTeletrabajoSolicitudes(historicalRows, { ...filters, periodo: '' });
   }, [currentPeriodo, filters, solicitudes]);
-  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<TeletrabajoTableColumnId>({
       storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTeletrabajoTablePreferences,
@@ -1169,7 +1171,7 @@ export function TeletrabajoPage({
               payload={{
                 title: 'Solicitudes de teletrabajo',
                 filename: 'teletrabajo-solicitudes',
-                columns: teletrabajoExportColumns,
+                columns: reorderExportColumns(teletrabajoExportColumns, preferences.columnOrder),
                 rows: sortedSolicitudes,
                 filterLabel: teletrabajoFilterLabel,
               }}
@@ -1199,11 +1201,13 @@ export function TeletrabajoPage({
         </div>
         <DataTable
           ariaLabel="Solicitudes de teletrabajo"
+          columnOrder={preferences.columnOrder}
           columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
           columns={teletrabajoTableColumns}
           emptyMessage="No hay solicitudes de teletrabajo para los criterios seleccionados."
           getRowId={(solicitud) => solicitud.id}
+          onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}
@@ -1272,10 +1276,12 @@ export function TeletrabajoPage({
                         <div className="border-t border-metro-border p-2">
                           <DataTable
                             ariaLabel={`Solicitudes históricas de teletrabajo ${group.periodo}`}
+                            columnOrder={preferences.columnOrder}
                             columnWidths={preferences.columnWidths}
                             columns={teletrabajoTableColumns}
                             emptyMessage="No hay solicitudes históricas para este periodo."
                             getRowId={(solicitud) => solicitud.id}
+                            onColumnOrderChange={setColumnOrder}
                             onColumnWidthChange={setColumnWidth}
                             onRowClick={openEditor}
                             onSortChange={setSort}

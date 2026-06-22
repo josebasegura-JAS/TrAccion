@@ -31,6 +31,7 @@ import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
+import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { relativeDate } from '../utils/relativeDate';
@@ -100,6 +101,7 @@ const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnI
     sindicato: 145,
     actions: 88,
   },
+  columnOrder: null,
 };
 
 const tareasTableColumnIds: ActiveTaskTableColumnId[] = [
@@ -469,7 +471,7 @@ export function TareasPage({
     setFilter('origen', '');
   };
 
-  const { preferences, setSort, setColumnWidth, resetColumnWidths } = useTableViewPreferences<ActiveTaskTableColumnId>(
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } = useTableViewPreferences<ActiveTaskTableColumnId>(
     {
       storageKey: TAREAS_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTareasTablePreferences,
@@ -723,7 +725,7 @@ export function TareasPage({
               payload={{
                 title: 'Tareas activas',
                 filename: 'tareas-activas',
-                columns: taskExportColumns,
+                columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
                 rows: sortedTasks,
                 filterLabel: activeTasksFilterLabel,
               }}
@@ -784,12 +786,14 @@ export function TareasPage({
         )}
         <DataTable
           ariaLabel="Tareas activas"
+          columnOrder={preferences.columnOrder}
           columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
           columns={activeTaskColumns}
           emptyMessage="No hay tareas activas con los filtros aplicados."
           getRowId={(task) => task.id}
           maxHeightClassName="max-h-[460px]"
+          onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}

@@ -18,6 +18,7 @@ import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
+import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -70,6 +71,7 @@ const defaultPlantillaTablePreferences: TableViewPreferences<EmployeeTableColumn
     direccionOrganizativa: 180,
     actions: 92,
   },
+  columnOrder: null,
 };
 
 const plantillaTableColumnIds: EmployeeTableColumnId[] = [
@@ -184,7 +186,7 @@ export function PlantillaPage() {
     setFilter('direccionOrganizativa', '');
   };
 
-  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } =
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<EmployeeTableColumnId>({
       storageKey: PLANTILLA_TABLE_STORAGE_KEY,
       defaultPreferences: defaultPlantillaTablePreferences,
@@ -448,7 +450,7 @@ export function PlantillaPage() {
               payload={{
                 title: 'Personas en plantilla',
                 filename: 'plantilla-personas',
-                columns: employeeExportColumns,
+                columns: reorderExportColumns(employeeExportColumns, preferences.columnOrder),
                 rows: sortedEmployees,
                 filterLabel: employeeFilterLabel,
               }}
@@ -469,11 +471,13 @@ export function PlantillaPage() {
         </div>
         <DataTable
           ariaLabel="Personas en plantilla"
+          columnOrder={preferences.columnOrder}
           columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
           columns={employeeTableColumns}
           emptyMessage="No hay personas que coincidan con los filtros."
           getRowId={(employee) => employee.empleado}
+          onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}
