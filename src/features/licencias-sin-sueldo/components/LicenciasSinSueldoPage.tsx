@@ -407,7 +407,7 @@ function LicenseEditor({
                 module="licencias-sin-sueldo"
               />
             )}
-            <ActionButton disabled={isReadOnly || isSaving} onClick={handleSave} size="sm" variant="save">{isSaving ? 'Guardando…' : 'Guardar'}</ActionButton><InlineSaveFeedback />
+            <ActionButton disabled={isReadOnly || isSaving} iconOnly={false} onClick={handleSave} size="sm" variant="save">{isSaving ? 'Guardando…' : 'Guardar'}</ActionButton><InlineSaveFeedback />
           </div>
         </div>
       </div>
