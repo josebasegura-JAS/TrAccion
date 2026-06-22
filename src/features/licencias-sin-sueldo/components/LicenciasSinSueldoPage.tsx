@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
@@ -7,8 +7,10 @@ import { useTableViewPreferences, type TableViewPreferences } from '../../../sha
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
@@ -56,9 +58,6 @@ const defaultTablePreferences: TableViewPreferences<LicenciasTableColumnId> = {
   columnWidths: {},
 };
 
-const inputClass = 'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60';
-const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-metro-muted';
-
 const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
@@ -91,9 +90,6 @@ const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
 ];
-
-const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50';
-const secondaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red disabled:cursor-not-allowed disabled:opacity-50';
 
 const estadoLabels: Record<LicenciaSinSueldoEstado, string> = {
   pendiente_aprobacion: 'Pendiente aprobar',
@@ -313,32 +309,32 @@ function LicenseEditor({
           {mode === 'edit' && draft.estado !== 'historico' && (
             <div className="flex flex-wrap gap-2 rounded-xl border border-metro-border bg-slate-950/10 p-3">
               <span className="w-full text-xs font-semibold uppercase tracking-wide text-metro-muted">Flujo</span>
-              <button
-                className={secondaryButtonClass}
+              <ActionButton
+                variant="approve"
+                iconOnly={false}
                 disabled={draft.estado !== 'pendiente_aprobacion'}
                 onClick={() => updateDraft('estado', 'pendiente_firma')}
-                type="button"
               >
                 Aprobar
-              </button>
-              <button
-                className={secondaryButtonClass}
+              </ActionButton>
+              <ActionButton
+                variant="secondary"
+                iconOnly={false}
                 disabled={draft.estado !== 'pendiente_firma'}
                 onClick={() => updateDraft('estado', 'vigente')}
-                type="button"
               >
                 Firma recibida / finalizar
-              </button>
+              </ActionButton>
             </div>
           )}
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <label className={labelClass}>Nº empleado
-              <input className={inputClass} onBlur={handleEmployeeNumberBlur} onChange={(event) => updateDraft('numeroEmpleado', event.target.value)} value={draft.numeroEmpleado} />
-            </label>
-            <label className={labelClass}>Buscar en plantilla
+            <FieldLabel>Nº empleado
+              <Input onBlur={handleEmployeeNumberBlur} onChange={(event) => updateDraft('numeroEmpleado', event.target.value)} value={draft.numeroEmpleado} />
+            </FieldLabel>
+            <FieldLabel>Buscar en plantilla
               <div className="relative">
-                <input className={inputClass} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Número o nombre" value={employeeSearch} />
+                <Input onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Número o nombre" value={employeeSearch} />
                 {suggestions.length > 0 && (
                   <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-xl border border-metro-border bg-metro-surface shadow-xl">
                     {suggestions.map((suggestion) => (
@@ -349,41 +345,41 @@ function LicenseEditor({
                   </div>
                 )}
               </div>
-            </label>
-            <label className={labelClass}>Nombre completo
-              <input className={inputClass} onChange={(event) => updateDraft('nombreCompleto', event.target.value)} value={draft.nombreCompleto} />
-            </label>
-            <label className={labelClass}>Tipo
-              <select className={inputClass} onChange={(event) => updateDraft('tipo', event.target.value as LicenciaSinSueldoTipo)} value={draft.tipo}>
+            </FieldLabel>
+            <FieldLabel>Nombre completo
+              <Input onChange={(event) => updateDraft('nombreCompleto', event.target.value)} value={draft.nombreCompleto} />
+            </FieldLabel>
+            <FieldLabel>Tipo
+              <Select onChange={(event) => updateDraft('tipo', event.target.value as LicenciaSinSueldoTipo)} value={draft.tipo}>
                 {licenciaSinSueldoTipos.map((tipo) => <option key={tipo}>{tipo}</option>)}
-              </select>
-            </label>
-            <label className={labelClass}>Fecha solicitud
-              <input className={inputClass} onChange={(event) => updateDraft('fechaSolicitud', event.target.value)} type="date" value={draft.fechaSolicitud} />
-            </label>
-            <label className={labelClass}>Estado
-              <select className={inputClass} onChange={(event) => updateDraft('estado', event.target.value as LicenciaSinSueldoEstado)} value={draft.estado}>
+              </Select>
+            </FieldLabel>
+            <FieldLabel>Fecha solicitud
+              <Input onChange={(event) => updateDraft('fechaSolicitud', event.target.value)} type="date" value={draft.fechaSolicitud} />
+            </FieldLabel>
+            <FieldLabel>Estado
+              <Select onChange={(event) => updateDraft('estado', event.target.value as LicenciaSinSueldoEstado)} value={draft.estado}>
                 {licenciaSinSueldoEstados.map((estado) => <option key={estado} value={estado}>{formatEstado(estado)}</option>)}
-              </select>
-            </label>
-            <label className={labelClass}>Fecha inicio
-              <input className={inputClass} onChange={(event) => updateDraft('fechaInicio', event.target.value)} type="date" value={draft.fechaInicio} />
-            </label>
-            <label className={labelClass}>Fecha fin
-              <input className={inputClass} disabled={draft.tipo === 'Año de Libre Disposición'} onChange={(event) => updateDraft('fechaFin', event.target.value)} type="date" value={draft.fechaFin} />
-            </label>
+              </Select>
+            </FieldLabel>
+            <FieldLabel>Fecha inicio
+              <Input onChange={(event) => updateDraft('fechaInicio', event.target.value)} type="date" value={draft.fechaInicio} />
+            </FieldLabel>
+            <FieldLabel>Fecha fin
+              <Input disabled={draft.tipo === 'Año de Libre Disposición'} onChange={(event) => updateDraft('fechaFin', event.target.value)} type="date" value={draft.fechaFin} />
+            </FieldLabel>
           </div>
 
-          <label className={labelClass}>Observaciones
-            <textarea className={`${inputClass} min-h-24 resize-y`} onChange={(event) => updateDraft('observaciones', event.target.value)} value={draft.observaciones} />
-          </label>
+          <FieldLabel>Observaciones
+            <Textarea className="min-h-24 resize-y" onChange={(event) => updateDraft('observaciones', event.target.value)} value={draft.observaciones} />
+          </FieldLabel>
 
           <section className="rounded-xl border border-metro-border bg-slate-950/10 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="text-xs font-bold uppercase tracking-wide text-metro-muted">Actualizaciones</h3>
-              <button className={secondaryButtonClass} onClick={addUpdate} type="button">Añadir</button>
+              <ActionButton variant="add" iconOnly={false} onClick={addUpdate}>Añadir</ActionButton>
             </div>
-            <textarea className={`${inputClass} min-h-16`} onChange={(event) => setNewUpdate(event.target.value)} placeholder="Nueva observación o actualización" value={newUpdate} />
+            <Textarea className="min-h-16" onChange={(event) => setNewUpdate(event.target.value)} placeholder="Nueva observación o actualización" value={newUpdate} />
             <div className="mt-3 space-y-2">
               {draft.actualizaciones.length === 0 ? (
                 <p className="text-xs text-metro-muted">Sin actualizaciones registradas.</p>
@@ -401,12 +397,11 @@ function LicenseEditor({
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t border-metro-border px-5 py-4">
-          <div>{mode === 'edit' && <button className={secondaryButtonClass} disabled={isReadOnly} onClick={onDelete} type="button"><Trash2 size={16} /> Eliminar</button>}</div>
+          <div>{mode === 'edit' && <ActionButton variant="delete" iconOnly={false} disabled={isReadOnly} onClick={onDelete}>Eliminar</ActionButton>}</div>
           <div className="flex flex-wrap gap-2">
-            <button className={secondaryButtonClass} onClick={onClose} type="button">Cancelar</button>
+            <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>Cancelar</ActionButton>
             {mode === 'edit' && record && (
               <AuditHistoryButton
-                className={secondaryButtonClass}
                 entityId={record.id}
                 entityTitle={record.nombreCompleto || 'Licencia sin nombre'}
                 module="licencias-sin-sueldo"
@@ -484,7 +479,7 @@ function LicenciasTable({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-metro-muted">{records.length} registros visibles</p>
         <div className="flex flex-wrap items-center gap-2">
-          <button className={secondaryButtonClass} onClick={resetPreferences} type="button"><RotateCcw size={14} /> Vista</button>
+          <ActionButton size="sm" variant="secondary" iconOnly={false} onClick={resetPreferences}><RotateCcw size={14} /> Vista</ActionButton>
           <ExportPrintButtons payload={{ title, filename: title, columns: exportColumns, rows: records, filterLabel: `${records.length} registros filtrados` }} />
         </div>
       </div>
@@ -707,41 +702,38 @@ export function LicenciasSinSueldoPage() {
       className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="licencias-sin-sueldo"
     >
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-metro-text">Licencias sin sueldo y permisos no retribuidos</h2>
-            <ModuleHelpButton
-              title="Licencias sin sueldo y permisos no retribuidos"
-              subtitle="Guía rápida de estados, reglas, vigencia, histórico y generación documental."
-              sections={LICENCIAS_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-sm text-metro-muted">Seguimiento por aprobación, firma, vigencia e histórico.</p>
-        </div>
-        <button className={buttonClass} onClick={() => setEditor({ mode: 'create', record: null })} type="button"><Plus size={16} /> Nueva solicitud</button>
-      </div>
+      <PageHeader
+        title="Licencias sin sueldo y permisos no retribuidos"
+        subtitle="Seguimiento por aprobación, firma, vigencia e histórico."
+        helpSections={LICENCIAS_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de estados, reglas, vigencia, histórico y generación documental."
+        className="mb-0"
+        actions={
+          <ActionButton variant="add" iconOnly={false} onClick={() => setEditor({ mode: 'create', record: null })}>
+            Nueva solicitud
+          </ActionButton>
+        }
+      />
 
       <div className="grid gap-3 rounded-2xl border border-metro-border bg-metro-panel p-4 md:grid-cols-3">
-        <label className={labelClass}>Buscar
+        <FieldLabel>Buscar
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted" size={15} />
-            <input className={`${inputClass} pl-9`} onChange={(event) => setQuery(event.target.value)} placeholder="Número, nombre, tipo o estado" value={query} />
+            <Input className="pl-9" onChange={(event) => setQuery(event.target.value)} placeholder="Número, nombre, tipo o estado" value={query} />
           </div>
-        </label>
-        <label className={labelClass}>Tipo
-          <select className={inputClass} onChange={(event) => setTypeFilter(event.target.value as 'todos' | LicenciaSinSueldoTipo)} value={typeFilter}>
+        </FieldLabel>
+        <FieldLabel>Tipo
+          <Select onChange={(event) => setTypeFilter(event.target.value as 'todos' | LicenciaSinSueldoTipo)} value={typeFilter}>
             <option value="todos">Todos</option>
             {licenciaSinSueldoTipos.map((tipo) => <option key={tipo}>{tipo}</option>)}
-          </select>
-        </label>
-        <label className={labelClass}>Año histórico
-          <select className={inputClass} onChange={(event) => setYearFilter(event.target.value)} value={yearFilter}>
+          </Select>
+        </FieldLabel>
+        <FieldLabel>Año histórico
+          <Select onChange={(event) => setYearFilter(event.target.value)} value={yearFilter}>
             <option value="todos">Todos</option>
             {historicalYears.map((year) => <option key={year} value={year}>{year || 'Sin año'}</option>)}
-          </select>
-        </label>
+          </Select>
+        </FieldLabel>
       </div>
 
       {wordStatus && (

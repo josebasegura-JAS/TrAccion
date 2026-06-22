@@ -1,4 +1,4 @@
-import { MailPlus, RotateCcw, Save, Trash2, Upload } from 'lucide-react';
+import { MailPlus, RotateCcw, Save, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildEspecialesHtmlBody,
@@ -19,7 +19,10 @@ import { useEspecialesStore } from '../store/useEspecialesStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { withSharedModuleLocks } from '../../../services/sharedModuleLock';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { FieldLabel, Input, Textarea } from '../../../components/ui/Field';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -39,14 +42,6 @@ const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
 ];
-
-const inputClass =
-  'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red';
-const labelClass = 'block text-xs font-semibold uppercase tracking-wide text-metro-muted';
-const buttonClass =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:bg-metro-secondary';
-const secondaryButtonClass =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:text-metro-red disabled:cursor-not-allowed disabled:text-metro-secondary';
 
 const recipientExportColumns: ExportColumn<EspecialRecipient>[] = [
   { key: 'name', header: 'Nombre', value: (recipient) => recipient.name },
@@ -371,40 +366,28 @@ export function EspecialesPage() {
   return (
     <section className="space-y-4" id="especiales">
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
-        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Especiales
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-bold text-metro-text">Especiales</h2>
-              <ModuleHelpButton
-                title="Especiales"
-                subtitle="Guía rápida de comunicaciones Outlook, destinatarios, plantilla HTML y mensajes .msg."
-                sections={ESPECIALES_HELP_SECTIONS}
-              />
-            </div>
-            <p className="mt-0.5 text-base text-metro-muted">
-              Generación asistida de comunicaciones Outlook para servicios especiales.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className={buttonClass}
-              disabled={Boolean(draftUnavailableReason) || isGeneratingDraft}
-              onClick={() => void createOutlookDraft()}
-              type="button"
-            >
-              <MailPlus size={16} />
-              {isGeneratingDraft
-                ? 'Generando borrador en Outlook...'
-                : 'Generar borrador en Outlook'}
-            </button>
-            <button className={secondaryButtonClass} onClick={resetForm} type="button">
-              <RotateCcw size={16} /> Limpiar formulario
-            </button>
-          </div>
-        </div>
+        <PageHeader
+          title="Especiales"
+          subtitle="Generación asistida de comunicaciones Outlook para servicios especiales."
+          helpSections={ESPECIALES_HELP_SECTIONS}
+          helpSubtitle="Guía rápida de comunicaciones Outlook, destinatarios, plantilla HTML y mensajes .msg."
+          actions={
+            <>
+              <ActionButton
+                variant="save"
+                iconOnly={false}
+                disabled={Boolean(draftUnavailableReason) || isGeneratingDraft}
+                onClick={() => void createOutlookDraft()}
+              >
+                <MailPlus size={16} />
+                {isGeneratingDraft ? 'Generando borrador en Outlook...' : 'Generar borrador en Outlook'}
+              </ActionButton>
+              <ActionButton variant="secondary" iconOnly={false} onClick={resetForm}>
+                <RotateCcw size={16} /> Limpiar formulario
+              </ActionButton>
+            </>
+          }
+        />
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
           <div className="space-y-4">
@@ -446,16 +429,16 @@ export function EspecialesPage() {
             >
               Arrastra aquí el correo .msg del servicio especial o selecciónalo manualmente.
               <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <button
-                  className={secondaryButtonClass}
+                <ActionButton
+                  variant="secondary"
+                  iconOnly={false}
                   onClick={() => fileInputRef.current?.click()}
-                  type="button"
                 >
                   <Upload size={16} /> Seleccionar mensaje
-                </button>
-                <button className={buttonClass} onClick={() => void importMessage()} type="button">
+                </ActionButton>
+                <ActionButton variant="save" iconOnly={false} onClick={() => void importMessage()}>
                   Importar mensaje
-                </button>
+                </ActionButton>
               </div>
               <input
                 ref={fileInputRef}
@@ -474,39 +457,35 @@ export function EspecialesPage() {
             )}
 
             <div className="grid gap-3 lg:grid-cols-3">
-              <label className={labelClass}>
+              <FieldLabel>
                 Evento
-                <input
-                  className={inputClass}
+                <Input
                   onChange={(event) => setField('evento', event.target.value)}
                   placeholder="Nombre del evento"
                   value={serviceDraft.evento}
                 />
-              </label>
-              <label className={labelClass}>
+              </FieldLabel>
+              <FieldLabel>
                 Fecha
-                <input
-                  className={inputClass}
+                <Input
                   onChange={(event) => setField('fecha', event.target.value)}
                   placeholder="DD/MM/AAAA"
                   type="date"
                   value={serviceDraft.fecha}
                 />
-              </label>
-              <label className={labelClass}>
+              </FieldLabel>
+              <FieldLabel>
                 Hora
-                <input
-                  className={inputClass}
+                <Input
                   onChange={(event) => setField('hora', event.target.value)}
                   placeholder="HH:mm"
                   type="time"
                   value={serviceDraft.hora}
                 />
-              </label>
-              <label className={`${labelClass} lg:col-span-3`}>
+              </FieldLabel>
+              <FieldLabel className="lg:col-span-3">
                 Texto Intranet del Servicio Especial
-                <input
-                  className={inputClass}
+                <Input
                   onChange={(event) =>
                     setServiceDraft((current) => ({
                       ...current,
@@ -516,26 +495,24 @@ export function EspecialesPage() {
                   placeholder="Ej.: BEC Alejandro Sanz Obra Lutxana Vía 2 Domingo"
                   value={serviceDraft.enlace}
                 />
-              </label>
-              <label className={`${labelClass} lg:col-span-3`}>
+              </FieldLabel>
+              <FieldLabel className="lg:col-span-3">
                 Ruta común / ubicación de turnos
-                <input
-                  className={inputClass}
+                <Input
                   onChange={(event) => setField('ruta', event.target.value)}
                   placeholder="\\servidor\carpeta\..."
                   value={serviceDraft.ruta}
                 />
-              </label>
-              <label className={`${labelClass} lg:col-span-3`}>
+              </FieldLabel>
+              <FieldLabel className="lg:col-span-3">
                 Observaciones internas (opcional)
-                <textarea
-                  className={inputClass}
+                <Textarea
                   onChange={(event) => setField('observaciones', event.target.value)}
                   placeholder="Solo para uso interno"
                   rows={2}
                   value={serviceDraft.observaciones}
                 />
-              </label>
+              </FieldLabel>
             </div>
 
             <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
@@ -544,14 +521,14 @@ export function EspecialesPage() {
                   <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
                   <p className="text-xs font-semibold text-metro-muted">Asunto: {subject}</p>
                 </div>
-                <button
-                  className={secondaryButtonClass}
+                <ActionButton
+                  variant="secondary"
+                  iconOnly={false}
                   disabled={!hasEditedPreview}
                   onClick={resetPreview}
-                  type="button"
                 >
                   Regenerar preview
-                </button>
+                </ActionButton>
               </div>
               <div
                 ref={previewRef}
@@ -590,52 +567,50 @@ export function EspecialesPage() {
             <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
               <h3 className="text-base font-bold text-metro-text">Destinatario</h3>
               <div className="mt-3 space-y-3">
-                <label className={labelClass}>
+                <FieldLabel>
                   Nombre
-                  <input
-                    className={inputClass}
+                  <Input
                     onChange={(event) =>
                       setRecipientDraft((current) => ({ ...current, name: event.target.value }))
                     }
                     value={recipientDraft.name}
                   />
-                </label>
-                <label className={labelClass}>
+                </FieldLabel>
+                <FieldLabel>
                   Email
-                  <input
-                    className={inputClass}
+                  <Input
                     onChange={(event) =>
                       setRecipientDraft((current) => ({ ...current, email: event.target.value }))
                     }
                     type="email"
                     value={recipientDraft.email}
                   />
-                </label>
+                </FieldLabel>
                 <div className="flex flex-wrap gap-2">
-                  <button className={buttonClass} onClick={() => saveRecipient('to')} type="button">
+                  <ActionButton variant="save" iconOnly={false} onClick={() => saveRecipient('to')}>
                     <Save size={16} />
                     {editingRecipientId ? 'Guardar cambios' : 'Añadir a Para'}
-                  </button>
+                  </ActionButton>
                   {!editingRecipientId && (
-                    <button
-                      className={secondaryButtonClass}
+                    <ActionButton
+                      variant="secondary"
+                      iconOnly={false}
                       onClick={() => saveRecipient('cc')}
-                      type="button"
                     >
                       Añadir a CC
-                    </button>
+                    </ActionButton>
                   )}
-                  <button
-                    className={secondaryButtonClass}
+                  <ActionButton
+                    variant="secondary"
+                    iconOnly={false}
                     onClick={() => {
                       setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
                       setEditingRecipientId(null);
                       setEditingRecipientType('to');
                     }}
-                    type="button"
                   >
                     Cancelar
-                  </button>
+                  </ActionButton>
                 </div>
               </div>
             </div>
@@ -704,22 +679,8 @@ function RecipientTable({
                   <td className="px-3 py-2 text-metro-muted">{item.email}</td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      <button
-                        className="rounded-lg border border-metro-border bg-metro-surface p-1.5 text-metro-muted hover:border-metro-red hover:text-metro-red"
-                        onClick={() => onEdit(item)}
-                        title="Editar"
-                        type="button"
-                      >
-                        <Save size={14} />
-                      </button>
-                      <button
-                        className="rounded-lg border border-metro-border bg-metro-surface p-1.5 text-metro-muted hover:border-metro-red hover:text-metro-red"
-                        onClick={() => onDelete(item.id)}
-                        title="Eliminar"
-                        type="button"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} />
+                      <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} />
                     </div>
                   </td>
                 </tr>

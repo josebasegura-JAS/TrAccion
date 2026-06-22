@@ -1,11 +1,13 @@
-import { Calculator, Copy, Plus, Save } from 'lucide-react';
+import { Calculator } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { FieldLabel, Input, Select } from '../../../components/ui/Field';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
 import {
   BUDGET_ACTUAL_BLOCKS,
@@ -91,19 +93,19 @@ function percent(value: number): string {
 
 function NumberField({ label, min = 0, onChange, step = '0.01', value }: { label: string; min?: number; onChange: (value: number) => void; step?: string; value: number }) {
   return (
-    <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-metro-muted">
+    <FieldLabel className="space-y-1">
       {label}
-      <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none focus:border-metro-red" min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="number" value={value} />
-    </label>
+      <Input className="mt-1" min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="number" value={value} />
+    </FieldLabel>
   );
 }
 
 function TextField({ label, onChange, placeholder, value }: { label: string; onChange: (value: string) => void; placeholder?: string; value: string }) {
   return (
-    <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-metro-muted">
+    <FieldLabel className="space-y-1">
       {label}
-      <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none placeholder:text-metro-muted focus:border-metro-red" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type="text" value={value} />
-    </label>
+      <Input className="mt-1" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type="text" value={value} />
+    </FieldLabel>
   );
 }
 
@@ -273,16 +275,14 @@ export function PresupuestosPage() {
   return (
     <div className="space-y-5 pb-8">
       <div className="rounded-2xl border border-metro-border bg-metro-panel p-5">
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-metro-red">Herramientas RRLL</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-2xl font-bold text-metro-text">Presupuestos RRLL</h2>
-          <ModuleHelpButton
-            title="Presupuestos RRLL"
-            subtitle="Guía rápida de escenarios, simulación, tickets, comparativas y reales ejecutados."
-            sections={PRESUPUESTOS_HELP_SECTIONS}
-          />
-        </div>
-        <p className="text-sm text-metro-muted">Escenarios, simulación anual, Ticket Restaurante, comparativas y reales ejecutados.</p>
+        <PageHeader
+          eyebrow="Herramientas RRLL"
+          title="Presupuestos RRLL"
+          subtitle="Escenarios, simulación anual, Ticket Restaurante, comparativas y reales ejecutados."
+          helpSections={PRESUPUESTOS_HELP_SECTIONS}
+          helpSubtitle="Guía rápida de escenarios, simulación, tickets, comparativas y reales ejecutados."
+          className="mb-0"
+        />
         <div className="mt-2"><InlineSaveFeedback /></div>
         {message && <p className="mt-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-muted">{message}</p>}
       </div>
@@ -293,7 +293,7 @@ export function PresupuestosPage() {
           <NumberField label="Año sugerido" onChange={(value) => setScenarioDraft({ ...scenarioDraft, year: value })} step="1" value={scenarioDraft.year} />
           <NumberField label="Importe ticket" onChange={(value) => setScenarioDraft({ ...scenarioDraft, ticketAmount: value })} value={scenarioDraft.ticketAmount} />
           <TextField label="Notas" onChange={(value) => setScenarioDraft({ ...scenarioDraft, notes: value })} value={scenarioDraft.notes} />
-          <button className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-metro-red px-4 py-2 text-sm font-bold text-white" onClick={saveScenario} type="button"><Plus size={16} />{editingScenarioId ? 'Guardar escenario' : 'Nuevo escenario'}</button>
+          <ActionButton className="mt-5" iconOnly={false} onClick={saveScenario} variant="save">{editingScenarioId ? 'Guardar escenario' : 'Nuevo escenario'}</ActionButton>
         </div>
         <DataTable ariaLabel="Escenarios de presupuesto" columnWidths={{}} columns={scenarioColumns} emptyMessage="No hay escenarios." getRowId={(row) => row.id} onColumnWidthChange={() => undefined} onRowClick={(row) => setActiveScenario(row.id)} onSortChange={() => undefined} rows={visibleScenarios} sort={null} />
       </Section>
@@ -303,12 +303,12 @@ export function PresupuestosPage() {
           <Section title="2. Escenario activo">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-xl font-bold text-metro-text">{activeScenario.name}</p><p className="text-sm text-metro-muted">Año {activeScenario.year} · Ticket base {euro(activeScenario.ticketAmount)} · {activeScenario.notes || 'Sin notas'}</p></div>
-              <div className="flex flex-wrap gap-2"><button className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold" onClick={() => duplicateScenario(activeScenario.id)} type="button"><Copy size={16} />Duplicar</button><ExportPrintButtons payload={{ title: `Presupuesto ${activeScenario.name}`, filename: `presupuesto-${activeScenario.name}`, columns: scenarioExportColumns, rows: scenarioExportRows, filterLabel: `Año ${simulationYear}` }} /></div>
+              <div className="flex flex-wrap gap-2"><ActionButton iconOnly={false} onClick={() => duplicateScenario(activeScenario.id)} variant="duplicate">Duplicar</ActionButton><ExportPrintButtons payload={{ title: `Presupuesto ${activeScenario.name}`, filename: `presupuesto-${activeScenario.name}`, columns: scenarioExportColumns, rows: scenarioExportRows, filterLabel: `Año ${simulationYear}` }} /></div>
             </div>
           </Section>
 
           <Section title="3. Simulación anual">
-            <div className="flex flex-wrap items-end gap-3"><NumberField label="Año de simulación" onChange={setSimulationYear} step="1" value={simulationYear} /><button className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-4 py-2 text-sm font-bold text-white" onClick={() => setLastCalculationAt(new Date().toLocaleString('es-ES'))} type="button"><Calculator size={16} />Calcular / recalcular</button><span className="text-sm text-metro-muted">Estado: calculado · Último cálculo: {lastCalculationAt}</span></div>
+            <div className="flex flex-wrap items-end gap-3"><NumberField label="Año de simulación" onChange={setSimulationYear} step="1" value={simulationYear} /><ActionButton iconOnly={false} onClick={() => setLastCalculationAt(new Date().toLocaleString('es-ES'))} variant="save"><Calculator size={16} />Calcular / recalcular</ActionButton><span className="text-sm text-metro-muted">Estado: calculado · Último cálculo: {lastCalculationAt}</span></div>
           </Section>
 
           <Section title="4. Totales">
@@ -317,13 +317,13 @@ export function PresupuestosPage() {
 
           <div className="grid gap-5 xl:grid-cols-2">
             <Section title="5A. Partidas manuales">
-              <div className="grid gap-2 md:grid-cols-5"><TextField label="Concepto" onChange={(value) => setManualDraft({ ...manualDraft, concept: value })} value={manualDraft.concept} /><TextField label="Categoría" onChange={(value) => setManualDraft({ ...manualDraft, category: value })} value={manualDraft.category} /><NumberField label="Mensual" onChange={(value) => setManualDraft({ ...manualDraft, monthlyAmount: value })} value={manualDraft.monthlyAmount} /><NumberField label="Anual informado" onChange={(value) => setManualDraft({ ...manualDraft, annualAmount: value })} value={manualDraft.annualAmount} /><button className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-metro-red px-4 py-2 text-sm font-bold text-white" onClick={saveManual} type="button"><Save size={16} />Guardar</button></div>
+              <div className="grid gap-2 md:grid-cols-5"><TextField label="Concepto" onChange={(value) => setManualDraft({ ...manualDraft, concept: value })} value={manualDraft.concept} /><TextField label="Categoría" onChange={(value) => setManualDraft({ ...manualDraft, category: value })} value={manualDraft.category} /><NumberField label="Mensual" onChange={(value) => setManualDraft({ ...manualDraft, monthlyAmount: value })} value={manualDraft.monthlyAmount} /><NumberField label="Anual informado" onChange={(value) => setManualDraft({ ...manualDraft, annualAmount: value })} value={manualDraft.annualAmount} /><ActionButton className="mt-5" iconOnly={false} onClick={saveManual} variant="save">Guardar</ActionButton></div>
               <p className="mb-2 text-xs text-metro-muted">Regla: si hay importe anual, prevalece sobre mensual × 12. Mensual equivalente activo: {euro(calculateBudgetManualItemMonth({ monthlyAmount: manualDraft.monthlyAmount, annualAmount: manualDraft.annualAmount }))}</p>
               <DataTable ariaLabel="Partidas manuales" columnWidths={{}} columns={manualColumns} emptyMessage="Sin partidas manuales." getRowId={(row) => row.id} onColumnWidthChange={() => undefined} onSortChange={() => undefined} rows={activeManualItems} sort={null} />
             </Section>
 
             <Section title="5B. Ticket Restaurante">
-              <div className="grid gap-2 md:grid-cols-3"><TextField label="Grupo" onChange={(value) => setTicketDraft({ ...ticketDraft, name: value })} value={ticketDraft.name} /><label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-metro-muted">Tipo<select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setTicketDraft({ ...ticketDraft, calculationType: event.target.value as BudgetTicketCalculationType })} value={ticketDraft.calculationType}>{Object.entries(calculationTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><NumberField label="Importe ticket" onChange={(value) => setTicketDraft({ ...ticketDraft, ticketAmount: value })} value={ticketDraft.ticketAmount} />{ticketDraft.calculationType === 'calendar_people' && <><NumberField label="Personas" onChange={(value) => setTicketDraft({ ...ticketDraft, peopleCount: value })} value={ticketDraft.peopleCount} /><TextField label="Calendario" onChange={(value) => setTicketDraft({ ...ticketDraft, ticketCalendar: value })} placeholder="SSCC" value={ticketDraft.ticketCalendar} /><NumberField label="Absentismo (0-1)" onChange={(value) => setTicketDraft({ ...ticketDraft, absenceRate: value })} step="0.01" value={ticketDraft.absenceRate} /></>}{ticketDraft.calculationType === 'manual_tickets' && <NumberField label="Tickets mensuales" onChange={(value) => setTicketDraft({ ...ticketDraft, manualTickets: value })} value={ticketDraft.manualTickets} />}{ticketDraft.calculationType === 'annual_tickets' && <NumberField label="Tickets anuales" onChange={(value) => setTicketDraft({ ...ticketDraft, annualTickets: value })} value={ticketDraft.annualTickets} />}{ticketDraft.calculationType === 'manual_amount' && <NumberField label="Importe mensual" onChange={(value) => setTicketDraft({ ...ticketDraft, manualMonthlyAmount: value })} value={ticketDraft.manualMonthlyAmount} />}<button className="inline-flex items-center justify-center gap-2 rounded-xl bg-metro-red px-4 py-2 text-sm font-bold text-white" onClick={saveTicket} type="button"><Save size={16} />Guardar grupo</button></div>
+              <div className="grid gap-2 md:grid-cols-3"><TextField label="Grupo" onChange={(value) => setTicketDraft({ ...ticketDraft, name: value })} value={ticketDraft.name} /><FieldLabel className="space-y-1">Tipo<Select className="mt-1" onChange={(event) => setTicketDraft({ ...ticketDraft, calculationType: event.target.value as BudgetTicketCalculationType })} value={ticketDraft.calculationType}>{Object.entries(calculationTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></FieldLabel><NumberField label="Importe ticket" onChange={(value) => setTicketDraft({ ...ticketDraft, ticketAmount: value })} value={ticketDraft.ticketAmount} />{ticketDraft.calculationType === 'calendar_people' && <><NumberField label="Personas" onChange={(value) => setTicketDraft({ ...ticketDraft, peopleCount: value })} value={ticketDraft.peopleCount} /><TextField label="Calendario" onChange={(value) => setTicketDraft({ ...ticketDraft, ticketCalendar: value })} placeholder="SSCC" value={ticketDraft.ticketCalendar} /><NumberField label="Absentismo (0-1)" onChange={(value) => setTicketDraft({ ...ticketDraft, absenceRate: value })} step="0.01" value={ticketDraft.absenceRate} /></>}{ticketDraft.calculationType === 'manual_tickets' && <NumberField label="Tickets mensuales" onChange={(value) => setTicketDraft({ ...ticketDraft, manualTickets: value })} value={ticketDraft.manualTickets} />}{ticketDraft.calculationType === 'annual_tickets' && <NumberField label="Tickets anuales" onChange={(value) => setTicketDraft({ ...ticketDraft, annualTickets: value })} value={ticketDraft.annualTickets} />}{ticketDraft.calculationType === 'manual_amount' && <NumberField label="Importe mensual" onChange={(value) => setTicketDraft({ ...ticketDraft, manualMonthlyAmount: value })} value={ticketDraft.manualMonthlyAmount} />}<ActionButton iconOnly={false} onClick={saveTicket} variant="save">Guardar grupo</ActionButton></div>
               <p className="mb-2 text-xs text-metro-muted">Calendarios disponibles: {calendars.filter((calendar) => !calendar.deletedAt).map((calendar) => calendar.nombre).join(', ') || 'sin calendarios'}</p>
               <DataTable ariaLabel="Grupos Ticket Restaurante" columnWidths={{}} columns={ticketColumns} emptyMessage="Sin grupos Ticket." getRowId={(row) => row.id} onColumnWidthChange={() => undefined} onSortChange={() => undefined} rows={activeTicketGroups} sort={null} />
             </Section>
@@ -336,17 +336,17 @@ export function PresupuestosPage() {
       )}
 
       <Section title="7. Comparativa de escenarios">
-        <div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase text-metro-muted">Escenario A<select className="mt-1 block rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setComparisonAId(event.target.value)} value={comparisonAId}><option value="">Selecciona</option>{visibleScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select></label><label className="text-xs font-semibold uppercase text-metro-muted">Escenario B<select className="mt-1 block rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setComparisonBId(event.target.value)} value={comparisonBId}><option value="">Selecciona</option>{visibleScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select></label><NumberField label="Año" onChange={setComparisonYear} step="1" value={comparisonYear} /><ExportPrintButtons payload={{ title: 'Comparativa de escenarios', filename: 'comparativa-presupuestos', columns: comparisonExportColumns, rows: comparisonRows, filterLabel: `Año ${comparisonYear}` }} /></div>
+        <div className="flex flex-wrap items-end gap-3"><FieldLabel className="text-xs">Escenario A<Select className="mt-1" onChange={(event) => setComparisonAId(event.target.value)} value={comparisonAId}><option value="">Selecciona</option>{visibleScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</Select></FieldLabel><FieldLabel className="text-xs">Escenario B<Select className="mt-1" onChange={(event) => setComparisonBId(event.target.value)} value={comparisonBId}><option value="">Selecciona</option>{visibleScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</Select></FieldLabel><NumberField label="Año" onChange={setComparisonYear} step="1" value={comparisonYear} /><ExportPrintButtons payload={{ title: 'Comparativa de escenarios', filename: 'comparativa-presupuestos', columns: comparisonExportColumns, rows: comparisonRows, filterLabel: `Año ${comparisonYear}` }} /></div>
         <DataTable ariaLabel="Comparativa de escenarios" columnWidths={{}} columns={comparisonTableColumns} emptyMessage="Selecciona dos escenarios." getRowId={(row) => String(row.month)} onColumnWidthChange={() => undefined} onSortChange={() => undefined} rows={comparisonRows} sort={null} />
       </Section>
 
       <Section title="8. Reales ejecutados">
-        <div className="grid gap-2 md:grid-cols-6"><NumberField label="Año" onChange={(value) => setActualDraft({ ...actualDraft, year: value })} step="1" value={actualDraft.year} /><label className="text-xs font-semibold uppercase text-metro-muted">Mes<select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setActualDraft({ ...actualDraft, month: Number(event.target.value) })} value={actualDraft.month}>{BUDGET_MONTHS.map((month) => <option key={month} value={month}>{MONTH_NAMES[month - 1]}</option>)}</select></label><label className="text-xs font-semibold uppercase text-metro-muted">Bloque<select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setActualDraft({ ...actualDraft, block: event.target.value as BudgetActualBlock })} value={actualDraft.block}>{BUDGET_ACTUAL_BLOCKS.map((block) => <option key={block} value={block}>{block}</option>)}</select></label><TextField label="Concepto" onChange={(value) => setActualDraft({ ...actualDraft, concept: value })} value={actualDraft.concept} /><NumberField label="Importe" onChange={(value) => setActualDraft({ ...actualDraft, amount: value })} value={actualDraft.amount} /><button className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-metro-red px-4 py-2 text-sm font-bold text-white" onClick={saveActual} type="button"><Save size={16} />Guardar real</button></div>
+        <div className="grid gap-2 md:grid-cols-6"><NumberField label="Año" onChange={(value) => setActualDraft({ ...actualDraft, year: value })} step="1" value={actualDraft.year} /><FieldLabel className="text-xs">Mes<Select className="mt-1" onChange={(event) => setActualDraft({ ...actualDraft, month: Number(event.target.value) })} value={actualDraft.month}>{BUDGET_MONTHS.map((month) => <option key={month} value={month}>{MONTH_NAMES[month - 1]}</option>)}</Select></FieldLabel><FieldLabel className="text-xs">Bloque<Select className="mt-1" onChange={(event) => setActualDraft({ ...actualDraft, block: event.target.value as BudgetActualBlock })} value={actualDraft.block}>{BUDGET_ACTUAL_BLOCKS.map((block) => <option key={block} value={block}>{block}</option>)}</Select></FieldLabel><TextField label="Concepto" onChange={(value) => setActualDraft({ ...actualDraft, concept: value })} value={actualDraft.concept} /><NumberField label="Importe" onChange={(value) => setActualDraft({ ...actualDraft, amount: value })} value={actualDraft.amount} /><ActionButton className="mt-5" iconOnly={false} onClick={saveActual} variant="save">Guardar real</ActionButton></div>
         <DataTable ariaLabel="Reales ejecutados" columnWidths={{}} columns={actualColumns} emptyMessage="Sin reales ejecutados." getRowId={(row) => row.id} onColumnWidthChange={() => undefined} onSortChange={() => undefined} rows={actuals.filter((actual) => !actual.deletedAt)} sort={null} />
       </Section>
 
       <Section title="9. Presupuesto vs real ejecutado">
-        <div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase text-metro-muted">Escenario<select className="mt-1 block rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setActualScenarioId(event.target.value)} value={actualScenarioId}><option value="">Activo</option>{visibleScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select></label><NumberField label="Año" onChange={setActualYear} step="1" value={actualYear} /><label className="text-xs font-semibold uppercase text-metro-muted">Mes de corte<select className="mt-1 block rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text" onChange={(event) => setCutoffMonth(Number(event.target.value))} value={cutoffMonth}>{BUDGET_MONTHS.map((month) => <option key={month} value={month}>{MONTH_NAMES[month - 1]}</option>)}</select></label>{actualDashboard && <ExportPrintButtons payload={{ title: 'Presupuesto vs real ejecutado', filename: 'presupuesto-vs-real', columns: actualComparisonExportColumns, rows: actualDashboard.rows, filterLabel: `Año ${actualYear}; corte ${MONTH_NAMES[cutoffMonth - 1]}` }} />}</div>
+        <div className="flex flex-wrap items-end gap-3"><FieldLabel className="text-xs">Escenario<Select className="mt-1" onChange={(event) => setActualScenarioId(event.target.value)} value={actualScenarioId}><option value="">Activo</option>{visibleScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</Select></FieldLabel><NumberField label="Año" onChange={setActualYear} step="1" value={actualYear} /><FieldLabel className="text-xs">Mes de corte<Select className="mt-1" onChange={(event) => setCutoffMonth(Number(event.target.value))} value={cutoffMonth}>{BUDGET_MONTHS.map((month) => <option key={month} value={month}>{MONTH_NAMES[month - 1]}</option>)}</Select></FieldLabel>{actualDashboard && <ExportPrintButtons payload={{ title: 'Presupuesto vs real ejecutado', filename: 'presupuesto-vs-real', columns: actualComparisonExportColumns, rows: actualDashboard.rows, filterLabel: `Año ${actualYear}; corte ${MONTH_NAMES[cutoffMonth - 1]}` }} />}</div>
         {actualDashboard && <><div className="my-3 grid gap-3 md:grid-cols-4">{[['Presupuesto acumulado', actualDashboard.budgetTotal], ['Real acumulado', actualDashboard.actualTotal], ['Desviación €', actualDashboard.difference], ['Desviación %', percent(actualDashboard.differenceRate)]].map(([label, value]) => <div className="rounded-xl border border-metro-border bg-metro-surface p-3" key={String(label)}><p className="text-xs font-bold uppercase text-metro-muted">{label}</p><p className="text-xl font-bold text-metro-text">{typeof value === 'number' ? euro(value) : value}</p></div>)}</div><DataTable ariaLabel="Dashboard presupuesto vs real" columnWidths={{}} columns={actualComparisonTableColumns} emptyMessage="Sin datos." getRowId={(row) => row.block} onColumnWidthChange={() => undefined} onSortChange={() => undefined} rows={actualDashboard.rows} sort={null} /></>}
       </Section>
     </div>

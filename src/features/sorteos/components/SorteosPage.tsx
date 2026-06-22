@@ -16,7 +16,10 @@ import { useSorteosStore } from '../store/useSorteosStore';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { withSharedModuleLocks } from '../../../services/sharedModuleLock';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { Input } from '../../../components/ui/Field';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -251,22 +254,13 @@ export function SorteosPage() {
       className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="sorteos"
     >
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-metro-text">Sorteos</h2>
-            <ModuleHelpButton
-              title="Sorteos"
-              subtitle="Guía rápida de creación de sorteos, exclusiones, ganadores e histórico."
-              sections={SORTEOS_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-sm text-metro-muted">
-            Gestión compacta de sorteos, exclusiones e histórico de resultados.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Sorteos"
+        subtitle="Gestión compacta de sorteos, exclusiones e histórico de resultados."
+        helpSections={SORTEOS_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de creación de sorteos, exclusiones, ganadores e histórico."
+        className="mb-0"
+      />
 
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)] xl:items-start">
         <div className="min-w-0 rounded-xl border border-metro-border bg-metro-panel p-3">
@@ -282,8 +276,8 @@ export function SorteosPage() {
           <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(180px,1fr)_minmax(140px,0.45fr)_minmax(96px,0.3fr)_auto] md:items-end">
             <label className="min-w-0 text-xs font-semibold text-metro-text">
               Título
-              <input
-                className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              <Input
+                className="mt-1 w-full min-w-0"
                 onChange={(event) => handleDraftChange('title', event.target.value)}
                 disabled={isActionDisabled}
                 value={draft.title}
@@ -291,8 +285,8 @@ export function SorteosPage() {
             </label>
             <label className="min-w-0 text-xs font-semibold text-metro-text">
               Fecha
-              <input
-                className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              <Input
+                className="mt-1 w-full min-w-0"
                 onChange={(event) => handleDraftChange('date', event.target.value)}
                 type="date"
                 disabled={isActionDisabled}
@@ -301,8 +295,8 @@ export function SorteosPage() {
             </label>
             <label className="min-w-0 text-xs font-semibold text-metro-text">
               Nº ganadores
-              <input
-                className="mt-1 w-full min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              <Input
+                className="mt-1 w-full min-w-0"
                 min="1"
                 onChange={(event) => handleDraftChange('winnersCount', Number(event.target.value))}
                 type="number"
@@ -310,15 +304,16 @@ export function SorteosPage() {
                 value={draft.winnersCount}
               />
             </label>
-            <button
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-600 md:w-auto md:self-end"
+            <ActionButton
+              variant="save"
+              iconOnly={false}
+              className="w-full md:w-auto md:self-end"
               disabled={isActionDisabled}
               onClick={handleDraw}
-              type="button"
             >
               <Gift className="h-4 w-4" />
               Sortear
-            </button>
+            </ActionButton>
           </div>
           {errors.length > 0 && (
             <div className="mt-2 rounded-lg border border-red-300/40 bg-red-500/10 p-2 text-sm text-red-100">
