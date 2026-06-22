@@ -156,6 +156,15 @@ function getMonthMatrix(monthDate: Date): (Date | null)[] {
   return cells;
 }
 
+
+function getLatestTeletrabajoPeriodo(solicitudes: readonly { periodo: string }[]): string {
+  return Array.from(
+    new Set(solicitudes.map((solicitud) => solicitud.periodo.trim()).filter(Boolean)),
+  ).sort((first, second) =>
+    second.localeCompare(first, 'es', { numeric: true, sensitivity: 'base' }),
+  )[0] ?? '';
+}
+
 function groupByState(tasks: readonly Task[]): Record<TaskState, number> {
   return tasks.reduce<Record<TaskState, number>>(
     (accumulator, task) => {
@@ -292,9 +301,22 @@ export function DashboardCards({
     () => paritariaSessions.filter((session) => session.status === 'open'),
     [paritariaSessions],
   );
-  const activeTelework = useMemo(
+  const nonDeletedTelework = useMemo(
     () => solicitudes.filter((solicitud) => !solicitud.deletedAt),
     [solicitudes],
+  );
+  const activeTeleworkPeriodo = useMemo(
+    () => getLatestTeletrabajoPeriodo(nonDeletedTelework),
+    [nonDeletedTelework],
+  );
+  const activeTelework = useMemo(
+    () =>
+      activeTeleworkPeriodo
+        ? nonDeletedTelework.filter(
+            (solicitud) => solicitud.periodo.trim() === activeTeleworkPeriodo,
+          )
+        : nonDeletedTelework,
+    [activeTeleworkPeriodo, nonDeletedTelework],
   );
   const pendingTelework = useMemo(
     () => activeTelework.filter((solicitud) => solicitud.estado === 'pendiente'),
@@ -632,7 +654,7 @@ export function DashboardCards({
               onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
             />
             <DashboardHeaderPill label="Comité" value={openCommitteeSessions.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Sesiones de Comité', subtitle: `${openCommitteeSessions.length} sesión${openCommitteeSessions.length === 1 ? '' : 'es'} abierta${openCommitteeSessions.length === 1 ? '' : 's'}`, emptyText: 'No hay sesiones de Comité abiertas.', items: committeePopupItems().filter((item) => item.type === 'committee') })} />
-            <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })} />
+            <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })} />
           </div>
         </div>
       </section>
@@ -648,7 +670,7 @@ export function DashboardCards({
               } else if (kpi.title === 'Comité') {
                 openPopup({ eyebrow: 'Dashboard', title: 'Comité y puntos abiertos', subtitle: `${openCommitteeSessions.length} sesiones · ${committeeTasks.length} puntos`, emptyText: 'No hay sesiones ni puntos abiertos.', items: [...committeePopupItems().filter((item) => item.type === 'committee'), ...taskPopupItems(committeeTasks)] });
               } else if (kpi.title === 'Teletrabajo') {
-                openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes de teletrabajo', subtitle: `${activeTelework.length} solicitud${activeTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes de teletrabajo.', items: teleworkPopupItems(activeTelework) });
+                openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes de teletrabajo', subtitle: `${activeTelework.length} solicitud${activeTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes de teletrabajo.', items: teleworkPopupItems(activeTelework) });
               } else if (kpi.title === 'Tickets') {
                 showTicketPopup();
               }
@@ -723,7 +745,7 @@ export function DashboardCards({
               className="border-blue-500"
               title={`${pendingTelework.length} teletrabajos`}
               subtitle="Pendientes de validar"
-              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
+              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
             />
             <TodayAlert
               className="border-emerald-500"
@@ -854,7 +876,7 @@ export function DashboardCards({
                 icon={Laptop}
                 label="Solicitudes teletrabajo"
                 value={pendingTelework.length}
-                onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes teletrabajo pendientes', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
+                onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes teletrabajo pendientes', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
               />
               <SummaryLine
                 icon={CheckCircle2}
