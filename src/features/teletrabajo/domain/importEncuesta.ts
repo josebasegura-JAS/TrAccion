@@ -8,6 +8,7 @@ import {
   type TeletrabajoDia,
   type TeletrabajoDraft,
   type TeletrabajoSolicitud,
+  type TeletrabajoEstado,
   type TeletrabajoTipoSolicitud,
 } from './solicitud';
 
@@ -46,6 +47,20 @@ export interface ImportEncuestaResult {
   solicitudes: TeletrabajoSolicitud[];
   summary: ImportEncuestaSummary;
   diagnostics: ImportEncuestaDiagnostics;
+}
+
+export interface ImportHistoricoTeletrabajoSummary {
+  imported: number;
+  updated: number;
+  unchanged: number;
+  ignored: number;
+  denegados: number;
+}
+
+export interface ImportHistoricoTeletrabajoResult {
+  solicitudes: TeletrabajoSolicitud[];
+  summary: ImportHistoricoTeletrabajoSummary;
+  periodo: string;
 }
 
 export interface EncuestaParseOptions {
@@ -160,6 +175,253 @@ export function importEncuestaRows(
   const defaultPeriodo = options.defaultPeriodo ?? detectPeriodo(rows) ?? '2026-2027';
   const drafts = rowsToTeletrabajoDrafts(rows, employees, defaultPeriodo, options);
   return upsertEncuestaSolicitudes(currentSolicitudes, drafts, now);
+}
+
+export async function importHistoricoTeletrabajoFromFile(
+  file: File,
+  employees: readonly Employee[],
+  currentSolicitudes: readonly TeletrabajoSolicitud[],
+  options: Pick<EncuestaParseOptions, 'now'> = {},
+): Promise<ImportHistoricoTeletrabajoResult> {
+  const buffer = await file.arrayBuffer();
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const rows =
+    extension === 'csv' || extension === 'tsv' || extension === 'txt'
+      ? parseDelimitedText(new TextDecoder().decode(buffer), extension)
+      : await parseXlsxRows(buffer);
+
+  return importHistoricoTeletrabajoRows(rows, employees, currentSolicitudes, options);
+}
+
+export function importHistoricoTeletrabajoRows(
+  rows: readonly TabularRow[],
+  employees: readonly Employee[],
+  currentSolicitudes: readonly TeletrabajoSolicitud[],
+  options: Pick<EncuestaParseOptions, 'now'> = {},
+): ImportHistoricoTeletrabajoResult {
+  const periodo = detectPeriodo(rows);
+  if (!periodo) {
+    throw new Error('No se ha podido detectar el periodo en el título del fichero.');
+  }
+
+  const headerIndex = findHistoricoHeaderIndex(rows);
+  if (headerIndex < 1) {
+    throw new Error('No se han localizado las cabeceras del histórico de teletrabajo.');
+  }
+
+  const nowDate = options.now ?? new Date();
+  const now = nowDate.toISOString();
+  const parentHeaders = rows[headerIndex - 1] ?? [];
+  const headers = rows[headerIndex] ?? [];
+  const columns = buildHistoricoColumns(parentHeaders, headers);
+  const employeesByEmpleado = new Map(
+    employees.map((employee): [string, Employee] => [employee.empleado.trim(), employee]),
+  );
+  const solicitudes = [...currentSolicitudes];
+  const indexByKey = new Map(
+    solicitudes.map((solicitud, index): [string, number] => [
+      getSolicitudKey(solicitud.empleado, solicitud.periodo),
+      index,
+    ]),
+  );
+
+  let imported = 0;
+  let updated = 0;
+  let unchanged = 0;
+  let ignored = 0;
+  let denegados = 0;
+
+  rows.slice(headerIndex + 1).forEach((row) => {
+    const empleado = getCell(row, columns.empleado).trim();
+    if (!empleado || isAuxiliaryRow(row)) {
+      ignored += 1;
+      return;
+    }
+
+    const nombre = getCell(row, columns.nombre).trim();
+    const detalle = getCell(row, columns.detalle).trim();
+    const direccion = getCell(row, columns.direccion).trim();
+    const informeFavorable = getCell(row, columns.informeFavorable).trim();
+    const estado = normalizeHistoricoEstado(informeFavorable);
+    const employee = employeesByEmpleado.get(empleado);
+    const periodoSolicitud = getCell(row, columns.periodoSolicitud).trim();
+    const observaciones = buildHistoricoObservaciones(
+      getCell(row, columns.observaciones).trim(),
+      periodoSolicitud,
+    );
+    const draft: TeletrabajoDraft = {
+      ...EMPTY_TELETRABAJO_DRAFT,
+      empleado,
+      nombreApellidos: nombre || employee?.nombreApellidos || '',
+      puestoNomina: employee?.puestoNomina || detalle,
+      puestoOrganizativo: detalle || employee?.puestoOrganizativo || employee?.puestoNomina || '',
+      residencia: direccion || employee?.residencia || '',
+      dni: employee?.dni || '',
+      direccionTeletrabajo: employee?.direccionTeletrabajo || '',
+      estado,
+      tipoSolicitud: normalizeHistoricoTipoSolicitud(getCell(row, columns.anteriorTeletrabajado)),
+      diasTeletrabajo: normalizeHistoricoDias(row, columns),
+      fechaSolicitud: '',
+      fechaOrdenador: '',
+      fechaCascos: '',
+      periodo,
+      observaciones,
+      validacionSeguridadInformatica: false,
+      validacionPrevencion: false,
+      validacionJefatura: false,
+      revisado: true,
+    };
+
+    if (estado === 'denegada') {
+      denegados += 1;
+    }
+
+    const key = getSolicitudKey(empleado, periodo);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      const solicitud: TeletrabajoSolicitud = {
+        id: createSolicitudId(),
+        ...draft,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      solicitudes.push(solicitud);
+      indexByKey.set(key, solicitudes.length - 1);
+      imported += 1;
+      return;
+    }
+
+    const previous = solicitudes[existingIndex];
+    const next: TeletrabajoSolicitud = {
+      ...previous,
+      ...draft,
+      createdAt: previous.createdAt,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    if (areHistoricoSolicitudesEquivalent(previous, next)) {
+      unchanged += 1;
+      return;
+    }
+
+    solicitudes[existingIndex] = next;
+    updated += 1;
+  });
+
+  return {
+    solicitudes,
+    periodo,
+    summary: { imported, updated, unchanged, ignored, denegados },
+  };
+}
+
+interface HistoricoColumns {
+  empleado: number;
+  nombre: number;
+  detalle: number;
+  direccion: number;
+  martes: number;
+  miercoles: number;
+  jueves: number;
+  periodoSolicitud: number;
+  informeFavorable: number;
+  anteriorTeletrabajado: number;
+  observaciones: number;
+}
+
+function findHistoricoHeaderIndex(rows: readonly TabularRow[]): number {
+  return rows.findIndex((row) => {
+    const headers = row.map(normalizeHeader);
+    return (
+      headers.some((header) =>
+        ['n empl', 'n empleado', 'num empl', 'num empleado'].includes(header),
+      ) &&
+      headers.includes('nombre') &&
+      headers.includes('martes') &&
+      headers.includes('miercoles') &&
+      headers.includes('jueves')
+    );
+  });
+}
+
+function buildHistoricoColumns(
+  parentHeaders: readonly string[],
+  headers: readonly string[],
+): HistoricoColumns {
+  const combinedHeaders = headers.map((header, index) =>
+    normalizeHeader(header || parentHeaders[index] || ''),
+  );
+
+  const findColumn = (aliases: readonly string[]): number =>
+    combinedHeaders.findIndex((header) =>
+      aliases.some((alias) => header === alias || header.includes(alias)),
+    );
+
+  return {
+    empleado: findColumn(['n empl', 'n empleado', 'num empl', 'num empleado']),
+    nombre: findColumn(['nombre']),
+    detalle: findColumn(['detalle']),
+    direccion: findColumn(['direccion']),
+    martes: findColumn(['martes']),
+    miercoles: findColumn(['miercoles']),
+    jueves: findColumn(['jueves']),
+    periodoSolicitud: findColumn(['periodo 20', 'periodo']),
+    informeFavorable: findColumn(['informe favorable']),
+    anteriorTeletrabajado: findColumn(['ano anterior teletrabajado']),
+    observaciones: findColumn(['observaciones']),
+  };
+}
+
+function getCell(row: readonly string[], index: number): string {
+  return index >= 0 ? (row[index] ?? '') : '';
+}
+
+function isMarked(value: string): boolean {
+  return normalizeHeader(value) === 'x' || normalizeHeader(value) === 'si';
+}
+
+function normalizeHistoricoEstado(informeFavorable: string): TeletrabajoEstado {
+  const normalized = normalizeHeader(informeFavorable);
+  return normalized === 'no' || normalized.includes('deneg') ? 'denegada' : 'aprobada';
+}
+
+function normalizeHistoricoTipoSolicitud(value: string): TeletrabajoTipoSolicitud {
+  return normalizeHeader(value) === 'si' ? 'renovacion' : 'nueva';
+}
+
+function normalizeHistoricoDias(
+  row: readonly string[],
+  columns: HistoricoColumns,
+): TeletrabajoDia[] {
+  const days: TeletrabajoDia[] = [];
+  if (isMarked(getCell(row, columns.martes))) days.push('martes');
+  if (isMarked(getCell(row, columns.miercoles))) days.push('miercoles');
+  if (isMarked(getCell(row, columns.jueves))) days.push('jueves');
+  return days;
+}
+
+function buildHistoricoObservaciones(observaciones: string, periodoSolicitud: string): string {
+  const parts = [];
+  if (periodoSolicitud.trim()) {
+    parts.push(`Periodo solicitado: ${periodoSolicitud.trim()}`);
+  }
+  if (observaciones.trim()) {
+    parts.push(observaciones.trim());
+  }
+  return parts.join('\n');
+}
+
+function areHistoricoSolicitudesEquivalent(
+  previous: TeletrabajoSolicitud,
+  next: TeletrabajoSolicitud,
+): boolean {
+  const ignoredFields = new Set<keyof TeletrabajoSolicitud>(['updatedAt']);
+  return (Object.keys(next) as Array<keyof TeletrabajoSolicitud>).every((field) => {
+    if (ignoredFields.has(field)) return true;
+    return JSON.stringify(previous[field]) === JSON.stringify(next[field]);
+  });
 }
 
 export function rowsToTeletrabajoDrafts(

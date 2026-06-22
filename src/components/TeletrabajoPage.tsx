@@ -48,7 +48,6 @@ import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import type { Employee } from '../features/plantilla/domain/employee';
 
-
 const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
@@ -120,11 +119,20 @@ const defaultTeletrabajoTablePreferences: TableViewPreferences<TeletrabajoTableC
 };
 
 const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
-  { key: 'revisado', header: 'Revisado', value: (solicitud) => solicitud.revisado ? 'Sí' : 'No' },
-  { key: 'estado', header: 'Estado', value: (solicitud) => {
-    const labels: Record<string, string> = { pendiente: 'Pendiente', analizada: 'Analizada', aprobada: 'Aprobada', denegada: 'Rechazada' };
-    return labels[solicitud.estado] ?? solicitud.estado;
-  }},
+  { key: 'revisado', header: 'Revisado', value: (solicitud) => (solicitud.revisado ? 'Sí' : 'No') },
+  {
+    key: 'estado',
+    header: 'Estado',
+    value: (solicitud) => {
+      const labels: Record<string, string> = {
+        pendiente: 'Pendiente',
+        analizada: 'Analizada',
+        aprobada: 'Aprobada',
+        denegada: 'Rechazada',
+      };
+      return labels[solicitud.estado] ?? solicitud.estado;
+    },
+  },
   { key: 'empleado', header: 'Empleado', value: (solicitud) => solicitud.empleado },
   {
     key: 'nombreApellidos',
@@ -321,6 +329,7 @@ export function TeletrabajoPage({
     createPeriodo,
     filters,
     importEncuesta,
+    importHistorico,
     load,
     puestosTeletrabajo,
     remove,
@@ -348,6 +357,7 @@ export function TeletrabajoPage({
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const historicoFileInputRef = useRef<HTMLInputElement | null>(null);
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -484,7 +494,8 @@ export function TeletrabajoPage({
             aprobada: 'Aprobada',
             denegada: 'Rechazada',
           };
-          const className = estadoStyles[s.estado] ?? 'border-metro-border bg-metro-surface text-metro-muted';
+          const className =
+            estadoStyles[s.estado] ?? 'border-metro-border bg-metro-surface text-metro-muted';
           const label = estadoLabels[s.estado] ?? s.estado;
           return (
             <span
@@ -538,7 +549,8 @@ export function TeletrabajoPage({
         id: 'teletrabajable',
         header: 'Cumplimiento',
         accessor: (s) =>
-          getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado).status,
+          getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado)
+            .status,
         render: (s) => {
           const semaforo = getTeletrabajoSemaforo(
             s,
@@ -661,7 +673,14 @@ export function TeletrabajoPage({
         className: 'whitespace-nowrap',
       },
     ],
-    [employeesByEmpleado, generatingWordId, handleGenerateWord, puestosByKey, remove, solicitudesByPuestoCount],
+    [
+      employeesByEmpleado,
+      generatingWordId,
+      handleGenerateWord,
+      puestosByKey,
+      remove,
+      solicitudesByPuestoCount,
+    ],
   );
 
   const sortedSolicitudes = useMemo(
@@ -748,7 +767,6 @@ export function TeletrabajoPage({
     }
   };
 
-
   const handleExportDireccion = useCallback(async () => {
     try {
       await exportTeletrabajoDireccionToExcel({
@@ -834,7 +852,11 @@ export function TeletrabajoPage({
         return;
       }
 
-      if (result.summary.imported === 0 && result.summary.updated === 0 && result.summary.reactivated === 0) {
+      if (
+        result.summary.imported === 0 &&
+        result.summary.updated === 0 &&
+        result.summary.reactivated === 0
+      ) {
         setImportSummary(
           `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
         );
@@ -850,6 +872,22 @@ export function TeletrabajoPage({
         error instanceof Error
           ? `No se pudo importar la encuesta: ${error.message}`
           : 'No se pudo importar la encuesta.',
+      );
+    }
+  };
+
+  const handleImportHistorico = async (file: File) => {
+    try {
+      setImportSummary('Importando histórico de teletrabajo...');
+      const result = await importHistorico(file, employees);
+      setImportSummary(
+        `Histórico ${result.periodo} importado correctamente: ${result.summary.imported} registros creados · ${result.summary.updated} actualizados · ${result.summary.unchanged} sin cambios · ${result.summary.denegados} denegados · ${result.summary.ignored} filas ignoradas.`,
+      );
+    } catch (error) {
+      setImportSummary(
+        error instanceof Error
+          ? `No se pudo importar el histórico: ${error.message}`
+          : 'No se pudo importar el histórico.',
       );
     }
   };
@@ -898,7 +936,11 @@ export function TeletrabajoPage({
         return;
       }
 
-      if (result.summary.imported === 0 && result.summary.updated === 0 && result.summary.reactivated === 0) {
+      if (
+        result.summary.imported === 0 &&
+        result.summary.updated === 0 &&
+        result.summary.reactivated === 0
+      ) {
         setPendingEncuestaImport(null);
         setImportSummary(
           `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
@@ -953,8 +995,24 @@ export function TeletrabajoPage({
             ref={fileInputRef}
             type="file"
           />
+          <input
+            accept=".xlsx,.csv,.tsv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleImportHistorico(file);
+              }
+              event.target.value = '';
+            }}
+            ref={historicoFileInputRef}
+            type="file"
+          />
           <ActionButton onClick={() => fileInputRef.current?.click()} variant="import">
             Importar encuesta
+          </ActionButton>
+          <ActionButton onClick={() => historicoFileInputRef.current?.click()} variant="import">
+            Importar histórico
           </ActionButton>
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
@@ -980,9 +1038,12 @@ export function TeletrabajoPage({
         </div>
       </div>
 
-
       {isEmployeesLoading && (
-        <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100" role="status" aria-live="polite">
+        <div
+          className="mb-3 flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100"
+          role="status"
+          aria-live="polite"
+        >
           <Loader2 size={16} className="animate-spin" />
           Cargando datos de Plantilla…
         </div>
@@ -1099,7 +1160,6 @@ export function TeletrabajoPage({
         />
       </div>
 
-
       {isPeriodoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <section className="w-full max-w-xl rounded-2xl border border-metro-border bg-metro-surface shadow-card">
@@ -1144,7 +1204,8 @@ export function TeletrabajoPage({
                 <span>
                   Generar renovaciones desde un periodo anterior
                   <span className="mt-1 block text-xs font-normal text-metro-muted">
-                    Copia solicitudes aprobadas o analizadas, las marca como renovación, las deja pendientes y limpia revisión y validaciones.
+                    Copia solicitudes aprobadas o analizadas, las marca como renovación, las deja
+                    pendientes y limpia revisión y validaciones.
                   </span>
                 </span>
               </label>
@@ -1181,7 +1242,9 @@ export function TeletrabajoPage({
               </button>
               <button
                 className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!newPeriodoName.trim() || (copyFromPreviousPeriodo && !sourcePeriodo.trim())}
+                disabled={
+                  !newPeriodoName.trim() || (copyFromPreviousPeriodo && !sourcePeriodo.trim())
+                }
                 onClick={() => void handleCreatePeriodo()}
                 type="button"
               >

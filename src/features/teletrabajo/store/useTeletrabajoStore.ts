@@ -3,8 +3,10 @@ import type { Employee } from '../../plantilla/domain/employee';
 import { EMPTY_TELETRABAJO_FILTERS, type TeletrabajoFilters } from '../domain/filters';
 import {
   importEncuestaFromFile,
+  importHistoricoTeletrabajoFromFile,
   type EncuestaParseOptions,
   type ImportEncuestaResult,
+  type ImportHistoricoTeletrabajoResult,
 } from '../domain/importEncuesta';
 import {
   importTeletrabajoPuestosFromFile,
@@ -20,7 +22,10 @@ import {
   waitForNextPaint,
   writeStorageItem,
 } from '../../../services/persistence';
-import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import {
+  saveNewSharedArrayRecord,
+  saveSharedArrayRecord,
+} from '../../../services/sharedRecordPersistence';
 import {
   deleteTeletrabajoSolicitudInSqlite,
   hasTeletrabajoSqliteRepository,
@@ -162,7 +167,13 @@ interface TeletrabajoStateStore {
     employees: readonly Employee[],
     options?: EncuestaParseOptions,
   ) => Promise<ImportEncuestaResult>;
-  createPeriodo: (options: CreateTeletrabajoPeriodoOptions) => Promise<TeletrabajoPeriodoCreationResult>;
+  importHistorico: (
+    file: File,
+    employees: readonly Employee[],
+  ) => Promise<ImportHistoricoTeletrabajoResult>;
+  createPeriodo: (
+    options: CreateTeletrabajoPeriodoOptions,
+  ) => Promise<TeletrabajoPeriodoCreationResult>;
   createPuestoTeletrabajo: (draft: TeletrabajoPuestoDraft) => void;
   updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
   removePuestoTeletrabajo: (id: string) => void;
@@ -294,7 +305,6 @@ function readPuestosTeletrabajo(): TeletrabajoPuesto[] {
   return parsed.filter(isTeletrabajoPuesto).map(normalizePuestoTeletrabajo);
 }
 
-
 async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] | null> {
   const loader = window.traccion?.loadTeletrabajoPuestoRecords;
   if (!loader) {
@@ -325,7 +335,9 @@ async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] |
   return puestos;
 }
 
-async function persistPuestosTeletrabajoInSqlite(puestosTeletrabajo: TeletrabajoPuesto[]): Promise<boolean> {
+async function persistPuestosTeletrabajoInSqlite(
+  puestosTeletrabajo: TeletrabajoPuesto[],
+): Promise<boolean> {
   const saver = window.traccion?.saveTeletrabajoPuestoRecordIfUnchanged;
   if (!saver) {
     return false;
@@ -403,7 +415,9 @@ function createSolicitudId(): string {
   return `teletrabajo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function getSolicitudPeriodoKey(solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'periodo'>): string {
+function getSolicitudPeriodoKey(
+  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'periodo'>,
+): string {
   return `${solicitud.empleado.trim()}::${solicitud.periodo.trim()}`;
 }
 
@@ -517,9 +531,10 @@ function buildTeletrabajoState(
   return {
     solicitudes,
     puestosTeletrabajo,
-    selectedSolicitudId: selectedSolicitudId && solicitudes.some((solicitud) => solicitud.id === selectedSolicitudId)
-      ? selectedSolicitudId
-      : firstVisibleSolicitudId(solicitudes),
+    selectedSolicitudId:
+      selectedSolicitudId && solicitudes.some((solicitud) => solicitud.id === selectedSolicitudId)
+        ? selectedSolicitudId
+        : firstVisibleSolicitudId(solicitudes),
   };
 }
 
@@ -534,11 +549,17 @@ async function loadSolicitudesFromSqliteOrStorage(): Promise<TeletrabajoSolicitu
   return readSolicitudes();
 }
 
-function areSolicitudesEquivalent(left: TeletrabajoSolicitud[], right: TeletrabajoSolicitud[]): boolean {
+function areSolicitudesEquivalent(
+  left: TeletrabajoSolicitud[],
+  right: TeletrabajoSolicitud[],
+): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function arePuestosTeletrabajoEquivalent(left: TeletrabajoPuesto[], right: TeletrabajoPuesto[]): boolean {
+function arePuestosTeletrabajoEquivalent(
+  left: TeletrabajoPuesto[],
+  right: TeletrabajoPuesto[],
+): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
@@ -563,21 +584,35 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     void readPuestosTeletrabajoFromSqlite()
       .then((sqlitePuestos) => {
         if (sqlitePuestos) {
-          set((state) => buildTeletrabajoState(state.solicitudes, sqlitePuestos, state.selectedSolicitudId));
+          set((state) =>
+            buildTeletrabajoState(state.solicitudes, sqlitePuestos, state.selectedSolicitudId),
+          );
         }
       })
       .catch((error) => console.warn('Puestos teletrabajables no cargados desde SQLite.', error));
     void loadSolicitudesFromSqliteOrStorage()
       .then((nextSolicitudes) =>
-        set((state) => buildTeletrabajoState(nextSolicitudes, state.puestosTeletrabajo, state.selectedSolicitudId)),
+        set((state) =>
+          buildTeletrabajoState(
+            nextSolicitudes,
+            state.puestosTeletrabajo,
+            state.selectedSolicitudId,
+          ),
+        ),
       )
       .catch((error) => logTeletrabajoPersistenceError('loadTeletrabajo', error));
   },
   reloadFromStorage: () => {
-    void Promise.all([loadSolicitudesFromSqliteOrStorage(), loadPuestosTeletrabajoFromSqliteOrStorage()])
+    void Promise.all([
+      loadSolicitudesFromSqliteOrStorage(),
+      loadPuestosTeletrabajoFromSqliteOrStorage(),
+    ])
       .then(([nextSolicitudes, nextPuestosTeletrabajo]) => {
         set((state) => {
-          const hasSolicitudesChanged = !areSolicitudesEquivalent(state.solicitudes, nextSolicitudes);
+          const hasSolicitudesChanged = !areSolicitudesEquivalent(
+            state.solicitudes,
+            nextSolicitudes,
+          );
           const hasPuestosChanged = !arePuestosTeletrabajoEquivalent(
             state.puestosTeletrabajo,
             nextPuestosTeletrabajo,
@@ -634,7 +669,9 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           const records = await loadTeletrabajoRecordsFromSqlite();
           if (records !== null) {
             if (records.some((record) => record.id === solicitud.id)) {
-              throw new Error('La solicitud ya existe en la base compartida. Recarga antes de continuar.');
+              throw new Error(
+                'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
+              );
             }
 
             const saveResult = await saveTeletrabajoSolicitudToSqlite(solicitud, null);
@@ -680,7 +717,8 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         return { ok: true, message: 'Solicitud creada.', recordId: result.newRecord.id };
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
+      const message =
+        error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
       return { ok: false, message };
     }
   },
@@ -714,13 +752,19 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           const records = await loadTeletrabajoRecordsFromSqlite();
           if (records !== null) {
             const currentRecord = records.find((record) => record.id === id);
-            const latestSolicitud = currentRecord ? parseSingleSolicitud(currentRecord.value) : null;
+            const latestSolicitud = currentRecord
+              ? parseSingleSolicitud(currentRecord.value)
+              : null;
             if (!currentRecord || !latestSolicitud) {
-              throw new Error('La solicitud ya no existe en la base compartida. Recarga antes de continuar.');
+              throw new Error(
+                'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+              );
             }
 
             if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
-              throw new Error('Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.');
+              throw new Error(
+                'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+              );
             }
 
             registerTeletrabajoUpdateAudit(latestSolicitud, normalizedDraft);
@@ -760,14 +804,17 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
               updatedAt: new Date().toISOString(),
             };
           },
-          missingMessage: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
-          conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+          missingMessage:
+            'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+          conflictMessage:
+            'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
         });
         set({ solicitudes: result.records, selectedSolicitudId: id });
         return { ok: true, message: 'Solicitud guardada.' };
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
+      const message =
+        error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
       return { ok: false, message };
     }
   },
@@ -782,14 +829,18 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     if (hasTeletrabajoSqliteRepository()) {
       const records = await loadTeletrabajoRecordsFromSqlite();
       if (records !== null) {
-        const expectedUpdatedAtById = new Map(records.map((record) => [record.id, record.updatedAt]));
+        const expectedUpdatedAtById = new Map(
+          records.map((record) => [record.id, record.updatedAt]),
+        );
         for (const solicitud of result.solicitudes) {
           const saveResult = await saveTeletrabajoSolicitudToSqlite(
             solicitud,
             expectedUpdatedAtById.get(solicitud.id) ?? null,
           );
           if (!saveResult?.ok) {
-            throw new Error(saveResult?.message ?? 'No se ha podido importar la encuesta en SQLite.');
+            throw new Error(
+              saveResult?.message ?? 'No se ha podido importar la encuesta en SQLite.',
+            );
           }
         }
         set({
@@ -805,6 +856,70 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       return {
         solicitudes: result.solicitudes,
         selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
+      };
+    });
+    return result;
+  },
+  importHistorico: async (file, employees) => {
+    const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
+    const result = await importHistoricoTeletrabajoFromFile(file, employees, baseSolicitudes);
+    const changedIds = new Set<string>();
+    const previousById = new Map(baseSolicitudes.map((solicitud) => [solicitud.id, solicitud]));
+
+    result.solicitudes.forEach((solicitud) => {
+      const previous = previousById.get(solicitud.id);
+      if (!previous) {
+        changedIds.add(solicitud.id);
+        enqueueAuditEvent({
+          module: 'teletrabajo',
+          entityId: solicitud.id,
+          action: 'created',
+          summary: `Registro histórico importado para el periodo ${result.periodo}`,
+          changes: [],
+        });
+        return;
+      }
+
+      if (previous.deletedAt || hasTeletrabajoDraftChanges(previous, solicitud)) {
+        changedIds.add(solicitud.id);
+        registerTeletrabajoUpdateAudit(previous, solicitud);
+      }
+    });
+
+    if (hasTeletrabajoSqliteRepository()) {
+      const records = await loadTeletrabajoRecordsFromSqlite();
+      if (records !== null) {
+        const expectedUpdatedAtById = new Map(
+          records.map((record) => [record.id, record.updatedAt]),
+        );
+        for (const solicitud of result.solicitudes.filter((candidate) =>
+          changedIds.has(candidate.id),
+        )) {
+          const saveResult = await saveTeletrabajoSolicitudToSqlite(
+            solicitud,
+            expectedUpdatedAtById.get(solicitud.id) ?? null,
+          );
+          if (!saveResult?.ok) {
+            throw new Error(
+              saveResult?.message ?? 'No se ha podido importar el histórico en SQLite.',
+            );
+          }
+        }
+        set({
+          solicitudes: result.solicitudes,
+          selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
+          filters: { ...get().filters, periodo: result.periodo },
+        });
+        return result;
+      }
+    }
+
+    set(() => {
+      persistSolicitudes(result.solicitudes);
+      return {
+        solicitudes: result.solicitudes,
+        selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
+        filters: { ...get().filters, periodo: result.periodo },
       };
     });
     return result;
@@ -831,9 +946,10 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         });
 
         if (options.copyFromPrevious && created.length === 0) {
-          const message = ignored > 0
-            ? `No se han creado solicitudes nuevas: ya existían ${ignored} empleado${ignored === 1 ? '' : 's'} en el periodo ${periodo}.`
-            : `No hay solicitudes aprobadas o analizadas en el periodo ${sourcePeriodo}.`;
+          const message =
+            ignored > 0
+              ? `No se han creado solicitudes nuevas: ya existían ${ignored} empleado${ignored === 1 ? '' : 's'} en el periodo ${periodo}.`
+              : `No hay solicitudes aprobadas o analizadas en el periodo ${sourcePeriodo}.`;
           return { ok: false, message, created: 0, ignored };
         }
 
@@ -843,7 +959,9 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             for (const solicitud of created) {
               const saveResult = await saveTeletrabajoSolicitudToSqlite(solicitud, null);
               if (!saveResult?.ok) {
-                throw new Error(saveResult?.message ?? 'No se ha podido crear el periodo en SQLite.');
+                throw new Error(
+                  saveResult?.message ?? 'No se ha podido crear el periodo en SQLite.',
+                );
               }
               enqueueAuditEvent({
                 module: 'teletrabajo',
@@ -862,9 +980,10 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             }));
             return {
               ok: true,
-              message: created.length > 0
-                ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
-                : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
+              message:
+                created.length > 0
+                  ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
+                  : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
               created: created.length,
               ignored,
             };
@@ -889,9 +1008,10 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         }));
         return {
           ok: true,
-          message: created.length > 0
-            ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
-            : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
+          message:
+            created.length > 0
+              ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
+              : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
           created: created.length,
           ignored,
         };
@@ -982,13 +1102,19 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           const records = await loadTeletrabajoRecordsFromSqlite();
           if (records !== null) {
             const currentRecord = records.find((record) => record.id === id);
-            const latestSolicitud = currentRecord ? parseSingleSolicitud(currentRecord.value) : null;
+            const latestSolicitud = currentRecord
+              ? parseSingleSolicitud(currentRecord.value)
+              : null;
             if (!currentRecord || !latestSolicitud) {
-              throw new Error('La solicitud ya no existe en la base compartida. Recarga antes de continuar.');
+              throw new Error(
+                'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+              );
             }
 
             if (expectedUpdatedAt && currentRecord.updatedAt !== expectedUpdatedAt) {
-              throw new Error('Esta solicitud ha sido modificada por otro usuario. Recarga antes de eliminarla.');
+              throw new Error(
+                'Esta solicitud ha sido modificada por otro usuario. Recarga antes de eliminarla.',
+              );
             }
 
             const saveResult = await deleteTeletrabajoSolicitudInSqlite(
@@ -1036,8 +1162,10 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             });
             return { ...latestSolicitud, deletedAt, updatedAt: deletedAt };
           },
-          missingMessage: 'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
-          conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+          missingMessage:
+            'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
+          conflictMessage:
+            'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
         });
         set({
           solicitudes: result.records,
@@ -1046,7 +1174,8 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         return { ok: true, message: 'Solicitud eliminada.' };
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
+      const message =
+        error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
       return { ok: false, message };
     }
   },
