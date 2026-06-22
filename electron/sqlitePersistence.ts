@@ -11,6 +11,12 @@ import {
   type SimpleJsonRecordsSnapshot,
   type SimpleJsonSaveResult,
 } from './persistence/simpleJsonModuleRepository.js';
+import {
+  computeHeaviestTables,
+  getDailyLocalBackupWeekdayName,
+  pruneLocalStorageBackups,
+  type TableSizeBreakdownEntry,
+} from './persistence/maintenanceQueries.js';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -21,7 +27,6 @@ const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
 const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
 const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
-const LOCAL_STORAGE_BACKUP_RETENTION_COUNT = 7;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 12;
@@ -31,17 +36,6 @@ const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
 const DAILY_LOCAL_BACKUP_DEFAULT_RETENTION_DAYS = 7;
 const DAILY_LOCAL_BACKUP_MIN_RETENTION_DAYS = 1;
 const DAILY_LOCAL_BACKUP_MAX_RETENTION_DAYS = 7;
-// Nombres de día en inglés, estables y sin acentos/locale: el archivo de
-// backup no depende del idioma del sistema operativo del usuario.
-const DAILY_LOCAL_BACKUP_WEEKDAY_NAMES = [
-  'sunday',
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-] as const;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
@@ -451,10 +445,6 @@ function getShutdownLocalBackupJsonPath(timestamp: string): string {
   return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.json`);
 }
 
-function getDailyLocalBackupWeekdayName(date: Date): string {
-  return DAILY_LOCAL_BACKUP_WEEKDAY_NAMES[date.getDay()];
-}
-
 async function getDailyLocalBackupDirectory(preferences: DatabasePreferences): Promise<string> {
   return preferences.dailyLocalBackupDirectoryPath
     ? preferences.dailyLocalBackupDirectoryPath
@@ -677,66 +667,10 @@ export async function vacuumDatabaseNow(): Promise<VacuumResult> {
   return vacuumDatabase('manual');
 }
 
-export interface TableSizeBreakdownEntry {
-  table: string;
-  /** Tamaño aproximado en bytes. Si dbstat no está disponible, se estima a partir del número de filas. */
-  sizeBytes: number;
-  rowCount: number;
-  /** false cuando el tamaño es una estimación por nº de filas, no una medida real de páginas SQLite. */
-  isExactSize: boolean;
-}
-
 export interface VacuumStatus {
   lastVacuumAt: string | null;
   currentSizeBytes: number | null;
   heaviestTables: TableSizeBreakdownEntry[];
-}
-
-function listUserTableNames(db: Database): string[] {
-  const rows = db
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-    )
-    .all() as Array<{ name: string }>;
-  return rows.map((row) => row.name);
-}
-
-function computeHeaviestTables(db: Database, limit = 8): TableSizeBreakdownEntry[] {
-  const tableNames = listUserTableNames(db);
-  if (tableNames.length === 0) {
-    return [];
-  }
-
-  // Intento preciso: dbstat es una tabla virtual integrada en SQLite que
-  // expone el tamaño real en páginas de cada tabla/índice. No siempre está
-  // compilada en todas las distribuciones de better-sqlite3, así que si
-  // falla, recurrimos a una estimación por nº de filas (menos exacta, pero
-  // siempre disponible y suficiente para detectar qué tabla crece más).
-  try {
-    const rows = db
-      .prepare('SELECT name, SUM(pgsize) AS sizeBytes FROM dbstat GROUP BY name')
-      .all() as Array<{ name: string; sizeBytes: number }>;
-    const sizeByTable = new Map(rows.map((row) => [row.name, row.sizeBytes]));
-
-    const entries: TableSizeBreakdownEntry[] = tableNames.map((table) => {
-      const rowCount = (db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number })
-        .c;
-      return {
-        table,
-        sizeBytes: sizeByTable.get(table) ?? 0,
-        rowCount,
-        isExactSize: true,
-      };
-    });
-    return entries.sort((a, b) => b.sizeBytes - a.sizeBytes).slice(0, limit);
-  } catch {
-    const entries: TableSizeBreakdownEntry[] = tableNames.map((table) => {
-      const rowCount = (db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number })
-        .c;
-      return { table, sizeBytes: 0, rowCount, isExactSize: false };
-    });
-    return entries.sort((a, b) => b.rowCount - a.rowCount).slice(0, limit);
-  }
 }
 
 export async function getVacuumStatus(): Promise<VacuumStatus> {
@@ -1280,18 +1214,6 @@ function readCurrentSchemaVersion(db: Database): number {
     .get();
 
   return isSchemaMigrationRow(row) ? row.version : 0;
-}
-
-function pruneLocalStorageBackups(db: Database): void {
-  db.prepare(
-    `DELETE FROM local_storage_backups
-     WHERE id NOT IN (
-       SELECT id
-       FROM local_storage_backups
-       ORDER BY created_at DESC, id DESC
-       LIMIT ?
-     )`,
-  ).run(LOCAL_STORAGE_BACKUP_RETENTION_COUNT);
 }
 
 function migrateToVersion1(db: Database): void {
