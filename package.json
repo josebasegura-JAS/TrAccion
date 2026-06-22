@@ -1,6 +1,6 @@
 {
   "name": "traccion-v1",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "TrAccion - RRLL Dashboard moderno con Electron, React y TypeScript",
   "author": "TrAccion",
   "private": true,
@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run electron:start\"",
     "electron:start": "tsc -p electron/tsconfig.json && electron dist-electron/main.js",
-    "electron:build": "npm run build && electron-builder --win portable",
+    "electron:build": "npm run build && npm run version:bump && electron-builder --win portable",
+    "version:bump": "node scripts/bump-version.mjs",
     "test": "vitest run --fileParallelism=false",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
@@ -89,7 +90,7 @@
       "icon": "build/icon/traccion-icon-256.ico"
     },
     "portable": {
-      "artifactName": "TrAccion-${version}-portable.exe"
+      "artifactName": "TrAccion V1.0.00.exe"
     },
     "npmRebuild": true,
     "icon": "build/icon/traccion-icon-256.ico"
