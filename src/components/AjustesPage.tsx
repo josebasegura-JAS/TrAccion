@@ -7,6 +7,7 @@ import { Notice } from './ui/Notice';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { StatusBadge } from './ui/StatusBadge';
 import { ActionButton } from './ui/ActionButton';
+import { FieldLabel, Select } from './ui/Field';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 
@@ -97,6 +98,10 @@ export function AjustesPage() {
   const [isCreatingManualBackup, setIsCreatingManualBackup] = useState(false);
   const [secondaryBackupPath, setSecondaryBackupPath] = useState<string | null>(null);
   const [secondaryBackupStatus, setSecondaryBackupStatus] = useState('');
+  const [dailyBackupSettings, setDailyBackupSettings] = useState<TraccionDailyLocalBackupSettings | null>(
+    null,
+  );
+  const [dailyBackupStatus, setDailyBackupStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const { confirm, dialogNode } = useAppDialog();
 
@@ -137,6 +142,12 @@ export function AjustesPage() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    window.traccion?.getDailyLocalBackupSettings?.()
+      .then((settings) => setDailyBackupSettings(settings))
+      .catch(() => undefined);
+  }, []);
+
   const handleSetSecondaryBackupDirectory = async () => {
     setSecondaryBackupStatus('');
     if (!window.traccion?.setSecondaryBackupDirectory) {
@@ -156,6 +167,50 @@ export function AjustesPage() {
     await window.traccion.clearSecondaryBackupDirectory();
     setSecondaryBackupPath(null);
     setSecondaryBackupStatus('Carpeta de respaldo secundario eliminada.');
+  };
+
+  const handleToggleDailyBackupEnabled = async () => {
+    setDailyBackupStatus('');
+    if (!window.traccion?.setDailyLocalBackupEnabled) {
+      setDailyBackupStatus('Solo disponible en escritorio.');
+      return;
+    }
+    const nextEnabled = !(dailyBackupSettings?.enabled ?? true);
+    const settings = await window.traccion.setDailyLocalBackupEnabled(nextEnabled);
+    setDailyBackupSettings(settings);
+    setDailyBackupStatus(settings.enabled ? 'Copia diaria activada.' : 'Copia diaria desactivada.');
+  };
+
+  const handleChangeDailyBackupRetentionDays = async (retentionDays: number) => {
+    setDailyBackupStatus('');
+    if (!window.traccion?.setDailyLocalBackupRetentionDays) {
+      setDailyBackupStatus('Solo disponible en escritorio.');
+      return;
+    }
+    const settings = await window.traccion.setDailyLocalBackupRetentionDays(retentionDays);
+    setDailyBackupSettings(settings);
+    setDailyBackupStatus(`Se conservarán ${settings.retentionDays} día(s) de copia diaria.`);
+  };
+
+  const handleSetDailyBackupDirectory = async () => {
+    setDailyBackupStatus('');
+    if (!window.traccion?.setDailyLocalBackupDirectory) {
+      setDailyBackupStatus('Solo disponible en escritorio.');
+      return;
+    }
+    const result = await window.traccion.setDailyLocalBackupDirectory();
+    setDailyBackupSettings(result.settings);
+    if (result.ok) {
+      setDailyBackupStatus('Carpeta de copia diaria guardada.');
+    }
+  };
+
+  const handleClearDailyBackupDirectory = async () => {
+    setDailyBackupStatus('');
+    if (!window.traccion?.clearDailyLocalBackupDirectory) return;
+    const settings = await window.traccion.clearDailyLocalBackupDirectory();
+    setDailyBackupSettings(settings);
+    setDailyBackupStatus('Carpeta de copia diaria restaurada a la ubicación por defecto.');
   };
 
   const handleCreateManualBackup = async () => {
@@ -531,6 +586,78 @@ export function AjustesPage() {
               >
                 <RotateCcw size={14} />
                 Eliminar
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+                Copia diaria local
+              </p>
+              <p className="mt-1 max-w-xl text-xs text-metro-muted">
+                Mantiene en este equipo un archivo fijo por día de la semana (se sobrescribe cada
+                vez), independiente de las copias en la carpeta de red. Útil si la carpeta
+                compartida deja de estar disponible o se corrompe.
+              </p>
+            </div>
+            <ActionButton
+              variant={dailyBackupSettings?.enabled === false ? 'secondary' : 'save'}
+              iconOnly={false}
+              onClick={() => void handleToggleDailyBackupEnabled()}
+            >
+              {dailyBackupSettings?.enabled === false ? 'Desactivada' : 'Activada'}
+            </ActionButton>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <FieldLabel className="w-32">
+              Días a conservar
+              <Select
+                disabled={dailyBackupSettings?.enabled === false}
+                onChange={(event) => void handleChangeDailyBackupRetentionDays(Number(event.target.value))}
+                value={dailyBackupSettings?.retentionDays ?? 7}
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((days) => (
+                  <option key={days} value={days}>
+                    {days} día{days === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </Select>
+            </FieldLabel>
+          </div>
+
+          {dailyBackupSettings?.directoryPath ? (
+            <p className="mt-3 break-all text-xs font-medium text-metro-text">
+              {dailyBackupSettings.directoryPath}
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-metro-muted">
+              Usando la ubicación por defecto de la aplicación.
+            </p>
+          )}
+          {dailyBackupStatus && (
+            <p className="mt-1 text-xs text-metro-success">{dailyBackupStatus}</p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-semibold text-white hover:bg-metro-dark"
+              onClick={() => void handleSetDailyBackupDirectory()}
+              type="button"
+            >
+              <Database size={14} />
+              {dailyBackupSettings?.directoryPath ? 'Cambiar carpeta' : 'Elegir otra carpeta'}
+            </button>
+            {dailyBackupSettings?.directoryPath && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red"
+                onClick={() => void handleClearDailyBackupDirectory()}
+                type="button"
+              >
+                <RotateCcw size={14} />
+                Restaurar por defecto
               </button>
             )}
           </div>

@@ -25,6 +25,22 @@ const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const CURRENT_SCHEMA_VERSION = 12;
 const LOCK_TTL_MS = 30 * 1000;
+const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
+const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
+const DAILY_LOCAL_BACKUP_DEFAULT_RETENTION_DAYS = 7;
+const DAILY_LOCAL_BACKUP_MIN_RETENTION_DAYS = 1;
+const DAILY_LOCAL_BACKUP_MAX_RETENTION_DAYS = 7;
+// Nombres de día en inglés, estables y sin acentos/locale: el archivo de
+// backup no depende del idioma del sistema operativo del usuario.
+const DAILY_LOCAL_BACKUP_WEEKDAY_NAMES = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+] as const;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
 const STARTUP_LOCK_RETRY_MS = 250;
@@ -280,6 +296,9 @@ interface SchemaMigrationRow {
 interface DatabasePreferences {
   customDirectoryPath: string | null;
   secondaryBackupDirectoryPath: string | null;
+  dailyLocalBackupEnabled: boolean;
+  dailyLocalBackupRetentionDays: number;
+  dailyLocalBackupDirectoryPath: string | null;
 }
 
 const require = createRequire(import.meta.url);
@@ -428,6 +447,20 @@ function getShutdownLocalBackupJsonPath(timestamp: string): string {
   return path.join(getLocalShutdownBackupDirectory(), `traccion-shutdown-backup-${timestamp}.json`);
 }
 
+function getDailyLocalBackupWeekdayName(date: Date): string {
+  return DAILY_LOCAL_BACKUP_WEEKDAY_NAMES[date.getDay()];
+}
+
+async function getDailyLocalBackupDirectory(preferences: DatabasePreferences): Promise<string> {
+  return preferences.dailyLocalBackupDirectoryPath
+    ? preferences.dailyLocalBackupDirectoryPath
+    : path.join(app.getPath('userData'), DAILY_LOCAL_BACKUP_DIRECTORY_NAME);
+}
+
+function getDailyLocalBackupDatabasePath(directory: string, weekdayName: string): string {
+  return path.join(directory, `traccion-daily-${weekdayName}.sqlite`);
+}
+
 function getSharedSqliteBackupPath(databasePath: string, timestamp: string): string {
   return path.join(path.dirname(databasePath), `traccion-backup-${timestamp}.sqlite`);
 }
@@ -519,6 +552,67 @@ async function writeSharedSqliteBackup(databasePath: string, timestamp: string):
   await pruneSharedSqliteBackups(databasePath);
 }
 
+/**
+ * Copia local diaria, independiente de la carpeta compartida de red: un
+ * archivo fijo por día de la semana (traccion-daily-lunes.sqlite, etc.) que
+ * se sobrescribe en cada backup del mismo día. La retención configurada
+ * limita cuántos de esos 7 archivos se mantienen; al reducirla se eliminan
+ * los días que dejan de estar en el rango, evitando dejar copias huérfanas
+ * de configuraciones anteriores.
+ */
+async function writeDailyLocalBackup(databasePath: string): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  if (!preferences.dailyLocalBackupEnabled) {
+    return;
+  }
+
+  const directory = await getDailyLocalBackupDirectory(preferences);
+
+  try {
+    await mkdir(directory, { recursive: true });
+
+    const today = new Date();
+    const todayWeekdayName = getDailyLocalBackupWeekdayName(today);
+    await copyFile(databasePath, getDailyLocalBackupDatabasePath(directory, todayWeekdayName));
+
+    await pruneDailyLocalBackups(directory, preferences.dailyLocalBackupRetentionDays, today);
+  } catch (error) {
+    console.warn('No se ha podido crear la copia diaria local SQLite.', error);
+  }
+}
+
+/**
+ * Elimina los archivos de días que ya no están dentro del rango de
+ * retención configurado (p. ej. si el usuario reduce de 7 a 5 días).
+ * El día de retención se cuenta hacia atrás desde hoy, por nombre de día
+ * de la semana, no por fecha exacta del archivo.
+ */
+async function pruneDailyLocalBackups(
+  directory: string,
+  retentionDays: number,
+  today: Date,
+): Promise<void> {
+  const keptWeekdayNames = new Set<string>();
+  for (let offset = 0; offset < retentionDays; offset += 1) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - offset);
+    keptWeekdayNames.add(getDailyLocalBackupWeekdayName(date));
+  }
+
+  const entries = await readdir(directory).catch(() => []);
+  const dailyBackupFiles = entries.filter((entry) => /^traccion-daily-[a-z]+\.sqlite$/.test(entry));
+
+  await Promise.all(
+    dailyBackupFiles
+      .filter((entry) => {
+        const weekdayMatch = /^traccion-daily-([a-z]+)\.sqlite$/.exec(entry);
+        const weekdayName = weekdayMatch?.[1];
+        return !weekdayName || !keptWeekdayNames.has(weekdayName);
+      })
+      .map((entry) => unlink(path.join(directory, entry)).catch(() => undefined)),
+  );
+}
+
 
 async function getLatestRotatedLocalBackupTime(): Promise<number | null> {
   const backupDirectory = getLocalBackupDirectory();
@@ -566,14 +660,31 @@ function getDatabasePathForDirectory(directoryPath: string): string {
 }
 
 async function readDatabasePreferences(): Promise<DatabasePreferences> {
+  const defaults: DatabasePreferences = {
+    customDirectoryPath: null,
+    secondaryBackupDirectoryPath: null,
+    dailyLocalBackupEnabled: DAILY_LOCAL_BACKUP_DEFAULT_ENABLED,
+    dailyLocalBackupRetentionDays: DAILY_LOCAL_BACKUP_DEFAULT_RETENTION_DAYS,
+    dailyLocalBackupDirectoryPath: null,
+  };
+
   try {
     const raw = await readFile(getPreferencesPath(), 'utf8');
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') {
-      return { customDirectoryPath: null, secondaryBackupDirectoryPath: null };
+      return defaults;
     }
 
     const candidate = parsed as Partial<DatabasePreferences>;
+    const retentionDaysCandidate = candidate.dailyLocalBackupRetentionDays;
+    const retentionDays =
+      typeof retentionDaysCandidate === 'number' && Number.isFinite(retentionDaysCandidate)
+        ? Math.min(
+            DAILY_LOCAL_BACKUP_MAX_RETENTION_DAYS,
+            Math.max(DAILY_LOCAL_BACKUP_MIN_RETENTION_DAYS, Math.round(retentionDaysCandidate)),
+          )
+        : defaults.dailyLocalBackupRetentionDays;
+
     return {
       customDirectoryPath:
         typeof candidate.customDirectoryPath === 'string' && candidate.customDirectoryPath.trim()
@@ -584,9 +695,19 @@ async function readDatabasePreferences(): Promise<DatabasePreferences> {
         candidate.secondaryBackupDirectoryPath.trim()
           ? candidate.secondaryBackupDirectoryPath
           : null,
+      dailyLocalBackupEnabled:
+        typeof candidate.dailyLocalBackupEnabled === 'boolean'
+          ? candidate.dailyLocalBackupEnabled
+          : defaults.dailyLocalBackupEnabled,
+      dailyLocalBackupRetentionDays: retentionDays,
+      dailyLocalBackupDirectoryPath:
+        typeof candidate.dailyLocalBackupDirectoryPath === 'string' &&
+        candidate.dailyLocalBackupDirectoryPath.trim()
+          ? candidate.dailyLocalBackupDirectoryPath
+          : null,
     };
   } catch {
-    return { customDirectoryPath: null, secondaryBackupDirectoryPath: null };
+    return defaults;
   }
 }
 
@@ -1879,6 +2000,12 @@ async function writeLocalBackupArtifacts(reason: string): Promise<void> {
       console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
     }
 
+    try {
+      await writeDailyLocalBackup(currentStatus.path);
+    } catch (error) {
+      console.warn('No se ha podido crear la copia diaria local SQLite.', error);
+    }
+
     // Copia opcional en carpeta secundaria configurada por el usuario (p.ej. red o USB).
     try {
       const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
@@ -1987,6 +2114,12 @@ async function writeShutdownLocalBackupArtifacts(): Promise<void> {
       await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
     } catch (error) {
       console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
+    }
+
+    try {
+      await writeDailyLocalBackup(currentStatus.path);
+    } catch (error) {
+      console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
     }
   } finally {
     clearInterval(backupLockHeartbeat);
@@ -4690,7 +4823,10 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
         false,
         previousDatabasePath,
       );
-      await writeDatabasePreferences({ customDirectoryPath: normalizedDirectoryPath, secondaryBackupDirectoryPath: (await readDatabasePreferences()).secondaryBackupDirectoryPath });
+      await writeDatabasePreferences({
+        ...(await readDatabasePreferences()),
+        customDirectoryPath: normalizedDirectoryPath,
+      });
       return nextStatus;
     } catch (changeError) {
       if (previousStatus.ready) {
@@ -4735,7 +4871,10 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
     }
     await closeDatabaseAndReleaseLock();
     const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
-    await writeDatabasePreferences({ customDirectoryPath: null, secondaryBackupDirectoryPath: (await readDatabasePreferences()).secondaryBackupDirectoryPath });
+    await writeDatabasePreferences({
+      ...(await readDatabasePreferences()),
+      customDirectoryPath: null,
+    });
     return nextStatus;
   } catch (error) {
     try {
@@ -4784,4 +4923,46 @@ export async function clearSecondaryBackupDirectory(): Promise<void> {
     ...preferences,
     secondaryBackupDirectoryPath: null,
   });
+}
+
+export interface DailyLocalBackupSettings {
+  enabled: boolean;
+  retentionDays: number;
+  directoryPath: string | null;
+}
+
+export async function getDailyLocalBackupSettings(): Promise<DailyLocalBackupSettings> {
+  const preferences = await readDatabasePreferences();
+  return {
+    enabled: preferences.dailyLocalBackupEnabled,
+    retentionDays: preferences.dailyLocalBackupRetentionDays,
+    directoryPath: preferences.dailyLocalBackupDirectoryPath,
+  };
+}
+
+export async function setDailyLocalBackupEnabled(enabled: boolean): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({ ...preferences, dailyLocalBackupEnabled: enabled });
+}
+
+export async function setDailyLocalBackupRetentionDays(retentionDays: number): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  const normalized = Math.min(
+    DAILY_LOCAL_BACKUP_MAX_RETENTION_DAYS,
+    Math.max(DAILY_LOCAL_BACKUP_MIN_RETENTION_DAYS, Math.round(retentionDays)),
+  );
+  await writeDatabasePreferences({ ...preferences, dailyLocalBackupRetentionDays: normalized });
+}
+
+export async function setDailyLocalBackupDirectory(directoryPath: string): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({
+    ...preferences,
+    dailyLocalBackupDirectoryPath: path.resolve(directoryPath),
+  });
+}
+
+export async function clearDailyLocalBackupDirectory(): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({ ...preferences, dailyLocalBackupDirectoryPath: null });
 }

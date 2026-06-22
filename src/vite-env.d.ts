@@ -142,6 +142,12 @@ interface TraccionRestoreLocalBackupResult {
   message: string;
 }
 
+interface TraccionDailyLocalBackupSettings {
+  enabled: boolean;
+  retentionDays: number;
+  directoryPath: string | null;
+}
+
 interface TraccionRecordLockOwnerInfo {
   ownerId: string;
   ownerName: string;
@@ -396,6 +402,11 @@ interface TraccionApi {
   getSecondaryBackupDirectory?: () => Promise<string | null>;
   setSecondaryBackupDirectory?: () => Promise<{ ok: boolean; path: string | null }>;
   clearSecondaryBackupDirectory?: () => Promise<{ ok: boolean }>;
+  getDailyLocalBackupSettings?: () => Promise<TraccionDailyLocalBackupSettings>;
+  setDailyLocalBackupEnabled?: (enabled: boolean) => Promise<TraccionDailyLocalBackupSettings>;
+  setDailyLocalBackupRetentionDays?: (retentionDays: number) => Promise<TraccionDailyLocalBackupSettings>;
+  setDailyLocalBackupDirectory?: () => Promise<{ ok: boolean; settings: TraccionDailyLocalBackupSettings }>;
+  clearDailyLocalBackupDirectory?: () => Promise<TraccionDailyLocalBackupSettings>;
   listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
   createManualBackup?: () => Promise<{ ok: boolean }>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;

@@ -65,6 +65,11 @@ import {
   getSecondaryBackupDirectory,
   setSecondaryBackupDirectory,
   clearSecondaryBackupDirectory,
+  getDailyLocalBackupSettings,
+  setDailyLocalBackupEnabled,
+  setDailyLocalBackupRetentionDays,
+  setDailyLocalBackupDirectory,
+  clearDailyLocalBackupDirectory,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir, userInfo } from 'node:os';
@@ -1061,6 +1066,45 @@ function registerIpcHandlers(): void {
   ipcMain.handle('database:clear-secondary-backup-directory', async () => {
     await clearSecondaryBackupDirectory();
     return { ok: true };
+  });
+
+  ipcMain.handle('database:get-daily-local-backup-settings', () => getDailyLocalBackupSettings());
+
+  ipcMain.handle('database:set-daily-local-backup-enabled', async (_event, payload: unknown) => {
+    const candidate = payload as { enabled?: unknown } | null;
+    const enabled = typeof candidate?.enabled === 'boolean' ? candidate.enabled : true;
+    await setDailyLocalBackupEnabled(enabled);
+    return getDailyLocalBackupSettings();
+  });
+
+  ipcMain.handle('database:set-daily-local-backup-retention-days', async (_event, payload: unknown) => {
+    const candidate = payload as { retentionDays?: unknown } | null;
+    const retentionDays = typeof candidate?.retentionDays === 'number' ? candidate.retentionDays : 7;
+    await setDailyLocalBackupRetentionDays(retentionDays);
+    return getDailyLocalBackupSettings();
+  });
+
+  ipcMain.handle('database:set-daily-local-backup-directory', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar carpeta para la copia diaria local',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || !result.filePaths[0]) {
+      return { ok: false, settings: await getDailyLocalBackupSettings() };
+    }
+
+    await setDailyLocalBackupDirectory(result.filePaths[0]);
+    return { ok: true, settings: await getDailyLocalBackupSettings() };
+  });
+
+  ipcMain.handle('database:clear-daily-local-backup-directory', async () => {
+    await clearDailyLocalBackupDirectory();
+    return getDailyLocalBackupSettings();
   });
 
   ipcMain.handle('database:list-local-backups', () => enqueueSqliteIpc('database:list-local-backups', () => listLocalBackups()));

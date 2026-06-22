@@ -18,6 +18,13 @@ contextBridge.exposeInMainWorld('traccion', {
   getSecondaryBackupDirectory: () => ipcRenderer.invoke('database:get-secondary-backup-directory'),
   setSecondaryBackupDirectory: () => ipcRenderer.invoke('database:set-secondary-backup-directory'),
   clearSecondaryBackupDirectory: () => ipcRenderer.invoke('database:clear-secondary-backup-directory'),
+  getDailyLocalBackupSettings: () => ipcRenderer.invoke('database:get-daily-local-backup-settings'),
+  setDailyLocalBackupEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('database:set-daily-local-backup-enabled', { enabled }),
+  setDailyLocalBackupRetentionDays: (retentionDays: number) =>
+    ipcRenderer.invoke('database:set-daily-local-backup-retention-days', { retentionDays }),
+  setDailyLocalBackupDirectory: () => ipcRenderer.invoke('database:set-daily-local-backup-directory'),
+  clearDailyLocalBackupDirectory: () => ipcRenderer.invoke('database:clear-daily-local-backup-directory'),
   listLocalBackups: () => ipcRenderer.invoke('database:list-local-backups'),
   createManualBackup: () => ipcRenderer.invoke('database:create-manual-backup'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
