@@ -198,7 +198,7 @@ export function Sidebar({
     }
   }, [activeViewGroupId]);
 
-  const handleHomeSelect = () => {
+  const handleLogoSelect = () => {
     if (!isPinned) {
       setIsPanelOpen(false);
     }
@@ -209,6 +209,14 @@ export function Sidebar({
     }
 
     onViewChange('dashboard');
+  };
+
+  const handleHomeSelect = () => {
+    onViewChange('dashboard');
+
+    if (!isPinned) {
+      setIsPanelOpen(false);
+    }
   };
 
   const handleGroupSelect = (groupId: NavigationGroupId) => {
@@ -256,7 +264,15 @@ export function Sidebar({
     >
       <div className="fixed inset-y-0 left-0 z-40 flex w-[4.5rem] flex-col border-r border-white/10 bg-gradient-to-b from-metro-navy via-metro-topbar to-[#08111F] text-white shadow-2xl shadow-slate-950/40">
         <div className="flex h-16 items-center justify-center border-b border-white/10 px-2">
-          <img alt="TrAccion" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
+          <button
+            aria-label="Reiniciar TrAccion"
+            className="rounded-2xl p-1 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-metro-red/60"
+            onClick={handleLogoSelect}
+            title="Reiniciar TrAccion"
+            type="button"
+          >
+            <img alt="TrAccion" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
+          </button>
         </div>
 
         <nav
