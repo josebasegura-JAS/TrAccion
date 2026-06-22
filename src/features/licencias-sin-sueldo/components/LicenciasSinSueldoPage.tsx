@@ -1,6 +1,7 @@
 import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
+import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
@@ -56,6 +57,7 @@ const tableColumnIds: readonly LicenciasTableColumnId[] = [
 const defaultTablePreferences: TableViewPreferences<LicenciasTableColumnId> = {
   sort: { columnId: 'fechaSolicitud', direction: 'desc' },
   columnWidths: {},
+  columnOrder: null,
 };
 
 const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -436,7 +438,7 @@ function LicenciasTable({
   onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
   generatingWordId: string | null;
 }) {
-  const { preferences, setSort, setColumnWidth, resetColumnWidths, resetPreferences } = useTableViewPreferences<LicenciasTableColumnId>({
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths, resetPreferences } = useTableViewPreferences<LicenciasTableColumnId>({
     storageKey: `traccion.tableView.licenciasSinSueldo.${blockId}`,
     defaultPreferences: defaultTablePreferences,
     validColumnIds: tableColumnIds,
@@ -480,17 +482,19 @@ function LicenciasTable({
         <p className="text-xs text-metro-muted">{records.length} registros visibles</p>
         <div className="flex flex-wrap items-center gap-2">
           <ActionButton size="sm" variant="secondary" iconOnly={false} onClick={resetPreferences}><RotateCcw size={14} /> Vista</ActionButton>
-          <ExportPrintButtons payload={{ title, filename: title, columns: exportColumns, rows: records, filterLabel: `${records.length} registros filtrados` }} />
+          <ExportPrintButtons payload={{ title, filename: title, columns: reorderExportColumns(exportColumns, preferences.columnOrder), rows: records, filterLabel: `${records.length} registros filtrados` }} />
         </div>
       </div>
       <DataTable
         ariaLabel={title}
+        columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
         columns={columns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
         maxHeightClassName="max-h-[320px]"
+        onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
         onRowDoubleClick={onEdit}
         onSortChange={setSort}
