@@ -3,6 +3,9 @@ name: Build Windows EXE
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     name: Build TrAccion V1 portable EXE
@@ -83,6 +86,9 @@ jobs:
       - name: Build renderer and Electron main
         run: npm run build
 
+      - name: Bump build version
+        run: npm run version:bump
+
       - name: Build portable EXE
         shell: pwsh
         run: |
@@ -91,7 +97,7 @@ jobs:
 
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
             Write-Host "electron-builder attempt $attempt of $maxAttempts"
-            npm run electron:build
+            npx electron-builder --win portable
 
             if ($LASTEXITCODE -eq 0) {
               exit 0
@@ -104,6 +110,20 @@ jobs:
           }
 
           exit $LASTEXITCODE
+
+      - name: Commit updated build counter
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .build-version package.json
+          $changes = git status --porcelain
+          if ($changes) {
+            git commit -m "ci: bump build counter [skip ci]"
+            git push
+          } else {
+            Write-Host "Sin cambios en el contador de build; nada que commitear."
+          }
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
