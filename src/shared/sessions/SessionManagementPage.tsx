@@ -20,6 +20,7 @@ import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
 import { ActionButton } from '../../components/ui/ActionButton';
+import { TaskEditor } from '../../components/TaskEditor';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
@@ -312,6 +313,7 @@ export function SessionManagementPage({
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
   const [openPanel, setOpenPanel] = useState<'open' | 'history'>('open');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
@@ -390,6 +392,7 @@ export function SessionManagementPage({
   const editingSession = editingSessionId
     ? (sessions.find((session) => session.id === editingSessionId) ?? null)
     : null;
+  const editingTask = editingTaskId ? (tasks.find((task) => task.id === editingTaskId) ?? null) : null;
   const canEditSessions = config.moduleId === 'comite';
   const sessionFilterLabel = buildFilterLabel([
     ['Módulo', config.title],
@@ -539,6 +542,23 @@ export function SessionManagementPage({
         type: 'error',
       });
     }
+  };
+
+
+  const openEditTaskModal = async (session: ManagedSession, taskId: string) => {
+    if (session.status !== 'open') {
+      return;
+    }
+
+    const task = tasksById.get(taskId);
+    if (!task) {
+      await alert('No se ha encontrado el punto seleccionado. Recarga la sesión antes de continuar.', {
+        type: 'warning',
+      });
+      return;
+    }
+
+    setEditingTaskId(task.id);
   };
 
   const handleAddTaskToSession = async (session: ManagedSession, taskId: string) => {
@@ -945,6 +965,7 @@ export function SessionManagementPage({
               isExpanded={expandedSessionId === session.id}
               key={session.id}
               moveTask={handleMoveTaskInSession}
+              onEditTask={openEditTaskModal}
               onClose={openCloseModal}
               onEdit={canEditSessions ? openEditModal : undefined}
               onRemove={handleRemoveSession}
@@ -1149,6 +1170,14 @@ export function SessionManagementPage({
         </div>
       )}
 
+      {editingTaskId && (
+        <TaskEditor
+          mode="edit"
+          onDone={() => setEditingTaskId(null)}
+          task={editingTask}
+        />
+      )}
+
       {closingSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
@@ -1277,6 +1306,7 @@ function SessionCard({
   moveTask,
   onClose,
   onEdit,
+  onEditTask,
   onRemove,
   onToggle,
   removeTask,
@@ -1294,6 +1324,7 @@ function SessionCard({
   ) => void | Promise<void>;
   onClose: (session: ManagedSession) => void;
   onEdit?: (session: ManagedSession) => void;
+  onEditTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
   onRemove: (session: ManagedSession) => void | Promise<void>;
   onToggle: () => void;
   removeTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
@@ -1447,6 +1478,15 @@ function SessionCard({
                       type="button"
                     >
                       ↓
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-1 rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isReadOnly || !task}
+                      onClick={() => void onEditTask(session, taskId)}
+                      title={task ? 'Editar punto' : 'No se ha encontrado el punto'}
+                      type="button"
+                    >
+                      <Pencil size={12} /> Editar
                     </button>
                     <button
                       className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
