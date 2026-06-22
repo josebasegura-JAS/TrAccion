@@ -1068,10 +1068,10 @@ export function TeletrabajoPage({
             ref={historicoFileInputRef}
             type="file"
           />
-          <ActionButton onClick={() => fileInputRef.current?.click()} variant="import">
+          <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
             Importar encuesta
           </ActionButton>
-          <ActionButton onClick={() => historicoFileInputRef.current?.click()} variant="import">
+          <ActionButton iconOnly={false} onClick={() => historicoFileInputRef.current?.click()} variant="import">
             Importar histórico
           </ActionButton>
           <button

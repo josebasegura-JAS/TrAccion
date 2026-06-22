@@ -536,7 +536,7 @@ export function TeletrabajoEditor({
           </div>
 
           <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-t border-metro-border bg-metro-panel pt-3">
-            <ActionButton disabled={!canSubmit} size="sm" type="submit" variant="save">
+            <ActionButton disabled={!canSubmit} iconOnly={false} size="sm" type="submit" variant="save">
               {isSaving ? 'Guardando…' : 'Guardar'}
             </ActionButton>
             <InlineSaveFeedback />
@@ -570,6 +570,7 @@ export function TeletrabajoEditor({
             )}
             <ActionButton
               disabled={!canGenerateWord || isGeneratingWord || isFormReadOnly}
+              iconOnly={false}
               onClick={handleGenerateWord}
               size="sm"
               variant="word"

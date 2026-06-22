@@ -384,7 +384,7 @@ export function PlantillaPage() {
           >
             <RefreshCw size={16} /> Actualizar puestos global
           </button>
-          <ActionButton onClick={() => fileInputRef.current?.click()} variant="import">
+          <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
             Importar
           </ActionButton>
           <button
