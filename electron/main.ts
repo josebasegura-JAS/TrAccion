@@ -70,6 +70,8 @@ import {
   setDailyLocalBackupRetentionDays,
   setDailyLocalBackupDirectory,
   clearDailyLocalBackupDirectory,
+  getVacuumStatus,
+  vacuumDatabaseNow,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir, userInfo } from 'node:os';
@@ -1114,6 +1116,14 @@ function registerIpcHandlers(): void {
       await createManualLocalBackup();
       return { ok: true };
     }),
+  );
+
+  ipcMain.handle('database:get-vacuum-status', () =>
+    enqueueSqliteIpc('database:get-vacuum-status', () => getVacuumStatus()),
+  );
+
+  ipcMain.handle('database:vacuum-now', () =>
+    enqueueSqliteIpc('database:vacuum-now', () => vacuumDatabaseNow()),
   );
 
   ipcMain.handle('database:restore-local-backup', (_event, payload: unknown) => {

@@ -102,6 +102,9 @@ export function AjustesPage() {
     null,
   );
   const [dailyBackupStatus, setDailyBackupStatus] = useState('');
+  const [vacuumStatus, setVacuumStatus] = useState<TraccionVacuumStatus | null>(null);
+  const [isVacuuming, setIsVacuuming] = useState(false);
+  const [vacuumActionStatus, setVacuumActionStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const { confirm, dialogNode } = useAppDialog();
 
@@ -211,6 +214,57 @@ export function AjustesPage() {
     const settings = await window.traccion.clearDailyLocalBackupDirectory();
     setDailyBackupSettings(settings);
     setDailyBackupStatus('Carpeta de copia diaria restaurada a la ubicación por defecto.');
+  };
+
+  const refreshVacuumStatus = useCallback(async () => {
+    if (!window.traccion?.getVacuumStatus) {
+      return;
+    }
+    try {
+      setVacuumStatus(await window.traccion.getVacuumStatus());
+    } catch (error) {
+      console.warn('No se ha podido consultar el estado de compactado de la base de datos.', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshVacuumStatus();
+  }, [refreshVacuumStatus]);
+
+  const formatBytesAsMb = (sizeBytes: number) => `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+
+  const handleVacuumNow = async () => {
+    if (!window.traccion?.vacuumDatabaseNow) {
+      setVacuumActionStatus('Solo disponible en escritorio.');
+      return;
+    }
+
+    const confirmed = await confirm(
+      'Compactar la base de datos puede tardar varios segundos y bloquea brevemente la escritura para el resto de equipos. ¿Continuar?',
+      { confirmLabel: 'Compactar', title: 'Compactar base de datos' },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsVacuuming(true);
+    setVacuumActionStatus('Compactando base de datos...');
+    try {
+      const result = await window.traccion.vacuumDatabaseNow();
+      if (result.ok && result.sizeBeforeBytes !== null && result.sizeAfterBytes !== null) {
+        setVacuumActionStatus(
+          `Compactada: ${formatBytesAsMb(result.sizeBeforeBytes)} → ${formatBytesAsMb(result.sizeAfterBytes)} (${((result.durationMs ?? 0) / 1000).toFixed(1)} s).`,
+        );
+      } else {
+        setVacuumActionStatus(result.message);
+      }
+      await refreshVacuumStatus();
+    } catch (error) {
+      console.warn('No se ha podido compactar la base de datos.', error);
+      setVacuumActionStatus('No se ha podido compactar la base de datos.');
+    } finally {
+      setIsVacuuming(false);
+    }
   };
 
   const handleCreateManualBackup = async () => {
@@ -661,6 +715,53 @@ export function AjustesPage() {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+                Compactar base de datos
+              </p>
+              <p className="mt-1 max-w-xl text-xs text-metro-muted">
+                Libera en disco el espacio de filas ya borradas (p. ej. tras podar copias internas
+                antiguas). Se ejecuta automáticamente como máximo una vez por semana al cerrar
+                TrAccion. Puede tardar varios segundos y bloquea brevemente la escritura para el
+                resto de equipos.
+              </p>
+            </div>
+            <ActionButton
+              variant="save"
+              iconOnly={false}
+              disabled={isVacuuming}
+              onClick={() => void handleVacuumNow()}
+            >
+              {isVacuuming ? 'Compactando...' : 'Compactar ahora'}
+            </ActionButton>
+          </div>
+
+          <div className="mt-3 grid gap-2 text-xs text-metro-muted sm:grid-cols-2">
+            <p>
+              Tamaño actual:{' '}
+              <span className="font-semibold text-metro-text">
+                {vacuumStatus?.currentSizeBytes != null
+                  ? formatBytesAsMb(vacuumStatus.currentSizeBytes)
+                  : '—'}
+              </span>
+            </p>
+            <p>
+              Última compactación:{' '}
+              <span className="font-semibold text-metro-text">
+                {vacuumStatus?.lastVacuumAt
+                  ? new Date(vacuumStatus.lastVacuumAt).toLocaleString('es-ES')
+                  : 'Nunca'}
+              </span>
+            </p>
+          </div>
+
+          {vacuumActionStatus && (
+            <p className="mt-2 text-xs text-metro-success">{vacuumActionStatus}</p>
+          )}
         </div>
       </div>
 

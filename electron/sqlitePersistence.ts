@@ -48,6 +48,9 @@ const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
 const SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS = 15 * 1000;
 const SQLITE_RECORD_LOCK_WAIT_MS = 750;
+const VACUUM_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const VACUUM_LOCK_WAIT_MS = 30 * 1000;
+const VACUUM_METADATA_KEY = 'last_vacuum_at';
 const SQLITE_OPERATION_LOCK_RETRY_MS = 50;
 const SQLITE_BUSY_RETRY_DELAYS_MS = [100, 300, 700];
 const RECORD_LOCK_TTL_MS = 30 * 1000;
@@ -551,6 +554,139 @@ async function pruneSharedSqliteBackups(databasePath: string): Promise<void> {
 async function writeSharedSqliteBackup(databasePath: string, timestamp: string): Promise<void> {
   await copyFile(databasePath, getSharedSqliteBackupPath(databasePath, timestamp));
   await pruneSharedSqliteBackups(databasePath);
+}
+
+// --- Mantenimiento de la base: VACUUM ---------------------------------
+
+export interface VacuumResult {
+  ok: boolean;
+  message: string;
+  sizeBeforeBytes: number | null;
+  sizeAfterBytes: number | null;
+  durationMs: number | null;
+}
+
+/**
+ * Ejecuta VACUUM sobre la base SQLite activa, reescribiendo el archivo
+ * completo para liberar en disco el espacio de filas ya borradas (p. ej.
+ * tras podar local_storage_backups o tras eliminaciones acumuladas).
+ *
+ * VACUUM exige exclusividad: usamos el mismo lock de fichero (mkdir-based)
+ * que coordina el resto de operaciones SQLite entre los 2-3 equipos de la
+ * red, con heartbeat porque puede tardar varios segundos en bases grandes.
+ * Nunca se ejecuta dentro de una transacción explícita.
+ */
+async function vacuumDatabase(reason: string): Promise<VacuumResult> {
+  const currentDatabase = database;
+  const currentStatus = getSqliteStatus();
+  if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
+    return {
+      ok: false,
+      message: 'La base de datos no está activa; no se ha podido compactar.',
+      sizeBeforeBytes: null,
+      sizeAfterBytes: null,
+      durationMs: null,
+    };
+  }
+
+  let vacuumLock: DatabaseLockInfo;
+  try {
+    vacuumLock = await acquireLock(currentStatus.path, VACUUM_LOCK_WAIT_MS);
+  } catch (error) {
+    if (isSqliteLockContentionError(error)) {
+      return {
+        ok: false,
+        message: 'La base de datos está ocupada por otro equipo; inténtalo de nuevo en unos minutos.',
+        sizeBeforeBytes: null,
+        sizeAfterBytes: null,
+        durationMs: null,
+      };
+    }
+    throw error;
+  }
+
+  const vacuumLockPath = getLockPath(currentStatus.path);
+  const vacuumLockHeartbeat = startDatabaseLockHeartbeat(vacuumLockPath, vacuumLock);
+
+  try {
+    const sizeBeforeBytes = (await stat(currentStatus.path).catch(() => null))?.size ?? null;
+    const startedAt = Date.now();
+
+    currentDatabase.exec('VACUUM');
+
+    const durationMs = Date.now() - startedAt;
+    const sizeAfterBytes = (await stat(currentStatus.path).catch(() => null))?.size ?? null;
+    const completedAt = new Date().toISOString();
+    writeLastVacuumAt(currentDatabase, completedAt);
+
+    console.info(`VACUUM SQLite completado (${reason}) en ${durationMs} ms.`);
+    return {
+      ok: true,
+      message: 'Base de datos compactada correctamente.',
+      sizeBeforeBytes,
+      sizeAfterBytes,
+      durationMs,
+    };
+  } catch (error) {
+    console.warn('No se ha podido compactar la base de datos SQLite (VACUUM).', error);
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido compactar la base de datos.',
+      sizeBeforeBytes: null,
+      sizeAfterBytes: null,
+      durationMs: null,
+    };
+  } finally {
+    clearInterval(vacuumLockHeartbeat);
+    await releaseLock(vacuumLockPath, vacuumLock).catch((error: unknown) => {
+      console.warn('No se ha podido liberar el bloqueo SQLite de compactado.', error);
+    });
+  }
+}
+
+/**
+ * Lanza VACUUM en segundo plano si ha pasado más de VACUUM_INTERVAL_MS desde
+ * el último (o si nunca se ha ejecutado). Pensado para llamarse al cerrar la
+ * app, igual que el backup de shutdown: nunca interrumpe una sesión activa.
+ */
+async function runScheduledVacuumIfDue(): Promise<void> {
+  const currentDatabase = database;
+  const currentStatus = getSqliteStatus();
+  if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
+    return;
+  }
+
+  const lastVacuumAt = readLastVacuumAt(currentDatabase);
+  const lastVacuumTime = lastVacuumAt ? new Date(lastVacuumAt).getTime() : null;
+  const isDue =
+    lastVacuumTime === null || Number.isNaN(lastVacuumTime) || Date.now() - lastVacuumTime >= VACUUM_INTERVAL_MS;
+
+  if (!isDue) {
+    return;
+  }
+
+  await vacuumDatabase('scheduled');
+}
+
+export async function vacuumDatabaseNow(): Promise<VacuumResult> {
+  return vacuumDatabase('manual');
+}
+
+export interface VacuumStatus {
+  lastVacuumAt: string | null;
+  currentSizeBytes: number | null;
+}
+
+export async function getVacuumStatus(): Promise<VacuumStatus> {
+  const currentDatabase = database;
+  const currentStatus = getSqliteStatus();
+  const lastVacuumAt =
+    currentDatabase && currentStatus.ready ? readLastVacuumAt(currentDatabase) : null;
+  const currentSizeBytes = currentStatus.ready
+    ? (await stat(currentStatus.path).catch(() => null))?.size ?? null
+    : null;
+
+  return { lastVacuumAt, currentSizeBytes };
 }
 
 /**
@@ -2172,6 +2308,21 @@ function readRefreshToken(db: Database): string | null {
     .prepare("SELECT value FROM app_metadata WHERE key = 'persisted_records_refresh_token'")
     .get();
   return isMetadataRow(row) ? row.value : null;
+}
+
+function readLastVacuumAt(db: Database): string | null {
+  const row = db.prepare(`SELECT value FROM app_metadata WHERE key = '${VACUUM_METADATA_KEY}'`).get();
+  return isMetadataRow(row) ? row.value : null;
+}
+
+function writeLastVacuumAt(db: Database, timestamp: string): void {
+  db.prepare(
+    `INSERT INTO app_metadata (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = excluded.updated_at`,
+  ).run(VACUUM_METADATA_KEY, timestamp, timestamp);
 }
 
 export async function savePersistedRecord(record: PersistedStorageRecord): Promise<DatabaseStatus> {
@@ -4919,6 +5070,7 @@ function errorMessage(error: unknown): string {
 }
 
 export async function closeSqlitePersistence(): Promise<void> {
+  await runScheduledVacuumIfDue();
   await createShutdownLocalBackup();
   await closeDatabaseAndReleaseLock();
 }

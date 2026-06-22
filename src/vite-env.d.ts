@@ -148,6 +148,19 @@ interface TraccionDailyLocalBackupSettings {
   directoryPath: string | null;
 }
 
+interface TraccionVacuumStatus {
+  lastVacuumAt: string | null;
+  currentSizeBytes: number | null;
+}
+
+interface TraccionVacuumResult {
+  ok: boolean;
+  message: string;
+  sizeBeforeBytes: number | null;
+  sizeAfterBytes: number | null;
+  durationMs: number | null;
+}
+
 interface TraccionRecordLockOwnerInfo {
   ownerId: string;
   ownerName: string;
@@ -409,6 +422,8 @@ interface TraccionApi {
   clearDailyLocalBackupDirectory?: () => Promise<TraccionDailyLocalBackupSettings>;
   listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
   createManualBackup?: () => Promise<{ ok: boolean }>;
+  getVacuumStatus?: () => Promise<TraccionVacuumStatus>;
+  vacuumDatabaseNow?: () => Promise<TraccionVacuumResult>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;
