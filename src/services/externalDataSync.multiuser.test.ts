@@ -155,7 +155,9 @@ describe('externalDataSync multiusuario', () => {
     await flushPromises();
 
     expect(reloadRegisteredSyncableStores).toHaveBeenCalledTimes(1);
-    expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo']);
+    expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo'], {
+      silentPersistenceFeedback: true,
+    });
 
     module.stopExternalDataSyncPolling();
   });
@@ -225,7 +227,9 @@ describe('externalDataSync multiusuario', () => {
 
     expect(loadPersistedRecords).toHaveBeenCalledTimes(1);
     expect(applyPersistedRecordsSnapshotToLocalStorage).toHaveBeenCalledTimes(1);
-    expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo']);
+    expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo'], {
+      silentPersistenceFeedback: true,
+    });
 
     module.stopExternalDataSyncPolling();
   });
