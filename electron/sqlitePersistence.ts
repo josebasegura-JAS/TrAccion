@@ -1209,6 +1209,35 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+
+interface SqliteTableInfoRow {
+  name: string;
+}
+
+function hasTableColumn(db: Database, tableName: string, columnName: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as SqliteTableInfoRow[];
+  return rows.some((row) => row.name === columnName);
+}
+
+function addColumnIfMissing(db: Database, tableName: string, columnName: string, definition: string): void {
+  if (!hasTableColumn(db, tableName, columnName)) {
+    db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`).run();
+  }
+}
+
+function ensureConfiguracionStateShape(db: Database): void {
+  const now = new Date().toISOString();
+  addColumnIfMissing(db, 'configuracion_state', 'created_at', 'TEXT');
+  addColumnIfMissing(db, 'configuracion_state', 'updated_at', 'TEXT');
+  addColumnIfMissing(db, 'configuracion_state', 'deleted_at', 'TEXT');
+  db.prepare(
+    `UPDATE configuracion_state
+     SET created_at = COALESCE(created_at, updated_at, ?),
+         updated_at = COALESCE(updated_at, created_at, ?)
+     WHERE created_at IS NULL OR updated_at IS NULL`,
+  ).run(now, now);
+}
+
 function readCurrentSchemaVersion(db: Database): number {
   const row = db
     .prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1')
@@ -1562,7 +1591,11 @@ function migrateToVersion11(db: Database): void {
       updated_at TEXT NOT NULL,
       deleted_at TEXT
     );
+  `);
 
+  ensureConfiguracionStateShape(db);
+
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_vinculograma_records_updated_at ON vinculograma_records(updated_at);
     CREATE INDEX IF NOT EXISTS idx_licencia_sin_sueldo_records_updated_at ON licencia_sin_sueldo_records(updated_at);
     CREATE INDEX IF NOT EXISTS idx_criterios_rrll_records_updated_at ON criterios_rrll_records(updated_at);
@@ -1586,9 +1619,11 @@ function migrateToVersion11(db: Database): void {
 }
 
 function migrateToVersion12(db: Database): void {
-  // v12 es una migración de compatibilidad. No añade ni modifica estructura:
-  // permite abrir bases que ya quedaron marcadas como schema 12 sin forzar
-  // fallback a localStorage, manteniendo todas las tablas creadas hasta v11.
+  // v12 mantiene compatibilidad con bases donde configuracion_state se creó
+  // antes de consolidar created_at/deleted_at. CREATE TABLE IF NOT EXISTS no
+  // corrige una tabla ya existente, por lo que hay que completar columnas aquí.
+  ensureConfiguracionStateShape(db);
+
   const currentVersion = readCurrentSchemaVersion(db);
   if (currentVersion < 12) {
     db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
