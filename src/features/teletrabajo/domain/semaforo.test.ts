@@ -222,4 +222,32 @@ describe('presencialidad mínima del puesto acotada al periodo de cada solicitud
 
     expect(semaforo.status).toBe('ok');
   });
+
+  it('no revienta cuando una solicitud llega con periodo undefined o null (registro legacy/corrupto)', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+
+    const solicitudSinPeriodo = buildSolicitud({
+      id: 'sol-sin-periodo',
+      empleado: '100',
+      // Simula un registro legacy/corrupto donde 'periodo' no llega como string.
+      periodo: undefined as unknown as string,
+    });
+
+    const solicitudes = [solicitudSinPeriodo];
+
+    expect(() => buildSolicitudesByPeriodoPuestoCount(solicitudes)).not.toThrow();
+
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(solicitudes);
+
+    expect(() =>
+      getTeletrabajoSemaforo(
+        solicitudSinPeriodo,
+        puestosByKey,
+        solicitudesByPuestoCount,
+        employeesByEmpleado,
+      ),
+    ).not.toThrow();
+  });
 });

@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('traccion', {
   createManualBackup: () => ipcRenderer.invoke('database:create-manual-backup'),
   getVacuumStatus: () => ipcRenderer.invoke('database:get-vacuum-status'),
   vacuumDatabaseNow: () => ipcRenderer.invoke('database:vacuum-now'),
+  getCurrentDatabaseLock: () => ipcRenderer.invoke('database:get-current-lock'),
+  forceReleaseDatabaseLock: () => ipcRenderer.invoke('database:force-release-lock'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
   getPersistedRecord: (key: string) =>

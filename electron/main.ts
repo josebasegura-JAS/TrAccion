@@ -74,6 +74,8 @@ import {
   clearDailyLocalBackupDirectory,
   getVacuumStatus,
   vacuumDatabaseNow,
+  getCurrentDatabaseLockInfo,
+  forceReleaseDatabaseLock,
 } from './sqlitePersistence.js';
 import { spawn } from 'node:child_process';
 import { tmpdir, userInfo } from 'node:os';
@@ -1186,6 +1188,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('database:vacuum-now', () =>
     enqueueSqliteIpc('database:vacuum-now', () => vacuumDatabaseNow()),
+  );
+
+  ipcMain.handle('database:get-current-lock', () =>
+    enqueueSqliteIpc('database:get-current-lock', () => getCurrentDatabaseLockInfo()),
+  );
+
+  ipcMain.handle('database:force-release-lock', () =>
+    enqueueSqliteIpc('database:force-release-lock', () => forceReleaseDatabaseLock()),
   );
 
   ipcMain.handle('database:restore-local-backup', (_event, payload: unknown) => {

@@ -21,7 +21,7 @@ export function buildPuestosByKey(
 }
 
 export function buildSolicitudPeriodoPuestoKey(periodo: string, puestoKey: string): string {
-  return `${periodo.trim()}::${puestoKey}`;
+  return `${(periodo ?? '').trim()}::${puestoKey}`;
 }
 
 /**
@@ -59,7 +59,7 @@ export function getTeletrabajoSemaforo(
 ): TeletrabajoSemaforo {
   const antiguedad = evaluateTeletrabajoAntiguedad(
     solicitud,
-    employeesByEmpleado.get(solicitud.empleado.trim()),
+    employeesByEmpleado.get((solicitud.empleado ?? '').trim()),
   );
 
   if (antiguedad.status === 'no-cumple') {

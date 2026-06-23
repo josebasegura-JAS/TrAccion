@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
+import { formatLockAge } from '../services/databaseLockView';
 import { Notice } from './ui/Notice';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { StatusBadge } from './ui/StatusBadge';
@@ -112,6 +113,11 @@ export function AjustesPage() {
   const [vacuumStatus, setVacuumStatus] = useState<TraccionVacuumStatus | null>(null);
   const [isVacuuming, setIsVacuuming] = useState(false);
   const [vacuumActionStatus, setVacuumActionStatus] = useState('');
+  const [currentDatabaseLock, setCurrentDatabaseLock] = useState<TraccionDatabaseLockInfo | null>(
+    null,
+  );
+  const [isCheckingDatabaseLock, setIsCheckingDatabaseLock] = useState(false);
+  const [isForcingLockRelease, setIsForcingLockRelease] = useState(false);
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const { confirm, dialogNode } = useAppDialog();
 
@@ -237,6 +243,67 @@ export function AjustesPage() {
   useEffect(() => {
     void refreshVacuumStatus();
   }, [refreshVacuumStatus]);
+
+  const refreshCurrentDatabaseLock = useCallback(async () => {
+    if (!window.traccion?.getCurrentDatabaseLock) {
+      return;
+    }
+
+    setIsCheckingDatabaseLock(true);
+    try {
+      setCurrentDatabaseLock(await window.traccion.getCurrentDatabaseLock());
+    } catch (error) {
+      console.warn('No se ha podido comprobar el bloqueo actual de SQLite.', error);
+    } finally {
+      setIsCheckingDatabaseLock(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Solo merece la pena comprobar el lock en caliente cuando el arranque
+    // se ha quedado realmente bloqueado por otro equipo; en el resto de
+    // fases no hay nada que mostrar.
+    if (databaseStatus?.phase === 'locked' || databaseStatus?.phase === 'fallback') {
+      void refreshCurrentDatabaseLock();
+    }
+  }, [databaseStatus?.phase, refreshCurrentDatabaseLock]);
+
+  const handleForceReleaseDatabaseLock = async () => {
+    setDatabaseActionStatus('');
+
+    if (!window.traccion?.forceReleaseDatabaseLock) {
+      setDatabaseActionStatus('La liberación manual del bloqueo solo está disponible en escritorio.');
+      return;
+    }
+
+    const lockDescription = currentDatabaseLock
+      ? `${currentDatabaseLock.username}@${currentDatabaseLock.hostname} (PID ${currentDatabaseLock.pid}, ${formatLockAge(currentDatabaseLock.updatedAt)})`
+      : 'el equipo que aparece en el aviso';
+
+    const confirmed = await confirm(
+      `Vas a forzar la liberación del bloqueo de ${lockDescription}. Solo hazlo si tienes la certeza de que esa persona no está trabajando realmente en TrAccion en este momento (por ejemplo, su equipo se apagó o se quedó colgado). Si en realidad sigue activo, ambos podríais escribir a la vez durante unos segundos. ¿Continuar?`,
+      { confirmLabel: 'Forzar liberación', danger: true, title: 'Forzar liberación de bloqueo SQLite' },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsForcingLockRelease(true);
+    try {
+      const result = await window.traccion.forceReleaseDatabaseLock();
+      publishDatabaseStatus(result.status);
+      setDatabaseActionStatus(result.message);
+      await refreshCurrentDatabaseLock();
+      if (result.ok) {
+        window.setTimeout(() => window.location.reload(), 900);
+      }
+    } catch (error) {
+      console.warn('No se ha podido forzar la liberación del bloqueo SQLite.', error);
+      setDatabaseActionStatus('No se ha podido forzar la liberación del bloqueo SQLite.');
+    } finally {
+      setIsForcingLockRelease(false);
+    }
+  };
 
   const formatBytesAsMb = (sizeBytes: number) => `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 
@@ -542,11 +609,31 @@ export function AjustesPage() {
           </div>
         </div>
 
-        {databaseStatus?.lock && (
-          <Notice className="mt-3" tone="muted">
-            Lock: {databaseStatus.lock.username}@{databaseStatus.lock.hostname} · PID{' '}
-            {databaseStatus.lock.pid} · {databaseStatus.lock.updatedAt}
-          </Notice>
+        {currentDatabaseLock && (
+          <>
+            <Notice className="mt-3" tone="warning">
+              Bloqueo activo de {currentDatabaseLock.username}@{currentDatabaseLock.hostname} · PID{' '}
+              {currentDatabaseLock.pid} · {formatLockAge(currentDatabaseLock.updatedAt)}
+            </Notice>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isCheckingDatabaseLock}
+                onClick={() => void refreshCurrentDatabaseLock()}
+                type="button"
+              >
+                {isCheckingDatabaseLock ? 'Comprobando...' : 'Comprobar de nuevo'}
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isForcingLockRelease}
+                onClick={handleForceReleaseDatabaseLock}
+                type="button"
+              >
+                {isForcingLockRelease ? 'Liberando...' : 'Forzar liberación'}
+              </button>
+            </div>
+          </>
         )}
 
         {(databaseStatus?.message || databaseActionStatus) && (

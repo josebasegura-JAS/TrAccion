@@ -143,6 +143,12 @@ interface TraccionRestoreLocalBackupResult {
   message: string;
 }
 
+interface TraccionForceReleaseDatabaseLockResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  message: string;
+}
+
 interface TraccionDailyLocalBackupSettings {
   enabled: boolean;
   retentionDays: number;
@@ -441,6 +447,8 @@ interface TraccionApi {
   createManualBackup?: () => Promise<{ ok: boolean }>;
   getVacuumStatus?: () => Promise<TraccionVacuumStatus>;
   vacuumDatabaseNow?: () => Promise<TraccionVacuumResult>;
+  getCurrentDatabaseLock?: () => Promise<TraccionDatabaseLockInfo | null>;
+  forceReleaseDatabaseLock?: () => Promise<TraccionForceReleaseDatabaseLockResult>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;

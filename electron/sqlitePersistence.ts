@@ -262,6 +262,12 @@ export interface RestoreLocalBackupResult {
   message: string;
 }
 
+export interface ForceReleaseDatabaseLockResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  message: string;
+}
+
 export interface DatabaseLockInfo {
   ownerId: string;
   username: string;
@@ -920,11 +926,29 @@ async function removeStaleLock(lockPath: string, staleLock: DatabaseLockInfo): P
     return;
   }
 
-  try {
-    await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
-    await rmdir(lockPath).catch(() => undefined);
-  } catch {
-    // Otro proceso puede haber limpiado el lock antes.
+  let unlinkFailed = false;
+  let rmdirFailed = false;
+
+  await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
+    unlinkFailed = true;
+    console.warn(
+      `No se ha podido borrar el fichero del lock SQLite caducado (${getLockInfoPath(lockPath)}). Propietario anterior: ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}).`,
+      error,
+    );
+  });
+  await rmdir(lockPath).catch((error: unknown) => {
+    rmdirFailed = true;
+    console.warn(
+      `No se ha podido borrar el directorio del lock SQLite caducado (${lockPath}). Propietario anterior: ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}).`,
+      error,
+    );
+  });
+
+  if (unlinkFailed || rmdirFailed) {
+    console.warn(
+      `El lock SQLite de ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}) está caducado pero no se ha podido limpiar automáticamente. ` +
+        'Puede requerir liberación manual desde Ajustes o borrado manual del directorio .lockdir en la carpeta compartida.',
+    );
   }
 }
 
@@ -935,10 +959,114 @@ async function removeCorruptStaleLock(lockPath: string): Promise<void> {
       return;
     }
 
-    await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
-    await rmdir(lockPath).catch(() => undefined);
+    let cleanupFailed = false;
+    await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
+      cleanupFailed = true;
+      console.warn(
+        `No se ha podido borrar el fichero de un lock SQLite corrupto/caducado (${getLockInfoPath(lockPath)}).`,
+        error,
+      );
+    });
+    await rmdir(lockPath).catch((error: unknown) => {
+      cleanupFailed = true;
+      console.warn(
+        `No se ha podido borrar el directorio de un lock SQLite corrupto/caducado (${lockPath}).`,
+        error,
+      );
+    });
+
+    if (cleanupFailed) {
+      console.warn(
+        `El directorio de lock ${lockPath} parece corrupto o caducado pero no se ha podido limpiar automáticamente. ` +
+          'Puede requerir liberación manual desde Ajustes o borrado manual en la carpeta compartida.',
+      );
+    }
   } catch {
     // Si no existe o no se puede leer, dejamos que el bucle normal reintente.
+  }
+}
+
+/**
+ * Relee del disco el lock que está bloqueando la base activa, sin intentar
+ * adquirirlo. A diferencia de `getSqliteStatus()`, que devuelve el `status`
+ * cacheado en el último intento de arranque, esta función consulta el
+ * fichero `.lockdir` en el momento de la llamada, para que la pantalla de
+ * Ajustes pueda mostrar información actualizada (por ejemplo, la antigüedad
+ * real del lock) mientras la app sigue en fase `locked`/`fallback`.
+ */
+export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | null> {
+  const currentStatus = getSqliteStatus();
+  return readLock(currentStatus.lockPath);
+}
+
+/**
+ * Borra manualmente el lock de sesión SQLite de la carpeta compartida y
+ * reintenta activar la base inmediatamente después.
+ *
+ * Esta es una acción explícita y destructiva pensada para el caso en que el
+ * lock automático (TTL de 30s, ver `isLockStale`) no se ha podido limpiar
+ * solo —por ejemplo, por un fallo de borrado en el recurso SMB— y se queda
+ * bloqueando a todo el resto de usuarios indefinidamente. El frontend debe
+ * pedir confirmación explícita antes de llamarla, ya que si el propietario
+ * del lock sigue realmente trabajando, esto puede provocar una escritura
+ * concurrente sin coordinación durante unos segundos.
+ */
+export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLockResult> {
+  const currentStatus = getSqliteStatus();
+  const lockPath = currentStatus.lockPath;
+  const previousLock = await readLock(lockPath);
+
+  if (previousLock) {
+    await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
+      console.warn(`No se ha podido borrar manualmente el fichero del lock SQLite (${getLockInfoPath(lockPath)}).`, error);
+    });
+    await rmdir(lockPath).catch((error: unknown) => {
+      console.warn(`No se ha podido borrar manualmente el directorio del lock SQLite (${lockPath}).`, error);
+    });
+  }
+
+  const lockDescription = previousLock
+    ? `${previousLock.username}@${previousLock.hostname} (PID ${previousLock.pid})`
+    : null;
+
+  if (database) {
+    // La base ya estaba activa en este proceso: no hay que reconectar, solo
+    // informar de que se ha limpiado un lock ajeno que pudiera estar
+    // bloqueando a otros usuarios.
+    const activeStatus = getSqliteStatus();
+    return {
+      ok: true,
+      status: activeStatus,
+      message: lockDescription
+        ? `Lock de ${lockDescription} liberado manualmente. Tu conexión a SQLite no se ha visto afectada.`
+        : 'No había ningún bloqueo activo que liberar. Tu conexión a SQLite no se ha visto afectada.',
+    };
+  }
+
+  try {
+    const configured = await getConfiguredDatabaseDirectory();
+    const nextStatus = await activateDatabase(configured.directoryPath, configured.isDefaultPath, null);
+    return {
+      ok: true,
+      status: nextStatus,
+      message: lockDescription
+        ? `Lock de ${lockDescription} liberado manualmente. Conexión a SQLite restablecida.`
+        : 'No había ningún bloqueo activo que liberar; se ha reintentado la conexión y se ha restablecido correctamente.',
+    };
+  } catch (error) {
+    const refreshedLock = await readLock(lockPath);
+    status = {
+      ...currentStatus,
+      lock: refreshedLock ?? undefined,
+      message: errorMessage(error),
+    };
+    return {
+      ok: false,
+      status,
+      message: lockDescription
+        ? `Lock de ${lockDescription} liberado manualmente, pero no se ha podido reconectar: ${errorMessage(error)}`
+        : `No se ha podido reconectar con SQLite: ${errorMessage(error)}`,
+    };
   }
 }
 
