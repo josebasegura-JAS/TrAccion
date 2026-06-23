@@ -4,6 +4,9 @@ import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable
 import { useTableViewPreferences, type TableSortState, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
+import type { Employee } from '../../plantilla/domain/employee';
+import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
+import { generateVinculogramaSolicitudWord } from '../domain/word';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   calculateExpiryDate,
@@ -296,6 +299,178 @@ function VinculogramaModal({
   );
 }
 
+
+function SolicitudVinculogramaModal({
+  employees,
+  templatePath,
+  onClose,
+}: {
+  employees: Employee[];
+  templatePath: string;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [status, setStatus] = useState('');
+  const [statusTone, setStatusTone] = useState<'success' | 'error' | 'muted'>('muted');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const suggestions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+
+    return employees
+      .filter((employee) => !employee.deletedAt)
+      .filter((employee) => {
+        const normalizedName = employee.nombreApellidos.toLowerCase();
+        return employee.empleado.includes(normalizedQuery) || normalizedName.includes(normalizedQuery);
+      })
+      .slice(0, 12);
+  }, [employees, query]);
+
+  const generateSolicitud = async () => {
+    if (!selectedEmployee) {
+      setStatus('Selecciona primero una persona de Plantilla.');
+      setStatusTone('error');
+      return;
+    }
+
+    if (!templatePath.trim()) {
+      setStatus('Configura primero la plantilla DOCX de Vinculograma en Ajustes.');
+      setStatusTone('error');
+      return;
+    }
+
+    if (!window.traccion?.createOutlookDraft) {
+      setStatus('Outlook solo está disponible en la aplicación de escritorio.');
+      setStatusTone('error');
+      return;
+    }
+
+    setIsGenerating(true);
+    setStatus('Generando solicitud y abriendo Outlook...');
+    setStatusTone('muted');
+    try {
+      const word = await generateVinculogramaSolicitudWord(selectedEmployee, templatePath);
+      const buffer = await word.blob.arrayBuffer();
+      const result = await window.traccion.createOutlookDraft({
+        subject: 'Solicitud vinculograma',
+        html: '<p></p>',
+        to: [],
+        cc: [],
+        attachments: [{ fileName: word.fileName, buffer }],
+      });
+
+      if (!result.ok) {
+        throw new Error(result.message || 'No se ha podido abrir Outlook.');
+      }
+
+      setStatus('Solicitud generada y correo abierto en Outlook.');
+      setStatusTone('success');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'No se ha podido generar la solicitud.');
+      setStatusTone('error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const statusClass =
+    statusTone === 'success'
+      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
+      : statusTone === 'error'
+        ? 'border-red-400/40 bg-red-950/20 text-red-100'
+        : 'border-metro-border bg-metro-panel text-metro-muted';
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
+        <div className="flex items-start justify-between border-b border-metro-border px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+              Vinculograma
+            </p>
+            <h3 className="text-xl font-bold text-metro-text">Enviar solicitud</h3>
+          </div>
+          <button
+            className="rounded-lg p-2 text-metro-muted hover:bg-metro-surface hover:text-metro-text"
+            onClick={onClose}
+            type="button"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-4">
+          <p className="text-sm text-metro-muted">
+            Busca la persona solicitante en Plantilla. El DOCX se generará con nombre, DNI y fecha actual; los datos de la persona vinculada quedan en blanco.
+          </p>
+
+          <div className="relative">
+            <FieldLabel>
+              Buscar por nº empleado o nombre
+              <Input
+                autoFocus
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setSelectedEmployee(null);
+                  setStatus('');
+                }}
+                placeholder="Ej.: 12345 o Apellidos, Nombre"
+                value={query}
+              />
+            </FieldLabel>
+            {suggestions.length > 0 && !selectedEmployee && (
+              <div className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-metro-border bg-metro-surface shadow-xl">
+                {suggestions.map((employee) => (
+                  <button
+                    className="block w-full px-3 py-2 text-left text-sm hover:bg-metro-red/10"
+                    key={employee.empleado}
+                    onClick={() => {
+                      setSelectedEmployee(employee);
+                      setQuery(`${employee.empleado} · ${employee.nombreApellidos}`);
+                    }}
+                    type="button"
+                  >
+                    <span className="font-semibold text-metro-text">{employee.empleado}</span>
+                    <span className="ml-2 text-metro-muted">{employee.nombreApellidos}</span>
+                    <span className="ml-2 text-metro-muted">{employee.dni || employee.nif}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedEmployee && (
+            <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm">
+              <p className="font-semibold text-metro-text">{selectedEmployee.nombreApellidos}</p>
+              <p className="text-metro-muted">
+                Nº {selectedEmployee.empleado} · DNI {selectedEmployee.dni || selectedEmployee.nif || 'sin informar'}
+              </p>
+            </div>
+          )}
+
+          {status && <p className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusClass}`}>{status}</p>}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-metro-border px-5 py-4">
+          <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>
+            Cancelar
+          </ActionButton>
+          <ActionButton
+            variant="save"
+            iconOnly={false}
+            disabled={isGenerating || !selectedEmployee}
+            onClick={() => void generateSolicitud()}
+          >
+            {isGenerating ? 'Generando…' : 'Generar'}
+          </ActionButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VinculogramaTable({
   emptyText,
   records,
@@ -433,9 +608,11 @@ function VinculogramaTable({
 export function VinculogramaPage() {
   const { records, load, createWithConcurrencyCheck, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useVinculogramaStore();
   const { employees, load: loadEmployees } = useEmployeeStore();
+  const rutaPlantillaVinculograma = useConfiguracionStore((state) => state.rutaPlantillaVinculograma);
   const [draft, setDraft] = useState<VinculogramaDraft>(EMPTY_VINCULOGRAMA_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showSolicitudModal, setShowSolicitudModal] = useState(false);
   const [showExpired, setShowExpired] = useState(readExpiredVisibility);
   const { alert, dialogNode } = useAppDialog();
   const today = todayIso();
@@ -557,9 +734,14 @@ export function VinculogramaPage() {
           helpSubtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
           className="mb-0"
           actions={
-            <ActionButton variant="add" iconOnly={false} onClick={openCreateModal}>
-              Nuevo vínculo
-            </ActionButton>
+            <div className="flex flex-wrap gap-2">
+              <ActionButton variant="word" iconOnly={false} onClick={() => setShowSolicitudModal(true)}>
+                Enviar solicitud
+              </ActionButton>
+              <ActionButton variant="add" iconOnly={false} onClick={openCreateModal}>
+                Nuevo vínculo
+              </ActionButton>
+            </div>
           }
         />
       </div>
@@ -638,6 +820,14 @@ export function VinculogramaPage() {
           </div>
         )}
       </div>
+
+      {showSolicitudModal && (
+        <SolicitudVinculogramaModal
+          employees={employees}
+          templatePath={rutaPlantillaVinculograma}
+          onClose={() => setShowSolicitudModal(false)}
+        />
+      )}
 
       {showModal && (
         <VinculogramaModal

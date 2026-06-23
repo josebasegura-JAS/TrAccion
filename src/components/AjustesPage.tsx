@@ -76,6 +76,9 @@ export function AjustesPage() {
   const rutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
     (state) => state.rutaPlantillaLicenciaSinSueldo,
   );
+  const rutaPlantillaVinculograma = useConfiguracionStore(
+    (state) => state.rutaPlantillaVinculograma,
+  );
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const addTaskPhase = useConfiguracionStore((state) => state.addTaskPhase);
   const updateTaskPhase = useConfiguracionStore((state) => state.updateTaskPhase);
@@ -87,8 +90,12 @@ export function AjustesPage() {
   const setRutaPlantillaLicenciaSinSueldo = useConfiguracionStore(
     (state) => state.setRutaPlantillaLicenciaSinSueldo,
   );
+  const setRutaPlantillaVinculograma = useConfiguracionStore(
+    (state) => state.setRutaPlantillaVinculograma,
+  );
   const [status, setStatus] = useState('');
   const [licenciaTemplateStatus, setLicenciaTemplateStatus] = useState('');
+  const [vinculogramaTemplateStatus, setVinculogramaTemplateStatus] = useState('');
   const databaseStatus = useDatabaseStatus();
   const databaseBadge = buildDatabaseStatusBadge(databaseStatus);
   const [databaseActionStatus, setDatabaseActionStatus] = useState('');
@@ -413,6 +420,33 @@ export function AjustesPage() {
 
     setRutaPlantillaTeletrabajo(selectedPath);
     setStatus('Ruta de plantilla guardada.');
+  };
+
+  const handleSelectVinculogramaTemplate = async () => {
+    setVinculogramaTemplateStatus('');
+
+    const api = window.traccion;
+    if (!api || (!api.selectVinculogramaTemplate && !api.selectTeletrabajoTemplate)) {
+      setVinculogramaTemplateStatus(
+        'El selector de plantillas solo está disponible en la aplicación de escritorio.',
+      );
+      return;
+    }
+
+    const selectedPath = api.selectVinculogramaTemplate
+      ? await api.selectVinculogramaTemplate()
+      : await api.selectTeletrabajoTemplate();
+    if (!selectedPath) {
+      return;
+    }
+
+    if (!isDocxPath(selectedPath)) {
+      setVinculogramaTemplateStatus('La ruta seleccionada debe apuntar a un archivo DOCX.');
+      return;
+    }
+
+    setRutaPlantillaVinculograma(selectedPath);
+    setVinculogramaTemplateStatus('Ruta de plantilla de vinculograma guardada.');
   };
 
   const handleSelectLicenciaSinSueldoTemplate = async () => {
@@ -864,6 +898,41 @@ export function AjustesPage() {
           </button>
           {licenciaTemplateStatus && (
             <Notice tone={noticeTone(licenciaTemplateStatus)}>{licenciaTemplateStatus}</Notice>
+          )}
+        </div>
+      </div>
+
+
+      <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-metro-text">Plantilla Vinculograma</h3>
+          <p className="mt-1 text-sm text-metro-muted">
+            Guarda la ruta externa del DOCX usado para generar la solicitud de declaración responsable.
+          </p>
+        </div>
+
+        <label className="block text-xs font-semibold text-metro-muted">
+          Ruta plantilla DOCX
+          <input
+            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => setRutaPlantillaVinculograma(event.target.value)}
+            placeholder="C:\\RRLL\\Plantillas\\Solicitud Vinculograma.docx"
+            type="text"
+            value={rutaPlantillaVinculograma}
+          />
+        </label>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+            onClick={handleSelectVinculogramaTemplate}
+            type="button"
+          >
+            <FolderOpen size={16} />
+            Seleccionar plantilla
+          </button>
+          {vinculogramaTemplateStatus && (
+            <Notice tone={noticeTone(vinculogramaTemplateStatus)}>{vinculogramaTemplateStatus}</Notice>
           )}
         </div>
       </div>

@@ -385,11 +385,17 @@ function normalizeDocxTextPayload(payload: unknown): Buffer {
   throw new Error('Contenido DOCX no válido.');
 }
 
+interface OutlookDraftAttachment {
+  fileName: string;
+  buffer: Buffer;
+}
+
 interface OutlookDraftPayload {
   subject: string;
   html: string;
   to: string[];
   cc: string[];
+  attachments: OutlookDraftAttachment[];
 }
 
 interface OutlookCalendarPayload {
@@ -424,6 +430,47 @@ function normalizeRecipientList(value: unknown): string[] {
   return [];
 }
 
+
+function normalizeOutlookDraftAttachments(value: unknown): OutlookDraftAttachment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.slice(0, 10).flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return [];
+    }
+
+    const candidate = item as { fileName?: unknown; buffer?: unknown };
+    if (typeof candidate.fileName !== 'string' || !candidate.fileName.trim()) {
+      return [];
+    }
+
+    const fileName = path
+      .basename(candidate.fileName)
+      .replace(/[<>:"\/\\|?*]/g, '_')
+      .split('')
+      .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
+      .join('');
+
+    const rawBuffer = candidate.buffer;
+    if (rawBuffer instanceof ArrayBuffer) {
+      return [{ fileName, buffer: Buffer.from(rawBuffer) }];
+    }
+
+    if (ArrayBuffer.isView(rawBuffer)) {
+      return [
+        {
+          fileName,
+          buffer: Buffer.from(rawBuffer.buffer, rawBuffer.byteOffset, rawBuffer.byteLength),
+        },
+      ];
+    }
+
+    return [];
+  });
+}
+
 function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -435,6 +482,7 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   const html = typeof htmlSource === 'string' ? htmlSource : '';
   const to = normalizeRecipientList(candidate.to);
   const cc = normalizeRecipientList(candidate.cc);
+  const attachments = normalizeOutlookDraftAttachments((candidate as { attachments?: unknown }).attachments);
 
   if (
     !subject ||
@@ -447,7 +495,7 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
     return null;
   }
 
-  return { subject, html, to, cc };
+  return { subject, html, to, cc, attachments };
 }
 
 function normalizeOutlookCalendarPayload(value: unknown): OutlookCalendarPayload | null {
@@ -495,6 +543,7 @@ function buildOutlookDraftPowerShellScript(payloadPath: string): string {
     '$mail.To = [string]$payload.to',
     '$mail.CC = [string]$payload.cc',
     '$mail.HTMLBody = [string]$payload.html',
+    'foreach ($attachment in @($payload.attachments)) { if ([string]$attachment.path) { $mail.Attachments.Add([string]$attachment.path) | Out-Null } }',
     '$mail.Display() | Out-Null',
     "Write-Output 'OK_DRAFT_DISPLAYED'",
   ].join('\n');
@@ -520,6 +569,11 @@ function buildOutlookDraftVbs(payloadPath: string): string {
     'Mail.To = Payload("to")',
     'Mail.CC = Payload("cc")',
     'Mail.HTMLBody = Payload("html")',
+    'Dim Attachments, AttachmentIndex',
+    'Set Attachments = Payload("attachments")',
+    'For AttachmentIndex = 0 To Attachments.length - 1',
+    '  If Attachments(AttachmentIndex).path <> "" Then Mail.Attachments.Add Attachments(AttachmentIndex).path',
+    'Next',
     'Mail.Display',
     '',
     'Function ParseJsonObject(ByVal Text)',
@@ -556,11 +610,18 @@ async function withOutlookDraftTempFiles<T>(
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'traccion-especiales-'));
   const payloadPath = path.join(tempRoot, `${randomUUID()}.json`);
   const scriptPath = path.join(tempRoot, `${randomUUID()}.${extension}`);
+  const attachmentPayload: Array<{ fileName: string; path: string }> = [];
+  for (const attachment of payload.attachments) {
+    const attachmentPath = path.join(tempRoot, attachment.fileName);
+    await writeFile(attachmentPath, attachment.buffer);
+    attachmentPayload.push({ fileName: attachment.fileName, path: attachmentPath });
+  }
   const serializedPayload = JSON.stringify({
     subject: payload.subject,
     html: payload.html,
     to: payload.to.join(';'),
     cc: payload.cc.join(';'),
+    attachments: attachmentPayload,
   });
 
   try {
@@ -2093,6 +2154,33 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('teletrabajo:read-template', async (_event, filePath: string) => {
+    assertDocxPath(filePath);
+    const fileBuffer = await readFile(filePath);
+    return fileBuffer.buffer.slice(
+      fileBuffer.byteOffset,
+      fileBuffer.byteOffset + fileBuffer.byteLength,
+    );
+  });
+
+  ipcMain.handle('vinculograma:select-template', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar plantilla de Vinculograma',
+      properties: ['openFile'],
+      filters: [{ name: 'Documento Word', extensions: ['docx'] }],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle('vinculograma:read-template', async (_event, filePath: string) => {
     assertDocxPath(filePath);
     const fileBuffer = await readFile(filePath);
     return fileBuffer.buffer.slice(

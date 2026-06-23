@@ -21,6 +21,7 @@ let latestConfiguracionUpdatedAt: string | null = null;
 interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
   rutaPlantillaLicenciaSinSueldo: string;
+  rutaPlantillaVinculograma: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
 }
@@ -30,6 +31,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   reloadFromStorage: () => void;
   setRutaPlantillaTeletrabajo: (ruta: string) => void;
   setRutaPlantillaLicenciaSinSueldo: (ruta: string) => void;
+  setRutaPlantillaVinculograma: (ruta: string) => void;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -118,6 +120,7 @@ function defaultConfiguracion(): ConfiguracionState {
   return {
     rutaPlantillaTeletrabajo: '',
     rutaPlantillaLicenciaSinSueldo: '',
+    rutaPlantillaVinculograma: '',
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
   };
@@ -138,6 +141,11 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(
       typeof (parsed as { rutaPlantillaLicenciaSinSueldo?: unknown }).rutaPlantillaLicenciaSinSueldo === 'string'
         ? (parsed as { rutaPlantillaLicenciaSinSueldo: string }).rutaPlantillaLicenciaSinSueldo
+        : '',
+    ),
+    rutaPlantillaVinculograma: normalizeTemplatePath(
+      typeof (parsed as { rutaPlantillaVinculograma?: unknown }).rutaPlantillaVinculograma === 'string'
+        ? (parsed as { rutaPlantillaVinculograma: string }).rutaPlantillaVinculograma
         : '',
     ),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
@@ -204,6 +212,7 @@ const initialConfiguracion = readConfiguracion();
 export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
   rutaPlantillaLicenciaSinSueldo: initialConfiguracion.rutaPlantillaLicenciaSinSueldo,
+  rutaPlantillaVinculograma: initialConfiguracion.rutaPlantillaVinculograma,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
   load: () => {
@@ -221,10 +230,17 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     // (y el parpadeo asociado) cuando el poll detecta cambio de updatedAt
     // pero el contenido normalizado ya coincide con el que tenemos en memoria.
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, taskPhases, taskOrigins } = get();
+      const {
+        rutaPlantillaTeletrabajo,
+        rutaPlantillaLicenciaSinSueldo,
+        rutaPlantillaVinculograma,
+        taskPhases,
+        taskOrigins,
+      } = get();
       const current: ConfiguracionState = {
         rutaPlantillaTeletrabajo,
         rutaPlantillaLicenciaSinSueldo,
+        rutaPlantillaVinculograma,
         taskPhases,
         taskOrigins,
       };
@@ -263,6 +279,14 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     const configuracion = {
       ...state,
       rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta),
+    };
+    commitConfiguracion(set, configuracion);
+  },
+  setRutaPlantillaVinculograma: (ruta) => {
+    const state = useConfiguracionStore.getState();
+    const configuracion = {
+      ...state,
+      rutaPlantillaVinculograma: normalizeTemplatePath(ruta),
     };
     commitConfiguracion(set, configuracion);
   },

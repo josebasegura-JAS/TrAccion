@@ -18,6 +18,7 @@ interface EspecialOutlookDraftPayload {
   html: string;
   to: string[];
   cc: string[];
+  attachments?: Array<{ fileName: string; buffer: ArrayBuffer }>;
 }
 
 interface LegacyEspecialOutlookDraftPayload {
@@ -526,6 +527,8 @@ interface TraccionApi {
   openTaskDocument?: (filePath: string) => Promise<TraccionOpenPathResult>;
   selectTeletrabajoTemplate: () => Promise<string | null>;
   readTeletrabajoTemplate: (path: string) => Promise<ArrayBuffer>;
+  selectVinculogramaTemplate?: () => Promise<string | null>;
+  readVinculogramaTemplate?: (path: string) => Promise<ArrayBuffer>;
   selectLicenciaSinSueldoTemplate?: () => Promise<string | null>;
   readLicenciaSinSueldoTemplate?: (path: string) => Promise<ArrayBuffer>;
   openTeletrabajoWord?: (
