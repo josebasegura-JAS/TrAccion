@@ -1,6 +1,9 @@
 import ExcelJS from 'exceljs';
 
 import type { Employee } from '../../plantilla/domain/employee';
+import { evaluateTeletrabajoAntiguedad } from './antiguedad';
+import type { TeletrabajoPuesto } from './puestosTeletrabajo';
+import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
 import type { TeletrabajoSolicitud } from './solicitud';
 import { buildStableExportFilename } from '../../../shared/export/tableExport';
 
@@ -9,8 +12,10 @@ const NO = 'NO';
 const ROTIS_FONT = 'TrueRotisSemiSansLightTwo';
 const SOFT_GREEN = '#E2F0D9';
 const SOFT_RED = '#FFC7CE';
+const SOFT_YELLOW = '#FFF2CC';
 const SOFT_RED_TEXT = '#9C0006';
 const SOFT_GREEN_TEXT = '#006100';
+const SOFT_YELLOW_TEXT = '#7F6000';
 
 function toExcelColor(hex: string): { argb: string } {
   return { argb: `FF${hex.replace('#', '').toUpperCase()}` };
@@ -60,6 +65,130 @@ function buildEmployeeMap(employees: readonly Employee[]): Map<string, Employee>
   return employeesById;
 }
 
+
+type TeletrabajoExportAssessment = {
+  status: 'ok' | 'review' | 'blocked' | 'rejected';
+  cellValue: string;
+  rowFillColor: string | null;
+  textColor: string;
+  apuntesRrll: string;
+};
+
+function buildPuestosByKey(puestos: readonly TeletrabajoPuesto[]): Map<string, TeletrabajoPuesto> {
+  return new Map(
+    puestos
+      .filter((puesto) => !puesto.deletedAt)
+      .map((puesto) => [normalizeTeletrabajoPuesto(puesto.puesto), puesto]),
+  );
+}
+
+function buildSolicitudesByPuestoCount(
+  solicitudes: readonly TeletrabajoSolicitud[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  solicitudes.forEach((solicitud) => {
+    if (solicitud.deletedAt || solicitud.estado === 'denegada') {
+      return;
+    }
+
+    const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
+    if (!puestoKey) {
+      return;
+    }
+
+    counts.set(puestoKey, (counts.get(puestoKey) ?? 0) + 1);
+  });
+
+  return counts;
+}
+
+function buildTeletrabajoAssessment({
+  solicitud,
+  employeesById,
+  puestosByKey,
+  solicitudesByPuestoCount,
+}: {
+  solicitud: TeletrabajoSolicitud;
+  employeesById: Map<string, Employee>;
+  puestosByKey: Map<string, TeletrabajoPuesto>;
+  solicitudesByPuestoCount: Map<string, number>;
+}): TeletrabajoExportAssessment {
+  if (solicitud.estado === 'denegada') {
+    return {
+      status: 'rejected',
+      cellValue: NO,
+      rowFillColor: SOFT_RED,
+      textColor: SOFT_RED_TEXT,
+      apuntesRrll: 'Rechazada por RRLL',
+    };
+  }
+
+  const employee = findEmployee(employeesById, solicitud.empleado);
+  const antiguedad = evaluateTeletrabajoAntiguedad(solicitud, employee);
+
+  if (antiguedad.status === 'no-cumple') {
+    return {
+      status: 'blocked',
+      cellValue: NO,
+      rowFillColor: SOFT_RED,
+      textColor: SOFT_RED_TEXT,
+      apuntesRrll: 'Antigüedad insuficiente',
+    };
+  }
+
+  if (antiguedad.status === 'sin-dato') {
+    return {
+      status: 'review',
+      cellValue: 'REVISAR',
+      rowFillColor: SOFT_YELLOW,
+      textColor: SOFT_YELLOW_TEXT,
+      apuntesRrll: antiguedad.title,
+    };
+  }
+
+  const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
+  if (!puestoKey) {
+    return {
+      status: 'blocked',
+      cellValue: NO,
+      rowFillColor: SOFT_RED,
+      textColor: SOFT_RED_TEXT,
+      apuntesRrll: 'Puesto organizativo',
+    };
+  }
+
+  const puesto = puestosByKey.get(puestoKey);
+  if (!puesto) {
+    return {
+      status: 'blocked',
+      cellValue: NO,
+      rowFillColor: SOFT_RED,
+      textColor: SOFT_RED_TEXT,
+      apuntesRrll: 'Puesto organizativo',
+    };
+  }
+
+  const solicitudesDelPuesto = solicitudesByPuestoCount.get(puestoKey) ?? 0;
+  if (puesto.maxSolicitudes > 0 && solicitudesDelPuesto > puesto.maxSolicitudes) {
+    return {
+      status: 'review',
+      cellValue: 'REVISAR',
+      rowFillColor: SOFT_YELLOW,
+      textColor: SOFT_YELLOW_TEXT,
+      apuntesRrll: 'Presencialidad',
+    };
+  }
+
+  return {
+    status: 'ok',
+    cellValue: YES,
+    rowFillColor: null,
+    textColor: SOFT_GREEN_TEXT,
+    apuntesRrll: '',
+  };
+}
+
 function findEmployee(employeesById: Map<string, Employee>, empleado: string): Employee | undefined {
   return employeesById.get(empleado.trim()) ?? employeesById.get(normalizeEmployeeKey(empleado));
 }
@@ -83,20 +212,53 @@ function buildTitle(rows: readonly TeletrabajoSolicitud[], selectedPeriodo?: str
 }
 
 function setValidationCellStyle(cell: ExcelJS.Cell, value: boolean): void {
-  cell.value = value ? YES : NO;
+  setStatusCellStyle({
+    cell,
+    value: value ? YES : NO,
+    fillColor: value ? SOFT_GREEN : SOFT_RED,
+    textColor: value ? SOFT_GREEN_TEXT : SOFT_RED_TEXT,
+  });
+}
+
+function setStatusCellStyle({
+  cell,
+  value,
+  fillColor,
+  textColor,
+}: {
+  cell: ExcelJS.Cell;
+  value: string;
+  fillColor: string;
+  textColor: string;
+}): void {
+  cell.value = value;
   cell.fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: toExcelColor(value ? SOFT_GREEN : SOFT_RED),
+    fgColor: toExcelColor(fillColor),
   };
   cell.font = {
     name: ROTIS_FONT,
     size: 11,
     bold: true,
-    color: toExcelColor(value ? SOFT_GREEN_TEXT : SOFT_RED_TEXT),
+    color: toExcelColor(textColor),
   };
   cell.alignment = { horizontal: 'center', vertical: 'middle' };
   cell.border = buildDottedBorder();
+}
+
+function applyRowFill(row: ExcelJS.Row, fillColor: string): void {
+  row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    if (colNumber < 1 || colNumber > 20) {
+      return;
+    }
+
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: toExcelColor(fillColor),
+    };
+  });
 }
 
 function setManualValidationCellStyle(cell: ExcelJS.Cell): void {
@@ -155,10 +317,14 @@ async function openWorkbookInExcel(
 export async function exportTeletrabajoDireccionToExcel({
   rows,
   employees,
+  puestosTeletrabajo,
+  solicitudesForAssessment = rows,
   periodo,
 }: {
   rows: readonly TeletrabajoSolicitud[];
   employees: readonly Employee[];
+  puestosTeletrabajo: readonly TeletrabajoPuesto[];
+  solicitudesForAssessment?: readonly TeletrabajoSolicitud[];
   periodo?: string;
 }): Promise<void> {
   const generatedAt = new Date();
@@ -171,6 +337,8 @@ export async function exportTeletrabajoDireccionToExcel({
     views: [{ state: 'frozen', ySplit: 5 }],
   });
   const employeesById = buildEmployeeMap(employees);
+  const puestosByKey = buildPuestosByKey(puestosTeletrabajo);
+  const solicitudesByPuestoCount = buildSolicitudesByPuestoCount(solicitudesForAssessment);
 
   worksheet.columns = [
     { key: 'nivel', width: 2.27 },
@@ -216,7 +384,7 @@ export async function exportTeletrabajoDireccionToExcel({
   worksheet.getCell('L4').value = 'Año Anterior Teletrabajado';
   worksheet.getCell('M4').value = 'Validación Jefatura de Unidad a Repetir ';
   worksheet.getCell('N4').value = 'Validación ordinaria de la Dirección ';
-  worksheet.getCell('O4').value = 'Validación 22 septiembre 2022';
+  worksheet.getCell('O4').value = 'Apuntes RRLL';
   worksheet.getCell('P4').value = 'Petición II';
   worksheet.getCell('S4').value = 'Cambios fuera de plazo ordinario';
   worksheet.getCell('T4').value = 'Observaciones';
@@ -265,6 +433,12 @@ export async function exportTeletrabajoDireccionToExcel({
 
   rows.forEach((solicitud, index) => {
     const employee = findEmployee(employeesById, solicitud.empleado);
+    const assessment = buildTeletrabajoAssessment({
+      solicitud,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoCount,
+    });
     const rowNumber = 6 + index;
     const row = worksheet.getRow(rowNumber);
 
@@ -283,7 +457,7 @@ export async function exportTeletrabajoDireccionToExcel({
       solicitud.tipoSolicitud === 'renovacion' ? YES : NO,
       '',
       '',
-      '',
+      assessment.apuntesRrll,
       '',
       '',
       '',
@@ -294,16 +468,31 @@ export async function exportTeletrabajoDireccionToExcel({
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.font = { name: ROTIS_FONT, size: 11 };
       cell.alignment = {
-        horizontal: [1, 2, 6, 7, 8, 9, 12].includes(colNumber) ? 'center' : 'left',
+        horizontal: [1, 2, 6, 7, 8, 9, 10, 12].includes(colNumber) ? 'center' : 'left',
         vertical: 'middle',
         wrapText: true,
       };
     });
 
-    setValidationCellStyle(row.getCell(10), solicitud.revisado);
+    setStatusCellStyle({
+      cell: row.getCell(10),
+      value: assessment.cellValue,
+      fillColor: assessment.status === 'ok' ? SOFT_GREEN : assessment.rowFillColor ?? SOFT_YELLOW,
+      textColor: assessment.textColor,
+    });
     setValidationCellStyle(row.getCell(11), solicitud.validacionJefatura);
     setAnoAnteriorCellStyle(row.getCell(12), solicitud.tipoSolicitud === 'renovacion' ? YES : NO);
     [13, 14, 15].forEach((columnNumber) => setManualValidationCellStyle(row.getCell(columnNumber)));
+
+    if (assessment.rowFillColor) {
+      applyRowFill(row, assessment.rowFillColor);
+      setStatusCellStyle({
+        cell: row.getCell(10),
+        value: assessment.cellValue,
+        fillColor: assessment.rowFillColor,
+        textColor: assessment.textColor,
+      });
+    }
   });
 
   worksheet.autoFilter = {

@@ -823,6 +823,8 @@ export function TeletrabajoPage({
       await exportTeletrabajoDireccionToExcel({
         rows: sortedSolicitudes,
         employees,
+        puestosTeletrabajo,
+        solicitudesForAssessment: solicitudes,
         periodo: filters.periodo,
       });
       setWordStatus('Excel Dirección generado y abierto correctamente.');
@@ -833,7 +835,7 @@ export function TeletrabajoPage({
           : 'No se pudo generar el Excel Dirección.',
       );
     }
-  }, [employees, filters.periodo, sortedSolicitudes]);
+  }, [employees, filters.periodo, puestosTeletrabajo, solicitudes, sortedSolicitudes]);
 
   const openEditor = (solicitud: TeletrabajoSolicitud) => {
     selectSolicitud(solicitud.id);
