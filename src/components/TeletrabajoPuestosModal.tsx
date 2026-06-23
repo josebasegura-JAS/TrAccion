@@ -1,4 +1,4 @@
-import { AlertTriangle, FileUp, Plus, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, FileUp, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
@@ -6,6 +6,7 @@ import {
   EMPTY_TELETRABAJO_PUESTO_DRAFT,
   importTeletrabajoPuestosFromFile,
   normalizeTeletrabajoPuesto,
+  type TeletrabajoPuesto,
   type TeletrabajoPuestoDraft,
 } from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
@@ -56,10 +57,12 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     importPuestosTeletrabajoDrafts,
     puestosTeletrabajo,
     removePuestoTeletrabajo,
+    updatePuestoTeletrabajo,
   } = useTeletrabajoStore();
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [editingPuestoId, setEditingPuestoId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TeletrabajoPuestoDraft>(EMPTY_TELETRABAJO_PUESTO_DRAFT);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -128,6 +131,61 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setIsCreating(false);
     setError('');
     setStatus('Puesto teletrabajable añadido.');
+  };
+
+  const handleStartEdit = (puesto: TeletrabajoPuesto) => {
+    setIsCreating(false);
+    setEditingPuestoId(puesto.id);
+    setDraft({
+      puesto: puesto.puesto,
+      maxSolicitudes: puesto.maxSolicitudes,
+      observaciones: puesto.observaciones,
+    });
+    setError('');
+    setStatus('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPuestoId(null);
+    setDraft(EMPTY_TELETRABAJO_PUESTO_DRAFT);
+    setError('');
+  };
+
+  const handleUpdate = () => {
+    if (!editingPuestoId) {
+      return;
+    }
+
+    const puesto = draft.puesto.trim();
+    if (!puesto) {
+      setError('Indica el puesto antes de guardar.');
+      setStatus('');
+      return;
+    }
+
+    if (masterPuestos.length > 0 && !masterPuestosByKey.has(normalizeJobPosition(puesto))) {
+      setError('El puesto indicado no existe en la tabla de Traducción de puestos. Selecciona un puesto válido de esa tabla.');
+      setStatus('');
+      return;
+    }
+
+    const duplicate = puestosTeletrabajo.find(
+      (existing) =>
+        existing.id !== editingPuestoId &&
+        !existing.deletedAt &&
+        normalizeTeletrabajoPuesto(existing.puesto) === normalizeTeletrabajoPuesto(puesto),
+    );
+    if (duplicate) {
+      setError('Ya existe otro puesto teletrabajable con ese mismo nombre.');
+      setStatus('');
+      return;
+    }
+
+    updatePuestoTeletrabajo(editingPuestoId, { ...draft, puesto });
+    setEditingPuestoId(null);
+    setDraft(EMPTY_TELETRABAJO_PUESTO_DRAFT);
+    setError('');
+    setStatus('Puesto teletrabajable actualizado.');
   };
 
   const applyResolvedImport = (drafts: readonly TeletrabajoPuestoDraft[]) => {
@@ -287,7 +345,11 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-              onClick={() => setIsCreating((current) => !current)}
+              onClick={() => {
+                setEditingPuestoId(null);
+                setDraft(EMPTY_TELETRABAJO_PUESTO_DRAFT);
+                setIsCreating((current) => !current);
+              }}
               type="button"
             >
               <Plus size={16} /> Añadir puesto
@@ -295,10 +357,10 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
           </div>
         </div>
 
-        {(isCreating || status || error || pendingImport) && (
+        {(isCreating || editingPuestoId || status || error || pendingImport) && (
           <div className="space-y-3 border-b border-metro-border p-4">
-            {isCreating && (
-              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(240px,1fr)_120px_minmax(220px,1fr)_auto] lg:items-end">
+            {(isCreating || editingPuestoId) && (
+              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(240px,1fr)_120px_minmax(220px,1fr)_auto_auto] lg:items-end">
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Puesto
                   <select
@@ -334,11 +396,20 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 </label>
                 <button
                   className="rounded-xl bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                  onClick={handleCreate}
+                  onClick={editingPuestoId ? handleUpdate : handleCreate}
                   type="button"
                 >
-                  Guardar
+                  {editingPuestoId ? 'Guardar cambios' : 'Guardar'}
                 </button>
+                {editingPuestoId && (
+                  <button
+                    className="rounded-xl border border-metro-border bg-metro-surface px-4 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                    onClick={handleCancelEdit}
+                    type="button"
+                  >
+                    Cancelar
+                  </button>
+                )}
               </div>
             )}
             {pendingImport && (
@@ -430,20 +501,38 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               </thead>
               <tbody className="divide-y divide-metro-border">
                 {filteredPuestos.map((puesto) => (
-                  <tr key={puesto.id} className="text-metro-text">
+                  <tr
+                    key={puesto.id}
+                    className={
+                      puesto.id === editingPuestoId
+                        ? 'bg-metro-red/5 text-metro-text'
+                        : 'text-metro-text'
+                    }
+                  >
                     <td className="px-3 py-2 font-semibold">{puesto.puesto}</td>
                     <td className="px-3 py-2 text-metro-muted">{puesto.maxSolicitudes || '—'}</td>
                     <td className="px-3 py-2 text-metro-muted">{puesto.observaciones || '—'}</td>
                     <td className="px-3 py-2 text-right">
-                      <button
-                        aria-label={`Eliminar ${puesto.puesto}`}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
-                        onClick={() => removePuestoTeletrabajo(puesto.id)}
-                        title="Eliminar puesto"
-                        type="button"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          aria-label={`Editar ${puesto.puesto}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-text"
+                          onClick={() => handleStartEdit(puesto)}
+                          title="Editar puesto"
+                          type="button"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          aria-label={`Eliminar ${puesto.puesto}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
+                          onClick={() => removePuestoTeletrabajo(puesto.id)}
+                          title="Eliminar puesto"
+                          type="button"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
