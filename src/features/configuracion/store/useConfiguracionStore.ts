@@ -29,9 +29,9 @@ interface ConfiguracionState {
 interface ConfiguracionStore extends ConfiguracionState {
   load: () => void;
   reloadFromStorage: () => void;
-  setRutaPlantillaTeletrabajo: (ruta: string) => void;
-  setRutaPlantillaLicenciaSinSueldo: (ruta: string) => void;
-  setRutaPlantillaVinculograma: (ruta: string) => void;
+  setRutaPlantillaTeletrabajo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaPlantillaLicenciaSinSueldo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaPlantillaVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -174,8 +174,12 @@ async function readConfiguracionFromSqlite(): Promise<ConfiguracionState | null>
 }
 
 async function persistConfiguracionConfirmed(configuracion: ConfiguracionState): Promise<void> {
-  const value = JSON.stringify(configuracion);
   const sqliteSaver = window.traccion?.saveConfiguracionIfUnchanged;
+  if (sqliteSaver && latestConfiguracionUpdatedAt === null) {
+    await readConfiguracionFromSqlite();
+  }
+
+  const value = JSON.stringify(configuracion);
   if (sqliteSaver) {
     const result = await sqliteSaver({ value, expectedUpdatedAt: latestConfiguracionUpdatedAt });
     if (!result.ok) {
@@ -192,15 +196,21 @@ async function persistConfiguracionConfirmed(configuracion: ConfiguracionState):
   }
 }
 
-function commitConfiguracion(set: (partial: ConfiguracionState) => void, configuracion: ConfiguracionState): void {
-  void (async () => {
-    try {
-      await persistConfiguracionConfirmed(configuracion);
-      set(configuracion);
-    } catch (error) {
-      console.warn('Configuración no guardada en SQLite.', error);
-    }
-  })();
+async function commitConfiguracion(
+  set: (partial: ConfiguracionState) => void,
+  configuracion: ConfiguracionState,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    await persistConfiguracionConfirmed(configuracion);
+    set(configuracion);
+    return { ok: true, message: 'Configuración guardada.' };
+  } catch (error) {
+    console.warn('Configuración no guardada en SQLite.', error);
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido guardar la configuración.',
+    };
+  }
 }
 
 function areConfiguracionesEquivalent(left: ConfiguracionState, right: ConfiguracionState): boolean {
@@ -266,29 +276,29 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
 
     applyIfChanged(readConfiguracion());
   },
-  setRutaPlantillaTeletrabajo: (ruta) => {
+  setRutaPlantillaTeletrabajo: async (ruta) => {
     const state = useConfiguracionStore.getState();
     const configuracion = {
       ...state,
       rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta),
     };
-    commitConfiguracion(set, configuracion);
+    return commitConfiguracion(set, configuracion);
   },
-  setRutaPlantillaLicenciaSinSueldo: (ruta) => {
+  setRutaPlantillaLicenciaSinSueldo: async (ruta) => {
     const state = useConfiguracionStore.getState();
     const configuracion = {
       ...state,
       rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta),
     };
-    commitConfiguracion(set, configuracion);
+    return commitConfiguracion(set, configuracion);
   },
-  setRutaPlantillaVinculograma: (ruta) => {
+  setRutaPlantillaVinculograma: async (ruta) => {
     const state = useConfiguracionStore.getState();
     const configuracion = {
       ...state,
       rutaPlantillaVinculograma: normalizeTemplatePath(ruta),
     };
-    commitConfiguracion(set, configuracion);
+    return commitConfiguracion(set, configuracion);
   },
   addTaskPhase: (nombre) =>
     set((state) => {
@@ -306,7 +316,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         updatedAt: now,
       };
       const configuracion = { ...state, taskPhases: [...state.taskPhases, phase] };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
   updateTaskPhase: (id, nombre) =>
@@ -323,7 +333,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
           phase.id === id ? { ...phase, nombre: normalizedName, updatedAt: now } : phase,
         ),
       };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
   toggleTaskPhase: (id) =>
@@ -335,7 +345,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
           phase.id === id ? { ...phase, active: !phase.active, updatedAt: now } : phase,
         ),
       };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
   addTaskOrigin: (nombre, tipo) =>
@@ -355,7 +365,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         updatedAt: now,
       };
       const configuracion = { ...state, taskOrigins: [...state.taskOrigins, origin] };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
   updateTaskOrigin: (id, nombre, tipo) =>
@@ -372,7 +382,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
           origin.id === id ? { ...origin, nombre: normalizedName, tipo, updatedAt: now } : origin,
         ),
       };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
   toggleTaskOrigin: (id) =>
@@ -384,7 +394,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
           origin.id === id ? { ...origin, active: !origin.active, updatedAt: now } : origin,
         ),
       };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
   deleteTaskOrigin: (id) =>
@@ -398,7 +408,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
             : origin,
         ),
       };
-      commitConfiguracion(set, configuracion);
+      void commitConfiguracion(set, configuracion);
       return state;
     }),
 }));

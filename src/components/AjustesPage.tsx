@@ -418,8 +418,9 @@ export function AjustesPage() {
       return;
     }
 
-    setRutaPlantillaTeletrabajo(selectedPath);
-    setStatus('Ruta de plantilla guardada.');
+    setStatus('Guardando ruta de plantilla...');
+    const result = await setRutaPlantillaTeletrabajo(selectedPath);
+    setStatus(result.ok ? 'Ruta de plantilla guardada.' : result.message);
   };
 
   const handleSelectVinculogramaTemplate = async () => {
@@ -445,8 +446,11 @@ export function AjustesPage() {
       return;
     }
 
-    setRutaPlantillaVinculograma(selectedPath);
-    setVinculogramaTemplateStatus('Ruta de plantilla de vinculograma guardada.');
+    setVinculogramaTemplateStatus('Guardando ruta de plantilla de vinculograma...');
+    const result = await setRutaPlantillaVinculograma(selectedPath);
+    setVinculogramaTemplateStatus(
+      result.ok ? 'Ruta de plantilla de vinculograma guardada.' : result.message,
+    );
   };
 
   const handleSelectLicenciaSinSueldoTemplate = async () => {
@@ -472,8 +476,11 @@ export function AjustesPage() {
       return;
     }
 
-    setRutaPlantillaLicenciaSinSueldo(selectedPath);
-    setLicenciaTemplateStatus('Ruta de plantilla de licencia sin sueldo guardada.');
+    setLicenciaTemplateStatus('Guardando ruta de plantilla de licencia sin sueldo...');
+    const result = await setRutaPlantillaLicenciaSinSueldo(selectedPath);
+    setLicenciaTemplateStatus(
+      result.ok ? 'Ruta de plantilla de licencia sin sueldo guardada.' : result.message,
+    );
   };
 
   return (
@@ -848,7 +855,7 @@ export function AjustesPage() {
           Ruta plantilla DOCX
           <input
             className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => setRutaPlantillaTeletrabajo(event.target.value)}
+            onChange={(event) => { void setRutaPlantillaTeletrabajo(event.target.value); }}
             placeholder="C:\\RRLL\\Plantillas\\Acuerdo Teletrabajo.docx"
             type="text"
             value={rutaPlantillaTeletrabajo}
@@ -880,7 +887,7 @@ export function AjustesPage() {
           Ruta plantilla DOCX
           <input
             className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => setRutaPlantillaLicenciaSinSueldo(event.target.value)}
+            onChange={(event) => { void setRutaPlantillaLicenciaSinSueldo(event.target.value); }}
             placeholder="C:\\RRLL\\Plantillas\\Concesión licencia sin sueldo.docx"
             type="text"
             value={rutaPlantillaLicenciaSinSueldo}
@@ -915,7 +922,7 @@ export function AjustesPage() {
           Ruta plantilla DOCX
           <input
             className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => setRutaPlantillaVinculograma(event.target.value)}
+            onChange={(event) => { void setRutaPlantillaVinculograma(event.target.value); }}
             placeholder="C:\\RRLL\\Plantillas\\Solicitud Vinculograma.docx"
             type="text"
             value={rutaPlantillaVinculograma}
