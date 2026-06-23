@@ -448,7 +448,7 @@ function normalizeOutlookDraftAttachments(value: unknown): OutlookDraftAttachmen
 
     const fileName = path
       .basename(candidate.fileName)
-      .replace(/[<>:"\/\\|?*]/g, '_')
+      .replace(/[<>:"/\\|?*]/g, '_')
       .split('')
       .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
       .join('');
