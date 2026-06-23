@@ -42,6 +42,7 @@ import {
   useTableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { TaskEditor } from './TaskEditor';
+import { useAppDialog } from '../hooks/useAppDialog';
 
 type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 
@@ -359,11 +360,12 @@ export function TareasPage({
     isLoadingHistoricalTasks,
     load,
     loadHistoricalTasks,
-    remove,
+    removeWithConcurrencyCheck,
     selectTask,
     setFilter,
     tasks,
   } = useTaskStore();
+  const { alert, dialogNode } = useAppDialog();
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
@@ -593,7 +595,12 @@ export function TareasPage({
             className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
             onClick={(event) => {
               event.stopPropagation();
-              remove(task.id);
+              void (async () => {
+                const result = await removeWithConcurrencyCheck(task.id, task.updatedAt);
+                if (!result.ok) {
+                  await alert(result.message, { type: 'error' });
+                }
+              })();
             }}
             type="button"
           >
@@ -608,7 +615,7 @@ export function TareasPage({
         className: 'whitespace-nowrap',
       },
     ],
-    [remove],
+    [alert, removeWithConcurrencyCheck],
   );
 
   const sortedTasks = useMemo(
@@ -844,6 +851,7 @@ export function TareasPage({
 
       {isOriginsModalOpen && <TaskOriginsModal onClose={() => setIsOriginsModalOpen(false)} />}
       {editorMode && <TaskEditor mode={editorMode} onDone={closeEditor} task={editorTask} />}
+      {dialogNode}
     </section>
   );
 }

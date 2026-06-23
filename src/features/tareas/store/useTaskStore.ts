@@ -146,6 +146,10 @@ interface TaskStateStore {
     expectedUpdatedAt: string | null,
   ) => Promise<TaskUpdateResult>;
   remove: (id: string) => void;
+  removeWithConcurrencyCheck: (
+    id: string,
+    expectedUpdatedAt: string | null,
+  ) => Promise<TaskUpdateResult>;
   selectTask: (taskId: string) => void;
   closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
   closeTasksFromSession: (taskIds: string[], moduleLabel: string, sessionLabel: string) => void;
@@ -1004,6 +1008,87 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       }
       return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
     });
+  },
+  removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
+    try {
+      if (hasTaskSqliteRepository()) {
+        const latestTasks = await readTasksForStore('all');
+        const latestTask = latestTasks.find((task) => task.id === id);
+        if (!latestTask) {
+          return {
+            ok: false,
+            message: 'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
+          };
+        }
+
+        if (latestTask.updatedAt !== expectedUpdatedAt) {
+          return {
+            ok: false,
+            message:
+              'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+          };
+        }
+
+        const now = new Date().toISOString();
+        const deletedTask = normalizeTask({ ...latestTask, deletedAt: now, updatedAt: now });
+        const saveResult = await persistTaskDirectly(deletedTask, expectedUpdatedAt);
+        if (!saveResult.ok) {
+          return saveResult;
+        }
+
+        enqueueAuditEvent({
+          module: 'tareas',
+          entityId: id,
+          action: 'deleted',
+          summary: 'Registro eliminado',
+          changes: [],
+        });
+
+        set((state) => {
+          const tasks = state.tasks.map((task) => (task.id === id ? deletedTask : task));
+          return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
+        });
+
+        return { ok: true, message: 'Tarea eliminada.', recordId: id };
+      }
+
+      const { records, updatedRecord } = await saveSharedArrayRecord<Task>({
+        storageKey: TASKS_STORAGE_KEY,
+        recordId: id,
+        expectedUpdatedAt,
+        parseRecords: parseTasksSnapshot,
+        getRecordId: (record) => record.id,
+        getRecordUpdatedAt: (record) => record.updatedAt,
+        updateRecord: (latestTask) => {
+          const now = new Date().toISOString();
+          enqueueAuditEvent({
+            module: 'tareas',
+            entityId: latestTask.id,
+            action: 'deleted',
+            summary: 'Registro eliminado',
+            changes: [],
+          });
+          return normalizeTask({ ...latestTask, deletedAt: now, updatedAt: now });
+        },
+        missingMessage:
+          'La tarea ya no existe en la base de datos compartida. Recarga antes de continuar.',
+        conflictMessage:
+          'La tarea ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      });
+
+      const normalizedRecords = records.map(normalizeTask);
+      set({
+        tasks: normalizedRecords,
+        selectedTaskId: firstActiveTaskId(normalizedRecords),
+      });
+
+      return { ok: true, message: 'Tarea eliminada.', recordId: updatedRecord.id };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido eliminar la tarea.',
+      };
+    }
   },
   closeTasksFromCommittee: (taskIds, sessionLabel) => {
     useTaskStore.getState().closeTasksFromSession(taskIds, 'Comité de Empresa', sessionLabel);

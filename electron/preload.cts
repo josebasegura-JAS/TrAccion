@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 const createOutlookDraft = (payload: unknown) =>
   ipcRenderer.invoke('especiales:create-outlook-draft', payload);
@@ -15,13 +15,31 @@ contextBridge.exposeInMainWorld('traccion', {
   databaseStatus: () => ipcRenderer.invoke('database:status'),
   selectDatabaseDirectory: () => ipcRenderer.invoke('database:select-directory'),
   resetDatabaseDirectory: () => ipcRenderer.invoke('database:reset-directory'),
+  getSecondaryBackupDirectory: () => ipcRenderer.invoke('database:get-secondary-backup-directory'),
+  setSecondaryBackupDirectory: () => ipcRenderer.invoke('database:set-secondary-backup-directory'),
+  clearSecondaryBackupDirectory: () => ipcRenderer.invoke('database:clear-secondary-backup-directory'),
+  getDailyLocalBackupSettings: () => ipcRenderer.invoke('database:get-daily-local-backup-settings'),
+  setDailyLocalBackupEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('database:set-daily-local-backup-enabled', { enabled }),
+  setDailyLocalBackupRetentionDays: (retentionDays: number) =>
+    ipcRenderer.invoke('database:set-daily-local-backup-retention-days', { retentionDays }),
+  setDailyLocalBackupDirectory: () => ipcRenderer.invoke('database:set-daily-local-backup-directory'),
+  clearDailyLocalBackupDirectory: () => ipcRenderer.invoke('database:clear-daily-local-backup-directory'),
   listLocalBackups: () => ipcRenderer.invoke('database:list-local-backups'),
+  createManualBackup: () => ipcRenderer.invoke('database:create-manual-backup'),
+  getVacuumStatus: () => ipcRenderer.invoke('database:get-vacuum-status'),
+  vacuumDatabaseNow: () => ipcRenderer.invoke('database:vacuum-now'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
   getPersistedRecord: (key: string) =>
     ipcRenderer.invoke('database:get-persisted-record', { key }),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
   getSqliteSyncTokens: () => ipcRenderer.invoke('database:get-sqlite-sync-tokens'),
+  onDatabaseConnectivityIssue: (listener: (payload: unknown) => void) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => listener(payload);
+    ipcRenderer.on('database:connectivity-issue', handler);
+    return () => ipcRenderer.removeListener('database:connectivity-issue', handler);
+  },
   backupLocalStorage: (records: { key: string; value: string }[]) =>
     ipcRenderer.invoke('database:backup-local-storage', { records }),
   migrateLocalStorage: (records: { key: string; value: string }[]) =>
@@ -96,6 +114,19 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('criterios-rrll:save-record-if-unchanged', record),
+  saveCriteriosRrllRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('criterios-rrll:save-records-if-unchanged', { records }),
+  loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
+  savePresupuestosSnapshotIfUnchanged: (snapshot: {
+    scenarios: Array<{ id: string; value: string }>;
+    manualItems: Array<{ id: string; value: string }>;
+    ticketGroups: Array<{ id: string; value: string }>;
+    actuals: Array<{ id: string; value: string }>;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('presupuestos:save-snapshot-if-unchanged', snapshot),
   loadEspecialesRecipientRecords: () => ipcRenderer.invoke('especiales:load-recipient-records'),
   saveEspecialesRecipientRecordIfUnchanged: (record: {
     id: string;
@@ -127,6 +158,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('teletrabajo:save-record-if-unchanged', record),
+  saveTeletrabajoRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('teletrabajo:save-records-if-unchanged', { records }),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   selectVinculogramaTemplate: () => ipcRenderer.invoke('vinculograma:select-template'),
