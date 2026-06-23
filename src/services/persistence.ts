@@ -101,7 +101,7 @@ function summarizeStorageRecordSizes(records: TraccionStorageRecord[]): Array<{
     .sort((left, right) => right.bytes - left.bytes);
 }
 
-function isTemporarySqliteLockMessage(message: string): boolean {
+export function isTemporarySqliteLockMessage(message: string): boolean {
   const normalized = message.toLowerCase();
   return (
     normalized.includes('base ocupada temporalmente') ||

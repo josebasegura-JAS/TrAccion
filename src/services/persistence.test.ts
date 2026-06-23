@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SQLITE_PENDING_WRITES_KEY } from './persistenceKeys';
-import { flushPendingSqliteWrites, subscribeToPersistenceFeedback, type PersistenceFeedback } from './persistence';
+import { flushPendingSqliteWrites, isTemporarySqliteLockMessage, subscribeToPersistenceFeedback, type PersistenceFeedback } from './persistence';
 
 // Clave de negocio real (PERSISTED_STORAGE_KEYS) usada como ejemplo en los
 // tests: cualquier escritura pendiente con una clave fuera de esa lista se
@@ -145,5 +145,31 @@ describe('persistence — cola de writes pendientes', () => {
     const remaining = stored ? (JSON.parse(stored) as Array<{ key: string }>) : [];
     expect(remaining).toHaveLength(1);
     expect(remaining[0].key).toBe(otherKey);
+  });
+});
+
+describe('isTemporarySqliteLockMessage', () => {
+  it('reconoce el mensaje de base ocupada temporalmente por otro equipo', () => {
+    expect(
+      isTemporarySqliteLockMessage(
+        'Base ocupada temporalmente por acabrera@PO153 (PID 7160). Inténtalo de nuevo en unos segundos.',
+      ),
+    ).toBe(true);
+  });
+
+  it('reconoce el mensaje de bloqueo temporal de operación SQLite', () => {
+    expect(
+      isTemporarySqliteLockMessage('Bloqueo temporal de operación SQLite, reintentando...'),
+    ).toBe(true);
+  });
+
+  it('no marca como bloqueo otros errores de guardado, como un conflicto de concurrencia', () => {
+    expect(
+      isTemporarySqliteLockMessage('El registro ha sido modificado por otro usuario.'),
+    ).toBe(false);
+  });
+
+  it('no es sensible a mayúsculas/minúsculas', () => {
+    expect(isTemporarySqliteLockMessage('BASE OCUPADA TEMPORALMENTE por X')).toBe(true);
   });
 });
