@@ -188,4 +188,29 @@ describe('useLicenciasSinSueldoStore concurrencia multiusuario', () => {
       'licencia-2',
     ]);
   });
+
+  it('reloadFromStorage no provoca un nuevo render (mantiene la misma referencia de records) cuando no hay cambios reales', async () => {
+    const existingLicencia = licencia();
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce(recordsSnapshot([existingLicencia], timestamp))
+      // Segunda lectura: mismo contenido normalizado, pero con un updatedAt
+      // distinto — simula el caso real de un poll que detecta una escritura
+      // (p.ej. un guardado de otro usuario en un registro distinto, o un
+      // touch sin cambios efectivos) sin que el contenido de esta lista haya
+      // cambiado de verdad.
+      .mockResolvedValueOnce(recordsSnapshot([existingLicencia], '2026-06-17T09:00:00.000Z'));
+
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { loadLicenciaSinSueldoRecords: loader, saveLicenciaSinSueldoRecordIfUnchanged: vi.fn() },
+    });
+
+    await useLicenciasSinSueldoStore.getState().load();
+    const recordsBeforeReload = useLicenciasSinSueldoStore.getState().records;
+
+    await useLicenciasSinSueldoStore.getState().reloadFromStorage();
+
+    expect(useLicenciasSinSueldoStore.getState().records).toBe(recordsBeforeReload);
+  });
 });
