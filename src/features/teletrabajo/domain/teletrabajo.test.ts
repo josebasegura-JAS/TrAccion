@@ -171,6 +171,7 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
     puestoOrganizativo: 'Puesto Organizativo Plantilla',
     puestoEus: 'Puesto Euskera Plantilla',
     residencia: 'Bilbao',
+    unidad: '',
     nivelRetributivo: 'N1',
     direccionOrganizativa: 'Dirección Plantilla',
     antiguedadPuesto: '2024-01-01',

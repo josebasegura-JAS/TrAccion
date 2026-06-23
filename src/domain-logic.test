@@ -101,6 +101,7 @@ function employee(overrides: Partial<Employee> = {}): Employee {
     puestoNomina: '',
     puestoOrganizativo: '',
     residencia: 'Oficinas Centrales',
+    unidad: '',
     nivelRetributivo: 'N3',
     sexo: '',
     calle: '',

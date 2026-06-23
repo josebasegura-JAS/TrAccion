@@ -1,5 +1,7 @@
 import type { Employee, EmployeeDerivedFields, EmployeeDraft } from './employee';
 
+type LegacyEmployeeDraft = Omit<EmployeeDraft, 'unidad'> & { unidad?: string };
+
 const RESIDENCIA_EUS_MAP: Record<string, string> = {
   'Oficinas Centrales': 'Bulego Nagusiak',
   'Sopela Taller': 'Sopela Tailerra',
@@ -32,11 +34,16 @@ export function getEmployeeDerivedFields(employee: EmployeeDraft): EmployeeDeriv
   };
 }
 
-export function hydrateEmployee(draft: EmployeeDraft, deletedAt: string | null = null): Employee {
-  return {
+export function hydrateEmployee(draft: LegacyEmployeeDraft, deletedAt: string | null = null): Employee {
+  const normalizedDraft: EmployeeDraft = {
     ...draft,
-    puestoEus: draft.puestoEus ?? '',
-    ...getEmployeeDerivedFields(draft),
+    unidad: draft.unidad ?? '',
+  };
+
+  return {
+    ...normalizedDraft,
+    puestoEus: normalizedDraft.puestoEus ?? '',
+    ...getEmployeeDerivedFields(normalizedDraft),
     deletedAt,
   };
 }

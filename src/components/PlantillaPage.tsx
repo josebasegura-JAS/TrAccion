@@ -52,6 +52,7 @@ type SortKey =
   | 'puestoNomina'
   | 'puestoEus'
   | 'residencia'
+  | 'unidad'
   | 'nivelRetributivo'
   | 'direccionOrganizativa';
 
@@ -68,6 +69,7 @@ const defaultPlantillaTablePreferences: TableViewPreferences<EmployeeTableColumn
     puestoNomina: 190,
     puestoEus: 190,
     residencia: 120,
+    unidad: 150,
     direccionOrganizativa: 180,
     actions: 92,
   },
@@ -81,6 +83,7 @@ const plantillaTableColumnIds: EmployeeTableColumnId[] = [
   'puestoNomina',
   'puestoEus',
   'residencia',
+  'unidad',
   'direccionOrganizativa',
   'actions',
 ];
@@ -96,6 +99,7 @@ const employeeExportColumns: ExportColumn<Employee>[] = [
   { key: 'puestoNomina', header: 'Puesto nómina', value: (employee) => employee.puestoNomina },
   { key: 'puestoEus', header: 'Puesto EUS', value: (employee) => employee.puestoEus || null },
   { key: 'residencia', header: 'Residencia', value: (employee) => employee.residencia },
+  { key: 'unidad', header: 'Unidad', value: (employee) => employee.unidad || null },
   { key: 'direccionOrganizativa', header: 'Dirección organizativa', value: (employee) => employee.direccionOrganizativa || null },
   { key: 'antiguedadPuesto', header: 'Antigüedad puesto', value: (employee) => employee.antiguedadPuesto || null },
 ];
@@ -261,6 +265,17 @@ export function PlantillaPage() {
         width: 120,
         minWidth: 95,
         maxWidth: 220,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'unidad',
+        header: 'Unidad',
+        accessor: (employee) => employee.unidad,
+        render: (employee) => employee.unidad || '—',
+        width: 150,
+        minWidth: 110,
+        maxWidth: 260,
         sortable: true,
         className: 'text-metro-muted',
       },

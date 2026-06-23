@@ -5,6 +5,7 @@ export interface EmployeePersistedFields {
   puestoOrganizativo: string;
   puestoEus: string;
   residencia: string;
+  unidad: string;
   nivelRetributivo: string;
   direccionOrganizativa: string;
   antiguedadPuesto: string;
@@ -40,6 +41,7 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
   'puestoOrganizativo',
   'puestoEus',
   'residencia',
+  'unidad',
   'nivelRetributivo',
   'direccionOrganizativa',
   'antiguedadPuesto',
@@ -60,6 +62,7 @@ export const EMPTY_EMPLOYEE_DRAFT: EmployeeDraft = {
   puestoOrganizativo: '',
   puestoEus: '',
   residencia: '',
+  unidad: '',
   nivelRetributivo: '',
   direccionOrganizativa: '',
   antiguedadPuesto: '',

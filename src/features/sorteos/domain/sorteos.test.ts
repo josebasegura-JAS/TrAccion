@@ -24,6 +24,7 @@ function employee(overrides: Partial<Employee> = {}): Employee {
     puestoNomina: '',
     puestoOrganizativo: '',
     residencia: '',
+    unidad: '',
     nivelRetributivo: '',
     sexo: '',
     calle: '',
