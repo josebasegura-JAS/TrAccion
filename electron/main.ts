@@ -485,12 +485,11 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   const attachments = normalizeOutlookDraftAttachments((candidate as { attachments?: unknown }).attachments);
 
   if (
-    !subject ||
-    !html ||
     subject.length > 255 ||
     html.length > 100_000 ||
     to.length > 200 ||
-    cc.length > 200
+    cc.length > 200 ||
+    (!subject && !html && attachments.length === 0)
   ) {
     return null;
   }

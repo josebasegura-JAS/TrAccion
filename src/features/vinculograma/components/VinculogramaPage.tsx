@@ -354,8 +354,8 @@ function SolicitudVinculogramaModal({
       const word = await generateVinculogramaSolicitudWord(selectedEmployee, templatePath);
       const buffer = await word.blob.arrayBuffer();
       const result = await window.traccion.createOutlookDraft({
-        subject: 'Solicitud vinculograma',
-        html: '<p></p>',
+        subject: '',
+        html: '',
         to: [],
         cc: [],
         attachments: [{ fileName: word.fileName, buffer }],
@@ -463,7 +463,7 @@ function SolicitudVinculogramaModal({
             disabled={isGenerating || !selectedEmployee}
             onClick={() => void generateSolicitud()}
           >
-            {isGenerating ? 'Generando…' : 'Generar'}
+            {isGenerating ? 'Generando…' : 'Generar Word'}
           </ActionButton>
         </div>
       </div>
@@ -736,7 +736,7 @@ export function VinculogramaPage() {
           actions={
             <div className="flex flex-wrap gap-2">
               <ActionButton variant="word" iconOnly={false} onClick={() => setShowSolicitudModal(true)}>
-                Enviar solicitud
+                Enviar solicitud Word
               </ActionButton>
               <ActionButton variant="add" iconOnly={false} onClick={openCreateModal}>
                 Nuevo vínculo

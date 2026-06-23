@@ -1,10 +1,11 @@
 import type { Employee } from '../../plantilla/domain/employee';
-import { validateConfiguredTeletrabajoTemplatePath } from '../../configuracion/domain/teletrabajoTemplate';
+import {
+  VINCULOGRAMA_TEMPLATE_UNAVAILABLE_MESSAGE,
+  validateConfiguredVinculogramaTemplatePath,
+} from '../../configuracion/domain/teletrabajoTemplate';
 import { unzipDocx, zipDocx, type ZipEntry } from '../../teletrabajo/domain/zip';
 
 const WORD_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const VINCULOGRAMA_TEMPLATE_UNAVAILABLE_MESSAGE =
-  'No se ha podido leer la plantilla DOCX de Vinculograma configurada.';
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -148,7 +149,7 @@ function replaceMarkersInTextNodes(
 }
 
 async function readTemplateFromConfiguredPath(path: string): Promise<ArrayBuffer> {
-  const templatePath = validateConfiguredTeletrabajoTemplatePath(path);
+  const templatePath = validateConfiguredVinculogramaTemplatePath(path);
 
   const reader = window.traccion?.readVinculogramaTemplate ?? window.traccion?.readTeletrabajoTemplate;
   if (!reader) {
