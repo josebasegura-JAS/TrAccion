@@ -30,6 +30,13 @@ import {
   type RecordLockPayload as RecordLockModulePayload,
   type RecordLockResult as RecordLockModuleResult,
 } from './persistence/recordLocks.js';
+import {
+  isLocalBackupFileName,
+  isShutdownBackupFileName,
+  localBackupKindFromFileName,
+  LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME,
+  resolveLocalBackupReference as resolveLocalBackupReferenceFromModule,
+} from './persistence/backupReference.js';
 
 const DATABASE_FILE_NAME = 'traccion.sqlite';
 const DATABASE_PREFERENCES_FILE_NAME = 'sqlite-preferences.json';
@@ -37,7 +44,6 @@ const LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-local-backup';
 const LOCAL_BACKUP_DATABASE_FILE_NAME = 'traccion-local-backup.sqlite';
 const LOCAL_BACKUP_JSON_FILE_NAME = 'traccion-local-backup.json';
 const LOCAL_ROTATED_BACKUP_RETENTION_COUNT = 5;
-const LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME = 'shutdown';
 const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
@@ -456,34 +462,6 @@ function getSharedSqliteBackupPath(databasePath: string, timestamp: string): str
 
 function isSharedSqliteBackupFileName(fileName: string): boolean {
   return /^traccion-backup-.*\.sqlite$/.test(fileName);
-}
-
-function isLocalBackupFileName(fileName: string): boolean {
-  return (
-    fileName === LOCAL_BACKUP_DATABASE_FILE_NAME ||
-    fileName === LOCAL_BACKUP_JSON_FILE_NAME ||
-    /^traccion-local-backup-.*\.(sqlite|json)$/.test(fileName)
-  );
-}
-
-function isShutdownBackupFileName(fileName: string): boolean {
-  return /^traccion-shutdown-backup-.*\.(sqlite|json)$/.test(fileName);
-}
-
-function isKnownBackupFileName(fileName: string): boolean {
-  return isLocalBackupFileName(fileName) || isShutdownBackupFileName(fileName);
-}
-
-function localBackupKindFromFileName(fileName: string): 'sqlite' | 'json' | null {
-  if (fileName.endsWith('.sqlite')) {
-    return 'sqlite';
-  }
-
-  if (fileName.endsWith('.json')) {
-    return 'json';
-  }
-
-  return null;
 }
 
 async function pruneBackupsInDirectory(
@@ -4114,26 +4092,11 @@ function parseLocalBackupJson(raw: string): PersistedStorageRecord[] {
 }
 
 function resolveLocalBackupReference(fileName: string): { safeFileName: string; backupPath: string } | null {
-  const normalizedReference = fileName.replace(/\\/g, '/');
-  const isShutdownReference = normalizedReference.startsWith(`${LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME}/`);
-  const rawFileName = isShutdownReference
-    ? normalizedReference.slice(LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME.length + 1)
-    : normalizedReference;
-  const safeFileName = path.basename(rawFileName);
-
-  if (safeFileName !== rawFileName || !isKnownBackupFileName(safeFileName)) {
-    return null;
-  }
-
-  if (isShutdownReference) {
-    return isShutdownBackupFileName(safeFileName)
-      ? { safeFileName, backupPath: path.join(getLocalShutdownBackupDirectory(), safeFileName) }
-      : null;
-  }
-
-  return isLocalBackupFileName(safeFileName)
-    ? { safeFileName, backupPath: path.join(getLocalBackupDirectory(), safeFileName) }
-    : null;
+  return resolveLocalBackupReferenceFromModule(
+    fileName,
+    getLocalBackupDirectory(),
+    getLocalShutdownBackupDirectory(),
+  );
 }
 
 export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
