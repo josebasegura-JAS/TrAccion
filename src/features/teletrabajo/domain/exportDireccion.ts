@@ -4,6 +4,11 @@ import type { Employee } from '../../plantilla/domain/employee';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
+import {
+  buildPuestosByKey,
+  buildSolicitudPeriodoPuestoKey,
+  buildSolicitudesByPeriodoPuestoCount,
+} from './semaforo';
 import type { TeletrabajoSolicitud } from './solicitud';
 import { buildStableExportFilename } from '../../../shared/export/tableExport';
 
@@ -74,35 +79,6 @@ type TeletrabajoExportAssessment = {
   apuntesRrll: string;
 };
 
-function buildPuestosByKey(puestos: readonly TeletrabajoPuesto[]): Map<string, TeletrabajoPuesto> {
-  return new Map(
-    puestos
-      .filter((puesto) => !puesto.deletedAt)
-      .map((puesto) => [normalizeTeletrabajoPuesto(puesto.puesto), puesto]),
-  );
-}
-
-function buildSolicitudesByPuestoCount(
-  solicitudes: readonly TeletrabajoSolicitud[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  solicitudes.forEach((solicitud) => {
-    if (solicitud.deletedAt || solicitud.estado === 'denegada') {
-      return;
-    }
-
-    const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
-    if (!puestoKey) {
-      return;
-    }
-
-    counts.set(puestoKey, (counts.get(puestoKey) ?? 0) + 1);
-  });
-
-  return counts;
-}
-
 function buildTeletrabajoAssessment({
   solicitud,
   employeesById,
@@ -169,7 +145,8 @@ function buildTeletrabajoAssessment({
     };
   }
 
-  const solicitudesDelPuesto = solicitudesByPuestoCount.get(puestoKey) ?? 0;
+  const solicitudesDelPuesto =
+    solicitudesByPuestoCount.get(buildSolicitudPeriodoPuestoKey(solicitud.periodo, puestoKey)) ?? 0;
   if (puesto.maxSolicitudes > 0 && solicitudesDelPuesto > puesto.maxSolicitudes) {
     return {
       status: 'review',
@@ -338,7 +315,7 @@ export async function exportTeletrabajoDireccionToExcel({
   });
   const employeesById = buildEmployeeMap(employees);
   const puestosByKey = buildPuestosByKey(puestosTeletrabajo);
-  const solicitudesByPuestoCount = buildSolicitudesByPuestoCount(solicitudesForAssessment);
+  const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment);
 
   worksheet.columns = [
     { key: 'nivel', width: 2.27 },

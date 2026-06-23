@@ -27,6 +27,11 @@ import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
 import { evaluateTeletrabajoAntiguedad } from '../features/teletrabajo/domain/antiguedad';
 import {
+  buildPuestosByKey,
+  buildSolicitudesByPeriodoPuestoCount,
+  getTeletrabajoSemaforo,
+} from '../features/teletrabajo/domain/semaforo';
+import {
   TELETRABAJO_ESTADOS,
   TELETRABAJO_TIPOS_SOLICITUD,
   type TeletrabajoSolicitud,
@@ -36,10 +41,6 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { exportTeletrabajoDireccionToExcel } from '../features/teletrabajo/domain/exportDireccion';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
-import {
-  normalizeTeletrabajoPuesto,
-  type TeletrabajoPuesto,
-} from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
@@ -176,13 +177,6 @@ function suggestNextPeriodo(periodos: readonly string[]): string {
   return `${Number(match[1]) + 1}-${Number(match[2]) + 1}`;
 }
 
-type TeletrabajoSemaforoStatus = 'ok' | 'review' | 'blocked';
-
-interface TeletrabajoSemaforo {
-  status: TeletrabajoSemaforoStatus;
-  title: string;
-}
-
 interface PendingEncuestaImport {
   file: File;
   unknownPuestos: string[];
@@ -235,92 +229,6 @@ function buildImportSummaryMessage(summary: {
   }
 
   return parts.join(' · ');
-}
-
-function buildPuestosByKey(puestos: readonly TeletrabajoPuesto[]): Map<string, TeletrabajoPuesto> {
-  return new Map(
-    puestos
-      .filter((puesto) => !puesto.deletedAt)
-      .map((puesto) => [normalizeTeletrabajoPuesto(puesto.puesto), puesto]),
-  );
-}
-
-function buildSolicitudesByPuestoCount(
-  solicitudes: readonly TeletrabajoSolicitud[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  solicitudes.forEach((solicitud) => {
-    if (solicitud.deletedAt || solicitud.estado === 'denegada') {
-      return;
-    }
-
-    const key = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
-    if (!key) {
-      return;
-    }
-
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  });
-
-  return counts;
-}
-
-function getTeletrabajoSemaforo(
-  solicitud: TeletrabajoSolicitud,
-  puestosByKey: Map<string, TeletrabajoPuesto>,
-  solicitudesByPuestoCount: Map<string, number>,
-  employeesByEmpleado: Map<string, Employee>,
-): TeletrabajoSemaforo {
-  const antiguedad = evaluateTeletrabajoAntiguedad(
-    solicitud,
-    employeesByEmpleado.get(solicitud.empleado.trim()),
-  );
-
-  if (antiguedad.status === 'no-cumple') {
-    return {
-      status: 'blocked',
-      title: antiguedad.title,
-    };
-  }
-
-  if (antiguedad.status === 'sin-dato') {
-    return {
-      status: 'review',
-      title: antiguedad.title,
-    };
-  }
-
-  const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
-  if (!puestoKey) {
-    return {
-      status: 'blocked',
-      title: 'La solicitud no tiene puesto organizativo informado.',
-    };
-  }
-
-  const puesto = puestosByKey.get(puestoKey);
-  if (!puesto) {
-    return {
-      status: 'blocked',
-      title: `El puesto organizativo «${solicitud.puestoOrganizativo}» no está marcado como teletrabajable.`,
-    };
-  }
-
-  const solicitudesDelPuesto = solicitudesByPuestoCount.get(puestoKey) ?? 0;
-  if (puesto.maxSolicitudes > 0 && solicitudesDelPuesto > puesto.maxSolicitudes) {
-    return {
-      status: 'review',
-      title: `Revisar: ${solicitudesDelPuesto} solicitudes activas para presencialidad mínima ${puesto.maxSolicitudes}.`,
-    };
-  }
-
-  return {
-    status: 'ok',
-    title: puesto.observaciones
-      ? `Puesto teletrabajable. ${puesto.observaciones}`
-      : 'Puesto teletrabajable.',
-  };
 }
 
 export function TeletrabajoPage({
@@ -448,7 +356,7 @@ export function TeletrabajoPage({
     [employees],
   );
   const solicitudesByPuestoCount = useMemo(
-    () => buildSolicitudesByPuestoCount(solicitudes),
+    () => buildSolicitudesByPeriodoPuestoCount(solicitudes),
     [solicitudes],
   );
   const periodos = useMemo(
