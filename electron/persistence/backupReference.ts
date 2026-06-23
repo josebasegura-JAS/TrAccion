@@ -1,5 +1,13 @@
 import path from 'node:path';
 
+function joinBackupPath(directory: string, fileName: string): string {
+  if (directory.includes('/')) {
+    return path.posix.join(directory.replace(/\\/g, '/'), fileName);
+  }
+
+  return path.join(directory, fileName);
+}
+
 /**
  * Sin dependencias de Electron a propósito (mismo motivo que
  * electron/persistence/maintenanceQueries.ts y recordLocks.ts): solo
@@ -82,11 +90,11 @@ export function resolveLocalBackupReference(
 
   if (isShutdownReference) {
     return isShutdownBackupFileName(safeFileName)
-      ? { safeFileName, backupPath: path.join(localShutdownBackupDirectory, safeFileName) }
+      ? { safeFileName, backupPath: joinBackupPath(localShutdownBackupDirectory, safeFileName) }
       : null;
   }
 
   return isLocalBackupFileName(safeFileName)
-    ? { safeFileName, backupPath: path.join(localBackupDirectory, safeFileName) }
+    ? { safeFileName, backupPath: joinBackupPath(localBackupDirectory, safeFileName) }
     : null;
 }
