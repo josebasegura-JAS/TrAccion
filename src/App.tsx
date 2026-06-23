@@ -11,6 +11,7 @@ import {
 } from './services/externalDataSync';
 import {
   bootstrapSqlitePersistence,
+  isTemporarySqliteLockMessage,
   startDatabaseConnectivityIssueListener,
   stopDatabaseConnectivityIssueListener,
   subscribeToPersistenceFeedback,
@@ -175,7 +176,7 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   ajustes: 'Cargando Ajustes...',
 };
 
-function PersistenceErrorBanner() {
+function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
   const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
 
   useEffect(() => {
@@ -201,6 +202,8 @@ function PersistenceErrorBanner() {
     return null;
   }
 
+  const isLockIssue = isTemporarySqliteLockMessage(feedback.message || '');
+
   return (
     <section className="persistence-error-banner" role="alert" aria-live="assertive">
       <AlertTriangle size={20} aria-hidden="true" />
@@ -210,6 +213,15 @@ function PersistenceErrorBanner() {
           {feedback.message ||
             'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}
         </p>
+        {isLockIssue && (
+          <button
+            className="persistence-error-banner__action"
+            onClick={onGoToAjustes}
+            type="button"
+          >
+            Ver bloqueo en Ajustes
+          </button>
+        )}
       </div>
     </section>
   );
@@ -362,7 +374,7 @@ export function App() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-metro-app/95">
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
-          <PersistenceErrorBanner />
+          <PersistenceErrorBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <GlobalBusyIndicator />
           <ModuleErrorBoundary activeView={activeView}>
             <Suspense fallback={<ModuleLoading activeView={activeView} />}>
