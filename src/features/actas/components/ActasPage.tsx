@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
+import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
@@ -1429,6 +1430,13 @@ export function ActasPage() {
               >
                 Guardar acta
               </button>
+              {editingActa && (
+                <AuditHistoryButton
+                  entityId={editingActa.id}
+                  entityTitle={editingActa.titulo || 'Acta sin título'}
+                  module="actas"
+                />
+              )}
               <InlineSaveFeedback />
             </div>
           </div>
