@@ -114,6 +114,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('criterios-rrll:save-record-if-unchanged', record),
+  saveCriteriosRrllRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('criterios-rrll:save-records-if-unchanged', { records }),
   loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
   savePresupuestosSnapshotIfUnchanged: (snapshot: {
     scenarios: Array<{ id: string; value: string }>;
@@ -153,6 +158,11 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('teletrabajo:save-record-if-unchanged', record),
+  saveTeletrabajoRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('teletrabajo:save-records-if-unchanged', { records }),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   loadLicenciaSinSueldoRecords: () => ipcRenderer.invoke('licencias-sin-sueldo:load-records'),

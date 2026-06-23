@@ -31,6 +31,7 @@ import {
   hasTeletrabajoSqliteRepository,
   loadTeletrabajoRecordsFromSqlite,
   loadTeletrabajoSolicitudesFromSqlite,
+  saveTeletrabajoSolicitudesToSqlite,
   saveTeletrabajoSolicitudToSqlite,
 } from './teletrabajoSqliteRepository';
 import {
@@ -840,16 +841,16 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         const expectedUpdatedAtById = new Map(
           records.map((record) => [record.id, record.updatedAt]),
         );
-        for (const solicitud of result.solicitudes) {
-          const saveResult = await saveTeletrabajoSolicitudToSqlite(
+        const batchResult = await saveTeletrabajoSolicitudesToSqlite(
+          result.solicitudes.map((solicitud) => ({
             solicitud,
-            expectedUpdatedAtById.get(solicitud.id) ?? null,
+            expectedUpdatedAt: expectedUpdatedAtById.get(solicitud.id) ?? null,
+          })),
+        );
+        if (!batchResult?.ok) {
+          throw new Error(
+            batchResult?.message ?? 'No se ha podido importar la encuesta en SQLite.',
           );
-          if (!saveResult?.ok) {
-            throw new Error(
-              saveResult?.message ?? 'No se ha podido importar la encuesta en SQLite.',
-            );
-          }
         }
         set({
           solicitudes: result.solicitudes,
@@ -914,18 +915,19 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           const expectedUpdatedAtById = new Map(
             records.map((record) => [record.id, record.updatedAt]),
           );
-          for (const solicitud of result.solicitudes.filter((candidate) =>
+          const changedSolicitudes = result.solicitudes.filter((candidate) =>
             changedIds.has(candidate.id),
-          )) {
-            const saveResult = await saveTeletrabajoSolicitudToSqlite(
+          );
+          const batchResult = await saveTeletrabajoSolicitudesToSqlite(
+            changedSolicitudes.map((solicitud) => ({
               solicitud,
-              expectedUpdatedAtById.get(solicitud.id) ?? null,
+              expectedUpdatedAt: expectedUpdatedAtById.get(solicitud.id) ?? null,
+            })),
+          );
+          if (!batchResult?.ok) {
+            throw new Error(
+              batchResult?.message ?? 'No se ha podido importar el histórico en SQLite.',
             );
-            if (!saveResult?.ok) {
-              throw new Error(
-                saveResult?.message ?? 'No se ha podido importar el histórico en SQLite.',
-              );
-            }
           }
           set({
             solicitudes: result.solicitudes,

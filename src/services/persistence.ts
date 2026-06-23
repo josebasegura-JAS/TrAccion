@@ -395,9 +395,14 @@ function upsertPendingSqliteWrite(
   // acumular ruido indefinidamente. Puede ocurrir si la clave ya no existe en
   // el schema o si hay un conflicto persistente que no se puede resolver.
   if (attempts > MAX_PENDING_WRITE_ATTEMPTS) {
-    console.warn(
-      `[pending-writes] Descartando write pendiente tras ${attempts} intentos fallidos. Clave: ${key}. Último error: ${lastError}`,
-    );
+    const discardMessage = `No se ha podido sincronizar un cambio tras ${attempts} intentos y se ha descartado. Revisa y vuelve a aplicar el cambio si sigue siendo necesario. Clave: ${key}.`;
+    console.warn(`[pending-writes] Descartando write pendiente tras ${attempts} intentos fallidos. Clave: ${key}. Último error: ${lastError}`);
+    emitPersistenceFeedback({
+      kind: 'error',
+      updatedAt: now,
+      key,
+      message: discardMessage,
+    });
     if (existingIndex >= 0) {
       writes.splice(existingIndex, 1);
       writePendingSqliteWrites(writes);
@@ -591,7 +596,7 @@ export async function flushPendingSqliteWrites(): Promise<number> {
           updatedAt: new Date().toISOString(),
           key: pendingWrite.key,
           message: isConcurrencyConflictMessage(message)
-            ? `Conflicto al sincronizar cambio pendiente — otro usuario modificó el mismo dato. Se reintentará automáticamente. Clave: ${pendingWrite.key}.`
+            ? `Conflicto al sincronizar cambio pendiente — otro usuario modificó el mismo dato. Se reintentará la próxima vez que se recargue TrAccion. Clave: ${pendingWrite.key}.`
             : `SQLite pendiente: ${message}`,
         });
       }

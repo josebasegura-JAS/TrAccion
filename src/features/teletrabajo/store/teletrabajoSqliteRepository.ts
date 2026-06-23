@@ -156,6 +156,63 @@ export async function saveTeletrabajoSolicitudToSqlite(
   }
 }
 
+export interface TeletrabajoBatchSaveResult {
+  ok: boolean;
+  message: string;
+  failedRecordId?: string;
+}
+
+/**
+ * Guarda varias solicitudes en una sola llamada IPC / transacción SQLite,
+ * en vez de una por una. Pensado para importadores masivos (encuesta e
+ * histórico): antes disparaban N llamadas IPC secuenciales, ahora 1.
+ */
+export async function saveTeletrabajoSolicitudesToSqlite(
+  items: Array<{ solicitud: TeletrabajoSolicitud; expectedUpdatedAt: string | null }>,
+): Promise<TeletrabajoBatchSaveResult | null> {
+  const saver = window.traccion?.saveTeletrabajoRecordsIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  if (items.length === 0) {
+    return { ok: true, message: 'Nada que importar.' };
+  }
+
+  publishPersistenceBusy(
+    TELETRABAJO_STORAGE_KEY,
+    `Guardando ${items.length} solicitudes de Teletrabajo en SQLite…`,
+  );
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver(
+        items.map(({ solicitud, expectedUpdatedAt }) => ({
+          id: solicitud.id,
+          value: JSON.stringify(solicitud),
+          expectedUpdatedAt,
+        })),
+      ),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(TELETRABAJO_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      failedRecordId: result.failedRecordId,
+    };
+  } catch (error) {
+    clearPersistenceBusy(
+      TELETRABAJO_STORAGE_KEY,
+      'No se ha podido importar las solicitudes de Teletrabajo en SQLite.',
+    );
+    throw error;
+  }
+}
+
 export async function deleteTeletrabajoSolicitudInSqlite(
   solicitud: TeletrabajoSolicitud,
   expectedUpdatedAt: string | null,

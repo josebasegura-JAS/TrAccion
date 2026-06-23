@@ -5,6 +5,7 @@ import {
   hasCriteriosRrllSqliteRepository,
   loadCriteriosRrllFromSqlite,
   loadCriteriosRrllRecordsFromSqlite,
+  saveCriteriosRrllToSqlite,
   saveCriterioRrllToSqlite,
 } from './criteriosRrllSqliteRepository';
 
@@ -148,6 +149,88 @@ describe('criteriosRrllSqliteRepository', () => {
 
   it('devuelve null si no existe saver SQLite para escritura', async () => {
     await expect(saveCriterioRrllToSqlite(criterio(), null)).resolves.toBeNull();
+  });
+
+  it('guarda un lote de criterios en una sola llamada IPC, no una por registro', async () => {
+    const saver = vi.fn(async () => ({
+      ok: true,
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      results: [],
+      message: '2 registros de Criterio RRLL guardados en SQLite.',
+    }));
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { saveCriteriosRrllRecordsIfUnchanged: saver },
+    });
+
+    const draftA = criterio({ id: 'criterio-1' });
+    const draftB = criterio({ id: 'criterio-2' });
+    const result = await saveCriteriosRrllToSqlite([
+      { record: draftA, expectedUpdatedAt: 'token-a' },
+      { record: draftB, expectedUpdatedAt: null },
+    ]);
+
+    expect(saver).toHaveBeenCalledTimes(1);
+    expect(saver).toHaveBeenCalledWith([
+      { id: 'criterio-1', value: JSON.stringify(draftA), expectedUpdatedAt: 'token-a' },
+      { id: 'criterio-2', value: JSON.stringify(draftB), expectedUpdatedAt: null },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      message: '2 registros de Criterio RRLL guardados en SQLite.',
+      failedRecordId: undefined,
+    });
+  });
+
+  it('no llama al saver de lote si la lista de registros está vacía', async () => {
+    const saver = vi.fn();
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { saveCriteriosRrllRecordsIfUnchanged: saver },
+    });
+
+    const result = await saveCriteriosRrllToSqlite([]);
+
+    expect(saver).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, message: 'Nada que importar.' });
+  });
+
+  it('devuelve null si no existe saver SQLite de lote para escritura', async () => {
+    await expect(
+      saveCriteriosRrllToSqlite([{ record: criterio(), expectedUpdatedAt: null }]),
+    ).resolves.toBeNull();
+  });
+
+  it('propaga el conflicto de concurrencia de un registro del lote junto a su id', async () => {
+    const saver = vi.fn(async () => ({
+      ok: false,
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      results: [
+        {
+          ok: false,
+          status: { ready: true, phase: 'active', message: 'SQLite activo' },
+          currentUpdatedAt: '2026-06-18T00:00:00.000Z',
+          message: 'Criterio RRLL ha sido modificado por otro usuario. Recarga antes de guardar.',
+        },
+      ],
+      failedRecordId: 'criterio-2',
+      message: 'Criterio RRLL ha sido modificado por otro usuario. Recarga antes de guardar.',
+    }));
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { saveCriteriosRrllRecordsIfUnchanged: saver },
+    });
+
+    const result = await saveCriteriosRrllToSqlite([
+      { record: criterio({ id: 'criterio-1' }), expectedUpdatedAt: 'token-a' },
+      { record: criterio({ id: 'criterio-2' }), expectedUpdatedAt: 'stale-token' },
+    ]);
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Criterio RRLL ha sido modificado por otro usuario. Recarga antes de guardar.',
+      failedRecordId: 'criterio-2',
+    });
   });
 
   it('propaga el conflicto de concurrencia sin lanzar excepción', async () => {

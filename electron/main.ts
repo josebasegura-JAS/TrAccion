@@ -53,9 +53,11 @@ import {
   saveParitariaSessionRecordIfUnchanged,
   saveActaRecordIfUnchanged,
   saveTeletrabajoRecordIfUnchanged,
+  saveTeletrabajoRecordsIfUnchanged,
   saveVinculogramaRecordIfUnchanged,
   saveLicenciaSinSueldoRecordIfUnchanged,
   saveCriteriosRrllRecordIfUnchanged,
+  saveCriteriosRrllRecordsIfUnchanged,
   saveEspecialesRecipientRecordIfUnchanged,
   saveConfiguracionIfUnchanged,
   savePresupuestosSnapshotIfUnchanged,
@@ -1679,6 +1681,48 @@ function registerIpcHandlers(): void {
     );
   });
 
+  ipcMain.handle('criterios-rrll:save-records-if-unchanged', (_event, payload: unknown) => {
+    const invalidPayloadResult = {
+      ok: false,
+      status: getSqliteStatus(),
+      results: [],
+      message: 'Payload de lote de criterios RRLL inválido.',
+    };
+
+    if (!payload || typeof payload !== 'object') {
+      return invalidPayloadResult;
+    }
+
+    const candidate = payload as { records?: unknown };
+    if (!Array.isArray(candidate.records)) {
+      return invalidPayloadResult;
+    }
+
+    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
+    for (const item of candidate.records) {
+      if (!item || typeof item !== 'object') {
+        return invalidPayloadResult;
+      }
+      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+      if (
+        typeof recordCandidate.id !== 'string' ||
+        typeof recordCandidate.value !== 'string' ||
+        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
+      ) {
+        return invalidPayloadResult;
+      }
+      records.push({
+        id: recordCandidate.id,
+        value: recordCandidate.value,
+        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
+      });
+    }
+
+    return enqueueSqliteIpc('criterios-rrll:save-records-if-unchanged', () =>
+      saveCriteriosRrllRecordsIfUnchanged(records),
+    );
+  });
+
 
 
   ipcMain.handle('presupuestos:load-records', () =>
@@ -1985,6 +2029,48 @@ function registerIpcHandlers(): void {
         value,
         expectedUpdatedAt,
       }),
+    );
+  });
+
+  ipcMain.handle('teletrabajo:save-records-if-unchanged', (_event, payload: unknown) => {
+    const invalidPayloadResult = {
+      ok: false,
+      status: getSqliteStatus(),
+      results: [],
+      message: 'Payload de lote de solicitudes de Teletrabajo inválido.',
+    };
+
+    if (!payload || typeof payload !== 'object') {
+      return invalidPayloadResult;
+    }
+
+    const candidate = payload as { records?: unknown };
+    if (!Array.isArray(candidate.records)) {
+      return invalidPayloadResult;
+    }
+
+    const records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }> = [];
+    for (const item of candidate.records) {
+      if (!item || typeof item !== 'object') {
+        return invalidPayloadResult;
+      }
+      const recordCandidate = item as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+      if (
+        typeof recordCandidate.id !== 'string' ||
+        typeof recordCandidate.value !== 'string' ||
+        (typeof recordCandidate.expectedUpdatedAt !== 'string' && recordCandidate.expectedUpdatedAt !== null)
+      ) {
+        return invalidPayloadResult;
+      }
+      records.push({
+        id: recordCandidate.id,
+        value: recordCandidate.value,
+        expectedUpdatedAt: recordCandidate.expectedUpdatedAt,
+      });
+    }
+
+    return enqueueSqliteIpc('teletrabajo:save-records-if-unchanged', () =>
+      saveTeletrabajoRecordsIfUnchanged(records),
     );
   });
 

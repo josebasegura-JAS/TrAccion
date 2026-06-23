@@ -8,6 +8,7 @@ import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords 
 import {
   createSimpleJsonModuleRepository,
   type ConditionalSimpleJsonRecord,
+  type SimpleJsonBatchSaveResult,
   type SimpleJsonRecordsSnapshot,
   type SimpleJsonSaveResult,
 } from './persistence/simpleJsonModuleRepository.js';
@@ -2878,6 +2879,99 @@ export async function loadTeletrabajoRecordsSnapshot(): Promise<SqliteTeletrabaj
   );
 }
 
+function saveTeletrabajoRecordInTransaction(
+  db: Database,
+  record: ConditionalSqliteTeletrabajoRecord,
+  currentStatus: DatabaseStatus,
+): ConditionalSqliteTaskSaveResult {
+  const row = db.prepare('SELECT updated_at FROM teletrabajo_solicitud_records WHERE id = ?').get(record.id);
+  const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
+
+  if (currentUpdatedAt !== record.expectedUpdatedAt) {
+    return {
+      ok: false,
+      status: currentStatus,
+      currentUpdatedAt,
+      message: 'La solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+    };
+  }
+
+  const now = new Date().toISOString();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(record.value);
+  } catch {
+    parsed = null;
+  }
+  const deletedAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+      ? (parsed as { deletedAt: string }).deletedAt
+      : null;
+  const createdAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
+      ? (parsed as { createdAt: string }).createdAt
+      : now;
+  const updatedAt =
+    parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
+      ? (parsed as { updatedAt: string }).updatedAt
+      : now;
+
+  if (currentUpdatedAt === null) {
+    const insertResult = db
+      .prepare(
+        `INSERT OR IGNORE INTO teletrabajo_solicitud_records (id, value_json, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(record.id, record.value, createdAt, updatedAt, deletedAt);
+
+    if (insertResult.changes !== 1) {
+      const latest = db.prepare('SELECT updated_at FROM teletrabajo_solicitud_records WHERE id = ?').get(record.id);
+      return {
+        ok: false,
+        status: currentStatus,
+        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+        message: 'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
+      };
+    }
+  } else {
+    const updateResult = db
+      .prepare(
+        `UPDATE teletrabajo_solicitud_records
+         SET value_json = ?, updated_at = ?, deleted_at = ?
+         WHERE id = ? AND updated_at = ?`,
+      )
+      .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
+
+    if (updateResult.changes !== 1) {
+      const latest = db.prepare('SELECT updated_at FROM teletrabajo_solicitud_records WHERE id = ?').get(record.id);
+      return {
+        ok: false,
+        status: currentStatus,
+        currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
+        message: 'La solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
+      };
+    }
+  }
+
+  updateRefreshMetadata(db, updatedAt);
+
+  return {
+    ok: true,
+    status: currentStatus,
+    currentUpdatedAt: updatedAt,
+    message: 'Solicitud de Teletrabajo guardada en SQLite.',
+  };
+}
+
+class TeletrabajoBatchSaveError extends Error {
+  constructor(
+    public readonly recordId: string,
+    public readonly saveResult: ConditionalSqliteTaskSaveResult,
+  ) {
+    super(saveResult.message);
+  }
+}
+
 export async function saveTeletrabajoRecordIfUnchanged(
   record: ConditionalSqliteTeletrabajoRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
@@ -2898,83 +2992,7 @@ export async function saveTeletrabajoRecordIfUnchanged(
       const db = requireDatabase();
       const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
         maybeMigrateTeletrabajoFromPersistedRecord(db);
-        const row = db.prepare('SELECT updated_at FROM teletrabajo_solicitud_records WHERE id = ?').get(record.id);
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message: 'La solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-          };
-        }
-
-        const now = new Date().toISOString();
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(record.value);
-        } catch {
-          parsed = null;
-        }
-        const deletedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
-            ? (parsed as { deletedAt: string }).deletedAt
-            : null;
-        const createdAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
-            ? (parsed as { createdAt: string }).createdAt
-            : now;
-        const updatedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
-            ? (parsed as { updatedAt: string }).updatedAt
-            : now;
-
-        if (currentUpdatedAt === null) {
-          const insertResult = db
-            .prepare(
-              `INSERT OR IGNORE INTO teletrabajo_solicitud_records (id, value_json, created_at, updated_at, deleted_at)
-               VALUES (?, ?, ?, ?, ?)`,
-            )
-            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
-
-          if (insertResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM teletrabajo_solicitud_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message: 'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
-            };
-          }
-        } else {
-          const updateResult = db
-            .prepare(
-              `UPDATE teletrabajo_solicitud_records
-               SET value_json = ?, updated_at = ?, deleted_at = ?
-               WHERE id = ? AND updated_at = ?`,
-            )
-            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
-
-          if (updateResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM teletrabajo_solicitud_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message: 'La solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-            };
-          }
-        }
-
-        updateRefreshMetadata(db, updatedAt);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Solicitud de Teletrabajo guardada en SQLite.',
-        };
+        return saveTeletrabajoRecordInTransaction(db, record, currentStatus);
       })();
 
       if (result.ok) {
@@ -2987,6 +3005,84 @@ export async function saveTeletrabajoRecordIfUnchanged(
       ok: false,
       status: nextStatus,
       currentUpdatedAt: null,
+      message,
+    }),
+  );
+}
+
+export interface TeletrabajoBatchSaveResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  results: ConditionalSqliteTaskSaveResult[];
+  failedRecordId?: string;
+  message: string;
+}
+
+/**
+ * Guarda varias solicitudes de Teletrabajo en una sola transacción SQLite.
+ * Atómico: si cualquier registro falla (conflicto de concurrencia u otro
+ * motivo), ninguno se aplica. Pensado para la confirmación de importación
+ * de histórico, que antes guardaba fila a fila con un await secuencial por
+ * registro (N round-trips IPC en vez de 1).
+ */
+export async function saveTeletrabajoRecordsIfUnchanged(
+  records: ConditionalSqliteTeletrabajoRecord[],
+): Promise<TeletrabajoBatchSaveResult> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+        return {
+          ok: false,
+          status: currentStatus,
+          results: [],
+          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+        };
+      }
+
+      if (records.length === 0) {
+        return { ok: true, status: currentStatus, results: [], message: 'Nada que guardar.' };
+      }
+
+      assertDatabaseWritesAllowed();
+
+      const db = requireDatabase();
+      try {
+        const results = db.transaction((): ConditionalSqliteTaskSaveResult[] => {
+          maybeMigrateTeletrabajoFromPersistedRecord(db);
+          return records.map((record) => {
+            const saveResult = saveTeletrabajoRecordInTransaction(db, record, currentStatus);
+            if (!saveResult.ok) {
+              throw new TeletrabajoBatchSaveError(record.id, saveResult);
+            }
+            return saveResult;
+          });
+        })();
+
+        enqueueLocalBackup('save:teletrabajo_solicitud_records');
+        return {
+          ok: true,
+          status: currentStatus,
+          results,
+          message: `${records.length} solicitudes de Teletrabajo guardadas en SQLite.`,
+        };
+      } catch (error) {
+        if (error instanceof TeletrabajoBatchSaveError) {
+          return {
+            ok: false,
+            status: currentStatus,
+            results: [error.saveResult],
+            failedRecordId: error.recordId,
+            message: error.saveResult.message,
+          };
+        }
+        throw error;
+      }
+    },
+    (nextStatus, message) => ({
+      ok: false,
+      status: nextStatus,
+      results: [],
       message,
     }),
   );
@@ -4198,6 +4294,7 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
 type JsonRecordSnapshot = SimpleJsonRecordsSnapshot;
 type ConditionalJsonRecord = ConditionalSimpleJsonRecord;
 type JsonRecordSaveResult = SimpleJsonSaveResult;
+type JsonRecordBatchSaveResult = SimpleJsonBatchSaveResult;
 
 function createJsonModuleRepository(
   tableName: string,
@@ -4349,6 +4446,12 @@ export function loadCriteriosRrllRecordsSnapshot(): Promise<JsonRecordSnapshot> 
 
 export function saveCriteriosRrllRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
   return criteriosRrllRepository.saveIfUnchanged(record);
+}
+
+export function saveCriteriosRrllRecordsIfUnchanged(
+  records: ConditionalJsonRecord[],
+): Promise<JsonRecordBatchSaveResult> {
+  return criteriosRrllRepository.saveManyIfUnchanged(records);
 }
 
 export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {

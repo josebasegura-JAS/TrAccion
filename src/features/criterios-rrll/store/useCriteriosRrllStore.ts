@@ -6,6 +6,7 @@ import {
   hasCriteriosRrllSqliteRepository,
   loadCriteriosRrllFromSqlite,
   loadCriteriosRrllRecordsFromSqlite,
+  saveCriteriosRrllToSqlite,
   saveCriterioRrllToSqlite,
 } from './criteriosRrllSqliteRepository';
 import {
@@ -355,15 +356,19 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
     await get().importDrafts(drafts);
   },
   importDrafts: async (drafts) => {
-    const criterios = upsertImportedCriterios(get().criterios, drafts);
+    const previousCriterios = get().criterios;
+    const criterios = upsertImportedCriterios(previousCriterios, drafts);
 
     if (hasCriteriosRrllSqliteRepository()) {
-      for (const criterio of criterios) {
-        const current = get().criterios.find((item) => item.id === criterio.id);
-        const result = await saveCriterioRrllToSqlite(criterio, current?.updatedAt ?? null);
-        if (!result?.ok) {
-          throw new Error(result?.message ?? 'No se ha podido importar criterios en SQLite.');
-        }
+      const previousById = new Map(previousCriterios.map((item) => [item.id, item]));
+      const batchResult = await saveCriteriosRrllToSqlite(
+        criterios.map((criterio) => ({
+          record: criterio,
+          expectedUpdatedAt: previousById.get(criterio.id)?.updatedAt ?? null,
+        })),
+      );
+      if (!batchResult?.ok) {
+        throw new Error(batchResult?.message ?? 'No se ha podido importar criterios en SQLite.');
       }
 
       const records = await loadCriteriosRrllRecordsFromSqlite();

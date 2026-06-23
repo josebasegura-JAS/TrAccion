@@ -140,6 +140,57 @@ export async function saveCriterioRrllToSqlite(
   }
 }
 
+export interface CriterioRrllBatchSaveResult {
+  ok: boolean;
+  message: string;
+  failedRecordId?: string;
+}
+
+/**
+ * Guarda varios criterios en una sola llamada IPC / transacción SQLite, en
+ * vez de uno por uno. Pensado para importaciones masivas desde Excel: antes
+ * disparaba N llamadas IPC secuenciales (una por fila), ahora dispara 1.
+ */
+export async function saveCriteriosRrllToSqlite(
+  records: Array<{ record: CriterioRrll; expectedUpdatedAt: string | null }>,
+): Promise<CriterioRrllBatchSaveResult | null> {
+  const saver = window.traccion?.saveCriteriosRrllRecordsIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  if (records.length === 0) {
+    return { ok: true, message: 'Nada que importar.' };
+  }
+
+  publishPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, `Guardando ${records.length} criterios en SQLite…`);
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver(
+        records.map(({ record, expectedUpdatedAt }) => ({
+          id: record.id,
+          value: JSON.stringify(record),
+          expectedUpdatedAt,
+        })),
+      ),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      failedRecordId: result.failedRecordId,
+    };
+  } catch (error) {
+    clearPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, 'No se ha podido importar los criterios en SQLite.');
+    throw error;
+  }
+}
+
 export async function deleteCriterioRrllInSqlite(
   record: CriterioRrll,
   expectedUpdatedAt: string | null,

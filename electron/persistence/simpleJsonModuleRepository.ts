@@ -77,6 +77,20 @@ function maybeMigrateJsonModuleRecords(
   );
 }
 
+/**
+ * Señal interna para abortar la transacción de saveManyIfUnchanged en el
+ * primer registro que falle, llevando adjunto el resultado real para
+ * devolverlo al caller (no es un error genérico, es control de flujo).
+ */
+class BatchSaveError extends Error {
+  constructor(
+    public readonly recordId: string,
+    public readonly saveResult: SimpleJsonSaveResult,
+  ) {
+    super(saveResult.message);
+  }
+}
+
 function saveJsonModuleRecordInTransaction(
   db: Database,
   record: ConditionalSimpleJsonRecord,
@@ -145,12 +159,23 @@ function saveJsonModuleRecordInTransaction(
   };
 }
 
+export interface SimpleJsonBatchSaveResult {
+  ok: boolean;
+  status: ReturnType<SimpleJsonModuleRepositoryDependencies['getSqliteStatus']>;
+  /** Resultado individual de cada registro, en el mismo orden que se recibieron. */
+  results: SimpleJsonSaveResult[];
+  /** Id del primer registro que falló, si ok es false. */
+  failedRecordId?: string;
+  message: string;
+}
+
 export function createSimpleJsonModuleRepository(
   options: SimpleJsonModuleRepositoryOptions,
   deps: SimpleJsonModuleRepositoryDependencies,
 ): {
   loadSnapshot: () => Promise<SimpleJsonRecordsSnapshot>;
   saveIfUnchanged: (record: ConditionalSimpleJsonRecord) => Promise<SimpleJsonSaveResult>;
+  saveManyIfUnchanged: (records: ConditionalSimpleJsonRecord[]) => Promise<SimpleJsonBatchSaveResult>;
 } {
   return {
     loadSnapshot: () => deps.safeDatabaseOperation(
@@ -198,6 +223,76 @@ export function createSimpleJsonModuleRepository(
         ok: false,
         status: nextStatus,
         currentUpdatedAt: null,
+        message,
+      }),
+    ),
+
+    /**
+     * Guarda varios registros en una sola transacción SQLite. Atómico: si
+     * cualquier registro falla (conflicto de concurrencia u otro motivo),
+     * ninguno se aplica — better-sqlite3 revierte la transacción completa al
+     * lanzar dentro de db.transaction(...). Pensado para importadores
+     * masivos, que antes guardaban fila a fila con un await secuencial por
+     * registro (N round-trips IPC en vez de 1).
+     */
+    saveManyIfUnchanged: (records) => deps.safeDatabaseOperation(
+      () => {
+        const currentStatus = deps.getSqliteStatus();
+        if (!currentStatus.ready || currentStatus.phase !== 'active' || deps.isDatabaseWriteBlockedByHeartbeat()) {
+          return {
+            ok: false,
+            status: currentStatus,
+            results: [],
+            message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+          };
+        }
+
+        if (records.length === 0) {
+          return { ok: true, status: currentStatus, results: [], message: 'Nada que guardar.' };
+        }
+
+        deps.assertDatabaseWritesAllowed();
+
+        const db = deps.requireDatabase();
+        try {
+          const results = db.transaction((): SimpleJsonSaveResult[] => {
+            maybeMigrateJsonModuleRecords(db, options);
+            return records.map((record) => {
+              const saveResult = saveJsonModuleRecordInTransaction(db, record, currentStatus, options, deps);
+              if (!saveResult.ok) {
+                // Lanzar dentro de db.transaction(...) revierte todo lo
+                // aplicado hasta ahora en esta misma llamada — atomicidad
+                // real del lote completo, no solo del registro individual.
+                throw new BatchSaveError(record.id, saveResult);
+              }
+              return saveResult;
+            });
+          })();
+
+          deps.enqueueLocalBackup(`save:${options.tableName}`);
+          return {
+            ok: true,
+            status: currentStatus,
+            results,
+            message: `${records.length} registros de ${options.moduleLabel} guardados en SQLite.`,
+          };
+        } catch (error) {
+          if (error instanceof BatchSaveError) {
+            return {
+              ok: false,
+              status: currentStatus,
+              results: [error.saveResult],
+              failedRecordId: error.recordId,
+              message: error.saveResult.message,
+            };
+          }
+          throw error;
+        }
+      },
+      (nextStatus, message) => ({
+        ok: false,
+        status: nextStatus,
+        results: [],
         message,
       }),
     ),

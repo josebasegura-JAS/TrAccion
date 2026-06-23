@@ -293,6 +293,14 @@ interface TraccionConditionalTaskSaveResult {
   message: string;
 }
 
+interface TraccionBatchSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  results: TraccionConditionalTaskSaveResult[];
+  failedRecordId?: string;
+  message: string;
+}
+
 interface TraccionComiteSessionRecord {
   id: string;
   value: string;
@@ -480,6 +488,9 @@ interface TraccionApi {
   saveTeletrabajoRecordIfUnchanged?: (
     record: TraccionConditionalTeletrabajoRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveTeletrabajoRecordsIfUnchanged?: (
+    records: TraccionConditionalTeletrabajoRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
   loadTeletrabajoPuestoRecords?: () => Promise<TraccionTeletrabajoPuestoRecordsSnapshot>;
   saveTeletrabajoPuestoRecordIfUnchanged?: (
     record: TraccionConditionalTeletrabajoPuestoRecord,
@@ -496,6 +507,9 @@ interface TraccionApi {
   saveCriteriosRrllRecordIfUnchanged?: (
     record: TraccionConditionalCriterioRrllRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveCriteriosRrllRecordsIfUnchanged?: (
+    records: TraccionConditionalCriterioRrllRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
   loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged?: (
     snapshot: TraccionConditionalPresupuestosSnapshot,
