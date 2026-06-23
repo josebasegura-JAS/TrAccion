@@ -41,6 +41,17 @@ interface ConfiguracionStore extends ConfiguracionState {
   deleteTaskOrigin: (id: string) => void;
 }
 
+
+function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState {
+  return {
+    rutaPlantillaTeletrabajo: state.rutaPlantillaTeletrabajo,
+    rutaPlantillaLicenciaSinSueldo: state.rutaPlantillaLicenciaSinSueldo,
+    rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
+    taskPhases: state.taskPhases,
+    taskOrigins: state.taskOrigins,
+  };
+}
+
 function isTaskOriginConfig(value: unknown): value is TaskOriginConfig {
   if (!value || typeof value !== 'object') {
     return false;
@@ -276,26 +287,23 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
 
     applyIfChanged(readConfiguracion());
   },
-  setRutaPlantillaTeletrabajo: async (ruta) => {
-    const state = useConfiguracionStore.getState();
-    const configuracion = {
-      ...state,
+  setRutaPlantillaTeletrabajo: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
       rutaPlantillaTeletrabajo: normalizeTemplatePath(ruta),
     };
     return commitConfiguracion(set, configuracion);
   },
-  setRutaPlantillaLicenciaSinSueldo: async (ruta) => {
-    const state = useConfiguracionStore.getState();
-    const configuracion = {
-      ...state,
+  setRutaPlantillaLicenciaSinSueldo: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
       rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(ruta),
     };
     return commitConfiguracion(set, configuracion);
   },
-  setRutaPlantillaVinculograma: async (ruta) => {
-    const state = useConfiguracionStore.getState();
-    const configuracion = {
-      ...state,
+  setRutaPlantillaVinculograma: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
       rutaPlantillaVinculograma: normalizeTemplatePath(ruta),
     };
     return commitConfiguracion(set, configuracion);
