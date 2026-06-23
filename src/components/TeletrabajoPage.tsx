@@ -50,6 +50,7 @@ import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import type { Employee } from '../features/plantilla/domain/employee';
+import { useAppDialog } from '../hooks/useAppDialog';
 
 const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -339,11 +340,12 @@ export function TeletrabajoPage({
     pendingHistoricoImport,
     previewImportHistorico,
     puestosTeletrabajo,
-    remove,
+    removeWithConcurrencyCheck,
     selectSolicitud,
     setFilter,
     solicitudes,
   } = useTeletrabajoStore();
+  const { alert, dialogNode } = useAppDialog();
   const employees = useEmployeeStore((state) => state.employees);
   const isEmployeesLoading = useEmployeeStore((state) => state.isLoading);
   const loadEmployees = useEmployeeStore((state) => state.load);
@@ -688,7 +690,12 @@ export function TeletrabajoPage({
               className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
               onClick={(event) => {
                 event.stopPropagation();
-                remove(solicitud.id);
+                void (async () => {
+                  const result = await removeWithConcurrencyCheck(solicitud.id, solicitud.updatedAt);
+                  if (!result.ok) {
+                    await alert(result.message, { type: 'error' });
+                  }
+                })();
               }}
               type="button"
             >
@@ -705,11 +712,12 @@ export function TeletrabajoPage({
       },
     ],
     [
+      alert,
       employeesByEmpleado,
       generatingWordId,
       handleGenerateWord,
       puestosByKey,
-      remove,
+      removeWithConcurrencyCheck,
       solicitudesByPuestoCount,
     ],
   );
@@ -1598,6 +1606,8 @@ export function TeletrabajoPage({
       {editorMode && (
         <TeletrabajoEditor mode={editorMode} onDone={closeEditor} solicitud={editorSolicitud} />
       )}
+
+      {dialogNode}
     </section>
   );
 }
