@@ -8,6 +8,10 @@ import {
 } from './filters';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import { importEncuestaRows } from './importEncuesta';
+import {
+  applyPlantillaDataToTeletrabajoSolicitud,
+  applyPlantillaDataToTeletrabajoSolicitudes,
+} from './plantillaData';
 import { sortTeletrabajoByDefault } from './sort';
 import { normalizeDiasTeletrabajo, type TeletrabajoSolicitud } from './solicitud';
 import { detectTeletrabajoWordMarkers, generateTeletrabajoWord } from './word';
@@ -193,6 +197,56 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
 }
 
 
+
+
+describe('datos maestros de Plantilla en teletrabajo', () => {
+  it('usa los datos actuales de Plantilla cuando existe el empleado', () => {
+    const solicitud = buildSolicitud({
+      empleado: '100',
+      nombreApellidos: 'Nombre antiguo',
+      puestoNomina: 'Puesto nómina antiguo',
+      puestoOrganizativo: 'Puesto organizativo antiguo',
+      residencia: 'Residencia antigua',
+      dni: 'DNI antiguo',
+      direccionTeletrabajo: 'Dirección antigua',
+    });
+    const employee = buildEmployee({
+      empleado: '100',
+      nombreApellidos: 'Nombre actualizado',
+      puestoNomina: 'Puesto nómina actualizado',
+      puestoOrganizativo: 'Puesto organizativo actualizado',
+      residencia: 'Residencia actualizada',
+      dni: 'DNI actualizado',
+      direccionTeletrabajo: 'Dirección actualizada',
+    });
+
+    expect(applyPlantillaDataToTeletrabajoSolicitud(solicitud, employee)).toMatchObject({
+      id: solicitud.id,
+      empleado: '100',
+      nombreApellidos: 'Nombre actualizado',
+      puestoNomina: 'Puesto nómina actualizado',
+      puestoOrganizativo: 'Puesto organizativo actualizado',
+      residencia: 'Residencia actualizada',
+      dni: 'DNI actualizado',
+      direccionTeletrabajo: 'Dirección actualizada',
+      estado: solicitud.estado,
+      periodo: solicitud.periodo,
+    });
+  });
+
+  it('mantiene los datos de la solicitud si el empleado no existe en Plantilla o está eliminado', () => {
+    const solicitud = buildSolicitud({ empleado: '200', puestoOrganizativo: 'Puesto solicitud' });
+    const deletedEmployee = buildEmployee({
+      empleado: '200',
+      puestoOrganizativo: 'Puesto eliminado',
+      deletedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(applyPlantillaDataToTeletrabajoSolicitudes([solicitud], [deletedEmployee])).toEqual([
+      solicitud,
+    ]);
+  });
+});
 
 describe('antigüedad mínima para teletrabajo', () => {
   it('marca como no cumple cuando la solicitud se realiza antes de cumplir un año en el puesto', () => {

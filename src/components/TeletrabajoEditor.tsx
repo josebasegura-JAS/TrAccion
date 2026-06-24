@@ -1,6 +1,5 @@
 import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { Employee } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import {
   EMPTY_TELETRABAJO_DRAFT,
@@ -15,6 +14,10 @@ import {
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
+import {
+  applyPlantillaDataToTeletrabajoDraft,
+  findActiveEmployeeByEmpleado,
+} from '../features/teletrabajo/domain/plantillaData';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
@@ -75,18 +78,6 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   };
 }
 
-function draftFromEmployee(draft: TeletrabajoDraft, employee: Employee): TeletrabajoDraft {
-  return {
-    ...draft,
-    empleado: employee.empleado,
-    nombreApellidos: employee.nombreApellidos,
-    puestoNomina: employee.puestoNomina,
-    puestoOrganizativo: employee.puestoOrganizativo,
-    residencia: employee.residencia,
-    dni: employee.dni,
-    direccionTeletrabajo: employee.direccionTeletrabajo,
-  };
-}
 
 function hasRequiredManualData(draft: TeletrabajoDraft): boolean {
   return [
@@ -145,17 +136,18 @@ export function TeletrabajoEditor({
     }
   }, [loadedSolicitudIdentity, mode, solicitud]);
 
-  const plantillaEmployee = useMemo(() => {
-    const empleado = draft.empleado.trim();
-    if (!empleado) {
-      return null;
+  const plantillaEmployee = useMemo(
+    () => findActiveEmployeeByEmpleado(employees, draft.empleado),
+    [draft.empleado, employees],
+  );
+
+  useEffect(() => {
+    if (!plantillaEmployee) {
+      return;
     }
 
-    return (
-      employees.find((employee) => !employee.deletedAt && employee.empleado.trim() === empleado) ??
-      null
-    );
-  }, [draft.empleado, employees]);
+    setDraft((current) => applyPlantillaDataToTeletrabajoDraft(current, plantillaEmployee));
+  }, [plantillaEmployee]);
 
   const employeeExists = Boolean(plantillaEmployee);
   const isCreate = mode === 'create';
@@ -175,12 +167,10 @@ export function TeletrabajoEditor({
   const canGenerateWord = canCreate && !isFormReadOnly && !isSaving;
 
   const handleEmpleadoChange = (empleado: string) => {
-    const employee = employees.find(
-      (candidate) => !candidate.deletedAt && candidate.empleado.trim() === empleado.trim(),
-    );
+    const employee = findActiveEmployeeByEmpleado(employees, empleado);
 
     setDraft((current) =>
-      employee ? draftFromEmployee(current, employee) : { ...current, empleado },
+      employee ? applyPlantillaDataToTeletrabajoDraft(current, employee) : { ...current, empleado },
     );
   };
 

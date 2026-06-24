@@ -41,6 +41,10 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
 import { exportTeletrabajoDireccionToExcel } from '../features/teletrabajo/domain/exportDireccion';
 import { generateTeletrabajoWord } from '../features/teletrabajo/domain/word';
+import {
+  applyPlantillaDataToTeletrabajoSolicitudes,
+  findActiveEmployeeByEmpleado,
+} from '../features/teletrabajo/domain/plantillaData';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
@@ -314,10 +318,7 @@ export function TeletrabajoPage({
       }
 
       const employee =
-        employees.find(
-          (candidate) =>
-            !candidate.deletedAt && candidate.empleado.trim() === solicitud.empleado.trim(),
-        ) ?? null;
+        findActiveEmployeeByEmpleado(employees, solicitud.empleado);
 
       setGeneratingWordId(solicitud.id);
       setWordStatus('');
@@ -341,9 +342,13 @@ export function TeletrabajoPage({
     [employees, generatingWordId, jobPositionTranslations, rutaPlantillaTeletrabajo],
   );
 
+  const solicitudesWithPlantillaData = useMemo(
+    () => applyPlantillaDataToTeletrabajoSolicitudes(solicitudes, employees),
+    [employees, solicitudes],
+  );
   const visibleSolicitudes = useMemo(
-    () => solicitudes.filter((solicitud) => !solicitud.deletedAt),
-    [solicitudes],
+    () => solicitudesWithPlantillaData.filter((solicitud) => !solicitud.deletedAt),
+    [solicitudesWithPlantillaData],
   );
   const puestosByKey = useMemo(() => buildPuestosByKey(puestosTeletrabajo), [puestosTeletrabajo]);
   const employeesByEmpleado = useMemo(
@@ -356,8 +361,8 @@ export function TeletrabajoPage({
     [employees],
   );
   const solicitudesByPuestoCount = useMemo(
-    () => buildSolicitudesByPeriodoPuestoCount(solicitudes),
-    [solicitudes],
+    () => buildSolicitudesByPeriodoPuestoCount(solicitudesWithPlantillaData),
+    [solicitudesWithPlantillaData],
   );
   const periodos = useMemo(
     () => uniqueSorted(visibleSolicitudes.map((solicitud) => solicitud.periodo)).reverse(),
@@ -371,11 +376,11 @@ export function TeletrabajoPage({
     [filters, mainPeriodo],
   );
   const filteredSolicitudes = useMemo(
-    () => filterTeletrabajoSolicitudes(solicitudes, mainFilters),
-    [mainFilters, solicitudes],
+    () => filterTeletrabajoSolicitudes(solicitudesWithPlantillaData, mainFilters),
+    [mainFilters, solicitudesWithPlantillaData],
   );
   const historicoSolicitudes = useMemo(() => {
-    const historicalRows = solicitudes.filter(
+    const historicalRows = solicitudesWithPlantillaData.filter(
       (solicitud) => !solicitud.deletedAt && solicitud.periodo !== currentPeriodo,
     );
 
@@ -384,7 +389,7 @@ export function TeletrabajoPage({
     }
 
     return filterTeletrabajoSolicitudes(historicalRows, { ...filters, periodo: '' });
-  }, [currentPeriodo, filters, solicitudes]);
+  }, [currentPeriodo, filters, solicitudesWithPlantillaData]);
   const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths, resetPreferences } =
     useTableViewPreferences<TeletrabajoTableColumnId>({
       storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
@@ -732,7 +737,7 @@ export function TeletrabajoPage({
         rows: sortedSolicitudes,
         employees,
         puestosTeletrabajo,
-        solicitudesForAssessment: solicitudes,
+        solicitudesForAssessment: solicitudesWithPlantillaData,
         periodo: filters.periodo,
       });
       setWordStatus('Excel Dirección generado y abierto correctamente.');
@@ -743,7 +748,7 @@ export function TeletrabajoPage({
           : 'No se pudo generar el Excel Dirección.',
       );
     }
-  }, [employees, filters.periodo, puestosTeletrabajo, solicitudes, sortedSolicitudes]);
+  }, [employees, filters.periodo, puestosTeletrabajo, solicitudesWithPlantillaData, sortedSolicitudes]);
 
   const openEditor = (solicitud: TeletrabajoSolicitud) => {
     selectSolicitud(solicitud.id);
