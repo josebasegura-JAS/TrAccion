@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Employee } from '../../plantilla/domain/employee';
+import type { GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import {
   buildPuestosByKey,
@@ -72,6 +73,8 @@ function buildPuesto(overrides: Partial<TeletrabajoPuesto>): TeletrabajoPuesto {
     id: 'puesto-base',
     puesto: 'Administrativo/a',
     maxSolicitudes: 2,
+    dotacionComputable: 0,
+    grupoCoberturaId: null,
     observaciones: '',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -421,5 +424,193 @@ describe('presencialidad mínima del puesto acotada al periodo de cada solicitud
       );
       expect(semaforo.status).toBe('review');
     });
+  });
+});
+
+describe('grupos de cobertura: puestos coordinados que comparten presencialidad mínima', () => {
+  function buildGrupo(overrides: Partial<GrupoCobertura>): GrupoCobertura {
+    return {
+      id: 'grupo-base',
+      nombre: 'Grupo base',
+      presencialidadMinima: 2,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      deletedAt: null,
+      ...overrides,
+    };
+  }
+
+  it('dos puestos del mismo grupo comparten presencialidad mínima y dotación conjunta', () => {
+    const grupo = buildGrupo({ id: 'grupo-recepcion', presencialidadMinima: 2 });
+    const gruposById = new Map([[grupo.id, grupo]]);
+
+    const puestoA = buildPuesto({
+      id: 'puesto-a',
+      puesto: 'Recepcionista turno mañana',
+      maxSolicitudes: 0,
+      dotacionComputable: 1,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestoB = buildPuesto({
+      id: 'puesto-b',
+      puesto: 'Recepcionista turno tarde',
+      maxSolicitudes: 0,
+      dotacionComputable: 1,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestosByKey = buildPuestosByKey([puestoA, puestoB]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100' })],
+      ['101', buildEmployee({ empleado: '101' })],
+    ]);
+
+    // Cada puesto tiene 1 persona de dotación (2 en total entre los dos), y el
+    // grupo exige mínimo 2 presenciales: si las dos personas piden teletrabajo
+    // el mismo día, debe marcar incidencia aunque pertenezcan a puestos distintos.
+    const solicitudA = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      puestoOrganizativo: 'Recepcionista turno mañana',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes'],
+    });
+    const solicitudB = buildSolicitud({
+      id: 'sol-b',
+      empleado: '101',
+      puestoOrganizativo: 'Recepcionista turno tarde',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes'],
+    });
+
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(
+      [solicitudA, solicitudB],
+      puestosByKey,
+    );
+
+    const semaforoA = getTeletrabajoSemaforo(
+      solicitudA,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+      gruposById,
+    );
+
+    expect(semaforoA.status).toBe('review');
+    expect(semaforoA.title).toContain('presencialidad mínima');
+  });
+
+  it('no marca incidencia si solo una persona del grupo pide el mismo día (cumple el mínimo conjunto)', () => {
+    const grupo = buildGrupo({ id: 'grupo-recepcion', presencialidadMinima: 2 });
+    const gruposById = new Map([[grupo.id, grupo]]);
+
+    const puestoA = buildPuesto({
+      id: 'puesto-a',
+      puesto: 'Recepcionista turno mañana',
+      maxSolicitudes: 0,
+      dotacionComputable: 2,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestoB = buildPuesto({
+      id: 'puesto-b',
+      puesto: 'Recepcionista turno tarde',
+      maxSolicitudes: 0,
+      dotacionComputable: 1,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestosByKey = buildPuestosByKey([puestoA, puestoB]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100' })],
+      ['101', buildEmployee({ empleado: '101' })],
+      ['102', buildEmployee({ empleado: '102' })],
+    ]);
+
+    // Dotación conjunta del grupo: 3 personas. Mínimo exigido: 2. Si solo 1
+    // pide teletrabajo ese día, quedan 2 presenciales: cumple justo el mínimo.
+    const solicitudSolicitante = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      puestoOrganizativo: 'Recepcionista turno mañana',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes'],
+    });
+
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(
+      [solicitudSolicitante],
+      puestosByKey,
+    );
+
+    const semaforo = getTeletrabajoSemaforo(
+      solicitudSolicitante,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+      gruposById,
+    );
+
+    expect(semaforo.status).toBe('ok');
+    expect(semaforo.title).toContain('mín. 2 presenciales');
+  });
+
+  it('un puesto sin grupo de cobertura usa su propia presencialidad mínima individual, sin afectar a otros puestos', () => {
+    const grupo = buildGrupo({ id: 'grupo-recepcion', presencialidadMinima: 5 });
+    const gruposById = new Map([[grupo.id, grupo]]);
+
+    const puestoAgrupado = buildPuesto({
+      id: 'puesto-a',
+      puesto: 'Recepcionista',
+      maxSolicitudes: 0,
+      dotacionComputable: 1,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestoIndividual = buildPuesto({
+      id: 'puesto-b',
+      puesto: 'Administrativo/a',
+      maxSolicitudes: 1,
+      dotacionComputable: 1,
+      grupoCoberturaId: null,
+    });
+    const puestosByKey = buildPuestosByKey([puestoAgrupado, puestoIndividual]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+
+    const solicitud = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      puestoOrganizativo: 'Administrativo/a',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes'],
+    });
+
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount([solicitud], puestosByKey);
+
+    const semaforo = getTeletrabajoSemaforo(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+      gruposById,
+    );
+
+    // El puesto individual exige mínimo 1, no el mínimo 5 del grupo al que no pertenece.
+    expect(semaforo.title).toContain('mín. 1 presenciales');
+  });
+
+  it('sin grupos de cobertura informados (parámetro por defecto), el cálculo sigue funcionando con la presencialidad mínima del propio puesto', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1, dotacionComputable: 3, grupoCoberturaId: null });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+
+    const solicitud = buildSolicitud({ id: 'sol-a', empleado: '100', periodo: '2026-2027' });
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount([solicitud], puestosByKey);
+
+    // No se pasa el quinto argumento (gruposById): debe usar el valor por defecto sin lanzar error.
+    const semaforo = getTeletrabajoSemaforo(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+    );
+
+    expect(semaforo.status).toBe('ok');
+    expect(semaforo.title).toContain('1 petición');
   });
 });

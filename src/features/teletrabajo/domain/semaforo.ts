@@ -1,5 +1,6 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
+import type { GrupoCobertura } from './gruposCobertura';
 import { normalizeTeletrabajoPuesto, type TeletrabajoPuesto } from './puestosTeletrabajo';
 import { TELETRABAJO_DIAS, type TeletrabajoDia, type TeletrabajoSolicitud } from './solicitud';
 
@@ -20,9 +21,13 @@ export function buildPuestosByKey(
   );
 }
 
+/**
+ * Clave de cobertura de un puesto: si pertenece a un grupo de cobertura (varios
+ * puestos coordinados que comparten presencialidad mínima), la clave es el id
+ * del grupo. Si no pertenece a ningún grupo, el puesto cubre solo por sí mismo.
+ */
 function getGrupoCoberturaKey(puesto: TeletrabajoPuesto, puestoKey: string): string {
-  const grupoKey = normalizeTeletrabajoPuesto(puesto.grupoCobertura);
-  return grupoKey || puestoKey;
+  return puesto.grupoCoberturaId ? `grupo::${puesto.grupoCoberturaId}` : puestoKey;
 }
 
 function getPuestosInGrupo(
@@ -44,10 +49,25 @@ function getDotacionComputableGrupo(
   );
 }
 
+/**
+ * Presencialidad mínima exigida para la clave de cobertura indicada. Si el
+ * puesto pertenece a un grupo de cobertura, la presencialidad mínima es la
+ * configurada en el grupo (gruposByid); si no pertenece a ningún grupo, es la
+ * declarada en el propio puesto (compatibilidad con puestos sin agrupar).
+ */
 function getPresencialidadMinimaGrupo(
   puestosByKey: Map<string, TeletrabajoPuesto>,
   grupoKey: string,
+  gruposById: Map<string, GrupoCobertura>,
 ): number {
+  const [primerPuesto] = getPuestosInGrupo(puestosByKey, grupoKey);
+  if (primerPuesto?.grupoCoberturaId) {
+    const grupo = gruposById.get(primerPuesto.grupoCoberturaId);
+    if (grupo) {
+      return Math.max(0, Math.floor(grupo.presencialidadMinima ?? 0));
+    }
+  }
+
   return Math.max(
     0,
     ...getPuestosInGrupo(puestosByKey, grupoKey).map((puesto) => Math.max(0, Math.floor(puesto.maxSolicitudes ?? 0))),
@@ -106,11 +126,16 @@ export function buildSolicitudesByPeriodoPuestoDiaCount(
 
 export const buildSolicitudesByPeriodoPuestoCount = buildSolicitudesByPeriodoPuestoDiaCount;
 
+function pluralPersonas(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export function getTeletrabajoSemaforo(
   solicitud: TeletrabajoSolicitud,
   puestosByKey: Map<string, TeletrabajoPuesto>,
   solicitudesByPuestoDiaCount: Map<string, number>,
   employeesByEmpleado: Map<string, Employee>,
+  gruposById: Map<string, GrupoCobertura> = new Map(),
 ): TeletrabajoSemaforo {
   const antiguedad = evaluateTeletrabajoAntiguedad(
     solicitud,
@@ -148,7 +173,23 @@ export function getTeletrabajoSemaforo(
   }
 
   const coberturaKey = getGrupoCoberturaKey(puesto, puestoKey);
-  const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey);
+  const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey, gruposById);
+  const diasSolicitados =
+    solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
+
+  // Nº de peticiones activas (mismo periodo, misma cobertura) en cualquiera de
+  // los días solicitados por esta solicitud: lo más representativo para el
+  // resumen corto, tanto si hay incidencia como si no.
+  const peticionesActivas = Math.max(
+    0,
+    ...diasSolicitados.map(
+      (dia) =>
+        solicitudesByPuestoDiaCount.get(
+          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
+        ) ?? 0,
+    ),
+  );
+
   if (presencialidadMinima > 0) {
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
     const totalPersonasPuesto = dotacionParametrizada > 0
@@ -159,8 +200,6 @@ export function getTeletrabajoSemaforo(
             .map((employee) => employee.empleado.trim()),
         ).size;
 
-    const diasSolicitados =
-      solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
     const conflictos = diasSolicitados
       .map((dia) => {
         const solicitudesDia =
@@ -176,26 +215,34 @@ export function getTeletrabajoSemaforo(
       );
 
     if (conflictos.length > 0) {
-      const detail = conflictos
-        .map(({ dia, solicitudesDia, presencialesDia }) => {
-          const presencialesResultantes = Math.max(presencialesDia, 0);
-          const personasFaltantes = presencialidadMinima - presencialesResultantes;
-
-          return `${dia}: hay ${solicitudesDia} ${solicitudesDia === 1 ? 'persona solicitando' : 'personas solicitando'} teletrabajo y ${presencialesResultantes} ${presencialesResultantes === 1 ? 'persona presencial' : 'personas presenciales'}. Faltaría ${personasFaltantes} ${personasFaltantes === 1 ? 'persona presencial' : 'personas presenciales'} para cumplir el mínimo exigido.`;
-        })
-        .join(' ');
+      const peorConflicto = conflictos.reduce((peor, actual) =>
+        actual.presencialesDia < peor.presencialesDia ? actual : peor,
+      );
+      const presencialesResultantes = Math.max(peorConflicto.presencialesDia, 0);
+      const personasFaltantes = presencialidadMinima - presencialesResultantes;
+      const diasAfectados = conflictos.map(({ dia }) => dia).join(', ');
 
       return {
         status: 'review',
-        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Grupo cobertura: ${coberturaKey}. Dotación computable: ${totalPersonasPuesto}. presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
+        title:
+          `Revisar presencialidad mínima · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · mín. ${presencialidadMinima} presenciales · ` +
+          `faltan ${pluralPersonas(personasFaltantes, 'persona', 'personas')} (${diasAfectados}).`,
       };
     }
+
+    return {
+      status: 'ok',
+      title:
+        `Sin incidencias · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · mín. ${presencialidadMinima} presenciales` +
+        (puesto.observaciones ? ` · ${puesto.observaciones}` : ''),
+    };
   }
 
   return {
     status: 'ok',
-    title: puesto.observaciones
-      ? `Sin incidencias detectadas. ${puesto.observaciones}`
-      : 'Sin incidencias detectadas.',
+    title:
+      `Sin incidencias · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · sin mínimo de presencialidad` +
+      (puesto.observaciones ? ` · ${puesto.observaciones}` : ''),
   };
 }
+

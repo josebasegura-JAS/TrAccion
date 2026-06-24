@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 
 import type { Employee } from '../../plantilla/domain/employee';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
+import { buildGruposCoberturaByIdMap, type GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
 import {
@@ -37,9 +38,15 @@ function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBu
 }
 
 
+/**
+ * Clave de cobertura de un puesto: si pertenece a un grupo de cobertura (varios
+ * puestos coordinados que comparten presencialidad mínima), la clave es el id
+ * del grupo. Si no pertenece a ningún grupo, el puesto cubre solo por sí mismo.
+ * Misma lógica que semaforo.ts (duplicada deliberadamente para que el
+ * exportador no dependa de ese módulo).
+ */
 function getGrupoCoberturaKey(puesto: TeletrabajoPuesto, puestoKey: string): string {
-  const grupoKey = normalizeTeletrabajoPuesto(puesto.grupoCobertura);
-  return grupoKey || puestoKey;
+  return puesto.grupoCoberturaId ? `grupo::${puesto.grupoCoberturaId}` : puestoKey;
 }
 
 function getPuestosInGrupo(
@@ -64,7 +71,16 @@ function getDotacionComputableGrupo(
 function getPresencialidadMinimaGrupo(
   puestosByKey: Map<string, TeletrabajoPuesto>,
   grupoKey: string,
+  gruposById: Map<string, GrupoCobertura>,
 ): number {
+  const [primerPuesto] = getPuestosInGrupo(puestosByKey, grupoKey);
+  if (primerPuesto?.grupoCoberturaId) {
+    const grupo = gruposById.get(primerPuesto.grupoCoberturaId);
+    if (grupo) {
+      return Math.max(0, Math.floor(grupo.presencialidadMinima ?? 0));
+    }
+  }
+
   return Math.max(
     0,
     ...getPuestosInGrupo(puestosByKey, grupoKey).map((puesto) => Math.max(0, Math.floor(puesto.maxSolicitudes ?? 0))),
@@ -119,11 +135,13 @@ export function buildTeletrabajoAssessment({
   employeesById,
   puestosByKey,
   solicitudesByPuestoDiaCount,
+  gruposById = new Map(),
 }: {
   solicitud: TeletrabajoSolicitud;
   employeesById: Map<string, Employee>;
   puestosByKey: Map<string, TeletrabajoPuesto>;
   solicitudesByPuestoDiaCount: Map<string, number>;
+  gruposById?: Map<string, GrupoCobertura>;
 }): TeletrabajoExportAssessment {
   if (solicitud.estado === 'denegada') {
     return {
@@ -181,7 +199,7 @@ export function buildTeletrabajoAssessment({
   }
 
   const coberturaKey = getGrupoCoberturaKey(puesto, puestoKey);
-  const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey);
+  const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey, gruposById);
   if (presencialidadMinima > 0) {
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
     const totalPersonasPuesto = dotacionParametrizada > 0
@@ -353,12 +371,14 @@ export async function exportTeletrabajoDireccionToExcel({
   rows,
   employees,
   puestosTeletrabajo,
+  gruposCobertura = [],
   solicitudesForAssessment = rows,
   periodo,
 }: {
   rows: readonly TeletrabajoSolicitud[];
   employees: readonly Employee[];
   puestosTeletrabajo: readonly TeletrabajoPuesto[];
+  gruposCobertura?: readonly GrupoCobertura[];
   solicitudesForAssessment?: readonly TeletrabajoSolicitud[];
   periodo?: string;
 }): Promise<void> {
@@ -373,6 +393,7 @@ export async function exportTeletrabajoDireccionToExcel({
   });
   const employeesById = buildEmployeeMap(employees);
   const puestosByKey = buildPuestosByKey(puestosTeletrabajo);
+  const gruposById = buildGruposCoberturaByIdMap(gruposCobertura);
   const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment, puestosByKey);
 
   worksheet.columns = [
@@ -473,6 +494,7 @@ export async function exportTeletrabajoDireccionToExcel({
       employeesById,
       puestosByKey,
       solicitudesByPuestoDiaCount,
+      gruposById,
     });
     const rowNumber = 6 + index;
     const row = worksheet.getRow(rowNumber);

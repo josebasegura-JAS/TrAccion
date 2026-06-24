@@ -5,7 +5,7 @@ export interface TeletrabajoPuesto {
   puesto: string;
   maxSolicitudes: number;
   dotacionComputable: number;
-  grupoCobertura: string;
+  grupoCoberturaId: string | null;
   observaciones: string;
   createdAt: string;
   updatedAt: string;
@@ -16,7 +16,7 @@ export interface TeletrabajoPuestoDraft {
   puesto: string;
   maxSolicitudes: number;
   dotacionComputable: number;
-  grupoCobertura: string;
+  grupoCoberturaId: string | null;
   observaciones: string;
 }
 
@@ -41,11 +41,17 @@ const GRUPO_COBERTURA_HEADERS = new Set(['grupo', 'grupo cobertura', 'grupo de c
 const TELETRABAJO_HEADERS = new Set(['teletrabajo s/n', 'teletrabajo', 'teletrabajable']);
 const OBSERVACIONES_HEADERS = new Set(['observaciones', 'observacion', 'notas', 'nota']);
 
+export interface TeletrabajoPuestoImportRow {
+  draft: TeletrabajoPuestoDraft;
+  /** Nombre textual del grupo de cobertura tal como aparece en el fichero importado (sin resolver a id todavía). */
+  grupoCoberturaNombre: string;
+}
+
 export const EMPTY_TELETRABAJO_PUESTO_DRAFT: TeletrabajoPuestoDraft = {
   puesto: '',
   maxSolicitudes: 0,
   dotacionComputable: 0,
-  grupoCobertura: '',
+  grupoCoberturaId: null,
   observaciones: '',
 };
 
@@ -65,14 +71,14 @@ export function normalizeTeletrabajoPuestoDraft(
     puesto: (draft.puesto ?? '').trim(),
     maxSolicitudes: normalizePresencialidadMinima(draft.maxSolicitudes ?? 0),
     dotacionComputable: normalizePresencialidadMinima(draft.dotacionComputable ?? 0),
-    grupoCobertura: (draft.grupoCobertura ?? '').trim(),
+    grupoCoberturaId: draft.grupoCoberturaId ?? null,
     observaciones: (draft.observaciones ?? '').trim(),
   };
 }
 
 export async function importTeletrabajoPuestosFromFile(
   file: File,
-): Promise<TeletrabajoPuestoDraft[]> {
+): Promise<TeletrabajoPuestoImportRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
   const rows = extension === 'xlsx' || extension === 'xls'
     ? await parseXlsxRows(await file.arrayBuffer())
@@ -81,7 +87,7 @@ export async function importTeletrabajoPuestosFromFile(
   return rowsToTeletrabajoPuestoDrafts(rows);
 }
 
-export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPuestoDraft[] {
+export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPuestoImportRow[] {
   const [headers, ...dataRows] = rows;
   if (!headers) {
     return [];
@@ -101,7 +107,7 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
     );
   }
 
-  const draftsByPuesto = new Map<string, TeletrabajoPuestoDraft>();
+  const rowsByPuesto = new Map<string, TeletrabajoPuestoImportRow>();
 
   dataRows.forEach((row) => {
     const puesto = row[puestoIndex]?.trim() ?? '';
@@ -115,15 +121,16 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
 
     const maxSolicitudes = maxIndex >= 0 ? parsePresencialidadMinima(row[maxIndex]) : 0;
     const dotacionComputable = dotacionIndex >= 0 ? parsePresencialidadMinima(row[dotacionIndex]) : 0;
-    const grupoCobertura = grupoCoberturaIndex >= 0 ? row[grupoCoberturaIndex]?.trim() ?? '' : '';
+    const grupoCoberturaNombre = grupoCoberturaIndex >= 0 ? row[grupoCoberturaIndex]?.trim() ?? '' : '';
     const observaciones = observacionesIndex >= 0 ? row[observacionesIndex]?.trim() ?? '' : '';
-    draftsByPuesto.set(normalizeTeletrabajoPuesto(puesto),
-      normalizeTeletrabajoPuestoDraft({ puesto, maxSolicitudes, dotacionComputable, grupoCobertura, observaciones }),
-    );
+    rowsByPuesto.set(normalizeTeletrabajoPuesto(puesto), {
+      draft: normalizeTeletrabajoPuestoDraft({ puesto, maxSolicitudes, dotacionComputable, observaciones }),
+      grupoCoberturaNombre,
+    });
   });
 
-  return Array.from(draftsByPuesto.values()).sort((first, second) =>
-    first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
+  return Array.from(rowsByPuesto.values()).sort((first, second) =>
+    first.draft.puesto.localeCompare(second.draft.puesto, 'es', { numeric: true, sensitivity: 'base' }),
   );
 }
 
