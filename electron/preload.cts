@@ -152,6 +152,12 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('teletrabajo-puestos:save-record-if-unchanged', record),
+  loadTeletrabajoGrupoCoberturaRecords: () => ipcRenderer.invoke('teletrabajo-grupos-cobertura:load-records'),
+  saveTeletrabajoGrupoCoberturaRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('teletrabajo-grupos-cobertura:save-record-if-unchanged', record),
   loadJobPositionTranslationRecords: () => ipcRenderer.invoke('plantilla-job-translations:load-records'),
   saveJobPositionTranslationRecordIfUnchanged: (record: {
     id: string;

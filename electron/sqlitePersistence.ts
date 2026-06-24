@@ -48,7 +48,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 14;
 const LOCK_TTL_MS = 30 * 1000;
 const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
@@ -367,6 +367,7 @@ let licenciaSinSueldoMigrationDone = false;
 let criteriosRrllMigrationDone = false;
 let especialesRecipientMigrationDone = false;
 let teletrabajoPuestosMigrationDone = false;
+let teletrabajoGruposCoberturaMigrationDone = false;
 let jobPositionTranslationsMigrationDone = false;
 let presupuestosScenariosMigrationDone = false;
 let presupuestosManualItemsMigrationDone = false;
@@ -1775,6 +1776,28 @@ function migrateToVersion13(db: Database): void {
   }
 }
 
+function migrateToVersion14(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS teletrabajo_grupo_cobertura_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_teletrabajo_grupo_cobertura_records_updated_at ON teletrabajo_grupo_cobertura_records(updated_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 14) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      14,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1789,6 +1812,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion11(db);
   migrateToVersion12(db);
   migrateToVersion13(db);
+  migrateToVersion14(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -4547,6 +4571,16 @@ const teletrabajoPuestosRepository = createJsonModuleRepository(
   },
 );
 
+const teletrabajoGruposCoberturaRepository = createJsonModuleRepository(
+  'teletrabajo_grupo_cobertura_records',
+  'traccion.v1.teletrabajo.gruposCobertura',
+  'Grupo de cobertura de teletrabajo',
+  () => teletrabajoGruposCoberturaMigrationDone,
+  (value) => {
+    teletrabajoGruposCoberturaMigrationDone = value;
+  },
+);
+
 const jobPositionTranslationsRepository = createJsonModuleRepository(
   'job_position_translation_records',
   'traccion.v1.plantilla.jobPositionTranslations',
@@ -4655,6 +4689,14 @@ export function loadTeletrabajoPuestoRecordsSnapshot(): Promise<JsonRecordSnapsh
 
 export function saveTeletrabajoPuestoRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
   return teletrabajoPuestosRepository.saveIfUnchanged(record);
+}
+
+export function loadTeletrabajoGrupoCoberturaRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return teletrabajoGruposCoberturaRepository.loadSnapshot();
+}
+
+export function saveTeletrabajoGrupoCoberturaRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return teletrabajoGruposCoberturaRepository.saveIfUnchanged(record);
 }
 
 export function loadJobPositionTranslationRecordsSnapshot(): Promise<JsonRecordSnapshot> {

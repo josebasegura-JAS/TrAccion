@@ -36,6 +36,7 @@ import {
   loadConfiguracionSnapshot,
   loadPresupuestosRecordsSnapshot,
   loadTeletrabajoPuestoRecordsSnapshot,
+  loadTeletrabajoGrupoCoberturaRecordsSnapshot,
   loadJobPositionTranslationRecordsSnapshot,
   type SqliteTaskRecordsFilter,
   getPersistedRecordsTokenSnapshot,
@@ -65,6 +66,7 @@ import {
   saveConfiguracionIfUnchanged,
   savePresupuestosSnapshotIfUnchanged,
   saveTeletrabajoPuestoRecordIfUnchanged,
+  saveTeletrabajoGrupoCoberturaRecordIfUnchanged,
   saveJobPositionTranslationRecordIfUnchanged,
   setDatabaseConnectivityIssueNotifier,
   getSecondaryBackupDirectory,
@@ -2046,6 +2048,27 @@ function registerIpcHandlers(): void {
 
     return enqueueSqliteIpc('teletrabajo-puestos:save-record-if-unchanged', () =>
       saveTeletrabajoPuestoRecordIfUnchanged({
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
+      }),
+    );
+  });
+
+  ipcMain.handle('teletrabajo-grupos-cobertura:load-records', () =>
+    enqueueSqliteIpc('teletrabajo-grupos-cobertura:load-records', () =>
+      loadTeletrabajoGrupoCoberturaRecordsSnapshot(),
+    ),
+  );
+
+  ipcMain.handle('teletrabajo-grupos-cobertura:save-record-if-unchanged', (_event, payload: unknown) => {
+    const record = validateJsonRecordPayload(payload, 'Payload de grupo de cobertura inválido.');
+    if (!record.ok) {
+      return record.result;
+    }
+
+    return enqueueSqliteIpc('teletrabajo-grupos-cobertura:save-record-if-unchanged', () =>
+      saveTeletrabajoGrupoCoberturaRecordIfUnchanged({
         id: record.id,
         value: record.value,
         expectedUpdatedAt: record.expectedUpdatedAt,
