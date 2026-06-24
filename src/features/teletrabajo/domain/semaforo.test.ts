@@ -332,4 +332,94 @@ describe('presencialidad mínima del puesto acotada al periodo de cada solicitud
       ),
     ).not.toThrow();
   });
+
+  it('no contagia el conflicto de un día a una solicitud que pide un día distinto sin problema (3 personas, mínimo 2)', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 2 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100' })],
+      ['101', buildEmployee({ empleado: '101' })],
+      ['102', buildEmployee({ empleado: '102' })],
+    ]);
+
+    // Dos personas piden martes y jueves a la vez (conflicto real: solo
+    // quedaría 1 presencial esos días frente al mínimo de 2). La tercera
+    // pide únicamente miércoles, día sin conflicto.
+    const solicitudMartesJueves1 = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes', 'jueves'],
+    });
+    const solicitudMartesJueves2 = buildSolicitud({
+      id: 'sol-b',
+      empleado: '101',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes', 'jueves'],
+    });
+    const solicitudMiercoles = buildSolicitud({
+      id: 'sol-c',
+      empleado: '102',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['miercoles'],
+    });
+
+    const solicitudes = [solicitudMartesJueves1, solicitudMartesJueves2, solicitudMiercoles];
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(solicitudes);
+
+    const semaforoMartesJueves1 = getTeletrabajoSemaforo(
+      solicitudMartesJueves1,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+    );
+    const semaforoMartesJueves2 = getTeletrabajoSemaforo(
+      solicitudMartesJueves2,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+    );
+    const semaforoMiercoles = getTeletrabajoSemaforo(
+      solicitudMiercoles,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+    );
+
+    expect(semaforoMartesJueves1.status).toBe('review');
+    expect(semaforoMartesJueves2.status).toBe('review');
+    // La solicitud de miércoles no debe heredar el conflicto de martes/jueves:
+    // su propio día no tiene ningún problema de presencialidad mínima.
+    expect(semaforoMiercoles.status).toBe('ok');
+  });
+
+  it('marca conflicto a las tres si las tres piden los mismos dos días (mínimo 2)', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 2 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100' })],
+      ['101', buildEmployee({ empleado: '101' })],
+      ['102', buildEmployee({ empleado: '102' })],
+    ]);
+
+    const solicitudes = ['100', '101', '102'].map((empleado, index) =>
+      buildSolicitud({
+        id: `sol-${index}`,
+        empleado,
+        periodo: '2026-2027',
+        diasTeletrabajo: ['martes', 'jueves'],
+      }),
+    );
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(solicitudes);
+
+    solicitudes.forEach((solicitud) => {
+      const semaforo = getTeletrabajoSemaforo(
+        solicitud,
+        puestosByKey,
+        solicitudesByPuestoCount,
+        employeesByEmpleado,
+      );
+      expect(semaforo.status).toBe('review');
+    });
+  });
 });
