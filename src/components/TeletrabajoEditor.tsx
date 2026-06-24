@@ -153,9 +153,13 @@ export function TeletrabajoEditor({
 
   const resolvedTipoSolicitud = useMemo(
     () =>
-      resolveTeletrabajoTipoSolicitud(draft, solicitudes, {
-        excludeSolicitudId: solicitud?.id ?? null,
-      }),
+      resolveTeletrabajoTipoSolicitud(
+        { empleado: draft.empleado, periodo: draft.periodo },
+        solicitudes,
+        {
+          excludeSolicitudId: solicitud?.id ?? null,
+        },
+      ),
     [draft.empleado, draft.periodo, solicitud?.id, solicitudes],
   );
 
