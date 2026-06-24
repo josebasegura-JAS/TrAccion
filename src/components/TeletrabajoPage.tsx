@@ -25,7 +25,6 @@ import { ActionButton } from './ui/ActionButton';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
-import { evaluateTeletrabajoAntiguedad } from '../features/teletrabajo/domain/antiguedad';
 import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
@@ -152,7 +151,7 @@ const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
   { key: 'puestoNomina', header: 'Puesto nómina', value: (solicitud) => solicitud.puestoNomina },
   {
     key: 'teletrabajable',
-    header: 'Teletrabajable',
+    header: 'Incidencias',
     value: (solicitud) => solicitud.puestoOrganizativo,
   },
   { key: 'residencia', header: 'Residencia', value: (solicitud) => solicitud.residencia },
@@ -185,6 +184,146 @@ interface PendingEncuestaImport {
   file: File;
   unknownPuestos: string[];
   mapping: Record<string, string>;
+}
+
+type TeletrabajoIncidentFilter =
+  | ''
+  | 'conflictos'
+  | 'bloqueantes'
+  | 'revisadasPendientes'
+  | 'sinRevisar'
+  | 'listasAprobar';
+
+interface TeletrabajoIncidentMeta {
+  status: 'ok' | 'review' | 'blocked';
+  label: 'OK' | 'Revisar' | 'Bloquea' | 'Pendiente';
+  title: string;
+  isReviewedPending: boolean;
+  isReadyToApprove: boolean;
+}
+
+const TELETRABAJO_INCIDENT_FILTER_LABELS: Record<Exclude<TeletrabajoIncidentFilter, ''>, string> = {
+  conflictos: 'Con incidencias',
+  bloqueantes: 'Bloqueantes',
+  revisadasPendientes: 'Revisadas pendientes',
+  sinRevisar: 'Sin revisar',
+  listasAprobar: 'Listas para aprobar',
+};
+
+function getTeletrabajoIncidentMeta(
+  solicitud: TeletrabajoSolicitud,
+  puestosByKey: ReturnType<typeof buildPuestosByKey>,
+  solicitudesByPuestoCount: ReturnType<typeof buildSolicitudesByPeriodoPuestoCount>,
+  employeesByEmpleado: Map<string, Employee>,
+): TeletrabajoIncidentMeta {
+  const semaforo = getTeletrabajoSemaforo(
+    solicitud,
+    puestosByKey,
+    solicitudesByPuestoCount,
+    employeesByEmpleado,
+  );
+  const isReviewedPending = solicitud.revisado && solicitud.estado === 'pendiente';
+  const isReadyToApprove =
+    solicitud.revisado && solicitud.estado === 'analizada' && semaforo.status === 'ok';
+
+  if (semaforo.status === 'blocked') {
+    return {
+      status: 'blocked',
+      label: 'Bloquea',
+      title: semaforo.title,
+      isReviewedPending,
+      isReadyToApprove,
+    };
+  }
+
+  if (semaforo.status === 'review') {
+    return {
+      status: 'review',
+      label: 'Revisar',
+      title: semaforo.title,
+      isReviewedPending,
+      isReadyToApprove,
+    };
+  }
+
+  if (isReviewedPending) {
+    return {
+      status: 'review',
+      label: 'Pendiente',
+      title:
+        'Solicitud revisada que sigue pendiente: hay un conflicto o decisión manual por resolver.',
+      isReviewedPending,
+      isReadyToApprove,
+    };
+  }
+
+  return {
+    status: 'ok',
+    label: 'OK',
+    title: semaforo.title,
+    isReviewedPending,
+    isReadyToApprove,
+  };
+}
+
+function matchesIncidentFilter(
+  solicitud: TeletrabajoSolicitud,
+  filter: TeletrabajoIncidentFilter,
+  puestosByKey: ReturnType<typeof buildPuestosByKey>,
+  solicitudesByPuestoCount: ReturnType<typeof buildSolicitudesByPeriodoPuestoCount>,
+  employeesByEmpleado: Map<string, Employee>,
+): boolean {
+  if (!filter) {
+    return true;
+  }
+
+  const meta = getTeletrabajoIncidentMeta(
+    solicitud,
+    puestosByKey,
+    solicitudesByPuestoCount,
+    employeesByEmpleado,
+  );
+
+  if (filter === 'conflictos') {
+    return meta.status !== 'ok' || meta.isReviewedPending;
+  }
+
+  if (filter === 'bloqueantes') {
+    return meta.status === 'blocked';
+  }
+
+  if (filter === 'revisadasPendientes') {
+    return meta.isReviewedPending;
+  }
+
+  if (filter === 'sinRevisar') {
+    return !solicitud.revisado;
+  }
+
+  if (filter === 'listasAprobar') {
+    return meta.isReadyToApprove;
+  }
+
+  return true;
+}
+
+function getTeletrabajoRowClassName(
+  meta: TeletrabajoIncidentMeta,
+  estado: TeletrabajoSolicitud['estado'],
+): string {
+  if (estado === 'denegada') {
+    return 'border-l-4 border-slate-500/50 bg-slate-900/20 text-slate-200 hover:bg-slate-900/30';
+  }
+
+  if (meta.status === 'blocked') {
+    return 'border-l-4 border-red-400 bg-red-950/30 text-red-100 hover:bg-red-950/40';
+  }
+
+  if (meta.status === 'review' || meta.isReviewedPending) {
+    return 'border-l-4 border-amber-400 bg-amber-950/20 text-amber-50 hover:bg-amber-950/30';
+  }
+
+  return '';
 }
 
 function readStoredPuestoAliases(): Record<string, string> {
@@ -282,6 +421,7 @@ export function TeletrabajoPage({
   const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
   const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
+  const [incidentFilter, setIncidentFilter] = useState<TeletrabajoIncidentFilter>('');
 
   useEffect(() => {
     load();
@@ -317,8 +457,7 @@ export function TeletrabajoPage({
         return;
       }
 
-      const employee =
-        findActiveEmployeeByEmpleado(employees, solicitud.empleado);
+      const employee = findActiveEmployeeByEmpleado(employees, solicitud.empleado);
 
       setGeneratingWordId(solicitud.id);
       setWordStatus('');
@@ -371,14 +510,67 @@ export function TeletrabajoPage({
 
   const currentPeriodo = periodos[0] ?? '';
   const mainPeriodo = filters.periodo || currentPeriodo;
-  const mainFilters = useMemo(
-    () => ({ ...filters, periodo: mainPeriodo }),
-    [filters, mainPeriodo],
-  );
-  const filteredSolicitudes = useMemo(
+  const mainFilters = useMemo(() => ({ ...filters, periodo: mainPeriodo }), [filters, mainPeriodo]);
+  const baseFilteredSolicitudes = useMemo(
     () => filterTeletrabajoSolicitudes(solicitudesWithPlantillaData, mainFilters),
     [mainFilters, solicitudesWithPlantillaData],
   );
+  const filteredSolicitudes = useMemo(
+    () =>
+      baseFilteredSolicitudes.filter((solicitud) =>
+        matchesIncidentFilter(
+          solicitud,
+          incidentFilter,
+          puestosByKey,
+          solicitudesByPuestoCount,
+          employeesByEmpleado,
+        ),
+      ),
+    [
+      baseFilteredSolicitudes,
+      employeesByEmpleado,
+      incidentFilter,
+      puestosByKey,
+      solicitudesByPuestoCount,
+    ],
+  );
+  const incidentStats = useMemo(() => {
+    const initial = {
+      total: baseFilteredSolicitudes.length,
+      conflicts: 0,
+      blocked: 0,
+      reviewedPending: 0,
+      notReviewed: 0,
+      readyToApprove: 0,
+    };
+
+    return baseFilteredSolicitudes.reduce((stats, solicitud) => {
+      const meta = getTeletrabajoIncidentMeta(
+        solicitud,
+        puestosByKey,
+        solicitudesByPuestoCount,
+        employeesByEmpleado,
+      );
+
+      if (meta.status !== 'ok' || meta.isReviewedPending) {
+        stats.conflicts += 1;
+      }
+      if (meta.status === 'blocked') {
+        stats.blocked += 1;
+      }
+      if (meta.isReviewedPending) {
+        stats.reviewedPending += 1;
+      }
+      if (!solicitud.revisado) {
+        stats.notReviewed += 1;
+      }
+      if (meta.isReadyToApprove) {
+        stats.readyToApprove += 1;
+      }
+
+      return stats;
+    }, initial);
+  }, [baseFilteredSolicitudes, employeesByEmpleado, puestosByKey, solicitudesByPuestoCount]);
   const historicoSolicitudes = useMemo(() => {
     const historicalRows = solicitudesWithPlantillaData.filter(
       (solicitud) => !solicitud.deletedAt && solicitud.periodo !== currentPeriodo,
@@ -388,14 +580,37 @@ export function TeletrabajoPage({
       return [];
     }
 
-    return filterTeletrabajoSolicitudes(historicalRows, { ...filters, periodo: '' });
-  }, [currentPeriodo, filters, solicitudesWithPlantillaData]);
-  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths, resetPreferences } =
-    useTableViewPreferences<TeletrabajoTableColumnId>({
-      storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
-      defaultPreferences: defaultTeletrabajoTablePreferences,
-      validColumnIds: teletrabajoTableColumnIds,
-    });
+    return filterTeletrabajoSolicitudes(historicalRows, { ...filters, periodo: '' }).filter(
+      (solicitud) =>
+        matchesIncidentFilter(
+          solicitud,
+          incidentFilter,
+          puestosByKey,
+          solicitudesByPuestoCount,
+          employeesByEmpleado,
+        ),
+    );
+  }, [
+    currentPeriodo,
+    employeesByEmpleado,
+    filters,
+    incidentFilter,
+    puestosByKey,
+    solicitudesByPuestoCount,
+    solicitudesWithPlantillaData,
+  ]);
+  const {
+    preferences,
+    setSort,
+    setColumnWidth,
+    setColumnOrder,
+    resetColumnWidths,
+    resetPreferences,
+  } = useTableViewPreferences<TeletrabajoTableColumnId>({
+    storageKey: TELETRABAJO_TABLE_STORAGE_KEY,
+    defaultPreferences: defaultTeletrabajoTablePreferences,
+    validColumnIds: teletrabajoTableColumnIds,
+  });
 
   const teletrabajoTableColumns = useMemo<
     Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>
@@ -493,27 +708,27 @@ export function TeletrabajoPage({
       },
       {
         id: 'teletrabajable',
-        header: 'Cumplimiento',
+        header: 'Incidencias',
         accessor: (s) =>
-          getTeletrabajoSemaforo(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado)
+          getTeletrabajoIncidentMeta(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado)
             .status,
         render: (s) => {
-          const semaforo = getTeletrabajoSemaforo(
+          const meta = getTeletrabajoIncidentMeta(
             s,
             puestosByKey,
             solicitudesByPuestoCount,
             employeesByEmpleado,
           );
           const className =
-            semaforo.status === 'ok'
+            meta.status === 'ok'
               ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-              : semaforo.status === 'review'
+              : meta.status === 'review'
                 ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
                 : 'border-red-400/40 bg-red-500/15 text-red-200';
           const icon =
-            semaforo.status === 'ok' ? (
+            meta.status === 'ok' ? (
               <CheckCircle2 size={15} />
-            ) : semaforo.status === 'review' ? (
+            ) : meta.status === 'review' ? (
               <AlertTriangle size={15} />
             ) : (
               <XCircle size={15} />
@@ -521,17 +736,17 @@ export function TeletrabajoPage({
 
           return (
             <span
-              className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full border px-2 text-xs font-bold ${className}`}
-              title={semaforo.title}
+              className={`inline-flex h-7 min-w-[5.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
+              title={meta.title}
             >
               {icon}
-              {semaforo.status === 'review' && <span className="ml-1">!</span>}
+              {meta.label}
             </span>
           );
         },
-        width: 70,
-        minWidth: 58,
-        maxWidth: 90,
+        width: 118,
+        minWidth: 104,
+        maxWidth: 180,
         sortable: true,
         className: 'text-center',
       },
@@ -604,7 +819,10 @@ export function TeletrabajoPage({
               onClick={(event) => {
                 event.stopPropagation();
                 void (async () => {
-                  const result = await removeWithConcurrencyCheck(solicitud.id, solicitud.updatedAt);
+                  const result = await removeWithConcurrencyCheck(
+                    solicitud.id,
+                    solicitud.updatedAt,
+                  );
                   if (!result.ok) {
                     await alert(result.message, { type: 'error' });
                   }
@@ -666,6 +884,7 @@ export function TeletrabajoPage({
     ['Estado', filters.estado],
     ['Tipo', filters.tipoSolicitud],
     ['Periodo', filters.periodo],
+    ['Incidencias', incidentFilter ? TELETRABAJO_INCIDENT_FILTER_LABELS[incidentFilter] : ''],
   ]);
   const activeFilterChips: ActiveFilterChip[] = [
     filters.search.trim()
@@ -700,9 +919,18 @@ export function TeletrabajoPage({
           onClear: () => setFilter('periodo', ''),
         }
       : null,
+    incidentFilter
+      ? {
+          key: 'incidentFilter',
+          label: 'Incidencias',
+          value: TELETRABAJO_INCIDENT_FILTER_LABELS[incidentFilter],
+          onClear: () => setIncidentFilter(''),
+        }
+      : null,
   ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
   const clearActiveFilters = () => {
+    setIncidentFilter('');
     setFilter('search', '');
     setFilter('estado', '');
     setFilter('tipoSolicitud', '');
@@ -748,7 +976,13 @@ export function TeletrabajoPage({
           : 'No se pudo generar el Excel Dirección.',
       );
     }
-  }, [employees, filters.periodo, puestosTeletrabajo, solicitudesWithPlantillaData, sortedSolicitudes]);
+  }, [
+    employees,
+    filters.periodo,
+    puestosTeletrabajo,
+    solicitudesWithPlantillaData,
+    sortedSolicitudes,
+  ]);
 
   const openEditor = (solicitud: TeletrabajoSolicitud) => {
     selectSolicitud(solicitud.id);
@@ -993,10 +1227,18 @@ export function TeletrabajoPage({
             ref={historicoFileInputRef}
             type="file"
           />
-          <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
+          <ActionButton
+            iconOnly={false}
+            onClick={() => fileInputRef.current?.click()}
+            variant="import"
+          >
             Importar encuesta
           </ActionButton>
-          <ActionButton iconOnly={false} onClick={() => historicoFileInputRef.current?.click()} variant="import">
+          <ActionButton
+            iconOnly={false}
+            onClick={() => historicoFileInputRef.current?.click()}
+            variant="import"
+          >
             Importar histórico
           </ActionButton>
           <button
@@ -1046,7 +1288,7 @@ export function TeletrabajoPage({
         </div>
       )}
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 xl:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
@@ -1080,6 +1322,65 @@ export function TeletrabajoPage({
         />
       </div>
 
+      <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          {
+            key: '',
+            label: 'Todas',
+            value: incidentStats.total,
+            className: 'border-metro-border text-metro-text',
+          },
+          {
+            key: 'sinRevisar',
+            label: 'Sin revisar',
+            value: incidentStats.notReviewed,
+            className: 'border-amber-400/40 text-amber-100',
+          },
+          {
+            key: 'revisadasPendientes',
+            label: 'Revisadas pendientes',
+            value: incidentStats.reviewedPending,
+            className: 'border-amber-400/40 text-amber-100',
+          },
+          {
+            key: 'conflictos',
+            label: 'Con incidencias',
+            value: incidentStats.conflicts,
+            className: 'border-amber-400/40 text-amber-100',
+          },
+          {
+            key: 'bloqueantes',
+            label: 'Bloqueantes',
+            value: incidentStats.blocked,
+            className: 'border-red-400/40 text-red-100',
+          },
+          {
+            key: 'listasAprobar',
+            label: 'Listas para aprobar',
+            value: incidentStats.readyToApprove,
+            className: 'border-emerald-400/40 text-emerald-100',
+          },
+        ].map((item) => {
+          const key = item.key as TeletrabajoIncidentFilter;
+          const isActive = incidentFilter === key;
+          return (
+            <button
+              className={`rounded-xl border bg-metro-surface px-3 py-2 text-left transition hover:border-metro-red ${item.className} ${
+                isActive ? 'ring-2 ring-metro-red/60' : ''
+              }`}
+              key={item.label}
+              onClick={() => setIncidentFilter(key)}
+              type="button"
+            >
+              <span className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                {item.label}
+              </span>
+              <span className="mt-1 block text-lg font-black">{item.value}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {activeFilterChips.length > 0 && (
         <div className="mb-3">
           <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
@@ -1089,7 +1390,8 @@ export function TeletrabajoPage({
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo · {mainPeriodo || 'Sin periodo'}
+            <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo ·{' '}
+            {mainPeriodo || 'Sin periodo'}
             <ExportPrintButtons
               payload={{
                 title: 'Solicitudes de teletrabajo',
@@ -1136,12 +1438,15 @@ export function TeletrabajoPage({
           onSortChange={setSort}
           rows={sortedSolicitudes}
           rowClassName={(solicitud) =>
-            evaluateTeletrabajoAntiguedad(
-              solicitud,
-              employeesByEmpleado.get(solicitud.empleado.trim()),
-            ).status === 'no-cumple'
-              ? 'border-l-4 border-red-400 bg-red-950/30 text-red-100 hover:bg-red-950/40'
-              : ''
+            getTeletrabajoRowClassName(
+              getTeletrabajoIncidentMeta(
+                solicitud,
+                puestosByKey,
+                solicitudesByPuestoCount,
+                employeesByEmpleado,
+              ),
+              solicitud.estado,
+            )
           }
           sort={preferences.sort}
         />
@@ -1210,12 +1515,15 @@ export function TeletrabajoPage({
                             onSortChange={setSort}
                             rows={group.rows}
                             rowClassName={(solicitud) =>
-                              evaluateTeletrabajoAntiguedad(
-                                solicitud,
-                                employeesByEmpleado.get(solicitud.empleado.trim()),
-                              ).status === 'no-cumple'
-                                ? 'border-l-4 border-red-400 bg-red-950/30 text-red-100 hover:bg-red-950/40'
-                                : ''
+                              getTeletrabajoRowClassName(
+                                getTeletrabajoIncidentMeta(
+                                  solicitud,
+                                  puestosByKey,
+                                  solicitudesByPuestoCount,
+                                  employeesByEmpleado,
+                                ),
+                                solicitud.estado,
+                              )
                             }
                             sort={preferences.sort}
                             maxHeightClassName="max-h-[360px]"
