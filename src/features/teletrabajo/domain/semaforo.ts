@@ -1,7 +1,7 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import { normalizeTeletrabajoPuesto, type TeletrabajoPuesto } from './puestosTeletrabajo';
-import type { TeletrabajoSolicitud } from './solicitud';
+import { TELETRABAJO_DIAS, type TeletrabajoDia, type TeletrabajoSolicitud } from './solicitud';
 
 export type TeletrabajoSemaforoStatus = 'ok' | 'review' | 'blocked';
 
@@ -29,7 +29,20 @@ export function buildSolicitudPeriodoPuestoKey(periodo: string, puestoKey: strin
  * agrupadas también por periodo: cada solicitud solo compite por la
  * presencialidad mínima con las demás solicitudes de su mismo periodo.
  */
-export function buildSolicitudesByPeriodoPuestoCount(
+export function buildSolicitudPeriodoPuestoDiaKey(
+  periodo: string,
+  puestoKey: string,
+  dia: TeletrabajoDia,
+): string {
+  return `${buildSolicitudPeriodoPuestoKey(periodo, puestoKey)}::${dia}`;
+}
+
+/**
+ * Cuenta solicitudes activas por puesto, periodo y día de teletrabajo.
+ * La presencialidad mínima se comprueba por día: dos solicitudes del mismo
+ * puesto no compiten entre sí si piden días distintos.
+ */
+export function buildSolicitudesByPeriodoPuestoDiaCount(
   solicitudes: readonly TeletrabajoSolicitud[],
 ): Map<string, number> {
   const counts = new Map<string, number>();
@@ -44,17 +57,21 @@ export function buildSolicitudesByPeriodoPuestoCount(
       return;
     }
 
-    const key = buildSolicitudPeriodoPuestoKey(solicitud.periodo, puestoKey);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    solicitud.diasTeletrabajo.forEach((dia) => {
+      const key = buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
   });
 
   return counts;
 }
 
+export const buildSolicitudesByPeriodoPuestoCount = buildSolicitudesByPeriodoPuestoDiaCount;
+
 export function getTeletrabajoSemaforo(
   solicitud: TeletrabajoSolicitud,
   puestosByKey: Map<string, TeletrabajoPuesto>,
-  solicitudesByPuestoCount: Map<string, number>,
+  solicitudesByPuestoDiaCount: Map<string, number>,
   employeesByEmpleado: Map<string, Employee>,
 ): TeletrabajoSemaforo {
   const antiguedad = evaluateTeletrabajoAntiguedad(
@@ -92,13 +109,40 @@ export function getTeletrabajoSemaforo(
     };
   }
 
-  const solicitudesDelPuesto =
-    solicitudesByPuestoCount.get(buildSolicitudPeriodoPuestoKey(solicitud.periodo, puestoKey)) ?? 0;
-  if (puesto.maxSolicitudes > 0 && solicitudesDelPuesto > puesto.maxSolicitudes) {
-    return {
-      status: 'review',
-      title: `Revisar: ${solicitudesDelPuesto} solicitudes activas para presencialidad mínima ${puesto.maxSolicitudes}.`,
-    };
+  const presencialidadMinima = puesto.maxSolicitudes;
+  if (presencialidadMinima > 0) {
+    const empleadosDelPuesto = new Set(
+      Array.from(employeesByEmpleado.values())
+        .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
+        .map((employee) => employee.empleado.trim()),
+    );
+    const totalPersonasPuesto = empleadosDelPuesto.size;
+
+    const conflictos = TELETRABAJO_DIAS.map((dia) => {
+      const solicitudesDia =
+        solicitudesByPuestoDiaCount.get(
+          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
+        ) ?? 0;
+      const presencialesDia = totalPersonasPuesto - solicitudesDia;
+      return { dia, solicitudesDia, presencialesDia };
+    }).filter(
+      ({ solicitudesDia, presencialesDia }) =>
+        solicitudesDia > 0 && presencialesDia < presencialidadMinima,
+    );
+
+    if (conflictos.length > 0) {
+      const detail = conflictos
+        .map(
+          ({ dia, solicitudesDia, presencialesDia }) =>
+            `${dia}: ${solicitudesDia} TT, ${Math.max(presencialesDia, 0)} presenciales`,
+        )
+        .join(' · ');
+
+      return {
+        status: 'review',
+        title: `Conflicto de presencialidad mínima (${presencialidadMinima}) en ${solicitud.puestoOrganizativo}. Total puesto: ${totalPersonasPuesto}. ${detail}.`,
+      };
+    }
   }
 
   return {

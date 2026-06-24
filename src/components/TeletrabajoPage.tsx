@@ -97,7 +97,7 @@ type TeletrabajoTableColumnId =
   | 'estado'
   | 'empleado'
   | 'nombreApellidos'
-  | 'puestoNomina'
+  | 'puestoOrganizativo'
   | 'teletrabajable'
   | 'residencia'
   | 'tipoSolicitud'
@@ -113,7 +113,7 @@ const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
   'estado',
   'empleado',
   'nombreApellidos',
-  'puestoNomina',
+  'puestoOrganizativo',
   'teletrabajable',
   'residencia',
   'tipoSolicitud',
@@ -148,7 +148,11 @@ const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
     header: 'Nombre y apellidos',
     value: (solicitud) => solicitud.nombreApellidos,
   },
-  { key: 'puestoNomina', header: 'Puesto nómina', value: (solicitud) => solicitud.puestoNomina },
+  {
+    key: 'puestoOrganizativo',
+    header: 'Puesto organizativo',
+    value: (solicitud) => solicitud.puestoOrganizativo,
+  },
   {
     key: 'teletrabajable',
     header: 'Incidencias',
@@ -696,10 +700,10 @@ export function TeletrabajoPage({
         className: 'text-metro-text',
       },
       {
-        id: 'puestoNomina',
-        header: 'Puesto nómina',
-        accessor: (s) => s.puestoNomina,
-        render: (s) => s.puestoNomina,
+        id: 'puestoOrganizativo',
+        header: 'Puesto organizativo',
+        accessor: (s) => s.puestoOrganizativo,
+        render: (s) => s.puestoOrganizativo,
         width: 190,
         minWidth: 140,
         maxWidth: 360,

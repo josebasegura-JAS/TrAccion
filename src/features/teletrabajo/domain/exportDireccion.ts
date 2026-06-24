@@ -6,10 +6,10 @@ import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
 import {
   buildPuestosByKey,
-  buildSolicitudPeriodoPuestoKey,
+  buildSolicitudPeriodoPuestoDiaKey,
   buildSolicitudesByPeriodoPuestoCount,
 } from './semaforo';
-import type { TeletrabajoSolicitud } from './solicitud';
+import { TELETRABAJO_DIAS, type TeletrabajoSolicitud } from './solicitud';
 import { buildStableExportFilename } from '../../../shared/export/tableExport';
 
 const YES = 'SI';
@@ -83,12 +83,12 @@ function buildTeletrabajoAssessment({
   solicitud,
   employeesById,
   puestosByKey,
-  solicitudesByPuestoCount,
+  solicitudesByPuestoDiaCount,
 }: {
   solicitud: TeletrabajoSolicitud;
   employeesById: Map<string, Employee>;
   puestosByKey: Map<string, TeletrabajoPuesto>;
-  solicitudesByPuestoCount: Map<string, number>;
+  solicitudesByPuestoDiaCount: Map<string, number>;
 }): TeletrabajoExportAssessment {
   if (solicitud.estado === 'denegada') {
     return {
@@ -145,16 +145,31 @@ function buildTeletrabajoAssessment({
     };
   }
 
-  const solicitudesDelPuesto =
-    solicitudesByPuestoCount.get(buildSolicitudPeriodoPuestoKey(solicitud.periodo, puestoKey)) ?? 0;
-  if (puesto.maxSolicitudes > 0 && solicitudesDelPuesto > puesto.maxSolicitudes) {
-    return {
-      status: 'review',
-      cellValue: 'REVISAR',
-      rowFillColor: SOFT_YELLOW,
-      textColor: SOFT_YELLOW_TEXT,
-      apuntesRrll: 'Presencialidad',
-    };
+  const presencialidadMinima = puesto.maxSolicitudes;
+  if (presencialidadMinima > 0) {
+    const empleadosDelPuesto = new Set(
+      Array.from(employeesById.values())
+        .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
+        .map((employee) => employee.empleado.trim()),
+    );
+    const totalPersonasPuesto = empleadosDelPuesto.size;
+    const diasConConflicto = TELETRABAJO_DIAS.filter((dia) => {
+      const solicitudesDia =
+        solicitudesByPuestoDiaCount.get(
+          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
+        ) ?? 0;
+      return solicitudesDia > 0 && totalPersonasPuesto - solicitudesDia < presencialidadMinima;
+    });
+
+    if (diasConConflicto.length > 0) {
+      return {
+        status: 'review',
+        cellValue: 'REVISAR',
+        rowFillColor: SOFT_YELLOW,
+        textColor: SOFT_YELLOW_TEXT,
+        apuntesRrll: `Presencialidad: ${diasConConflicto.join(', ')}`,
+      };
+    }
   }
 
   return {
@@ -315,7 +330,7 @@ export async function exportTeletrabajoDireccionToExcel({
   });
   const employeesById = buildEmployeeMap(employees);
   const puestosByKey = buildPuestosByKey(puestosTeletrabajo);
-  const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment);
+  const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment);
 
   worksheet.columns = [
     { key: 'nivel', width: 2.27 },
@@ -414,7 +429,7 @@ export async function exportTeletrabajoDireccionToExcel({
       solicitud,
       employeesById,
       puestosByKey,
-      solicitudesByPuestoCount,
+      solicitudesByPuestoDiaCount,
     });
     const rowNumber = 6 + index;
     const row = worksheet.getRow(rowNumber);

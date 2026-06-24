@@ -123,6 +123,42 @@ describe('presencialidad mínima del puesto acotada al periodo de cada solicitud
     expect(semaforo.status).toBe('ok');
   });
 
+  it('no marca a revisar si el mismo puesto mantiene presencialidad mínima repartiendo días', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100' })],
+      ['101', buildEmployee({ empleado: '101' })],
+    ]);
+
+    const solicitudMartesJueves = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes', 'jueves'],
+    });
+    const solicitudMiercoles = buildSolicitud({
+      id: 'sol-b',
+      empleado: '101',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['miercoles'],
+    });
+
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount([
+      solicitudMartesJueves,
+      solicitudMiercoles,
+    ]);
+
+    const semaforo = getTeletrabajoSemaforo(
+      solicitudMiercoles,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+    );
+
+    expect(semaforo.status).toBe('ok');
+  });
+
   it('marca a revisar cuando se supera el mínimo dentro del mismo periodo', () => {
     const puesto = buildPuesto({ maxSolicitudes: 1 });
     const puestosByKey = buildPuestosByKey([puesto]);
