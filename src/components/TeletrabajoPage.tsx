@@ -200,7 +200,7 @@ type TeletrabajoIncidentFilter =
 
 interface TeletrabajoIncidentMeta {
   status: 'ok' | 'review' | 'blocked';
-  label: 'OK' | 'Revisar' | 'Bloquea' | 'Pendiente';
+  label: 'OK' | 'Revisar' | 'Bloquea';
   title: string;
   isReviewedPending: boolean;
   isReadyToApprove: boolean;
@@ -250,21 +250,12 @@ function getTeletrabajoIncidentMeta(
     };
   }
 
-  if (isReviewedPending) {
-    return {
-      status: 'review',
-      label: 'Pendiente',
-      title:
-        'Solicitud revisada que sigue pendiente: hay un conflicto o decisión manual por resolver.',
-      isReviewedPending,
-      isReadyToApprove,
-    };
-  }
-
   return {
     status: 'ok',
     label: 'OK',
-    title: semaforo.title,
+    title: isReviewedPending
+      ? `${semaforo.title} Solicitud revisada que sigue en estado pendiente: queda una decisión manual por resolver, pero no hay incidencia objetiva de condiciones.`
+      : semaforo.title,
     isReviewedPending,
     isReadyToApprove,
   };
@@ -289,7 +280,7 @@ function matchesIncidentFilter(
   );
 
   if (filter === 'conflictos') {
-    return meta.status !== 'ok' || meta.isReviewedPending;
+    return meta.status !== 'ok';
   }
 
   if (filter === 'bloqueantes') {
@@ -556,7 +547,7 @@ export function TeletrabajoPage({
         employeesByEmpleado,
       );
 
-      if (meta.status !== 'ok' || meta.isReviewedPending) {
+      if (meta.status !== 'ok') {
         stats.conflicts += 1;
       }
       if (meta.status === 'blocked') {
@@ -1453,6 +1444,7 @@ export function TeletrabajoPage({
             )
           }
           sort={preferences.sort}
+          preserveScrollOnRowsChange
         />
       </div>
 
@@ -1531,6 +1523,7 @@ export function TeletrabajoPage({
                             }
                             sort={preferences.sort}
                             maxHeightClassName="max-h-[360px]"
+                            preserveScrollOnRowsChange
                           />
                         </div>
                       )}

@@ -39,6 +39,8 @@ interface DataTableProps<Row, ColumnId extends string> {
   rowClassName?: (row: Row) => string;
   ariaLabel: string;
   maxHeightClassName?: string;
+  /** Mantiene la posición vertical cuando cambian filas por una edición. Útil en tablas de trabajo largas. */
+  preserveScrollOnRowsChange?: boolean;
 }
 
 const DEFAULT_MIN_COLUMN_WIDTH = 80;
@@ -131,6 +133,7 @@ export function DataTable<Row, ColumnId extends string>({
   rowClassName,
   ariaLabel,
   maxHeightClassName = 'max-h-[460px]',
+  preserveScrollOnRowsChange = false,
 }: DataTableProps<Row, ColumnId>) {
   const resizeStateRef = useRef<{
     columnId: ColumnId;
@@ -177,11 +180,21 @@ export function DataTable<Row, ColumnId extends string>({
     return sortDataTableRows(sliced, visibleColumns, sort);
   }, [rows, sort, visibleColumns, renderLimit]);
 
-  // Resetear renderLimit y volver al inicio cuando cambian los datos o el sort
+  // Resetear renderLimit y volver al inicio cuando cambia la ordenación.
   useEffect(() => {
     setRenderLimit(DEFAULT_RENDER_BATCH_SIZE);
     scrollContainerRef.current?.scrollTo(0, 0);
-  }, [rows, sort]);
+  }, [sort]);
+
+  // En tablas de edición frecuente puede interesar conservar la posición al volver del editor.
+  useEffect(() => {
+    if (preserveScrollOnRowsChange) {
+      return;
+    }
+
+    setRenderLimit(DEFAULT_RENDER_BATCH_SIZE);
+    scrollContainerRef.current?.scrollTo(0, 0);
+  }, [preserveScrollOnRowsChange, rows]);
 
   // Cargar más filas automáticamente al hacer scroll hasta el final (IntersectionObserver)
   useEffect(() => {
