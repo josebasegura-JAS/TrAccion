@@ -187,7 +187,7 @@ interface TeletrabajoStateStore {
   updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
   removePuestoTeletrabajo: (id: string) => void;
   importPuestosTeletrabajo: (file: File) => Promise<number>;
-  importPuestosTeletrabajoDrafts: (drafts: readonly TeletrabajoPuestoDraft[]) => number;
+  importPuestosTeletrabajoDrafts: (drafts: readonly Partial<TeletrabajoPuestoDraft>[]) => number;
   remove: (id: string) => void;
   removeWithConcurrencyCheck: (
     id: string,
@@ -388,7 +388,7 @@ function createPuestoTeletrabajoId(): string {
 
 function upsertPuestosTeletrabajo(
   current: TeletrabajoPuesto[],
-  drafts: TeletrabajoPuestoDraft[],
+  drafts: readonly Partial<TeletrabajoPuestoDraft>[],
 ): TeletrabajoPuesto[] {
   const now = new Date().toISOString();
   const puestosByKey = new Map(

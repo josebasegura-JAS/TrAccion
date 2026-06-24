@@ -59,14 +59,14 @@ export function normalizeTeletrabajoPuesto(value: string | null | undefined): st
 }
 
 export function normalizeTeletrabajoPuestoDraft(
-  draft: TeletrabajoPuestoDraft,
+  draft: Partial<TeletrabajoPuestoDraft>,
 ): TeletrabajoPuestoDraft {
   return {
-    puesto: draft.puesto.trim(),
-    maxSolicitudes: normalizePresencialidadMinima(draft.maxSolicitudes),
-    dotacionComputable: normalizePresencialidadMinima(draft.dotacionComputable),
-    grupoCobertura: draft.grupoCobertura.trim(),
-    observaciones: draft.observaciones.trim(),
+    puesto: (draft.puesto ?? '').trim(),
+    maxSolicitudes: normalizePresencialidadMinima(draft.maxSolicitudes ?? 0),
+    dotacionComputable: normalizePresencialidadMinima(draft.dotacionComputable ?? 0),
+    grupoCobertura: (draft.grupoCobertura ?? '').trim(),
+    observaciones: (draft.observaciones ?? '').trim(),
   };
 }
 
