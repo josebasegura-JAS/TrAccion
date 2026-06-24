@@ -146,7 +146,7 @@ export function getTeletrabajoSemaforo(
 
       return {
         status: 'review',
-        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Personas del puesto: ${totalPersonasPuesto}. Presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
+        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Personas del puesto: ${totalPersonasPuesto}. presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
       };
     }
   }
