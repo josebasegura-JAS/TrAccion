@@ -354,7 +354,7 @@ interface TraccionTeletrabajoRecordsSnapshot {
 
 type TraccionConditionalTeletrabajoRecord = TraccionConditionalComiteSessionRecord;
 
-type TraccionTeletrabajoPuestoRecord = TraccionComiteSessionRecord;
+type TeletrabajoPuestoRecord = TraccionComiteSessionRecord;
 
 interface TraccionTeletrabajoPuestoRecordsSnapshot {
   status: TraccionDatabaseStatus;
@@ -362,6 +362,15 @@ interface TraccionTeletrabajoPuestoRecordsSnapshot {
 }
 
 type TraccionConditionalTeletrabajoPuestoRecord = TraccionConditionalComiteSessionRecord;
+
+type TraccionTeletrabajoGrupoCoberturaRecord = TraccionComiteSessionRecord;
+
+interface TraccionTeletrabajoGrupoCoberturaRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTeletrabajoGrupoCoberturaRecord[];
+}
+
+type TraccionConditionalTeletrabajoGrupoCoberturaRecord = TraccionConditionalComiteSessionRecord;
 
 type TraccionVinculogramaRecord = TraccionComiteSessionRecord;
 
@@ -512,6 +521,10 @@ interface TraccionApi {
   loadTeletrabajoPuestoRecords?: () => Promise<TraccionTeletrabajoPuestoRecordsSnapshot>;
   saveTeletrabajoPuestoRecordIfUnchanged?: (
     record: TraccionConditionalTeletrabajoPuestoRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  loadTeletrabajoGrupoCoberturaRecords?: () => Promise<TraccionTeletrabajoGrupoCoberturaRecordsSnapshot>;
+  saveTeletrabajoGrupoCoberturaRecordIfUnchanged?: (
+    record: TraccionConditionalTeletrabajoGrupoCoberturaRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
   loadVinculogramaRecords?: () => Promise<TraccionVinculogramaRecordsSnapshot>;
   saveVinculogramaRecordIfUnchanged?: (
