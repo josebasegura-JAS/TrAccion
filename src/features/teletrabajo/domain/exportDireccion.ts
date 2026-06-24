@@ -36,6 +36,41 @@ function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBu
   return copy.buffer;
 }
 
+
+function getGrupoCoberturaKey(puesto: TeletrabajoPuesto, puestoKey: string): string {
+  const grupoKey = normalizeTeletrabajoPuesto(puesto.grupoCobertura);
+  return grupoKey || puestoKey;
+}
+
+function getPuestosInGrupo(
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): TeletrabajoPuesto[] {
+  return Array.from(puestosByKey.entries())
+    .filter(([puestoKey, puesto]) => getGrupoCoberturaKey(puesto, puestoKey) === grupoKey)
+    .map(([, puesto]) => puesto);
+}
+
+function getDotacionComputableGrupo(
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): number {
+  return getPuestosInGrupo(puestosByKey, grupoKey).reduce(
+    (total, puesto) => total + Math.max(0, Math.floor(puesto.dotacionComputable ?? 0)),
+    0,
+  );
+}
+
+function getPresencialidadMinimaGrupo(
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): number {
+  return Math.max(
+    0,
+    ...getPuestosInGrupo(puestosByKey, grupoKey).map((puesto) => Math.max(0, Math.floor(puesto.maxSolicitudes ?? 0))),
+  );
+}
+
 function normalizeEmployeeKey(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -145,14 +180,17 @@ export function buildTeletrabajoAssessment({
     };
   }
 
-  const presencialidadMinima = puesto.maxSolicitudes;
+  const coberturaKey = getGrupoCoberturaKey(puesto, puestoKey);
+  const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey);
   if (presencialidadMinima > 0) {
-    const empleadosDelPuesto = new Set(
-      Array.from(employeesById.values())
-        .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
-        .map((employee) => employee.empleado.trim()),
-    );
-    const totalPersonasPuesto = empleadosDelPuesto.size;
+    const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
+    const totalPersonasPuesto = dotacionParametrizada > 0
+      ? dotacionParametrizada
+      : new Set(
+          Array.from(employeesById.values())
+            .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
+            .map((employee) => employee.empleado.trim()),
+        ).size;
     // Solo importan los días que esta solicitud concreta pide teletrabajar:
     // un conflicto de otro compañero del mismo puesto en un día distinto no
     // debe contagiar el semáforo de esta solicitud. Igual que en semaforo.ts.
@@ -161,7 +199,7 @@ export function buildTeletrabajoAssessment({
     const diasConConflicto = diasSolicitados.filter((dia) => {
       const solicitudesDia =
         solicitudesByPuestoDiaCount.get(
-          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
+          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
         ) ?? 0;
       return solicitudesDia > 0 && totalPersonasPuesto - solicitudesDia < presencialidadMinima;
     });
@@ -335,7 +373,7 @@ export async function exportTeletrabajoDireccionToExcel({
   });
   const employeesById = buildEmployeeMap(employees);
   const puestosByKey = buildPuestosByKey(puestosTeletrabajo);
-  const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment);
+  const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment, puestosByKey);
 
   worksheet.columns = [
     { key: 'nivel', width: 2.27 },

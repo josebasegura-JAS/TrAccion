@@ -99,7 +99,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     }
 
     return visiblePuestos.filter((puesto) =>
-      `${puesto.puesto} ${puesto.maxSolicitudes} ${puesto.observaciones}`
+      `${puesto.puesto} ${puesto.maxSolicitudes} ${puesto.dotacionComputable} ${puesto.grupoCobertura} ${puesto.observaciones}`
         .toLowerCase()
         .includes(normalizedSearch),
     );
@@ -139,6 +139,8 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setDraft({
       puesto: puesto.puesto,
       maxSolicitudes: puesto.maxSolicitudes,
+      dotacionComputable: puesto.dotacionComputable,
+      grupoCobertura: puesto.grupoCobertura,
       observaciones: puesto.observaciones,
     });
     setError('');
@@ -360,7 +362,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
         {(isCreating || editingPuestoId || status || error || pendingImport) && (
           <div className="space-y-3 border-b border-metro-border p-4">
             {(isCreating || editingPuestoId) && (
-              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(240px,1fr)_120px_minmax(220px,1fr)_auto_auto] lg:items-end">
+              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_110px_110px_minmax(140px,0.8fr)_minmax(180px,1fr)_auto_auto] lg:items-end">
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Puesto
                   <select
@@ -382,6 +384,26 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                     onChange={(event) => updateDraft('maxSolicitudes', Number(event.target.value))}
                     type="number"
                     value={draft.maxSolicitudes}
+                  />
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                  Dotación computable
+                  <input
+                    className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                    min={0}
+                    onChange={(event) => updateDraft('dotacionComputable', Number(event.target.value))}
+                    type="number"
+                    value={draft.dotacionComputable}
+                  />
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                  Grupo cobertura
+                  <input
+                    className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateDraft('grupoCobertura', event.target.value)}
+                    placeholder="Opcional"
+                    type="text"
+                    value={draft.grupoCobertura}
                   />
                 </label>
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
@@ -495,6 +517,8 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 <tr>
                   <th className="px-3 py-2">Puesto</th>
                   <th className="w-44 px-3 py-2">Presencialidad mínima</th>
+                  <th className="w-40 px-3 py-2">Dotación computable</th>
+                  <th className="w-44 px-3 py-2">Grupo cobertura</th>
                   <th className="px-3 py-2">Observaciones</th>
                   <th className="w-24 px-3 py-2 text-right">Acciones</th>
                 </tr>
@@ -511,6 +535,8 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                   >
                     <td className="px-3 py-2 font-semibold">{puesto.puesto}</td>
                     <td className="px-3 py-2 text-metro-muted">{puesto.maxSolicitudes || '—'}</td>
+                    <td className="px-3 py-2 text-metro-muted">{puesto.dotacionComputable || '—'}</td>
+                    <td className="px-3 py-2 text-metro-muted">{puesto.grupoCobertura || '—'}</td>
                     <td className="px-3 py-2 text-metro-muted">{puesto.observaciones || '—'}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -538,7 +564,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 ))}
                 {filteredPuestos.length === 0 && (
                   <tr>
-                    <td className="px-3 py-8 text-center text-sm text-metro-muted" colSpan={4}>
+                    <td className="px-3 py-8 text-center text-sm text-metro-muted" colSpan={6}>
                       No hay puestos teletrabajables para los criterios indicados.
                     </td>
                   </tr>

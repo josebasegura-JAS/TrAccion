@@ -292,6 +292,8 @@ function normalizePuestoTeletrabajo(puesto: TeletrabajoPuesto): TeletrabajoPuest
     ...normalizeTeletrabajoPuestoDraft({
       puesto: puesto.puesto,
       maxSolicitudes: puesto.maxSolicitudes,
+      dotacionComputable: puesto.dotacionComputable ?? 0,
+      grupoCobertura: puesto.grupoCobertura ?? '',
       observaciones: puesto.observaciones ?? '',
     }),
     createdAt,

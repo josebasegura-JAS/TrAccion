@@ -20,6 +20,40 @@ export function buildPuestosByKey(
   );
 }
 
+function getGrupoCoberturaKey(puesto: TeletrabajoPuesto, puestoKey: string): string {
+  const grupoKey = normalizeTeletrabajoPuesto(puesto.grupoCobertura);
+  return grupoKey || puestoKey;
+}
+
+function getPuestosInGrupo(
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): TeletrabajoPuesto[] {
+  return Array.from(puestosByKey.entries())
+    .filter(([puestoKey, puesto]) => getGrupoCoberturaKey(puesto, puestoKey) === grupoKey)
+    .map(([, puesto]) => puesto);
+}
+
+function getDotacionComputableGrupo(
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): number {
+  return getPuestosInGrupo(puestosByKey, grupoKey).reduce(
+    (total, puesto) => total + Math.max(0, Math.floor(puesto.dotacionComputable ?? 0)),
+    0,
+  );
+}
+
+function getPresencialidadMinimaGrupo(
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): number {
+  return Math.max(
+    0,
+    ...getPuestosInGrupo(puestosByKey, grupoKey).map((puesto) => Math.max(0, Math.floor(puesto.maxSolicitudes ?? 0))),
+  );
+}
+
 export function buildSolicitudPeriodoPuestoKey(periodo: string, puestoKey: string): string {
   return `${(periodo ?? '').trim()}::${puestoKey}`;
 }
@@ -44,6 +78,7 @@ export function buildSolicitudPeriodoPuestoDiaKey(
  */
 export function buildSolicitudesByPeriodoPuestoDiaCount(
   solicitudes: readonly TeletrabajoSolicitud[],
+  puestosByKey?: Map<string, TeletrabajoPuesto>,
 ): Map<string, number> {
   const counts = new Map<string, number>();
 
@@ -57,8 +92,11 @@ export function buildSolicitudesByPeriodoPuestoDiaCount(
       return;
     }
 
+    const puesto = puestosByKey?.get(puestoKey);
+    const coberturaKey = puesto ? getGrupoCoberturaKey(puesto, puestoKey) : puestoKey;
+
     solicitud.diasTeletrabajo.forEach((dia) => {
-      const key = buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia);
+      const key = buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia);
       counts.set(key, (counts.get(key) ?? 0) + 1);
     });
   });
@@ -109,14 +147,17 @@ export function getTeletrabajoSemaforo(
     };
   }
 
-  const presencialidadMinima = puesto.maxSolicitudes;
+  const coberturaKey = getGrupoCoberturaKey(puesto, puestoKey);
+  const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey);
   if (presencialidadMinima > 0) {
-    const empleadosDelPuesto = new Set(
-      Array.from(employeesByEmpleado.values())
-        .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
-        .map((employee) => employee.empleado.trim()),
-    );
-    const totalPersonasPuesto = empleadosDelPuesto.size;
+    const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
+    const totalPersonasPuesto = dotacionParametrizada > 0
+      ? dotacionParametrizada
+      : new Set(
+          Array.from(employeesByEmpleado.values())
+            .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
+            .map((employee) => employee.empleado.trim()),
+        ).size;
 
     const diasSolicitados =
       solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
@@ -124,7 +165,7 @@ export function getTeletrabajoSemaforo(
       .map((dia) => {
         const solicitudesDia =
           solicitudesByPuestoDiaCount.get(
-            buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
+            buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
           ) ?? 0;
         const presencialesDia = totalPersonasPuesto - solicitudesDia;
         return { dia, solicitudesDia, presencialesDia };
@@ -146,7 +187,7 @@ export function getTeletrabajoSemaforo(
 
       return {
         status: 'review',
-        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Personas del puesto: ${totalPersonasPuesto}. presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
+        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Grupo cobertura: ${coberturaKey}. Dotación computable: ${totalPersonasPuesto}. presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
       };
     }
   }

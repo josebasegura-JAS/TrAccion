@@ -4,6 +4,8 @@ export interface TeletrabajoPuesto {
   id: string;
   puesto: string;
   maxSolicitudes: number;
+  dotacionComputable: number;
+  grupoCobertura: string;
   observaciones: string;
   createdAt: string;
   updatedAt: string;
@@ -13,6 +15,8 @@ export interface TeletrabajoPuesto {
 export interface TeletrabajoPuestoDraft {
   puesto: string;
   maxSolicitudes: number;
+  dotacionComputable: number;
+  grupoCobertura: string;
   observaciones: string;
 }
 
@@ -32,17 +36,21 @@ const MAX_HEADERS = new Set([
   'presencialidad minima de personas por puesto',
   'presencialidad minima de personas por puesto para el normal funcionamiento de la unidad puestos 2 o mas personas',
 ]);
+const DOTACION_HEADERS = new Set(['dotacion', 'dotacion computable', 'personas', 'personas computables', 'numero personas', 'n personas']);
+const GRUPO_COBERTURA_HEADERS = new Set(['grupo', 'grupo cobertura', 'grupo de cobertura', 'cobertura']);
 const TELETRABAJO_HEADERS = new Set(['teletrabajo s/n', 'teletrabajo', 'teletrabajable']);
 const OBSERVACIONES_HEADERS = new Set(['observaciones', 'observacion', 'notas', 'nota']);
 
 export const EMPTY_TELETRABAJO_PUESTO_DRAFT: TeletrabajoPuestoDraft = {
   puesto: '',
   maxSolicitudes: 0,
+  dotacionComputable: 0,
+  grupoCobertura: '',
   observaciones: '',
 };
 
-export function normalizeTeletrabajoPuesto(value: string): string {
-  return value
+export function normalizeTeletrabajoPuesto(value: string | null | undefined): string {
+  return (value ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
@@ -56,6 +64,8 @@ export function normalizeTeletrabajoPuestoDraft(
   return {
     puesto: draft.puesto.trim(),
     maxSolicitudes: normalizePresencialidadMinima(draft.maxSolicitudes),
+    dotacionComputable: normalizePresencialidadMinima(draft.dotacionComputable),
+    grupoCobertura: draft.grupoCobertura.trim(),
     observaciones: draft.observaciones.trim(),
   };
 }
@@ -80,6 +90,8 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
   const normalizedHeaders = headers.map(normalizeHeader);
   const puestoIndex = normalizedHeaders.findIndex((header) => PUESTO_HEADERS.has(header));
   const maxIndex = normalizedHeaders.findIndex((header) => MAX_HEADERS.has(header));
+  const dotacionIndex = normalizedHeaders.findIndex((header) => DOTACION_HEADERS.has(header));
+  const grupoCoberturaIndex = normalizedHeaders.findIndex((header) => GRUPO_COBERTURA_HEADERS.has(header));
   const teletrabajoIndex = normalizedHeaders.findIndex((header) => TELETRABAJO_HEADERS.has(header));
   const observacionesIndex = normalizedHeaders.findIndex((header) => OBSERVACIONES_HEADERS.has(header));
 
@@ -102,9 +114,11 @@ export function rowsToTeletrabajoPuestoDrafts(rows: string[][]): TeletrabajoPues
     }
 
     const maxSolicitudes = maxIndex >= 0 ? parsePresencialidadMinima(row[maxIndex]) : 0;
+    const dotacionComputable = dotacionIndex >= 0 ? parsePresencialidadMinima(row[dotacionIndex]) : 0;
+    const grupoCobertura = grupoCoberturaIndex >= 0 ? row[grupoCoberturaIndex]?.trim() ?? '' : '';
     const observaciones = observacionesIndex >= 0 ? row[observacionesIndex]?.trim() ?? '' : '';
     draftsByPuesto.set(normalizeTeletrabajoPuesto(puesto),
-      normalizeTeletrabajoPuestoDraft({ puesto, maxSolicitudes, observaciones }),
+      normalizeTeletrabajoPuestoDraft({ puesto, maxSolicitudes, dotacionComputable, grupoCobertura, observaciones }),
     );
   });
 
