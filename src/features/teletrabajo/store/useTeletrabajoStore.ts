@@ -9,11 +9,19 @@ import {
   type ImportHistoricoTeletrabajoResult,
 } from '../domain/importEncuesta';
 import {
+  isGrupoCobertura,
+  normalizeGrupoCoberturaDraft,
+  normalizeGrupoCoberturaNombre,
+  type GrupoCobertura,
+  type GrupoCoberturaDraft,
+} from '../domain/gruposCobertura';
+import {
   importTeletrabajoPuestosFromFile,
   normalizeTeletrabajoPuesto,
   normalizeTeletrabajoPuestoDraft,
   type TeletrabajoPuesto,
   type TeletrabajoPuestoDraft,
+  type TeletrabajoPuestoImportRow,
 } from '../domain/puestosTeletrabajo';
 import {
   clearPersistenceBusy,
@@ -50,8 +58,10 @@ import {
 
 const STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
 const PUESTOS_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos';
+const GRUPOS_COBERTURA_STORAGE_KEY = 'traccion.v1.teletrabajo.gruposCobertura';
 
 let latestPuestosTeletrabajoUpdatedAtById = new Map<string, string>();
+let latestGruposCoberturaUpdatedAtById = new Map<string, string>();
 
 const TELETRABAJO_AUDIT_LABELS = {
   empleado: 'Empleado',
@@ -156,6 +166,7 @@ interface PendingHistoricoImport extends ImportHistoricoTeletrabajoResult {
 interface TeletrabajoStateStore {
   solicitudes: TeletrabajoSolicitud[];
   puestosTeletrabajo: TeletrabajoPuesto[];
+  gruposCobertura: GrupoCobertura[];
   selectedSolicitudId: string;
   filters: TeletrabajoFilters;
   pendingHistoricoImport: PendingHistoricoImport | null;
@@ -187,7 +198,11 @@ interface TeletrabajoStateStore {
   updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
   removePuestoTeletrabajo: (id: string) => void;
   importPuestosTeletrabajo: (file: File) => Promise<number>;
-  importPuestosTeletrabajoDrafts: (drafts: readonly Partial<TeletrabajoPuestoDraft>[]) => number;
+  importPuestosTeletrabajoDrafts: (rows: readonly TeletrabajoPuestoImportRow[]) => number;
+  createGrupoCobertura: (draft: GrupoCoberturaDraft) => string;
+  updateGrupoCobertura: (id: string, draft: GrupoCoberturaDraft) => void;
+  removeGrupoCobertura: (id: string) => void;
+  setPuestoGrupoCobertura: (puestoId: string, grupoCoberturaId: string | null) => void;
   remove: (id: string) => void;
   removeWithConcurrencyCheck: (
     id: string,
@@ -293,7 +308,7 @@ function normalizePuestoTeletrabajo(puesto: TeletrabajoPuesto): TeletrabajoPuest
       puesto: puesto.puesto,
       maxSolicitudes: puesto.maxSolicitudes,
       dotacionComputable: puesto.dotacionComputable ?? 0,
-      grupoCobertura: puesto.grupoCobertura ?? '',
+      grupoCoberturaId: puesto.grupoCoberturaId ?? null,
       observaciones: puesto.observaciones ?? '',
     }),
     createdAt,
@@ -302,21 +317,115 @@ function normalizePuestoTeletrabajo(puesto: TeletrabajoPuesto): TeletrabajoPuest
   };
 }
 
-function readPuestosTeletrabajo(): TeletrabajoPuesto[] {
+/**
+ * Lee el campo de texto libre `grupoCobertura` que pudiera venir de un
+ * registro legacy guardado antes de la migración a Grupos de cobertura como
+ * entidad propia. Los registros nuevos no tienen esta propiedad.
+ */
+function readLegacyGrupoCoberturaNombre(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return '';
+  }
+  const candidate = (value as { grupoCobertura?: unknown }).grupoCobertura;
+  return typeof candidate === 'string' ? candidate.trim() : '';
+}
+
+/**
+ * Migra, una sola vez, los puestos que aún tengan el antiguo campo de texto
+ * libre `grupoCobertura` (de instalaciones previas a esta versión) creando un
+ * Grupo de cobertura real por cada nombre de texto distinto encontrado, con
+ * la presencialidad mínima igual al máximo declarado entre esos puestos
+ * (igual que calculaba antes el propio código), y enlazando cada puesto al
+ * grupo resultante mediante grupoCoberturaId.
+ */
+function migrateLegacyGruposCobertura(
+  rawPuestos: unknown[],
+  puestos: TeletrabajoPuesto[],
+  gruposExistentes: GrupoCobertura[],
+): { puestos: TeletrabajoPuesto[]; gruposCobertura: GrupoCobertura[]; migrated: boolean } {
+  const legacyNombreById = new Map<string, string>();
+  rawPuestos.forEach((raw) => {
+    if (!raw || typeof raw !== 'object') {
+      return;
+    }
+    const id = (raw as { id?: unknown }).id;
+    const nombre = readLegacyGrupoCoberturaNombre(raw);
+    if (typeof id === 'string' && nombre) {
+      legacyNombreById.set(id, nombre);
+    }
+  });
+
+  if (legacyNombreById.size === 0) {
+    return { puestos, gruposCobertura: gruposExistentes, migrated: false };
+  }
+
+  const now = new Date().toISOString();
+  const gruposByNombreKey = new Map<string, GrupoCobertura>(
+    gruposExistentes
+      .filter((grupo) => !grupo.deletedAt)
+      .map((grupo) => [normalizeGrupoCoberturaNombre(grupo.nombre), grupo]),
+  );
+  const maximaPorNombreKey = new Map<string, number>();
+
+  puestos.forEach((puesto) => {
+    const nombre = legacyNombreById.get(puesto.id);
+    if (!nombre) {
+      return;
+    }
+    const key = normalizeGrupoCoberturaNombre(nombre);
+    maximaPorNombreKey.set(key, Math.max(maximaPorNombreKey.get(key) ?? 0, puesto.maxSolicitudes ?? 0));
+  });
+
+  const gruposNuevos: GrupoCobertura[] = [];
+  const puestosMigrados = puestos.map((puesto) => {
+    const nombre = legacyNombreById.get(puesto.id);
+    if (!nombre) {
+      return puesto;
+    }
+
+    const key = normalizeGrupoCoberturaNombre(nombre);
+    let grupo = gruposByNombreKey.get(key);
+    if (!grupo) {
+      grupo = {
+        id: createGrupoCoberturaId(),
+        nombre,
+        presencialidadMinima: maximaPorNombreKey.get(key) ?? 0,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      gruposByNombreKey.set(key, grupo);
+      gruposNuevos.push(grupo);
+    }
+
+    return { ...puesto, grupoCoberturaId: grupo.id };
+  });
+
+  return {
+    puestos: puestosMigrados,
+    gruposCobertura: [...gruposExistentes, ...gruposNuevos],
+    migrated: true,
+  };
+}
+
+function readPuestosTeletrabajo(): { puestos: TeletrabajoPuesto[]; rawRecords: unknown[] } {
   const stored = readStorageItem(PUESTOS_STORAGE_KEY);
   if (!stored) {
-    return [];
+    return { puestos: [], rawRecords: [] };
   }
 
   const parsed: unknown = JSON.parse(stored);
   if (!Array.isArray(parsed)) {
-    return [];
+    return { puestos: [], rawRecords: [] };
   }
 
-  return parsed.filter(isTeletrabajoPuesto).map(normalizePuestoTeletrabajo);
+  return {
+    puestos: parsed.filter(isTeletrabajoPuesto).map(normalizePuestoTeletrabajo),
+    rawRecords: parsed,
+  };
 }
 
-async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] | null> {
+async function readPuestosTeletrabajoFromSqlite(): Promise<{ puestos: TeletrabajoPuesto[]; rawRecords: unknown[] } | null> {
   const loader = window.traccion?.loadTeletrabajoPuestoRecords;
   if (!loader) {
     return null;
@@ -331,10 +440,12 @@ async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] |
     snapshot.records.map((record) => [record.id, record.updatedAt]),
   );
 
+  const rawRecords: unknown[] = [];
   const puestos = snapshot.records
     .map((record): TeletrabajoPuesto | null => {
       try {
         const parsed: unknown = JSON.parse(record.value);
+        rawRecords.push(parsed);
         return isTeletrabajoPuesto(parsed) ? normalizePuestoTeletrabajo(parsed) : null;
       } catch {
         return null;
@@ -342,7 +453,7 @@ async function readPuestosTeletrabajoFromSqlite(): Promise<TeletrabajoPuesto[] |
     })
     .filter((puesto): puesto is TeletrabajoPuesto => Boolean(puesto));
 
-  return puestos;
+  return { puestos, rawRecords };
 }
 
 async function persistPuestosTeletrabajoInSqlite(
@@ -384,6 +495,109 @@ function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): voi
 
 function createPuestoTeletrabajoId(): string {
   return `teletrabajo-puesto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createGrupoCoberturaId(): string {
+  return `teletrabajo-grupo-cobertura-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeGrupoCobertura(grupo: GrupoCobertura): GrupoCobertura {
+  const createdAt = grupo.createdAt ?? new Date().toISOString();
+  return {
+    id: grupo.id,
+    ...normalizeGrupoCoberturaDraft({
+      nombre: grupo.nombre,
+      presencialidadMinima: grupo.presencialidadMinima,
+    }),
+    createdAt,
+    updatedAt: grupo.updatedAt ?? createdAt,
+    deletedAt: grupo.deletedAt ?? null,
+  };
+}
+
+function readGruposCobertura(): GrupoCobertura[] {
+  const stored = readStorageItem(GRUPOS_COBERTURA_STORAGE_KEY);
+  if (!stored) {
+    return [];
+  }
+
+  const parsed: unknown = JSON.parse(stored);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed.filter(isGrupoCobertura).map(normalizeGrupoCobertura);
+}
+
+async function readGruposCoberturaFromSqlite(): Promise<GrupoCobertura[] | null> {
+  const loader = window.traccion?.loadTeletrabajoGrupoCoberturaRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await loader();
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  latestGruposCoberturaUpdatedAtById = new Map(
+    snapshot.records.map((record) => [record.id, record.updatedAt]),
+  );
+
+  return snapshot.records
+    .map((record): GrupoCobertura | null => {
+      try {
+        const parsed: unknown = JSON.parse(record.value);
+        return isGrupoCobertura(parsed) ? normalizeGrupoCobertura(parsed) : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((grupo): grupo is GrupoCobertura => Boolean(grupo));
+}
+
+async function persistGruposCoberturaInSqlite(gruposCobertura: GrupoCobertura[]): Promise<boolean> {
+  const saver = window.traccion?.saveTeletrabajoGrupoCoberturaRecordIfUnchanged;
+  if (!saver) {
+    return false;
+  }
+
+  for (const grupo of gruposCobertura) {
+    const result = await saver({
+      id: grupo.id,
+      value: JSON.stringify(grupo),
+      expectedUpdatedAt: latestGruposCoberturaUpdatedAtById.get(grupo.id) ?? null,
+    });
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    if (result.currentUpdatedAt) {
+      latestGruposCoberturaUpdatedAtById.set(grupo.id, result.currentUpdatedAt);
+    }
+  }
+
+  return true;
+}
+
+function persistGruposCobertura(gruposCobertura: GrupoCobertura[]): void {
+  writeStorageItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(gruposCobertura));
+
+  void (async () => {
+    try {
+      await persistGruposCoberturaInSqlite(gruposCobertura);
+    } catch (error) {
+      console.warn('Grupos de cobertura no guardados en SQLite.', error);
+    }
+  })();
+}
+
+async function loadGruposCoberturaFromSqliteOrStorage(): Promise<GrupoCobertura[]> {
+  const sqliteGrupos = await readGruposCoberturaFromSqlite();
+  return sqliteGrupos ?? readGruposCobertura();
+}
+
+function areGruposCoberturaEquivalent(left: GrupoCobertura[], right: GrupoCobertura[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function upsertPuestosTeletrabajo(
@@ -536,11 +750,16 @@ async function withTeletrabajoBusy<T>(message: string, operation: () => Promise<
 function buildTeletrabajoState(
   solicitudes: TeletrabajoSolicitud[],
   puestosTeletrabajo: TeletrabajoPuesto[],
+  gruposCobertura: GrupoCobertura[],
   selectedSolicitudId?: string,
-): Pick<TeletrabajoStateStore, 'solicitudes' | 'puestosTeletrabajo' | 'selectedSolicitudId'> {
+): Pick<
+  TeletrabajoStateStore,
+  'solicitudes' | 'puestosTeletrabajo' | 'gruposCobertura' | 'selectedSolicitudId'
+> {
   return {
     solicitudes,
     puestosTeletrabajo,
+    gruposCobertura,
     selectedSolicitudId:
       selectedSolicitudId && solicitudes.some((solicitud) => solicitud.id === selectedSolicitudId)
         ? selectedSolicitudId
@@ -573,9 +792,83 @@ function arePuestosTeletrabajoEquivalent(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-async function loadPuestosTeletrabajoFromSqliteOrStorage(): Promise<TeletrabajoPuesto[]> {
-  const sqlitePuestos = await readPuestosTeletrabajoFromSqlite();
-  return sqlitePuestos ?? readPuestosTeletrabajo();
+/**
+ * Carga puestos y grupos de cobertura juntos y, si encuentra puestos con el
+ * antiguo campo de texto libre `grupoCobertura` sin migrar todavía, crea los
+ * grupos correspondientes y persiste tanto los puestos enlazados como los
+ * grupos nuevos. Se ejecuta tanto en el arranque (load) como en cada
+ * recarga (reloadFromStorage) pero es una operación idempotente: una vez
+ * migrado un puesto, ya no vuelve a tener el campo legacy en el registro guardado.
+ */
+async function loadPuestosYGruposConMigracion(): Promise<{
+  puestos: TeletrabajoPuesto[];
+  gruposCobertura: GrupoCobertura[];
+}> {
+  const [puestosResult, gruposCobertura] = await Promise.all([
+    readPuestosTeletrabajoFromSqlite().then((result) => result ?? readPuestosTeletrabajo()),
+    loadGruposCoberturaFromSqliteOrStorage(),
+  ]);
+
+  const migrated = migrateLegacyGruposCobertura(
+    puestosResult.rawRecords,
+    puestosResult.puestos,
+    gruposCobertura,
+  );
+
+  if (migrated.migrated) {
+    const gruposNuevosCount = migrated.gruposCobertura.length - gruposCobertura.length;
+    persistGruposCobertura(migrated.gruposCobertura);
+    persistPuestosTeletrabajo(migrated.puestos);
+    console.warn(
+      `Migrados ${gruposNuevosCount} grupo(s) de cobertura desde el campo de texto libre legacy.`,
+    );
+  }
+
+  return { puestos: migrated.puestos, gruposCobertura: migrated.gruposCobertura };
+}
+
+/**
+ * Resuelve una lista de nombres de grupo de cobertura (tal como vienen del
+ * fichero importado) a ids de grupos existentes, creando un grupo nuevo (con
+ * presencialidad mínima 0, a completar luego en el modal de grupos) por cada
+ * nombre que no coincida con ninguno ya dado de alta.
+ */
+function resolveGrupoCoberturaNombresToIds(
+  nombres: readonly string[],
+  gruposExistentes: GrupoCobertura[],
+): { gruposCobertura: GrupoCobertura[]; idByNombreKey: Map<string, string> } {
+  const now = new Date().toISOString();
+  const gruposByNombreKey = new Map<string, GrupoCobertura>(
+    gruposExistentes
+      .filter((grupo) => !grupo.deletedAt)
+      .map((grupo) => [normalizeGrupoCoberturaNombre(grupo.nombre), grupo]),
+  );
+  const idByNombreKey = new Map<string, string>();
+  const gruposNuevos: GrupoCobertura[] = [];
+
+  nombres.forEach((nombre) => {
+    const trimmed = (nombre ?? '').trim();
+    if (!trimmed) {
+      return;
+    }
+    const key = normalizeGrupoCoberturaNombre(trimmed);
+    let grupo = gruposByNombreKey.get(key);
+    if (!grupo) {
+      grupo = {
+        id: createGrupoCoberturaId(),
+        nombre: trimmed,
+        presencialidadMinima: 0,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      gruposByNombreKey.set(key, grupo);
+      gruposNuevos.push(grupo);
+    }
+    idByNombreKey.set(key, grupo.id);
+  });
+
+  return { gruposCobertura: [...gruposExistentes, ...gruposNuevos], idByNombreKey };
 }
 
 function logTeletrabajoPersistenceError(action: string, error: unknown): void {
@@ -585,28 +878,34 @@ function logTeletrabajoPersistenceError(action: string, error: unknown): void {
 export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => ({
   solicitudes: [],
   puestosTeletrabajo: [],
+  gruposCobertura: [],
   selectedSolicitudId: '',
   filters: EMPTY_TELETRABAJO_FILTERS,
   pendingHistoricoImport: null,
   load: () => {
     const solicitudes = readSolicitudes();
-    const puestosTeletrabajo = readPuestosTeletrabajo();
-    set(buildTeletrabajoState(solicitudes, puestosTeletrabajo));
-    void readPuestosTeletrabajoFromSqlite()
-      .then((sqlitePuestos) => {
-        if (sqlitePuestos) {
-          set((state) =>
-            buildTeletrabajoState(state.solicitudes, sqlitePuestos, state.selectedSolicitudId),
-          );
-        }
+    const puestosTeletrabajo = readPuestosTeletrabajo().puestos;
+    const gruposCobertura = readGruposCobertura();
+    set(buildTeletrabajoState(solicitudes, puestosTeletrabajo, gruposCobertura));
+    void loadPuestosYGruposConMigracion()
+      .then(({ puestos, gruposCobertura: nextGruposCobertura }) => {
+        set((state) =>
+          buildTeletrabajoState(
+            state.solicitudes,
+            puestos,
+            nextGruposCobertura,
+            state.selectedSolicitudId,
+          ),
+        );
       })
-      .catch((error) => console.warn('Puestos teletrabajables no cargados desde SQLite.', error));
+      .catch((error) => console.warn('Puestos/grupos de cobertura no cargados desde SQLite.', error));
     void loadSolicitudesFromSqliteOrStorage()
       .then((nextSolicitudes) =>
         set((state) =>
           buildTeletrabajoState(
             nextSolicitudes,
             state.puestosTeletrabajo,
+            state.gruposCobertura,
             state.selectedSolicitudId,
           ),
         ),
@@ -614,11 +913,8 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       .catch((error) => logTeletrabajoPersistenceError('loadTeletrabajo', error));
   },
   reloadFromStorage: () => {
-    void Promise.all([
-      loadSolicitudesFromSqliteOrStorage(),
-      loadPuestosTeletrabajoFromSqliteOrStorage(),
-    ])
-      .then(([nextSolicitudes, nextPuestosTeletrabajo]) => {
+    void Promise.all([loadSolicitudesFromSqliteOrStorage(), loadPuestosYGruposConMigracion()])
+      .then(([nextSolicitudes, { puestos: nextPuestosTeletrabajo, gruposCobertura: nextGruposCobertura }]) => {
         set((state) => {
           const hasSolicitudesChanged = !areSolicitudesEquivalent(
             state.solicitudes,
@@ -628,14 +924,19 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             state.puestosTeletrabajo,
             nextPuestosTeletrabajo,
           );
+          const hasGruposChanged = !areGruposCoberturaEquivalent(
+            state.gruposCobertura,
+            nextGruposCobertura,
+          );
 
-          if (!hasSolicitudesChanged && !hasPuestosChanged) {
+          if (!hasSolicitudesChanged && !hasPuestosChanged && !hasGruposChanged) {
             return state;
           }
 
           return buildTeletrabajoState(
             nextSolicitudes,
             nextPuestosTeletrabajo,
+            nextGruposCobertura,
             state.selectedSolicitudId,
           );
         });
@@ -1083,25 +1384,104 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     });
   },
   importPuestosTeletrabajo: async (file) => {
-    const drafts = await importTeletrabajoPuestosFromFile(file);
+    const rows = await importTeletrabajoPuestosFromFile(file);
     set((state) => {
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, drafts);
+      const { gruposCobertura, idByNombreKey } = resolveGrupoCoberturaNombresToIds(
+        rows.map((row) => row.grupoCoberturaNombre),
+        state.gruposCobertura,
+      );
+      const draftsConGrupo = rows.map((row) => ({
+        ...row.draft,
+        grupoCoberturaId:
+          idByNombreKey.get(normalizeGrupoCoberturaNombre(row.grupoCoberturaNombre)) ?? null,
+      }));
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, draftsConGrupo);
       persistPuestosTeletrabajo(puestosTeletrabajo);
-      return { puestosTeletrabajo };
+      if (gruposCobertura !== state.gruposCobertura) {
+        persistGruposCobertura(gruposCobertura);
+      }
+      return { puestosTeletrabajo, gruposCobertura };
     });
-    return drafts.length;
+    return rows.length;
   },
-  importPuestosTeletrabajoDrafts: (drafts) => {
-    const normalizedDrafts = drafts.map((draft) => normalizeTeletrabajoPuestoDraft(draft));
+  importPuestosTeletrabajoDrafts: (rows) => {
     set((state) => {
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(
-        state.puestosTeletrabajo,
-        normalizedDrafts,
+      const { gruposCobertura, idByNombreKey } = resolveGrupoCoberturaNombresToIds(
+        rows.map((row) => row.grupoCoberturaNombre),
+        state.gruposCobertura,
+      );
+      const normalizedDrafts = rows.map((row) =>
+        normalizeTeletrabajoPuestoDraft({
+          ...row.draft,
+          grupoCoberturaId:
+            idByNombreKey.get(normalizeGrupoCoberturaNombre(row.grupoCoberturaNombre)) ?? null,
+        }),
+      );
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, normalizedDrafts);
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      if (gruposCobertura !== state.gruposCobertura) {
+        persistGruposCobertura(gruposCobertura);
+      }
+      return { puestosTeletrabajo, gruposCobertura };
+    });
+    return rows.filter((row) => row.draft.puesto.trim()).length;
+  },
+  createGrupoCobertura: (draft) => {
+    const id = createGrupoCoberturaId();
+    set((state) => {
+      const now = new Date().toISOString();
+      const normalizedDraft = normalizeGrupoCoberturaDraft(draft);
+      const gruposCobertura = [
+        ...state.gruposCobertura,
+        { id, ...normalizedDraft, createdAt: now, updatedAt: now, deletedAt: null },
+      ].sort((first, second) =>
+        first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
+      );
+      persistGruposCobertura(gruposCobertura);
+      return { gruposCobertura };
+    });
+    return id;
+  },
+  updateGrupoCobertura: (id, draft) => {
+    set((state) => {
+      const normalizedDraft = normalizeGrupoCoberturaDraft(draft);
+      const now = new Date().toISOString();
+      const gruposCobertura = state.gruposCobertura
+        .map((grupo) => (grupo.id === id ? { ...grupo, ...normalizedDraft, updatedAt: now } : grupo))
+        .sort((first, second) =>
+          first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
+        );
+      persistGruposCobertura(gruposCobertura);
+      return { gruposCobertura };
+    });
+  },
+  removeGrupoCobertura: (id) => {
+    set((state) => {
+      const now = new Date().toISOString();
+      const gruposCobertura = state.gruposCobertura.map((grupo) =>
+        grupo.id === id ? { ...grupo, deletedAt: now, updatedAt: now } : grupo,
+      );
+      // Los puestos que estaban en el grupo eliminado quedan sin grupo (cobertura individual),
+      // en vez de quedar enlazados a un grupo borrado de forma invisible.
+      const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
+        puesto.grupoCoberturaId === id
+          ? { ...puesto, grupoCoberturaId: null, updatedAt: now }
+          : puesto,
+      );
+      persistGruposCobertura(gruposCobertura);
+      persistPuestosTeletrabajo(puestosTeletrabajo);
+      return { gruposCobertura, puestosTeletrabajo };
+    });
+  },
+  setPuestoGrupoCobertura: (puestoId, grupoCoberturaId) => {
+    set((state) => {
+      const now = new Date().toISOString();
+      const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
+        puesto.id === puestoId ? { ...puesto, grupoCoberturaId, updatedAt: now } : puesto,
       );
       persistPuestosTeletrabajo(puestosTeletrabajo);
       return { puestosTeletrabajo };
     });
-    return normalizedDrafts.filter((draft) => draft.puesto.trim()).length;
   },
   remove: (id) => {
     set((state) => {

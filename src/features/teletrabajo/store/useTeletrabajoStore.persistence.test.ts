@@ -43,6 +43,7 @@ describe('useTeletrabajoStore persistence', () => {
     useTeletrabajoStore.setState({
       solicitudes: [],
       puestosTeletrabajo: [],
+      gruposCobertura: [],
       selectedSolicitudId: '',
       filters: EMPTY_TELETRABAJO_FILTERS,
     });
@@ -140,9 +141,18 @@ describe('useTeletrabajoStore persistence', () => {
 
   it('importa puestos por borrador deduplicando por puesto normalizado', () => {
     const count = useTeletrabajoStore.getState().importPuestosTeletrabajoDrafts([
-      { puesto: ' Técnico RRLL ', maxSolicitudes: 2, observaciones: 'Inicial' },
-      { puesto: 'técnico rrll', maxSolicitudes: 3, observaciones: 'Actualizado' },
-      { puesto: 'Jefatura', maxSolicitudes: 1, observaciones: '' },
+      {
+        draft: { puesto: ' Técnico RRLL ', maxSolicitudes: 2, dotacionComputable: 0, grupoCoberturaId: null, observaciones: 'Inicial' },
+        grupoCoberturaNombre: '',
+      },
+      {
+        draft: { puesto: 'técnico rrll', maxSolicitudes: 3, dotacionComputable: 0, grupoCoberturaId: null, observaciones: 'Actualizado' },
+        grupoCoberturaNombre: '',
+      },
+      {
+        draft: { puesto: 'Jefatura', maxSolicitudes: 1, dotacionComputable: 0, grupoCoberturaId: null, observaciones: '' },
+        grupoCoberturaNombre: '',
+      },
     ]);
 
     expect(count).toBe(3);
