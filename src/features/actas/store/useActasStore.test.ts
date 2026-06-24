@@ -146,26 +146,29 @@ describe('useActasStore', () => {
     expect(useActasStore.getState().actas[0].observaciones).toContain('1. Punto tratado');
   });
 
-  it('gestiona tipos de acta evitando duplicados y eliminaciones con actas asociadas', () => {
+  it('gestiona tipos de acta evitando duplicados y eliminaciones con actas asociadas', async () => {
     useActasStore.getState().load();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
-    expect(useActasStore.getState().createActaType('  Comité  ').ok).toBe(false);
-    expect(useActasStore.getState().createActaType('Mesa Técnica').ok).toBe(true);
+    expect((await useActasStore.getState().createActaType('  Comité  ')).ok).toBe(false);
+    expect((await useActasStore.getState().createActaType('Mesa Técnica')).ok).toBe(true);
     expect(useActasStore.getState().actaTypes.map((type) => type.nombre)).toContain('Mesa Técnica');
 
     const type = useActasStore.getState().actaTypes.find((item) => item.nombre === 'Mesa Técnica');
     expect(type).toBeDefined();
     if (!type) return;
 
-    useActasStore.getState().toggleActaType(type.id);
+    await useActasStore.getState().toggleActaType(type.id);
     expect(useActasStore.getState().actaTypes.find((item) => item.id === type.id)?.disabled).toBe(true);
-    expect(useActasStore.getState().removeActaType(type.id).ok).toBe(true);
+    expect((await useActasStore.getState().removeActaType(type.id)).ok).toBe(true);
     expect(window.localStorage.getItem(ACTA_TYPES_STORAGE_KEY)).toContain('Comité');
 
     useActasStore.getState().create(draft({ tipo: 'Comité' }));
     const comiteType = useActasStore.getState().actaTypes.find((item) => item.nombre === 'Comité');
     expect(comiteType).toBeDefined();
     if (!comiteType) return;
-    expect(useActasStore.getState().removeActaType(comiteType.id)).toMatchObject({ ok: false });
+    expect(await useActasStore.getState().removeActaType(comiteType.id)).toMatchObject({ ok: false });
   });
 });

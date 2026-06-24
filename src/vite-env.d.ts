@@ -390,6 +390,15 @@ interface TraccionCriteriosRrllRecordsSnapshot {
 
 type TraccionConditionalCriterioRrllRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionActaTypeRecord = TraccionComiteSessionRecord;
+
+interface TraccionActaTypeRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionActaTypeRecord[];
+}
+
+type TraccionConditionalActaTypeRecord = TraccionConditionalComiteSessionRecord;
+
 type TraccionEspecialRecipientRecord = TraccionComiteSessionRecord;
 
 interface TraccionEspecialRecipientRecordsSnapshot {
@@ -518,6 +527,13 @@ interface TraccionApi {
   ) => Promise<TraccionConditionalTaskSaveResult>;
   saveCriteriosRrllRecordsIfUnchanged?: (
     records: TraccionConditionalCriterioRrllRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
+  loadActaTypeRecords?: () => Promise<TraccionActaTypeRecordsSnapshot>;
+  saveActaTypeRecordIfUnchanged?: (
+    record: TraccionConditionalActaTypeRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveActaTypeRecordsIfUnchanged?: (
+    records: TraccionConditionalActaTypeRecord[],
   ) => Promise<TraccionBatchSaveResult>;
   loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged?: (

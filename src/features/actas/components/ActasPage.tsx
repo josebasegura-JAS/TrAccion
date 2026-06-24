@@ -177,7 +177,7 @@ export function ActasPage() {
   }, [actas]);
 
   const saveNewActaType = async () => {
-    const result = createActaType(newActaTypeName);
+    const result = await createActaType(newActaTypeName);
     if (!result.ok) {
       await alert(result.message ?? 'No se ha podido crear el tipo de acta.', { type: 'error' });
       return;
@@ -186,12 +186,19 @@ export function ActasPage() {
   };
 
   const deleteActaType = async (typeId: string) => {
-    const result = removeActaType(typeId);
+    const result = await removeActaType(typeId);
     if (!result.ok) {
       await alert(result.message ?? 'No se ha podido eliminar el tipo de acta.', { type: 'error' });
       return;
     }
     setPendingDeleteActaTypeId(null);
+  };
+
+  const toggleActaTypeWithFeedback = async (typeId: string) => {
+    const result = await toggleActaType(typeId);
+    if (!result.ok) {
+      await alert(result.message ?? 'No se ha podido actualizar el tipo de acta.', { type: 'error' });
+    }
   };
 
   const deleteActa = useCallback(
@@ -1021,7 +1028,7 @@ export function ActasPage() {
                       </span>
                       <button
                         className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                        onClick={() => toggleActaType(type.id)}
+                        onClick={() => void toggleActaTypeWithFeedback(type.id)}
                         type="button"
                       >
                         {type.disabled ? 'Habilitar' : 'Deshabilitar'}

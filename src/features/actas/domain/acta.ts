@@ -20,6 +20,7 @@ export interface ActaTypeDefinition {
   disabled: boolean;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 }
 
 export interface ActaAlegacion {
@@ -99,6 +100,7 @@ export function createDefaultActaTypes(): ActaTypeDefinition[] {
     disabled: false,
     createdAt: now,
     updatedAt: now,
+    deletedAt: null,
   }));
 }
 

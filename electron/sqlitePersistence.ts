@@ -48,7 +48,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 12;
+const CURRENT_SCHEMA_VERSION = 13;
 const LOCK_TTL_MS = 30 * 1000;
 const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
@@ -358,6 +358,7 @@ let tasksMigrationDone = false;
 let comiteSessionsMigrationDone = false;
 let paritariaSessionsMigrationDone = false;
 let actasMigrationDone = false;
+let actaTypesMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
@@ -1752,6 +1753,28 @@ function migrateToVersion12(db: Database): void {
   }
 }
 
+function migrateToVersion13(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS acta_type_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_acta_type_records_updated_at ON acta_type_records(updated_at);
+  `);
+
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 13) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      13,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1765,6 +1788,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion10(db);
   migrateToVersion11(db);
   migrateToVersion12(db);
+  migrateToVersion13(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -4493,6 +4517,16 @@ const criteriosRrllRepository = createJsonModuleRepository(
   },
 );
 
+const actaTypesRepository = createJsonModuleRepository(
+  'acta_type_records',
+  'traccion.v1.actas.types',
+  'Tipo de acta',
+  () => actaTypesMigrationDone,
+  (value) => {
+    actaTypesMigrationDone = value;
+  },
+);
+
 const especialesRecipientRepository = createJsonModuleRepository(
   'especiales_recipient_records',
   'rrll_especiales_destinatarios',
@@ -4591,6 +4625,20 @@ export function saveCriteriosRrllRecordsIfUnchanged(
   records: ConditionalJsonRecord[],
 ): Promise<JsonRecordBatchSaveResult> {
   return criteriosRrllRepository.saveManyIfUnchanged(records);
+}
+
+export function loadActaTypeRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return actaTypesRepository.loadSnapshot();
+}
+
+export function saveActaTypeRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
+  return actaTypesRepository.saveIfUnchanged(record);
+}
+
+export function saveActaTypeRecordsIfUnchanged(
+  records: ConditionalJsonRecord[],
+): Promise<JsonRecordBatchSaveResult> {
+  return actaTypesRepository.saveManyIfUnchanged(records);
 }
 
 export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {

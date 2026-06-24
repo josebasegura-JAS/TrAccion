@@ -121,6 +121,17 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }>) => ipcRenderer.invoke('criterios-rrll:save-records-if-unchanged', { records }),
+  loadActaTypeRecords: () => ipcRenderer.invoke('acta-types:load-records'),
+  saveActaTypeRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('acta-types:save-record-if-unchanged', record),
+  saveActaTypeRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('acta-types:save-records-if-unchanged', { records }),
   loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
   savePresupuestosSnapshotIfUnchanged: (snapshot: {
     scenarios: Array<{ id: string; value: string }>;

@@ -15,6 +15,13 @@ import {
   saveActaToSqlite,
 } from './actaSqliteRepository';
 import {
+  deleteActaTypeInSqlite,
+  hasActaTypesSqliteRepository,
+  loadActaTypeRecordsFromSqlite,
+  saveActaTypeToSqlite,
+  saveActaTypesToSqlite,
+} from './actaTypesSqliteRepository';
+import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
   buildActaObservacionesFromSession,
@@ -63,9 +70,9 @@ interface ActasStateStore {
   createFromSessionWithConcurrencyCheck: (
     input: CreateActaFromSessionInput,
   ) => Promise<{ ok: boolean; message: string; recordId?: string }>;
-  createActaType: (nombre: string) => { ok: boolean; message?: string };
-  toggleActaType: (typeId: string) => void;
-  removeActaType: (typeId: string) => { ok: boolean; message?: string };
+  createActaType: (nombre: string) => Promise<{ ok: boolean; message?: string }>;
+  toggleActaType: (typeId: string) => Promise<{ ok: boolean; message?: string }>;
+  removeActaType: (typeId: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
 function createActaId(): string {
@@ -200,6 +207,7 @@ function normalizeActaType(type: ActaTypeDefinition): ActaTypeDefinition {
     disabled: type.disabled,
     createdAt,
     updatedAt: typeof type.updatedAt === 'string' ? type.updatedAt : createdAt,
+    deletedAt: typeof type.deletedAt === 'string' ? type.deletedAt : null,
   };
 }
 
@@ -271,6 +279,7 @@ function readActaTypes(actas: Acta[]): ActaTypeDefinition[] {
     disabled: false,
     createdAt: now,
     updatedAt: now,
+    deletedAt: null,
   }));
   const types = dedupeActaTypes([...createDefaultActaTypes(), ...storedTypes, ...typesFromActas]);
 
@@ -349,17 +358,95 @@ function loadActasState(
   return buildActasState(readActas(), includeHistorical);
 }
 
+// Mapa en memoria id -> updatedAt SQLite, usado para hacer comprobaciones de
+// concurrencia (OCC) al editar/eliminar tipos de acta sin que la UI tenga que
+// gestionar el token de versión explícitamente, igual que el resto del store
+// gestiona expectedUpdatedAt para las propias actas.
+let actaTypeSqliteUpdatedAt = new Map<string, string>();
+
+function updateActaTypeSqliteUpdatedAtMap(types: ActaTypeDefinition[]): void {
+  actaTypeSqliteUpdatedAt = new Map(types.map((type) => [type.id, type.updatedAt]));
+}
+
+/**
+ * Carga los tipos de acta desde SQLite si el repositorio está activo. Si no
+ * hay tipos en SQLite todavía (primer arranque tras esta migración), siembra
+ * la tabla con los tipos calculados desde localStorage/actas existentes en
+ * un único guardado por lotes, para no perder los tipos ya en uso.
+ */
+async function loadActaTypesPreferringSqlite(actas: Acta[]): Promise<ActaTypeDefinition[]> {
+  if (!hasActaTypesSqliteRepository()) {
+    return readActaTypes(actas);
+  }
+
+  const sqliteRecords = await loadActaTypeRecordsFromSqlite();
+  if (sqliteRecords === null) {
+    return readActaTypes(actas);
+  }
+
+  if (sqliteRecords.length > 0) {
+    const sqliteTypes = sqliteRecords
+      .flatMap((record) => {
+        try {
+          return [JSON.parse(record.value) as ActaTypeDefinition];
+        } catch {
+          return [];
+        }
+      })
+      .filter(isStoredActaType)
+      .map(normalizeActaType);
+    updateActaTypeSqliteUpdatedAtMap(sqliteTypes);
+    return dedupeActaTypes(sqliteTypes);
+  }
+
+  // Tabla vacía: siembra inicial desde localStorage/actas existentes.
+  const fallbackTypes = readActaTypes(actas);
+  const seedResult = await saveActaTypesToSqlite(
+    fallbackTypes.map((type) => ({ record: type, expectedUpdatedAt: null })),
+  );
+  if (seedResult?.ok) {
+    const reloadedRecords = await loadActaTypeRecordsFromSqlite();
+    if (reloadedRecords) {
+      const reloadedTypes = reloadedRecords
+        .flatMap((record) => {
+          try {
+            return [JSON.parse(record.value) as ActaTypeDefinition];
+          } catch {
+            return [];
+          }
+        })
+        .filter(isStoredActaType)
+        .map(normalizeActaType);
+      updateActaTypeSqliteUpdatedAtMap(reloadedTypes);
+      return dedupeActaTypes(reloadedTypes);
+    }
+  }
+  return fallbackTypes;
+}
+
+async function buildActasStateWithSqliteTypes(
+  allActas: Acta[],
+  includeHistorical: boolean,
+): Promise<Pick<ActasStateStore, 'actas' | 'actaTypes' | 'hasLoadedHistoricalActas'>> {
+  const actas = includeHistorical ? allActas : allActas.filter(isOpenActa);
+  return {
+    actas: sortActasForState(actas),
+    actaTypes: await loadActaTypesPreferringSqlite(allActas),
+    hasLoadedHistoricalActas: includeHistorical,
+  };
+}
+
 async function loadActasStateFromSqliteOrStorage(
   includeHistorical: boolean,
 ): Promise<Pick<ActasStateStore, 'actas' | 'actaTypes' | 'hasLoadedHistoricalActas'>> {
   if (hasActaSqliteRepository()) {
     const sqliteActas = await loadActasFromSqlite(parseActasSnapshot);
     if (sqliteActas !== null) {
-      return buildActasState(sqliteActas, includeHistorical);
+      return buildActasStateWithSqliteTypes(sqliteActas, includeHistorical);
     }
   }
 
-  return loadActasState(includeHistorical);
+  return buildActasStateWithSqliteTypes(readActas(), includeHistorical);
 }
 
 function logActaPersistenceError(action: string, error: unknown): void {
@@ -785,7 +872,7 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       };
     }
   },
-  createActaType: (nombre) => {
+  createActaType: async (nombre) => {
     const normalizedName = normalizeActaTypeName(nombre);
     if (!normalizedName) {
       return { ok: false, message: 'Indica un nombre de tipo de acta.' };
@@ -798,35 +885,85 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       return { ok: false, message: 'Ya existe un tipo de acta con ese nombre.' };
     }
 
+    const now = new Date().toISOString();
+    const newType: ActaTypeDefinition = {
+      id: createActaTypeId(normalizedName),
+      nombre: normalizedName,
+      disabled: false,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    if (hasActaTypesSqliteRepository()) {
+      try {
+        const saveResult = await saveActaTypeToSqlite(newType, null);
+        if (!saveResult?.ok) {
+          return { ok: false, message: saveResult?.message ?? 'No se ha podido crear el tipo de acta.' };
+        }
+        if (saveResult.currentUpdatedAt) {
+          actaTypeSqliteUpdatedAt.set(newType.id, saveResult.currentUpdatedAt);
+        }
+        set((state) => ({ actaTypes: dedupeActaTypes([...state.actaTypes, newType]) }));
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido crear el tipo de acta.',
+        };
+      }
+    }
+
     set((state) => {
-      const now = new Date().toISOString();
-      const actaTypes = dedupeActaTypes([
-        ...state.actaTypes,
-        {
-          id: createActaTypeId(normalizedName),
-          nombre: normalizedName,
-          disabled: false,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ]);
+      const actaTypes = dedupeActaTypes([...state.actaTypes, newType]);
       persistActaTypes(actaTypes);
       return { actaTypes };
     });
 
     return { ok: true };
   },
-  toggleActaType: (typeId) => {
+  toggleActaType: async (typeId) => {
+    const type = get().actaTypes.find((item) => item.id === typeId);
+    if (!type) {
+      return { ok: false, message: 'No se ha encontrado el tipo de acta.' };
+    }
+
+    const now = new Date().toISOString();
+    const updatedType: ActaTypeDefinition = { ...type, disabled: !type.disabled, updatedAt: now };
+
+    if (hasActaTypesSqliteRepository()) {
+      try {
+        const expectedUpdatedAt = actaTypeSqliteUpdatedAt.get(typeId) ?? null;
+        const saveResult = await saveActaTypeToSqlite(updatedType, expectedUpdatedAt);
+        if (!saveResult?.ok) {
+          return {
+            ok: false,
+            message: saveResult?.message ?? 'Este tipo de acta ha sido modificado por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        if (saveResult.currentUpdatedAt) {
+          actaTypeSqliteUpdatedAt.set(typeId, saveResult.currentUpdatedAt);
+        }
+        set((state) => ({
+          actaTypes: state.actaTypes.map((item) => (item.id === typeId ? updatedType : item)),
+        }));
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido actualizar el tipo de acta.',
+        };
+      }
+    }
+
     set((state) => {
-      const now = new Date().toISOString();
-      const actaTypes = state.actaTypes.map((type) =>
-        type.id === typeId ? { ...type, disabled: !type.disabled, updatedAt: now } : type,
-      );
+      const actaTypes = state.actaTypes.map((item) => (item.id === typeId ? updatedType : item));
       persistActaTypes(actaTypes);
       return { actaTypes };
     });
+    return { ok: true };
   },
-  removeActaType: (typeId) => {
+  removeActaType: async (typeId) => {
     const type = get().actaTypes.find((item) => item.id === typeId);
     if (!type) {
       return { ok: false, message: 'No se ha encontrado el tipo de acta.' };
@@ -840,6 +977,27 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
         ok: false,
         message: 'No se puede eliminar porque tiene actas asociadas. Puedes deshabilitarlo.',
       };
+    }
+
+    if (hasActaTypesSqliteRepository()) {
+      try {
+        const expectedUpdatedAt = actaTypeSqliteUpdatedAt.get(typeId) ?? null;
+        const deleteResult = await deleteActaTypeInSqlite(type, expectedUpdatedAt);
+        if (!deleteResult?.ok) {
+          return {
+            ok: false,
+            message: deleteResult?.message ?? 'Este tipo de acta ha sido modificado por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        actaTypeSqliteUpdatedAt.delete(typeId);
+        set((state) => ({ actaTypes: state.actaTypes.filter((item) => item.id !== typeId) }));
+        return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : 'No se ha podido eliminar el tipo de acta.',
+        };
+      }
     }
 
     set((state) => {
