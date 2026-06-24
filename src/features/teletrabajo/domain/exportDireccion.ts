@@ -87,6 +87,11 @@ function getPresencialidadMinimaGrupo(
   );
 }
 
+/** Mismo formato que semaforo.ts, para que el Excel de Dirección y la app muestren el mismo texto. */
+function pluralPersonas(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function normalizeEmployeeKey(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -200,6 +205,22 @@ export function buildTeletrabajoAssessment({
 
   const coberturaKey = getGrupoCoberturaKey(puesto, puestoKey);
   const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey, gruposById);
+  const diasSolicitados =
+    solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
+
+  // Nº de peticiones activas (mismo periodo, misma cobertura) en cualquiera de
+  // los días solicitados por esta solicitud. Mismo cálculo que semaforo.ts,
+  // para que el Excel de Dirección y la app muestren la misma cifra.
+  const peticionesActivas = Math.max(
+    0,
+    ...diasSolicitados.map(
+      (dia) =>
+        solicitudesByPuestoDiaCount.get(
+          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
+        ) ?? 0,
+    ),
+  );
+
   if (presencialidadMinima > 0) {
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
     const totalPersonasPuesto = dotacionParametrizada > 0
@@ -212,25 +233,48 @@ export function buildTeletrabajoAssessment({
     // Solo importan los días que esta solicitud concreta pide teletrabajar:
     // un conflicto de otro compañero del mismo puesto en un día distinto no
     // debe contagiar el semáforo de esta solicitud. Igual que en semaforo.ts.
-    const diasSolicitados =
-      solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
-    const diasConConflicto = diasSolicitados.filter((dia) => {
-      const solicitudesDia =
-        solicitudesByPuestoDiaCount.get(
-          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
-        ) ?? 0;
-      return solicitudesDia > 0 && totalPersonasPuesto - solicitudesDia < presencialidadMinima;
-    });
+    const conflictos = diasSolicitados
+      .map((dia) => {
+        const solicitudesDia =
+          solicitudesByPuestoDiaCount.get(
+            buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
+          ) ?? 0;
+        const presencialesDia = totalPersonasPuesto - solicitudesDia;
+        return { dia, solicitudesDia, presencialesDia };
+      })
+      .filter(
+        ({ solicitudesDia, presencialesDia }) =>
+          solicitudesDia > 0 && presencialesDia < presencialidadMinima,
+      );
 
-    if (diasConConflicto.length > 0) {
+    if (conflictos.length > 0) {
+      const peorConflicto = conflictos.reduce((peor, actual) =>
+        actual.presencialesDia < peor.presencialesDia ? actual : peor,
+      );
+      const presencialesResultantes = Math.max(peorConflicto.presencialesDia, 0);
+      const personasFaltantes = presencialidadMinima - presencialesResultantes;
+      const diasAfectados = conflictos.map(({ dia }) => dia).join(', ');
+
       return {
         status: 'review',
         cellValue: 'REVISAR',
         rowFillColor: SOFT_YELLOW,
         textColor: SOFT_YELLOW_TEXT,
-        apuntesRrll: `Presencialidad: ${diasConConflicto.join(', ')}`,
+        apuntesRrll:
+          `Revisar presencialidad mínima · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · mín. ${presencialidadMinima} presenciales · ` +
+          `faltan ${pluralPersonas(personasFaltantes, 'persona', 'personas')} (${diasAfectados}).`,
       };
     }
+
+    return {
+      status: 'ok',
+      cellValue: YES,
+      rowFillColor: null,
+      textColor: SOFT_GREEN_TEXT,
+      apuntesRrll:
+        `Sin incidencias · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · mín. ${presencialidadMinima} presenciales` +
+        (puesto.observaciones ? ` · ${puesto.observaciones}` : ''),
+    };
   }
 
   return {
@@ -238,7 +282,9 @@ export function buildTeletrabajoAssessment({
     cellValue: YES,
     rowFillColor: null,
     textColor: SOFT_GREEN_TEXT,
-    apuntesRrll: '',
+    apuntesRrll:
+      `Sin incidencias · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · sin mínimo de presencialidad` +
+      (puesto.observaciones ? ` · ${puesto.observaciones}` : ''),
   };
 }
 
@@ -411,7 +457,7 @@ export async function exportTeletrabajoDireccionToExcel({
     { key: 'anoAnterior', width: 14 },
     { key: 'validacionJefatura', width: 16.18 },
     { key: 'validacionDireccion', width: 38.54 },
-    { key: 'validacionSeptiembre', width: 31.36 },
+    { key: 'validacionSeptiembre', width: 48 },
     { key: 'peticionMartes', width: 8.27 },
     { key: 'peticionMiercoles', width: 8.09 },
     { key: 'peticionJueves', width: 5.63 },

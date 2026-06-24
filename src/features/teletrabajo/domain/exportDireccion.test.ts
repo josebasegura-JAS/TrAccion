@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Employee } from '../../plantilla/domain/employee';
+import type { GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount } from './semaforo';
 import type { TeletrabajoSolicitud } from './solicitud';
@@ -71,6 +72,8 @@ function buildPuesto(overrides: Partial<TeletrabajoPuesto>): TeletrabajoPuesto {
     id: 'puesto-base',
     puesto: 'Administrativo/a',
     maxSolicitudes: 2,
+    dotacionComputable: 0,
+    grupoCoberturaId: null,
     observaciones: '',
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -279,5 +282,136 @@ describe('buildTeletrabajoAssessment — presencialidad mínima en la exportaci�
 
     expect(assessment.status).toBe('blocked');
     expect(assessment.apuntesRrll).toBe('Puesto organizativo');
+  });
+});
+
+describe('buildTeletrabajoAssessment — texto de Apuntes RRLL con peticiones y presencialidad', () => {
+  it('en un caso ok muestra el número de peticiones y la presencialidad mínima, aunque no haya incidencia', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 2 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesById = buildEmployeesById([
+      buildEmployee({ empleado: '100' }),
+      buildEmployee({ empleado: '101' }),
+      buildEmployee({ empleado: '102' }),
+    ]);
+
+    const solicitud = buildSolicitud({ id: 'sol-a', empleado: '100', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const assessment = buildTeletrabajoAssessment({
+      solicitud,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+    });
+
+    expect(assessment.status).toBe('ok');
+    expect(assessment.apuntesRrll).toBe('Sin incidencias · 1 petición · mín. 2 presenciales');
+  });
+
+  it('en un caso de revisión incluye el número de peticiones, la presencialidad mínima y las personas que faltan', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 2 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesById = buildEmployeesById([
+      buildEmployee({ empleado: '100' }),
+      buildEmployee({ empleado: '101' }),
+    ]);
+
+    const solicitudA = buildSolicitud({ id: 'sol-a', empleado: '100', diasTeletrabajo: ['martes'] });
+    const solicitudB = buildSolicitud({ id: 'sol-b', empleado: '101', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitudA, solicitudB]);
+
+    const assessment = buildTeletrabajoAssessment({
+      solicitud: solicitudB,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+    });
+
+    expect(assessment.status).toBe('review');
+    expect(assessment.apuntesRrll).toContain('presencialidad mínima');
+    expect(assessment.apuntesRrll).toContain('mín. 2 presenciales');
+    expect(assessment.apuntesRrll).toContain('falta');
+  });
+
+  it('cuando el puesto no tiene presencialidad mínima, indica igualmente el número de peticiones', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 0 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesById = buildEmployeesById([buildEmployee({ empleado: '100' })]);
+
+    const solicitud = buildSolicitud({ id: 'sol-a', empleado: '100', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const assessment = buildTeletrabajoAssessment({
+      solicitud,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+    });
+
+    expect(assessment.status).toBe('ok');
+    expect(assessment.apuntesRrll).toBe('Sin incidencias · 1 petición · sin mínimo de presencialidad');
+  });
+
+  it('respeta la presencialidad mínima del grupo de cobertura, no la del puesto individual', () => {
+    const grupo: GrupoCobertura = {
+      id: 'grupo-recepcion',
+      nombre: 'Recepción',
+      presencialidadMinima: 2,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+    };
+    const gruposById = new Map([[grupo.id, grupo]]);
+
+    const puestoA = buildPuesto({
+      id: 'puesto-a',
+      puesto: 'Recepcionista turno mañana',
+      maxSolicitudes: 0,
+      dotacionComputable: 1,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestoB = buildPuesto({
+      id: 'puesto-b',
+      puesto: 'Recepcionista turno tarde',
+      maxSolicitudes: 0,
+      dotacionComputable: 1,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestosByKey = buildPuestosByKey([puestoA, puestoB]);
+    const employeesById = buildEmployeesById([
+      buildEmployee({ empleado: '100', puestoOrganizativo: 'Recepcionista turno mañana' }),
+      buildEmployee({ empleado: '101', puestoOrganizativo: 'Recepcionista turno tarde' }),
+    ]);
+
+    const solicitudA = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      puestoOrganizativo: 'Recepcionista turno mañana',
+      diasTeletrabajo: ['martes'],
+    });
+    const solicitudB = buildSolicitud({
+      id: 'sol-b',
+      empleado: '101',
+      puestoOrganizativo: 'Recepcionista turno tarde',
+      diasTeletrabajo: ['martes'],
+    });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(
+      [solicitudA, solicitudB],
+      puestosByKey,
+    );
+
+    const assessment = buildTeletrabajoAssessment({
+      solicitud: solicitudA,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      gruposById,
+    });
+
+    // Dotación conjunta del grupo: 2 personas. Las dos piden el mismo día: 0
+    // presenciales frente al mínimo de 2 exigido por el grupo: incidencia.
+    expect(assessment.status).toBe('review');
+    expect(assessment.apuntesRrll).toContain('mín. 2 presenciales');
   });
 });
