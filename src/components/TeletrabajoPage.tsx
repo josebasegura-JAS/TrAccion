@@ -542,8 +542,8 @@ export function TeletrabajoPage({
     [employees],
   );
   const solicitudesByPuestoCount = useMemo(
-    () => buildSolicitudesByPeriodoPuestoCount(solicitudesWithPlantillaData),
-    [solicitudesWithPlantillaData],
+    () => buildSolicitudesByPeriodoPuestoCount(solicitudesWithPlantillaData, puestosByKey),
+    [solicitudesWithPlantillaData, puestosByKey],
   );
   const periodos = useMemo(
     () => uniqueSorted(visibleSolicitudes.map((solicitud) => solicitud.periodo)).reverse(),
