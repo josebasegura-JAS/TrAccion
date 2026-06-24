@@ -1,28 +1,32 @@
-import { AlertTriangle, FileUp, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, FileUp, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
+import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/gruposCobertura';
 import {
   EMPTY_TELETRABAJO_PUESTO_DRAFT,
   importTeletrabajoPuestosFromFile,
   normalizeTeletrabajoPuesto,
   type TeletrabajoPuesto,
   type TeletrabajoPuestoDraft,
+  type TeletrabajoPuestoImportRow,
 } from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
 
 interface TeletrabajoPuestosModalProps {
   onClose: () => void;
 }
 
 interface PendingImportResolution {
-  drafts: TeletrabajoPuestoDraft[];
+  rows: TeletrabajoPuestoImportRow[];
   unknownPuestos: string[];
   mapping: Record<string, string>;
 }
 
 const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos.translationAliases';
+const SIN_GRUPO_VALUE = '';
 
 function readStoredAliases(): Record<string, string> {
   try {
@@ -54,6 +58,7 @@ function persistStoredAliases(aliases: Record<string, string>): void {
 export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProps) {
   const {
     createPuestoTeletrabajo,
+    gruposCobertura,
     importPuestosTeletrabajoDrafts,
     puestosTeletrabajo,
     removePuestoTeletrabajo,
@@ -67,6 +72,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [pendingImport, setPendingImport] = useState<PendingImportResolution | null>(null);
+  const [isGruposModalOpen, setIsGruposModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const masterPuestos = useMemo(
@@ -87,6 +93,13 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     [masterPuestos],
   );
 
+  const visibleGruposCobertura = useMemo(
+    () => gruposCobertura.filter((grupo) => !grupo.deletedAt),
+    [gruposCobertura],
+  );
+
+  const gruposById = useMemo(() => buildGruposCoberturaByIdMap(gruposCobertura), [gruposCobertura]);
+
   const visiblePuestos = useMemo(
     () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt),
     [puestosTeletrabajo],
@@ -98,12 +111,15 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       return visiblePuestos;
     }
 
-    return visiblePuestos.filter((puesto) =>
-      `${puesto.puesto} ${puesto.maxSolicitudes} ${puesto.dotacionComputable} ${puesto.grupoCobertura} ${puesto.observaciones}`
+    return visiblePuestos.filter((puesto) => {
+      const nombreGrupo = puesto.grupoCoberturaId
+        ? gruposById.get(puesto.grupoCoberturaId)?.nombre ?? ''
+        : '';
+      return `${puesto.puesto} ${puesto.maxSolicitudes} ${puesto.dotacionComputable} ${nombreGrupo} ${puesto.observaciones}`
         .toLowerCase()
-        .includes(normalizedSearch),
-    );
-  }, [search, visiblePuestos]);
+        .includes(normalizedSearch);
+    });
+  }, [search, visiblePuestos, gruposById]);
 
   const updateDraft = <K extends keyof TeletrabajoPuestoDraft>(
     key: K,
@@ -140,7 +156,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       puesto: puesto.puesto,
       maxSolicitudes: puesto.maxSolicitudes,
       dotacionComputable: puesto.dotacionComputable,
-      grupoCobertura: puesto.grupoCobertura,
+      grupoCoberturaId: puesto.grupoCoberturaId,
       observaciones: puesto.observaciones,
     });
     setError('');
@@ -190,8 +206,8 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setStatus('Puesto teletrabajable actualizado.');
   };
 
-  const applyResolvedImport = (drafts: readonly TeletrabajoPuestoDraft[]) => {
-    const count = importPuestosTeletrabajoDrafts(drafts);
+  const applyResolvedImport = (rows: readonly TeletrabajoPuestoImportRow[]) => {
+    const count = importPuestosTeletrabajoDrafts(rows);
     setPendingImport(null);
     setError('');
     setStatus(`Importación completada: ${count} puestos procesados.`);
@@ -207,13 +223,13 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
         throw new Error('Antes de importar puestos teletrabajables debes importar la tabla de Traducción de puestos.');
       }
 
-      const drafts = await importTeletrabajoPuestosFromFile(file);
+      const rows = await importTeletrabajoPuestosFromFile(file);
       const aliases = readStoredAliases();
       const mapping: Record<string, string> = {};
       const unknownByKey = new Map<string, string>();
 
-      drafts.forEach((item) => {
-        const original = item.puesto.trim();
+      rows.forEach((row) => {
+        const original = row.draft.puesto.trim();
         const key = normalizeTeletrabajoPuesto(original);
         if (!original || masterPuestosByKey.has(normalizeJobPosition(original))) {
           return;
@@ -230,16 +246,16 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
 
       if (unknownByKey.size === 0) {
         applyResolvedImport(
-          drafts.map((item) => {
-            const alias = mapping[normalizeTeletrabajoPuesto(item.puesto)];
-            return alias ? { ...item, puesto: alias } : item;
+          rows.map((row) => {
+            const alias = mapping[normalizeTeletrabajoPuesto(row.draft.puesto)];
+            return alias ? { ...row, draft: { ...row.draft, puesto: alias } } : row;
           }),
         );
         return;
       }
 
       setPendingImport({
-        drafts,
+        rows,
         unknownPuestos: Array.from(unknownByKey.values()).sort((first, second) =>
           first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' }),
         ),
@@ -275,17 +291,17 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     }
 
     const aliases = readStoredAliases();
-    const resolvedDrafts = pendingImport.drafts.map((item) => {
-      const key = normalizeTeletrabajoPuesto(item.puesto);
-      const resolved = pendingImport.mapping[key] ?? item.puesto;
-      if (resolved !== item.puesto && masterPuestosByKey.has(normalizeJobPosition(resolved))) {
+    const resolvedRows = pendingImport.rows.map((row) => {
+      const key = normalizeTeletrabajoPuesto(row.draft.puesto);
+      const resolved = pendingImport.mapping[key] ?? row.draft.puesto;
+      if (resolved !== row.draft.puesto && masterPuestosByKey.has(normalizeJobPosition(resolved))) {
         aliases[key] = resolved;
       }
-      return { ...item, puesto: resolved };
+      return { ...row, draft: { ...row.draft, puesto: resolved } };
     });
 
     persistStoredAliases(aliases);
-    applyResolvedImport(resolvedDrafts);
+    applyResolvedImport(resolvedRows);
   };
 
   return (
@@ -299,6 +315,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             <h3 className="text-xl font-bold text-metro-text">Puestos Teletrabajo</h3>
             <p className="mt-1 text-sm text-metro-muted">
               Importa o mantén los puestos organizativos teletrabajables usando Traducción de puestos como tabla maestra.
+              Si varios puestos van coordinados (comparten presencialidad mínima), asígnales el mismo Grupo de cobertura.
             </p>
           </div>
           <button
@@ -337,6 +354,13 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               type="file"
             />
             <button
+              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => setIsGruposModalOpen(true)}
+              type="button"
+            >
+              <Users size={16} /> Grupos de cobertura
+            </button>
+            <button
               className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
               disabled={masterPuestos.length === 0}
               onClick={() => fileInputRef.current?.click()}
@@ -362,7 +386,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
         {(isCreating || editingPuestoId || status || error || pendingImport) && (
           <div className="space-y-3 border-b border-metro-border p-4">
             {(isCreating || editingPuestoId) && (
-              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_110px_110px_minmax(140px,0.8fr)_minmax(180px,1fr)_auto_auto] lg:items-end">
+              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_110px_110px_minmax(160px,0.9fr)_minmax(180px,1fr)_auto_auto] lg:items-end">
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Puesto
                   <select
@@ -379,9 +403,15 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Presencialidad mínima
                   <input
-                    className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                    className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:opacity-50"
+                    disabled={Boolean(draft.grupoCoberturaId)}
                     min={0}
                     onChange={(event) => updateDraft('maxSolicitudes', Number(event.target.value))}
+                    title={
+                      draft.grupoCoberturaId
+                        ? 'Este puesto pertenece a un grupo de cobertura: la presencialidad mínima se gestiona en el grupo.'
+                        : undefined
+                    }
                     type="number"
                     value={draft.maxSolicitudes}
                   />
@@ -398,13 +428,20 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 </label>
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Grupo cobertura
-                  <input
+                  <select
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                    onChange={(event) => updateDraft('grupoCobertura', event.target.value)}
-                    placeholder="Opcional"
-                    type="text"
-                    value={draft.grupoCobertura}
-                  />
+                    onChange={(event) =>
+                      updateDraft('grupoCoberturaId', event.target.value === SIN_GRUPO_VALUE ? null : event.target.value)
+                    }
+                    value={draft.grupoCoberturaId ?? SIN_GRUPO_VALUE}
+                  >
+                    <option value={SIN_GRUPO_VALUE}>Sin grupo (cobertura individual)</option>
+                    {visibleGruposCobertura.map((grupo) => (
+                      <option key={grupo.id} value={grupo.id}>
+                        {grupo.nombre} (mín. {grupo.presencialidadMinima})
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Observaciones
@@ -524,44 +561,49 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 </tr>
               </thead>
               <tbody className="divide-y divide-metro-border">
-                {filteredPuestos.map((puesto) => (
-                  <tr
-                    key={puesto.id}
-                    className={
-                      puesto.id === editingPuestoId
-                        ? 'bg-metro-red/5 text-metro-text'
-                        : 'text-metro-text'
-                    }
-                  >
-                    <td className="px-3 py-2 font-semibold">{puesto.puesto}</td>
-                    <td className="px-3 py-2 text-metro-muted">{puesto.maxSolicitudes || '—'}</td>
-                    <td className="px-3 py-2 text-metro-muted">{puesto.dotacionComputable || '—'}</td>
-                    <td className="px-3 py-2 text-metro-muted">{puesto.grupoCobertura || '—'}</td>
-                    <td className="px-3 py-2 text-metro-muted">{puesto.observaciones || '—'}</td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          aria-label={`Editar ${puesto.puesto}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-text"
-                          onClick={() => handleStartEdit(puesto)}
-                          title="Editar puesto"
-                          type="button"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          aria-label={`Eliminar ${puesto.puesto}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
-                          onClick={() => removePuestoTeletrabajo(puesto.id)}
-                          title="Eliminar puesto"
-                          type="button"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredPuestos.map((puesto) => {
+                  const grupo = puesto.grupoCoberturaId ? gruposById.get(puesto.grupoCoberturaId) : null;
+                  return (
+                    <tr
+                      key={puesto.id}
+                      className={
+                        puesto.id === editingPuestoId
+                          ? 'bg-metro-red/5 text-metro-text'
+                          : 'text-metro-text'
+                      }
+                    >
+                      <td className="px-3 py-2 font-semibold">{puesto.puesto}</td>
+                      <td className="px-3 py-2 text-metro-muted">
+                        {grupo ? `${grupo.presencialidadMinima} (grupo)` : puesto.maxSolicitudes || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-metro-muted">{puesto.dotacionComputable || '—'}</td>
+                      <td className="px-3 py-2 text-metro-muted">{grupo?.nombre ?? '—'}</td>
+                      <td className="px-3 py-2 text-metro-muted">{puesto.observaciones || '—'}</td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            aria-label={`Editar ${puesto.puesto}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-text"
+                            onClick={() => handleStartEdit(puesto)}
+                            title="Editar puesto"
+                            type="button"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            aria-label={`Eliminar ${puesto.puesto}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
+                            onClick={() => removePuestoTeletrabajo(puesto.id)}
+                            title="Eliminar puesto"
+                            type="button"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filteredPuestos.length === 0 && (
                   <tr>
                     <td className="px-3 py-8 text-center text-sm text-metro-muted" colSpan={6}>
@@ -574,6 +616,10 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
           </div>
         </div>
       </section>
+
+      {isGruposModalOpen && (
+        <TeletrabajoGruposCoberturaModal onClose={() => setIsGruposModalOpen(false)} />
+      )}
     </div>
   );
 }

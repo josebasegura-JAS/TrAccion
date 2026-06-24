@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Users,
   XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,11 +21,13 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
+import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
 import { TeletrabajoPuestosModal } from './TeletrabajoPuestosModal';
 import { ActionButton } from './ui/ActionButton';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
+import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/gruposCobertura';
 import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
@@ -256,12 +259,14 @@ function getTeletrabajoIncidentMeta(
   puestosByKey: ReturnType<typeof buildPuestosByKey>,
   solicitudesByPuestoCount: ReturnType<typeof buildSolicitudesByPeriodoPuestoCount>,
   employeesByEmpleado: Map<string, Employee>,
+  gruposById: ReturnType<typeof buildGruposCoberturaByIdMap>,
 ): TeletrabajoIncidentMeta {
   const semaforo = getTeletrabajoSemaforo(
     solicitud,
     puestosByKey,
     solicitudesByPuestoCount,
     employeesByEmpleado,
+    gruposById,
   );
   const isReviewedPending = solicitud.revisado && solicitud.estado === 'pendiente';
   const isReadyToApprove =
@@ -304,6 +309,7 @@ function matchesIncidentFilter(
   puestosByKey: ReturnType<typeof buildPuestosByKey>,
   solicitudesByPuestoCount: ReturnType<typeof buildSolicitudesByPeriodoPuestoCount>,
   employeesByEmpleado: Map<string, Employee>,
+  gruposById: ReturnType<typeof buildGruposCoberturaByIdMap>,
 ): boolean {
   if (!filter) {
     return true;
@@ -314,6 +320,7 @@ function matchesIncidentFilter(
     puestosByKey,
     solicitudesByPuestoCount,
     employeesByEmpleado,
+    gruposById,
   );
 
   if (filter === 'conflictos') {
@@ -418,6 +425,7 @@ export function TeletrabajoPage({
     confirmImportHistorico,
     createPeriodo,
     filters,
+    gruposCobertura,
     importEncuesta,
     load,
     pendingHistoricoImport,
@@ -445,6 +453,7 @@ export function TeletrabajoPage({
     null,
   );
   const [isPuestosModalOpen, setIsPuestosModalOpen] = useState(false);
+  const [isGruposCoberturaModalOpen, setIsGruposCoberturaModalOpen] = useState(false);
   const [wordStatus, setWordStatus] = useState<string>('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
@@ -532,6 +541,10 @@ export function TeletrabajoPage({
     [solicitudesWithPlantillaData],
   );
   const puestosByKey = useMemo(() => buildPuestosByKey(puestosTeletrabajo), [puestosTeletrabajo]);
+  const gruposByIdMap = useMemo(
+    () => buildGruposCoberturaByIdMap(gruposCobertura),
+    [gruposCobertura],
+  );
   const employeesByEmpleado = useMemo(
     () =>
       new Map(
@@ -566,11 +579,13 @@ export function TeletrabajoPage({
           puestosByKey,
           solicitudesByPuestoCount,
           employeesByEmpleado,
+          gruposByIdMap,
         ),
       ),
     [
       baseFilteredSolicitudes,
       employeesByEmpleado,
+      gruposByIdMap,
       incidentFilter,
       puestosByKey,
       solicitudesByPuestoCount,
@@ -592,6 +607,7 @@ export function TeletrabajoPage({
         puestosByKey,
         solicitudesByPuestoCount,
         employeesByEmpleado,
+        gruposByIdMap,
       );
 
       if (meta.status !== 'ok') {
@@ -612,7 +628,13 @@ export function TeletrabajoPage({
 
       return stats;
     }, initial);
-  }, [baseFilteredSolicitudes, employeesByEmpleado, puestosByKey, solicitudesByPuestoCount]);
+  }, [
+    baseFilteredSolicitudes,
+    employeesByEmpleado,
+    gruposByIdMap,
+    puestosByKey,
+    solicitudesByPuestoCount,
+  ]);
   const historicoSolicitudes = useMemo(() => {
     const historicalRows = solicitudesWithPlantillaData.filter(
       (solicitud) => !solicitud.deletedAt && solicitud.periodo !== currentPeriodo,
@@ -630,12 +652,14 @@ export function TeletrabajoPage({
           puestosByKey,
           solicitudesByPuestoCount,
           employeesByEmpleado,
+          gruposByIdMap,
         ),
     );
   }, [
     currentPeriodo,
     employeesByEmpleado,
     filters,
+    gruposByIdMap,
     incidentFilter,
     puestosByKey,
     solicitudesByPuestoCount,
@@ -752,14 +776,20 @@ export function TeletrabajoPage({
         id: 'teletrabajable',
         header: 'Incidencias',
         accessor: (s) =>
-          getTeletrabajoIncidentMeta(s, puestosByKey, solicitudesByPuestoCount, employeesByEmpleado)
-            .status,
+          getTeletrabajoIncidentMeta(
+            s,
+            puestosByKey,
+            solicitudesByPuestoCount,
+            employeesByEmpleado,
+            gruposByIdMap,
+          ).status,
         render: (s) => {
           const meta = getTeletrabajoIncidentMeta(
             s,
             puestosByKey,
             solicitudesByPuestoCount,
             employeesByEmpleado,
+            gruposByIdMap,
           );
           const className =
             meta.status === 'ok'
@@ -901,6 +931,7 @@ export function TeletrabajoPage({
       alert,
       employeesByEmpleado,
       generatingWordId,
+      gruposByIdMap,
       handleGenerateWord,
       puestosByKey,
       removeWithConcurrencyCheck,
@@ -1020,6 +1051,7 @@ export function TeletrabajoPage({
         rows: sortedSolicitudes,
         employees,
         puestosTeletrabajo,
+        gruposCobertura,
         solicitudesForAssessment: solicitudesWithPlantillaData,
         periodo: filters.periodo,
       });
@@ -1034,6 +1066,7 @@ export function TeletrabajoPage({
   }, [
     employees,
     filters.periodo,
+    gruposCobertura,
     puestosTeletrabajo,
     solicitudesWithPlantillaData,
     sortedSolicitudes,
@@ -1305,6 +1338,13 @@ export function TeletrabajoPage({
           </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => setIsGruposCoberturaModalOpen(true)}
+            type="button"
+          >
+            <Users size={16} /> Grupos Cobertura
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
             onClick={openPeriodoModal}
             type="button"
           >
@@ -1499,6 +1539,7 @@ export function TeletrabajoPage({
                 puestosByKey,
                 solicitudesByPuestoCount,
                 employeesByEmpleado,
+                gruposByIdMap,
               ),
               solicitud.estado,
             )
@@ -1577,6 +1618,7 @@ export function TeletrabajoPage({
                                   puestosByKey,
                                   solicitudesByPuestoCount,
                                   employeesByEmpleado,
+                                  gruposByIdMap,
                                 ),
                                 solicitud.estado,
                               )
@@ -1802,6 +1844,9 @@ export function TeletrabajoPage({
 
       {isPuestosModalOpen && (
         <TeletrabajoPuestosModal onClose={() => setIsPuestosModalOpen(false)} />
+      )}
+      {isGruposCoberturaModalOpen && (
+        <TeletrabajoGruposCoberturaModal onClose={() => setIsGruposCoberturaModalOpen(false)} />
       )}
 
       {pendingHistoricoImport && (
