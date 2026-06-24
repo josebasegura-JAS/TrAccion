@@ -201,7 +201,7 @@ type TeletrabajoIncidentFilter =
 
 interface TeletrabajoIncidentMeta {
   status: 'ok' | 'review' | 'blocked';
-  label: 'OK' | 'Revisar' | 'Bloquea';
+  label: string;
   title: string;
   isReviewedPending: boolean;
   isReadyToApprove: boolean;
@@ -214,6 +214,42 @@ const TELETRABAJO_INCIDENT_FILTER_LABELS: Record<Exclude<TeletrabajoIncidentFilt
   sinRevisar: 'Sin revisar',
   listasAprobar: 'Listas para aprobar',
 };
+
+function getTeletrabajoIncidentLabel(
+  semaforo: ReturnType<typeof getTeletrabajoSemaforo>,
+): string {
+  if (semaforo.status === 'ok') {
+    return 'Sin incidencias';
+  }
+
+  const title = semaforo.title.toLocaleLowerCase('es-ES');
+
+  if (title.includes('presencialidad')) {
+    return 'Revisar presencialidad';
+  }
+
+  if (title.includes('empleado no localizado')) {
+    return 'Empleado no localizado';
+  }
+
+  if (title.includes('antigüedad insuficiente')) {
+    return 'Antigüedad insuficiente';
+  }
+
+  if (title.includes('antigüedad')) {
+    return 'Revisar antigüedad';
+  }
+
+  if (title.includes('falta puesto organizativo')) {
+    return 'Falta puesto organizativo';
+  }
+
+  if (title.includes('puesto no teletrabajable')) {
+    return 'Puesto no teletrabajable';
+  }
+
+  return semaforo.status === 'blocked' ? 'Incidencia bloqueante' : 'Revisar incidencia';
+}
 
 function getTeletrabajoIncidentMeta(
   solicitud: TeletrabajoSolicitud,
@@ -234,7 +270,7 @@ function getTeletrabajoIncidentMeta(
   if (semaforo.status === 'blocked') {
     return {
       status: 'blocked',
-      label: 'Bloquea',
+      label: getTeletrabajoIncidentLabel(semaforo),
       title: semaforo.title,
       isReviewedPending,
       isReadyToApprove,
@@ -244,7 +280,7 @@ function getTeletrabajoIncidentMeta(
   if (semaforo.status === 'review') {
     return {
       status: 'review',
-      label: 'Revisar',
+      label: getTeletrabajoIncidentLabel(semaforo),
       title: semaforo.title,
       isReviewedPending,
       isReadyToApprove,
@@ -253,7 +289,7 @@ function getTeletrabajoIncidentMeta(
 
   return {
     status: 'ok',
-    label: 'OK',
+    label: getTeletrabajoIncidentLabel(semaforo),
     title: isReviewedPending
       ? `${semaforo.title} Solicitud revisada que sigue en estado pendiente: queda una decisión manual por resolver, pero no hay incidencia objetiva de condiciones.`
       : semaforo.title,
@@ -418,6 +454,11 @@ export function TeletrabajoPage({
   const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
   const [incidentFilter, setIncidentFilter] = useState<TeletrabajoIncidentFilter>('');
+  const [incidentTooltip, setIncidentTooltip] = useState<{
+    title: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     load();
@@ -737,17 +778,30 @@ export function TeletrabajoPage({
 
           return (
             <span
-              className={`inline-flex h-7 min-w-[5.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
-              title={meta.title}
+              aria-label={meta.title}
+              className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
+              onMouseEnter={(event) =>
+                setIncidentTooltip({
+                  title: meta.title,
+                  x: event.clientX,
+                  y: event.clientY,
+                })
+              }
+              onMouseLeave={() => setIncidentTooltip(null)}
+              onMouseMove={(event) =>
+                setIncidentTooltip((current) =>
+                  current ? { ...current, x: event.clientX, y: event.clientY } : current,
+                )
+              }
             >
               {icon}
-              {meta.label}
+              <span className="truncate">{meta.label}</span>
             </span>
           );
         },
-        width: 118,
-        minWidth: 104,
-        maxWidth: 180,
+        width: 185,
+        minWidth: 160,
+        maxWidth: 260,
         sortable: true,
         className: 'text-center',
       },
@@ -1539,6 +1593,18 @@ export function TeletrabajoPage({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {incidentTooltip && (
+        <div
+          className="pointer-events-none fixed z-[80] max-w-md rounded-xl border border-metro-border bg-slate-950 px-3 py-2 text-left text-xs font-semibold leading-relaxed text-metro-text shadow-card"
+          style={{
+            left: Math.max(12, Math.min(incidentTooltip.x + 12, window.innerWidth - 420)),
+            top: incidentTooltip.y + 12,
+          }}
+        >
+          {incidentTooltip.title}
         </div>
       )}
 

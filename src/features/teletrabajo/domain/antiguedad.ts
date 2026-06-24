@@ -50,7 +50,7 @@ export function evaluateTeletrabajoAntiguedad(
   if (!employee) {
     return {
       status: 'sin-dato',
-      title: 'No se puede comprobar antigüedad: empleado no encontrado en Plantilla.',
+      title: 'Empleado no localizado en Plantilla. No se puede comprobar la antigüedad.',
       antiguedadPuesto: '',
       fechaReferencia: solicitud.fechaSolicitud,
     };
@@ -63,7 +63,7 @@ export function evaluateTeletrabajoAntiguedad(
   if (!fechaAntiguedad) {
     return {
       status: 'sin-dato',
-      title: 'No se puede comprobar antigüedad: fecha de antigüedad en el puesto no informada o no válida.',
+      title: 'Falta informar la antigüedad en el puesto en Plantilla.',
       antiguedadPuesto,
       fechaReferencia: solicitud.fechaSolicitud,
     };
@@ -72,7 +72,7 @@ export function evaluateTeletrabajoAntiguedad(
   if (!fechaReferencia) {
     return {
       status: 'sin-dato',
-      title: 'No se puede comprobar antigüedad: fecha de solicitud no informada o no válida.',
+      title: 'Falta informar una fecha de solicitud válida para comprobar la antigüedad.',
       antiguedadPuesto,
       fechaReferencia: solicitud.fechaSolicitud,
     };
@@ -83,7 +83,7 @@ export function evaluateTeletrabajoAntiguedad(
   if (fechaReferencia < fechaCumplimiento) {
     return {
       status: 'no-cumple',
-      title: `No cumple antigüedad mínima: puesto desde ${antiguedadPuesto}; cumple 1 año el ${formatIsoDate(fechaCumplimiento)}.`,
+      title: `Antigüedad insuficiente: la persona está en el puesto desde ${antiguedadPuesto} y cumple 1 año el ${formatIsoDate(fechaCumplimiento)}.`,
       antiguedadPuesto,
       fechaReferencia: solicitud.fechaSolicitud,
     };
@@ -91,7 +91,7 @@ export function evaluateTeletrabajoAntiguedad(
 
   return {
     status: 'cumple',
-    title: `Cumple antigüedad mínima: puesto desde ${antiguedadPuesto}.`,
+    title: `Antigüedad correcta: la persona está en el puesto desde ${antiguedadPuesto}.`,
     antiguedadPuesto,
     fechaReferencia: solicitud.fechaSolicitud,
   };

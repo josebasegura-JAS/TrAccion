@@ -97,7 +97,7 @@ export function getTeletrabajoSemaforo(
   if (!puestoKey) {
     return {
       status: 'blocked',
-      title: 'La solicitud no tiene puesto organizativo informado.',
+      title: 'Falta puesto organizativo en la solicitud.',
     };
   }
 
@@ -105,7 +105,7 @@ export function getTeletrabajoSemaforo(
   if (!puesto) {
     return {
       status: 'blocked',
-      title: `El puesto organizativo «${solicitud.puestoOrganizativo}» no está marcado como teletrabajable.`,
+      title: `Puesto no teletrabajable: «${solicitud.puestoOrganizativo}» no está configurado como teletrabajable.`,
     };
   }
 
@@ -132,15 +132,17 @@ export function getTeletrabajoSemaforo(
 
     if (conflictos.length > 0) {
       const detail = conflictos
-        .map(
-          ({ dia, solicitudesDia, presencialesDia }) =>
-            `${dia}: ${solicitudesDia} TT, ${Math.max(presencialesDia, 0)} presenciales`,
-        )
-        .join(' · ');
+        .map(({ dia, solicitudesDia, presencialesDia }) => {
+          const presencialesResultantes = Math.max(presencialesDia, 0);
+          const personasFaltantes = presencialidadMinima - presencialesResultantes;
+
+          return `${dia}: hay ${solicitudesDia} ${solicitudesDia === 1 ? 'persona solicitando' : 'personas solicitando'} teletrabajo y ${presencialesResultantes} ${presencialesResultantes === 1 ? 'persona presencial' : 'personas presenciales'}. Faltaría ${personasFaltantes} ${personasFaltantes === 1 ? 'persona presencial' : 'personas presenciales'} para cumplir el mínimo exigido.`;
+        })
+        .join(' ');
 
       return {
         status: 'review',
-        title: `Conflicto de presencialidad mínima (${presencialidadMinima}) en ${solicitud.puestoOrganizativo}. Total puesto: ${totalPersonasPuesto}. ${detail}.`,
+        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Personas del puesto: ${totalPersonasPuesto}. presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
       };
     }
   }
@@ -148,7 +150,7 @@ export function getTeletrabajoSemaforo(
   return {
     status: 'ok',
     title: puesto.observaciones
-      ? `Puesto teletrabajable. ${puesto.observaciones}`
-      : 'Puesto teletrabajable.',
+      ? `Sin incidencias detectadas. ${puesto.observaciones}`
+      : 'Sin incidencias detectadas.',
   };
 }
