@@ -71,7 +71,7 @@ function buildEmployeeMap(employees: readonly Employee[]): Map<string, Employee>
 }
 
 
-type TeletrabajoExportAssessment = {
+export type TeletrabajoExportAssessment = {
   status: 'ok' | 'review' | 'blocked' | 'rejected';
   cellValue: string;
   rowFillColor: string | null;
@@ -79,7 +79,7 @@ type TeletrabajoExportAssessment = {
   apuntesRrll: string;
 };
 
-function buildTeletrabajoAssessment({
+export function buildTeletrabajoAssessment({
   solicitud,
   employeesById,
   puestosByKey,
@@ -153,7 +153,12 @@ function buildTeletrabajoAssessment({
         .map((employee) => employee.empleado.trim()),
     );
     const totalPersonasPuesto = empleadosDelPuesto.size;
-    const diasConConflicto = TELETRABAJO_DIAS.filter((dia) => {
+    // Solo importan los días que esta solicitud concreta pide teletrabajar:
+    // un conflicto de otro compañero del mismo puesto en un día distinto no
+    // debe contagiar el semáforo de esta solicitud. Igual que en semaforo.ts.
+    const diasSolicitados =
+      solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
+    const diasConConflicto = diasSolicitados.filter((dia) => {
       const solicitudesDia =
         solicitudesByPuestoDiaCount.get(
           buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
