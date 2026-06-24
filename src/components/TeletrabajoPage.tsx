@@ -35,6 +35,7 @@ import {
   TELETRABAJO_TIPOS_SOLICITUD,
   type TeletrabajoSolicitud,
 } from '../features/teletrabajo/domain/solicitud';
+import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/tipoSolicitud';
 
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { saveDocxWithDialog } from '../features/teletrabajo/domain/download';
@@ -476,10 +477,15 @@ export function TeletrabajoPage({
     [employees, generatingWordId, jobPositionTranslations, rutaPlantillaTeletrabajo],
   );
 
-  const solicitudesWithPlantillaData = useMemo(
-    () => applyPlantillaDataToTeletrabajoSolicitudes(solicitudes, employees),
-    [employees, solicitudes],
-  );
+  const solicitudesWithPlantillaData = useMemo(() => {
+    const withPlantillaData = applyPlantillaDataToTeletrabajoSolicitudes(solicitudes, employees);
+    return withPlantillaData.map((solicitud) => ({
+      ...solicitud,
+      tipoSolicitud: resolveTeletrabajoTipoSolicitud(solicitud, withPlantillaData, {
+        excludeSolicitudId: solicitud.id,
+      }),
+    }));
+  }, [employees, solicitudes]);
   const visibleSolicitudes = useMemo(
     () => solicitudesWithPlantillaData.filter((solicitud) => !solicitud.deletedAt),
     [solicitudesWithPlantillaData],

@@ -14,6 +14,7 @@ import {
 } from './plantillaData';
 import { sortTeletrabajoByDefault } from './sort';
 import { normalizeDiasTeletrabajo, type TeletrabajoSolicitud } from './solicitud';
+import { resolveTeletrabajoTipoSolicitud } from './tipoSolicitud';
 import { detectTeletrabajoWordMarkers, generateTeletrabajoWord } from './word';
 import { unzipDocx, zipDocx, type ZipEntry } from './zip';
 
@@ -612,5 +613,45 @@ describe('generación Word de teletrabajo', () => {
       '«Nombre_Completo»',
     ]);
     await expect(unzipDocx(docx.buffer)).resolves.toHaveLength(1);
+  });
+});
+
+describe('tipo de solicitud derivado del periodo anterior', () => {
+  it('marca renovación cuando existe teletrabajo aprobado en el periodo anterior', () => {
+    const solicitudes = [
+      buildSolicitud({
+        id: 'previa',
+        empleado: '1001',
+        periodo: '2025-2026',
+        estado: 'aprobada',
+        diasTeletrabajo: ['martes'],
+      }),
+    ];
+
+    expect(
+      resolveTeletrabajoTipoSolicitud(
+        { empleado: '1001', periodo: '2026-2027' },
+        solicitudes,
+      ),
+    ).toBe('renovacion');
+  });
+
+  it('marca nueva cuando no consta teletrabajo efectivo en el periodo anterior', () => {
+    const solicitudes = [
+      buildSolicitud({
+        id: 'denegada',
+        empleado: '1001',
+        periodo: '2025-2026',
+        estado: 'denegada',
+        diasTeletrabajo: ['martes'],
+      }),
+    ];
+
+    expect(
+      resolveTeletrabajoTipoSolicitud(
+        { empleado: '1001', periodo: '2026-2027' },
+        solicitudes,
+      ),
+    ).toBe('nueva');
   });
 });

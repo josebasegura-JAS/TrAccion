@@ -19,6 +19,7 @@ import {
   findActiveEmployeeByEmpleado,
 } from '../features/teletrabajo/domain/plantillaData';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
+import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/tipoSolicitud';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
@@ -105,6 +106,7 @@ export function TeletrabajoEditor({
   const createSolicitud = useTeletrabajoStore((state) => state.createWithConcurrencyCheck);
   const updateSolicitud = useTeletrabajoStore((state) => state.updateWithConcurrencyCheck);
   const removeSolicitud = useTeletrabajoStore((state) => state.removeWithConcurrencyCheck);
+  const solicitudes = useTeletrabajoStore((state) => state.solicitudes);
   const employees = useEmployeeStore((state) => state.employees);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
@@ -149,6 +151,30 @@ export function TeletrabajoEditor({
     setDraft((current) => applyPlantillaDataToTeletrabajoDraft(current, plantillaEmployee));
   }, [plantillaEmployee]);
 
+  const resolvedTipoSolicitud = useMemo(
+    () =>
+      resolveTeletrabajoTipoSolicitud(draft, solicitudes, {
+        excludeSolicitudId: solicitud?.id ?? null,
+      }),
+    [draft.empleado, draft.periodo, solicitud?.id, solicitudes],
+  );
+
+  useEffect(() => {
+    setDraft((current) => {
+      const nextTipoSolicitud = resolveTeletrabajoTipoSolicitud(current, solicitudes, {
+        excludeSolicitudId: solicitud?.id ?? null,
+      });
+      return current.tipoSolicitud === nextTipoSolicitud
+        ? current
+        : { ...current, tipoSolicitud: nextTipoSolicitud };
+    });
+  }, [draft.empleado, draft.periodo, solicitud?.id, solicitudes]);
+
+  const isNuevaPeticion = resolvedTipoSolicitud === 'nueva';
+  const draftForSave = useMemo(
+    () => ({ ...draft, tipoSolicitud: resolvedTipoSolicitud }),
+    [draft, resolvedTipoSolicitud],
+  );
   const employeeExists = Boolean(plantillaEmployee);
   const isCreate = mode === 'create';
   const hasExternalSolicitudUpdate =
@@ -224,11 +250,21 @@ export function TeletrabajoEditor({
             <h3 className="mt-1 truncate text-base font-bold text-metro-text">
               {isCreate
                 ? 'Nueva solicitud de teletrabajo'
-                : solicitud?.nombreApellidos || 'Sin selección'}
+                : draft.nombreApellidos || solicitud?.nombreApellidos || 'Sin selección'}
             </h3>
-            <p className="text-xs text-metro-muted">
-              {isCreate ? 'Alta manual compacta.' : `Editando solicitud ${solicitud?.id ?? '—'}`}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-metro-muted">
+                {isCreate ? 'Alta manual compacta.' : `Editando solicitud ${solicitud?.id ?? '—'}`}
+              </p>
+              {isNuevaPeticion && draft.empleado.trim().length > 0 && (
+                <span
+                  className="rounded-full border border-amber-400/60 bg-amber-300 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-950"
+                  title="No consta teletrabajo aprobado o analizado para esta persona en el periodo anterior."
+                >
+                  Nueva petición, enviar documentación
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
@@ -264,7 +300,7 @@ export function TeletrabajoEditor({
             if (isCreate) {
               setIsSaving(true);
               setSaveStatus('');
-              void createSolicitud(draft)
+              void createSolicitud(draftForSave)
                 .then((result) => {
                   if (result.ok) {
                     onDone();
@@ -282,13 +318,15 @@ export function TeletrabajoEditor({
 
             setIsSaving(true);
             setSaveStatus('');
-            void updateSolicitud(solicitud.id, draft, loadedSolicitudUpdatedAt).then((result) => {
-              if (result.ok) {
-                onDone();
-                return;
-              }
-              setSaveStatus(result.message);
-            }).finally(() => setIsSaving(false));
+            void updateSolicitud(solicitud.id, draftForSave, loadedSolicitudUpdatedAt)
+              .then((result) => {
+                if (result.ok) {
+                  onDone();
+                  return;
+                }
+                setSaveStatus(result.message);
+              })
+              .finally(() => setIsSaving(false));
           }}
         >
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -356,13 +394,9 @@ export function TeletrabajoEditor({
             <label className="text-xs font-semibold text-metro-muted">
               Tipo solicitud
               <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    tipoSolicitud: event.target.value as TeletrabajoDraft['tipoSolicitud'],
-                  }))
-                }
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none disabled:bg-metro-surface disabled:text-metro-muted"
+                disabled
+                title="Tipo calculado automáticamente según exista teletrabajo aprobado o analizado en el periodo anterior."
                 value={draft.tipoSolicitud}
               >
                 {TELETRABAJO_TIPOS_SOLICITUD.map((tipoSolicitud) => (
@@ -371,6 +405,9 @@ export function TeletrabajoEditor({
                   </option>
                 ))}
               </select>
+              <span className="mt-1 block text-[11px] font-medium text-metro-muted">
+                Calculado automáticamente con el periodo anterior.
+              </span>
             </label>
 
             <label className="text-xs font-semibold text-metro-muted">
