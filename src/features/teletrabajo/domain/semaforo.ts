@@ -118,17 +118,21 @@ export function getTeletrabajoSemaforo(
     );
     const totalPersonasPuesto = empleadosDelPuesto.size;
 
-    const conflictos = TELETRABAJO_DIAS.map((dia) => {
-      const solicitudesDia =
-        solicitudesByPuestoDiaCount.get(
-          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
-        ) ?? 0;
-      const presencialesDia = totalPersonasPuesto - solicitudesDia;
-      return { dia, solicitudesDia, presencialesDia };
-    }).filter(
-      ({ solicitudesDia, presencialesDia }) =>
-        solicitudesDia > 0 && presencialesDia < presencialidadMinima,
-    );
+    const diasSolicitados =
+      solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
+    const conflictos = diasSolicitados
+      .map((dia) => {
+        const solicitudesDia =
+          solicitudesByPuestoDiaCount.get(
+            buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, puestoKey, dia),
+          ) ?? 0;
+        const presencialesDia = totalPersonasPuesto - solicitudesDia;
+        return { dia, solicitudesDia, presencialesDia };
+      })
+      .filter(
+        ({ solicitudesDia, presencialesDia }) =>
+          solicitudesDia > 0 && presencialesDia < presencialidadMinima,
+      );
 
     if (conflictos.length > 0) {
       const detail = conflictos
@@ -142,7 +146,7 @@ export function getTeletrabajoSemaforo(
 
       return {
         status: 'review',
-        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Personas del puesto: ${totalPersonasPuesto}. presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
+        title: `Revisar presencialidad. Puesto: ${solicitud.puestoOrganizativo}. Personas del puesto: ${totalPersonasPuesto}. Presencialidad mínima requerida: ${presencialidadMinima}. ${detail}`,
       };
     }
   }
