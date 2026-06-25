@@ -426,6 +426,24 @@ interface TraccionTicketRestaurantePersonRecordsSnapshot {
 
 type TraccionConditionalTicketRestaurantePersonRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionTicketRestauranteAbsenceRecord = TraccionComiteSessionRecord;
+
+interface TraccionTicketRestauranteAbsenceRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTicketRestauranteAbsenceRecord[];
+}
+
+type TraccionConditionalTicketRestauranteAbsenceRecord = TraccionConditionalComiteSessionRecord;
+
+type TraccionTicketRestauranteConfigRecord = TraccionComiteSessionRecord;
+
+interface TraccionTicketRestauranteConfigRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTicketRestauranteConfigRecord[];
+}
+
+type TraccionConditionalTicketRestauranteConfigRecord = TraccionConditionalComiteSessionRecord;
+
 type TraccionEspecialRecipientRecord = TraccionComiteSessionRecord;
 
 interface TraccionEspecialRecipientRecordsSnapshot {
@@ -580,6 +598,17 @@ interface TraccionApi {
   saveTicketRestaurantePersonRecordsIfUnchanged?: (
     records: TraccionConditionalTicketRestaurantePersonRecord[],
   ) => Promise<TraccionBatchSaveResult>;
+  loadTicketRestauranteAbsenceRecords?: () => Promise<TraccionTicketRestauranteAbsenceRecordsSnapshot>;
+  saveTicketRestauranteAbsenceRecordIfUnchanged?: (
+    record: TraccionConditionalTicketRestauranteAbsenceRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveTicketRestauranteAbsenceRecordsIfUnchanged?: (
+    records: TraccionConditionalTicketRestauranteAbsenceRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
+  loadTicketRestauranteConfigRecords?: () => Promise<TraccionTicketRestauranteConfigRecordsSnapshot>;
+  saveTicketRestauranteConfigRecordIfUnchanged?: (
+    record: TraccionConditionalTicketRestauranteConfigRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
   loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged?: (
     snapshot: TraccionConditionalPresupuestosSnapshot,

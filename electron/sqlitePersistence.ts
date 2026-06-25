@@ -48,7 +48,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 15;
+const CURRENT_SCHEMA_VERSION = 16;
 const LOCK_TTL_MS = 30 * 1000;
 const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
@@ -376,6 +376,8 @@ let presupuestosActualsMigrationDone = false;
 let configuracionMigrationDone = false;
 let ticketRestauranteCalendarsMigrationDone = false;
 let ticketRestaurantePeopleMigrationDone = false;
+let ticketRestauranteAbsencesMigrationDone = false;
+let ticketRestauranteConfigMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -1833,6 +1835,42 @@ function migrateToVersion15(db: Database): void {
   }
 }
 
+function migrateToVersion16(db: Database): void {
+  // Segunda tanda de migración de Ticket Restaurante a SQLite: absences
+  // (colección con id propio, igual patrón que calendars/people) y config
+  // (objeto único, migrado como colección de un solo registro de id fijo
+  // para reutilizar createJsonModuleRepository sin código a medida).
+  // debtLedger y manutenciones permanecen en localStorage por ahora.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ticket_restaurante_absence_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ticket_restaurante_absence_records_updated_at ON ticket_restaurante_absence_records(updated_at);
+
+    CREATE TABLE IF NOT EXISTS ticket_restaurante_config_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ticket_restaurante_config_records_updated_at ON ticket_restaurante_config_records(updated_at);
+  `);
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 16) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      16,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1849,6 +1887,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion13(db);
   migrateToVersion14(db);
   migrateToVersion15(db);
+  migrateToVersion16(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -4607,6 +4646,26 @@ const ticketRestaurantePeopleRepository = createJsonModuleRepository(
   },
 );
 
+const ticketRestauranteAbsencesRepository = createJsonModuleRepository(
+  'ticket_restaurante_absence_records',
+  'traccion.v1.ticketRestaurante.absences',
+  'Ausencia de Ticket Restaurante',
+  () => ticketRestauranteAbsencesMigrationDone,
+  (value) => {
+    ticketRestauranteAbsencesMigrationDone = value;
+  },
+);
+
+const ticketRestauranteConfigRepository = createJsonModuleRepository(
+  'ticket_restaurante_config_records',
+  'traccion.v1.ticketRestaurante.config',
+  'Configuración de Ticket Restaurante',
+  () => ticketRestauranteConfigMigrationDone,
+  (value) => {
+    ticketRestauranteConfigMigrationDone = value;
+  },
+);
+
 const especialesRecipientRepository = createJsonModuleRepository(
   'especiales_recipient_records',
   'rrll_especiales_destinatarios',
@@ -4761,6 +4820,32 @@ export function saveTicketRestaurantePersonRecordsIfUnchanged(
   records: ConditionalJsonRecord[],
 ): Promise<JsonRecordBatchSaveResult> {
   return ticketRestaurantePeopleRepository.saveManyIfUnchanged(records);
+}
+
+export function loadTicketRestauranteAbsenceRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return ticketRestauranteAbsencesRepository.loadSnapshot();
+}
+
+export function saveTicketRestauranteAbsenceRecordIfUnchanged(
+  record: ConditionalJsonRecord,
+): Promise<JsonRecordSaveResult> {
+  return ticketRestauranteAbsencesRepository.saveIfUnchanged(record);
+}
+
+export function saveTicketRestauranteAbsenceRecordsIfUnchanged(
+  records: ConditionalJsonRecord[],
+): Promise<JsonRecordBatchSaveResult> {
+  return ticketRestauranteAbsencesRepository.saveManyIfUnchanged(records);
+}
+
+export function loadTicketRestauranteConfigRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return ticketRestauranteConfigRepository.loadSnapshot();
+}
+
+export function saveTicketRestauranteConfigRecordIfUnchanged(
+  record: ConditionalJsonRecord,
+): Promise<JsonRecordSaveResult> {
+  return ticketRestauranteConfigRepository.saveIfUnchanged(record);
 }
 
 export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {

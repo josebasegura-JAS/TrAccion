@@ -25,12 +25,19 @@ import {
 import {
   hasTicketRestauranteCalendarsSqliteRepository,
   hasTicketRestaurantePeopleSqliteRepository,
+  hasTicketRestauranteAbsencesSqliteRepository,
+  hasTicketRestauranteConfigSqliteRepository,
   loadTicketRestauranteCalendarRecordsFromSqlite,
   loadTicketRestaurantePersonRecordsFromSqlite,
+  loadTicketRestauranteAbsenceRecordsFromSqlite,
+  loadTicketRestauranteConfigRecordFromSqlite,
   saveTicketRestauranteCalendarsToSqlite,
   saveTicketRestauranteCalendarToSqlite,
   saveTicketRestaurantePeopleToSqlite,
   saveTicketRestaurantePersonToSqlite,
+  saveTicketRestauranteAbsencesToSqlite,
+  saveTicketRestauranteAbsenceToSqlite,
+  saveTicketRestauranteConfigToSqlite,
   type TicketRestauranteSqliteRecord,
 } from './ticketRestauranteSqliteRepository';
 
@@ -55,8 +62,8 @@ interface TicketRestauranteState {
   toggleCalendarActive: (id: string) => Promise<{ ok: boolean; message?: string }>;
   removeCalendar: (id: string) => Promise<{ ok: boolean; message?: string }>;
   toggleDay: (calendarId: string, fecha: string) => Promise<{ ok: boolean; message?: string }>;
-  saveAbsences: (absences: TicketRestaurantAbsence[]) => void;
-  removeAbsence: (id: string) => void;
+  saveAbsences: (absences: TicketRestaurantAbsence[]) => Promise<{ ok: boolean; message?: string }>;
+  removeAbsence: (id: string) => Promise<{ ok: boolean; message?: string }>;
   upsertPerson: (draft: TicketPersonDraft) => Promise<{ ok: boolean; message?: string }>;
   importPeople: (drafts: TicketPeopleImportDraft[]) => Promise<{
     imported: number;
@@ -65,7 +72,7 @@ interface TicketRestauranteState {
     message?: string;
   }>;
   removePerson: (empleado: string) => Promise<{ ok: boolean; message?: string }>;
-  updateConfig: (config: TicketRestaurantConfig) => void;
+  updateConfig: (config: TicketRestaurantConfig) => Promise<{ ok: boolean; message?: string }>;
   saveManutenciones: (drafts: TicketManutencionDraft[]) => void;
   removeManutencion: (id: string) => void;
 }
@@ -345,6 +352,8 @@ function areTicketSnapshotsEquivalent(
 // `people` es `empleado` (no hay id propio en TicketPerson).
 let calendarSqliteUpdatedAt = new Map<string, string>();
 let personSqliteUpdatedAt = new Map<string, string>();
+let absenceSqliteUpdatedAt = new Map<string, string>();
+let configSqliteUpdatedAt: string | null = null;
 
 function updateCalendarSqliteUpdatedAtMap(calendars: readonly TicketCalendar[]): void {
   calendarSqliteUpdatedAt = new Map(calendars.map((calendar) => [calendar.id, calendar.updatedAt]));
@@ -352,6 +361,10 @@ function updateCalendarSqliteUpdatedAtMap(calendars: readonly TicketCalendar[]):
 
 function updatePersonSqliteUpdatedAtMap(people: readonly TicketPerson[]): void {
   personSqliteUpdatedAt = new Map(people.map((person) => [person.empleado, person.updatedAt]));
+}
+
+function updateAbsenceSqliteUpdatedAtMap(absences: readonly TicketRestaurantAbsence[]): void {
+  absenceSqliteUpdatedAt = new Map(absences.map((absence) => [absence.id, absence.updatedAt]));
 }
 
 function parseTicketCalendarRecords(
@@ -380,6 +393,20 @@ function parseTicketPersonRecords(records: readonly TicketRestauranteSqliteRecor
     })
     .filter(isTicketPerson)
     .map(normalizeStoredTicketPerson);
+}
+
+function parseTicketAbsenceRecords(
+  records: readonly TicketRestauranteSqliteRecord[],
+): TicketRestaurantAbsence[] {
+  return records
+    .flatMap((record) => {
+      try {
+        return [JSON.parse(record.value) as TicketRestaurantAbsence];
+      } catch {
+        return [];
+      }
+    })
+    .filter(isTicketRestaurantAbsence);
 }
 
 /**
@@ -467,18 +494,95 @@ async function loadTicketPeoplePreferringSqlite(): Promise<TicketPerson[]> {
 }
 
 /**
- * Carga calendars + people (preferentemente desde SQLite) y recalcula el
- * resto del snapshot (absences/config siguen en localStorage; debtLedger se
- * recalcula a partir de los datos frescos, igual que hacían las acciones de
- * escritura antes de esta migración).
+ * Carga ausencias desde SQLite si el repositorio está activo, con la misma
+ * siembra inicial desde localStorage que loadTicketCalendarsPreferringSqlite.
+ */
+async function loadTicketAbsencesPreferringSqlite(): Promise<TicketRestaurantAbsence[]> {
+  if (!hasTicketRestauranteAbsencesSqliteRepository()) {
+    return readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
+  }
+
+  const sqliteRecords = await loadTicketRestauranteAbsenceRecordsFromSqlite();
+  if (sqliteRecords === null) {
+    return readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
+  }
+
+  if (sqliteRecords.length > 0) {
+    const absences = parseTicketAbsenceRecords(sqliteRecords);
+    updateAbsenceSqliteUpdatedAtMap(absences);
+    return absences;
+  }
+
+  const fallbackAbsences = readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
+  const seedResult = await saveTicketRestauranteAbsencesToSqlite(
+    fallbackAbsences.map((absence) => ({
+      id: absence.id,
+      serializedValue: JSON.stringify(absence),
+      expectedUpdatedAt: null,
+    })),
+  );
+  if (seedResult?.ok) {
+    const reloadedRecords = await loadTicketRestauranteAbsenceRecordsFromSqlite();
+    if (reloadedRecords) {
+      const reloadedAbsences = parseTicketAbsenceRecords(reloadedRecords);
+      updateAbsenceSqliteUpdatedAtMap(reloadedAbsences);
+      return reloadedAbsences;
+    }
+  }
+  return fallbackAbsences;
+}
+
+/**
+ * Carga config desde SQLite si el repositorio está activo. config es un
+ * objeto único (no colección), así que la siembra inicial guarda un solo
+ * registro de id fijo en vez de un lote.
+ */
+async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfig> {
+  if (!hasTicketRestauranteConfigSqliteRepository()) {
+    return readConfig();
+  }
+
+  const sqliteRecord = await loadTicketRestauranteConfigRecordFromSqlite();
+  if (sqliteRecord === null) {
+    // null puede significar "SQLite no activo" o "tabla sin fila aún"; en
+    // ambos casos hay que comprobar localStorage. Si la fila no existe pero
+    // SQLite sí está activo, se siembra desde localStorage.
+    const fallbackConfig = readConfig();
+    if (hasTicketRestauranteConfigSqliteRepository()) {
+      const seedResult = await saveTicketRestauranteConfigToSqlite(JSON.stringify(fallbackConfig), null);
+      if (seedResult?.ok && seedResult.currentUpdatedAt) {
+        configSqliteUpdatedAt = seedResult.currentUpdatedAt;
+      }
+    }
+    return fallbackConfig;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(sqliteRecord.value);
+  } catch {
+    parsed = null;
+  }
+
+  configSqliteUpdatedAt = sqliteRecord.updatedAt;
+  if (!parsed || typeof parsed !== 'object') {
+    return DEFAULT_TICKET_RESTAURANT_CONFIG;
+  }
+  return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
+}
+
+/**
+ * Carga calendars + people + absences + config (preferentemente desde
+ * SQLite) y recalcula debtLedger a partir de los datos frescos, igual que
+ * hacían las acciones de escritura antes de esta migración.
  */
 async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRestauranteSnapshot> {
-  const [calendars, people] = await Promise.all([
+  const [calendars, people, absences, config] = await Promise.all([
     loadTicketCalendarsPreferringSqlite(),
     loadTicketPeoplePreferringSqlite(),
+    loadTicketAbsencesPreferringSqlite(),
+    loadTicketConfigPreferringSqlite(),
   ]);
-  const absences = readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
-  const config = readConfig();
   const manutenciones = readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
     normalizeStoredTicketManutencion,
   );
@@ -781,25 +885,92 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     ]);
     return { ok: true };
   },
-  saveAbsences: (absences) => {
+  saveAbsences: async (absences) => {
     const state = get();
+
+    if (hasTicketRestauranteAbsencesSqliteRepository()) {
+      // saveAbsences reemplaza el listado activo completo: las ausencias que
+      // ya no están presentes se marcan deletedAt en el mismo batch (igual
+      // que el soft-delete de removeAbsence), y las presentes se guardan con
+      // su expectedUpdatedAt individual para no perder conflictos de OCC.
+      const now = nowIso();
+      const nextIds = new Set(absences.map((absence) => absence.id));
+      const removedAbsences = state.absences.filter(
+        (absence) => !absence.deletedAt && !nextIds.has(absence.id),
+      );
+      const tombstones = removedAbsences.map((absence) => ({ ...absence, updatedAt: now, deletedAt: now }));
+
+      const batchSaveResult = await saveTicketRestauranteAbsencesToSqlite(
+        [...absences, ...tombstones].map((absence) => ({
+          id: absence.id,
+          serializedValue: JSON.stringify(absence),
+          expectedUpdatedAt: absenceSqliteUpdatedAt.get(absence.id) ?? null,
+        })),
+      );
+
+      if (batchSaveResult) {
+        if (!batchSaveResult.ok) {
+          return {
+            ok: false,
+            message:
+              batchSaveResult.message ??
+              'Alguna ausencia ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        updateAbsenceSqliteUpdatedAtMap(absences);
+        const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
+        set({ absences, debtLedger });
+        return { ok: true };
+      }
+    }
+
     const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
     commitTicketState(set, { absences, debtLedger }, [
       [ABSENCES_STORAGE_KEY, absences],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
-  removeAbsence: (id) => {
+  removeAbsence: async (id) => {
     const state = get();
+    const previous = state.absences.find((absence) => absence.id === id);
+    if (!previous) {
+      return { ok: false, message: 'No se ha encontrado la ausencia.' };
+    }
     const updatedAt = nowIso();
-    const absences = state.absences.map((absence) =>
-      absence.id === id ? { ...absence, updatedAt, deletedAt: updatedAt } : absence,
-    );
+    const removedAbsence = { ...previous, updatedAt, deletedAt: updatedAt };
+
+    if (hasTicketRestauranteAbsencesSqliteRepository()) {
+      const expectedUpdatedAt = absenceSqliteUpdatedAt.get(id) ?? null;
+      const saveResult = await saveTicketRestauranteAbsenceToSqlite(
+        removedAbsence,
+        JSON.stringify(removedAbsence),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Esta ausencia ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        absenceSqliteUpdatedAt.delete(id);
+        const absences = state.absences.map((absence) => (absence.id === id ? removedAbsence : absence));
+        const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
+        set({ absences, debtLedger });
+        return { ok: true };
+      }
+    }
+
+    const absences = state.absences.map((absence) => (absence.id === id ? removedAbsence : absence));
     const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
     commitTicketState(set, { absences, debtLedger }, [
       [ABSENCES_STORAGE_KEY, absences],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
   upsertPerson: async (draft) => {
     const state = get();
@@ -978,13 +1149,38 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     ]);
     return { ok: true };
   },
-  updateConfig: (config) => {
+  updateConfig: async (config) => {
     const state = get();
+
+    if (hasTicketRestauranteConfigSqliteRepository()) {
+      const saveResult = await saveTicketRestauranteConfigToSqlite(
+        JSON.stringify(config),
+        configSqliteUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'La configuración ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        if (saveResult.currentUpdatedAt) {
+          configSqliteUpdatedAt = saveResult.currentUpdatedAt;
+        }
+        const debtLedger = recalculateDebtLedger(state.people, state.calendars, state.absences, config);
+        set({ config, debtLedger });
+        return { ok: true };
+      }
+    }
+
     const debtLedger = recalculateDebtLedger(state.people, state.calendars, state.absences, config);
     commitTicketState(set, { config, debtLedger }, [
       [CONFIG_STORAGE_KEY, config],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
   saveManutenciones: (drafts) => {
     const state = get();

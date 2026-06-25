@@ -1126,7 +1126,7 @@ export function TicketRestaurantePage({
     setPreviewRows((rows) => rows.filter((row) => row.id !== rowId));
   };
 
-  const savePreviewRows = () => {
+  const savePreviewRows = async () => {
     const currentAbsences = editingAbsenceId
       ? absences.filter((absence) => absence.id !== editingAbsenceId)
       : absences;
@@ -1138,7 +1138,13 @@ export function TicketRestaurantePage({
       return;
     }
 
-    saveAbsences(result.absences);
+    const saveResult = await saveAbsences(result.absences);
+    if (!saveResult.ok) {
+      setImportMessage(
+        saveResult.message ?? 'No se han podido guardar las ausencias. Recarga e inténtalo de nuevo.',
+      );
+      return;
+    }
     setImportMessage(formatSaveSummary(result));
     setPreviewRows([]);
     setEditingAbsenceId(null);
@@ -1625,8 +1631,12 @@ export function TicketRestaurantePage({
         <TicketPriceModal
           config={config}
           onClose={() => setIsPriceModalOpen(false)}
-          onSave={(nextConfig) => {
-            updateConfig(nextConfig);
+          onSave={async (nextConfig) => {
+            const result = await updateConfig(nextConfig);
+            if (!result.ok) {
+              await alert(result.message ?? 'No se ha podido guardar el precio del ticket.');
+              return;
+            }
             setIsPriceModalOpen(false);
           }}
         />
@@ -1636,8 +1646,12 @@ export function TicketRestaurantePage({
         <TicketRulesModal
           config={config}
           onClose={() => setIsRulesModalOpen(false)}
-          onSave={(nextConfig) => {
-            updateConfig(nextConfig);
+          onSave={async (nextConfig) => {
+            const result = await updateConfig(nextConfig);
+            if (!result.ok) {
+              await alert(result.message ?? 'No se han podido guardar las reglas de cálculo.');
+              return;
+            }
             setIsRulesModalOpen(false);
           }}
         />

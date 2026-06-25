@@ -7,6 +7,8 @@ import { publishDatabaseStatus } from '../../../services/databaseStatus';
 
 const TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
+const TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
+const TICKET_RESTAURANTE_CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -296,6 +298,193 @@ export async function saveTicketRestaurantePeopleToSqlite(
     clearPersistenceBusy(
       TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY,
       'No se ha podido importar las personas de Ticket Restaurante en SQLite.',
+    );
+    throw error;
+  }
+}
+
+// -- Absences -----------------------------------------------------------------
+
+export function hasTicketRestauranteAbsencesSqliteRepository(): boolean {
+  return Boolean(
+    window.traccion?.loadTicketRestauranteAbsenceRecords &&
+      window.traccion?.saveTicketRestauranteAbsenceRecordIfUnchanged,
+  );
+}
+
+export async function loadTicketRestauranteAbsenceRecordsFromSqlite(): Promise<
+  TicketRestauranteSqliteRecord[] | null
+> {
+  const loader = window.traccion?.loadTicketRestauranteAbsenceRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await withTemporarySqliteRetry(() => loader());
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  return snapshot.records;
+}
+
+export async function saveTicketRestauranteAbsenceToSqlite(
+  record: { id: string },
+  serializedValue: string,
+  expectedUpdatedAt: string | null,
+): Promise<TicketRestauranteSqliteSaveResult | null> {
+  const saver = window.traccion?.saveTicketRestauranteAbsenceRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  publishPersistenceBusy(
+    TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY,
+    'Guardando ausencia de Ticket Restaurante en SQLite…',
+  );
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      currentUpdatedAt: result.currentUpdatedAt,
+    };
+  } catch (error) {
+    clearPersistenceBusy(
+      TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY,
+      'No se ha podido guardar la ausencia de Ticket Restaurante en SQLite.',
+    );
+    throw error;
+  }
+}
+
+/**
+ * Guarda varias ausencias en una sola llamada IPC / transacción SQLite.
+ * Pensado para saveAbsences, que reemplaza el listado completo de golpe
+ * (igual patrón que el resto de importadores/siembras de este repositorio).
+ */
+export async function saveTicketRestauranteAbsencesToSqlite(
+  records: Array<{ id: string; serializedValue: string; expectedUpdatedAt: string | null }>,
+): Promise<TicketRestauranteSqliteBatchSaveResult | null> {
+  const saver = window.traccion?.saveTicketRestauranteAbsenceRecordsIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  if (records.length === 0) {
+    return { ok: true, message: 'Nada que importar.' };
+  }
+
+  publishPersistenceBusy(
+    TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY,
+    `Guardando ${records.length} ausencias de Ticket Restaurante en SQLite…`,
+  );
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver(
+        records.map(({ id, serializedValue, expectedUpdatedAt }) => ({
+          id,
+          value: serializedValue,
+          expectedUpdatedAt,
+        })),
+      ),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      failedRecordId: result.failedRecordId,
+    };
+  } catch (error) {
+    clearPersistenceBusy(
+      TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY,
+      'No se ha podido importar las ausencias de Ticket Restaurante en SQLite.',
+    );
+    throw error;
+  }
+}
+
+// -- Config (objeto único, migrado como colección de un solo registro) -------
+
+/**
+ * Id fijo del único registro de configuración. config no es una colección
+ * — es un objeto único — pero se migra reutilizando
+ * createJsonModuleRepository (igual tabla value_json que el resto de
+ * entidades de este módulo) en vez de una tabla singleton a medida como
+ * configuracion_state, para no duplicar lógica SQL nueva.
+ */
+export const TICKET_RESTAURANTE_CONFIG_RECORD_ID = 'ticket-restaurante-config';
+
+export function hasTicketRestauranteConfigSqliteRepository(): boolean {
+  return Boolean(
+    window.traccion?.loadTicketRestauranteConfigRecords &&
+      window.traccion?.saveTicketRestauranteConfigRecordIfUnchanged,
+  );
+}
+
+export async function loadTicketRestauranteConfigRecordFromSqlite(): Promise<
+  TicketRestauranteSqliteRecord | null
+> {
+  const loader = window.traccion?.loadTicketRestauranteConfigRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await withTemporarySqliteRetry(() => loader());
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  return snapshot.records.find((record) => record.id === TICKET_RESTAURANTE_CONFIG_RECORD_ID) ?? null;
+}
+
+export async function saveTicketRestauranteConfigToSqlite(
+  serializedValue: string,
+  expectedUpdatedAt: string | null,
+): Promise<TicketRestauranteSqliteSaveResult | null> {
+  const saver = window.traccion?.saveTicketRestauranteConfigRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  publishPersistenceBusy(
+    TICKET_RESTAURANTE_CONFIG_STORAGE_KEY,
+    'Guardando configuración de Ticket Restaurante en SQLite…',
+  );
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver({ id: TICKET_RESTAURANTE_CONFIG_RECORD_ID, value: serializedValue, expectedUpdatedAt }),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(TICKET_RESTAURANTE_CONFIG_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      currentUpdatedAt: result.currentUpdatedAt,
+    };
+  } catch (error) {
+    clearPersistenceBusy(
+      TICKET_RESTAURANTE_CONFIG_STORAGE_KEY,
+      'No se ha podido guardar la configuración de Ticket Restaurante en SQLite.',
     );
     throw error;
   }
