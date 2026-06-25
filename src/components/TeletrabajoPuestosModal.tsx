@@ -110,7 +110,6 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     updatePuestoTeletrabajo,
   } = useTeletrabajoStore();
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
-  const employees = useEmployeeStore((state) => state.employees);
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingPuestoId, setEditingPuestoId] = useState<string | null>(null);
@@ -166,32 +165,6 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt).sort(compareTeletrabajoPuestos),
     [puestosTeletrabajo],
   );
-
-  const puestosTeletrabajoByKey = useMemo(
-    () => new Set(visiblePuestos.map((puesto) => normalizeJobPosition(puesto.puesto))),
-    [visiblePuestos],
-  );
-
-  /**
-   * Puestos organizativos en uso (Plantilla) que no tienen ningún puesto
-   * teletrabajable equivalente todavía. Es el mismo cruce de texto que hace
-   * semaforo.ts/exportDireccion.ts para calcular la dotación real: si un
-   * puestoOrganizativo no aparece aquí, ese empleado no se está contando en
-   * ningún cálculo de presencialidad/dotación de Teletrabajo.
-   */
-  const puestosOrganizativosSinTeletrabajo = useMemo(() => {
-    const seen = new Map<string, string>();
-    employees
-      .filter((employee) => !employee.deletedAt && employee.puestoOrganizativo.trim())
-      .forEach((employee) => {
-        const puesto = employee.puestoOrganizativo.trim();
-        const key = normalizeJobPosition(puesto);
-        if (!puestosTeletrabajoByKey.has(key) && !seen.has(key)) {
-          seen.set(key, puesto);
-        }
-      });
-    return Array.from(seen.values()).sort(compareTextEs);
-  }, [employees, puestosTeletrabajoByKey]);
 
   const filteredPuestos = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -569,28 +542,6 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             <X size={18} />
           </button>
         </header>
-
-        {puestosOrganizativosSinTeletrabajo.length > 0 && (
-          <div className="border-b border-metro-border p-4">
-            <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">
-              <div className="flex items-start gap-2 font-semibold">
-                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-                <div>
-                  Hay {puestosOrganizativosSinTeletrabajo.length} puesto
-                  {puestosOrganizativosSinTeletrabajo.length === 1 ? '' : 's'} organizativo
-                  {puestosOrganizativosSinTeletrabajo.length === 1 ? '' : 's'} en Plantilla sin equivalente aquí.
-                  Esos empleados no se están contando en ningún cálculo de presencialidad/dotación de Teletrabajo.
-                  Añádelos primero en Traducción de puestos y luego aquí, con el mismo nombre exacto.
-                </div>
-              </div>
-              <ul className="mt-2 ml-7 list-disc space-y-0.5 text-amber-100/90">
-                {puestosOrganizativosSinTeletrabajo.map((puesto) => (
-                  <li key={puesto}>{puesto}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
 
         <div className="grid gap-3 border-b border-metro-border p-4 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">
           <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">

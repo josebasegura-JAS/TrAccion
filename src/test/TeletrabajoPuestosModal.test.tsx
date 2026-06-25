@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
-import type { Employee } from '../features/plantilla/domain/employee';
 import type { JobPositionTranslation } from '../features/plantilla/domain/jobPositionTranslation';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import type { TeletrabajoPuesto } from '../features/teletrabajo/domain/puestosTeletrabajo';
@@ -13,35 +12,6 @@ import { TeletrabajoPuestosModal } from '../components/TeletrabajoPuestosModal';
 Element.prototype.scrollTo = vi.fn();
 
 const now = '2026-06-01T08:00:00.000Z';
-
-function buildEmployee(overrides: Partial<Employee>): Employee {
-  return {
-    empleado: '00001',
-    nombreApellidos: 'Ana García',
-    puestoNomina: 'Técnica',
-    puestoOrganizativo: 'Técnica',
-    puestoEus: '',
-    residencia: '',
-    unidad: '',
-    nivelRetributivo: '',
-    direccionOrganizativa: '',
-    antiguedadPuesto: '',
-    sexo: '',
-    calle: '',
-    numero: '',
-    piso: '',
-    codigoPostal: '',
-    poblacion: '',
-    provincia: '',
-    nif: '',
-    dni: '',
-    residenciaCast: '',
-    residenciaEus: '',
-    direccionTeletrabajo: '',
-    deletedAt: null,
-    ...overrides,
-  };
-}
 
 function buildPuesto(overrides: Partial<TeletrabajoPuesto>): TeletrabajoPuesto {
   return {
@@ -90,61 +60,8 @@ describe('TeletrabajoPuestosModal', () => {
     expect(option.getAttribute('value')).toBe('Técnica');
   });
 
-  it('no muestra ningún aviso cuando todo puestoOrganizativo activo tiene su puesto teletrabajable', () => {
-    useEmployeeStore.setState({
-      employees: [buildEmployee({ puestoOrganizativo: 'Técnica' })],
-    });
-    useTeletrabajoStore.setState({
-      puestosTeletrabajo: [buildPuesto({ puesto: 'Técnica' })],
-    });
-
-    render(<TeletrabajoPuestosModal onClose={() => {}} />);
-
-    expect(screen.queryByText(/sin equivalente aquí/i)).not.toBeInTheDocument();
-  });
-
-  it('avisa cuando un puestoOrganizativo activo no tiene ningún puesto teletrabajable equivalente', () => {
-    useEmployeeStore.setState({
-      employees: [buildEmployee({ puestoOrganizativo: 'Técnica de Recursos' })],
-    });
-    useTeletrabajoStore.setState({
-      puestosTeletrabajo: [buildPuesto({ puesto: 'Técnica' })],
-    });
-
-    render(<TeletrabajoPuestosModal onClose={() => {}} />);
-
-    expect(screen.getByText(/sin equivalente aquí/i)).toBeInTheDocument();
-    expect(screen.getByText('Técnica de Recursos')).toBeInTheDocument();
-  });
-
-  it('no avisa de empleados dados de baja (deletedAt) ni cuenta duplicados del mismo puesto', () => {
-    useEmployeeStore.setState({
-      employees: [
-        buildEmployee({ empleado: '00001', puestoOrganizativo: 'Técnica de Recursos' }),
-        buildEmployee({ empleado: '00002', puestoOrganizativo: 'Técnica de Recursos' }),
-        buildEmployee({
-          empleado: '00003',
-          puestoOrganizativo: 'Puesto de baja',
-          deletedAt: now,
-        }),
-      ],
-    });
+  it('no muestra ningún aviso de puestos organizativos sin equivalente (Puestos Teletrabajo es de gestión manual)', () => {
     useTeletrabajoStore.setState({ puestosTeletrabajo: [] });
-
-    render(<TeletrabajoPuestosModal onClose={() => {}} />);
-
-    expect(screen.getByText(/hay 1 puesto organizativo en plantilla/i)).toBeInTheDocument();
-    expect(screen.queryByText('Puesto de baja')).not.toBeInTheDocument();
-    expect(screen.getAllByText('Técnica de Recursos')).toHaveLength(1);
-  });
-
-  it('compara por texto normalizado: acentos/mayúsculas distintos no generan aviso', () => {
-    useEmployeeStore.setState({
-      employees: [buildEmployee({ puestoOrganizativo: 'técnica  ' })],
-    });
-    useTeletrabajoStore.setState({
-      puestosTeletrabajo: [buildPuesto({ puesto: 'Técnica' })],
-    });
 
     render(<TeletrabajoPuestosModal onClose={() => {}} />);
 
