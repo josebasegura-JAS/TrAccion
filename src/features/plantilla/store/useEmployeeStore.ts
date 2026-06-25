@@ -45,6 +45,11 @@ interface EmployeeState {
   removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   importExcel: (file: File) => Promise<EmployeeImportResult>;
   importJobPositionTranslations: (file: File) => Promise<number>;
+  createJobPositionTranslation: (translation: JobPositionTranslation) => Promise<{ ok: boolean; message: string }>;
+  updateJobPositionTranslation: (
+    previousPuestoCastellano: string,
+    translation: JobPositionTranslation,
+  ) => Promise<{ ok: boolean; message: string }>;
   updateEmptyEmployeeJobPositionTranslations: () => Promise<{ updated: number; missing: number }>;
   selectEmployee: (employeeId: string) => void;
   setFilter: <K extends keyof EmployeeFilters>(key: K, value: EmployeeFilters[K]) => void;
@@ -176,6 +181,37 @@ async function persistJobPositionTranslationsConfirmed(
   }
 }
 
+
+function validateJobPositionTranslationDraft(
+  translation: JobPositionTranslation,
+): { ok: boolean; message: string; normalized: JobPositionTranslation } {
+  const normalized = {
+    puestoCastellano: translation.puestoCastellano.trim(),
+    puestoEuskera: translation.puestoEuskera.trim(),
+  };
+
+  if (!normalized.puestoCastellano) {
+    return { ok: false, message: 'Indica el nombre del puesto.', normalized };
+  }
+
+  if (!normalized.puestoEuskera) {
+    return { ok: false, message: 'Indica la traducción del puesto.', normalized };
+  }
+
+  return { ok: true, message: '', normalized };
+}
+
+function sortJobPositionTranslations(
+  translations: JobPositionTranslation[],
+): JobPositionTranslation[] {
+  return [...translations].sort((first, second) =>
+    first.puestoCastellano.localeCompare(second.puestoCastellano, 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    }),
+  );
+}
+
 function upsertJobPositionTranslations(
   current: JobPositionTranslation[],
   imported: JobPositionTranslation[],
@@ -188,12 +224,7 @@ function upsertJobPositionTranslations(
     translationsByPosition.set(normalizeJobPosition(translation.puestoCastellano), translation);
   });
 
-  return Array.from(translationsByPosition.values()).sort((first, second) =>
-    first.puestoCastellano.localeCompare(second.puestoCastellano, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    }),
-  );
+  return sortJobPositionTranslations(Array.from(translationsByPosition.values()));
 }
 
 
@@ -543,6 +574,68 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     await persistJobPositionTranslationsConfirmed(jobPositionTranslations);
     set({ jobPositionTranslations });
     return importedTranslations.length;
+  },
+  createJobPositionTranslation: async (translation) => {
+    const validation = validateJobPositionTranslationDraft(translation);
+    if (!validation.ok) {
+      return { ok: false, message: validation.message };
+    }
+
+    const currentTranslations = get().jobPositionTranslations;
+    const translationKey = normalizeJobPosition(validation.normalized.puestoCastellano);
+    const alreadyExists = currentTranslations.some(
+      (currentTranslation) =>
+        normalizeJobPosition(currentTranslation.puestoCastellano) === translationKey,
+    );
+
+    if (alreadyExists) {
+      return { ok: false, message: 'Ya existe un puesto con ese nombre.' };
+    }
+
+    const jobPositionTranslations = sortJobPositionTranslations([
+      ...currentTranslations,
+      validation.normalized,
+    ]);
+    await persistJobPositionTranslationsConfirmed(jobPositionTranslations);
+    set({ jobPositionTranslations });
+    return { ok: true, message: 'Puesto creado.' };
+  },
+  updateJobPositionTranslation: async (previousPuestoCastellano, translation) => {
+    const validation = validateJobPositionTranslationDraft(translation);
+    if (!validation.ok) {
+      return { ok: false, message: validation.message };
+    }
+
+    const currentTranslations = get().jobPositionTranslations;
+    const previousKey = normalizeJobPosition(previousPuestoCastellano);
+    const nextKey = normalizeJobPosition(validation.normalized.puestoCastellano);
+    const targetExists = currentTranslations.some(
+      (currentTranslation) => normalizeJobPosition(currentTranslation.puestoCastellano) === previousKey,
+    );
+
+    if (!targetExists) {
+      return { ok: false, message: 'El puesto ya no existe. Recarga antes de continuar.' };
+    }
+
+    const duplicated = currentTranslations.some((currentTranslation) => {
+      const currentKey = normalizeJobPosition(currentTranslation.puestoCastellano);
+      return currentKey !== previousKey && currentKey === nextKey;
+    });
+
+    if (duplicated) {
+      return { ok: false, message: 'Ya existe otro puesto con ese nombre.' };
+    }
+
+    const jobPositionTranslations = sortJobPositionTranslations(
+      currentTranslations.map((currentTranslation) =>
+        normalizeJobPosition(currentTranslation.puestoCastellano) === previousKey
+          ? validation.normalized
+          : currentTranslation,
+      ),
+    );
+    await persistJobPositionTranslationsConfirmed(jobPositionTranslations);
+    set({ jobPositionTranslations });
+    return { ok: true, message: 'Puesto actualizado.' };
   },
   updateEmptyEmployeeJobPositionTranslations: async () => {
     const { employees, jobPositionTranslations } = get();
