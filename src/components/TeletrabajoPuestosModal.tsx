@@ -128,7 +128,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const puesto = draft.puesto.trim();
     if (!puesto) {
       setError('Indica el puesto antes de guardar.');
@@ -142,7 +142,13 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       return;
     }
 
-    createPuestoTeletrabajo({ ...draft, puesto });
+    const result = await createPuestoTeletrabajo({ ...draft, puesto });
+    if (!result.ok) {
+      setError(result.message);
+      setStatus('');
+      return;
+    }
+
     setDraft(EMPTY_TELETRABAJO_PUESTO_DRAFT);
     setIsCreating(false);
     setError('');
@@ -169,7 +175,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setError('');
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!editingPuestoId) {
       return;
     }
@@ -199,11 +205,28 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       return;
     }
 
-    updatePuestoTeletrabajo(editingPuestoId, { ...draft, puesto });
+    const result = await updatePuestoTeletrabajo(editingPuestoId, { ...draft, puesto });
+    if (!result.ok) {
+      setError(result.message);
+      setStatus('');
+      return;
+    }
+
     setEditingPuestoId(null);
     setDraft(EMPTY_TELETRABAJO_PUESTO_DRAFT);
     setError('');
     setStatus('Puesto teletrabajable actualizado.');
+  };
+
+  const handleRemove = async (puesto: TeletrabajoPuesto) => {
+    const result = await removePuestoTeletrabajo(puesto.id);
+    if (!result.ok) {
+      setError(result.message);
+      setStatus('');
+      return;
+    }
+    setError('');
+    setStatus(`Puesto «${puesto.puesto}» eliminado.`);
   };
 
   const applyResolvedImport = (rows: readonly TeletrabajoPuestoImportRow[]) => {
@@ -455,7 +478,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 </label>
                 <button
                   className="rounded-xl bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                  onClick={editingPuestoId ? handleUpdate : handleCreate}
+                  onClick={() => void (editingPuestoId ? handleUpdate() : handleCreate())}
                   type="button"
                 >
                   {editingPuestoId ? 'Guardar cambios' : 'Guardar'}
@@ -593,7 +616,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                           <button
                             aria-label={`Eliminar ${puesto.puesto}`}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
-                            onClick={() => removePuestoTeletrabajo(puesto.id)}
+                            onClick={() => void handleRemove(puesto)}
                             title="Eliminar puesto"
                             type="button"
                           >

@@ -83,7 +83,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
     setError('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const nombre = draft.nombre.trim();
     if (!nombre) {
       setError('Indica un nombre para el grupo (por ejemplo, el área o turno coordinado).');
@@ -103,11 +103,23 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
     }
 
     if (editingGrupoId) {
-      updateGrupoCobertura(editingGrupoId, { ...draft, nombre });
+      const result = await updateGrupoCobertura(editingGrupoId, { ...draft, nombre });
+      if (!result.ok) {
+        setError(result.message);
+        setStatus('');
+        return;
+      }
       setStatus('Grupo de cobertura actualizado.');
     } else {
-      const id = createGrupoCobertura({ ...draft, nombre });
-      setExpandedGrupoId(id);
+      const result = await createGrupoCobertura({ ...draft, nombre });
+      if (!result.ok) {
+        setError(result.message);
+        setStatus('');
+        return;
+      }
+      if (result.recordId) {
+        setExpandedGrupoId(result.recordId);
+      }
       setStatus('Grupo de cobertura creado. Selecciona ahora qué puestos lo forman.');
     }
 
@@ -117,8 +129,13 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
     setError('');
   };
 
-  const handleRemove = (grupo: GrupoCobertura) => {
-    removeGrupoCobertura(grupo.id);
+  const handleRemove = async (grupo: GrupoCobertura) => {
+    const result = await removeGrupoCobertura(grupo.id);
+    if (!result.ok) {
+      setError(result.message);
+      setStatus('');
+      return;
+    }
     if (expandedGrupoId === grupo.id) {
       setExpandedGrupoId(null);
     }
@@ -126,8 +143,12 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
     setError('');
   };
 
-  const togglePuestoEnGrupo = (puestoId: string, grupoId: string, isChecked: boolean) => {
-    setPuestoGrupoCobertura(puestoId, isChecked ? grupoId : null);
+  const togglePuestoEnGrupo = async (puestoId: string, grupoId: string, isChecked: boolean) => {
+    const result = await setPuestoGrupoCobertura(puestoId, isChecked ? grupoId : null);
+    if (!result.ok) {
+      setError(result.message);
+      setStatus('');
+    }
   };
 
   return (
@@ -191,7 +212,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
                 </label>
                 <button
                   className="rounded-xl bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                  onClick={handleSave}
+                  onClick={() => void handleSave()}
                   type="button"
                 >
                   {editingGrupoId ? 'Guardar cambios' : 'Crear grupo'}
@@ -260,7 +281,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
                           onClick={(event) => {
                             event.stopPropagation();
-                            handleRemove(grupo);
+                            void handleRemove(grupo);
                           }}
                           role="button"
                           tabIndex={0}
@@ -297,7 +318,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
                                   <input
                                     checked={isInThisGroup}
                                     onChange={(event) =>
-                                      togglePuestoEnGrupo(puesto.id, grupo.id, event.target.checked)
+                                      void togglePuestoEnGrupo(puesto.id, grupo.id, event.target.checked)
                                     }
                                     type="checkbox"
                                   />
