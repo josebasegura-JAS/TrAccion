@@ -332,3 +332,96 @@ export function getTeletrabajoSemaforo(
   };
 }
 
+export interface TeletrabajoIncidentSummary {
+  status: TeletrabajoSemaforoStatus;
+  label: string;
+  title: string;
+}
+
+function getTeletrabajoIncidentLabel(semaforo: TeletrabajoSemaforo): string {
+  if (semaforo.status === 'ok') {
+    return 'Sin incidencias';
+  }
+
+  const title = semaforo.title.toLocaleLowerCase('es-ES');
+
+  if (title.includes('presencialidad')) {
+    return 'Revisar presencialidad';
+  }
+
+  if (title.includes('empleado no localizado')) {
+    return 'Empleado no localizado';
+  }
+
+  if (title.includes('antigüedad insuficiente')) {
+    return 'Antigüedad insuficiente';
+  }
+
+  if (title.includes('antigüedad')) {
+    return 'Revisar antigüedad';
+  }
+
+  if (title.includes('falta puesto organizativo')) {
+    return 'Falta puesto organizativo';
+  }
+
+  if (title.includes('puesto no teletrabajable')) {
+    return 'Puesto no teletrabajable';
+  }
+
+  return semaforo.status === 'blocked' ? 'Incidencia bloqueante' : 'Revisar incidencia';
+}
+
+/**
+ * Resumen de incidencia para un único badge en la app: normalmente basta
+ * con el semáforo general (getTeletrabajoSemaforo), porque ya incorpora la
+ * presencialidad mínima cuando la antigüedad es correcta. La única
+ * situación donde antigüedad y presencialidad pueden decir cosas distintas
+ * es cuando la antigüedad bloquea o deja en revisión el semáforo general,
+ * pero la presencialidad por su lado sí se cumpliría: en ese caso se añade
+ * esa información al label/title en vez de mostrar un segundo badge
+ * permanente, que sería redundante en el resto de casos.
+ */
+export function getTeletrabajoIncidentSummary(
+  solicitud: TeletrabajoSolicitud,
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  solicitudesByPuestoDiaCount: Map<string, number>,
+  employeesByEmpleado: Map<string, Employee>,
+  gruposById: Map<string, GrupoCobertura> = new Map(),
+): TeletrabajoIncidentSummary {
+  const semaforo = getTeletrabajoSemaforo(
+    solicitud,
+    puestosByKey,
+    solicitudesByPuestoDiaCount,
+    employeesByEmpleado,
+    gruposById,
+  );
+  const antiguedad = evaluateTeletrabajoAntiguedad(
+    solicitud,
+    employeesByEmpleado.get((solicitud.empleado ?? '').trim()),
+  );
+
+  const label = getTeletrabajoIncidentLabel(semaforo);
+  let title = semaforo.title;
+  let combinedLabel = label;
+
+  if (semaforo.status !== 'ok' && antiguedad.status !== 'cumple') {
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+      gruposById,
+    );
+    if (presencialidad.status === 'cumple') {
+      combinedLabel = `${label} · presencialidad OK`;
+      title = `${title} En cuanto a presencialidad mínima, no hay incidencia: ${presencialidad.title.toLocaleLowerCase('es-ES')}`;
+    }
+  }
+
+  return {
+    status: semaforo.status,
+    label: combinedLabel,
+    title,
+  };
+}

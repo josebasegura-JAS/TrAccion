@@ -7,6 +7,7 @@ import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
   evaluateTeletrabajoPresencialidad,
+  getTeletrabajoIncidentSummary,
   getTeletrabajoSemaforo,
 } from './semaforo';
 import type { TeletrabajoSolicitud } from './solicitud';
@@ -771,5 +772,88 @@ describe('evaluateTeletrabajoPresencialidad — indicador aislado, sin antigüed
     );
 
     expect(presencialidad.status).toBe('revisar');
+  });
+});
+
+describe('getTeletrabajoIncidentSummary — un único badge para la app, fusionando motivos solo cuando difieren', () => {
+  it('no añade nada al label cuando todo está en orden', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1, dotacionComputable: 3 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+    const solicitud = buildSolicitud({ diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const summary = getTeletrabajoIncidentSummary(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(summary.status).toBe('ok');
+    expect(summary.label).not.toContain('presencialidad OK');
+  });
+
+  it('añade "presencialidad OK" cuando la antigüedad bloquea pero la presencialidad sí se cumple', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100', antiguedadPuesto: '2026-05-01' })],
+    ]);
+    const solicitud = buildSolicitud({ fechaSolicitud: '2026-06-01', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const summary = getTeletrabajoIncidentSummary(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(summary.status).toBe('blocked');
+    expect(summary.label).toBe('Antigüedad insuficiente · presencialidad OK');
+    expect(summary.title).toContain('presencialidad mínima, no hay incidencia');
+  });
+
+  it('añade "presencialidad OK" cuando la antigüedad está sin dato (empleado no localizado) pero presencialidad se cumple', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map<string, Employee>();
+    const solicitud = buildSolicitud({ diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const summary = getTeletrabajoIncidentSummary(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(summary.status).toBe('review');
+    expect(summary.label).toContain('presencialidad OK');
+  });
+
+  it('no añade nada cuando antigüedad y presencialidad fallan a la vez (no hay nada nuevo que aportar)', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1, dotacionComputable: 1 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100', antiguedadPuesto: '2026-05-01' })],
+    ]);
+    // Antigüedad insuficiente Y sin días marcados (presencialidad también
+    // 'revisar', no 'cumple'): el label no debe mencionar presencialidad,
+    // ya que no añadiría información nueva.
+    const solicitud = buildSolicitud({ fechaSolicitud: '2026-06-01', diasTeletrabajo: [] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const summary = getTeletrabajoIncidentSummary(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(summary.status).toBe('blocked');
+    expect(summary.label).toBe('Antigüedad insuficiente');
+    expect(summary.label).not.toContain('presencialidad OK');
   });
 });

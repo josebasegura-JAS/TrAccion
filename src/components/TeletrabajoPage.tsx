@@ -31,8 +31,7 @@ import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/grup
 import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
-  evaluateTeletrabajoPresencialidad,
-  getTeletrabajoSemaforo,
+  getTeletrabajoIncidentSummary,
 } from '../features/teletrabajo/domain/semaforo';
 import {
   TELETRABAJO_ESTADOS,
@@ -219,75 +218,6 @@ const TELETRABAJO_INCIDENT_FILTER_LABELS: Record<Exclude<TeletrabajoIncidentFilt
   listasAprobar: 'Listas para aprobar',
 };
 
-function getTeletrabajoIncidentLabel(
-  semaforo: ReturnType<typeof getTeletrabajoSemaforo>,
-): string {
-  if (semaforo.status === 'ok') {
-    return 'Sin incidencias';
-  }
-
-  const title = semaforo.title.toLocaleLowerCase('es-ES');
-
-  if (title.includes('presencialidad')) {
-    return 'Revisar presencialidad';
-  }
-
-  if (title.includes('empleado no localizado')) {
-    return 'Empleado no localizado';
-  }
-
-  if (title.includes('antigüedad insuficiente')) {
-    return 'Antigüedad insuficiente';
-  }
-
-  if (title.includes('antigüedad')) {
-    return 'Revisar antigüedad';
-  }
-
-  if (title.includes('falta puesto organizativo')) {
-    return 'Falta puesto organizativo';
-  }
-
-  if (title.includes('puesto no teletrabajable')) {
-    return 'Puesto no teletrabajable';
-  }
-
-  return semaforo.status === 'blocked' ? 'Incidencia bloqueante' : 'Revisar incidencia';
-}
-
-/**
- * Badge aislado de presencialidad mínima, independiente del semáforo
- * general: no tiene en cuenta si la solicitud está rechazada o si la
- * antigüedad es insuficiente, solo si se cumple la presencialidad mínima
- * exigida para los días que pide. Se muestra junto al badge de incidencias
- * (que sigue igual), no lo sustituye.
- */
-function getTeletrabajoPresencialidadBadgeProps(
-  presencialidad: ReturnType<typeof evaluateTeletrabajoPresencialidad>,
-): { label: string; className: string; icon: typeof CheckCircle2 } {
-  if (presencialidad.status === 'cumple') {
-    return {
-      label: 'Presencialidad',
-      className: 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200',
-      icon: CheckCircle2,
-    };
-  }
-
-  if (presencialidad.status === 'revisar') {
-    return {
-      label: 'Presencialidad: revisar',
-      className: 'border-amber-400/40 bg-amber-500/15 text-amber-200',
-      icon: AlertTriangle,
-    };
-  }
-
-  return {
-    label: 'Presencialidad: no cumple',
-    className: 'border-red-400/40 bg-red-500/15 text-red-200',
-    icon: XCircle,
-  };
-}
-
 function getTeletrabajoIncidentMeta(
   solicitud: TeletrabajoSolicitud,
   puestosByKey: ReturnType<typeof buildPuestosByKey>,
@@ -295,7 +225,7 @@ function getTeletrabajoIncidentMeta(
   employeesByEmpleado: Map<string, Employee>,
   gruposById: ReturnType<typeof buildGruposCoberturaByIdMap>,
 ): TeletrabajoIncidentMeta {
-  const semaforo = getTeletrabajoSemaforo(
+  const summary = getTeletrabajoIncidentSummary(
     solicitud,
     puestosByKey,
     solicitudesByPuestoCount,
@@ -304,23 +234,23 @@ function getTeletrabajoIncidentMeta(
   );
   const isReviewedPending = solicitud.revisado && solicitud.estado === 'pendiente';
   const isReadyToApprove =
-    solicitud.revisado && solicitud.estado === 'analizada' && semaforo.status === 'ok';
+    solicitud.revisado && solicitud.estado === 'analizada' && summary.status === 'ok';
 
-  if (semaforo.status === 'blocked') {
+  if (summary.status === 'blocked') {
     return {
       status: 'blocked',
-      label: getTeletrabajoIncidentLabel(semaforo),
-      title: semaforo.title,
+      label: summary.label,
+      title: summary.title,
       isReviewedPending,
       isReadyToApprove,
     };
   }
 
-  if (semaforo.status === 'review') {
+  if (summary.status === 'review') {
     return {
       status: 'review',
-      label: getTeletrabajoIncidentLabel(semaforo),
-      title: semaforo.title,
+      label: summary.label,
+      title: summary.title,
       isReviewedPending,
       isReadyToApprove,
     };
@@ -328,10 +258,10 @@ function getTeletrabajoIncidentMeta(
 
   return {
     status: 'ok',
-    label: getTeletrabajoIncidentLabel(semaforo),
+    label: summary.label,
     title: isReviewedPending
-      ? `${semaforo.title} Solicitud revisada que sigue en estado pendiente: queda una decisión manual por resolver, pero no hay incidencia objetiva de condiciones.`
-      : semaforo.title,
+      ? `${summary.title} Solicitud revisada que sigue en estado pendiente: queda una decisión manual por resolver, pero no hay incidencia objetiva de condiciones.`
+      : summary.title,
     isReviewedPending,
     isReadyToApprove,
   };
@@ -840,64 +770,32 @@ export function TeletrabajoPage({
               <XCircle size={15} />
             );
 
-          const presencialidad = evaluateTeletrabajoPresencialidad(
-            s,
-            puestosByKey,
-            solicitudesByPuestoCount,
-            employeesByEmpleado,
-            gruposByIdMap,
-          );
-          const presencialidadBadge = getTeletrabajoPresencialidadBadgeProps(presencialidad);
-          const PresencialidadIcon = presencialidadBadge.icon;
-
           return (
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              <span
-                aria-label={meta.title}
-                className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
-                onMouseEnter={(event) =>
-                  setIncidentTooltip({
-                    title: meta.title,
-                    x: event.clientX,
-                    y: event.clientY,
-                  })
-                }
-                onMouseLeave={() => setIncidentTooltip(null)}
-                onMouseMove={(event) =>
-                  setIncidentTooltip((current) =>
-                    current ? { ...current, x: event.clientX, y: event.clientY } : current,
-                  )
-                }
-              >
-                {icon}
-                <span className="truncate">{meta.label}</span>
-              </span>
-              <span
-                aria-label={presencialidad.title}
-                className={`inline-flex h-7 min-w-[8.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${presencialidadBadge.className}`}
-                onMouseEnter={(event) =>
-                  setIncidentTooltip({
-                    title: presencialidad.title,
-                    x: event.clientX,
-                    y: event.clientY,
-                  })
-                }
-                onMouseLeave={() => setIncidentTooltip(null)}
-                onMouseMove={(event) =>
-                  setIncidentTooltip((current) =>
-                    current ? { ...current, x: event.clientX, y: event.clientY } : current,
-                  )
-                }
-              >
-                <PresencialidadIcon size={15} />
-                <span className="truncate">{presencialidadBadge.label}</span>
-              </span>
-            </div>
+            <span
+              aria-label={meta.title}
+              className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
+              onMouseEnter={(event) =>
+                setIncidentTooltip({
+                  title: meta.title,
+                  x: event.clientX,
+                  y: event.clientY,
+                })
+              }
+              onMouseLeave={() => setIncidentTooltip(null)}
+              onMouseMove={(event) =>
+                setIncidentTooltip((current) =>
+                  current ? { ...current, x: event.clientX, y: event.clientY } : current,
+                )
+              }
+            >
+              {icon}
+              <span className="truncate">{meta.label}</span>
+            </span>
           );
         },
-        width: 340,
-        minWidth: 280,
-        maxWidth: 460,
+        width: 200,
+        minWidth: 160,
+        maxWidth: 280,
         sortable: true,
         className: 'text-center',
       },
