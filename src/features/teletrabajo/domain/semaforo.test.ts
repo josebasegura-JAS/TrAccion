@@ -6,6 +6,7 @@ import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
+  evaluateTeletrabajoPresencialidad,
   getTeletrabajoSemaforo,
 } from './semaforo';
 import type { TeletrabajoSolicitud } from './solicitud';
@@ -677,4 +678,98 @@ describe('grupos de cobertura: puestos coordinados que comparten presencialidad 
     expect(semaforoMiercoles.status).toBe('ok');
   });
 
+});
+
+describe('evaluateTeletrabajoPresencialidad — indicador aislado, sin antigüedad ni estado', () => {
+  it('cumple presencialidad aunque la antigüedad sea insuficiente (motivos independientes)', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100', antiguedadPuesto: '2026-05-01' })],
+    ]);
+    // Antigüedad insuficiente para esta fecha de solicitud (cumple el año el
+    // 2027-05-01), pero eso no debe afectar al cálculo de presencialidad.
+    const solicitud = buildSolicitud({ fechaSolicitud: '2026-06-01', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(presencialidad.status).toBe('cumple');
+  });
+
+  it('cumple presencialidad aunque la solicitud esté rechazada (motivos independientes)', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+    const solicitud = buildSolicitud({ estado: 'denegada', diasTeletrabajo: ['martes'] });
+    // buildSolicitudesByPeriodoPuestoCount ya excluye las denegadas del
+    // conteo de conflictos, así que esta sola solicitud no genera ninguno.
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(presencialidad.status).toBe('cumple');
+  });
+
+  it('marca a revisar (no a no-cumple) una solicitud sin ningún día de la semana marcado', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+    const solicitud = buildSolicitud({ estado: 'denegada', diasTeletrabajo: [] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(presencialidad.status).toBe('revisar');
+    expect(presencialidad.title).toContain('Sin días de la semana marcados');
+  });
+
+  it('no cumple si el puesto organizativo no está configurado como teletrabajable', () => {
+    const puestosByKey = buildPuestosByKey([]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+    const solicitud = buildSolicitud({ puestoOrganizativo: 'Puesto Inexistente', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(presencialidad.status).toBe('no-cumple');
+  });
+
+  it('marca a revisar (no no-cumple) cuando hay conflicto real de presencialidad mínima', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 2, dotacionComputable: 2 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesByEmpleado = new Map([['100', buildEmployee({ empleado: '100' })]]);
+    const solicitudA = buildSolicitud({ empleado: '100', diasTeletrabajo: ['martes'] });
+    const solicitudB = buildSolicitud({ empleado: '101', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitudA, solicitudB]);
+
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitudA,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesByEmpleado,
+    );
+
+    expect(presencialidad.status).toBe('revisar');
+  });
 });

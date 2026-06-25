@@ -9,6 +9,7 @@ import {
   buildPuestosByKey,
   buildSolicitudPeriodoPuestoDiaKey,
   buildSolicitudesByPeriodoPuestoCount,
+  evaluateTeletrabajoPresencialidad,
 } from './semaforo';
 import { TELETRABAJO_DIAS, type TeletrabajoSolicitud } from './solicitud';
 import { buildStableExportFilename } from '../../../shared/export/tableExport';
@@ -477,6 +478,7 @@ export async function exportTeletrabajoDireccionToExcel({
     { key: 'jueves', width: 5.63 },
     { key: 'periodo', width: 10.45 },
     { key: 'cumplimiento', width: 13.82 },
+    { key: 'presencialidad', width: 13.82 },
     { key: 'informe', width: 11.09 },
     { key: 'anoAnterior', width: 14 },
     { key: 'validacionJefatura', width: 16.18 },
@@ -499,21 +501,22 @@ export async function exportTeletrabajoDireccionToExcel({
   worksheet.mergeCells('B4:C4');
   worksheet.mergeCells('D4:E4');
   worksheet.mergeCells('F4:H4');
-  worksheet.mergeCells('P4:R4');
+  worksheet.mergeCells('Q4:S4');
 
   worksheet.getCell('B4').value = 'Solicitante';
   worksheet.getCell('D4').value = 'Puesto de Trabajo';
   worksheet.getCell('F4').value = 'Petición original';
   worksheet.getCell('I4').value = 'Periodo 2025-2026';
   worksheet.getCell('J4').value = 'Cumplimiento Condiciones Presencialidad';
-  worksheet.getCell('K4').value = 'Informe Favorable';
-  worksheet.getCell('L4').value = 'Año Anterior Teletrabajado';
-  worksheet.getCell('M4').value = 'Validación Jefatura de Unidad a Repetir ';
-  worksheet.getCell('N4').value = 'Validación ordinaria de la Dirección ';
-  worksheet.getCell('O4').value = 'Apuntes RRLL';
-  worksheet.getCell('P4').value = 'Petición II';
-  worksheet.getCell('S4').value = 'Cambios fuera de plazo ordinario';
-  worksheet.getCell('T4').value = 'Observaciones';
+  worksheet.getCell('K4').value = 'Cumplimiento Presencialidad Mínima';
+  worksheet.getCell('L4').value = 'Informe Favorable';
+  worksheet.getCell('M4').value = 'Año Anterior Teletrabajado';
+  worksheet.getCell('N4').value = 'Validación Jefatura de Unidad a Repetir ';
+  worksheet.getCell('O4').value = 'Validación ordinaria de la Dirección ';
+  worksheet.getCell('P4').value = 'Apuntes RRLL';
+  worksheet.getCell('Q4').value = 'Petición II';
+  worksheet.getCell('T4').value = 'Cambios fuera de plazo ordinario';
+  worksheet.getCell('U4').value = 'Observaciones';
 
   worksheet.getRow(5).values = [
     '',
@@ -524,6 +527,7 @@ export async function exportTeletrabajoDireccionToExcel({
     'Martes',
     'Miércoles',
     'Jueves',
+    '',
     '',
     '',
     '',
@@ -566,6 +570,13 @@ export async function exportTeletrabajoDireccionToExcel({
       solicitudesByPuestoDiaCount,
       gruposById,
     });
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesById,
+      gruposById,
+    );
     const rowNumber = 6 + index;
     const row = worksheet.getRow(rowNumber);
 
@@ -579,6 +590,7 @@ export async function exportTeletrabajoDireccionToExcel({
       hasDia(solicitud, 'miercoles'),
       hasDia(solicitud, 'jueves'),
       solicitud.periodo,
+      '',
       '',
       '',
       solicitud.tipoSolicitud === 'renovacion' ? YES : NO,
@@ -595,7 +607,7 @@ export async function exportTeletrabajoDireccionToExcel({
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.font = { name: ROTIS_FONT, size: 11 };
       cell.alignment = {
-        horizontal: [1, 2, 6, 7, 8, 9, 10, 12].includes(colNumber) ? 'center' : 'left',
+        horizontal: [1, 2, 6, 7, 8, 9, 10, 11, 13].includes(colNumber) ? 'center' : 'left',
         vertical: 'middle',
         wrapText: true,
       };
@@ -607,9 +619,33 @@ export async function exportTeletrabajoDireccionToExcel({
       fillColor: assessment.status === 'ok' ? SOFT_GREEN : assessment.rowFillColor ?? SOFT_YELLOW,
       textColor: assessment.textColor,
     });
-    setValidationCellStyle(row.getCell(11), solicitud.validacionJefatura);
-    setAnoAnteriorCellStyle(row.getCell(12), solicitud.tipoSolicitud === 'renovacion' ? YES : NO);
-    [13, 14, 15].forEach((columnNumber) => setManualValidationCellStyle(row.getCell(columnNumber)));
+    // Celda K, aislada de J: solo presencialidad mínima, sin tener en cuenta
+    // el estado de la solicitud (rechazada) ni la antigüedad del empleado,
+    // que ya tiñen J y el resto de la fila si corresponde.
+    setStatusCellStyle({
+      cell: row.getCell(11),
+      value:
+        presencialidad.status === 'cumple'
+          ? YES
+          : presencialidad.status === 'revisar'
+            ? 'REVISAR'
+            : NO,
+      fillColor:
+        presencialidad.status === 'cumple'
+          ? SOFT_GREEN
+          : presencialidad.status === 'revisar'
+            ? SOFT_YELLOW
+            : SOFT_RED,
+      textColor:
+        presencialidad.status === 'cumple'
+          ? SOFT_GREEN_TEXT
+          : presencialidad.status === 'revisar'
+            ? SOFT_YELLOW_TEXT
+            : SOFT_RED_TEXT,
+    });
+    setValidationCellStyle(row.getCell(12), solicitud.validacionJefatura);
+    setAnoAnteriorCellStyle(row.getCell(13), solicitud.tipoSolicitud === 'renovacion' ? YES : NO);
+    [14, 15, 16].forEach((columnNumber) => setManualValidationCellStyle(row.getCell(columnNumber)));
 
     if (assessment.rowFillColor) {
       applyRowFill(row, assessment.rowFillColor);
@@ -624,7 +660,7 @@ export async function exportTeletrabajoDireccionToExcel({
 
   worksheet.autoFilter = {
     from: 'B5',
-    to: 'T5',
+    to: 'U5',
   };
 
   const buffer = await workbook.xlsx.writeBuffer();

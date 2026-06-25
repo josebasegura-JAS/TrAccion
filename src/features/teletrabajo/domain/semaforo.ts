@@ -2,12 +2,19 @@ import type { Employee } from '../../plantilla/domain/employee';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import type { GrupoCobertura } from './gruposCobertura';
 import { normalizeTeletrabajoPuesto, type TeletrabajoPuesto } from './puestosTeletrabajo';
-import { TELETRABAJO_DIAS, type TeletrabajoDia, type TeletrabajoSolicitud } from './solicitud';
+import { type TeletrabajoDia, type TeletrabajoSolicitud } from './solicitud';
 
 export type TeletrabajoSemaforoStatus = 'ok' | 'review' | 'blocked';
 
 export interface TeletrabajoSemaforo {
   status: TeletrabajoSemaforoStatus;
+  title: string;
+}
+
+export type TeletrabajoPresencialidadStatus = 'cumple' | 'no-cumple' | 'revisar';
+
+export interface TeletrabajoPresencialidadEvaluation {
+  status: TeletrabajoPresencialidadStatus;
   title: string;
 }
 
@@ -158,36 +165,31 @@ function pluralPersonas(count: number, singular: string, plural: string): string
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-export function getTeletrabajoSemaforo(
+/**
+ * Evalúa SOLO la presencialidad mínima de una solicitud, sin tener en cuenta
+ * el estado de la solicitud (pendiente/aprobada/denegada) ni la antigüedad
+ * del empleado: esos son motivos de bloqueo distintos y anteriores que ya
+ * gestionan getTeletrabajoSemaforo (app) y buildTeletrabajoAssessment
+ * (Excel de Dirección). Esta función responde únicamente a "si esta persona
+ * llegara a teletrabajar esos días, ¿se mantiene la presencialidad mínima
+ * exigida?", para no mezclar ambos criterios en un único semáforo.
+ *
+ * Si la solicitud no tiene ningún día de la semana marcado, no se puede
+ * saber qué días afectaría, así que se marca como 'revisar' en vez de
+ * asumir "todos los días" (que es lo que hace getTeletrabajoSemaforo para
+ * el cálculo de conflictos, donde esa suposición es deliberada y distinta).
+ */
+export function evaluateTeletrabajoPresencialidad(
   solicitud: TeletrabajoSolicitud,
   puestosByKey: Map<string, TeletrabajoPuesto>,
   solicitudesByPuestoDiaCount: Map<string, number>,
   employeesByEmpleado: Map<string, Employee>,
   gruposById: Map<string, GrupoCobertura> = new Map(),
-): TeletrabajoSemaforo {
-  const antiguedad = evaluateTeletrabajoAntiguedad(
-    solicitud,
-    employeesByEmpleado.get((solicitud.empleado ?? '').trim()),
-  );
-
-  if (antiguedad.status === 'no-cumple') {
-    return {
-      status: 'blocked',
-      title: antiguedad.title,
-    };
-  }
-
-  if (antiguedad.status === 'sin-dato') {
-    return {
-      status: 'review',
-      title: antiguedad.title,
-    };
-  }
-
+): TeletrabajoPresencialidadEvaluation {
   const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
   if (!puestoKey) {
     return {
-      status: 'blocked',
+      status: 'no-cumple',
       title: 'Falta puesto organizativo en la solicitud.',
     };
   }
@@ -195,15 +197,21 @@ export function getTeletrabajoSemaforo(
   const puesto = puestosByKey.get(puestoKey);
   if (!puesto) {
     return {
-      status: 'blocked',
+      status: 'no-cumple',
       title: `Puesto no teletrabajable: «${solicitud.puestoOrganizativo}» no está configurado como teletrabajable.`,
+    };
+  }
+
+  if (solicitud.diasTeletrabajo.length === 0) {
+    return {
+      status: 'revisar',
+      title: 'Sin días de la semana marcados: no se puede comprobar la presencialidad mínima.',
     };
   }
 
   const coberturaKey = getGrupoCoberturaKey(puesto, puestoKey);
   const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey, gruposById);
-  const diasSolicitados =
-    solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
+  const diasSolicitados = solicitud.diasTeletrabajo;
 
   // Nº de peticiones activas (mismo periodo, misma cobertura) en cualquiera de
   // los días solicitados por esta solicitud: lo más representativo para el
@@ -247,7 +255,7 @@ export function getTeletrabajoSemaforo(
       const diasAfectados = conflictos.map(({ dia }) => dia).join(', ');
 
       return {
-        status: 'review',
+        status: 'revisar',
         title:
           `Revisar presencialidad mínima · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · mín. ${presencialidadMinima} presenciales · ` +
           `faltan ${pluralPersonas(personasFaltantes, 'persona', 'personas')} (${diasAfectados}).`,
@@ -255,7 +263,7 @@ export function getTeletrabajoSemaforo(
     }
 
     return {
-      status: 'ok',
+      status: 'cumple',
       title:
         `Sin incidencias · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · mín. ${presencialidadMinima} presenciales` +
         (puesto.observaciones ? ` · ${puesto.observaciones}` : ''),
@@ -263,10 +271,64 @@ export function getTeletrabajoSemaforo(
   }
 
   return {
-    status: 'ok',
+    status: 'cumple',
     title:
       `Sin incidencias · ${pluralPersonas(peticionesActivas, 'petición', 'peticiones')} · sin mínimo de presencialidad` +
       (puesto.observaciones ? ` · ${puesto.observaciones}` : ''),
+  };
+}
+
+export function getTeletrabajoSemaforo(
+  solicitud: TeletrabajoSolicitud,
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  solicitudesByPuestoDiaCount: Map<string, number>,
+  employeesByEmpleado: Map<string, Employee>,
+  gruposById: Map<string, GrupoCobertura> = new Map(),
+): TeletrabajoSemaforo {
+  const antiguedad = evaluateTeletrabajoAntiguedad(
+    solicitud,
+    employeesByEmpleado.get((solicitud.empleado ?? '').trim()),
+  );
+
+  if (antiguedad.status === 'no-cumple') {
+    return {
+      status: 'blocked',
+      title: antiguedad.title,
+    };
+  }
+
+  if (antiguedad.status === 'sin-dato') {
+    return {
+      status: 'review',
+      title: antiguedad.title,
+    };
+  }
+
+  const presencialidad = evaluateTeletrabajoPresencialidad(
+    solicitud,
+    puestosByKey,
+    solicitudesByPuestoDiaCount,
+    employeesByEmpleado,
+    gruposById,
+  );
+
+  if (presencialidad.status === 'no-cumple') {
+    return {
+      status: 'blocked',
+      title: presencialidad.title,
+    };
+  }
+
+  if (presencialidad.status === 'revisar') {
+    return {
+      status: 'review',
+      title: presencialidad.title,
+    };
+  }
+
+  return {
+    status: 'ok',
+    title: presencialidad.title,
   };
 }
 

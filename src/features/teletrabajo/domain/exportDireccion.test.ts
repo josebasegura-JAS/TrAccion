@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
-import { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount } from './semaforo';
+import { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount, evaluateTeletrabajoPresencialidad } from './semaforo';
 import type { TeletrabajoSolicitud } from './solicitud';
 import { buildTeletrabajoAssessment } from './exportDireccion';
 
@@ -484,4 +484,58 @@ describe('buildTeletrabajoAssessment — texto de Apuntes RRLL con peticiones y 
     expect(assessmentMiercoles.cellValue).toBe('SI');
   });
 
+});
+
+describe('celda J (assessment combinado) vs celda K (presencialidad aislada) — casos reales de Dirección', () => {
+  it('antigüedad insuficiente: J marca NO (rojo) pero K marca SI (verde), porque son motivos independientes', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 0, dotacionComputable: 0 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesById = buildEmployeesById([
+      buildEmployee({ empleado: '100', antiguedadPuesto: '2026-05-01' }),
+    ]);
+    const solicitud = buildSolicitud({ fechaSolicitud: '2026-06-01', diasTeletrabajo: ['martes'] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const assessment = buildTeletrabajoAssessment({
+      solicitud,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+    });
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesById,
+    );
+
+    expect(assessment.cellValue).toBe('NO');
+    expect(assessment.apuntesRrll).toBe('Antigüedad insuficiente');
+    expect(presencialidad.status).toBe('cumple');
+  });
+
+  it('rechazada sin días marcados: J marca NO (rojo) y K marca REVISAR (amarillo), no NO', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 1 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesById = buildEmployeesById([buildEmployee({ empleado: '100' })]);
+    const solicitud = buildSolicitud({ estado: 'denegada', diasTeletrabajo: [] });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount([solicitud]);
+
+    const assessment = buildTeletrabajoAssessment({
+      solicitud,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+    });
+    const presencialidad = evaluateTeletrabajoPresencialidad(
+      solicitud,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      employeesById,
+    );
+
+    expect(assessment.cellValue).toBe('NO');
+    expect(assessment.apuntesRrll).toBe('Rechazada por RRLL');
+    expect(presencialidad.status).toBe('revisar');
+  });
 });

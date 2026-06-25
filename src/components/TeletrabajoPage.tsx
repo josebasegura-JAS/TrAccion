@@ -31,6 +31,7 @@ import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/grup
 import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
+  evaluateTeletrabajoPresencialidad,
   getTeletrabajoSemaforo,
 } from '../features/teletrabajo/domain/semaforo';
 import {
@@ -252,6 +253,39 @@ function getTeletrabajoIncidentLabel(
   }
 
   return semaforo.status === 'blocked' ? 'Incidencia bloqueante' : 'Revisar incidencia';
+}
+
+/**
+ * Badge aislado de presencialidad mínima, independiente del semáforo
+ * general: no tiene en cuenta si la solicitud está rechazada o si la
+ * antigüedad es insuficiente, solo si se cumple la presencialidad mínima
+ * exigida para los días que pide. Se muestra junto al badge de incidencias
+ * (que sigue igual), no lo sustituye.
+ */
+function getTeletrabajoPresencialidadBadgeProps(
+  presencialidad: ReturnType<typeof evaluateTeletrabajoPresencialidad>,
+): { label: string; className: string; icon: typeof CheckCircle2 } {
+  if (presencialidad.status === 'cumple') {
+    return {
+      label: 'Presencialidad',
+      className: 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200',
+      icon: CheckCircle2,
+    };
+  }
+
+  if (presencialidad.status === 'revisar') {
+    return {
+      label: 'Presencialidad: revisar',
+      className: 'border-amber-400/40 bg-amber-500/15 text-amber-200',
+      icon: AlertTriangle,
+    };
+  }
+
+  return {
+    label: 'Presencialidad: no cumple',
+    className: 'border-red-400/40 bg-red-500/15 text-red-200',
+    icon: XCircle,
+  };
 }
 
 function getTeletrabajoIncidentMeta(
@@ -806,32 +840,64 @@ export function TeletrabajoPage({
               <XCircle size={15} />
             );
 
+          const presencialidad = evaluateTeletrabajoPresencialidad(
+            s,
+            puestosByKey,
+            solicitudesByPuestoCount,
+            employeesByEmpleado,
+            gruposByIdMap,
+          );
+          const presencialidadBadge = getTeletrabajoPresencialidadBadgeProps(presencialidad);
+          const PresencialidadIcon = presencialidadBadge.icon;
+
           return (
-            <span
-              aria-label={meta.title}
-              className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
-              onMouseEnter={(event) =>
-                setIncidentTooltip({
-                  title: meta.title,
-                  x: event.clientX,
-                  y: event.clientY,
-                })
-              }
-              onMouseLeave={() => setIncidentTooltip(null)}
-              onMouseMove={(event) =>
-                setIncidentTooltip((current) =>
-                  current ? { ...current, x: event.clientX, y: event.clientY } : current,
-                )
-              }
-            >
-              {icon}
-              <span className="truncate">{meta.label}</span>
-            </span>
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <span
+                aria-label={meta.title}
+                className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
+                onMouseEnter={(event) =>
+                  setIncidentTooltip({
+                    title: meta.title,
+                    x: event.clientX,
+                    y: event.clientY,
+                  })
+                }
+                onMouseLeave={() => setIncidentTooltip(null)}
+                onMouseMove={(event) =>
+                  setIncidentTooltip((current) =>
+                    current ? { ...current, x: event.clientX, y: event.clientY } : current,
+                  )
+                }
+              >
+                {icon}
+                <span className="truncate">{meta.label}</span>
+              </span>
+              <span
+                aria-label={presencialidad.title}
+                className={`inline-flex h-7 min-w-[8.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${presencialidadBadge.className}`}
+                onMouseEnter={(event) =>
+                  setIncidentTooltip({
+                    title: presencialidad.title,
+                    x: event.clientX,
+                    y: event.clientY,
+                  })
+                }
+                onMouseLeave={() => setIncidentTooltip(null)}
+                onMouseMove={(event) =>
+                  setIncidentTooltip((current) =>
+                    current ? { ...current, x: event.clientX, y: event.clientY } : current,
+                  )
+                }
+              >
+                <PresencialidadIcon size={15} />
+                <span className="truncate">{presencialidadBadge.label}</span>
+              </span>
+            </div>
           );
         },
-        width: 185,
-        minWidth: 160,
-        maxWidth: 260,
+        width: 340,
+        minWidth: 280,
+        maxWidth: 460,
         sortable: true,
         className: 'text-center',
       },
