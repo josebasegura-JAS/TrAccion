@@ -28,6 +28,21 @@ interface PendingImportResolution {
 const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos.translationAliases';
 const SIN_GRUPO_VALUE = '';
 
+function compareTextEs(first: string, second: string): number {
+  return first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' });
+}
+
+function compareTeletrabajoPuestos(first: TeletrabajoPuesto, second: TeletrabajoPuesto): number {
+  return compareTextEs(first.puesto, second.puesto);
+}
+
+function compareGruposCoberturaByName(
+  first: { nombre: string },
+  second: { nombre: string },
+): number {
+  return compareTextEs(first.nombre, second.nombre);
+}
+
 function readStoredAliases(): Record<string, string> {
   try {
     const stored = readStorageItem(TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY);
@@ -84,7 +99,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             .filter(Boolean)
             .map((puesto): [string, string] => [normalizeJobPosition(puesto), puesto]),
         ).values(),
-      ).sort((first, second) => first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' })),
+      ).sort(compareTextEs),
     [jobPositionTranslations],
   );
 
@@ -94,14 +109,14 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
   );
 
   const visibleGruposCobertura = useMemo(
-    () => gruposCobertura.filter((grupo) => !grupo.deletedAt),
+    () => gruposCobertura.filter((grupo) => !grupo.deletedAt).sort(compareGruposCoberturaByName),
     [gruposCobertura],
   );
 
   const gruposById = useMemo(() => buildGruposCoberturaByIdMap(gruposCobertura), [gruposCobertura]);
 
   const visiblePuestos = useMemo(
-    () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt),
+    () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt).sort(compareTeletrabajoPuestos),
     [puestosTeletrabajo],
   );
 
@@ -279,9 +294,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
 
       setPendingImport({
         rows,
-        unknownPuestos: Array.from(unknownByKey.values()).sort((first, second) =>
-          first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' }),
-        ),
+        unknownPuestos: Array.from(unknownByKey.values()).sort(compareTextEs),
         mapping,
       });
       setError('');

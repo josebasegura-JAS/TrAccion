@@ -11,6 +11,18 @@ interface TeletrabajoGruposCoberturaModalProps {
   onClose: () => void;
 }
 
+function compareTextEs(first: string, second: string): number {
+  return first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' });
+}
+
+function compareByPuesto(first: { puesto: string }, second: { puesto: string }): number {
+  return compareTextEs(first.puesto, second.puesto);
+}
+
+function compareByNombre(first: { nombre: string }, second: { nombre: string }): number {
+  return compareTextEs(first.nombre, second.nombre);
+}
+
 export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCoberturaModalProps) {
   const {
     createGrupoCobertura,
@@ -32,14 +44,12 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
     () =>
       gruposCobertura
         .filter((grupo) => !grupo.deletedAt)
-        .sort((first, second) =>
-          first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
-        ),
+        .sort(compareByNombre),
     [gruposCobertura],
   );
 
   const visiblePuestos = useMemo(
-    () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt),
+    () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt).sort(compareByPuesto),
     [puestosTeletrabajo],
   );
 
