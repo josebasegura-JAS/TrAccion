@@ -669,7 +669,7 @@ export function TicketRestaurantePage({
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
-  const { confirm, dialogNode } = useAppDialog();
+  const { alert, confirm, dialogNode } = useAppDialog();
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
   const [year, setYear] = useState(currentYear());
   const [absenceYear, setAbsenceYear] = useState(currentYear());
@@ -864,16 +864,20 @@ export function TicketRestaurantePage({
     setEditingCalendarId(null);
   };
 
-  const saveCalendar = () => {
+  const saveCalendar = async () => {
     if (!calendarDraft.nombre.trim()) {
       return;
     }
 
     if (editingCalendarId) {
-      updateCalendar(editingCalendarId, calendarDraft);
+      const result = await updateCalendar(editingCalendarId, calendarDraft);
+      if (!result.ok) {
+        await alert(result.message ?? 'No se ha podido guardar el calendario.');
+        return;
+      }
       setSelectedCalendarId(editingCalendarId);
     } else {
-      const id = createCalendar(calendarDraft);
+      const id = await createCalendar(calendarDraft);
       setSelectedCalendarId(id);
     }
     resetForm();
@@ -890,12 +894,16 @@ export function TicketRestaurantePage({
     setEditingPersonId(null);
   };
 
-  const savePerson = () => {
+  const savePerson = async () => {
     if (!personDraft.empleado.trim() || !personDraft.nombre.trim() || !personDraft.calendarId) {
       return;
     }
 
-    upsertPerson(personDraft);
+    const result = await upsertPerson(personDraft);
+    if (!result.ok) {
+      await alert(result.message ?? 'No se ha podido guardar la persona.');
+      return;
+    }
     resetPersonForm();
   };
 
@@ -923,7 +931,10 @@ export function TicketRestaurantePage({
       return;
     }
 
-    removeCalendar(calendarId);
+    const result = await removeCalendar(calendarId);
+    if (!result.ok) {
+      await alert(result.message ?? 'No se ha podido eliminar el calendario.');
+    }
   };
 
   const handleYearChange = (value: string) => {
@@ -1063,7 +1074,14 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const saveResult = importPeople(result.drafts);
+    const saveResult = await importPeople(result.drafts);
+    if (!saveResult.ok) {
+      setPeopleImportMessage(
+        saveResult.message ?? 'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
+      );
+      return;
+    }
+
     const missingText =
       result.missingEmployees.length > 0
         ? ` · No encontrados en Plantilla: ${result.missingEmployees.join(', ')}`

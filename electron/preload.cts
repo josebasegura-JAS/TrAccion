@@ -132,6 +132,30 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }>) => ipcRenderer.invoke('acta-types:save-records-if-unchanged', { records }),
+  loadTicketRestauranteCalendarRecords: () =>
+    ipcRenderer.invoke('ticket-restaurante-calendars:load-records'),
+  saveTicketRestauranteCalendarRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('ticket-restaurante-calendars:save-record-if-unchanged', record),
+  saveTicketRestauranteCalendarRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('ticket-restaurante-calendars:save-records-if-unchanged', { records }),
+  loadTicketRestaurantePersonRecords: () =>
+    ipcRenderer.invoke('ticket-restaurante-people:load-records'),
+  saveTicketRestaurantePersonRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('ticket-restaurante-people:save-record-if-unchanged', record),
+  saveTicketRestaurantePersonRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('ticket-restaurante-people:save-records-if-unchanged', { records }),
   loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
   savePresupuestosSnapshotIfUnchanged: (snapshot: {
     scenarios: Array<{ id: string; value: string }>;

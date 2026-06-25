@@ -22,6 +22,17 @@ import {
   type TicketManutencion,
   type TicketManutencionDraft,
 } from '../domain/importManutenciones';
+import {
+  hasTicketRestauranteCalendarsSqliteRepository,
+  hasTicketRestaurantePeopleSqliteRepository,
+  loadTicketRestauranteCalendarRecordsFromSqlite,
+  loadTicketRestaurantePersonRecordsFromSqlite,
+  saveTicketRestauranteCalendarsToSqlite,
+  saveTicketRestauranteCalendarToSqlite,
+  saveTicketRestaurantePeopleToSqlite,
+  saveTicketRestaurantePersonToSqlite,
+  type TicketRestauranteSqliteRecord,
+} from './ticketRestauranteSqliteRepository';
 
 const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
@@ -39,19 +50,21 @@ interface TicketRestauranteState {
   manutenciones: TicketManutencion[];
   load: () => void;
   reloadFromStorage: () => void;
-  createCalendar: (draft: TicketCalendarDraft) => string;
-  updateCalendar: (id: string, draft: TicketCalendarDraft) => void;
-  toggleCalendarActive: (id: string) => void;
-  removeCalendar: (id: string) => void;
-  toggleDay: (calendarId: string, fecha: string) => void;
+  createCalendar: (draft: TicketCalendarDraft) => Promise<string>;
+  updateCalendar: (id: string, draft: TicketCalendarDraft) => Promise<{ ok: boolean; message?: string }>;
+  toggleCalendarActive: (id: string) => Promise<{ ok: boolean; message?: string }>;
+  removeCalendar: (id: string) => Promise<{ ok: boolean; message?: string }>;
+  toggleDay: (calendarId: string, fecha: string) => Promise<{ ok: boolean; message?: string }>;
   saveAbsences: (absences: TicketRestaurantAbsence[]) => void;
   removeAbsence: (id: string) => void;
-  upsertPerson: (draft: TicketPersonDraft) => void;
-  importPeople: (drafts: TicketPeopleImportDraft[]) => {
+  upsertPerson: (draft: TicketPersonDraft) => Promise<{ ok: boolean; message?: string }>;
+  importPeople: (drafts: TicketPeopleImportDraft[]) => Promise<{
     imported: number;
     createdCalendars: number;
-  };
-  removePerson: (empleado: string) => void;
+    ok: boolean;
+    message?: string;
+  }>;
+  removePerson: (empleado: string) => Promise<{ ok: boolean; message?: string }>;
   updateConfig: (config: TicketRestaurantConfig) => void;
   saveManutenciones: (drafts: TicketManutencionDraft[]) => void;
   removeManutencion: (id: string) => void;
@@ -326,6 +339,154 @@ function areTicketSnapshotsEquivalent(
   );
 }
 
+// Mapas en memoria id -> updatedAt SQLite, usados para hacer comprobaciones
+// de concurrencia (OCC) al editar/eliminar calendarios y personas sin que la
+// UI tenga que gestionar el token de versión explícitamente. La clave de
+// `people` es `empleado` (no hay id propio en TicketPerson).
+let calendarSqliteUpdatedAt = new Map<string, string>();
+let personSqliteUpdatedAt = new Map<string, string>();
+
+function updateCalendarSqliteUpdatedAtMap(calendars: readonly TicketCalendar[]): void {
+  calendarSqliteUpdatedAt = new Map(calendars.map((calendar) => [calendar.id, calendar.updatedAt]));
+}
+
+function updatePersonSqliteUpdatedAtMap(people: readonly TicketPerson[]): void {
+  personSqliteUpdatedAt = new Map(people.map((person) => [person.empleado, person.updatedAt]));
+}
+
+function parseTicketCalendarRecords(
+  records: readonly TicketRestauranteSqliteRecord[],
+): TicketCalendar[] {
+  return records
+    .flatMap((record) => {
+      try {
+        return [JSON.parse(record.value) as TicketCalendar];
+      } catch {
+        return [];
+      }
+    })
+    .filter(isTicketCalendar)
+    .map(normalizeStoredTicketCalendar);
+}
+
+function parseTicketPersonRecords(records: readonly TicketRestauranteSqliteRecord[]): TicketPerson[] {
+  return records
+    .flatMap((record) => {
+      try {
+        return [JSON.parse(record.value) as TicketPerson];
+      } catch {
+        return [];
+      }
+    })
+    .filter(isTicketPerson)
+    .map(normalizeStoredTicketPerson);
+}
+
+/**
+ * Carga calendarios desde SQLite si el repositorio está activo. Si la tabla
+ * está vacía (primer arranque tras esta migración), siembra desde
+ * localStorage en un único guardado por lotes para no perder los calendarios
+ * ya en uso.
+ */
+async function loadTicketCalendarsPreferringSqlite(): Promise<TicketCalendar[]> {
+  if (!hasTicketRestauranteCalendarsSqliteRepository()) {
+    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar);
+  }
+
+  const sqliteRecords = await loadTicketRestauranteCalendarRecordsFromSqlite();
+  if (sqliteRecords === null) {
+    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar);
+  }
+
+  if (sqliteRecords.length > 0) {
+    const calendars = parseTicketCalendarRecords(sqliteRecords);
+    updateCalendarSqliteUpdatedAtMap(calendars);
+    return calendars;
+  }
+
+  const fallbackCalendars = readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
+    normalizeStoredTicketCalendar,
+  );
+  const seedResult = await saveTicketRestauranteCalendarsToSqlite(
+    fallbackCalendars.map((calendar) => ({
+      id: calendar.id,
+      serializedValue: JSON.stringify(calendar),
+      expectedUpdatedAt: null,
+    })),
+  );
+  if (seedResult?.ok) {
+    const reloadedRecords = await loadTicketRestauranteCalendarRecordsFromSqlite();
+    if (reloadedRecords) {
+      const reloadedCalendars = parseTicketCalendarRecords(reloadedRecords);
+      updateCalendarSqliteUpdatedAtMap(reloadedCalendars);
+      return reloadedCalendars;
+    }
+  }
+  return fallbackCalendars;
+}
+
+/**
+ * Carga personas desde SQLite si el repositorio está activo, con la misma
+ * siembra inicial desde localStorage que loadTicketCalendarsPreferringSqlite.
+ */
+async function loadTicketPeoplePreferringSqlite(): Promise<TicketPerson[]> {
+  if (!hasTicketRestaurantePeopleSqliteRepository()) {
+    return readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson);
+  }
+
+  const sqliteRecords = await loadTicketRestaurantePersonRecordsFromSqlite();
+  if (sqliteRecords === null) {
+    return readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson);
+  }
+
+  if (sqliteRecords.length > 0) {
+    const people = parseTicketPersonRecords(sqliteRecords);
+    updatePersonSqliteUpdatedAtMap(people);
+    return people;
+  }
+
+  const fallbackPeople = readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(
+    normalizeStoredTicketPerson,
+  );
+  const seedResult = await saveTicketRestaurantePeopleToSqlite(
+    fallbackPeople.map((person) => ({
+      id: person.empleado,
+      serializedValue: JSON.stringify(person),
+      expectedUpdatedAt: null,
+    })),
+  );
+  if (seedResult?.ok) {
+    const reloadedRecords = await loadTicketRestaurantePersonRecordsFromSqlite();
+    if (reloadedRecords) {
+      const reloadedPeople = parseTicketPersonRecords(reloadedRecords);
+      updatePersonSqliteUpdatedAtMap(reloadedPeople);
+      return reloadedPeople;
+    }
+  }
+  return fallbackPeople;
+}
+
+/**
+ * Carga calendars + people (preferentemente desde SQLite) y recalcula el
+ * resto del snapshot (absences/config siguen en localStorage; debtLedger se
+ * recalcula a partir de los datos frescos, igual que hacían las acciones de
+ * escritura antes de esta migración).
+ */
+async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRestauranteSnapshot> {
+  const [calendars, people] = await Promise.all([
+    loadTicketCalendarsPreferringSqlite(),
+    loadTicketPeoplePreferringSqlite(),
+  ]);
+  const absences = readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
+  const config = readConfig();
+  const manutenciones = readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+    normalizeStoredTicketManutencion,
+  );
+  const debtLedger = recalculateDebtLedger(people, calendars, absences, config);
+
+  return { calendars, absences, people, config, debtLedger, manutenciones };
+}
+
 function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
   return {
     calendars: readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
@@ -350,21 +511,52 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   manutenciones: [],
   load: () => {
     set(readTicketRestauranteSnapshot());
+    void loadTicketRestauranteStateFromSqliteOrStorage()
+      .then((nextSnapshot) => set(nextSnapshot))
+      .catch((error) => console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error));
   },
   reloadFromStorage: () => {
     // Compara contenido antes de actualizar el estado para evitar el
     // re-render (y el parpadeo asociado) cuando el poll detecta cambio de
     // updatedAt pero el contenido normalizado ya coincide con el que
     // tenemos en memoria.
-    const nextSnapshot = readTicketRestauranteSnapshot();
-    if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
-      set(nextSnapshot);
+    const syncSnapshot = readTicketRestauranteSnapshot();
+    if (!areTicketSnapshotsEquivalent(get(), syncSnapshot)) {
+      set(syncSnapshot);
     }
+    void loadTicketRestauranteStateFromSqliteOrStorage()
+      .then((nextSnapshot) => {
+        if (!areTicketSnapshotsEquivalent(get(), nextSnapshot)) {
+          set(nextSnapshot);
+        }
+      })
+      .catch((error) => console.warn('Ticket Restaurante: no se ha podido recargar desde SQLite.', error));
   },
-  createCalendar: (draft) => {
+  createCalendar: async (draft) => {
     const id = createId('ticket-calendar');
     const state = get();
-    const calendars = [...state.calendars, buildTicketCalendar(draft, nowIso(), id)];
+    const now = nowIso();
+    const newCalendar = buildTicketCalendar(draft, now, id);
+
+    if (hasTicketRestauranteCalendarsSqliteRepository()) {
+      const saveResult = await saveTicketRestauranteCalendarToSqlite(
+        newCalendar,
+        JSON.stringify(newCalendar),
+        null,
+      );
+      if (saveResult?.ok) {
+        if (saveResult.currentUpdatedAt) {
+          calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
+        }
+        const calendars = [...state.calendars, newCalendar];
+        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+        set({ calendars, debtLedger });
+        return id;
+      }
+      console.warn('Ticket Restaurante: no se ha podido crear el calendario en SQLite.', saveResult?.message);
+    }
+
+    const calendars = [...state.calendars, newCalendar];
     const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
     commitTicketState(set, { calendars, debtLedger }, [
       [CALENDARS_STORAGE_KEY, calendars],
@@ -372,63 +564,222 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     ]);
     return id;
   },
-  updateCalendar: (id, draft) => {
+  updateCalendar: async (id, draft) => {
     const state = get();
     const updatedAt = nowIso();
-    const calendars = state.calendars.map((calendar) =>
-      calendar.id === id ? buildTicketCalendar(draft, updatedAt, id, calendar) : calendar,
-    );
+    const previous = state.calendars.find((calendar) => calendar.id === id);
+    const updatedCalendar = buildTicketCalendar(draft, updatedAt, id, previous);
+
+    if (hasTicketRestauranteCalendarsSqliteRepository()) {
+      const expectedUpdatedAt = calendarSqliteUpdatedAt.get(id) ?? null;
+      const saveResult = await saveTicketRestauranteCalendarToSqlite(
+        updatedCalendar,
+        JSON.stringify(updatedCalendar),
+        expectedUpdatedAt,
+      );
+      if (!saveResult) {
+        // Sin repositorio disponible pese al check anterior (caso límite):
+        // sigue con el camino localStorage más abajo.
+      } else if (!saveResult.ok) {
+        return {
+          ok: false,
+          message:
+            saveResult.message ??
+            'Este calendario ha sido modificado por otro usuario. Recarga antes de continuar.',
+        };
+      } else {
+        if (saveResult.currentUpdatedAt) {
+          calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
+        }
+        const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
+        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+        set({ calendars, debtLedger });
+        return { ok: true };
+      }
+    }
+
+    const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
     const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
     commitTicketState(set, { calendars, debtLedger }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
-  toggleCalendarActive: (id) => {
+  toggleCalendarActive: async (id) => {
     const state = get();
     const updatedAt = nowIso();
-    const calendars = state.calendars.map((calendar) =>
-      calendar.id === id ? { ...calendar, activo: !calendar.activo, updatedAt } : calendar,
-    );
+    const previous = state.calendars.find((calendar) => calendar.id === id);
+    if (!previous) {
+      return { ok: false, message: 'No se ha encontrado el calendario.' };
+    }
+    const updatedCalendar = { ...previous, activo: !previous.activo, updatedAt };
+
+    if (hasTicketRestauranteCalendarsSqliteRepository()) {
+      const expectedUpdatedAt = calendarSqliteUpdatedAt.get(id) ?? null;
+      const saveResult = await saveTicketRestauranteCalendarToSqlite(
+        updatedCalendar,
+        JSON.stringify(updatedCalendar),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Este calendario ha sido modificado por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        if (saveResult.currentUpdatedAt) {
+          calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
+        }
+        const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
+        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+        set({ calendars, debtLedger });
+        return { ok: true };
+      }
+    }
+
+    const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
     const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
     commitTicketState(set, { calendars, debtLedger }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
-  removeCalendar: (id) => {
+  removeCalendar: async (id) => {
     const state = get();
     const updatedAt = nowIso();
-    const calendars = state.calendars.map((calendar) =>
-      calendar.id === id
-        ? { ...calendar, activo: false, updatedAt, deletedAt: updatedAt }
-        : calendar,
+    const previous = state.calendars.find((calendar) => calendar.id === id);
+    if (!previous) {
+      return { ok: false, message: 'No se ha encontrado el calendario.' };
+    }
+    const removedCalendar = { ...previous, activo: false, updatedAt, deletedAt: updatedAt };
+    const affectedPeople = state.people.filter(
+      (person) => person.calendarId === id && !person.deletedAt,
     );
-    const people = state.people.map((person) =>
-      person.calendarId === id && !person.deletedAt
-        ? { ...person, activo: false, updatedAt, deletedAt: updatedAt }
-        : person,
-    );
+    const removedPeople = affectedPeople.map((person) => ({
+      ...person,
+      activo: false,
+      updatedAt,
+      deletedAt: updatedAt,
+    }));
+
+    if (hasTicketRestauranteCalendarsSqliteRepository()) {
+      const expectedUpdatedAt = calendarSqliteUpdatedAt.get(id) ?? null;
+      const saveResult = await saveTicketRestauranteCalendarToSqlite(
+        removedCalendar,
+        JSON.stringify(removedCalendar),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Este calendario ha sido modificado por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        if (saveResult.currentUpdatedAt) {
+          calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
+        }
+
+        let people = state.people;
+        if (removedPeople.length > 0 && hasTicketRestaurantePeopleSqliteRepository()) {
+          const peopleSaveResult = await saveTicketRestaurantePeopleToSqlite(
+            removedPeople.map((person) => ({
+              id: person.empleado,
+              serializedValue: JSON.stringify(person),
+              expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
+            })),
+          );
+          if (peopleSaveResult?.ok) {
+            removedPeople.forEach((person) => personSqliteUpdatedAt.delete(person.empleado));
+            const removedByEmployee = new Map(removedPeople.map((person) => [person.empleado, person]));
+            people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
+          } else {
+            console.warn(
+              'Ticket Restaurante: el calendario se eliminó pero algunas personas asociadas no se han podido actualizar en SQLite.',
+              peopleSaveResult?.message,
+            );
+          }
+        } else if (removedPeople.length > 0) {
+          people = state.people.map((person) => {
+            const removed = removedPeople.find((item) => item.empleado === person.empleado);
+            return removed ?? person;
+          });
+          writeJsonStorageAsync(PEOPLE_STORAGE_KEY, people).catch((error) =>
+            console.warn('Ticket Restaurante: no se ha podido persistir personas tras eliminar calendario.', error),
+          );
+        }
+
+        const calendars = state.calendars.map((calendar) => (calendar.id === id ? removedCalendar : calendar));
+        const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
+        set({ calendars, people, debtLedger });
+        return { ok: true };
+      }
+    }
+
+    const calendars = state.calendars.map((calendar) => (calendar.id === id ? removedCalendar : calendar));
+    const removedByEmployee = new Map(removedPeople.map((person) => [person.empleado, person]));
+    const people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
     const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
     commitTicketState(set, { calendars, people, debtLedger }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [PEOPLE_STORAGE_KEY, people],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
-  toggleDay: (calendarId, fecha) => {
+  toggleDay: async (calendarId, fecha) => {
     const state = get();
     const updatedAt = nowIso();
+    const previous = state.calendars.find((calendar) => calendar.id === calendarId);
+    if (!previous) {
+      return { ok: false, message: 'No se ha encontrado el calendario.' };
+    }
+    const updatedCalendar = { ...toggleDiaSinTicket(previous, fecha), updatedAt };
+
+    if (hasTicketRestauranteCalendarsSqliteRepository()) {
+      const expectedUpdatedAt = calendarSqliteUpdatedAt.get(calendarId) ?? null;
+      const saveResult = await saveTicketRestauranteCalendarToSqlite(
+        updatedCalendar,
+        JSON.stringify(updatedCalendar),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Este calendario ha sido modificado por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        if (saveResult.currentUpdatedAt) {
+          calendarSqliteUpdatedAt.set(calendarId, saveResult.currentUpdatedAt);
+        }
+        const calendars = state.calendars.map((calendar) =>
+          calendar.id === calendarId ? updatedCalendar : calendar,
+        );
+        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
+        set({ calendars, debtLedger });
+        return { ok: true };
+      }
+    }
+
     const calendars = state.calendars.map((calendar) =>
-      calendar.id === calendarId
-        ? { ...toggleDiaSinTicket(calendar, fecha), updatedAt }
-        : calendar,
+      calendar.id === calendarId ? updatedCalendar : calendar,
     );
     const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
     commitTicketState(set, { calendars, debtLedger }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
   saveAbsences: (absences) => {
     const state = get();
@@ -450,32 +801,63 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
   },
-  upsertPerson: (draft) => {
+  upsertPerson: async (draft) => {
     const state = get();
     const now = nowIso();
     const previous = state.people.find((person) => person.empleado === draft.empleado);
+    const updatedPerson = buildTicketPerson(draft, now, previous);
+
+    if (hasTicketRestaurantePeopleSqliteRepository()) {
+      const expectedUpdatedAt = previous ? personSqliteUpdatedAt.get(draft.empleado) ?? null : null;
+      const saveResult = await saveTicketRestaurantePersonToSqlite(
+        { id: updatedPerson.empleado },
+        JSON.stringify(updatedPerson),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Esta persona ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        if (saveResult.currentUpdatedAt) {
+          personSqliteUpdatedAt.set(updatedPerson.empleado, saveResult.currentUpdatedAt);
+        }
+        const people = previous
+          ? state.people.map((person) => (person.empleado === draft.empleado ? updatedPerson : person))
+          : [...state.people, updatedPerson];
+        const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
+        set({ people, debtLedger });
+        return { ok: true };
+      }
+    }
+
     const people = previous
-      ? state.people.map((person) =>
-          person.empleado === draft.empleado ? buildTicketPerson(draft, now, person) : person,
-        )
-      : [...state.people, buildTicketPerson(draft, now)];
+      ? state.people.map((person) => (person.empleado === draft.empleado ? updatedPerson : person))
+      : [...state.people, updatedPerson];
     const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
     commitTicketState(set, { people, debtLedger }, [
       [PEOPLE_STORAGE_KEY, people],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
-  importPeople: (drafts) => {
+  importPeople: async (drafts) => {
     let result = { imported: 0, createdCalendars: 0 };
     const state = get();
     const now = nowIso();
     const calendars = [...state.calendars];
+    const newCalendars: TicketCalendar[] = [];
     const calendarIdByName = new Map(
       calendars
         .filter((calendar) => !calendar.deletedAt)
         .map((calendar) => [normalizeCalendarName(calendar.nombre), calendar.id]),
     );
     const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
+    const updatedPeople: TicketPerson[] = [];
 
     drafts.forEach((draft) => {
       const normalizedCalendarName = normalizeCalendarName(draft.calendarName);
@@ -483,39 +865,118 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
 
       if (!calendarId) {
         calendarId = createId('ticket-calendar');
-        calendars.push(
-          buildTicketCalendar(
-            { nombre: draft.calendarName, activo: true, diasSinTicket: [] },
-            now,
-            calendarId,
-          ),
+        const newCalendar = buildTicketCalendar(
+          { nombre: draft.calendarName, activo: true, diasSinTicket: [] },
+          now,
+          calendarId,
         );
+        calendars.push(newCalendar);
+        newCalendars.push(newCalendar);
         calendarIdByName.set(normalizedCalendarName, calendarId);
         result = { ...result, createdCalendars: result.createdCalendars + 1 };
       }
 
       const previous = peopleByEmployee.get(draft.empleado);
-      peopleByEmployee.set(draft.empleado, buildTicketPerson({ ...draft, calendarId }, now, previous));
+      const updatedPerson = buildTicketPerson({ ...draft, calendarId }, now, previous);
+      peopleByEmployee.set(draft.empleado, updatedPerson);
+      updatedPeople.push(updatedPerson);
       result = { ...result, imported: result.imported + 1 };
     });
 
     const people = Array.from(peopleByEmployee.values());
+
+    if (
+      hasTicketRestauranteCalendarsSqliteRepository() &&
+      hasTicketRestaurantePeopleSqliteRepository()
+    ) {
+      if (newCalendars.length > 0) {
+        const calendarsSaveResult = await saveTicketRestauranteCalendarsToSqlite(
+          newCalendars.map((calendar) => ({
+            id: calendar.id,
+            serializedValue: JSON.stringify(calendar),
+            expectedUpdatedAt: null,
+          })),
+        );
+        if (!calendarsSaveResult?.ok) {
+          return {
+            ...result,
+            ok: false,
+            message:
+              calendarsSaveResult?.message ?? 'No se han podido crear los calendarios nuevos en SQLite.',
+          };
+        }
+      }
+
+      const peopleSaveResult = await saveTicketRestaurantePeopleToSqlite(
+        updatedPeople.map((person) => ({
+          id: person.empleado,
+          serializedValue: JSON.stringify(person),
+          expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
+        })),
+      );
+      if (!peopleSaveResult?.ok) {
+        return {
+          ...result,
+          ok: false,
+          message: peopleSaveResult?.message ?? 'No se han podido importar las personas en SQLite.',
+        };
+      }
+
+      updateCalendarSqliteUpdatedAtMap(calendars);
+      updatePersonSqliteUpdatedAtMap(people);
+      const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
+      set({ calendars, people, debtLedger });
+      return { ...result, ok: true };
+    }
+
     const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
     commitTicketState(set, { calendars, people, debtLedger }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [PEOPLE_STORAGE_KEY, people],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
-    return result;
+    return { ...result, ok: true };
   },
-  removePerson: (empleado) => {
+  removePerson: async (empleado) => {
     const state = get();
+    const previous = state.people.find((person) => person.empleado === empleado);
+    if (!previous) {
+      return { ok: false, message: 'No se ha encontrado la persona.' };
+    }
+
+    if (hasTicketRestaurantePeopleSqliteRepository()) {
+      const now = nowIso();
+      const removedPerson = { ...previous, updatedAt: now, deletedAt: now };
+      const expectedUpdatedAt = personSqliteUpdatedAt.get(empleado) ?? null;
+      const saveResult = await saveTicketRestaurantePersonToSqlite(
+        { id: empleado },
+        JSON.stringify(removedPerson),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Esta persona ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
+        }
+        personSqliteUpdatedAt.delete(empleado);
+        const people = state.people.filter((person) => person.empleado !== empleado);
+        const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
+        set({ people, debtLedger });
+        return { ok: true };
+      }
+    }
+
     const people = state.people.filter((person) => person.empleado !== empleado);
     const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
     commitTicketState(set, { people, debtLedger }, [
       [PEOPLE_STORAGE_KEY, people],
       [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
+    return { ok: true };
   },
   updateConfig: (config) => {
     const state = get();

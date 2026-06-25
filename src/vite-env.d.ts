@@ -408,6 +408,24 @@ interface TraccionActaTypeRecordsSnapshot {
 
 type TraccionConditionalActaTypeRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionTicketRestauranteCalendarRecord = TraccionComiteSessionRecord;
+
+interface TraccionTicketRestauranteCalendarRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTicketRestauranteCalendarRecord[];
+}
+
+type TraccionConditionalTicketRestauranteCalendarRecord = TraccionConditionalComiteSessionRecord;
+
+type TraccionTicketRestaurantePersonRecord = TraccionComiteSessionRecord;
+
+interface TraccionTicketRestaurantePersonRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTicketRestaurantePersonRecord[];
+}
+
+type TraccionConditionalTicketRestaurantePersonRecord = TraccionConditionalComiteSessionRecord;
+
 type TraccionEspecialRecipientRecord = TraccionComiteSessionRecord;
 
 interface TraccionEspecialRecipientRecordsSnapshot {
@@ -547,6 +565,20 @@ interface TraccionApi {
   ) => Promise<TraccionConditionalTaskSaveResult>;
   saveActaTypeRecordsIfUnchanged?: (
     records: TraccionConditionalActaTypeRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
+  loadTicketRestauranteCalendarRecords?: () => Promise<TraccionTicketRestauranteCalendarRecordsSnapshot>;
+  saveTicketRestauranteCalendarRecordIfUnchanged?: (
+    record: TraccionConditionalTicketRestauranteCalendarRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveTicketRestauranteCalendarRecordsIfUnchanged?: (
+    records: TraccionConditionalTicketRestauranteCalendarRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
+  loadTicketRestaurantePersonRecords?: () => Promise<TraccionTicketRestaurantePersonRecordsSnapshot>;
+  saveTicketRestaurantePersonRecordIfUnchanged?: (
+    record: TraccionConditionalTicketRestaurantePersonRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveTicketRestaurantePersonRecordsIfUnchanged?: (
+    records: TraccionConditionalTicketRestaurantePersonRecord[],
   ) => Promise<TraccionBatchSaveResult>;
   loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged?: (

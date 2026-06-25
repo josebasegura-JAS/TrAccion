@@ -48,7 +48,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 14;
+const CURRENT_SCHEMA_VERSION = 15;
 const LOCK_TTL_MS = 30 * 1000;
 const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
@@ -374,6 +374,8 @@ let presupuestosManualItemsMigrationDone = false;
 let presupuestosTicketGroupsMigrationDone = false;
 let presupuestosActualsMigrationDone = false;
 let configuracionMigrationDone = false;
+let ticketRestauranteCalendarsMigrationDone = false;
+let ticketRestaurantePeopleMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -1788,11 +1790,44 @@ function migrateToVersion14(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_teletrabajo_grupo_cobertura_records_updated_at ON teletrabajo_grupo_cobertura_records(updated_at);
   `);
-
   const currentVersion = readCurrentSchemaVersion(db);
   if (currentVersion < 14) {
     db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
       14,
+      new Date().toISOString(),
+    );
+  }
+}
+
+function migrateToVersion15(db: Database): void {
+  // Primera tanda de migración de Ticket Restaurante a SQLite: calendars y
+  // people (entidades maestras relacionadas por calendarId). absences,
+  // config, debtLedger y manutenciones permanecen en localStorage por ahora.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ticket_restaurante_calendar_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ticket_restaurante_calendar_records_updated_at ON ticket_restaurante_calendar_records(updated_at);
+
+    CREATE TABLE IF NOT EXISTS ticket_restaurante_person_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ticket_restaurante_person_records_updated_at ON ticket_restaurante_person_records(updated_at);
+  `);
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 15) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      15,
       new Date().toISOString(),
     );
   }
@@ -1813,6 +1848,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion12(db);
   migrateToVersion13(db);
   migrateToVersion14(db);
+  migrateToVersion15(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -4551,6 +4587,26 @@ const actaTypesRepository = createJsonModuleRepository(
   },
 );
 
+const ticketRestauranteCalendarsRepository = createJsonModuleRepository(
+  'ticket_restaurante_calendar_records',
+  'traccion.v1.ticketRestaurante.calendars',
+  'Calendario de Ticket Restaurante',
+  () => ticketRestauranteCalendarsMigrationDone,
+  (value) => {
+    ticketRestauranteCalendarsMigrationDone = value;
+  },
+);
+
+const ticketRestaurantePeopleRepository = createJsonModuleRepository(
+  'ticket_restaurante_person_records',
+  'traccion.v1.ticketRestaurante.people',
+  'Persona de Ticket Restaurante',
+  () => ticketRestaurantePeopleMigrationDone,
+  (value) => {
+    ticketRestaurantePeopleMigrationDone = value;
+  },
+);
+
 const especialesRecipientRepository = createJsonModuleRepository(
   'especiales_recipient_records',
   'rrll_especiales_destinatarios',
@@ -4673,6 +4729,38 @@ export function saveActaTypeRecordsIfUnchanged(
   records: ConditionalJsonRecord[],
 ): Promise<JsonRecordBatchSaveResult> {
   return actaTypesRepository.saveManyIfUnchanged(records);
+}
+
+export function loadTicketRestauranteCalendarRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return ticketRestauranteCalendarsRepository.loadSnapshot();
+}
+
+export function saveTicketRestauranteCalendarRecordIfUnchanged(
+  record: ConditionalJsonRecord,
+): Promise<JsonRecordSaveResult> {
+  return ticketRestauranteCalendarsRepository.saveIfUnchanged(record);
+}
+
+export function saveTicketRestauranteCalendarRecordsIfUnchanged(
+  records: ConditionalJsonRecord[],
+): Promise<JsonRecordBatchSaveResult> {
+  return ticketRestauranteCalendarsRepository.saveManyIfUnchanged(records);
+}
+
+export function loadTicketRestaurantePersonRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return ticketRestaurantePeopleRepository.loadSnapshot();
+}
+
+export function saveTicketRestaurantePersonRecordIfUnchanged(
+  record: ConditionalJsonRecord,
+): Promise<JsonRecordSaveResult> {
+  return ticketRestaurantePeopleRepository.saveIfUnchanged(record);
+}
+
+export function saveTicketRestaurantePersonRecordsIfUnchanged(
+  records: ConditionalJsonRecord[],
+): Promise<JsonRecordBatchSaveResult> {
+  return ticketRestaurantePeopleRepository.saveManyIfUnchanged(records);
 }
 
 export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {
