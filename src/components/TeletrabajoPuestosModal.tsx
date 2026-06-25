@@ -1,5 +1,5 @@
-import { AlertTriangle, FileUp, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { AlertTriangle, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/gruposCobertura';
@@ -13,6 +13,12 @@ import {
 } from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { sortDataTableRows } from '../shared/table/tableSorting';
+import {
+  useTableViewPreferences,
+  type TableViewPreferences,
+} from '../shared/table/useTableViewPreferences';
 import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
 
 interface TeletrabajoPuestosModalProps {
@@ -27,6 +33,30 @@ interface PendingImportResolution {
 
 const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos.translationAliases';
 const SIN_GRUPO_VALUE = '';
+const TELETRABAJO_PUESTOS_TABLE_STORAGE_KEY = 'traccion.tableView.teletrabajo.puestos';
+
+type TeletrabajoPuestoColumnId =
+  | 'puesto'
+  | 'maxSolicitudes'
+  | 'dotacionComputable'
+  | 'grupoCobertura'
+  | 'observaciones'
+  | 'acciones';
+
+const teletrabajoPuestoColumnIds: readonly TeletrabajoPuestoColumnId[] = [
+  'puesto',
+  'maxSolicitudes',
+  'dotacionComputable',
+  'grupoCobertura',
+  'observaciones',
+  'acciones',
+];
+
+const defaultTeletrabajoPuestoTablePreferences: TableViewPreferences<TeletrabajoPuestoColumnId> = {
+  sort: null,
+  columnWidths: {},
+  columnOrder: null,
+};
 
 function compareTextEs(first: string, second: string): number {
   return first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' });
@@ -80,6 +110,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     updatePuestoTeletrabajo,
   } = useTeletrabajoStore();
   const jobPositionTranslations = useEmployeeStore((state) => state.jobPositionTranslations);
+  const employees = useEmployeeStore((state) => state.employees);
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingPuestoId, setEditingPuestoId] = useState<string | null>(null);
@@ -119,6 +150,32 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     () => puestosTeletrabajo.filter((puesto) => !puesto.deletedAt).sort(compareTeletrabajoPuestos),
     [puestosTeletrabajo],
   );
+
+  const puestosTeletrabajoByKey = useMemo(
+    () => new Set(visiblePuestos.map((puesto) => normalizeJobPosition(puesto.puesto))),
+    [visiblePuestos],
+  );
+
+  /**
+   * Puestos organizativos en uso (Plantilla) que no tienen ningún puesto
+   * teletrabajable equivalente todavía. Es el mismo cruce de texto que hace
+   * semaforo.ts/exportDireccion.ts para calcular la dotación real: si un
+   * puestoOrganizativo no aparece aquí, ese empleado no se está contando en
+   * ningún cálculo de presencialidad/dotación de Teletrabajo.
+   */
+  const puestosOrganizativosSinTeletrabajo = useMemo(() => {
+    const seen = new Map<string, string>();
+    employees
+      .filter((employee) => !employee.deletedAt && employee.puestoOrganizativo.trim())
+      .forEach((employee) => {
+        const puesto = employee.puestoOrganizativo.trim();
+        const key = normalizeJobPosition(puesto);
+        if (!puestosTeletrabajoByKey.has(key) && !seen.has(key)) {
+          seen.set(key, puesto);
+        }
+      });
+    return Array.from(seen.values()).sort(compareTextEs);
+  }, [employees, puestosTeletrabajoByKey]);
 
   const filteredPuestos = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -170,7 +227,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setStatus('Puesto teletrabajable añadido.');
   };
 
-  const handleStartEdit = (puesto: TeletrabajoPuesto) => {
+  const handleStartEdit = useCallback((puesto: TeletrabajoPuesto) => {
     setIsCreating(false);
     setEditingPuestoId(puesto.id);
     setDraft({
@@ -182,7 +239,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     });
     setError('');
     setStatus('');
-  };
+  }, []);
 
   const handleCancelEdit = () => {
     setEditingPuestoId(null);
@@ -233,16 +290,19 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     setStatus('Puesto teletrabajable actualizado.');
   };
 
-  const handleRemove = async (puesto: TeletrabajoPuesto) => {
-    const result = await removePuestoTeletrabajo(puesto.id);
-    if (!result.ok) {
-      setError(result.message);
-      setStatus('');
-      return;
-    }
-    setError('');
-    setStatus(`Puesto «${puesto.puesto}» eliminado.`);
-  };
+  const handleRemove = useCallback(
+    async (puesto: TeletrabajoPuesto) => {
+      const result = await removePuestoTeletrabajo(puesto.id);
+      if (!result.ok) {
+        setError(result.message);
+        setStatus('');
+        return;
+      }
+      setError('');
+      setStatus(`Puesto «${puesto.puesto}» eliminado.`);
+    },
+    [removePuestoTeletrabajo],
+  );
 
   const applyResolvedImport = (rows: readonly TeletrabajoPuestoImportRow[]) => {
     const count = importPuestosTeletrabajoDrafts(rows);
@@ -340,6 +400,129 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     applyResolvedImport(resolvedRows);
   };
 
+  const {
+    preferences,
+    setSort,
+    setColumnWidth,
+    setColumnOrder,
+    resetColumnWidths,
+    resetPreferences,
+  } = useTableViewPreferences<TeletrabajoPuestoColumnId>({
+    storageKey: TELETRABAJO_PUESTOS_TABLE_STORAGE_KEY,
+    defaultPreferences: defaultTeletrabajoPuestoTablePreferences,
+    validColumnIds: teletrabajoPuestoColumnIds,
+  });
+
+  const puestoColumns = useMemo<Array<DataTableColumn<TeletrabajoPuesto, TeletrabajoPuestoColumnId>>>(
+    () => [
+      {
+        id: 'puesto',
+        header: 'Puesto',
+        accessor: (puesto) => puesto.puesto,
+        render: (puesto) => puesto.puesto,
+        width: 320,
+        minWidth: 180,
+        maxWidth: 640,
+        sortable: true,
+        className: 'font-semibold text-metro-text',
+      },
+      {
+        id: 'maxSolicitudes',
+        header: 'Presencialidad mínima',
+        accessor: (puesto) => {
+          const grupo = puesto.grupoCoberturaId ? gruposById.get(puesto.grupoCoberturaId) : null;
+          return grupo ? grupo.presencialidadMinima : puesto.maxSolicitudes;
+        },
+        render: (puesto) => {
+          const grupo = puesto.grupoCoberturaId ? gruposById.get(puesto.grupoCoberturaId) : null;
+          return grupo ? `${grupo.presencialidadMinima} (grupo)` : puesto.maxSolicitudes || '—';
+        },
+        width: 176,
+        minWidth: 140,
+        maxWidth: 260,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'dotacionComputable',
+        header: 'Dotación computable',
+        accessor: (puesto) => puesto.dotacionComputable,
+        render: (puesto) => puesto.dotacionComputable || '—',
+        width: 160,
+        minWidth: 120,
+        maxWidth: 240,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'grupoCobertura',
+        header: 'Grupo cobertura',
+        accessor: (puesto) =>
+          puesto.grupoCoberturaId ? gruposById.get(puesto.grupoCoberturaId)?.nombre ?? '' : '',
+        render: (puesto) => (puesto.grupoCoberturaId ? gruposById.get(puesto.grupoCoberturaId)?.nombre ?? '—' : '—'),
+        width: 176,
+        minWidth: 140,
+        maxWidth: 280,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'observaciones',
+        header: 'Observaciones',
+        accessor: (puesto) => puesto.observaciones,
+        render: (puesto) => puesto.observaciones || '—',
+        width: 220,
+        minWidth: 140,
+        maxWidth: 480,
+        sortable: true,
+        className: 'text-metro-muted',
+      },
+      {
+        id: 'acciones',
+        header: 'Acciones',
+        render: (puesto) => (
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              aria-label={`Editar ${puesto.puesto}`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleStartEdit(puesto);
+              }}
+              title="Editar puesto"
+              type="button"
+            >
+              <Pencil size={15} />
+            </button>
+            <button
+              aria-label={`Eliminar ${puesto.puesto}`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleRemove(puesto);
+              }}
+              title="Eliminar puesto"
+              type="button"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ),
+        width: 96,
+        minWidth: 88,
+        maxWidth: 120,
+        isActionColumn: true,
+        reorderable: false,
+      },
+    ],
+    [gruposById, handleStartEdit, handleRemove],
+  );
+
+  const sortedPuestos = useMemo(
+    () => sortDataTableRows(filteredPuestos, puestoColumns, preferences.sort),
+    [filteredPuestos, preferences.sort, puestoColumns],
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
@@ -363,6 +546,28 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             <X size={18} />
           </button>
         </header>
+
+        {puestosOrganizativosSinTeletrabajo.length > 0 && (
+          <div className="border-b border-metro-border p-4">
+            <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">
+              <div className="flex items-start gap-2 font-semibold">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                <div>
+                  Hay {puestosOrganizativosSinTeletrabajo.length} puesto
+                  {puestosOrganizativosSinTeletrabajo.length === 1 ? '' : 's'} organizativo
+                  {puestosOrganizativosSinTeletrabajo.length === 1 ? '' : 's'} en Plantilla sin equivalente aquí.
+                  Esos empleados no se están contando en ningún cálculo de presencialidad/dotación de Teletrabajo.
+                  Añádelos primero en Traducción de puestos y luego aquí, con el mismo nombre exacto.
+                </div>
+              </div>
+              <ul className="mt-2 ml-7 list-disc space-y-0.5 text-amber-100/90">
+                {puestosOrganizativosSinTeletrabajo.map((puesto) => (
+                  <li key={puesto}>{puesto}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-3 border-b border-metro-border p-4 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">
           <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
@@ -425,16 +630,19 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_110px_110px_minmax(160px,0.9fr)_minmax(180px,1fr)_auto_auto] lg:items-end">
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Puesto
-                  <select
+                  <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                    list="teletrabajo-puestos-maestros"
                     onChange={(event) => updateDraft('puesto', event.target.value)}
+                    placeholder="Escribe para buscar..."
+                    type="text"
                     value={draft.puesto}
-                  >
-                    <option value="">Selecciona puesto...</option>
+                  />
+                  <datalist id="teletrabajo-puestos-maestros">
                     {masterPuestos.map((puesto) => (
-                      <option key={puesto} value={puesto}>{puesto}</option>
+                      <option key={puesto} value={puesto} />
                     ))}
-                  </select>
+                  </datalist>
                 </label>
                 <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
                   Presencialidad mínima
@@ -582,73 +790,37 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             <div className="flex items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
               <span>Puestos organizativos con posibilidad de teletrabajo</span>
               <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-                {filteredPuestos.length} registros
+                {sortedPuestos.length} registros
               </span>
             </div>
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-metro-surface text-left text-xs uppercase tracking-wide text-metro-muted">
-                <tr>
-                  <th className="px-3 py-2">Puesto</th>
-                  <th className="w-44 px-3 py-2">Presencialidad mínima</th>
-                  <th className="w-40 px-3 py-2">Dotación computable</th>
-                  <th className="w-44 px-3 py-2">Grupo cobertura</th>
-                  <th className="px-3 py-2">Observaciones</th>
-                  <th className="w-24 px-3 py-2 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-metro-border">
-                {filteredPuestos.map((puesto) => {
-                  const grupo = puesto.grupoCoberturaId ? gruposById.get(puesto.grupoCoberturaId) : null;
-                  return (
-                    <tr
-                      key={puesto.id}
-                      className={
-                        puesto.id === editingPuestoId
-                          ? 'bg-metro-red/5 text-metro-text'
-                          : 'text-metro-text'
-                      }
-                    >
-                      <td className="px-3 py-2 font-semibold">{puesto.puesto}</td>
-                      <td className="px-3 py-2 text-metro-muted">
-                        {grupo ? `${grupo.presencialidadMinima} (grupo)` : puesto.maxSolicitudes || '—'}
-                      </td>
-                      <td className="px-3 py-2 text-metro-muted">{puesto.dotacionComputable || '—'}</td>
-                      <td className="px-3 py-2 text-metro-muted">{grupo?.nombre ?? '—'}</td>
-                      <td className="px-3 py-2 text-metro-muted">{puesto.observaciones || '—'}</td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            aria-label={`Editar ${puesto.puesto}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-text"
-                            onClick={() => handleStartEdit(puesto)}
-                            title="Editar puesto"
-                            type="button"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            aria-label={`Eliminar ${puesto.puesto}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-metro-muted hover:border-metro-red hover:text-metro-red"
-                            onClick={() => void handleRemove(puesto)}
-                            title="Eliminar puesto"
-                            type="button"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filteredPuestos.length === 0 && (
-                  <tr>
-                    <td className="px-3 py-8 text-center text-sm text-metro-muted" colSpan={6}>
-                      No hay puestos teletrabajables para los criterios indicados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            <div className="flex justify-end px-3 py-2">
+              <button
+                className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={resetPreferences}
+                type="button"
+              >
+                <RotateCcw size={14} /> Restablecer vista
+              </button>
+            </div>
+            <DataTable
+              ariaLabel="Puestos teletrabajables"
+              columnOrder={preferences.columnOrder}
+              columnWidths={preferences.columnWidths}
+              columns={puestoColumns}
+              emptyMessage="No hay puestos teletrabajables para los criterios indicados."
+              getRowId={(puesto) => puesto.id}
+              maxHeightClassName="max-h-[46vh]"
+              onColumnOrderChange={setColumnOrder}
+              onColumnWidthChange={setColumnWidth}
+              onResetColumnWidths={resetColumnWidths}
+              onRowDoubleClick={handleStartEdit}
+              onSortChange={setSort}
+              rowClassName={(puesto) =>
+                puesto.id === editingPuestoId ? 'bg-metro-red/5 text-metro-text' : 'text-metro-text'
+              }
+              rows={sortedPuestos}
+              sort={preferences.sort}
+            />
           </div>
         </div>
       </section>
