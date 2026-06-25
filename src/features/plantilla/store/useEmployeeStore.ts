@@ -46,6 +46,7 @@ interface EmployeeState {
   importExcel: (file: File) => Promise<EmployeeImportResult>;
   importJobPositionTranslations: (file: File) => Promise<number>;
   createJobPositionTranslation: (translation: JobPositionTranslation) => Promise<{ ok: boolean; message: string }>;
+  syncMissingJobPositionTranslationsFromEmployees: () => Promise<{ created: number; createdPuestos: string[] }>;
   updateJobPositionTranslation: (
     previousPuestoCastellano: string,
     translation: JobPositionTranslation,
@@ -599,6 +600,52 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     await persistJobPositionTranslationsConfirmed(jobPositionTranslations);
     set({ jobPositionTranslations });
     return { ok: true, message: 'Puesto creado.' };
+  },
+  /**
+   * Da de alta automáticamente, como pendientes (puestoEuskera vacío), los
+   * puestoOrganizativo de empleados activos que todavía no tienen ninguna
+   * fila equivalente en jobPositionTranslations. Pensado para llamarse al
+   * abrir el modal de Traducción de puestos, así Joseba ve de inmediato qué
+   * le falta traducir tras renombrar un puesto en Plantilla, sin tener que
+   * darlo de alta a mano antes. Una sola escritura por lotes, no una por
+   * puesto encontrado.
+   */
+  syncMissingJobPositionTranslationsFromEmployees: async () => {
+    const { employees, jobPositionTranslations: currentTranslations } = get();
+    const existingKeys = new Set(
+      currentTranslations.map((translation) => normalizeJobPosition(translation.puestoCastellano)),
+    );
+
+    const pendingByKey = new Map<string, string>();
+    employees
+      .filter((employee) => !employee.deletedAt && employee.puestoOrganizativo.trim())
+      .forEach((employee) => {
+        const puesto = employee.puestoOrganizativo.trim();
+        const key = normalizeJobPosition(puesto);
+        if (!existingKeys.has(key) && !pendingByKey.has(key)) {
+          pendingByKey.set(key, puesto);
+        }
+      });
+
+    if (pendingByKey.size === 0) {
+      return { created: 0, createdPuestos: [] };
+    }
+
+    const createdPuestos = Array.from(pendingByKey.values()).sort((first, second) =>
+      first.localeCompare(second, 'es', { numeric: true, sensitivity: 'base' }),
+    );
+    const newTranslations: JobPositionTranslation[] = createdPuestos.map((puesto) => ({
+      puestoCastellano: puesto,
+      puestoEuskera: '',
+    }));
+
+    const jobPositionTranslations = sortJobPositionTranslations([
+      ...currentTranslations,
+      ...newTranslations,
+    ]);
+    await persistJobPositionTranslationsConfirmed(jobPositionTranslations);
+    set({ jobPositionTranslations });
+    return { created: createdPuestos.length, createdPuestos };
   },
   updateJobPositionTranslation: async (previousPuestoCastellano, translation) => {
     const validation = validateJobPositionTranslationDraft(translation);

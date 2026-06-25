@@ -150,4 +150,30 @@ describe('TeletrabajoPuestosModal', () => {
 
     expect(screen.queryByText(/sin equivalente aquí/i)).not.toBeInTheDocument();
   });
+
+  it('marca «(sin traducción)» en un puesto teletrabajable cuya traducción está pendiente', () => {
+    useEmployeeStore.setState({
+      jobPositionTranslations: [buildTranslation({ puestoCastellano: 'Técnica', puestoEuskera: '' })],
+    });
+    useTeletrabajoStore.setState({
+      puestosTeletrabajo: [buildPuesto({ puesto: 'Técnica' })],
+    });
+
+    render(<TeletrabajoPuestosModal onClose={() => {}} />);
+
+    expect(screen.getByText('(sin traducción)')).toBeInTheDocument();
+  });
+
+  it('no marca nada cuando el puesto teletrabajable ya tiene traducción al euskera', () => {
+    useEmployeeStore.setState({
+      jobPositionTranslations: [buildTranslation({ puestoCastellano: 'Técnica', puestoEuskera: 'Teknikaria' })],
+    });
+    useTeletrabajoStore.setState({
+      puestosTeletrabajo: [buildPuesto({ puesto: 'Técnica' })],
+    });
+
+    render(<TeletrabajoPuestosModal onClose={() => {}} />);
+
+    expect(screen.queryByText('(sin traducción)')).not.toBeInTheDocument();
+  });
 });

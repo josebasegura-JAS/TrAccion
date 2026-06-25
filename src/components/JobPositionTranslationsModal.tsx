@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import {
@@ -17,6 +17,7 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
+import { isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
 
 interface JobPositionTranslationsModalProps {
   onClose: () => void;
@@ -52,6 +53,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
     createJobPositionTranslation,
     updateJobPositionTranslation,
     updateEmptyEmployeeJobPositionTranslations,
+    syncMissingJobPositionTranslationsFromEmployees,
   } = useEmployeeStore();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -60,6 +62,30 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
   const [editingPuestoCastellano, setEditingPuestoCastellano] = useState<string | null>(null);
   const [draft, setDraft] = useState<JobPositionTranslation>(EMPTY_TRANSLATION_DRAFT);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Al abrir el modal, da de alta como pendientes (sin traducción) los
+  // puestoOrganizativo de Plantilla que todavía no existan aquí. Solo una
+  // vez por apertura del modal, no en cada render.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { created, createdPuestos } = await syncMissingJobPositionTranslationsFromEmployees();
+        if (created > 0) {
+          setError('');
+          setMessage(
+            `Se ${created === 1 ? 'ha' : 'han'} añadido ${created} puesto${created === 1 ? '' : 's'} pendiente${created === 1 ? '' : 's'} de traducción: ${createdPuestos.join(', ')}.`,
+          );
+        }
+      } catch (syncError) {
+        setMessage('');
+        setError(
+          syncError instanceof Error
+            ? syncError.message
+            : 'No se pudieron sincronizar los puestos pendientes desde Plantilla.',
+        );
+      }
+    })();
+  }, [syncMissingJobPositionTranslationsFromEmployees]);
 
   const resetEditor = () => {
     setEditorMode('create');
@@ -140,7 +166,12 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
         id: 'puestoEuskera',
         header: 'Lanpostua',
         accessor: (translation) => translation.puestoEuskera,
-        render: (translation) => translation.puestoEuskera,
+        render: (translation) =>
+          isJobPositionTranslationPending(translation) ? (
+            <span className="font-semibold text-red-300">Sin traducción</span>
+          ) : (
+            translation.puestoEuskera
+          ),
         width: 360,
         minWidth: 180,
         maxWidth: 640,
@@ -368,6 +399,9 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               onResetColumnWidths={resetColumnWidths}
               onRowDoubleClick={startEdit}
               onSortChange={setSort}
+              rowClassName={(translation) =>
+                isJobPositionTranslationPending(translation) ? 'bg-red-500/10' : ''
+              }
               rows={sortedTranslations}
               sort={preferences.sort}
             />

@@ -1,7 +1,7 @@
 import { AlertTriangle, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
-import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
+import { normalizeJobPosition, isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
 import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/gruposCobertura';
 import {
   EMPTY_TELETRABAJO_PUESTO_DRAFT,
@@ -137,6 +137,22 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
   const masterPuestosByKey = useMemo(
     () => new Map(masterPuestos.map((puesto): [string, string] => [normalizeJobPosition(puesto), puesto])),
     [masterPuestos],
+  );
+
+  /**
+   * Claves (texto normalizado) de puestoCastellano que existen en
+   * Traducción de puestos pero todavía no tienen traducción al euskera.
+   * Permite resaltar en esta tabla qué puestos teletrabajables están
+   * esperando esa traducción, sin tener que ir a comprobarlo aparte.
+   */
+  const pendingTranslationKeys = useMemo(
+    () =>
+      new Set(
+        jobPositionTranslations
+          .filter((translation) => isJobPositionTranslationPending(translation))
+          .map((translation) => normalizeJobPosition(translation.puestoCastellano)),
+      ),
+    [jobPositionTranslations],
   );
 
   const visibleGruposCobertura = useMemo(
@@ -419,7 +435,14 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
         id: 'puesto',
         header: 'Puesto',
         accessor: (puesto) => puesto.puesto,
-        render: (puesto) => puesto.puesto,
+        render: (puesto) =>
+          pendingTranslationKeys.has(normalizeJobPosition(puesto.puesto)) ? (
+            <span className="text-red-300">
+              {puesto.puesto} <span className="text-xs font-normal">(sin traducción)</span>
+            </span>
+          ) : (
+            puesto.puesto
+          ),
         width: 320,
         minWidth: 180,
         maxWidth: 640,
@@ -515,7 +538,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
         reorderable: false,
       },
     ],
-    [gruposById, handleStartEdit, handleRemove],
+    [gruposById, handleStartEdit, handleRemove, pendingTranslationKeys],
   );
 
   const sortedPuestos = useMemo(
@@ -815,9 +838,13 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               onResetColumnWidths={resetColumnWidths}
               onRowDoubleClick={handleStartEdit}
               onSortChange={setSort}
-              rowClassName={(puesto) =>
-                puesto.id === editingPuestoId ? 'bg-metro-red/5 text-metro-text' : 'text-metro-text'
-              }
+              rowClassName={(puesto) => {
+                const isPending = pendingTranslationKeys.has(normalizeJobPosition(puesto.puesto));
+                if (isPending) {
+                  return 'bg-red-500/10 text-metro-text';
+                }
+                return puesto.id === editingPuestoId ? 'bg-metro-red/5 text-metro-text' : 'text-metro-text';
+              }}
               rows={sortedPuestos}
               sort={preferences.sort}
             />
