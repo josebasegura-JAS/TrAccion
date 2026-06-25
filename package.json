@@ -93,7 +93,7 @@
       "icon": "build/icon/traccion-icon-256.ico"
     },
     "portable": {
-      "artifactName": "TrAccion V1.0.31.exe"
+      "artifactName": "TrAccion V1.0.32.exe"
     },
     "npmRebuild": true,
     "icon": "build/icon/traccion-icon-256.ico"
