@@ -613,4 +613,68 @@ describe('grupos de cobertura: puestos coordinados que comparten presencialidad 
     expect(semaforo.status).toBe('ok');
     expect(semaforo.title).toContain('1 petición');
   });
+
+  it('no marca a revisar un grupo de cobertura con dos puestos si cada día mantiene una persona presencial aunque la dotación no esté parametrizada', () => {
+    const grupo = buildGrupo({ id: 'grupo-cobertura', presencialidadMinima: 1 });
+    const gruposById = new Map([[grupo.id, grupo]]);
+
+    const puestoA = buildPuesto({
+      id: 'puesto-a',
+      puesto: 'Puesto A',
+      maxSolicitudes: 0,
+      dotacionComputable: 0,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestoB = buildPuesto({
+      id: 'puesto-b',
+      puesto: 'Puesto B',
+      maxSolicitudes: 0,
+      dotacionComputable: 0,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestosByKey = buildPuestosByKey([puestoA, puestoB]);
+    const employeesByEmpleado = new Map([
+      ['100', buildEmployee({ empleado: '100', puestoOrganizativo: 'Puesto A' })],
+      ['101', buildEmployee({ empleado: '101', puestoOrganizativo: 'Puesto B' })],
+    ]);
+
+    const solicitudMartesJueves = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      puestoOrganizativo: 'Puesto A',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['martes', 'jueves'],
+    });
+    const solicitudMiercoles = buildSolicitud({
+      id: 'sol-b',
+      empleado: '101',
+      puestoOrganizativo: 'Puesto B',
+      periodo: '2026-2027',
+      diasTeletrabajo: ['miercoles'],
+    });
+
+    const solicitudesByPuestoCount = buildSolicitudesByPeriodoPuestoCount(
+      [solicitudMartesJueves, solicitudMiercoles],
+      puestosByKey,
+    );
+
+    const semaforoMartesJueves = getTeletrabajoSemaforo(
+      solicitudMartesJueves,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+      gruposById,
+    );
+    const semaforoMiercoles = getTeletrabajoSemaforo(
+      solicitudMiercoles,
+      puestosByKey,
+      solicitudesByPuestoCount,
+      employeesByEmpleado,
+      gruposById,
+    );
+
+    expect(semaforoMartesJueves.status).toBe('ok');
+    expect(semaforoMiercoles.status).toBe('ok');
+  });
+
 });

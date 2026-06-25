@@ -58,6 +58,34 @@ function getPuestosInGrupo(
     .map(([, puesto]) => puesto);
 }
 
+
+function getDotacionRealGrupo(
+  employees: Iterable<Employee>,
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): number {
+  return new Set(
+    Array.from(employees)
+      .filter((employee) => {
+        if (employee.deletedAt) {
+          return false;
+        }
+
+        const empleadoKey = employee.empleado.trim();
+        if (!empleadoKey) {
+          return false;
+        }
+
+        const employeePuestoKey = normalizeTeletrabajoPuesto(employee.puestoOrganizativo);
+        const employeePuesto = puestosByKey.get(employeePuestoKey);
+        return employeePuesto
+          ? getGrupoCoberturaKey(employeePuesto, employeePuestoKey) === grupoKey
+          : false;
+      })
+      .map((employee) => employee.empleado.trim()),
+  ).size;
+}
+
 function getDotacionComputableGrupo(
   puestosByKey: Map<string, TeletrabajoPuesto>,
   grupoKey: string,
@@ -225,11 +253,7 @@ export function buildTeletrabajoAssessment({
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
     const totalPersonasPuesto = dotacionParametrizada > 0
       ? dotacionParametrizada
-      : new Set(
-          Array.from(employeesById.values())
-            .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
-            .map((employee) => employee.empleado.trim()),
-        ).size;
+      : getDotacionRealGrupo(employeesById.values(), puestosByKey, coberturaKey);
     // Solo importan los días que esta solicitud concreta pide teletrabajar:
     // un conflicto de otro compañero del mismo puesto en un día distinto no
     // debe contagiar el semáforo de esta solicitud. Igual que en semaforo.ts.

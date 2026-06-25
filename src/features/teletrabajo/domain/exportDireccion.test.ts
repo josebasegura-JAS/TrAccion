@@ -414,4 +414,74 @@ describe('buildTeletrabajoAssessment — texto de Apuntes RRLL con peticiones y 
     expect(assessment.status).toBe('review');
     expect(assessment.apuntesRrll).toContain('mín. 2 presenciales');
   });
+
+  it('exporta como SI un grupo de cobertura con dos puestos si cada día mantiene una persona presencial aunque la dotación no esté parametrizada', () => {
+    const grupo: GrupoCobertura = {
+      id: 'grupo-cobertura',
+      nombre: 'Grupo cobertura',
+      presencialidadMinima: 1,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      deletedAt: null,
+    };
+    const gruposById = new Map([[grupo.id, grupo]]);
+
+    const puestoA = buildPuesto({
+      id: 'puesto-a',
+      puesto: 'Puesto A',
+      maxSolicitudes: 0,
+      dotacionComputable: 0,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestoB = buildPuesto({
+      id: 'puesto-b',
+      puesto: 'Puesto B',
+      maxSolicitudes: 0,
+      dotacionComputable: 0,
+      grupoCoberturaId: grupo.id,
+    });
+    const puestosByKey = buildPuestosByKey([puestoA, puestoB]);
+    const employeesById = buildEmployeesById([
+      buildEmployee({ empleado: '100', puestoOrganizativo: 'Puesto A' }),
+      buildEmployee({ empleado: '101', puestoOrganizativo: 'Puesto B' }),
+    ]);
+
+    const solicitudMartesJueves = buildSolicitud({
+      id: 'sol-a',
+      empleado: '100',
+      puestoOrganizativo: 'Puesto A',
+      diasTeletrabajo: ['martes', 'jueves'],
+    });
+    const solicitudMiercoles = buildSolicitud({
+      id: 'sol-b',
+      empleado: '101',
+      puestoOrganizativo: 'Puesto B',
+      diasTeletrabajo: ['miercoles'],
+    });
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(
+      [solicitudMartesJueves, solicitudMiercoles],
+      puestosByKey,
+    );
+
+    const assessmentMartesJueves = buildTeletrabajoAssessment({
+      solicitud: solicitudMartesJueves,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      gruposById,
+    });
+    const assessmentMiercoles = buildTeletrabajoAssessment({
+      solicitud: solicitudMiercoles,
+      employeesById,
+      puestosByKey,
+      solicitudesByPuestoDiaCount,
+      gruposById,
+    });
+
+    expect(assessmentMartesJueves.status).toBe('ok');
+    expect(assessmentMartesJueves.cellValue).toBe('SI');
+    expect(assessmentMiercoles.status).toBe('ok');
+    expect(assessmentMiercoles.cellValue).toBe('SI');
+  });
+
 });

@@ -39,6 +39,34 @@ function getPuestosInGrupo(
     .map(([, puesto]) => puesto);
 }
 
+
+function getDotacionRealGrupo(
+  employees: Iterable<Employee>,
+  puestosByKey: Map<string, TeletrabajoPuesto>,
+  grupoKey: string,
+): number {
+  return new Set(
+    Array.from(employees)
+      .filter((employee) => {
+        if (employee.deletedAt) {
+          return false;
+        }
+
+        const empleadoKey = employee.empleado.trim();
+        if (!empleadoKey) {
+          return false;
+        }
+
+        const employeePuestoKey = normalizeTeletrabajoPuesto(employee.puestoOrganizativo);
+        const employeePuesto = puestosByKey.get(employeePuestoKey);
+        return employeePuesto
+          ? getGrupoCoberturaKey(employeePuesto, employeePuestoKey) === grupoKey
+          : false;
+      })
+      .map((employee) => employee.empleado.trim()),
+  ).size;
+}
+
 function getDotacionComputableGrupo(
   puestosByKey: Map<string, TeletrabajoPuesto>,
   grupoKey: string,
@@ -194,11 +222,7 @@ export function getTeletrabajoSemaforo(
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
     const totalPersonasPuesto = dotacionParametrizada > 0
       ? dotacionParametrizada
-      : new Set(
-          Array.from(employeesByEmpleado.values())
-            .filter((employee) => normalizeTeletrabajoPuesto(employee.puestoOrganizativo) === puestoKey)
-            .map((employee) => employee.empleado.trim()),
-        ).size;
+      : getDotacionRealGrupo(employeesByEmpleado.values(), puestosByKey, coberturaKey);
 
     const conflictos = diasSolicitados
       .map((dia) => {
