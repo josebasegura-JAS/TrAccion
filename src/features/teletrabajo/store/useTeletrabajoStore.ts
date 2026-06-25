@@ -194,15 +194,24 @@ interface TeletrabajoStateStore {
   createPeriodo: (
     options: CreateTeletrabajoPeriodoOptions,
   ) => Promise<TeletrabajoPeriodoCreationResult>;
-  createPuestoTeletrabajo: (draft: TeletrabajoPuestoDraft) => void;
-  updatePuestoTeletrabajo: (id: string, draft: TeletrabajoPuestoDraft) => void;
-  removePuestoTeletrabajo: (id: string) => void;
+  createPuestoTeletrabajo: (draft: TeletrabajoPuestoDraft) => Promise<TeletrabajoUpdateResult>;
+  updatePuestoTeletrabajo: (
+    id: string,
+    draft: TeletrabajoPuestoDraft,
+  ) => Promise<TeletrabajoUpdateResult>;
+  removePuestoTeletrabajo: (id: string) => Promise<TeletrabajoUpdateResult>;
   importPuestosTeletrabajo: (file: File) => Promise<number>;
   importPuestosTeletrabajoDrafts: (rows: readonly TeletrabajoPuestoImportRow[]) => number;
-  createGrupoCobertura: (draft: GrupoCoberturaDraft) => string;
-  updateGrupoCobertura: (id: string, draft: GrupoCoberturaDraft) => void;
-  removeGrupoCobertura: (id: string) => void;
-  setPuestoGrupoCobertura: (puestoId: string, grupoCoberturaId: string | null) => void;
+  createGrupoCobertura: (draft: GrupoCoberturaDraft) => Promise<TeletrabajoUpdateResult>;
+  updateGrupoCobertura: (
+    id: string,
+    draft: GrupoCoberturaDraft,
+  ) => Promise<TeletrabajoUpdateResult>;
+  removeGrupoCobertura: (id: string) => Promise<TeletrabajoUpdateResult>;
+  setPuestoGrupoCobertura: (
+    puestoId: string,
+    grupoCoberturaId: string | null,
+  ) => Promise<TeletrabajoUpdateResult>;
   remove: (id: string) => void;
   removeWithConcurrencyCheck: (
     id: string,
@@ -481,6 +490,14 @@ async function persistPuestosTeletrabajoInSqlite(
   return true;
 }
 
+/**
+ * Persiste TODA la lista de puestos en localStorage y, en segundo plano, en
+ * SQLite registro a registro. Pensada solo para operaciones que legítimamente
+ * tocan muchos puestos a la vez (migración legacy, importación masiva), donde
+ * el resultado se ve en el siguiente reload. NO usar para una edición de un
+ * solo puesto desde el modal: ahí se debe usar persistPuestoTeletrabajoRecord,
+ * que guarda solo ese registro y permite avisar al usuario si hay conflicto.
+ */
 function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): void {
   writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
 
@@ -491,6 +508,49 @@ function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): voi
       console.warn('Puestos teletrabajables no guardados en SQLite.', error);
     }
   })();
+}
+
+/**
+ * Persiste un único puesto (creación, edición o baja lógica de un registro
+ * concreto desde el modal). A diferencia de persistPuestosTeletrabajo, espera
+ * el resultado real de SQLite y lo devuelve, para que el caller pueda avisar
+ * al usuario si otra persona modificó ese mismo puesto mientras tanto.
+ */
+async function persistPuestoTeletrabajoRecord(
+  allPuestos: TeletrabajoPuesto[],
+  puesto: TeletrabajoPuesto,
+): Promise<{ ok: boolean; message: string }> {
+  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(allPuestos));
+
+  const saver = window.traccion?.saveTeletrabajoPuestoRecordIfUnchanged;
+  if (!saver) {
+    return { ok: true, message: '' };
+  }
+
+  try {
+    const result = await saver({
+      id: puesto.id,
+      value: JSON.stringify(puesto),
+      expectedUpdatedAt: latestPuestosTeletrabajoUpdatedAtById.get(puesto.id) ?? null,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        message:
+          result.message ||
+          'Este puesto ha sido modificado por otra persona. Recarga antes de continuar.',
+      };
+    }
+    if (result.currentUpdatedAt) {
+      latestPuestosTeletrabajoUpdatedAtById.set(puesto.id, result.currentUpdatedAt);
+    }
+    return { ok: true, message: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido guardar el puesto.',
+    };
+  }
 }
 
 function createPuestoTeletrabajoId(): string {
@@ -579,6 +639,14 @@ async function persistGruposCoberturaInSqlite(gruposCobertura: GrupoCobertura[])
   return true;
 }
 
+/**
+ * Persiste TODA la lista de grupos en localStorage y, en segundo plano, en
+ * SQLite registro a registro. Pensada solo para operaciones que legítimamente
+ * tocan muchos grupos a la vez (migración legacy), donde el resultado se ve
+ * en el siguiente reload. NO usar para una edición de un solo grupo desde el
+ * modal: ahí se debe usar persistGrupoCoberturaRecord, que guarda solo ese
+ * registro y permite avisar al usuario si hay conflicto.
+ */
 function persistGruposCobertura(gruposCobertura: GrupoCobertura[]): void {
   writeStorageItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(gruposCobertura));
 
@@ -589,6 +657,49 @@ function persistGruposCobertura(gruposCobertura: GrupoCobertura[]): void {
       console.warn('Grupos de cobertura no guardados en SQLite.', error);
     }
   })();
+}
+
+/**
+ * Persiste un único grupo de cobertura (creación, edición o baja lógica de un
+ * registro concreto desde el modal). A diferencia de persistGruposCobertura,
+ * espera el resultado real de SQLite y lo devuelve, para que el caller pueda
+ * avisar al usuario si otra persona modificó ese mismo grupo mientras tanto.
+ */
+async function persistGrupoCoberturaRecord(
+  allGrupos: GrupoCobertura[],
+  grupo: GrupoCobertura,
+): Promise<{ ok: boolean; message: string }> {
+  writeStorageItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(allGrupos));
+
+  const saver = window.traccion?.saveTeletrabajoGrupoCoberturaRecordIfUnchanged;
+  if (!saver) {
+    return { ok: true, message: '' };
+  }
+
+  try {
+    const result = await saver({
+      id: grupo.id,
+      value: JSON.stringify(grupo),
+      expectedUpdatedAt: latestGruposCoberturaUpdatedAtById.get(grupo.id) ?? null,
+    });
+    if (!result.ok) {
+      return {
+        ok: false,
+        message:
+          result.message ||
+          'Este grupo de cobertura ha sido modificado por otra persona. Recarga antes de continuar.',
+      };
+    }
+    if (result.currentUpdatedAt) {
+      latestGruposCoberturaUpdatedAtById.set(grupo.id, result.currentUpdatedAt);
+    }
+    return { ok: true, message: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido guardar el grupo de cobertura.',
+    };
+  }
 }
 
 async function loadGruposCoberturaFromSqliteOrStorage(): Promise<GrupoCobertura[]> {
@@ -1351,37 +1462,63 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       return { ok: false, message, created: 0, ignored: 0 };
     }
   },
-  createPuestoTeletrabajo: (draft) => {
-    set((state) => {
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, [draft]);
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      return { puestosTeletrabajo };
-    });
+  createPuestoTeletrabajo: async (draft) => {
+    const puestosTeletrabajo = upsertPuestosTeletrabajo(get().puestosTeletrabajo, [draft]);
+    const created = puestosTeletrabajo.find(
+      (puesto) => normalizeTeletrabajoPuesto(puesto.puesto) === normalizeTeletrabajoPuesto(draft.puesto),
+    );
+    set({ puestosTeletrabajo });
+
+    if (!created) {
+      return { ok: true, message: 'Puesto teletrabajable añadido.' };
+    }
+
+    const result = await persistPuestoTeletrabajoRecord(puestosTeletrabajo, created);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    return { ok: true, message: 'Puesto teletrabajable añadido.', recordId: created.id };
   },
-  updatePuestoTeletrabajo: (id, draft) => {
-    set((state) => {
-      const normalizedDraft = normalizeTeletrabajoPuestoDraft(draft);
-      const now = new Date().toISOString();
-      const puestosTeletrabajo = state.puestosTeletrabajo
-        .map((puesto) =>
-          puesto.id === id ? { ...puesto, ...normalizedDraft, updatedAt: now } : puesto,
-        )
-        .sort((first, second) =>
-          first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
-        );
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      return { puestosTeletrabajo };
-    });
-  },
-  removePuestoTeletrabajo: (id) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
-        puesto.id === id ? { ...puesto, deletedAt: now, updatedAt: now } : puesto,
+  updatePuestoTeletrabajo: async (id, draft) => {
+    const normalizedDraft = normalizeTeletrabajoPuestoDraft(draft);
+    const now = new Date().toISOString();
+    const puestosTeletrabajo = get()
+      .puestosTeletrabajo.map((puesto) =>
+        puesto.id === id ? { ...puesto, ...normalizedDraft, updatedAt: now } : puesto,
+      )
+      .sort((first, second) =>
+        first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
       );
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      return { puestosTeletrabajo };
-    });
+    set({ puestosTeletrabajo });
+
+    const updated = puestosTeletrabajo.find((puesto) => puesto.id === id);
+    if (!updated) {
+      return { ok: true, message: 'Puesto teletrabajable actualizado.' };
+    }
+
+    const result = await persistPuestoTeletrabajoRecord(puestosTeletrabajo, updated);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    return { ok: true, message: 'Puesto teletrabajable actualizado.', recordId: id };
+  },
+  removePuestoTeletrabajo: async (id) => {
+    const now = new Date().toISOString();
+    const puestosTeletrabajo = get().puestosTeletrabajo.map((puesto) =>
+      puesto.id === id ? { ...puesto, deletedAt: now, updatedAt: now } : puesto,
+    );
+    set({ puestosTeletrabajo });
+
+    const removed = puestosTeletrabajo.find((puesto) => puesto.id === id);
+    if (!removed) {
+      return { ok: true, message: 'Puesto teletrabajable eliminado.' };
+    }
+
+    const result = await persistPuestoTeletrabajoRecord(puestosTeletrabajo, removed);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    return { ok: true, message: 'Puesto teletrabajable eliminado.', recordId: id };
   },
   importPuestosTeletrabajo: async (file) => {
     const rows = await importTeletrabajoPuestosFromFile(file);
@@ -1426,62 +1563,108 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     });
     return rows.filter((row) => row.draft.puesto.trim()).length;
   },
-  createGrupoCobertura: (draft) => {
+  createGrupoCobertura: async (draft) => {
     const id = createGrupoCoberturaId();
-    set((state) => {
-      const now = new Date().toISOString();
-      const normalizedDraft = normalizeGrupoCoberturaDraft(draft);
-      const gruposCobertura = [
-        ...state.gruposCobertura,
-        { id, ...normalizedDraft, createdAt: now, updatedAt: now, deletedAt: null },
-      ].sort((first, second) =>
+    const now = new Date().toISOString();
+    const normalizedDraft = normalizeGrupoCoberturaDraft(draft);
+    const nuevoGrupo: GrupoCobertura = {
+      id,
+      ...normalizedDraft,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    const gruposCobertura = [...get().gruposCobertura, nuevoGrupo].sort((first, second) =>
+      first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
+    );
+    set({ gruposCobertura });
+
+    const result = await persistGrupoCoberturaRecord(gruposCobertura, nuevoGrupo);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    return { ok: true, message: 'Grupo de cobertura creado.', recordId: id };
+  },
+  updateGrupoCobertura: async (id, draft) => {
+    const normalizedDraft = normalizeGrupoCoberturaDraft(draft);
+    const now = new Date().toISOString();
+    const gruposCobertura = get()
+      .gruposCobertura.map((grupo) =>
+        grupo.id === id ? { ...grupo, ...normalizedDraft, updatedAt: now } : grupo,
+      )
+      .sort((first, second) =>
         first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
       );
-      persistGruposCobertura(gruposCobertura);
-      return { gruposCobertura };
-    });
-    return id;
+    set({ gruposCobertura });
+
+    const updated = gruposCobertura.find((grupo) => grupo.id === id);
+    if (!updated) {
+      return { ok: true, message: 'Grupo de cobertura actualizado.' };
+    }
+
+    const result = await persistGrupoCoberturaRecord(gruposCobertura, updated);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    return { ok: true, message: 'Grupo de cobertura actualizado.', recordId: id };
   },
-  updateGrupoCobertura: (id, draft) => {
-    set((state) => {
-      const normalizedDraft = normalizeGrupoCoberturaDraft(draft);
-      const now = new Date().toISOString();
-      const gruposCobertura = state.gruposCobertura
-        .map((grupo) => (grupo.id === id ? { ...grupo, ...normalizedDraft, updatedAt: now } : grupo))
-        .sort((first, second) =>
-          first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
-        );
-      persistGruposCobertura(gruposCobertura);
-      return { gruposCobertura };
-    });
+  removeGrupoCobertura: async (id) => {
+    const now = new Date().toISOString();
+    const state = get();
+    const gruposCobertura = state.gruposCobertura.map((grupo) =>
+      grupo.id === id ? { ...grupo, deletedAt: now, updatedAt: now } : grupo,
+    );
+    // Los puestos que estaban en el grupo eliminado quedan sin grupo (cobertura individual),
+    // en vez de quedar enlazados a un grupo borrado de forma invisible.
+    const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
+      puesto.grupoCoberturaId === id
+        ? { ...puesto, grupoCoberturaId: null, updatedAt: now }
+        : puesto,
+    );
+    set({ gruposCobertura, puestosTeletrabajo });
+
+    const removedGrupo = gruposCobertura.find((grupo) => grupo.id === id);
+    const grupoResult = removedGrupo
+      ? await persistGrupoCoberturaRecord(gruposCobertura, removedGrupo)
+      : { ok: true, message: '' };
+    if (!grupoResult.ok) {
+      return { ok: false, message: grupoResult.message };
+    }
+
+    // Los puestos que quedaron desenlazados también deben persistirse, uno a
+    // uno, para no arrastrar el patrón de "guardar toda la lista".
+    const puestosDesenlazados = puestosTeletrabajo.filter(
+      (puesto, index) => puesto !== state.puestosTeletrabajo[index] && puesto.grupoCoberturaId === null,
+    );
+    for (const puesto of puestosDesenlazados) {
+      const puestoResult = await persistPuestoTeletrabajoRecord(puestosTeletrabajo, puesto);
+      if (!puestoResult.ok) {
+        return {
+          ok: false,
+          message: `Grupo eliminado, pero no se ha podido actualizar el puesto «${puesto.puesto}»: ${puestoResult.message}`,
+        };
+      }
+    }
+
+    return { ok: true, message: 'Grupo de cobertura eliminado.', recordId: id };
   },
-  removeGrupoCobertura: (id) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const gruposCobertura = state.gruposCobertura.map((grupo) =>
-        grupo.id === id ? { ...grupo, deletedAt: now, updatedAt: now } : grupo,
-      );
-      // Los puestos que estaban en el grupo eliminado quedan sin grupo (cobertura individual),
-      // en vez de quedar enlazados a un grupo borrado de forma invisible.
-      const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
-        puesto.grupoCoberturaId === id
-          ? { ...puesto, grupoCoberturaId: null, updatedAt: now }
-          : puesto,
-      );
-      persistGruposCobertura(gruposCobertura);
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      return { gruposCobertura, puestosTeletrabajo };
-    });
-  },
-  setPuestoGrupoCobertura: (puestoId, grupoCoberturaId) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const puestosTeletrabajo = state.puestosTeletrabajo.map((puesto) =>
-        puesto.id === puestoId ? { ...puesto, grupoCoberturaId, updatedAt: now } : puesto,
-      );
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      return { puestosTeletrabajo };
-    });
+  setPuestoGrupoCobertura: async (puestoId, grupoCoberturaId) => {
+    const now = new Date().toISOString();
+    const puestosTeletrabajo = get().puestosTeletrabajo.map((puesto) =>
+      puesto.id === puestoId ? { ...puesto, grupoCoberturaId, updatedAt: now } : puesto,
+    );
+    set({ puestosTeletrabajo });
+
+    const updated = puestosTeletrabajo.find((puesto) => puesto.id === puestoId);
+    if (!updated) {
+      return { ok: true, message: 'Puesto actualizado.' };
+    }
+
+    const result = await persistPuestoTeletrabajoRecord(puestosTeletrabajo, updated);
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+    return { ok: true, message: 'Puesto actualizado.', recordId: puestoId };
   },
   remove: (id) => {
     set((state) => {

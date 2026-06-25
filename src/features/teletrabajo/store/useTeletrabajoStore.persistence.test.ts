@@ -162,4 +162,101 @@ describe('useTeletrabajoStore persistence', () => {
     ]);
     expect(window.localStorage.getItem(PUESTOS_STORAGE_KEY)).toContain('Actualizado');
   });
+
+  describe('concurrencia en Puestos y Grupos de cobertura (creación/edición individual)', () => {
+    afterEach(() => {
+      delete (window as { traccion?: unknown }).traccion;
+    });
+
+    it('createPuestoTeletrabajo devuelve ok y guarda solo el registro creado, no toda la lista', async () => {
+      const saveCalls: Array<{ id: string }> = [];
+      (window as { traccion?: unknown }).traccion = {
+        saveTeletrabajoPuestoRecordIfUnchanged: vi.fn(async (record: { id: string }) => {
+          saveCalls.push(record);
+          return { ok: true, currentUpdatedAt: timestamp };
+        }),
+      };
+
+      const result = await useTeletrabajoStore.getState().createPuestoTeletrabajo({
+        puesto: 'Recepcionista',
+        maxSolicitudes: 1,
+        dotacionComputable: 1,
+        grupoCoberturaId: null,
+        observaciones: '',
+      });
+
+      expect(result.ok).toBe(true);
+      // Solo debe haberse llamado al guardado SQLite UNA vez (el puesto creado), no una vez por puesto existente.
+      expect(saveCalls).toHaveLength(1);
+      expect(saveCalls[0].id).toBe(useTeletrabajoStore.getState().puestosTeletrabajo[0].id);
+    });
+
+    it('updatePuestoTeletrabajo refleja el conflicto cuando otra persona modificó el mismo puesto', async () => {
+      (window as { traccion?: unknown }).traccion = {
+        saveTeletrabajoPuestoRecordIfUnchanged: vi.fn(async () => ({ ok: true, currentUpdatedAt: timestamp })),
+      };
+      const createResult = await useTeletrabajoStore.getState().createPuestoTeletrabajo({
+        puesto: 'Recepcionista',
+        maxSolicitudes: 1,
+        dotacionComputable: 1,
+        grupoCoberturaId: null,
+        observaciones: '',
+      });
+      const puestoId = createResult.recordId as string;
+
+      // Simula que, entre medias, otra persona ya modificó este mismo puesto en la base compartida.
+      (window as { traccion?: unknown }).traccion = {
+        saveTeletrabajoPuestoRecordIfUnchanged: vi.fn(async () => ({
+          ok: false,
+          message: 'Este puesto ha sido modificado por otra persona. Recarga antes de continuar.',
+        })),
+      };
+
+      const updateResult = await useTeletrabajoStore.getState().updatePuestoTeletrabajo(puestoId, {
+        puesto: 'Recepcionista',
+        maxSolicitudes: 2,
+        dotacionComputable: 1,
+        grupoCoberturaId: null,
+        observaciones: '',
+      });
+
+      expect(updateResult.ok).toBe(false);
+      expect(updateResult.message).toContain('modificado por otra persona');
+    });
+
+    it('createGrupoCobertura y updateGrupoCobertura guardan solo el registro tocado y reflejan conflictos', async () => {
+      const saveCalls: Array<{ id: string }> = [];
+      (window as { traccion?: unknown }).traccion = {
+        saveTeletrabajoGrupoCoberturaRecordIfUnchanged: vi.fn(async (record: { id: string }) => {
+          saveCalls.push(record);
+          return { ok: true, currentUpdatedAt: timestamp };
+        }),
+      };
+
+      const createResult = await useTeletrabajoStore.getState().createGrupoCobertura({
+        nombre: 'Recepción',
+        presencialidadMinima: 2,
+      });
+
+      expect(createResult.ok).toBe(true);
+      expect(saveCalls).toHaveLength(1);
+
+      (window as { traccion?: unknown }).traccion = {
+        saveTeletrabajoGrupoCoberturaRecordIfUnchanged: vi.fn(async () => ({
+          ok: false,
+          message: 'Este grupo de cobertura ha sido modificado por otra persona. Recarga antes de continuar.',
+        })),
+      };
+
+      const updateResult = await useTeletrabajoStore
+        .getState()
+        .updateGrupoCobertura(createResult.recordId as string, {
+          nombre: 'Recepción',
+          presencialidadMinima: 3,
+        });
+
+      expect(updateResult.ok).toBe(false);
+      expect(updateResult.message).toContain('modificado por otra persona');
+    });
+  });
 });
