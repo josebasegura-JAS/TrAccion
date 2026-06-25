@@ -378,6 +378,7 @@ let ticketRestauranteCalendarsMigrationDone = false;
 let ticketRestaurantePeopleMigrationDone = false;
 let ticketRestauranteAbsencesMigrationDone = false;
 let ticketRestauranteConfigMigrationDone = false;
+let ticketRestauranteManutencionesMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -1871,6 +1872,29 @@ function migrateToVersion16(db: Database): void {
   }
 }
 
+function migrateToVersion17(db: Database): void {
+  // Tercera tanda de Ticket Restaurante: manutenciones. debtLedger sigue
+  // siendo derivado/recalculable y no se persiste como entidad SQLite.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ticket_restaurante_manutencion_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ticket_restaurante_manutencion_records_updated_at ON ticket_restaurante_manutencion_records(updated_at);
+  `);
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 17) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      17,
+      new Date().toISOString(),
+    );
+  }
+}
+
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1888,6 +1912,7 @@ function applyMigrations(db: Database): void {
   migrateToVersion14(db);
   migrateToVersion15(db);
   migrateToVersion16(db);
+  migrateToVersion17(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -4666,6 +4691,16 @@ const ticketRestauranteConfigRepository = createJsonModuleRepository(
   },
 );
 
+const ticketRestauranteManutencionesRepository = createJsonModuleRepository(
+  'ticket_restaurante_manutencion_records',
+  'traccion.v1.ticketRestaurante.manutenciones',
+  'Manutención de Ticket Restaurante',
+  () => ticketRestauranteManutencionesMigrationDone,
+  (value) => {
+    ticketRestauranteManutencionesMigrationDone = value;
+  },
+);
+
 const especialesRecipientRepository = createJsonModuleRepository(
   'especiales_recipient_records',
   'rrll_especiales_destinatarios',
@@ -4846,6 +4881,22 @@ export function saveTicketRestauranteConfigRecordIfUnchanged(
   record: ConditionalJsonRecord,
 ): Promise<JsonRecordSaveResult> {
   return ticketRestauranteConfigRepository.saveIfUnchanged(record);
+}
+
+export function loadTicketRestauranteManutencionRecordsSnapshot(): Promise<JsonRecordSnapshot> {
+  return ticketRestauranteManutencionesRepository.loadSnapshot();
+}
+
+export function saveTicketRestauranteManutencionRecordIfUnchanged(
+  record: ConditionalJsonRecord,
+): Promise<JsonRecordSaveResult> {
+  return ticketRestauranteManutencionesRepository.saveIfUnchanged(record);
+}
+
+export function saveTicketRestauranteManutencionRecordsIfUnchanged(
+  records: ConditionalJsonRecord[],
+): Promise<JsonRecordBatchSaveResult> {
+  return ticketRestauranteManutencionesRepository.saveManyIfUnchanged(records);
 }
 
 export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {

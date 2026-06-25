@@ -27,10 +27,12 @@ import {
   hasTicketRestaurantePeopleSqliteRepository,
   hasTicketRestauranteAbsencesSqliteRepository,
   hasTicketRestauranteConfigSqliteRepository,
+  hasTicketRestauranteManutencionesSqliteRepository,
   loadTicketRestauranteCalendarRecordsFromSqlite,
   loadTicketRestaurantePersonRecordsFromSqlite,
   loadTicketRestauranteAbsenceRecordsFromSqlite,
   loadTicketRestauranteConfigRecordFromSqlite,
+  loadTicketRestauranteManutencionRecordsFromSqlite,
   saveTicketRestauranteCalendarsToSqlite,
   saveTicketRestauranteCalendarToSqlite,
   saveTicketRestaurantePeopleToSqlite,
@@ -38,6 +40,8 @@ import {
   saveTicketRestauranteAbsencesToSqlite,
   saveTicketRestauranteAbsenceToSqlite,
   saveTicketRestauranteConfigToSqlite,
+  saveTicketRestauranteManutencionToSqlite,
+  saveTicketRestauranteManutencionesToSqlite,
   type TicketRestauranteSqliteRecord,
 } from './ticketRestauranteSqliteRepository';
 
@@ -354,6 +358,7 @@ let calendarSqliteUpdatedAt = new Map<string, string>();
 let personSqliteUpdatedAt = new Map<string, string>();
 let absenceSqliteUpdatedAt = new Map<string, string>();
 let configSqliteUpdatedAt: string | null = null;
+let manutencionSqliteUpdatedAt = new Map<string, string>();
 
 function updateCalendarSqliteUpdatedAtMap(calendars: readonly TicketCalendar[]): void {
   calendarSqliteUpdatedAt = new Map(calendars.map((calendar) => [calendar.id, calendar.updatedAt]));
@@ -407,6 +412,25 @@ function parseTicketAbsenceRecords(
       }
     })
     .filter(isTicketRestaurantAbsence);
+}
+
+function updateManutencionSqliteUpdatedAtMap(manutenciones: readonly TicketManutencion[]): void {
+  manutencionSqliteUpdatedAt = new Map(manutenciones.map((row) => [row.id, row.updatedAt]));
+}
+
+function parseTicketManutencionRecords(
+  records: readonly TicketRestauranteSqliteRecord[],
+): TicketManutencion[] {
+  return records
+    .flatMap((record) => {
+      try {
+        return [JSON.parse(record.value) as TicketManutencion];
+      } catch {
+        return [];
+      }
+    })
+    .filter(isTicketManutencion)
+    .map(normalizeStoredTicketManutencion);
 }
 
 /**
@@ -571,21 +595,61 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
   return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
 }
 
+
+async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutencion[]> {
+  if (!hasTicketRestauranteManutencionesSqliteRepository()) {
+    return readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+      normalizeStoredTicketManutencion,
+    );
+  }
+
+  const sqliteRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
+  if (sqliteRecords === null) {
+    return readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+      normalizeStoredTicketManutencion,
+    );
+  }
+
+  if (sqliteRecords.length > 0) {
+    const manutenciones = parseTicketManutencionRecords(sqliteRecords);
+    updateManutencionSqliteUpdatedAtMap(manutenciones);
+    return manutenciones;
+  }
+
+  const fallbackManutenciones = readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
+    normalizeStoredTicketManutencion,
+  );
+  const seedResult = await saveTicketRestauranteManutencionesToSqlite(
+    fallbackManutenciones.map((row) => ({
+      id: row.id,
+      serializedValue: JSON.stringify(row),
+      expectedUpdatedAt: null,
+    })),
+  );
+  if (seedResult?.ok) {
+    const reloadedRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
+    if (reloadedRecords) {
+      const reloadedManutenciones = parseTicketManutencionRecords(reloadedRecords);
+      updateManutencionSqliteUpdatedAtMap(reloadedManutenciones);
+      return reloadedManutenciones;
+    }
+  }
+  return fallbackManutenciones;
+}
+
 /**
  * Carga calendars + people + absences + config (preferentemente desde
  * SQLite) y recalcula debtLedger a partir de los datos frescos, igual que
  * hacían las acciones de escritura antes de esta migración.
  */
 async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRestauranteSnapshot> {
-  const [calendars, people, absences, config] = await Promise.all([
+  const [calendars, people, absences, config, manutenciones] = await Promise.all([
     loadTicketCalendarsPreferringSqlite(),
     loadTicketPeoplePreferringSqlite(),
     loadTicketAbsencesPreferringSqlite(),
     loadTicketConfigPreferringSqlite(),
+    loadTicketManutencionesPreferringSqlite(),
   ]);
-  const manutenciones = readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-    normalizeStoredTicketManutencion,
-  );
   const debtLedger = recalculateDebtLedger(people, calendars, absences, config);
 
   return { calendars, absences, people, config, debtLedger, manutenciones };
@@ -1189,6 +1253,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const existingKeys = new Set(
       result.map((row) => `${row.empleado}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`),
     );
+    const newRows: TicketManutencion[] = [];
 
     drafts.forEach((draft) => {
       const key = `${draft.empleado}|${draft.fechaGasto}|${draft.imputacionYear}|${draft.imputacionMonth}`;
@@ -1196,23 +1261,77 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         return;
       }
       existingKeys.add(key);
-      result.push(
-        buildTicketManutencion(
-          draft,
-          now,
-          `ticket-manutencion-${draft.empleado}-${draft.fechaGasto}-${result.length + 1}`,
-        ),
+      const row = buildTicketManutencion(
+        draft,
+        now,
+        `ticket-manutencion-${draft.empleado}-${draft.fechaGasto}-${result.length + newRows.length + 1}`,
       );
+      newRows.push(row);
     });
 
-    commitTicketState(set, { manutenciones: result }, [[MANUTENCIONES_STORAGE_KEY, result]]);
+    const manutenciones = [...result, ...newRows];
+
+    if (hasTicketRestauranteManutencionesSqliteRepository()) {
+      void (async () => {
+        try {
+          const saveResult = await saveTicketRestauranteManutencionesToSqlite(
+            newRows.map((row) => ({
+              id: row.id,
+              serializedValue: JSON.stringify(row),
+              expectedUpdatedAt: null,
+            })),
+          );
+          if (saveResult?.ok) {
+            const reloadedRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
+            if (reloadedRecords) {
+              const reloadedManutenciones = parseTicketManutencionRecords(reloadedRecords);
+              updateManutencionSqliteUpdatedAtMap(reloadedManutenciones);
+              set({ manutenciones: reloadedManutenciones });
+              return;
+            }
+            newRows.forEach((row) => manutencionSqliteUpdatedAt.set(row.id, row.updatedAt));
+            set({ manutenciones });
+          }
+        } catch (error) {
+          console.warn('Ticket Restaurante: no se han podido guardar las manutenciones en SQLite.', error);
+        }
+      })();
+      return;
+    }
+
+    commitTicketState(set, { manutenciones }, [[MANUTENCIONES_STORAGE_KEY, manutenciones]]);
   },
   removeManutencion: (id) => {
     const state = get();
     const updatedAt = nowIso();
+    const previous = state.manutenciones.find((row) => row.id === id);
     const manutenciones = state.manutenciones.map((row) =>
       row.id === id ? { ...row, updatedAt, deletedAt: updatedAt } : row,
     );
+
+    if (previous && hasTicketRestauranteManutencionesSqliteRepository()) {
+      const removedRow = { ...previous, updatedAt, deletedAt: updatedAt };
+      const expectedUpdatedAt = manutencionSqliteUpdatedAt.get(id) ?? null;
+      void (async () => {
+        try {
+          const saveResult = await saveTicketRestauranteManutencionToSqlite(
+            { id },
+            JSON.stringify(removedRow),
+            expectedUpdatedAt,
+          );
+          if (saveResult?.ok) {
+            if (saveResult.currentUpdatedAt) {
+              manutencionSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
+            }
+            set({ manutenciones });
+          }
+        } catch (error) {
+          console.warn('Ticket Restaurante: no se ha podido eliminar la manutención en SQLite.', error);
+        }
+      })();
+      return;
+    }
+
     commitTicketState(set, { manutenciones }, [[MANUTENCIONES_STORAGE_KEY, manutenciones]]);
   },
 }));

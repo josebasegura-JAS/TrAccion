@@ -175,6 +175,18 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('ticket-restaurante-config:save-record-if-unchanged', record),
+  loadTicketRestauranteManutencionRecords: () =>
+    ipcRenderer.invoke('ticket-restaurante-manutenciones:load-records'),
+  saveTicketRestauranteManutencionRecordIfUnchanged: (record: {
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }) => ipcRenderer.invoke('ticket-restaurante-manutenciones:save-record-if-unchanged', record),
+  saveTicketRestauranteManutencionRecordsIfUnchanged: (records: Array<{
+    id: string;
+    value: string;
+    expectedUpdatedAt: string | null;
+  }>) => ipcRenderer.invoke('ticket-restaurante-manutenciones:save-records-if-unchanged', { records }),
   loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
   savePresupuestosSnapshotIfUnchanged: (snapshot: {
     scenarios: Array<{ id: string; value: string }>;

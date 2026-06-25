@@ -9,6 +9,7 @@ const TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.
 const TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
 const TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
 const TICKET_RESTAURANTE_CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
+const TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.manutenciones';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -485,6 +486,118 @@ export async function saveTicketRestauranteConfigToSqlite(
     clearPersistenceBusy(
       TICKET_RESTAURANTE_CONFIG_STORAGE_KEY,
       'No se ha podido guardar la configuración de Ticket Restaurante en SQLite.',
+    );
+    throw error;
+  }
+}
+
+
+// -- Manutenciones -----------------------------------------------------------
+
+export function hasTicketRestauranteManutencionesSqliteRepository(): boolean {
+  return Boolean(
+    window.traccion?.loadTicketRestauranteManutencionRecords &&
+      window.traccion?.saveTicketRestauranteManutencionRecordIfUnchanged &&
+      window.traccion?.saveTicketRestauranteManutencionRecordsIfUnchanged,
+  );
+}
+
+export async function loadTicketRestauranteManutencionRecordsFromSqlite(): Promise<
+  TicketRestauranteSqliteRecord[] | null
+> {
+  const loader = window.traccion?.loadTicketRestauranteManutencionRecords;
+  if (!loader) {
+    return null;
+  }
+
+  const snapshot = await withTemporarySqliteRetry(() => loader());
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return null;
+  }
+
+  return snapshot.records;
+}
+
+export async function saveTicketRestauranteManutencionToSqlite(
+  record: { id: string },
+  serializedValue: string,
+  expectedUpdatedAt: string | null,
+): Promise<TicketRestauranteSqliteSaveResult | null> {
+  const saver = window.traccion?.saveTicketRestauranteManutencionRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  publishPersistenceBusy(
+    TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY,
+    'Guardando manutención de Ticket Restaurante en SQLite…',
+  );
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      currentUpdatedAt: result.currentUpdatedAt,
+    };
+  } catch (error) {
+    clearPersistenceBusy(
+      TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY,
+      'No se ha podido guardar la manutención de Ticket Restaurante en SQLite.',
+    );
+    throw error;
+  }
+}
+
+export async function saveTicketRestauranteManutencionesToSqlite(
+  records: Array<{ id: string; serializedValue: string; expectedUpdatedAt: string | null }>,
+): Promise<TicketRestauranteSqliteBatchSaveResult | null> {
+  const saver = window.traccion?.saveTicketRestauranteManutencionRecordsIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  if (records.length === 0) {
+    return { ok: true, message: 'Nada que importar.' };
+  }
+
+  publishPersistenceBusy(
+    TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY,
+    `Guardando ${records.length} manutenciones de Ticket Restaurante en SQLite…`,
+  );
+  await waitForNextPaint();
+
+  try {
+    const result = await withTemporarySqliteRetry(() =>
+      saver(
+        records.map(({ id, serializedValue, expectedUpdatedAt }) => ({
+          id,
+          value: serializedValue,
+          expectedUpdatedAt,
+        })),
+      ),
+    );
+
+    publishDatabaseStatus(result.status);
+    clearPersistenceBusy(TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY, result.message);
+
+    return {
+      ok: result.ok,
+      message: result.message,
+      failedRecordId: result.failedRecordId,
+    };
+  } catch (error) {
+    clearPersistenceBusy(
+      TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY,
+      'No se han podido importar las manutenciones de Ticket Restaurante en SQLite.',
     );
     throw error;
   }
