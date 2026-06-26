@@ -12,8 +12,9 @@
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run electron:start\"",
     "electron:start": "tsc -p electron/tsconfig.json && electron dist-electron/main.js",
-    "electron:build": "npm run build && npm run version:bump && electron-builder --win portable",
+    "electron:build": "npm run build && npm run version:bump && electron-builder --win portable && npm run update-manifest:write",
     "version:bump": "node scripts/bump-version.mjs",
+    "update-manifest:write": "node scripts/write-update-manifest.mjs",
     "test": "vitest run --fileParallelism=false",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
@@ -93,7 +94,7 @@
       "icon": "build/icon/traccion-icon-256.ico"
     },
     "portable": {
-      "artifactName": "TrAccion V1.0.35.exe"
+      "artifactName": "TrAccion V1.0.33.exe"
     },
     "npmRebuild": true,
     "icon": "build/icon/traccion-icon-256.ico"
