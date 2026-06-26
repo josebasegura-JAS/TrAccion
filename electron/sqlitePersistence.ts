@@ -71,6 +71,8 @@ import {
   writeDailyLocalBackup as writeDailyLocalBackupFromModule,
   writeSharedSqliteBackup,
 } from './persistence/localBackups.js';
+import { createVinculogramaRepository } from './persistence/vinculogramaRepository.js';
+import { createLicenciaSinSueldoRepository } from './persistence/licenciaSinSueldoRepository.js';
 
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const LOCK_TTL_MS = 30 * 1000;
@@ -369,8 +371,6 @@ let actaTypesMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
-let vinculogramaMigrationDone = false;
-let licenciaSinSueldoMigrationDone = false;
 let criteriosRrllMigrationDone = false;
 let especialesRecipientMigrationDone = false;
 let teletrabajoPuestosMigrationDone = false;
@@ -3727,25 +3727,13 @@ function createJsonModuleRepository(
   );
 }
 
-const vinculogramaRepository = createJsonModuleRepository(
-  'vinculograma_records',
-  'traccion.v1.vinculograma.records',
-  'Vinculograma',
-  () => vinculogramaMigrationDone,
-  (value) => {
-    vinculogramaMigrationDone = value;
-  },
-);
+const vinculogramaModule = createVinculogramaRepository(createJsonModuleRepository);
+const { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged } = vinculogramaModule;
+export { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged };
 
-const licenciaSinSueldoRepository = createJsonModuleRepository(
-  'licencia_sin_sueldo_records',
-  'traccion.v1.licenciasSinSueldo.records',
-  'Licencia sin sueldo',
-  () => licenciaSinSueldoMigrationDone,
-  (value) => {
-    licenciaSinSueldoMigrationDone = value;
-  },
-);
+const licenciaSinSueldoModule = createLicenciaSinSueldoRepository(createJsonModuleRepository);
+const { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged } = licenciaSinSueldoModule;
+export { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged };
 
 const criteriosRrllRepository = createJsonModuleRepository(
   'criterios_rrll_records',
@@ -3896,22 +3884,6 @@ const presupuestosActualsRepository = createJsonModuleRepository(
     presupuestosActualsMigrationDone = value;
   },
 );
-
-export function loadVinculogramaRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return vinculogramaRepository.loadSnapshot();
-}
-
-export function saveVinculogramaRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return vinculogramaRepository.saveIfUnchanged(record);
-}
-
-export function loadLicenciaSinSueldoRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return licenciaSinSueldoRepository.loadSnapshot();
-}
-
-export function saveLicenciaSinSueldoRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return licenciaSinSueldoRepository.saveIfUnchanged(record);
-}
 
 export function loadCriteriosRrllRecordsSnapshot(): Promise<JsonRecordSnapshot> {
   return criteriosRrllRepository.loadSnapshot();
