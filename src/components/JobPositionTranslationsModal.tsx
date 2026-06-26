@@ -369,7 +369,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
           </div>
         )}
 
-        <div className="min-h-0 flex-1 p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="overflow-hidden rounded-xl border border-metro-border">
             <div className="flex items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
               <span>Equivalencias de puestos</span>
