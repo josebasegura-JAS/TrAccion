@@ -107,11 +107,39 @@ function employeeSnapshot(employee: Employee): string {
   return JSON.stringify(employee);
 }
 
+function canonicalEmployeeSnapshot(employee: Employee): string {
+  return JSON.stringify({
+    empleado: employee.empleado,
+    nombreApellidos: employee.nombreApellidos,
+    puestoNomina: employee.puestoNomina,
+    puestoOrganizativo: employee.puestoOrganizativo,
+    puestoEus: employee.puestoEus,
+    residencia: employee.residencia,
+    unidad: employee.unidad,
+    nivelRetributivo: employee.nivelRetributivo,
+    direccionOrganizativa: employee.direccionOrganizativa,
+    antiguedadPuesto: employee.antiguedadPuesto,
+    sexo: employee.sexo,
+    calle: employee.calle,
+    numero: employee.numero,
+    piso: employee.piso,
+    codigoPostal: employee.codigoPostal,
+    poblacion: employee.poblacion,
+    provincia: employee.provincia,
+    nif: employee.nif,
+    dni: employee.dni,
+    residenciaCast: employee.residenciaCast,
+    residenciaEus: employee.residenciaEus,
+    direccionTeletrabajo: employee.direccionTeletrabajo,
+    deletedAt: employee.deletedAt,
+  });
+}
+
 function employeeSnapshotFromStorageValue(storageValue: string | null): string | null {
   try {
     const employees = parseEmployeesSnapshot(storageValue ? `[${storageValue}]` : null);
     const employee = employees[0];
-    return employee ? employeeSnapshot(employee) : null;
+    return employee ? canonicalEmployeeSnapshot(employee) : null;
   } catch {
     return null;
   }
