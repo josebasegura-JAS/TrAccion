@@ -7,7 +7,6 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './persistence/jsonRecordRepository.js';
 import {
   createSimpleJsonModuleRepository,
-  type SimpleJsonRecordsSnapshot,
   type SimpleJsonSaveResult,
 } from './persistence/simpleJsonModuleRepository.js';
 import {
@@ -82,6 +81,7 @@ import { createTicketRestauranteCalendarsRepository } from './persistence/ticket
 import { createTicketRestaurantePeopleRepository } from './persistence/ticketRestaurantePeopleRepository.js';
 import { createTicketRestauranteAbsencesRepository } from './persistence/ticketRestauranteAbsencesRepository.js';
 import { createTicketRestauranteManutencionesRepository } from './persistence/ticketRestauranteManutencionesRepository.js';
+import { createPresupuestosRepository } from './persistence/presupuestosRepository.js';
 
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const LOCK_TTL_MS = 30 * 1000;
@@ -379,10 +379,6 @@ let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
-let presupuestosScenariosMigrationDone = false;
-let presupuestosManualItemsMigrationDone = false;
-let presupuestosTicketGroupsMigrationDone = false;
-let presupuestosActualsMigrationDone = false;
 let configuracionMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
@@ -3692,7 +3688,6 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
 
 
 
-type JsonRecordSnapshot = SimpleJsonRecordsSnapshot;
 type JsonRecordSaveResult = SimpleJsonSaveResult;
 
 function createJsonModuleRepository(
@@ -3833,170 +3828,18 @@ const {
 } = jobPositionTranslationsModule;
 export { loadJobPositionTranslationRecordsSnapshot, saveJobPositionTranslationRecordIfUnchanged };
 
-const presupuestosScenariosRepository = createJsonModuleRepository(
-  'presupuesto_scenario_records',
-  'traccion.v1.presupuestos.scenarios',
-  'Escenario de presupuesto',
-  () => presupuestosScenariosMigrationDone,
-  (value) => {
-    presupuestosScenariosMigrationDone = value;
-  },
-);
-
-const presupuestosManualItemsRepository = createJsonModuleRepository(
-  'presupuesto_manual_item_records',
-  'traccion.v1.presupuestos.manualItems',
-  'Partida manual de presupuesto',
-  () => presupuestosManualItemsMigrationDone,
-  (value) => {
-    presupuestosManualItemsMigrationDone = value;
-  },
-);
-
-const presupuestosTicketGroupsRepository = createJsonModuleRepository(
-  'presupuesto_ticket_group_records',
-  'traccion.v1.presupuestos.ticketGroups',
-  'Grupo ticket de presupuesto',
-  () => presupuestosTicketGroupsMigrationDone,
-  (value) => {
-    presupuestosTicketGroupsMigrationDone = value;
-  },
-);
-
-const presupuestosActualsRepository = createJsonModuleRepository(
-  'presupuesto_actual_records',
-  'traccion.v1.presupuestos.actuals',
-  'Real de presupuesto',
-  () => presupuestosActualsMigrationDone,
-  (value) => {
-    presupuestosActualsMigrationDone = value;
-  },
-);
-
-function latestUpdatedAtFromSnapshots(snapshots: JsonRecordSnapshot[]): string | null {
-  return snapshots
-    .flatMap((snapshot) => snapshot.records)
-    .reduce<string | null>((latest, record) => {
-      if (!latest || record.updatedAt > latest) {
-        return record.updatedAt;
-      }
-      return latest;
-    }, null);
-}
-
-export async function loadPresupuestosRecordsSnapshot(): Promise<{
-  status: DatabaseStatus;
-  scenarios: JsonRecordSnapshot['records'];
-  manualItems: JsonRecordSnapshot['records'];
-  ticketGroups: JsonRecordSnapshot['records'];
-  actuals: JsonRecordSnapshot['records'];
-}> {
-  const [scenarios, manualItems, ticketGroups, actuals] = await Promise.all([
-    presupuestosScenariosRepository.loadSnapshot(),
-    presupuestosManualItemsRepository.loadSnapshot(),
-    presupuestosTicketGroupsRepository.loadSnapshot(),
-    presupuestosActualsRepository.loadSnapshot(),
-  ]);
-
-  return {
-    status: scenarios.status as DatabaseStatus,
-    scenarios: scenarios.records,
-    manualItems: manualItems.records,
-    ticketGroups: ticketGroups.records,
-    actuals: actuals.records,
-  };
-}
-
-export async function savePresupuestosSnapshotIfUnchanged(snapshot: {
-  scenarios: Array<{ id: string; value: string }>;
-  manualItems: Array<{ id: string; value: string }>;
-  ticketGroups: Array<{ id: string; value: string }>;
-  actuals: Array<{ id: string; value: string }>;
-  expectedUpdatedAt: string | null;
-}): Promise<JsonRecordSaveResult> {
-  const currentSnapshot = await loadPresupuestosRecordsSnapshot();
-  const currentUpdatedAt = latestUpdatedAtFromSnapshots([
-    { status: currentSnapshot.status, records: currentSnapshot.scenarios },
-    { status: currentSnapshot.status, records: currentSnapshot.manualItems },
-    { status: currentSnapshot.status, records: currentSnapshot.ticketGroups },
-    { status: currentSnapshot.status, records: currentSnapshot.actuals },
-  ]);
-
-  if (currentUpdatedAt !== snapshot.expectedUpdatedAt) {
-    return {
-      ok: false,
-      status: currentSnapshot.status,
-      currentUpdatedAt,
-      message: 'Presupuestos ha sido modificado por otro usuario. Recarga antes de guardar.',
-    };
-  }
-
-  const updatedAt = new Date().toISOString();
-
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-      const db = requireDatabase();
-      db.transaction(() => {
-        const collections = [
-          ['presupuesto_scenario_records', snapshot.scenarios],
-          ['presupuesto_manual_item_records', snapshot.manualItems],
-          ['presupuesto_ticket_group_records', snapshot.ticketGroups],
-          ['presupuesto_actual_records', snapshot.actuals],
-        ] as const;
-
-        for (const [tableName, records] of collections) {
-          const ids = new Set(records.map((record) => record.id));
-          const existingRows = readActiveJsonRecords(db, tableName);
-          for (const row of existingRows) {
-            if (!ids.has(row.id)) {
-              db.prepare(`UPDATE ${tableName} SET updated_at = ?, deleted_at = ? WHERE id = ?`).run(
-                updatedAt,
-                updatedAt,
-                row.id,
-              );
-            }
-          }
-
-          for (const record of records) {
-            db.prepare(
-              `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-               VALUES (?, ?, ?, ?, NULL)
-               ON CONFLICT(id) DO UPDATE SET
-                 value_json = excluded.value_json,
-                 updated_at = excluded.updated_at,
-                 deleted_at = NULL`,
-            ).run(record.id, record.value, updatedAt, updatedAt);
-          }
-        }
-        updateRefreshMetadata(db, updatedAt);
-      })();
-      enqueueLocalBackup('save:presupuestos');
-      return {
-        ok: true,
-        status: currentStatus,
-        currentUpdatedAt: updatedAt,
-        message: 'Presupuestos guardado en SQLite.',
-      };
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
+const presupuestosModule = createPresupuestosRepository({
+  createJsonModuleRepository,
+  getSqliteStatus: () => getSqliteStatus(),
+  isDatabaseWriteBlockedByHeartbeat,
+  assertDatabaseWritesAllowed,
+  requireDatabase,
+  updateRefreshMetadata,
+  enqueueLocalBackup,
+  safeDatabaseOperation,
+});
+const { loadPresupuestosRecordsSnapshot, savePresupuestosSnapshotIfUnchanged } = presupuestosModule;
+export { loadPresupuestosRecordsSnapshot, savePresupuestosSnapshotIfUnchanged };
 
 function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
   if (configuracionMigrationDone) {
