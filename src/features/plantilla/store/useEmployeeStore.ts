@@ -107,6 +107,28 @@ function employeeSnapshot(employee: Employee): string {
   return JSON.stringify(employee);
 }
 
+function employeeSnapshotFromStorageValue(storageValue: string | null): string | null {
+  try {
+    const employees = parseEmployeesSnapshot(storageValue ? `[${storageValue}]` : null);
+    const employee = employees[0];
+    return employee ? employeeSnapshot(employee) : null;
+  } catch {
+    return null;
+  }
+}
+
+function areEmployeeStorageSnapshotsEquivalent(left: string | null, right: string | null): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return employeeSnapshotFromStorageValue(left) === employeeSnapshotFromStorageValue(right);
+}
+
 async function persistEmployeesConfirmed(employees: Employee[]): Promise<void> {
   const result = await writeJsonStorageAsync(STORAGE_KEY, employees);
   if (!result.ok) {
@@ -117,7 +139,7 @@ async function persistEmployeesConfirmed(employees: Employee[]): Promise<void> {
 async function persistEmployeeDirectOrFallback(
   employee: Employee,
   expectedSnapshot: string | null,
-): Promise<{ ok: boolean; message: string } | null> {
+): Promise<{ ok: boolean; message: string; currentValue: string | null } | null> {
   if (!hasEmployeeSqliteRepository()) {
     return null;
   }
@@ -127,7 +149,7 @@ async function persistEmployeeDirectOrFallback(
     return null;
   }
 
-  return { ok: result.ok, message: result.message };
+  return { ok: result.ok, message: result.message, currentValue: result.currentValue };
 }
 
 async function persistEmployeesShared(
@@ -455,6 +477,15 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         const directResult = await persistEmployeeDirectOrFallback(updatedEmployee, expectedSnapshot);
         if (directResult) {
           if (!directResult.ok) {
+            if (areEmployeeStorageSnapshotsEquivalent(directResult.currentValue, expectedSnapshot)) {
+              const retryResult = await persistEmployeeDirectOrFallback(updatedEmployee, directResult.currentValue);
+              if (retryResult?.ok) {
+                const employees = await readEmployeesShared();
+                set({ employees, selectedEmployeeId: updatedEmployee.empleado });
+                return { ok: true, message: retryResult.message };
+              }
+              return retryResult ?? directResult;
+            }
             return directResult;
           }
           const employees = await readEmployeesShared();
@@ -503,6 +534,15 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         const directResult = await persistEmployeeDirectOrFallback(deletedEmployee, expectedSnapshot);
         if (directResult) {
           if (!directResult.ok) {
+            if (areEmployeeStorageSnapshotsEquivalent(directResult.currentValue, expectedSnapshot)) {
+              const retryResult = await persistEmployeeDirectOrFallback(deletedEmployee, directResult.currentValue);
+              if (retryResult?.ok) {
+                const employees = await readEmployeesShared();
+                set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
+                return { ok: true, message: retryResult.message };
+              }
+              return retryResult ?? directResult;
+            }
             return directResult;
           }
           const employees = await readEmployeesShared();

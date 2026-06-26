@@ -99,6 +99,70 @@ describe('useEmployeeStore (Plantilla) concurrencia multiusuario', () => {
     expect(saver).toHaveBeenCalledTimes(1);
   });
 
+
+  it('permite guardar si SQLite devuelve el mismo empleado con JSON no canónico', async () => {
+    const existingEmployee = employee({ puestoOrganizativo: 'Analisis informatico' });
+    const nonCanonicalCurrentValue = JSON.stringify({
+      nombreApellidos: existingEmployee.nombreApellidos,
+      empleado: existingEmployee.empleado,
+      puestoOrganizativo: existingEmployee.puestoOrganizativo,
+      puestoNomina: existingEmployee.puestoNomina,
+      puestoEus: existingEmployee.puestoEus,
+      residencia: existingEmployee.residencia,
+      unidad: existingEmployee.unidad,
+      nivelRetributivo: existingEmployee.nivelRetributivo,
+      direccionOrganizativa: existingEmployee.direccionOrganizativa,
+      antiguedadPuesto: existingEmployee.antiguedadPuesto,
+      sexo: existingEmployee.sexo,
+      calle: existingEmployee.calle,
+      numero: existingEmployee.numero,
+      piso: existingEmployee.piso,
+      codigoPostal: existingEmployee.codigoPostal,
+      poblacion: existingEmployee.poblacion,
+      provincia: existingEmployee.provincia,
+      nif: existingEmployee.nif,
+      deletedAt: existingEmployee.deletedAt,
+    });
+    const loader = vi.fn(async () => recordsSnapshot([existingEmployee], '2026-06-17T08:00:00.000Z'));
+    const saver = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: activeStatus(),
+        currentValue: nonCanonicalCurrentValue,
+        message: 'Esta persona ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: activeStatus(),
+        currentValue: JSON.stringify({ ...existingEmployee, puestoOrganizativo: 'Nuevo puesto' }),
+        message: 'Persona guardada.',
+      });
+
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: { loadEmployeeRecords: loader, saveEmployeeRecordIfUnchanged: saver },
+    });
+
+    useEmployeeStore.getState().load();
+    await vi.waitFor(() => expect(useEmployeeStore.getState().employees).toHaveLength(1));
+
+    const result = await useEmployeeStore.getState().updateWithConcurrencyCheck(
+      existingEmployee.empleado,
+      {
+        ...EMPTY_EMPLOYEE_DRAFT,
+        empleado: existingEmployee.empleado,
+        nombreApellidos: existingEmployee.nombreApellidos,
+        puestoOrganizativo: 'Nuevo puesto',
+      },
+      JSON.stringify(existingEmployee),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(saver).toHaveBeenCalledTimes(2);
+    expect(saver.mock.calls[1][0].expectedValue).toBe(nonCanonicalCurrentValue);
+  });
+
   it('reloadFromStorage no sustituye el estado si el contenido normalizado no ha cambiado', async () => {
     const existingEmployee = employee();
     const loader = vi.fn(async () => recordsSnapshot([existingEmployee], '2026-06-17T08:00:00.000Z'));

@@ -62,36 +62,72 @@ import { useAppDialog } from '../hooks/useAppDialog';
 
 const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
   {
-    title: '¿Qué hace este módulo?',
-    body: 'Gestiona solicitudes y renovaciones de teletrabajo, con seguimiento de validaciones, aprobación, denegación e histórico.',
+    title: 'Finalidad del módulo',
+    body: 'Registra, revisa y controla las solicitudes de teletrabajo de cada periodo. Cada fila corresponde a una persona solicitante. La app ayuda a detectar incidencias, pero la validación final corresponde a RRLL.',
   },
   {
-    title: 'Flujo recomendado',
+    title: 'Datos de cada solicitud',
+    items: [
+      'Nº de empleado y nombre: identifican a la persona. Si existe en Plantilla, la app toma sus datos actualizados.',
+      'Puesto organizativo: se usa para agrupar solicitudes y calcular la presencialidad. Si está mal, debe corregirse en Plantilla.',
+      'Días solicitados: martes, miércoles y/o jueves. Son los días que entran en el cálculo diario de presencialidad.',
+      'Estado, validaciones, observaciones y revisado: sirven para seguimiento administrativo y control interno de RRLL.',
+    ],
+  },
+  {
+    title: 'Cálculo de peticiones',
+    items: [
+      '“Peticiones” significa número de personas del mismo puesto/grupo que solicitan teletrabajo en el periodo.',
+      'No significa número de días solicitados. Una persona que pide martes y jueves cuenta como una petición, no como dos.',
+      'Todas las personas del mismo puesto/grupo muestran el mismo total de peticiones del periodo.',
+      'Ejemplo: si cuatro personas del mismo puesto piden teletrabajo, la app muestra 4 peticiones aunque no pidan los mismos días.',
+    ],
+  },
+  {
+    title: 'Cálculo de presencialidad mínima',
+    items: [
+      'La presencialidad se comprueba por puesto/grupo y por día concreto.',
+      'Fórmula: personas totales del puesto/grupo menos personas que teletrabajan ese día.',
+      'El resultado se compara con el mínimo presencial configurado para ese puesto/grupo.',
+      'Ejemplo: plantilla 7, mínimo 4. Si el martes teletrabajan 2, quedan 5 presenciales y no hay incidencia.',
+    ],
+  },
+  {
+    title: 'Cuándo aparece incidencia',
+    items: [
+      'Aparece incidencia si en martes, miércoles o jueves quedan menos personas presenciales que el mínimo exigido.',
+      'Puede haber muchas peticiones sin incidencia si cada día concreto mantiene el mínimo presencial.',
+      'La incidencia no depende solo del número total de solicitudes, sino de cómo se concentran por día.',
+    ],
+  },
+  {
+    title: 'Cómo modificar datos que afectan al cálculo',
+    items: [
+      'Para cambiar días solicitados, abre la solicitud, marca o desmarca martes, miércoles y/o jueves y guarda.',
+      'Para cambiar el puesto organizativo, corrige la persona en Plantilla. Teletrabajo usará ese puesto en los cálculos posteriores.',
+      'Para cambiar la presencialidad mínima o las equivalencias de puestos, usa los botones de configuración/asignación del propio módulo.',
+      'Al guardar cambios, se recalculan peticiones, presencialidad, incidencias y exportación a Dirección.',
+    ],
+  },
+  {
+    title: 'Exportación Excel para Dirección',
+    items: [
+      'La Excel consolida las solicitudes del periodo y muestra las mismas reglas de cálculo.',
+      '“Peticiones” representa personas solicitantes del puesto/grupo.',
+      'Las incidencias se calculan por día concreto frente al mínimo presencial.',
+      'Si una fila tiene color general y una celda tiene color propio por otra condición, se conserva el color específico de la celda.',
+    ],
+  },
+  {
+    title: 'Revisión recomendada por RRLL',
     ordered: true,
     items: [
-      'Crear solicitud o importar interesados desde encuesta.',
-      'Revisar los datos de la persona y el puesto asignado.',
-      'Completar las validaciones necesarias.',
-      'Aprobar o denegar la solicitud.',
-      'Mantener el histórico cuando finalice el periodo correspondiente.',
-    ],
-  },
-  {
-    title: 'Reglas principales',
-    items: [
-      'El puesto debe existir en Plantilla y debe poder traducirse a un puesto de teletrabajo.',
-      'Las renovaciones mantienen trazabilidad respecto al ejercicio anterior.',
-      'Las solicitudes conservan observaciones y validaciones para revisión posterior.',
-      'Los registros eliminados no desaparecen físicamente: quedan fuera de la vista activa mediante borrado lógico.',
-    ],
-  },
-  {
-    title: 'Importación de interesados',
-    items: [
-      'Permite alta o actualización masiva desde Excel de encuesta.',
-      'Busca la persona en Plantilla para tomar el puesto correcto.',
-      'Si un puesto no tiene correspondencia, debe resolverse desde el popup de asignación de puestos.',
-      'La importación debe informar si termina correctamente o si no ha podido procesarse.',
+      'Comprobar que la persona y el número de empleado son correctos.',
+      'Verificar que el puesto organizativo está bien asignado en Plantilla.',
+      'Revisar que los días solicitados son los correctos.',
+      'Comprobar avisos de presencialidad e incidencias automáticas.',
+      'Actualizar estado, observaciones y validaciones.',
+      'Marcar la solicitud como Revisada cuando la comprobación esté cerrada.',
     ],
   },
 ];
