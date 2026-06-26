@@ -73,6 +73,11 @@ import {
 } from './persistence/localBackups.js';
 import { createVinculogramaRepository } from './persistence/vinculogramaRepository.js';
 import { createLicenciaSinSueldoRepository } from './persistence/licenciaSinSueldoRepository.js';
+import { createTicketRestauranteConfigRepository } from './persistence/ticketRestauranteConfigRepository.js';
+import { createEspecialesRecipientRepository } from './persistence/especialesRecipientRepository.js';
+import { createTeletrabajoPuestosRepository } from './persistence/teletrabajoPuestosRepository.js';
+import { createTeletrabajoGruposCoberturaRepository } from './persistence/teletrabajoGruposCoberturaRepository.js';
+import { createJobPositionTranslationsRepository } from './persistence/jobPositionTranslationsRepository.js';
 
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const LOCK_TTL_MS = 30 * 1000;
@@ -372,10 +377,6 @@ let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
 let criteriosRrllMigrationDone = false;
-let especialesRecipientMigrationDone = false;
-let teletrabajoPuestosMigrationDone = false;
-let teletrabajoGruposCoberturaMigrationDone = false;
-let jobPositionTranslationsMigrationDone = false;
 let presupuestosScenariosMigrationDone = false;
 let presupuestosManualItemsMigrationDone = false;
 let presupuestosTicketGroupsMigrationDone = false;
@@ -384,7 +385,6 @@ let configuracionMigrationDone = false;
 let ticketRestauranteCalendarsMigrationDone = false;
 let ticketRestaurantePeopleMigrationDone = false;
 let ticketRestauranteAbsencesMigrationDone = false;
-let ticketRestauranteConfigMigrationDone = false;
 let ticketRestauranteManutencionesMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
@@ -3785,15 +3785,12 @@ const ticketRestauranteAbsencesRepository = createJsonModuleRepository(
   },
 );
 
-const ticketRestauranteConfigRepository = createJsonModuleRepository(
-  'ticket_restaurante_config_records',
-  'traccion.v1.ticketRestaurante.config',
-  'Configuración de Ticket Restaurante',
-  () => ticketRestauranteConfigMigrationDone,
-  (value) => {
-    ticketRestauranteConfigMigrationDone = value;
-  },
-);
+const ticketRestauranteConfigModule = createTicketRestauranteConfigRepository(createJsonModuleRepository);
+const {
+  loadTicketRestauranteConfigRecordsSnapshot,
+  saveTicketRestauranteConfigRecordIfUnchanged,
+} = ticketRestauranteConfigModule;
+export { loadTicketRestauranteConfigRecordsSnapshot, saveTicketRestauranteConfigRecordIfUnchanged };
 
 const ticketRestauranteManutencionesRepository = createJsonModuleRepository(
   'ticket_restaurante_manutencion_records',
@@ -3805,45 +3802,33 @@ const ticketRestauranteManutencionesRepository = createJsonModuleRepository(
   },
 );
 
-const especialesRecipientRepository = createJsonModuleRepository(
-  'especiales_recipient_records',
-  'rrll_especiales_destinatarios',
-  'Destinatario especial',
-  () => especialesRecipientMigrationDone,
-  (value) => {
-    especialesRecipientMigrationDone = value;
-  },
-);
+const especialesRecipientModule = createEspecialesRecipientRepository(createJsonModuleRepository);
+const {
+  loadEspecialesRecipientRecordsSnapshot,
+  saveEspecialesRecipientRecordIfUnchanged,
+} = especialesRecipientModule;
+export { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged };
 
-const teletrabajoPuestosRepository = createJsonModuleRepository(
-  'teletrabajo_puesto_records',
-  'traccion.v1.teletrabajo.puestos',
-  'Puesto teletrabajable',
-  () => teletrabajoPuestosMigrationDone,
-  (value) => {
-    teletrabajoPuestosMigrationDone = value;
-  },
-);
+const teletrabajoPuestosModule = createTeletrabajoPuestosRepository(createJsonModuleRepository);
+const {
+  loadTeletrabajoPuestoRecordsSnapshot,
+  saveTeletrabajoPuestoRecordIfUnchanged,
+} = teletrabajoPuestosModule;
+export { loadTeletrabajoPuestoRecordsSnapshot, saveTeletrabajoPuestoRecordIfUnchanged };
 
-const teletrabajoGruposCoberturaRepository = createJsonModuleRepository(
-  'teletrabajo_grupo_cobertura_records',
-  'traccion.v1.teletrabajo.gruposCobertura',
-  'Grupo de cobertura de teletrabajo',
-  () => teletrabajoGruposCoberturaMigrationDone,
-  (value) => {
-    teletrabajoGruposCoberturaMigrationDone = value;
-  },
-);
+const teletrabajoGruposCoberturaModule = createTeletrabajoGruposCoberturaRepository(createJsonModuleRepository);
+const {
+  loadTeletrabajoGrupoCoberturaRecordsSnapshot,
+  saveTeletrabajoGrupoCoberturaRecordIfUnchanged,
+} = teletrabajoGruposCoberturaModule;
+export { loadTeletrabajoGrupoCoberturaRecordsSnapshot, saveTeletrabajoGrupoCoberturaRecordIfUnchanged };
 
-const jobPositionTranslationsRepository = createJsonModuleRepository(
-  'job_position_translation_records',
-  'traccion.v1.plantilla.jobPositionTranslations',
-  'Traducción de puesto',
-  () => jobPositionTranslationsMigrationDone,
-  (value) => {
-    jobPositionTranslationsMigrationDone = value;
-  },
-);
+const jobPositionTranslationsModule = createJobPositionTranslationsRepository(createJsonModuleRepository);
+const {
+  loadJobPositionTranslationRecordsSnapshot,
+  saveJobPositionTranslationRecordIfUnchanged,
+} = jobPositionTranslationsModule;
+export { loadJobPositionTranslationRecordsSnapshot, saveJobPositionTranslationRecordIfUnchanged };
 
 const presupuestosScenariosRepository = createJsonModuleRepository(
   'presupuesto_scenario_records',
@@ -3961,16 +3946,6 @@ export function saveTicketRestauranteAbsenceRecordsIfUnchanged(
   return ticketRestauranteAbsencesRepository.saveManyIfUnchanged(records);
 }
 
-export function loadTicketRestauranteConfigRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return ticketRestauranteConfigRepository.loadSnapshot();
-}
-
-export function saveTicketRestauranteConfigRecordIfUnchanged(
-  record: ConditionalJsonRecord,
-): Promise<JsonRecordSaveResult> {
-  return ticketRestauranteConfigRepository.saveIfUnchanged(record);
-}
-
 export function loadTicketRestauranteManutencionRecordsSnapshot(): Promise<JsonRecordSnapshot> {
   return ticketRestauranteManutencionesRepository.loadSnapshot();
 }
@@ -3985,38 +3960,6 @@ export function saveTicketRestauranteManutencionRecordsIfUnchanged(
   records: ConditionalJsonRecord[],
 ): Promise<JsonRecordBatchSaveResult> {
   return ticketRestauranteManutencionesRepository.saveManyIfUnchanged(records);
-}
-
-export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return especialesRecipientRepository.loadSnapshot();
-}
-
-export function saveEspecialesRecipientRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return especialesRecipientRepository.saveIfUnchanged(record);
-}
-
-export function loadTeletrabajoPuestoRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return teletrabajoPuestosRepository.loadSnapshot();
-}
-
-export function saveTeletrabajoPuestoRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return teletrabajoPuestosRepository.saveIfUnchanged(record);
-}
-
-export function loadTeletrabajoGrupoCoberturaRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return teletrabajoGruposCoberturaRepository.loadSnapshot();
-}
-
-export function saveTeletrabajoGrupoCoberturaRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return teletrabajoGruposCoberturaRepository.saveIfUnchanged(record);
-}
-
-export function loadJobPositionTranslationRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return jobPositionTranslationsRepository.loadSnapshot();
-}
-
-export function saveJobPositionTranslationRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return jobPositionTranslationsRepository.saveIfUnchanged(record);
 }
 
 function latestUpdatedAtFromSnapshots(snapshots: JsonRecordSnapshot[]): string | null {
