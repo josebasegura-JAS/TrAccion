@@ -325,6 +325,16 @@ function hasDia(solicitud: TeletrabajoSolicitud, dia: 'martes' | 'miercoles' | '
   return solicitud.diasTeletrabajo.includes(dia) ? 'X' : '';
 }
 
+function toNumericEmployeeValue(empleado: string): number | string {
+  const trimmed = empleado.trim();
+
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  return empleado;
+}
+
 function buildTitle(rows: readonly TeletrabajoSolicitud[], selectedPeriodo?: string): string {
   const periodo = selectedPeriodo?.trim();
   if (periodo) {
@@ -591,7 +601,7 @@ export async function exportTeletrabajoDireccionToExcel({
 
     row.values = [
       employee?.nivelRetributivo ?? '',
-      solicitud.empleado,
+      toNumericEmployeeValue(solicitud.empleado),
       solicitud.nombreApellidos,
       solicitud.puestoNomina,
       employee?.direccionOrganizativa ?? '',
@@ -611,6 +621,9 @@ export async function exportTeletrabajoDireccionToExcel({
       '',
       solicitud.observaciones,
     ];
+
+    const empleadoCell = row.getCell(2);
+    empleadoCell.numFmt = '0';
 
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.font = { name: ROTIS_FONT, size: 11 };
