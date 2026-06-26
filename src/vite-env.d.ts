@@ -456,6 +456,15 @@ interface TraccionTicketRestauranteConfigRecordsSnapshot {
 
 type TraccionConditionalTicketRestauranteConfigRecord = TraccionConditionalComiteSessionRecord;
 
+type TraccionTicketRestauranteManutencionRecord = TraccionComiteSessionRecord;
+
+interface TraccionTicketRestauranteManutencionRecordsSnapshot {
+  status: TraccionDatabaseStatus;
+  records: TraccionTicketRestauranteManutencionRecord[];
+}
+
+type TraccionConditionalTicketRestauranteManutencionRecord = TraccionConditionalComiteSessionRecord;
+
 type TraccionEspecialRecipientRecord = TraccionComiteSessionRecord;
 
 interface TraccionEspecialRecipientRecordsSnapshot {
@@ -626,6 +635,14 @@ interface TraccionApi {
   saveTicketRestauranteConfigRecordIfUnchanged?: (
     record: TraccionConditionalTicketRestauranteConfigRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
+
+  loadTicketRestauranteManutencionRecords?: () => Promise<TraccionTicketRestauranteManutencionRecordsSnapshot>;
+  saveTicketRestauranteManutencionRecordIfUnchanged?: (
+    record: TraccionConditionalTicketRestauranteManutencionRecord,
+  ) => Promise<TraccionConditionalTaskSaveResult>;
+  saveTicketRestauranteManutencionRecordsIfUnchanged?: (
+    records: TraccionConditionalTicketRestauranteManutencionRecord[],
+  ) => Promise<TraccionBatchSaveResult>;
   loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged?: (
     snapshot: TraccionConditionalPresupuestosSnapshot,
