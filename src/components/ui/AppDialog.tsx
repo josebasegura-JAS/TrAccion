@@ -84,15 +84,15 @@ export function AppDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
       <div
         aria-modal="true"
-        className={`w-full max-w-md scale-100 rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
+        className={`flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
         role="dialog"
       >
-        <div className="mb-3 flex justify-end">
+        <div className="mb-3 flex shrink-0 justify-end">
           <ModalDatabaseStatus />
         </div>
 
-        <div className="flex items-start gap-3">
-          <div className={`mt-0.5 rounded-full p-2 ring-1 ${getIconClassName({ danger, mode, type })}`}>
+        <div className="flex min-h-0 flex-1 items-start gap-3 overflow-y-auto">
+          <div className={`mt-0.5 shrink-0 rounded-full p-2 ring-1 ${getIconClassName({ danger, mode, type })}`}>
             {getDialogIcon({ danger, mode, type })}
           </div>
           <div className="min-w-0 flex-1">
@@ -101,7 +101,7 @@ export function AppDialog({
           </div>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex shrink-0 justify-end gap-2">
           {mode === 'confirm' && (
             <button
               className="rounded-xl border border-metro-border px-4 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
