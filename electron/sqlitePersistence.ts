@@ -48,7 +48,7 @@ const LOCAL_SHUTDOWN_BACKUP_RETENTION_COUNT = 3;
 const SHARED_SQLITE_BACKUP_RETENTION_COUNT = 3;
 const LOCAL_ROTATED_BACKUP_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
-const CURRENT_SCHEMA_VERSION = 17;
+const CURRENT_SCHEMA_VERSION = 16;
 const LOCK_TTL_MS = 30 * 1000;
 const DAILY_LOCAL_BACKUP_DIRECTORY_NAME = 'sqlite-daily-backup';
 const DAILY_LOCAL_BACKUP_DEFAULT_ENABLED = true;
@@ -304,6 +304,7 @@ interface DatabasePreferences {
   dailyLocalBackupEnabled: boolean;
   dailyLocalBackupRetentionDays: number;
   dailyLocalBackupDirectoryPath: string | null;
+  updatesDirectoryPath: string | null;
 }
 
 const require = createRequire(import.meta.url);
@@ -378,7 +379,6 @@ let ticketRestauranteCalendarsMigrationDone = false;
 let ticketRestaurantePeopleMigrationDone = false;
 let ticketRestauranteAbsencesMigrationDone = false;
 let ticketRestauranteConfigMigrationDone = false;
-let ticketRestauranteManutencionesMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -787,6 +787,7 @@ async function readDatabasePreferences(): Promise<DatabasePreferences> {
     dailyLocalBackupEnabled: DAILY_LOCAL_BACKUP_DEFAULT_ENABLED,
     dailyLocalBackupRetentionDays: DAILY_LOCAL_BACKUP_DEFAULT_RETENTION_DAYS,
     dailyLocalBackupDirectoryPath: null,
+    updatesDirectoryPath: null,
   };
 
   try {
@@ -825,6 +826,10 @@ async function readDatabasePreferences(): Promise<DatabasePreferences> {
         typeof candidate.dailyLocalBackupDirectoryPath === 'string' &&
         candidate.dailyLocalBackupDirectoryPath.trim()
           ? candidate.dailyLocalBackupDirectoryPath
+          : null,
+      updatesDirectoryPath:
+        typeof candidate.updatesDirectoryPath === 'string' && candidate.updatesDirectoryPath.trim()
+          ? candidate.updatesDirectoryPath
           : null,
     };
   } catch {
@@ -1872,29 +1877,6 @@ function migrateToVersion16(db: Database): void {
   }
 }
 
-function migrateToVersion17(db: Database): void {
-  // Tercera tanda de Ticket Restaurante: manutenciones. debtLedger sigue
-  // siendo derivado/recalculable y no se persiste como entidad SQLite.
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ticket_restaurante_manutencion_records (
-      id TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_ticket_restaurante_manutencion_records_updated_at ON ticket_restaurante_manutencion_records(updated_at);
-  `);
-  const currentVersion = readCurrentSchemaVersion(db);
-  if (currentVersion < 17) {
-    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
-      17,
-      new Date().toISOString(),
-    );
-  }
-}
-
 function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -1912,7 +1894,6 @@ function applyMigrations(db: Database): void {
   migrateToVersion14(db);
   migrateToVersion15(db);
   migrateToVersion16(db);
-  migrateToVersion17(db);
 }
 
 function openDatabase(databasePath: string): Database {
@@ -4691,16 +4672,6 @@ const ticketRestauranteConfigRepository = createJsonModuleRepository(
   },
 );
 
-const ticketRestauranteManutencionesRepository = createJsonModuleRepository(
-  'ticket_restaurante_manutencion_records',
-  'traccion.v1.ticketRestaurante.manutenciones',
-  'Manutención de Ticket Restaurante',
-  () => ticketRestauranteManutencionesMigrationDone,
-  (value) => {
-    ticketRestauranteManutencionesMigrationDone = value;
-  },
-);
-
 const especialesRecipientRepository = createJsonModuleRepository(
   'especiales_recipient_records',
   'rrll_especiales_destinatarios',
@@ -4881,22 +4852,6 @@ export function saveTicketRestauranteConfigRecordIfUnchanged(
   record: ConditionalJsonRecord,
 ): Promise<JsonRecordSaveResult> {
   return ticketRestauranteConfigRepository.saveIfUnchanged(record);
-}
-
-export function loadTicketRestauranteManutencionRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return ticketRestauranteManutencionesRepository.loadSnapshot();
-}
-
-export function saveTicketRestauranteManutencionRecordIfUnchanged(
-  record: ConditionalJsonRecord,
-): Promise<JsonRecordSaveResult> {
-  return ticketRestauranteManutencionesRepository.saveIfUnchanged(record);
-}
-
-export function saveTicketRestauranteManutencionRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return ticketRestauranteManutencionesRepository.saveManyIfUnchanged(records);
 }
 
 export function loadEspecialesRecipientRecordsSnapshot(): Promise<JsonRecordSnapshot> {
@@ -5412,6 +5367,27 @@ export async function clearSecondaryBackupDirectory(): Promise<void> {
   await writeDatabasePreferences({
     ...preferences,
     secondaryBackupDirectoryPath: null,
+  });
+}
+
+export async function getUpdatesDirectory(): Promise<string | null> {
+  const preferences = await readDatabasePreferences();
+  return preferences.updatesDirectoryPath;
+}
+
+export async function setUpdatesDirectory(directoryPath: string): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({
+    ...preferences,
+    updatesDirectoryPath: path.resolve(directoryPath),
+  });
+}
+
+export async function clearUpdatesDirectory(): Promise<void> {
+  const preferences = await readDatabasePreferences();
+  await writeDatabasePreferences({
+    ...preferences,
+    updatesDirectoryPath: null,
   });
 }
 

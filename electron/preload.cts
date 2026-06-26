@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('traccion', {
   getSecondaryBackupDirectory: () => ipcRenderer.invoke('database:get-secondary-backup-directory'),
   setSecondaryBackupDirectory: () => ipcRenderer.invoke('database:set-secondary-backup-directory'),
   clearSecondaryBackupDirectory: () => ipcRenderer.invoke('database:clear-secondary-backup-directory'),
+  getUpdatesDirectory: () => ipcRenderer.invoke('app-update:get-updates-directory'),
+  setUpdatesDirectory: () => ipcRenderer.invoke('app-update:set-updates-directory'),
+  clearUpdatesDirectory: () => ipcRenderer.invoke('app-update:clear-updates-directory'),
+  checkForAppUpdate: () => ipcRenderer.invoke('app-update:check'),
+  applyAppUpdate: () => ipcRenderer.invoke('app-update:apply'),
   getDailyLocalBackupSettings: () => ipcRenderer.invoke('database:get-daily-local-backup-settings'),
   setDailyLocalBackupEnabled: (enabled: boolean) =>
     ipcRenderer.invoke('database:set-daily-local-backup-enabled', { enabled }),
@@ -175,18 +180,6 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('ticket-restaurante-config:save-record-if-unchanged', record),
-  loadTicketRestauranteManutencionRecords: () =>
-    ipcRenderer.invoke('ticket-restaurante-manutenciones:load-records'),
-  saveTicketRestauranteManutencionRecordIfUnchanged: (record: {
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }) => ipcRenderer.invoke('ticket-restaurante-manutenciones:save-record-if-unchanged', record),
-  saveTicketRestauranteManutencionRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('ticket-restaurante-manutenciones:save-records-if-unchanged', { records }),
   loadPresupuestosRecords: () => ipcRenderer.invoke('presupuestos:load-records'),
   savePresupuestosSnapshotIfUnchanged: (snapshot: {
     scenarios: Array<{ id: string; value: string }>;
