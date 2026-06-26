@@ -1,4 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
+import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { AlertTriangle } from 'lucide-react';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { Header } from './components/Header';
@@ -362,6 +363,7 @@ export function App() {
 
   return (
     <AppShellErrorBoundary>
+      <AppUpdateChecker />
       <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
       <Sidebar
         activeView={activeView}

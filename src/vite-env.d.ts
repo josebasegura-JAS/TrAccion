@@ -88,6 +88,18 @@ interface TraccionDatabaseStatus {
   message?: string;
 }
 
+interface TraccionAppUpdateCheckResult {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  message: string | null;
+}
+
+interface TraccionAppUpdateApplyResult {
+  ok: boolean;
+  message: string;
+}
+
 interface TraccionStorageRecord {
   key: string;
   value: string;
@@ -444,15 +456,6 @@ interface TraccionTicketRestauranteConfigRecordsSnapshot {
 
 type TraccionConditionalTicketRestauranteConfigRecord = TraccionConditionalComiteSessionRecord;
 
-type TraccionTicketRestauranteManutencionRecord = TraccionComiteSessionRecord;
-
-interface TraccionTicketRestauranteManutencionRecordsSnapshot {
-  status: TraccionDatabaseStatus;
-  records: TraccionTicketRestauranteManutencionRecord[];
-}
-
-type TraccionConditionalTicketRestauranteManutencionRecord = TraccionConditionalComiteSessionRecord;
-
 type TraccionEspecialRecipientRecord = TraccionComiteSessionRecord;
 
 interface TraccionEspecialRecipientRecordsSnapshot {
@@ -501,6 +504,11 @@ interface TraccionApi {
   getSecondaryBackupDirectory?: () => Promise<string | null>;
   setSecondaryBackupDirectory?: () => Promise<{ ok: boolean; path: string | null }>;
   clearSecondaryBackupDirectory?: () => Promise<{ ok: boolean }>;
+  getUpdatesDirectory?: () => Promise<string | null>;
+  setUpdatesDirectory?: () => Promise<{ ok: boolean; path: string | null }>;
+  clearUpdatesDirectory?: () => Promise<{ ok: boolean }>;
+  checkForAppUpdate?: () => Promise<TraccionAppUpdateCheckResult>;
+  applyAppUpdate?: () => Promise<TraccionAppUpdateApplyResult>;
   getDailyLocalBackupSettings?: () => Promise<TraccionDailyLocalBackupSettings>;
   setDailyLocalBackupEnabled?: (enabled: boolean) => Promise<TraccionDailyLocalBackupSettings>;
   setDailyLocalBackupRetentionDays?: (retentionDays: number) => Promise<TraccionDailyLocalBackupSettings>;
@@ -618,13 +626,6 @@ interface TraccionApi {
   saveTicketRestauranteConfigRecordIfUnchanged?: (
     record: TraccionConditionalTicketRestauranteConfigRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
-  loadTicketRestauranteManutencionRecords?: () => Promise<TraccionTicketRestauranteManutencionRecordsSnapshot>;
-  saveTicketRestauranteManutencionRecordIfUnchanged?: (
-    record: TraccionConditionalTicketRestauranteManutencionRecord,
-  ) => Promise<TraccionConditionalTaskSaveResult>;
-  saveTicketRestauranteManutencionRecordsIfUnchanged?: (
-    records: TraccionConditionalTicketRestauranteManutencionRecord[],
-  ) => Promise<TraccionBatchSaveResult>;
   loadPresupuestosRecords?: () => Promise<TraccionPresupuestosRecordsSnapshot>;
   savePresupuestosSnapshotIfUnchanged?: (
     snapshot: TraccionConditionalPresupuestosSnapshot,
