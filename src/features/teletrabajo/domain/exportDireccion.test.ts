@@ -309,6 +309,48 @@ describe('buildTeletrabajoAssessment — texto de Apuntes RRLL con peticiones y 
     expect(assessment.apuntesRrll).toBe('Sin incidencias · 1 petición · mín. 2 presenciales');
   });
 
+  it('cuenta peticiones como personas del puesto, no como coincidencias por día', () => {
+    const puesto = buildPuesto({ maxSolicitudes: 4, dotacionComputable: 7 });
+    const puestosByKey = buildPuestosByKey([puesto]);
+    const employeesById = buildEmployeesById([
+      buildEmployee({ empleado: '100' }),
+      buildEmployee({ empleado: '101' }),
+      buildEmployee({ empleado: '102' }),
+      buildEmployee({ empleado: '103' }),
+      buildEmployee({ empleado: '104' }),
+      buildEmployee({ empleado: '105' }),
+      buildEmployee({ empleado: '106' }),
+    ]);
+
+    const solicitudes = [
+      buildSolicitud({ id: 'sol-a', empleado: '100', diasTeletrabajo: ['martes'] }),
+      buildSolicitud({ id: 'sol-b', empleado: '101', diasTeletrabajo: ['martes', 'jueves'] }),
+      buildSolicitud({ id: 'sol-c', empleado: '102', diasTeletrabajo: ['miercoles'] }),
+      buildSolicitud({ id: 'sol-d', empleado: '103', diasTeletrabajo: ['jueves'] }),
+    ];
+    const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(solicitudes, puestosByKey);
+
+    solicitudes.forEach((solicitud) => {
+      const assessment = buildTeletrabajoAssessment({
+        solicitud,
+        employeesById,
+        puestosByKey,
+        solicitudesByPuestoDiaCount,
+      });
+      const presencialidad = evaluateTeletrabajoPresencialidad(
+        solicitud,
+        puestosByKey,
+        solicitudesByPuestoDiaCount,
+        employeesById,
+      );
+
+      expect(assessment.status).toBe('ok');
+      expect(assessment.apuntesRrll).toContain('4 peticiones');
+      expect(presencialidad.status).toBe('cumple');
+      expect(presencialidad.title).toContain('4 peticiones');
+    });
+  });
+
   it('en un caso de revisión incluye el número de peticiones, la presencialidad mínima y las personas que faltan', () => {
     const puesto = buildPuesto({ maxSolicitudes: 2 });
     const puestosByKey = buildPuestosByKey([puesto]);

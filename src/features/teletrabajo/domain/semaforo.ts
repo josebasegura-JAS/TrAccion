@@ -159,7 +159,42 @@ export function buildSolicitudesByPeriodoPuestoDiaCount(
   return counts;
 }
 
-export const buildSolicitudesByPeriodoPuestoCount = buildSolicitudesByPeriodoPuestoDiaCount;
+/**
+ * Cuenta solicitudes activas por cobertura y periodo, y mantiene también las
+ * claves por día en el mismo mapa para no duplicar recorridos ni romper los
+ * consumidores existentes. La clave base (periodo::cobertura) representa
+ * personas/solicitudes del puesto; las claves con ::día representan cuántas
+ * personas teletrabajan ese día concreto.
+ */
+export function buildSolicitudesByPeriodoPuestoCount(
+  solicitudes: readonly TeletrabajoSolicitud[],
+  puestosByKey?: Map<string, TeletrabajoPuesto>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  solicitudes.forEach((solicitud) => {
+    if (solicitud.deletedAt || solicitud.estado === 'denegada') {
+      return;
+    }
+
+    const puestoKey = normalizeTeletrabajoPuesto(solicitud.puestoOrganizativo);
+    if (!puestoKey) {
+      return;
+    }
+
+    const puesto = puestosByKey?.get(puestoKey);
+    const coberturaKey = puesto ? getGrupoCoberturaKey(puesto, puestoKey) : puestoKey;
+    const baseKey = buildSolicitudPeriodoPuestoKey(solicitud.periodo, coberturaKey);
+    counts.set(baseKey, (counts.get(baseKey) ?? 0) + 1);
+
+    solicitud.diasTeletrabajo.forEach((dia) => {
+      const key = buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+  });
+
+  return counts;
+}
 
 function pluralPersonas(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -213,18 +248,21 @@ export function evaluateTeletrabajoPresencialidad(
   const presencialidadMinima = getPresencialidadMinimaGrupo(puestosByKey, coberturaKey, gruposById);
   const diasSolicitados = solicitud.diasTeletrabajo;
 
-  // Nº de peticiones activas (mismo periodo, misma cobertura) en cualquiera de
-  // los días solicitados por esta solicitud: lo más representativo para el
-  // resumen corto, tanto si hay incidencia como si no.
-  const peticionesActivas = Math.max(
-    0,
-    ...diasSolicitados.map(
-      (dia) =>
-        solicitudesByPuestoDiaCount.get(
-          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
-        ) ?? 0,
-    ),
-  );
+  // Nº de peticiones activas: personas del mismo puesto/cobertura y periodo
+  // que han solicitado teletrabajo. No equivale al número de días pedidos ni
+  // a las coincidencias en un día concreto; esas cifras solo sirven para la
+  // comprobación diaria de presencialidad.
+  const peticionesActivas =
+    solicitudesByPuestoDiaCount.get(buildSolicitudPeriodoPuestoKey(solicitud.periodo, coberturaKey)) ??
+    Math.max(
+      0,
+      ...diasSolicitados.map(
+        (dia) =>
+          solicitudesByPuestoDiaCount.get(
+            buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
+          ) ?? 0,
+      ),
+    );
 
   if (presencialidadMinima > 0) {
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);

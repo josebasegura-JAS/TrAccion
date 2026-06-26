@@ -7,6 +7,7 @@ import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { normalizeTeletrabajoPuesto } from './puestosTeletrabajo';
 import {
   buildPuestosByKey,
+  buildSolicitudPeriodoPuestoKey,
   buildSolicitudPeriodoPuestoDiaKey,
   buildSolicitudesByPeriodoPuestoCount,
   evaluateTeletrabajoPresencialidad,
@@ -237,18 +238,21 @@ export function buildTeletrabajoAssessment({
   const diasSolicitados =
     solicitud.diasTeletrabajo.length > 0 ? solicitud.diasTeletrabajo : TELETRABAJO_DIAS;
 
-  // Nº de peticiones activas (mismo periodo, misma cobertura) en cualquiera de
-  // los días solicitados por esta solicitud. Mismo cálculo que semaforo.ts,
-  // para que el Excel de Dirección y la app muestren la misma cifra.
-  const peticionesActivas = Math.max(
-    0,
-    ...diasSolicitados.map(
-      (dia) =>
-        solicitudesByPuestoDiaCount.get(
-          buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
-        ) ?? 0,
-    ),
-  );
+  // Nº de peticiones activas: personas del mismo puesto/cobertura y periodo
+  // que han solicitado teletrabajo. No equivale al número de días pedidos ni
+  // a las coincidencias en un día concreto; esas cifras solo sirven para la
+  // comprobación diaria de presencialidad.
+  const peticionesActivas =
+    solicitudesByPuestoDiaCount.get(buildSolicitudPeriodoPuestoKey(solicitud.periodo, coberturaKey)) ??
+    Math.max(
+      0,
+      ...diasSolicitados.map(
+        (dia) =>
+          solicitudesByPuestoDiaCount.get(
+            buildSolicitudPeriodoPuestoDiaKey(solicitud.periodo, coberturaKey, dia),
+          ) ?? 0,
+      ),
+    );
 
   if (presencialidadMinima > 0) {
     const dotacionParametrizada = getDotacionComputableGrupo(puestosByKey, coberturaKey);
@@ -374,6 +378,14 @@ function setStatusCellStyle({
 function applyRowFill(row: ExcelJS.Row, fillColor: string): void {
   row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
     if (colNumber < 1 || colNumber > 20) {
+      return;
+    }
+
+    // La fila puede marcar un bloqueo general (por ejemplo, solicitud
+    // rechazada o antigüedad insuficiente), pero no debe borrar colores de
+    // celdas calculadas por otra condición: cumplimiento de presencialidad,
+    // informe favorable, año anterior o validaciones manuales.
+    if (cell.fill) {
       return;
     }
 
