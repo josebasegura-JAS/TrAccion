@@ -106,6 +106,11 @@ export function AjustesPage() {
   const [isCreatingManualBackup, setIsCreatingManualBackup] = useState(false);
   const [secondaryBackupPath, setSecondaryBackupPath] = useState<string | null>(null);
   const [secondaryBackupStatus, setSecondaryBackupStatus] = useState('');
+  const [updatesDirectoryPath, setUpdatesDirectoryPath] = useState<string | null>(null);
+  const [updatesDirectoryStatus, setUpdatesDirectoryStatus] = useState('');
+  const [updateCheckResult, setUpdateCheckResult] = useState<TraccionAppUpdateCheckResult | null>(null);
+  const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const [dailyBackupSettings, setDailyBackupSettings] = useState<TraccionDailyLocalBackupSettings | null>(
     null,
   );
@@ -159,6 +164,12 @@ export function AjustesPage() {
   }, []);
 
   useEffect(() => {
+    window.traccion?.getUpdatesDirectory?.()
+      .then((p) => setUpdatesDirectoryPath(p ?? null))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     window.traccion?.getDailyLocalBackupSettings?.()
       .then((settings) => setDailyBackupSettings(settings))
       .catch(() => undefined);
@@ -183,6 +194,73 @@ export function AjustesPage() {
     await window.traccion.clearSecondaryBackupDirectory();
     setSecondaryBackupPath(null);
     setSecondaryBackupStatus('Carpeta de respaldo secundario eliminada.');
+  };
+
+  const handleSetUpdatesDirectory = async () => {
+    setUpdatesDirectoryStatus('');
+    setUpdateCheckResult(null);
+    if (!window.traccion?.setUpdatesDirectory) {
+      setUpdatesDirectoryStatus('Solo disponible en escritorio.');
+      return;
+    }
+    const result = await window.traccion.setUpdatesDirectory();
+    if (result.ok && result.path) {
+      setUpdatesDirectoryPath(result.path);
+      setUpdatesDirectoryStatus('Carpeta de actualizaciones guardada.');
+    }
+  };
+
+  const handleClearUpdatesDirectory = async () => {
+    setUpdatesDirectoryStatus('');
+    setUpdateCheckResult(null);
+    if (!window.traccion?.clearUpdatesDirectory) return;
+    await window.traccion.clearUpdatesDirectory();
+    setUpdatesDirectoryPath(null);
+    setUpdatesDirectoryStatus('Carpeta de actualizaciones eliminada.');
+  };
+
+  const handleCheckForUpdateNow = async () => {
+    setUpdatesDirectoryStatus('');
+    if (!window.traccion?.checkForAppUpdate) {
+      setUpdatesDirectoryStatus('Solo disponible en escritorio.');
+      return;
+    }
+    setIsCheckingForUpdate(true);
+    try {
+      const result = await window.traccion.checkForAppUpdate();
+      setUpdateCheckResult(result);
+    } finally {
+      setIsCheckingForUpdate(false);
+    }
+  };
+
+  const handleApplyUpdateNow = async () => {
+    if (!window.traccion?.applyAppUpdate || !updateCheckResult?.latestVersion) {
+      return;
+    }
+    const confirmed = await confirm(
+      `Se va a actualizar TrAccion a la versión V${updateCheckResult.latestVersion}. ` +
+        'La aplicación se cerrará y se reabrirá automáticamente. ¿Continuar?',
+      { confirmLabel: 'Actualizar ahora', title: 'Confirmar actualización' },
+    );
+    if (!confirmed) {
+      return;
+    }
+    setIsApplyingUpdate(true);
+    try {
+      const result = await window.traccion.applyAppUpdate();
+      if (!result.ok) {
+        setUpdatesDirectoryStatus(`No se ha podido aplicar la actualización: ${result.message}`);
+        setIsApplyingUpdate(false);
+      }
+      // Si result.ok, la app se cierra por su cuenta en breve; no hace
+      // falta volver a false isApplyingUpdate ni mostrar más estado.
+    } catch (error) {
+      setUpdatesDirectoryStatus(
+        `No se ha podido aplicar la actualización: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      setIsApplyingUpdate(false);
+    }
   };
 
   const handleToggleDailyBackupEnabled = async () => {
@@ -771,6 +849,82 @@ export function AjustesPage() {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3" id="actualizaciones">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            Carpeta de actualizaciones
+          </p>
+          <p className="mt-1 text-xs text-metro-muted">
+            Carpeta de red donde se publican las nuevas versiones de TrAccion (el .exe nuevo junto a
+            version.txt). Al arrancar, TrAccion comprueba aquí si hay una versión más nueva y, si la hay,
+            pregunta antes de actualizarse.
+          </p>
+          {updatesDirectoryPath ? (
+            <p className="mt-2 break-all text-xs font-medium text-metro-text">{updatesDirectoryPath}</p>
+          ) : (
+            <p className="mt-2 text-xs text-metro-muted">Sin carpeta de actualizaciones configurada.</p>
+          )}
+          {updatesDirectoryStatus && (
+            <p className="mt-1 text-xs text-metro-success">{updatesDirectoryStatus}</p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-semibold text-white hover:bg-metro-dark"
+              onClick={() => void handleSetUpdatesDirectory()}
+              type="button"
+            >
+              <Database size={14} />
+              {updatesDirectoryPath ? 'Cambiar carpeta' : 'Seleccionar carpeta'}
+            </button>
+            {updatesDirectoryPath && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red"
+                onClick={() => void handleClearUpdatesDirectory()}
+                type="button"
+              >
+                <RotateCcw size={14} />
+                Eliminar
+              </button>
+            )}
+            {updatesDirectoryPath && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isCheckingForUpdate}
+                onClick={() => void handleCheckForUpdateNow()}
+                type="button"
+              >
+                <RotateCcw size={14} />
+                {isCheckingForUpdate ? 'Comprobando…' : 'Comprobar ahora'}
+              </button>
+            )}
+          </div>
+          {updateCheckResult && (
+            <div className="mt-3 rounded-lg border border-metro-border bg-metro-panel p-2 text-xs">
+              {updateCheckResult.updateAvailable && updateCheckResult.latestVersion ? (
+                <>
+                  <p className="font-semibold text-metro-text">
+                    Hay una versión nueva disponible: V{updateCheckResult.latestVersion} (la tuya es V
+                    {updateCheckResult.currentVersion}).
+                  </p>
+                  <button
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isApplyingUpdate}
+                    onClick={() => void handleApplyUpdateNow()}
+                    type="button"
+                  >
+                    {isApplyingUpdate ? 'Actualizando…' : 'Actualizar ahora'}
+                  </button>
+                </>
+              ) : updateCheckResult.message ? (
+                <p className="text-metro-muted">{updateCheckResult.message}</p>
+              ) : (
+                <p className="text-metro-muted">
+                  Ya tienes la última versión (V{updateCheckResult.currentVersion}).
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
