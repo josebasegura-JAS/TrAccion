@@ -7,8 +7,6 @@ import type { Database, DatabaseConstructor } from 'better-sqlite3';
 import { maybeMigrateJsonArrayRecordsFromPersistedRecord, readActiveJsonRecords } from './persistence/jsonRecordRepository.js';
 import {
   createSimpleJsonModuleRepository,
-  type ConditionalSimpleJsonRecord,
-  type SimpleJsonBatchSaveResult,
   type SimpleJsonRecordsSnapshot,
   type SimpleJsonSaveResult,
 } from './persistence/simpleJsonModuleRepository.js';
@@ -78,6 +76,12 @@ import { createEspecialesRecipientRepository } from './persistence/especialesRec
 import { createTeletrabajoPuestosRepository } from './persistence/teletrabajoPuestosRepository.js';
 import { createTeletrabajoGruposCoberturaRepository } from './persistence/teletrabajoGruposCoberturaRepository.js';
 import { createJobPositionTranslationsRepository } from './persistence/jobPositionTranslationsRepository.js';
+import { createCriteriosRrllRepository } from './persistence/criteriosRrllRepository.js';
+import { createActaTypesRepository } from './persistence/actaTypesRepository.js';
+import { createTicketRestauranteCalendarsRepository } from './persistence/ticketRestauranteCalendarsRepository.js';
+import { createTicketRestaurantePeopleRepository } from './persistence/ticketRestaurantePeopleRepository.js';
+import { createTicketRestauranteAbsencesRepository } from './persistence/ticketRestauranteAbsencesRepository.js';
+import { createTicketRestauranteManutencionesRepository } from './persistence/ticketRestauranteManutencionesRepository.js';
 
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const LOCK_TTL_MS = 30 * 1000;
@@ -372,20 +376,14 @@ let tasksMigrationDone = false;
 let comiteSessionsMigrationDone = false;
 let paritariaSessionsMigrationDone = false;
 let actasMigrationDone = false;
-let actaTypesMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
 let sorteosMigrationDone = false;
-let criteriosRrllMigrationDone = false;
 let presupuestosScenariosMigrationDone = false;
 let presupuestosManualItemsMigrationDone = false;
 let presupuestosTicketGroupsMigrationDone = false;
 let presupuestosActualsMigrationDone = false;
 let configuracionMigrationDone = false;
-let ticketRestauranteCalendarsMigrationDone = false;
-let ticketRestaurantePeopleMigrationDone = false;
-let ticketRestauranteAbsencesMigrationDone = false;
-let ticketRestauranteManutencionesMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
   blocked: boolean;
@@ -3695,9 +3693,7 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
 
 
 type JsonRecordSnapshot = SimpleJsonRecordsSnapshot;
-type ConditionalJsonRecord = ConditionalSimpleJsonRecord;
 type JsonRecordSaveResult = SimpleJsonSaveResult;
-type JsonRecordBatchSaveResult = SimpleJsonBatchSaveResult;
 
 function createJsonModuleRepository(
   tableName: string,
@@ -3735,55 +3731,58 @@ const licenciaSinSueldoModule = createLicenciaSinSueldoRepository(createJsonModu
 const { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged } = licenciaSinSueldoModule;
 export { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged };
 
-const criteriosRrllRepository = createJsonModuleRepository(
-  'criterios_rrll_records',
-  'traccion.v1.criterios-rrll.criterios',
-  'Criterio RRLL',
-  () => criteriosRrllMigrationDone,
-  (value) => {
-    criteriosRrllMigrationDone = value;
-  },
-);
+const criteriosRrllModule = createCriteriosRrllRepository(createJsonModuleRepository);
+const {
+  loadCriteriosRrllRecordsSnapshot,
+  saveCriteriosRrllRecordIfUnchanged,
+  saveCriteriosRrllRecordsIfUnchanged,
+} = criteriosRrllModule;
+export {
+  loadCriteriosRrllRecordsSnapshot,
+  saveCriteriosRrllRecordIfUnchanged,
+  saveCriteriosRrllRecordsIfUnchanged,
+};
 
-const actaTypesRepository = createJsonModuleRepository(
-  'acta_type_records',
-  'traccion.v1.actas.types',
-  'Tipo de acta',
-  () => actaTypesMigrationDone,
-  (value) => {
-    actaTypesMigrationDone = value;
-  },
-);
+const actaTypesModule = createActaTypesRepository(createJsonModuleRepository);
+const { loadActaTypeRecordsSnapshot, saveActaTypeRecordIfUnchanged, saveActaTypeRecordsIfUnchanged } =
+  actaTypesModule;
+export { loadActaTypeRecordsSnapshot, saveActaTypeRecordIfUnchanged, saveActaTypeRecordsIfUnchanged };
 
-const ticketRestauranteCalendarsRepository = createJsonModuleRepository(
-  'ticket_restaurante_calendar_records',
-  'traccion.v1.ticketRestaurante.calendars',
-  'Calendario de Ticket Restaurante',
-  () => ticketRestauranteCalendarsMigrationDone,
-  (value) => {
-    ticketRestauranteCalendarsMigrationDone = value;
-  },
-);
+const ticketRestauranteCalendarsModule = createTicketRestauranteCalendarsRepository(createJsonModuleRepository);
+const {
+  loadTicketRestauranteCalendarRecordsSnapshot,
+  saveTicketRestauranteCalendarRecordIfUnchanged,
+  saveTicketRestauranteCalendarRecordsIfUnchanged,
+} = ticketRestauranteCalendarsModule;
+export {
+  loadTicketRestauranteCalendarRecordsSnapshot,
+  saveTicketRestauranteCalendarRecordIfUnchanged,
+  saveTicketRestauranteCalendarRecordsIfUnchanged,
+};
 
-const ticketRestaurantePeopleRepository = createJsonModuleRepository(
-  'ticket_restaurante_person_records',
-  'traccion.v1.ticketRestaurante.people',
-  'Persona de Ticket Restaurante',
-  () => ticketRestaurantePeopleMigrationDone,
-  (value) => {
-    ticketRestaurantePeopleMigrationDone = value;
-  },
-);
+const ticketRestaurantePeopleModule = createTicketRestaurantePeopleRepository(createJsonModuleRepository);
+const {
+  loadTicketRestaurantePersonRecordsSnapshot,
+  saveTicketRestaurantePersonRecordIfUnchanged,
+  saveTicketRestaurantePersonRecordsIfUnchanged,
+} = ticketRestaurantePeopleModule;
+export {
+  loadTicketRestaurantePersonRecordsSnapshot,
+  saveTicketRestaurantePersonRecordIfUnchanged,
+  saveTicketRestaurantePersonRecordsIfUnchanged,
+};
 
-const ticketRestauranteAbsencesRepository = createJsonModuleRepository(
-  'ticket_restaurante_absence_records',
-  'traccion.v1.ticketRestaurante.absences',
-  'Ausencia de Ticket Restaurante',
-  () => ticketRestauranteAbsencesMigrationDone,
-  (value) => {
-    ticketRestauranteAbsencesMigrationDone = value;
-  },
-);
+const ticketRestauranteAbsencesModule = createTicketRestauranteAbsencesRepository(createJsonModuleRepository);
+const {
+  loadTicketRestauranteAbsenceRecordsSnapshot,
+  saveTicketRestauranteAbsenceRecordIfUnchanged,
+  saveTicketRestauranteAbsenceRecordsIfUnchanged,
+} = ticketRestauranteAbsencesModule;
+export {
+  loadTicketRestauranteAbsenceRecordsSnapshot,
+  saveTicketRestauranteAbsenceRecordIfUnchanged,
+  saveTicketRestauranteAbsenceRecordsIfUnchanged,
+};
 
 const ticketRestauranteConfigModule = createTicketRestauranteConfigRepository(createJsonModuleRepository);
 const {
@@ -3792,15 +3791,19 @@ const {
 } = ticketRestauranteConfigModule;
 export { loadTicketRestauranteConfigRecordsSnapshot, saveTicketRestauranteConfigRecordIfUnchanged };
 
-const ticketRestauranteManutencionesRepository = createJsonModuleRepository(
-  'ticket_restaurante_manutencion_records',
-  'traccion.v1.ticketRestaurante.manutenciones',
-  'Manutención de Ticket Restaurante',
-  () => ticketRestauranteManutencionesMigrationDone,
-  (value) => {
-    ticketRestauranteManutencionesMigrationDone = value;
-  },
+const ticketRestauranteManutencionesModule = createTicketRestauranteManutencionesRepository(
+  createJsonModuleRepository,
 );
+const {
+  loadTicketRestauranteManutencionRecordsSnapshot,
+  saveTicketRestauranteManutencionRecordIfUnchanged,
+  saveTicketRestauranteManutencionRecordsIfUnchanged,
+} = ticketRestauranteManutencionesModule;
+export {
+  loadTicketRestauranteManutencionRecordsSnapshot,
+  saveTicketRestauranteManutencionRecordIfUnchanged,
+  saveTicketRestauranteManutencionRecordsIfUnchanged,
+};
 
 const especialesRecipientModule = createEspecialesRecipientRepository(createJsonModuleRepository);
 const {
@@ -3869,98 +3872,6 @@ const presupuestosActualsRepository = createJsonModuleRepository(
     presupuestosActualsMigrationDone = value;
   },
 );
-
-export function loadCriteriosRrllRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return criteriosRrllRepository.loadSnapshot();
-}
-
-export function saveCriteriosRrllRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return criteriosRrllRepository.saveIfUnchanged(record);
-}
-
-export function saveCriteriosRrllRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return criteriosRrllRepository.saveManyIfUnchanged(records);
-}
-
-export function loadActaTypeRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return actaTypesRepository.loadSnapshot();
-}
-
-export function saveActaTypeRecordIfUnchanged(record: ConditionalJsonRecord): Promise<JsonRecordSaveResult> {
-  return actaTypesRepository.saveIfUnchanged(record);
-}
-
-export function saveActaTypeRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return actaTypesRepository.saveManyIfUnchanged(records);
-}
-
-export function loadTicketRestauranteCalendarRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return ticketRestauranteCalendarsRepository.loadSnapshot();
-}
-
-export function saveTicketRestauranteCalendarRecordIfUnchanged(
-  record: ConditionalJsonRecord,
-): Promise<JsonRecordSaveResult> {
-  return ticketRestauranteCalendarsRepository.saveIfUnchanged(record);
-}
-
-export function saveTicketRestauranteCalendarRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return ticketRestauranteCalendarsRepository.saveManyIfUnchanged(records);
-}
-
-export function loadTicketRestaurantePersonRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return ticketRestaurantePeopleRepository.loadSnapshot();
-}
-
-export function saveTicketRestaurantePersonRecordIfUnchanged(
-  record: ConditionalJsonRecord,
-): Promise<JsonRecordSaveResult> {
-  return ticketRestaurantePeopleRepository.saveIfUnchanged(record);
-}
-
-export function saveTicketRestaurantePersonRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return ticketRestaurantePeopleRepository.saveManyIfUnchanged(records);
-}
-
-export function loadTicketRestauranteAbsenceRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return ticketRestauranteAbsencesRepository.loadSnapshot();
-}
-
-export function saveTicketRestauranteAbsenceRecordIfUnchanged(
-  record: ConditionalJsonRecord,
-): Promise<JsonRecordSaveResult> {
-  return ticketRestauranteAbsencesRepository.saveIfUnchanged(record);
-}
-
-export function saveTicketRestauranteAbsenceRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return ticketRestauranteAbsencesRepository.saveManyIfUnchanged(records);
-}
-
-export function loadTicketRestauranteManutencionRecordsSnapshot(): Promise<JsonRecordSnapshot> {
-  return ticketRestauranteManutencionesRepository.loadSnapshot();
-}
-
-export function saveTicketRestauranteManutencionRecordIfUnchanged(
-  record: ConditionalJsonRecord,
-): Promise<JsonRecordSaveResult> {
-  return ticketRestauranteManutencionesRepository.saveIfUnchanged(record);
-}
-
-export function saveTicketRestauranteManutencionRecordsIfUnchanged(
-  records: ConditionalJsonRecord[],
-): Promise<JsonRecordBatchSaveResult> {
-  return ticketRestauranteManutencionesRepository.saveManyIfUnchanged(records);
-}
 
 function latestUpdatedAtFromSnapshots(snapshots: JsonRecordSnapshot[]): string | null {
   return snapshots
