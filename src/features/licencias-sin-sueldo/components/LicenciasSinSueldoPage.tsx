@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, RotateCcw, Search, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
@@ -481,7 +481,7 @@ function LicenciasTable({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-metro-muted">{records.length} registros visibles</p>
         <div className="flex flex-wrap items-center gap-2">
-          <ActionButton size="sm" variant="secondary" iconOnly={false} onClick={resetPreferences}><RotateCcw size={14} /> Vista</ActionButton>
+          <ActionButton size="sm" variant="secondary" iconOnly={false} onClick={resetPreferences}>Vista</ActionButton>
           <ExportPrintButtons payload={{ title, filename: title, columns: reorderExportColumns(exportColumns, preferences.columnOrder), rows: records, filterLabel: `${records.length} registros filtrados` }} />
         </div>
       </div>
