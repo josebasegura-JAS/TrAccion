@@ -1,4 +1,4 @@
-import { AlertTriangle, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from 'lucide-react';
+import { AlertTriangle, Download, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { normalizeJobPosition, isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
@@ -13,6 +13,7 @@ import {
 } from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+import { buildStableExportFilename } from '../shared/export/tableExport';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import {
@@ -71,6 +72,16 @@ function compareGruposCoberturaByName(
   second: { nombre: string },
 ): number {
   return compareTextEs(first.nombre, second.nombre);
+}
+
+function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBuffer {
+  if (buffer instanceof ArrayBuffer) {
+    return buffer;
+  }
+
+  const copy = new Uint8Array(buffer.byteLength);
+  copy.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+  return copy.buffer;
 }
 
 function readStoredAliases(): Record<string, string> {
@@ -359,6 +370,87 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     }
   };
 
+  const handleGenerateSampleExcel = async () => {
+    try {
+      setError('');
+      setStatus('');
+
+      const openExcelWorkbook = window.traccion?.openExcelWorkbook;
+      if (!openExcelWorkbook) {
+        throw new Error('La generación del Excel de muestra no está disponible en este entorno.');
+      }
+
+      const { default: ExcelJS } = await import('exceljs');
+      const generatedAt = new Date();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'TrAccion';
+      workbook.created = generatedAt;
+      workbook.modified = generatedAt;
+
+      const worksheet = workbook.addWorksheet('Puestos Teletrabajo', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+      });
+
+      worksheet.columns = [
+        { header: 'Puesto Organizativo', key: 'puesto', width: 42 },
+        { header: 'Presencialidad mínima', key: 'presencialidadMinima', width: 24 },
+        { header: 'Dotación computable', key: 'dotacionComputable', width: 24 },
+        { header: 'Grupo cobertura', key: 'grupoCobertura', width: 28 },
+        { header: 'Observaciones', key: 'observaciones', width: 44 },
+      ];
+
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      const puestosMuestra = masterPuestos.length > 0
+        ? masterPuestos.slice(0, 10)
+        : ['Ejemplo puesto teletrabajable 1', 'Ejemplo puesto teletrabajable 2'];
+
+      puestosMuestra.forEach((puesto, index) => {
+        worksheet.addRow({
+          puesto,
+          presencialidadMinima: index === 0 ? 1 : '',
+          dotacionComputable: index === 0 ? 2 : '',
+          grupoCobertura: '',
+          observaciones: index === 0
+            ? 'Fila de ejemplo: sustituir o borrar antes de importar.'
+            : '',
+        });
+      });
+
+      const notesSheet = workbook.addWorksheet('Instrucciones');
+      notesSheet.columns = [{ header: 'Campo', width: 28 }, { header: 'Uso', width: 82 }];
+      notesSheet.addRows([
+        ['Puesto Organizativo', 'Obligatorio. Debe coincidir con un puesto existente en la tabla de Traducción de puestos.'],
+        ['Presencialidad mínima', 'Opcional. Número mínimo de personas que deben quedar presencialmente en ese puesto si no se usa grupo de cobertura.'],
+        ['Dotación computable', 'Opcional. Número de personas computables para el cálculo del puesto. Si se deja vacío, la app guarda 0.'],
+        ['Grupo cobertura', 'Opcional. Si varios puestos comparten cobertura, indica el mismo nombre de grupo en todos ellos.'],
+        ['Observaciones', 'Opcional. Texto interno de apoyo para RRLL.'],
+      ]);
+      notesSheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const result = await openExcelWorkbook(
+        normalizeWorkbookBuffer(buffer),
+        buildStableExportFilename('muestra-puestos-teletrabajo', generatedAt),
+      );
+
+      if (!result.ok) {
+        throw new Error(result.message || 'No se ha podido abrir el Excel de muestra.');
+      }
+
+      setStatus('Excel de muestra generado.');
+    } catch (sampleError) {
+      setStatus('');
+      setError(
+        sampleError instanceof Error
+          ? sampleError.message
+          : 'No se pudo generar el Excel de muestra.',
+      );
+    }
+  };
+
   const handleResolvePendingImport = () => {
     if (!pendingImport) {
       return;
@@ -574,6 +666,14 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               type="button"
             >
               <Users size={16} /> Grupos de cobertura
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => void handleGenerateSampleExcel()}
+              title="Generar un Excel compatible con el importador de puestos teletrabajables"
+              type="button"
+            >
+              <Download size={16} /> Excel muestra
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"

@@ -82,6 +82,22 @@ describe('rowsToTeletrabajoPuestoDrafts', () => {
     });
   });
 
+  it('importa la columna Dotación computable cuando viene con el formato de muestra', () => {
+    const rows = [
+      ['Puesto Organizativo', 'Presencialidad mínima', 'Dotación computable', 'Grupo cobertura', 'Observaciones'],
+      ['Análisis Informático (Desarrollo)', '4', '7', '', ''],
+    ];
+
+    const result = rowsToTeletrabajoPuestoDrafts(rows);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.draft).toMatchObject({
+      puesto: 'Análisis Informático (Desarrollo)',
+      maxSolicitudes: 4,
+      dotacionComputable: 7,
+    });
+  });
+
   it('lanza un error claro cuando falta la columna de Puesto', () => {
     const rows = [
       ['Presencialidad mínima', 'Observaciones'],
