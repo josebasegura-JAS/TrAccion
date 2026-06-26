@@ -72,6 +72,7 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
     fechaCascos: solicitud.fechaCascos || EMPTY_TELETRABAJO_DRAFT.fechaCascos,
     periodo: solicitud.periodo,
     observaciones: solicitud.observaciones,
+    observacionesRrll: solicitud.observacionesRrll ?? '',
     validacionSeguridadInformatica: solicitud.validacionSeguridadInformatica,
     validacionPrevencion: solicitud.validacionPrevencion,
     validacionJefatura: solicitud.validacionJefatura,
@@ -542,6 +543,18 @@ export function TeletrabajoEditor({
                   setDraft((current) => ({ ...current, observaciones: event.target.value }))
                 }
                 value={draft.observaciones}
+              />
+            </label>
+
+            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+              Observaciones RRLL
+              <textarea
+                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, observacionesRrll: event.target.value }))
+                }
+                placeholder="Notas internas de RRLL para la exportación a Dirección"
+                value={draft.observacionesRrll ?? ''}
               />
             </label>
             </fieldset>

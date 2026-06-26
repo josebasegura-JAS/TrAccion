@@ -387,7 +387,7 @@ function setStatusCellStyle({
 
 function applyRowFill(row: ExcelJS.Row, fillColor: string): void {
   row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    if (colNumber < 1 || colNumber > 20) {
+    if (colNumber < 1 || colNumber > 21) {
       return;
     }
 
@@ -510,6 +510,7 @@ export async function exportTeletrabajoDireccionToExcel({
     { key: 'peticionJueves', width: 5.63 },
     { key: 'cambiosFueraPlazo', width: 52.09 },
     { key: 'observaciones', width: 40.73 },
+    { key: 'observacionesRrll', width: 40.73 },
   ];
 
   worksheet.mergeCells('B2:D2');
@@ -537,6 +538,7 @@ export async function exportTeletrabajoDireccionToExcel({
   worksheet.getCell('P4').value = 'Petición II';
   worksheet.getCell('S4').value = 'Cambios fuera de plazo ordinario';
   worksheet.getCell('T4').value = 'Observaciones';
+  worksheet.getCell('U4').value = 'Observaciones RRLL';
 
   worksheet.getRow(5).values = [
     '',
@@ -557,6 +559,7 @@ export async function exportTeletrabajoDireccionToExcel({
     'Martes',
     'Miércoles',
     'Jueves',
+    '',
     '',
     '',
   ];
@@ -600,7 +603,7 @@ export async function exportTeletrabajoDireccionToExcel({
     const row = worksheet.getRow(rowNumber);
 
     row.values = [
-      employee?.nivelRetributivo ?? '',
+      '',
       toNumericEmployeeValue(solicitud.empleado),
       solicitud.nombreApellidos,
       solicitud.puestoNomina,
@@ -620,6 +623,7 @@ export async function exportTeletrabajoDireccionToExcel({
       '',
       '',
       solicitud.observaciones,
+      solicitud.observacionesRrll ?? '',
     ];
 
     const empleadoCell = row.getCell(2);
@@ -671,7 +675,7 @@ export async function exportTeletrabajoDireccionToExcel({
 
   worksheet.autoFilter = {
     from: 'B5',
-    to: 'T5',
+    to: 'U5',
   };
 
   const buffer = await workbook.xlsx.writeBuffer();

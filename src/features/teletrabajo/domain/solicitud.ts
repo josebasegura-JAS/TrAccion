@@ -23,6 +23,7 @@ export interface TeletrabajoSolicitud {
   fechaCascos: string;
   periodo: string;
   observaciones: string;
+  observacionesRrll?: string;
   validacionSeguridadInformatica: boolean;
   validacionPrevencion: boolean;
   validacionJefatura: boolean;
@@ -49,6 +50,7 @@ export type TeletrabajoDraft = Pick<
   | 'fechaCascos'
   | 'periodo'
   | 'observaciones'
+  | 'observacionesRrll'
   | 'validacionSeguridadInformatica'
   | 'validacionPrevencion'
   | 'validacionJefatura'
@@ -86,6 +88,7 @@ export const EMPTY_TELETRABAJO_DRAFT: TeletrabajoDraft = {
   fechaCascos: '2024-09-01',
   periodo: '',
   observaciones: '',
+  observacionesRrll: '',
   validacionSeguridadInformatica: false,
   validacionPrevencion: false,
   validacionJefatura: false,
