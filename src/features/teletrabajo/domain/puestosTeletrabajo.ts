@@ -1,4 +1,4 @@
-import { parseXlsxRows } from '../../plantilla/domain/importJobPositionTranslations';
+import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 
 export interface TeletrabajoPuesto {
   id: string;
