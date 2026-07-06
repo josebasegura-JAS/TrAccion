@@ -163,7 +163,7 @@ function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBu
   return copy.buffer;
 }
 
-async function openWorkbookInExcel(
+export async function openWorkbookInExcel(
   buffer: ArrayBuffer | ArrayBufferView,
   filename: string,
 ): Promise<void> {

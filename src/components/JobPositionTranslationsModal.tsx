@@ -1,4 +1,5 @@
 import {
+  Download,
   FileUp,
   Languages,
   Pencil,
@@ -18,6 +19,7 @@ import {
 } from '../shared/table/useTableViewPreferences';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
+import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 
 interface JobPositionTranslationsModalProps {
   onClose: () => void;
@@ -208,6 +210,58 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
     [filteredTranslations, preferences.sort, translationColumns],
   );
 
+  const handleGenerateSampleExcel = async () => {
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const generatedAt = new Date();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'TrAccion';
+      workbook.created = generatedAt;
+      workbook.modified = generatedAt;
+
+      const worksheet = workbook.addWorksheet('Traducciones', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+      });
+
+      worksheet.columns = [
+        { header: 'Puesto', key: 'puesto', width: 42 },
+        { header: 'Lanpostua', key: 'lanpostua', width: 42 },
+      ];
+
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      worksheet.addRow({
+        puesto: 'Ejemplo puesto en castellano',
+        lanpostua: 'Adibidez, lanpostua euskaraz',
+      });
+
+      const notesSheet = workbook.addWorksheet('Instrucciones');
+      notesSheet.columns = [{ header: 'Campo', width: 20 }, { header: 'Uso', width: 82 }];
+      notesSheet.addRows([
+        ['Puesto', 'Obligatorio. Debe ser exactamente esta cabecera, "Puesto".'],
+        ['Lanpostua', 'Obligatorio. Debe ser exactamente esta cabecera, "Lanpostua".'],
+        ['General', 'Ambas columnas son obligatorias en cada fila. Fila de ejemplo: sustituir o borrar antes de importar.'],
+      ]);
+      notesSheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      await openWorkbookInExcel(
+        buffer,
+        buildStableExportFilename('muestra-traduccion-puestos', generatedAt),
+      );
+      setError('');
+      setMessage('Excel de muestra generado.');
+    } catch (sampleError) {
+      setMessage('');
+      setError(
+        sampleError instanceof Error
+          ? sampleError.message
+          : 'No se ha podido generar el Excel de muestra.',
+      );
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <section className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
@@ -297,6 +351,14 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               type="button"
             >
               <RefreshCw size={16} /> Actualizar plantilla
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => void handleGenerateSampleExcel()}
+              title="Generar un Excel de muestra compatible con el importador de Traducción de puestos"
+              type="button"
+            >
+              <Download size={16} /> Generar muestra
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"

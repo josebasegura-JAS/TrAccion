@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Download,
   FileText,
   Loader2,
   Plus,
@@ -50,6 +51,7 @@ import {
 } from '../features/teletrabajo/domain/plantillaData';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
+import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { SelectFilter } from '../shared/filters/SelectFilter';
@@ -1268,6 +1270,161 @@ export function TeletrabajoPage({
     }
   };
 
+  const handleGenerateSampleEncuestaExcel = async () => {
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const generatedAt = new Date();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'TrAccion';
+      workbook.created = generatedAt;
+      workbook.modified = generatedAt;
+
+      const worksheet = workbook.addWorksheet('Encuesta', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+      });
+
+      worksheet.columns = [
+        { header: 'Nº Empleado', key: 'empleado', width: 14 },
+        { header: 'Nombre Apellidos', key: 'nombreApellidos', width: 32 },
+        { header: 'Respuesta', key: 'respuesta', width: 14 },
+        { header: 'Tipo solicitud', key: 'tipoSolicitud', width: 16 },
+        { header: 'Días teletrabajo', key: 'diasTeletrabajo', width: 22 },
+        { header: 'Periodo', key: 'periodo', width: 14 },
+        { header: 'Fecha entrega ordenador', key: 'fechaOrdenador', width: 22 },
+        { header: 'Fecha entrega cascos', key: 'fechaCascos', width: 20 },
+        { header: 'Observaciones', key: 'observaciones', width: 44 },
+      ];
+
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      worksheet.addRow({
+        empleado: '12345',
+        nombreApellidos: 'Apellido1 Apellido2, Nombre',
+        respuesta: 'Sí',
+        tipoSolicitud: 'Nueva',
+        diasTeletrabajo: 'Martes y jueves',
+        periodo: '2026-2027',
+        fechaOrdenador: '2026-09-01',
+        fechaCascos: '2026-09-01',
+        observaciones: 'Fila de ejemplo: sustituir o borrar antes de importar.',
+      });
+
+      const notesSheet = workbook.addWorksheet('Instrucciones');
+      notesSheet.columns = [{ header: 'Campo', width: 26 }, { header: 'Uso', width: 82 }];
+      notesSheet.addRows([
+        ['Nº Empleado', 'Obligatorio. Debe coincidir con un empleado existente en Plantilla.'],
+        ['Nombre Apellidos', 'Opcional. Si no se informa, se usa el nombre de Plantilla.'],
+        ['Respuesta', 'Obligatorio. Solo se importan las filas con "Sí"; el resto se ignoran.'],
+        ['Tipo solicitud', 'Opcional. "Nueva" o "Renovación" (si no contiene "nueva" se asume renovación).'],
+        ['Días teletrabajo', 'Opcional. Debe mencionar martes, miércoles y/o jueves.'],
+        ['Periodo', 'Opcional. Si se deja vacío se usa el periodo por defecto de la campaña.'],
+        ['Fecha entrega ordenador / Fecha entrega cascos', 'Opcionales.'],
+        ['Observaciones', 'Opcional. Texto libre; también se usa para detectar los días de teletrabajo.'],
+        ['Requisito previo', 'Antes de importar debes tener cargada la tabla de Traducción de puestos en Plantilla.'],
+      ]);
+      notesSheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      await openWorkbookInExcel(
+        buffer,
+        buildStableExportFilename('muestra-encuesta-teletrabajo', generatedAt),
+      );
+      setImportSummary('Excel de muestra generado.');
+    } catch (sampleError) {
+      setImportSummary(
+        sampleError instanceof Error
+          ? sampleError.message
+          : 'No se ha podido generar el Excel de muestra.',
+      );
+    }
+  };
+
+  const handleGenerateSampleHistoricoExcel = async () => {
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const generatedAt = new Date();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'TrAccion';
+      workbook.created = generatedAt;
+      workbook.modified = generatedAt;
+
+      const worksheet = workbook.addWorksheet('Historico', {
+        views: [{ state: 'frozen', ySplit: 3 }],
+      });
+
+      worksheet.mergeCells('A1:K1');
+      worksheet.getCell('A1').value = 'Teletrabajo 2026-2027';
+      worksheet.getCell('A1').font = { bold: true };
+
+      const parentHeaderRow = worksheet.getRow(2);
+      parentHeaderRow.getCell(5).value = 'Días teletrabajo';
+      worksheet.mergeCells('E2:G2');
+
+      const headerRow = worksheet.getRow(3);
+      headerRow.values = [
+        'Nº Empleado',
+        'Nombre',
+        'Detalle',
+        'Dirección',
+        'Martes',
+        'Miércoles',
+        'Jueves',
+        'Periodo 20XX-20XX',
+        'Informe favorable',
+        'Año anterior teletrabajado',
+        'Observaciones',
+      ];
+      headerRow.font = { bold: true };
+
+      worksheet.addRow([
+        '12345',
+        'Apellido1 Apellido2, Nombre',
+        'Puesto organizativo',
+        'Centro de trabajo',
+        'X',
+        '',
+        'X',
+        '2026-2027',
+        'Sí',
+        'Sí',
+        'Fila de ejemplo: sustituir o borrar antes de importar.',
+      ]);
+
+      worksheet.columns.forEach((column) => {
+        column.width = 20;
+      });
+
+      const notesSheet = workbook.addWorksheet('Instrucciones');
+      notesSheet.columns = [{ header: 'Campo', width: 26 }, { header: 'Uso', width: 82 }];
+      notesSheet.addRows([
+        ['Título', 'Obligatorio. En algún texto del fichero debe aparecer el periodo, por ejemplo "2026-2027".'],
+        ['Nº Empleado', 'Obligatorio. Debe coincidir con un empleado existente en Plantilla.'],
+        ['Nombre / Detalle / Dirección', 'Opcionales. "Detalle" se usa como puesto y "Dirección" como residencia si Plantilla no los tiene.'],
+        ['Martes / Miércoles / Jueves', 'Marcar con "X" o "Sí" los días de teletrabajo concedidos.'],
+        ['Periodo 20XX-20XX', 'Opcional. Periodo concreto solicitado; se añade a las observaciones.'],
+        ['Informe favorable', '"No" o cualquier texto con "denegado" marca la solicitud como denegada; en otro caso se considera aprobada.'],
+        ['Año anterior teletrabajado', '"Sí" marca la solicitud como renovación; en otro caso se considera nueva.'],
+        ['Observaciones', 'Opcional. Texto libre.'],
+        ['Estructura', 'Se esperan dos filas de cabecera: una fila superior de agrupación y, justo debajo, la fila con los nombres de columna ("Nº Empleado", "Nombre", "Martes", "Miércoles", "Jueves" son obligatorias para localizarla).'],
+      ]);
+      notesSheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      await openWorkbookInExcel(
+        buffer,
+        buildStableExportFilename('muestra-historico-teletrabajo', generatedAt),
+      );
+      setImportSummary('Excel de muestra generado.');
+    } catch (sampleError) {
+      setImportSummary(
+        sampleError instanceof Error
+          ? sampleError.message
+          : 'No se ha podido generar el Excel de muestra.',
+      );
+    }
+  };
+
   return (
     <section
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
@@ -1322,6 +1479,14 @@ export function TeletrabajoPage({
           >
             Importar encuesta
           </ActionButton>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => void handleGenerateSampleEncuestaExcel()}
+            title="Generar un Excel de muestra compatible con el importador de encuesta"
+            type="button"
+          >
+            <Download size={16} /> Muestra encuesta
+          </button>
           <ActionButton
             iconOnly={false}
             onClick={() => historicoFileInputRef.current?.click()}
@@ -1329,6 +1494,14 @@ export function TeletrabajoPage({
           >
             Importar histórico
           </ActionButton>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => void handleGenerateSampleHistoricoExcel()}
+            title="Generar un Excel de muestra compatible con el importador de histórico"
+            type="button"
+          >
+            <Download size={16} /> Muestra histórico
+          </button>
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
             onClick={() => setIsPuestosModalOpen(true)}

@@ -1,4 +1,5 @@
 import {
+  Download,
   Languages,
   Plus,
   RefreshCw,
@@ -7,6 +8,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
+import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { EmployeeEditor } from './EmployeeEditor';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -335,6 +337,92 @@ export function PlantillaPage() {
     }
   };
 
+  const handleGenerateSampleExcel = async () => {
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const generatedAt = new Date();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'TrAccion';
+      workbook.created = generatedAt;
+      workbook.modified = generatedAt;
+
+      const worksheet = workbook.addWorksheet('Plantilla', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+      });
+
+      worksheet.columns = [
+        { header: 'Empleado', key: 'empleado', width: 14 },
+        { header: 'Nombre Apellidos', key: 'nombreApellidos', width: 32 },
+        { header: 'Puesto Nomina', key: 'puestoNomina', width: 26 },
+        { header: 'Puesto Organizativo', key: 'puestoOrganizativo', width: 26 },
+        { header: 'Puesto EUS', key: 'puestoEus', width: 26 },
+        { header: 'Residencia', key: 'residencia', width: 18 },
+        { header: 'Unidad', key: 'unidad', width: 18 },
+        { header: 'Nivel Retributivo', key: 'nivelRetributivo', width: 16 },
+        { header: 'Direccion Organizativa', key: 'direccionOrganizativa', width: 26 },
+        { header: 'Antiguedad Puesto', key: 'antiguedadPuesto', width: 18 },
+        { header: 'Sexo', key: 'sexo', width: 10 },
+        { header: 'Calle', key: 'calle', width: 26 },
+        { header: 'Numero', key: 'numero', width: 10 },
+        { header: 'Piso', key: 'piso', width: 10 },
+        { header: 'Codigo Postal', key: 'codigoPostal', width: 14 },
+        { header: 'Poblacion', key: 'poblacion', width: 18 },
+        { header: 'Provincia', key: 'provincia', width: 18 },
+        { header: 'NIF', key: 'nif', width: 14 },
+      ];
+
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+
+      worksheet.addRow({
+        empleado: '12345',
+        nombreApellidos: 'Apellido1 Apellido2, Nombre',
+        puestoNomina: 'Puesto según nómina',
+        puestoOrganizativo: 'Puesto organizativo',
+        puestoEus: 'Lanpostua euskaraz',
+        residencia: 'Centro de trabajo',
+        unidad: 'Unidad organizativa',
+        nivelRetributivo: 'N3',
+        direccionOrganizativa: 'Dirección/Área',
+        antiguedadPuesto: '2020-01-01',
+        sexo: 'M',
+        calle: 'Nombre de la calle',
+        numero: '1',
+        piso: '2ºA',
+        codigoPostal: '48001',
+        poblacion: 'Bilbao',
+        provincia: 'Bizkaia',
+        nif: '00000000A',
+      });
+
+      const notesSheet = workbook.addWorksheet('Instrucciones');
+      notesSheet.columns = [{ header: 'Campo', width: 26 }, { header: 'Uso', width: 82 }];
+      notesSheet.addRows([
+        ['Empleado', 'Obligatorio. Número de empleado; identifica a la persona y evita duplicados.'],
+        ['Nombre Apellidos', 'Recomendado. Nombre completo de la persona.'],
+        ['Puesto Nomina / Puesto Organizativo / Puesto EUS', 'Opcionales. Se usan en Teletrabajo para resolver el puesto de cada persona.'],
+        ['Residencia', 'Opcional. Centro de trabajo.'],
+        ['Unidad', 'Opcional. Unidad organizativa corta.'],
+        ['Nivel Retributivo', 'Opcional.'],
+        ['Direccion Organizativa', 'Opcional. Área o dirección a la que pertenece la persona.'],
+        ['Antiguedad Puesto', 'Opcional. Fecha en formato AAAA-MM-DD.'],
+        ['Sexo', 'Opcional.'],
+        ['Calle, Numero, Piso, Codigo Postal, Poblacion, Provincia', 'Opcionales. Domicilio particular.'],
+        ['NIF', 'Opcional.'],
+        ['General', 'Los nombres de columnas admiten variantes habituales (con/sin acentos, "Nº Empleado", etc.). Fila de ejemplo: sustituir o borrar antes de importar.'],
+      ]);
+      notesSheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      await openWorkbookInExcel(buffer, buildStableExportFilename('muestra-plantilla', generatedAt));
+      setImportMessage('Excel de muestra generado.');
+    } catch (error) {
+      setImportMessage(
+        error instanceof Error ? error.message : 'No se ha podido generar el Excel de muestra.',
+      );
+    }
+  };
+
   return (
     <section
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
@@ -400,6 +488,14 @@ export function PlantillaPage() {
             type="button"
           >
             <RefreshCw size={16} /> Actualizar puestos global
+          </button>
+          <button
+            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            onClick={() => void handleGenerateSampleExcel()}
+            title="Generar un Excel de muestra compatible con el importador de Plantilla"
+            type="button"
+          >
+            <Download size={16} /> Generar muestra
           </button>
           <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
             Importar
