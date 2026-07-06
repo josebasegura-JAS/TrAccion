@@ -33,9 +33,26 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
     items: [
-      'Mantiene la relación base de personas de Metro Bilbao que utiliza el resto de módulos.',
+      'Mantiene la relación base de personas que utiliza el resto de módulos (Teletrabajo, Ticket Restaurante, etc.).',
       'Permite alta manual, edición, búsqueda, filtros y borrado lógico sin perder trazabilidad.',
       'La importación Excel actualiza datos de plantilla y evita tener que introducir personas una a una.',
+    ],
+  },
+  {
+    title: 'Importación de personas',
+    items: [
+      'Admite Excel, CSV, TSV o TXT. Las columnas se reconocen por variantes habituales del nombre (con/sin acentos, "Nº Empleado", etc.), no hace falta que coincidan exactamente.',
+      'Si la persona ya existe (mismo número de empleado), se actualiza; si no existe, se crea. Si el Excel trae el Puesto EUS vacío para alguien que ya tenía uno guardado, se conserva el que ya había en vez de borrarlo.',
+      'Modo especial "solo antigüedad": si el fichero importado únicamente tiene informadas las columnas Empleado y Antigüedad Puesto (todo lo demás vacío en todas las filas), la app entiende que es una actualización masiva de antigüedad y solo toca ese campo en las personas que ya existen; no crea personas nuevas ni modifica el resto de datos.',
+      'El botón "Generar muestra" descarga un Excel de ejemplo con las columnas que reconoce el importador.',
+    ],
+  },
+  {
+    title: 'Traducción de puestos (EUS)',
+    items: [
+      '"Traducir puestos" abre la tabla de equivalencias Puesto (castellano) / Lanpostua (euskera) que usan Plantilla y Teletrabajo.',
+      '"Actualizar puestos global" recorre toda la plantilla y rellena el Puesto EUS de quienes lo tengan vacío, usando esa tabla de traducciones; el botón muestra cuántos puestos EUS quedan pendientes.',
+      'Conviene mantener esta tabla actualizada antes de importar la encuesta de Teletrabajo, porque ese importador la usa para resolver el puesto de cada persona.',
     ],
   },
   {

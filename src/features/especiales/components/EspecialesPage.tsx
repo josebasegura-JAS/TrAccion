@@ -27,10 +27,29 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Genera el correo Outlook con el que se avisa de que los turnos de conducción de un Servicio Especial ya están publicados en la intranet, con un cuerpo de mensaje fijo (evento, ruta a los turnos en Excel y enlace/nombre en intranet) y gestión de destinatarios Para/CC.',
+  },
+  {
+    title: 'Datos del servicio',
     items: [
-      'Prepara comunicaciones Outlook para servicios especiales a partir de evento, fecha, hora, enlace y ruta.',
-      'Gestiona destinatarios Para y CC y permite previsualizar el cuerpo HTML antes de abrir Outlook.',
-      'Puede leer mensajes .msg arrastrados para reutilizar asunto, cuerpo, fecha o remitente como apoyo.',
+      'Evento, fecha y hora identifican el servicio especial; la fecha se usa además para calcular el año que se muestra en el correo y en la ruta de turnos.',
+      'Si no se indica una ruta a mano, se propone automáticamente "G:\\DC\\PAS_TURNOS_RRLL\\<año>\\TURNOS" con el año detectado de la fecha o, si falta, del propio texto del evento.',
+      'El campo "aparecerá en la Intranet como" añade un párrafo aclaratorio en el correo con el nombre exacto que tiene el evento en la intranet.',
+    ],
+  },
+  {
+    title: 'Importar un .msg para rellenar automáticamente',
+    items: [
+      'Se puede arrastrar o seleccionar un correo .msg de Outlook para detectar automáticamente evento, fecha, hora, una ruta de red (si aparece en el texto) y el nombre del evento en la intranet.',
+      'Es una ayuda para rellenar más rápido: conviene revisar los campos detectados antes de generar el correo, porque la detección es por patrones de texto y puede no acertar siempre.',
+    ],
+  },
+  {
+    title: 'Destinatarios y borrador',
+    items: [
+      'Los destinatarios se guardan como libreta reutilizable, cada uno marcado como "Para" o "CC".',
+      'Antes de abrir Outlook se puede previsualizar el cuerpo HTML del correo tal y como se enviará.',
+      '"Limpiar formulario" vacía los datos del servicio introducidos, sin tocar la libreta de destinatarios guardada.',
     ],
   },
   {
@@ -38,7 +57,7 @@ const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'Completa primero datos del servicio y destinatarios antes de generar el borrador Outlook.',
       'Revisa la previsualización HTML para detectar errores de formato o información incompleta.',
-      'Usa restaurar cuando quieras volver a la plantilla base sin conservar cambios manuales.',
+      'Si importas un .msg, revisa los campos detectados antes de dar por buena la información.',
     ],
   },
 ];

@@ -34,16 +34,44 @@ import { usePresupuestosStore, type BudgetActualDraft, type BudgetManualItemDraf
 const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Permite crear escenarios presupuestarios anuales de RRLL, combinando conceptos manuales con grupos de Ticket Restaurante, y compararlos entre sí o frente al gasto real ejecutado.',
+  },
+  {
+    title: 'Conceptos manuales',
     items: [
-      'Permite crear escenarios presupuestarios de RRLL con conceptos manuales y grupos de Ticket Restaurante.',
-      'Compara previsiones anuales y mensuales para valorar impacto económico antes de cerrar una propuesta.',
-      'Recoge importes reales ejecutados para contrastar presupuesto frente a realidad.',
+      'Cada concepto puede definirse con un importe mensual o con un importe anual directo.',
+      'Si se informa el importe anual, este tiene prioridad: el mensual se calcula dividiéndolo entre 12. Si no hay importe anual, el anual se calcula multiplicando el mensual por 12.',
+    ],
+  },
+  {
+    title: 'Grupos de Ticket Restaurante: 4 formas de calcular',
+    items: [
+      'Personas por calendario: días con derecho a ticket del calendario asignado × nº de personas × (1 − % de ausentismo) × precio del ticket. Es el cálculo más ajustado a la realidad, siempre que el calendario y el nº de personas estén bien informados.',
+      'Tickets mensuales: un nº de tickets manual cada mes × precio del ticket.',
+      'Tickets anuales: un nº de tickets manual para todo el año × precio del ticket; para la vista mensual se reparte entre 12.',
+      'Importe manual: un importe fijo cada mes (× 12 para el anual), sin ningún cálculo de días o personas.',
+      'Cada grupo puede tener su propio precio de ticket o heredar el precio general definido en el escenario.',
+    ],
+  },
+  {
+    title: 'Comparativa entre escenarios',
+    items: [
+      'Permite comparar dos escenarios del mismo año mes a mes, mostrando la diferencia en importe y en porcentaje.',
+      'Es la forma recomendada de valorar una alternativa (por ejemplo, subir el precio del ticket o cambiar una plantilla) sin tocar el escenario original: duplica el escenario y compáralo con el de partida.',
+    ],
+  },
+  {
+    title: 'Comparativa con lo real ejecutado',
+    items: [
+      'Se pueden registrar importes reales ejecutados por año, mes, bloque (Ticket Restaurante, Formación, Vestuario, Consultoría, Reconocimientos médicos, Gastos sindicales, Otros) y concepto.',
+      'La comparativa acumula el presupuesto hasta un mes de corte elegido y lo enfrenta a lo realmente gastado en ese periodo, separando "Ticket Restaurante" del resto de partidas manuales.',
+      'Muestra la diferencia total y por bloque, en importe y en porcentaje, para detectar desviaciones cuanto antes.',
     ],
   },
   {
     title: 'Uso recomendado',
     items: [
-      'Crea escenarios por año y diferencia claramente conceptos manuales, tickets y reales ejecutados.',
+      'Crea un escenario por año y añade primero los grupos de Ticket Restaurante (suelen ser el bloque más previsible) y después los conceptos manuales.',
       'Duplica escenarios cuando quieras probar una alternativa sin perder el cálculo original.',
       'Revisa la comparativa antes de exportar para comprobar que meses, importes y grupos son coherentes.',
     ],

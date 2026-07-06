@@ -63,32 +63,29 @@ const defaultTablePreferences: TableViewPreferences<LicenciasTableColumnId> = {
 const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
-    body: 'Gestiona solicitudes de licencia sin sueldo, excedencias y permisos no retribuidos, desde la aprobación hasta el histórico.',
+    body: 'Gestiona solicitudes de Licencia sin sueldo, Permiso no retribuido, Año de Libre Disposición y Excedencia, desde la aprobación hasta el histórico, con generación del documento Word de concesión.',
   },
   {
     title: 'Estados',
     items: [
-      'Pendiente de aprobar.',
-      'Pendiente de firma.',
-      'Vigente.',
-      'Histórico.',
+      'Pendiente de aprobar → Pendiente de firma → Vigente.',
+      'Una solicitud "Vigente" pasa a mostrarse como histórica automáticamente en cuanto su fecha de fin queda en el pasado, sin necesidad de cambiarla a mano.',
     ],
   },
   {
-    title: 'Reglas principales',
+    title: 'Reglas de duración según el tipo',
     items: [
-      'Las licencias sin sueldo tienen duración mínima de 15 días y máxima de 9 meses.',
-      'El Año de Libre Disposición genera automáticamente una duración de 5 años.',
-      'Las solicitudes aprobadas pasan a pendiente de firma antes de quedar vigentes.',
-      'Los registros finalizados quedan agrupados en histórico por año.',
+      'Licencia sin sueldo: duración obligatoria de entre 15 días naturales y 9 meses desde la fecha de inicio.',
+      'Año de Libre Disposición: la fecha de fin se calcula automáticamente como 5 años después del inicio; no se edita a mano.',
+      'Permiso no retribuido y Excedencia: no tienen una duración mínima ni máxima automática; solo se exige que la fecha de fin no sea anterior a la de inicio.',
+      'En todos los tipos son obligatorios el número de empleado, nombre completo, fecha de solicitud, fecha de inicio y fecha de fin.',
     ],
   },
   {
     title: 'Generación documental',
     items: [
-      'En los registros de licencia sin sueldo aprobados puede generarse documento Word desde plantilla.',
-      'La plantilla se toma de la ruta configurada en Ajustes.',
-      'El documento rellena datos de la persona, puesto, fechas y fecha del sistema.',
+      'En los registros aprobados puede generarse el documento Word de concesión a partir de una plantilla externa configurada en Ajustes.',
+      'El documento rellena automáticamente marcadores de la plantilla («Puesto_CAST», «Puesto_EUS»...) con los datos de la persona: puesto en castellano y su traducción a euskera (tomada de Plantilla o, si falta, de la tabla de Traducción de puestos), fechas y demás datos de la solicitud.',
     ],
   },
 ];

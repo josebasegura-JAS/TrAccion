@@ -15,17 +15,50 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Centraliza toda la configuración técnica de TrAccion: dónde vive la base de datos compartida, sus copias de respaldo, la carpeta de actualizaciones automáticas, las plantillas Word externas y las fases de Tareas.',
+  },
+  {
+    title: 'Base de datos',
     items: [
-      'Centraliza configuración técnica de TrAccion: base de datos, rutas externas, plantillas y opciones auxiliares.',
-      'Permite comprobar el estado de SQLite, el modo de conexión y avisos de funcionamiento.',
-      'Guarda rutas necesarias para generar documentos o comunicaciones sin incrustar plantillas en la app.',
+      'Muestra la ruta activa de SQLite y su estado (correcto, aviso, error o bloqueado) para saber si TrAccion está trabajando contra la ubicación compartida esperada.',
+      'Si otra persona tiene la base bloqueada (se muestra usuario, equipo y PID), normalmente se libera sola; "Forzar liberación" solo debe usarse si el bloqueo ha quedado colgado tras un cierre anómalo.',
+      '"Compactar base de datos" libera en disco el espacio de registros ya borrados. Se ejecuta automáticamente como máximo una vez por semana al cerrar la app, y también se puede lanzar a mano; bloquea brevemente la escritura para el resto de equipos.',
+    ],
+  },
+  {
+    title: 'Copias de respaldo',
+    items: [
+      'TrAccion guarda copias locales automáticas (base SQLite + un JSON de emergencia). El JSON solo debe usarse si la base SQLite no es recuperable; no sustituye a la copia SQLite.',
+      'Restaurar una copia crea antes un respaldo de la base activa y recarga la app para aplicar los datos restaurados.',
+      'La copia diaria automática es configurable: se puede activar/desactivar, elegir cuántos días se conservan y, opcionalmente, guardar también en una carpeta secundaria (red, USB u otro equipo) como protección extra.',
+    ],
+  },
+  {
+    title: 'Carpeta de actualizaciones',
+    items: [
+      'Es la carpeta de red donde se publican las nuevas versiones del .exe de TrAccion junto a un version.txt.',
+      'Al arrancar, la app comprueba esa carpeta y, si hay una versión más nueva, pregunta antes de actualizarse.',
+    ],
+  },
+  {
+    title: 'Plantillas Word externas',
+    items: [
+      'Guardan solo la ruta (local, UNC o unidad mapeada) de los documentos DOCX externos que usan otros módulos para generar sus escritos: Teletrabajo, Licencia sin sueldo y Vinculograma.',
+      'La plantilla no se copia dentro de TrAccion: la app abre el DOCX de esa ruta en el momento de generar el documento, así que si se mueve o renombra el fichero hay que actualizar la ruta aquí.',
+    ],
+  },
+  {
+    title: 'Fases de tareas',
+    items: [
+      'Define las fases disponibles para clasificar las tareas del módulo Tareas (por ejemplo, las fases que alimentan Comité y Paritaria).',
+      'Desactivar una fase evita que se seleccione en tareas nuevas, pero conserva el histórico y las tareas ya existentes con esa fase.',
     ],
   },
   {
     title: 'Uso recomendado',
     items: [
-      'Modifica rutas solo cuando cambie la ubicación real de base de datos o plantillas.',
-      'Comprueba los avisos de estado antes de asumir que la app está trabajando contra la ruta compartida.',
+      'Modifica rutas solo cuando cambie la ubicación real de la base de datos o de las plantillas.',
+      'Comprueba el estado de la base de datos antes de asumir que la app está trabajando contra la ruta compartida.',
       'Evita cambiar configuración durante importaciones o escrituras críticas en otros módulos.',
     ],
   },

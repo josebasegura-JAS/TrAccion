@@ -35,17 +35,29 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Registra declaraciones de vínculo entre una persona de la plantilla y otra persona (familiar, allegado...), calculando automáticamente su fecha de vigencia.',
+  },
+  {
+    title: 'Cómo se calcula la vigencia',
     items: [
-      'Registra vínculos entre personas y calcula la vigencia aplicable de forma automática.',
-      'Se apoya en Plantilla para localizar personas por número de empleado y nombre completo.',
-      'Separa vínculos vigentes e históricos para consultar relaciones activas sin perder antecedentes.',
+      'La fecha de vigencia se calcula automáticamente como 3 años exactos después de la fecha de solicitud; no se edita a mano.',
+      'El vínculo se marca como "Vigente" mientras la fecha actual no supere esa fecha de vigencia, y pasa a "Vencido" en cuanto se supera, sin ninguna acción manual.',
+      'La búsqueda de la persona se apoya en Plantilla (por número de empleado o nombre), evitando duplicar datos que ya están dados de alta allí.',
+    ],
+  },
+  {
+    title: 'Generación documental',
+    items: [
+      'Puede generarse un documento Word de solicitud de declaración responsable a partir de una plantilla externa configurada en Ajustes.',
+      'El documento sustituye los marcadores de la plantilla por los datos del vínculo y de la persona.',
     ],
   },
   {
     title: 'Uso recomendado',
     items: [
-      'Selecciona siempre la persona desde plantilla cuando sea posible para evitar duplicidades.',
-      'Comprueba fechas y estado antes de guardar un nuevo vínculo.',
+      'Selecciona siempre la persona desde Plantilla cuando sea posible para evitar duplicidades o errores de nombre.',
+      'Comprueba la fecha de solicitud antes de guardar, ya que de ella depende directamente la fecha de vigencia calculada.',
+      'Usa el filtro de vigentes/vencidos para separar relaciones activas de las que ya han caducado.',
       'Usa exportación o impresión para trasladar un listado filtrado de vínculos activos o históricos.',
     ],
   },

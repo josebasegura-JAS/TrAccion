@@ -26,17 +26,36 @@ const today = new Date().toISOString().slice(0, 10);
 const SORTEOS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Realiza sorteos internos entre la plantilla, evitando que quien ya ha ganado (o quien se excluya a mano) vuelva a entrar en el bombo mientras la exclusión siga activa.',
+  },
+  {
+    title: 'Participantes y exclusiones',
     items: [
-      'Gestiona sorteos internos con participantes normalizados desde plantilla, ganadores e histórico.',
-      'Permite excluir personas para evitar que vuelvan a participar mientras siga vigente la exclusión.',
-      'El histórico conserva resultados y permite desbloquear exclusiones cuando corresponde.',
+      'Los participantes se toman automáticamente de Plantilla; no hace falta darlos de alta aparte.',
+      'Cada ganador de un sorteo se excluye automáticamente de futuros sorteos (motivo "Ganador sorteo"), sin necesidad de hacerlo a mano.',
+      'También se pueden añadir exclusiones manuales a personas concretas (motivo "Manual"), buscándolas por nombre o número de empleado.',
+      'Una persona con exclusión activa (manual o por haber ganado antes) no entra en el sorteo hasta que se elimine esa exclusión.',
+    ],
+  },
+  {
+    title: 'Cómo funciona el sorteo',
+    items: [
+      'Antes de sortear, la app comprueba que haya título, fecha, un nº de ganadores válido y que ese número no supere las personas disponibles (sin exclusión activa).',
+      'El sorteo elige al azar, sin repetición, tantas personas como ganadores se hayan indicado, únicamente entre las personas disponibles.',
+      'El resultado queda guardado en el histórico con la fecha, el título y la posición de cada ganador.',
+    ],
+  },
+  {
+    title: 'Eliminar un sorteo del histórico',
+    items: [
+      'Al borrar un sorteo se puede elegir si también se liberan las exclusiones de sus ganadores (para que vuelvan a poder participar) o si se mantienen esas exclusiones aunque se borre el sorteo.',
     ],
   },
   {
     title: 'Uso recomendado',
     items: [
       'Define título, fecha y número de ganadores antes de ejecutar el sorteo.',
-      'Revisa exclusiones activas antes de sortear para evitar resultados no deseados.',
+      'Revisa las exclusiones activas antes de sortear para evitar resultados no deseados.',
       'Exporta o imprime el resultado cuando necesites dejar constancia del sorteo realizado.',
     ],
   },

@@ -10,27 +10,40 @@ import { useCommitteeSessionStore } from '../store/useCommitteeSessionStore';
 const COMITE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
-    body: 'Gestiona puntos tratados y sesiones del Comité de Empresa, incluyendo apertura, cierre, histórico y generación de acta.',
+    body: 'Gestiona las sesiones del Comité de Empresa: qué puntos se tratan en cada una, su cierre y la generación automática del acta correspondiente.',
+  },
+  {
+    title: 'De dónde salen los puntos',
+    items: [
+      'Los puntos disponibles para añadir a una sesión son las tareas del módulo Tareas que tienen la fase "comité" y todavía no están cerradas.',
+      'Una tarea puede estar en varios estados (pendiente, en curso, bloqueada, resuelta); mientras no esté cerrada, sigue disponible para incluirla en una sesión.',
+      'Si el punto que necesitas no aparece, revisa en Tareas que tenga la fase correcta.',
+    ],
   },
   {
     title: 'Flujo recomendado',
     ordered: true,
     items: [
-      'Crear o importar puntos pendientes.',
-      'Crear la sesión correspondiente.',
-      'Añadir y ordenar los puntos que se tratarán en la sesión.',
-      'Cerrar la sesión indicando puntos tratados y no tratados.',
-      'Generar el acta desde la sesión cerrada.',
+      'Crear la sesión indicando fecha, código y título.',
+      'Añadir los puntos (tareas de fase comité) que se van a tratar y ordenarlos si hace falta.',
+      'Cuando termine la reunión, cerrar la sesión: para cada punto se indica si se ha tratado o no.',
+      'Los puntos marcados como tratados cierran automáticamente esa tarea en Tareas; los no tratados quedan disponibles para una sesión posterior.',
+      'Al cerrar, se puede generar directamente un registro en Actas con los puntos tratados.',
     ],
   },
   {
-    title: 'Reglas principales',
+    title: 'Sesiones abiertas e histórico',
     items: [
-      'Los puntos pueden estar pendientes, en curso o cerrados.',
-      'Las sesiones abiertas siguen visibles hasta su cierre.',
-      'Las sesiones cerradas pasan a histórico.',
-      'El cierre de sesión actualiza los puntos tratados según la fase configurada.',
-      'Los puntos no tratados pueden mantenerse para una sesión posterior.',
+      'Una sesión solo tiene dos estados: abierta o cerrada.',
+      'Las sesiones abiertas se pueden seguir editando (añadir, quitar o reordenar puntos).',
+      'Al cerrarse, la sesión pasa al histórico y ya no admite cambios en sus puntos.',
+    ],
+  },
+  {
+    title: 'Importar sesiones antiguas desde Word',
+    items: [
+      'Se puede importar un documento Word (u otro texto) con actas antiguas del Comité para recuperar sesiones e histórico.',
+      'La app detecta las sesiones que correspondan a este módulo dentro del documento y evita duplicar sesiones que coincidan en código y fecha con una ya existente.',
     ],
   },
 ];

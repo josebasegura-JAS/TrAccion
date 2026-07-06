@@ -49,10 +49,30 @@ type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Centraliza tareas internas y solicitudes sindicales para seguirlas por tipo, fase, prioridad, responsable y fecha límite, con seguimiento de gestión y documentos enlazados.',
+  },
+  {
+    title: 'Tipo, fase y estado de cada tarea',
     items: [
-      'Centraliza tareas internas y solicitudes sindicales para seguirlas por fase, prioridad y fecha límite.',
-      'Permite separar trabajo abierto, cerrado e histórico sin sacar los asuntos del circuito de RRLL.',
-      'Los orígenes configurables sirven para clasificar de dónde viene cada tarea o petición.',
+      'Tipo: interna o sindical.',
+      'Estado: pendiente, en curso, bloqueada, resuelta o cerrada.',
+      'Fase: clasifica la tarea y determina en qué módulo aparece como "punto" disponible. Las fases "comité" y "paritaria" son las que alimentan, respectivamente, los módulos Comité y Paritaria; se gestionan desde Configuración → Fases de tareas.',
+      'Una tarea se considera cerrada tanto si su estado es "cerrada" como si su fase es "cerrada"; en ambos casos deja de estar disponible para añadirla a una sesión de Comité o Paritaria.',
+    ],
+  },
+  {
+    title: 'Orígenes',
+    items: [
+      'Los orígenes (sindicatos, áreas internas u otros) se gestionan desde el propio módulo Tareas, no desde Configuración: se pueden dar de alta, editar, activar/desactivar o eliminar.',
+      'Sirven para clasificar de dónde viene cada tarea o solicitud, independientemente de su fase.',
+    ],
+  },
+  {
+    title: 'Seguimiento y documentos',
+    items: [
+      'Cada tarea admite un histórico de anotaciones de seguimiento con fecha y hora, para dejar constancia de las gestiones realizadas.',
+      'Se pueden enlazar documentos (nombre + ruta) relacionados con la tarea.',
+      'Si una tarea nace de una sesión de Comité o Paritaria, conserva la referencia a esa sesión para poder rastrear su origen.',
     ],
   },
   {

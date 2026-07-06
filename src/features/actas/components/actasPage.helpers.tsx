@@ -149,35 +149,41 @@ export function replaceActaTemplateMarkers(
 export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
-    body: 'Gestiona el ciclo completo de elaboración, envío, alegaciones, firma e histórico de actas.',
+    body: 'Gestiona el ciclo completo de un acta: redacción, envío a Dirección, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
   },
   {
-    title: 'Estados',
+    title: 'Estados y plazos automáticos',
     items: [
-      'Pendiente de hacer.',
-      'Enviada a Dirección.',
-      'Pendiente de alegaciones.',
-      'Pendiente de firma.',
-      'Cerrada o finalizada según corresponda.',
+      'Pendiente de redactar → Enviada a Dirección → Pendiente de alegaciones → Pendiente de firma → Cerrada.',
+      'Al pasar a "Enviada a Dirección" se propone automáticamente una fecha límite a 7 días.',
+      'Al pasar a "Pendiente de alegaciones" se propone una fecha límite a 21 días.',
+      'Al pasar a "Pendiente de firma" se propone una fecha límite a 14 días.',
+      'La fecha propuesta se puede corregir a mano en cualquier momento; no se recalcula sola si luego se cambia manualmente.',
     ],
   },
   {
-    title: 'Reglas principales',
+    title: 'Alegaciones',
     items: [
-      'Cada cambio de estado debe mantener la trazabilidad del acta.',
-      'Las fechas límite se actualizan según el estado de tramitación.',
-      'Las alegaciones quedan registradas por sindicato.',
-      'Las actas firmadas o cerradas pasan a histórico.',
-      'Los tipos de acta pueden gestionarse desde el botón Nuevo tipo.',
+      'Cada acta puede tener varias alegaciones, una por sindicato, marcando si ha sido presentada, su fecha y una observación.',
+      'En estado "Pendiente de alegaciones" se puede abrir un borrador de Outlook con una plantilla configurable (con marcadores que se sustituyen por los datos del acta) para reclamar alegaciones a los sindicatos.',
+      'También se puede crear directamente una cita de Outlook "FIN ALEGACIONES {título}" en la fecha límite, para no perder de vista el plazo.',
+    ],
+  },
+  {
+    title: 'Cierre y archivo',
+    items: [
+      'En "Pendiente de firma" o "Cerrada" se puede adjuntar la ruta del documento del acta ya firmada.',
+      'Las actas cerradas quedan en el histórico y se pueden consultar filtrando por año.',
+      'Los tipos de acta (por defecto Comité y Paritaria) se pueden ampliar o desactivar desde el botón "Nuevo tipo", sin perder las actas ya creadas con un tipo desactivado.',
     ],
   },
   {
     title: 'Uso recomendado',
     ordered: true,
     items: [
-      'Crear o generar el acta desde la sesión correspondiente.',
-      'Completar título, fechas y estado.',
-      'Registrar alegaciones cuando proceda.',
+      'Crear el acta desde la sesión de Comité/Paritaria correspondiente, o manualmente indicando tipo, título y fecha de sesión.',
+      'Avanzar el estado a medida que progresa el trámite; revisar la fecha límite propuesta en cada cambio.',
+      'Registrar alegaciones por sindicato cuando proceda.',
       'Adjuntar la ruta del acta firmada al cerrar el ciclo.',
       'Consultar el histórico por año cuando el acta ya no esté abierta.',
     ],

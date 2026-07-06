@@ -26,17 +26,31 @@ import { useAppDialog } from '../../../hooks/useAppDialog';
 const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Para qué sirve',
+    body: 'Actúa como repositorio de criterios laborales ya analizados (tema, criterio aplicado, fecha, responsable, estado y sentido) para reutilizarlos ante casos similares.',
+  },
+  {
+    title: 'Campos de cada criterio',
     items: [
-      'Actúa como repositorio de criterios laborales ya analizados para reutilizarlos en casos similares.',
-      'Cada criterio puede registrar tema, resumen, estado, sentido y observaciones de aplicación.',
-      'La importación Excel permite incorporar históricos o respuestas ya trabajadas fuera de la app.',
+      'Tema y Criterio son los únicos campos obligatorios; el resto son de apoyo.',
+      'Estado: vigente, en revisión o archivado.',
+      'Sentido: aprobado, denegado o sin clasificar.',
+      'Fecha, responsable y observaciones ayudan a documentar el contexto sin ser obligatorios.',
+    ],
+  },
+  {
+    title: 'Importación desde Excel',
+    items: [
+      'Admite Excel, CSV, TSV o TXT, con columnas reconocidas por variantes habituales del nombre (Tema/Asunto/Materia, Criterio/Descripción/Detalle, Sentido/Resultado, etc.); no hace falta que coincidan exactamente.',
+      'El campo Fecha también acepta simplemente un año.',
+      'Antes de confirmar la importación se muestra una vista previa donde se puede desmarcar fila a fila lo que no se quiera incorporar.',
+      'El botón "Descargar plantilla" genera un Excel de ejemplo con las columnas que reconoce el importador.',
     ],
   },
   {
     title: 'Uso recomendado',
     items: [
-      'Resume el caso y la solución de forma clara, evitando textos demasiado largos.',
-      'Usa el campo sentido para distinguir criterios de aprobar, denegar u otros resultados.',
+      'Redacta el criterio de forma clara y concreta, evitando textos demasiado largos.',
+      'Usa el campo sentido para distinguir de un vistazo criterios de aprobar, denegar u otros resultados.',
       'Filtra por tema, estado o sentido antes de contestar nuevas consultas similares.',
     ],
   },
