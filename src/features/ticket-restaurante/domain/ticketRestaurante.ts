@@ -97,8 +97,6 @@ export interface TicketPriceHistoryEntry {
 
 export interface TicketCalculationRules {
   debtStartDate: string;
-  /** @deprecated Los meses sin pedido ya no se usan: se marcan días sin ticket en calendario. */
-  noOrderMonths: number[];
   nonDiscountableMotivesByCalendar: Record<string, string[]>;
   applyDebtAtClosedMonth: boolean;
 }
@@ -173,7 +171,6 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   priceHistory: [{ amount: 14.57, effectiveFrom: '2026-03-01' }],
   rules: {
     debtStartDate: '2026-03-01',
-    noOrderMonths: [],
     nonDiscountableMotivesByCalendar: { Liberados: ['SIN'] },
     applyDebtAtClosedMonth: true,
   },
@@ -542,14 +539,12 @@ export function normalizeTicketCalculationRules(
   rules: Partial<TicketCalculationRules> | undefined,
 ): TicketCalculationRules {
   const defaultRules = DEFAULT_TICKET_RESTAURANT_CONFIG.rules;
-  const noOrderMonths: number[] = [];
 
   return {
     debtStartDate:
       typeof rules?.debtStartDate === 'string' && isIsoDate(rules.debtStartDate)
         ? rules.debtStartDate
         : defaultRules.debtStartDate,
-    noOrderMonths,
     nonDiscountableMotivesByCalendar:
       rules?.nonDiscountableMotivesByCalendar &&
       typeof rules.nonDiscountableMotivesByCalendar === 'object'

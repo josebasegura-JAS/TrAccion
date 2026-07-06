@@ -13,7 +13,7 @@ import {
   evaluateTeletrabajoPresencialidad,
 } from './semaforo';
 import { TELETRABAJO_DIAS, type TeletrabajoSolicitud } from './solicitud';
-import { buildStableExportFilename } from '../../../shared/export/tableExport';
+import { buildStableExportFilename, openWorkbookInExcel } from '../../../shared/export/tableExport';
 
 const YES = 'SI';
 const NO = 'NO';
@@ -28,17 +28,6 @@ const SOFT_YELLOW_TEXT = '#7F6000';
 function toExcelColor(hex: string): { argb: string } {
   return { argb: `FF${hex.replace('#', '').toUpperCase()}` };
 }
-
-function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBuffer {
-  if (buffer instanceof ArrayBuffer) {
-    return buffer;
-  }
-
-  const copy = new Uint8Array(buffer.byteLength);
-  copy.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
-  return copy.buffer;
-}
-
 
 /**
  * Clave de cobertura de un puesto: si pertenece a un grupo de cobertura (varios
@@ -442,22 +431,6 @@ function buildDottedBorder(): Partial<ExcelJS.Borders> {
     bottom: { style: 'dotted' },
     right: { style: 'dotted' },
   };
-}
-
-async function openWorkbookInExcel(
-  buffer: ArrayBuffer | ArrayBufferView,
-  filename: string,
-): Promise<void> {
-  const openExcelWorkbook = window.traccion?.openExcelWorkbook;
-
-  if (!openExcelWorkbook) {
-    throw new Error('La apertura directa en Excel no está disponible en este entorno.');
-  }
-
-  const result = await openExcelWorkbook(normalizeWorkbookBuffer(buffer), filename);
-  if (!result.ok) {
-    throw new Error(result.message || 'No se ha podido abrir el Excel generado.');
-  }
 }
 
 export async function exportTeletrabajoDireccionToExcel({

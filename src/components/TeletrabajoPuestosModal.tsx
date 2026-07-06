@@ -13,7 +13,7 @@ import {
 } from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
-import { buildStableExportFilename } from '../shared/export/tableExport';
+import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import {
@@ -72,16 +72,6 @@ function compareGruposCoberturaByName(
   second: { nombre: string },
 ): number {
   return compareTextEs(first.nombre, second.nombre);
-}
-
-function normalizeWorkbookBuffer(buffer: ArrayBuffer | ArrayBufferView): ArrayBuffer {
-  if (buffer instanceof ArrayBuffer) {
-    return buffer;
-  }
-
-  const copy = new Uint8Array(buffer.byteLength);
-  copy.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength));
-  return copy.buffer;
 }
 
 function readStoredAliases(): Record<string, string> {
@@ -375,11 +365,6 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       setError('');
       setStatus('');
 
-      const openExcelWorkbook = window.traccion?.openExcelWorkbook;
-      if (!openExcelWorkbook) {
-        throw new Error('La generación del Excel de muestra no está disponible en este entorno.');
-      }
-
       const { default: ExcelJS } = await import('exceljs');
       const generatedAt = new Date();
       const workbook = new ExcelJS.Workbook();
@@ -431,14 +416,10 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
 
       const buffer = await workbook.xlsx.writeBuffer();
 
-      const result = await openExcelWorkbook(
-        normalizeWorkbookBuffer(buffer),
+      await openWorkbookInExcel(
+        buffer,
         buildStableExportFilename('muestra-puestos-teletrabajo', generatedAt),
       );
-
-      if (!result.ok) {
-        throw new Error(result.message || 'No se ha podido abrir el Excel de muestra.');
-      }
 
       setStatus('Excel de muestra generado.');
     } catch (sampleError) {

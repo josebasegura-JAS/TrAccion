@@ -1091,7 +1091,6 @@ export function TicketRulesModal({
         ...normalizedConfig,
         rules: {
           debtStartDate,
-          noOrderMonths: [],
           nonDiscountableMotivesByCalendar: parseNonDiscountableRules(),
           applyDebtAtClosedMonth: true,
         },

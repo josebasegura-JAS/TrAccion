@@ -176,10 +176,6 @@ describe('ticket restaurante calculation domain', () => {
       ...DEFAULT_TICKET_RESTAURANT_CONFIG,
       importeTicket: 16,
       pedidoMensual: 0,
-      rules: {
-        ...DEFAULT_TICKET_RESTAURANT_CONFIG.rules,
-        noOrderMonths: [],
-      },
     };
 
     const march = calculateTicketMonth([person], [calendar], [absence], config, 2026, 3);
