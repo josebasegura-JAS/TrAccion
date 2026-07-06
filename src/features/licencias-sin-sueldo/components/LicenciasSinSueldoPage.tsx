@@ -450,9 +450,9 @@ function LicenciasTable({
     { id: 'fechaFin', header: 'Fin', accessor: (record) => record.fechaFin, render: (record) => formatDate(record.fechaFin), width: 105, sortable: true },
     { id: 'estado', header: 'Estado', accessor: (record) => record.estado, render: (record) => formatEstado(record.estado), width: 125, sortable: true },
     {
-      id: 'actions', header: 'Acciones', width: 170, minWidth: 150, resizable: false, isActionColumn: true,
+      id: 'actions', header: 'Acciones', width: 220, minWidth: 190, resizable: false, isActionColumn: true,
       render: (record) => (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {record.estado === 'pendiente_aprobacion' && <button className="text-xs font-semibold text-metro-red hover:text-metro-text" onClick={(event) => { event.stopPropagation(); onAdvance(record); }} type="button">Aprobar</button>}
           {record.estado === 'pendiente_firma' && record.tipo === 'Licencia sin sueldo' && (
             <ActionButton
@@ -467,7 +467,13 @@ function LicenciasTable({
             </ActionButton>
           )}
           {record.estado === 'pendiente_firma' && <button className="text-xs font-semibold text-metro-red hover:text-metro-text" onClick={(event) => { event.stopPropagation(); onAdvance(record); }} type="button">Firma recibida</button>}
-          <button className="text-xs font-semibold text-metro-muted hover:text-metro-red" onClick={(event) => { event.stopPropagation(); onDelete(record); }} type="button">Eliminar</button>
+          <ActionButton
+            aria-label="Eliminar"
+            onClick={(event) => { event.stopPropagation(); onDelete(record); }}
+            size="sm"
+            title="Eliminar"
+            variant="delete"
+          />
         </div>
       ),
     },

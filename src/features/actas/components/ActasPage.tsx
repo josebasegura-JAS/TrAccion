@@ -82,7 +82,6 @@ export function ActasPage() {
   const [deadlineWasAutoUpdated, setDeadlineWasAutoUpdated] = useState(false);
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
   const [newActaTypeName, setNewActaTypeName] = useState('');
-  const [pendingDeleteActaId, setPendingDeleteActaId] = useState<string | null>(null);
   const [openHistoryYears, setOpenHistoryYears] = useState<Record<string, boolean>>({});
   const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState('');
@@ -94,7 +93,7 @@ export function ActasPage() {
   const [outlookTemplateStatusIsError, setOutlookTemplateStatusIsError] = useState(false);
   const [outlookDraftStatus, setOutlookDraftStatus] = useState('');
   const [outlookDraftStatusIsError, setOutlookDraftStatusIsError] = useState(false);
-  const { alert, dialogNode } = useAppDialog();
+  const { alert, confirm, dialogNode } = useAppDialog();
   const outlookTemplateBodyRef = useRef<HTMLDivElement | null>(null);
   const recordLock = useSharedRecordLock({
     module: 'actas',
@@ -206,18 +205,24 @@ export function ActasPage() {
       const acta = actas.find((candidate) => candidate.id === actaId);
       if (!acta) {
         await alert('El acta ya no existe. Recarga antes de continuar.', { type: 'warning' });
-        setPendingDeleteActaId(null);
+        return;
+      }
+
+      const confirmed = await confirm(`¿Eliminar el acta «${acta.titulo}»?`, {
+        confirmLabel: 'Eliminar',
+        danger: true,
+        title: 'Eliminar acta',
+      });
+      if (!confirmed) {
         return;
       }
 
       const result = await removeWithConcurrencyCheck(actaId, acta.updatedAt);
       if (!result.ok) {
         await alert(result.message, { type: 'error' });
-        return;
       }
-      setPendingDeleteActaId(null);
     },
-    [actas, alert, removeWithConcurrencyCheck],
+    [actas, alert, confirm, removeWithConcurrencyCheck],
   );
 
   const years = useMemo(
@@ -504,30 +509,21 @@ export function ActasPage() {
                 O
               </button>
             )}
-            {pendingDeleteActaId === acta.id ? (
-              <DeleteConfirmDialog
-                label={`el acta «${acta.titulo}»`}
-                onCancel={() => setPendingDeleteActaId(null)}
-                onConfirm={() => deleteActa(acta.id)}
-              />
-            ) : (
-              <button
-                className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-500/10"
-                onClick={() => setPendingDeleteActaId(acta.id)}
-                title="Eliminar acta"
-                type="button"
-              >
-                <Trash2 size={13} />
-              </button>
-            )}
-          </div>
+            <button
+              className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-500/10"
+              onClick={() => void deleteActa(acta.id)}
+              title="Eliminar acta"
+              type="button"
+            >
+              <Trash2 size={13} />
+            </button>          </div>
         ),
         width: 80,
         minWidth: 70,
         isActionColumn: true,
       },
     ],
-    [createActaOutlookDraft, deleteActa, pendingDeleteActaId, setPendingDeleteActaId],
+    [createActaOutlookDraft, deleteActa],
   );
 
   const openEditor = (acta?: Acta) => {

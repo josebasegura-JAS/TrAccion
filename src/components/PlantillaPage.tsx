@@ -506,17 +506,19 @@ export function PlantillaPage() {
           >
             <RefreshCw size={16} /> Actualizar puestos global
           </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => void handleGenerateSampleExcel()}
-            title="Generar un Excel de muestra compatible con el importador de Plantilla"
-            type="button"
-          >
-            <Download size={16} /> Generar muestra
-          </button>
-          <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
-            Importar
-          </ActionButton>
+          <div className="flex items-center gap-1">
+            <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
+              Importar
+            </ActionButton>
+            <button
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red"
+              onClick={() => void handleGenerateSampleExcel()}
+              title="Generar un Excel de muestra compatible con el importador de Plantilla"
+              type="button"
+            >
+              <Download size={16} />
+            </button>
+          </div>
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}

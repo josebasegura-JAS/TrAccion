@@ -1507,36 +1507,40 @@ export function TeletrabajoPage({
             ref={historicoFileInputRef}
             type="file"
           />
-          <ActionButton
-            iconOnly={false}
-            onClick={() => fileInputRef.current?.click()}
-            variant="import"
-          >
-            Importar encuesta
-          </ActionButton>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => void handleGenerateSampleEncuestaExcel()}
-            title="Generar un Excel de muestra compatible con el importador de encuesta"
-            type="button"
-          >
-            <Download size={16} /> Muestra encuesta
-          </button>
-          <ActionButton
-            iconOnly={false}
-            onClick={() => historicoFileInputRef.current?.click()}
-            variant="import"
-          >
-            Importar histórico
-          </ActionButton>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => void handleGenerateSampleHistoricoExcel()}
-            title="Generar un Excel de muestra compatible con el importador de histórico"
-            type="button"
-          >
-            <Download size={16} /> Muestra histórico
-          </button>
+          <div className="flex items-center gap-1">
+            <ActionButton
+              iconOnly={false}
+              onClick={() => fileInputRef.current?.click()}
+              variant="import"
+            >
+              Importar encuesta
+            </ActionButton>
+            <button
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red"
+              onClick={() => void handleGenerateSampleEncuestaExcel()}
+              title="Generar un Excel de muestra compatible con el importador de encuesta"
+              type="button"
+            >
+              <Download size={16} />
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <ActionButton
+              iconOnly={false}
+              onClick={() => historicoFileInputRef.current?.click()}
+              variant="import"
+            >
+              Importar histórico
+            </ActionButton>
+            <button
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red"
+              onClick={() => void handleGenerateSampleHistoricoExcel()}
+              title="Generar un Excel de muestra compatible con el importador de histórico"
+              type="button"
+            >
+              <Download size={16} />
+            </button>
+          </div>
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
             onClick={() => setIsPuestosModalOpen(true)}
