@@ -1,5 +1,6 @@
 import { EMPTY_EMPLOYEE_DRAFT, type EmployeeDraft, type EmployeeField } from './employee';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
+import { parseDelimitedText } from '../../../shared/import/delimitedText';
 
 type TabularRow = string[];
 
@@ -166,38 +167,3 @@ function normalizeHeader(header: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
-function parseDelimitedText(text: string): TabularRow[] {
-  const delimiter = text.includes('\t') ? '\t' : ';';
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line) => parseDelimitedLine(line, delimiter));
-}
-
-function parseDelimitedLine(line: string, delimiter: string): string[] {
-  const values: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-
-    if (char === '"' && inQuotes && next === '"') {
-      current += '"';
-      index += 1;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
-      values.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  values.push(current);
-  return values;
-}
-

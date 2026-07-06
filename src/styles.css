@@ -3,23 +3,31 @@
 @tailwind utilities;
 
 :root {
-  --app-bg: #374151;
-  --sidebar-bg: #08111f;
-  --sidebar-bg-soft: #0f172a;
-  --topbar-bg: #0b1324;
-  --surface: #1f2937;
-  --surface-soft: #243244;
-  --surface-raised: #273548;
-  --border: #334155;
-  --border-soft: rgba(148, 163, 184, 0.18);
-  --text-primary: #f3f4f6;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --accent-red: #dc2626;
+  /*
+   * Estas variables son un alias semántico de la paleta "metro" definida en
+   * tailwind.config.ts (única fuente de verdad para los colores de marca).
+   * Se usan aquí porque este CSS necesita valores fuera del sistema de clases
+   * de utilidad de Tailwind (gradientes, sombras, degradados de scrollbar...).
+   * Si cambia un color de marca, basta con tocar tailwind.config.ts: estas
+   * variables se recalculan solas en el siguiente build.
+   */
+  --app-bg: theme('colors.metro.app');
+  --sidebar-bg: theme('colors.metro.navy');
+  --sidebar-bg-soft: theme('colors.metro.slate');
+  --topbar-bg: theme('colors.metro.topbar');
+  --surface: theme('colors.metro.surface');
+  --surface-soft: theme('colors.metro.panel');
+  --surface-raised: theme('colors.metro.raised');
+  --border: theme('colors.metro.bluegray');
+  --border-soft: theme('colors.metro.border');
+  --text-primary: theme('colors.metro.text');
+  --text-secondary: theme('colors.metro.secondary');
+  --text-muted: theme('colors.metro.muted');
+  --accent-red: theme('colors.metro.red');
   --accent-red-soft: rgba(220, 38, 38, 0.14);
-  --accent-blue: #3b82f6;
-  --accent-green: #22c55e;
-  --accent-amber: #f59e0b;
+  --accent-blue: theme('colors.metro.info');
+  --accent-green: theme('colors.metro.success');
+  --accent-amber: theme('colors.metro.warning');
   color: var(--text-primary);
   background: var(--app-bg);
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;

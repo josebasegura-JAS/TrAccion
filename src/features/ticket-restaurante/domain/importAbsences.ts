@@ -5,6 +5,7 @@ import {
   type TicketRestaurantAbsence,
 } from './ticketRestaurante';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
+import { parseDelimitedText } from '../../../shared/import/delimitedText';
 
 export type TicketRestaurantAbsenceFormat = 'clean' | 'zerkos';
 export type TicketRestaurantAbsenceField =
@@ -597,37 +598,4 @@ function toIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function parseDelimitedText(text: string, extension: string): TabularRow[] {
-  const delimiter = extension === 'tsv' || text.includes('\t') ? '\t' : ';';
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line) => parseDelimitedLine(line, delimiter));
-}
-
-function parseDelimitedLine(line: string, delimiter: string): string[] {
-  const values: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-
-    if (char === '"' && inQuotes && next === '"') {
-      current += '"';
-      index += 1;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
-      values.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  values.push(current);
-  return values;
-}
 
