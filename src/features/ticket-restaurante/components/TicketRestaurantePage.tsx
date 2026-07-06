@@ -59,47 +59,71 @@ import {
 const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
-    body: 'Gestiona el cálculo, seguimiento y cotización de los Tickets Restaurante de la plantilla.',
+    body: 'Calcula cuántos Tickets Restaurante genera cada persona cada mes, a partir de su calendario, sus ausencias y sus notas de gasto (manutenciones), y permite cuadrar el pedido mensual con la cotización real.',
   },
   {
     title: 'Flujo recomendado',
     ordered: true,
     items: [
-      'Configurar calendarios.',
-      'Configurar personas con derecho a ticket.',
-      'Importar ausencias.',
-      'Revisar cómputo mensual.',
-      'Revisar cotización mensual.',
-      'Exportar resultados.',
+      'Configurar calendarios: qué días de la semana generan ticket y qué fechas concretas quedan excluidas (festivos, cierres...).',
+      'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario.',
+      'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
+      'Revisar "Cómputo mensual" para hacer el pedido del mes.',
+      'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes.',
+      'Exportar o imprimir los resultados que necesite RRLL.',
+    ],
+  },
+  {
+    title: 'Calendarios: qué días generan ticket',
+    items: [
+      'Cada calendario define qué días de la semana (p. ej. lunes a viernes) generan ticket en general.',
+      'Además admite marcar fechas concretas como "sin ticket" (festivos, cierres puntuales, etc.), que se restan aunque caigan en un día que normalmente sí genera ticket.',
+      'Cada persona con derecho a ticket tiene asignado un único calendario; el cálculo mensual usa siempre el calendario de la persona.',
+    ],
+  },
+  {
+    title: 'Diferencia entre Cómputo mensual y Cómputo cotización',
+    items: [
+      'Cómputo mensual (el pedido del mes): parte de los días de calendario del mes y resta la deuda de ausencias arrastrada desde meses anteriores más las notas de gasto marcadas como "afecta ticket" e imputadas a ese mes. No resta directamente las ausencias del propio mes: esas pasan a formar parte de la deuda que se descontará en un mes posterior con días de calendario disponibles.',
+      'Cómputo cotización (lo que realmente corresponde ese mes): días de calendario del mes menos las ausencias que caen dentro de ese mismo mes y descuentan ticket. No arrastra deuda de otros meses y no resta las notas de gasto (solo las muestra como referencia).',
+      'Por eso el mismo mes puede mostrar cifras distintas en cada vista: el "Cómputo mensual" refleja lo que se pide a proveedor, y la "Cómputo cotización" lo que realmente se ha consumido ese mes en concreto.',
     ],
   },
   {
     title: 'Reglas de cálculo',
     items: [
-      'Solo se calculan personas con derecho a ticket.',
-      'Las ausencias no computables se ignoran.',
-      'Las ausencias anteriores al 01/03/2026 no se consideran.',
-      'Las deudas se arrastran al primer mes con tickets disponibles.',
-      'Los calendarios determinan los días potencialmente generadores de ticket.',
-      'El precio del ticket es parametrizable.',
-      'Los meses sin pedido generan deuda pendiente para meses posteriores.',
+      'Solo se calculan personas activas con derecho a ticket y con calendario asignado.',
+      'Las ausencias con fecha "Desde" anterior al 01/03/2026 nunca se tienen en cuenta (límite fijo de la aplicación).',
+      'La "Fecha inicio cómputo deuda" (configurable en Reglas de cálculo) marca desde cuándo empiezan a arrastrarse ausencias como deuda en el Cómputo mensual; por defecto es esa misma fecha, pero puede adelantarse o retrasarse.',
+      'En "Motivos que no descuentan por calendario" se puede indicar, calendario por calendario, qué motivos de ausencia no restan ticket (p. ej. una liberación sindical).',
+      'El precio del ticket admite un histórico de importes con fecha de vigencia: cada mes se calcula con el precio vigente en ese momento, sin afectar a meses anteriores.',
     ],
   },
   {
     title: 'Importación de ausencias',
     items: [
-      'Se eliminan duplicados.',
-      'Se agrupan por empleado y fecha.',
-      'Se ignoran registros sin empleado válido.',
-      'Se muestran advertencias de incidencias detectadas.',
+      'Se admiten dos formatos de fichero, detectados automáticamente: uno "limpio" con cabeceras propias, y el formato de exportación habitual de Zerkos.',
+      'Las filas exactamente iguales a una ausencia ya guardada se cuentan como duplicadas y se ignoran.',
+      'Si una ausencia importada se solapa en fechas con otra ya existente del mismo empleado y mismo motivo, la sustituye en lugar de duplicarla.',
+      'Si el fichero no indica si la ausencia afecta al ticket, se asume que sí siempre que la fecha "Desde" sea igual o posterior al 01/03/2026.',
+      'El botón "Modelo" genera un fichero de ejemplo con las columnas que reconoce el importador.',
     ],
   },
   {
-    title: 'Cotización',
+    title: 'Notas de gasto (Manutenciones)',
     items: [
-      'Muestra tickets realmente generados.',
-      'Permite verificar importes por empleado y mes.',
-      'Incluye el calendario asignado a cada persona.',
+      'Se pueden importar desde un fichero de gastos (identifica quién paga y con quién se reparte la comida) o añadir manualmente indicando empleado y fecha.',
+      'Antes de importar o añadir, hay que elegir el mes/año de imputación: todas las filas se guardan bajo ese mes, aunque la fecha del gasto sea otro día.',
+      'Solo se importan personas que ya están dadas de alta como personas con derecho a ticket; el resto se ignoran.',
+      'Una nota de gasto marcada como "afecta ticket" solo descuenta un ticket en el Cómputo mensual del mes de imputación, y únicamente si ese día generaría ticket según el calendario de la persona. No afecta al Cómputo cotización.',
+    ],
+  },
+  {
+    title: 'Cotización y exportación',
+    items: [
+      'La vista de cotización muestra, para el mes y calendario de cada persona, los tickets realmente generados y su importe.',
+      'Permite revisar caso a caso antes de dar por bueno el mes.',
+      'Los resultados pueden exportarse/imprimirse para su uso fuera de la aplicación.',
     ],
   },
 ];
