@@ -75,7 +75,7 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
     observacionesRrll: solicitud.observacionesRrll ?? '',
     validacionSeguridadInformatica: solicitud.validacionSeguridadInformatica,
     validacionPrevencion: solicitud.validacionPrevencion,
-    validacionJefatura: solicitud.validacionJefatura,
+    validacionJefatura: solicitud.validacionJefatura ?? EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
     validacionDireccion: solicitud.validacionDireccion,
     revisado: Boolean(solicitud.revisado),
   };

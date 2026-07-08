@@ -326,7 +326,7 @@ describe('importador de encuesta de teletrabajo', () => {
       tipoSolicitud: 'renovacion',
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
-      validacionJefatura: false,
+      validacionJefatura: true,
       revisado: false,
     });
   });

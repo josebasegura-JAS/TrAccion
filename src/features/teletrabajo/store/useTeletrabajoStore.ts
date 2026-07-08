@@ -268,7 +268,7 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
     observacionesRrll: solicitud.observacionesRrll ?? EMPTY_TELETRABAJO_DRAFT.observacionesRrll,
     validacionSeguridadInformatica: Boolean(solicitud.validacionSeguridadInformatica),
     validacionPrevencion: Boolean(solicitud.validacionPrevencion),
-    validacionJefatura: Boolean(solicitud.validacionJefatura),
+    validacionJefatura: solicitud.validacionJefatura ?? EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
     validacionDireccion: Boolean(solicitud.validacionDireccion),
     revisado: Boolean(solicitud.revisado),
     createdAt,

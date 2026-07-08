@@ -264,7 +264,7 @@ export function importHistoricoTeletrabajoRows(
       observaciones,
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
-      validacionJefatura: false,
+      validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
       revisado: true,
     };
 
@@ -502,7 +502,7 @@ export function rowsToTeletrabajoDrafts(
       observaciones: aportaciones,
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
-      validacionJefatura: false,
+      validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
     });
   });
 
