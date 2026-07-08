@@ -722,7 +722,7 @@ export function LicenciasSinSueldoPage() {
         }
       />
 
-      <div className="grid gap-3 rounded-2xl border border-metro-border bg-metro-panel p-4 md:grid-cols-3">
+      <div className="grid grid-cols-3 gap-3 overflow-x-auto rounded-2xl border border-metro-border bg-metro-panel p-4">
         <FieldLabel>Buscar
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted" size={15} />

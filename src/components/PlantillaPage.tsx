@@ -6,12 +6,13 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Upload,
 } from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { EmployeeEditor } from './EmployeeEditor';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
-import { ActionButton } from './ui/ActionButton';
+import { DropdownMenu } from './ui/DropdownMenu';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
@@ -486,39 +487,42 @@ export function PlantillaPage() {
             ref={fileInputRef}
             type="file"
           />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => setTranslationsModalOpen(true)}
-            type="button"
-          >
-            <Languages size={16} /> Traducir puestos
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={emptyPuestoEusCount === 0}
-            onClick={() => { void handleGlobalJobPositionUpdate(); }}
-            title={
-              emptyPuestoEusCount === 0
-                ? 'No hay puestos EUS pendientes'
-                : `${emptyPuestoEusCount} puestos EUS pendientes`
-            }
-            type="button"
-          >
-            <RefreshCw size={16} /> Actualizar puestos global
-          </button>
-          <div className="flex items-center gap-1">
-            <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} variant="import">
-              Importar
-            </ActionButton>
-            <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red"
-              onClick={() => void handleGenerateSampleExcel()}
-              title="Generar un Excel de muestra compatible con el importador de Plantilla"
-              type="button"
-            >
-              <Download size={16} />
-            </button>
-          </div>
+          <DropdownMenu
+            icon={<Upload size={16} />}
+            items={[
+              {
+                key: 'traducir-puestos',
+                label: 'Traducir puestos',
+                icon: <Languages size={14} />,
+                onClick: () => setTranslationsModalOpen(true),
+              },
+              {
+                key: 'actualizar-puestos-global',
+                label:
+                  emptyPuestoEusCount === 0
+                    ? 'Actualizar puestos global (sin pendientes)'
+                    : `Actualizar puestos global (${emptyPuestoEusCount} pendientes)`,
+                icon: <RefreshCw size={14} />,
+                disabled: emptyPuestoEusCount === 0,
+                onClick: () => {
+                  void handleGlobalJobPositionUpdate();
+                },
+              },
+              {
+                key: 'importar',
+                label: 'Importar Excel',
+                icon: <Upload size={14} />,
+                onClick: () => fileInputRef.current?.click(),
+              },
+              {
+                key: 'generar-muestra',
+                label: 'Generar Excel de muestra',
+                icon: <Download size={14} />,
+                onClick: () => void handleGenerateSampleExcel(),
+              },
+            ]}
+            label="Importar"
+          />
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
             onClick={openCreateEditor}
@@ -535,7 +539,7 @@ export function PlantillaPage() {
         </div>
       )}
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+      <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input

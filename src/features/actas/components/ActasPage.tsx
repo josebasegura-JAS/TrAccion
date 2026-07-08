@@ -758,7 +758,7 @@ export function ActasPage() {
         }
       />
 
-      <div className="grid gap-2 xl:grid-cols-[minmax(220px,1fr)_220px_160px]">
+      <div className="grid grid-cols-[minmax(220px,1fr)_220px_160px] gap-2 overflow-x-auto">
         <Input
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar por título, estado, actualización, alegación o ruta..."

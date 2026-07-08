@@ -867,7 +867,7 @@ export function SessionManagementPage({
 
       {isCreateOpen && (
         <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-3">
-          <div className="grid gap-2 xl:grid-cols-[150px_180px_minmax(220px,1fr)]">
+          <div className="grid grid-cols-[150px_180px_minmax(220px,1fr)] gap-2 overflow-x-auto">
             <input
               className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
               onChange={(event) => updateDraft('date', event.target.value)}
@@ -919,7 +919,7 @@ export function SessionManagementPage({
         >
           <Search size={14} className="text-metro-red" /> Buscar en {config.shortTitle}
         </label>
-        <div className="mt-2 flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="mt-2 flex flex-row flex-wrap items-center gap-2">
           <input
             className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
             id={`${config.moduleId}-session-search`}
@@ -1124,7 +1124,7 @@ export function SessionManagementPage({
               Modifica la fecha, el código documental, el título o las notas. El estado de la sesión
               no se cambia.
             </p>
-            <div className="mt-4 grid gap-2 xl:grid-cols-[150px_180px_minmax(220px,1fr)]">
+            <div className="mt-4 grid grid-cols-[150px_180px_minmax(220px,1fr)] gap-2 overflow-x-auto">
               <input
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
                 onChange={(event) => updateEditDraft('date', event.target.value)}

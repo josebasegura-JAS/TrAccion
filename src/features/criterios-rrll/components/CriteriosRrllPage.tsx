@@ -20,6 +20,7 @@ import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 
@@ -329,12 +330,26 @@ export function CriteriosRrllPage() {
               ref={fileInputRef}
               type="file"
             />
-            <ActionButton variant="secondary" iconOnly={false} onClick={handleTemplateDownload}>
-              <FileDown size={16} /> Descargar plantilla
-            </ActionButton>
-            <ActionButton variant="secondary" iconOnly={false} onClick={() => fileInputRef.current?.click()}>
-              <FileUp size={16} /> Importar Excel
-            </ActionButton>
+            <DropdownMenu
+              icon={<FileUp size={16} />}
+              items={[
+                {
+                  key: 'descargar-plantilla',
+                  label: 'Descargar plantilla',
+                  icon: <FileDown size={14} />,
+                  onClick: () => {
+                    void handleTemplateDownload();
+                  },
+                },
+                {
+                  key: 'importar-excel',
+                  label: 'Importar Excel',
+                  icon: <FileUp size={14} />,
+                  onClick: () => fileInputRef.current?.click(),
+                },
+              ]}
+              label="Importar"
+            />
             <ActionButton variant="add" iconOnly={false} onClick={openCreateEditor}>
               Nuevo criterio
             </ActionButton>
@@ -353,7 +368,7 @@ export function CriteriosRrllPage() {
         </p>
       )}
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+      <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
