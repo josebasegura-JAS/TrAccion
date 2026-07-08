@@ -76,6 +76,7 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
     validacionSeguridadInformatica: solicitud.validacionSeguridadInformatica,
     validacionPrevencion: solicitud.validacionPrevencion,
     validacionJefatura: solicitud.validacionJefatura,
+    validacionDireccion: solicitud.validacionDireccion,
     revisado: Boolean(solicitud.revisado),
   };
 }
@@ -489,7 +490,7 @@ export function TeletrabajoEditor({
 
             <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
               <h4 className="mb-2 text-sm font-bold text-metro-text">Validaciones</h4>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-4">
                 <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
                   <input
                     checked={draft.validacionSeguridadInformatica}
@@ -531,6 +532,20 @@ export function TeletrabajoEditor({
                     type="checkbox"
                   />
                   Jefatura
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
+                  <input
+                    checked={draft.validacionDireccion}
+                    className="h-4 w-4 accent-metro-red"
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        validacionDireccion: event.target.checked,
+                      }))
+                    }
+                    type="checkbox"
+                  />
+                  Dirección
                 </label>
               </div>
             </section>

@@ -30,6 +30,7 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     validacionSeguridadInformatica: false,
     validacionPrevencion: false,
     validacionJefatura: false,
+    validacionDireccion: false,
     revisado: false,
     createdAt: timestamp,
     updatedAt: timestamp,

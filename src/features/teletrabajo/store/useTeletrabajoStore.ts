@@ -83,6 +83,7 @@ const TELETRABAJO_AUDIT_LABELS = {
   validacionSeguridadInformatica: 'Validación Seguridad Informática',
   validacionPrevencion: 'Validación Prevención',
   validacionJefatura: 'Validación Jefatura',
+  validacionDireccion: 'Validación Dirección',
   revisado: 'Revisado',
 } satisfies Partial<Record<keyof TeletrabajoDraft, string>>;
 
@@ -106,6 +107,7 @@ const TELETRABAJO_AUDIT_FIELDS: Array<keyof TeletrabajoDraft> = [
   'validacionSeguridadInformatica',
   'validacionPrevencion',
   'validacionJefatura',
+  'validacionDireccion',
   'revisado',
 ];
 
@@ -267,6 +269,7 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
     validacionSeguridadInformatica: Boolean(solicitud.validacionSeguridadInformatica),
     validacionPrevencion: Boolean(solicitud.validacionPrevencion),
     validacionJefatura: Boolean(solicitud.validacionJefatura),
+    validacionDireccion: Boolean(solicitud.validacionDireccion),
     revisado: Boolean(solicitud.revisado),
     createdAt,
     updatedAt: solicitud.updatedAt ?? createdAt,
@@ -797,7 +800,8 @@ function buildSolicitudesForNewPeriodo(
       revisado: false,
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
-      validacionJefatura: false,
+      validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+      validacionDireccion: false,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,

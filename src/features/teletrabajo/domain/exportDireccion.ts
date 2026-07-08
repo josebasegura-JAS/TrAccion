@@ -13,10 +13,37 @@ import {
   evaluateTeletrabajoPresencialidad,
 } from './semaforo';
 import { TELETRABAJO_DIAS, type TeletrabajoSolicitud } from './solicitud';
+import { getTeletrabajoPeriodoOffset, hasTeletrabajoEnPeriodo } from './tipoSolicitud';
 import { buildStableExportFilename, openWorkbookInExcel } from '../../../shared/export/tableExport';
 
 const YES = 'SI';
 const NO = 'NO';
+
+/**
+ * Nº de periodos anteriores que se muestran en el Excel de Dirección, cada
+ * uno en su propia columna ("Año Anterior Teletrabajado (YYYY-YYYY)",
+ * "Año Teletrabajado (YYYY-YYYY)", ...). De momento solo hay histórico de 2
+ * periodos anteriores; cuando haya más datos, basta con subir este número
+ * (hasta 5, según lo comentado) para que aparezcan más columnas.
+ */
+const TELETRABAJO_EXPORT_ANOS_ANTERIORES = 2;
+
+// Columnas fijas antes/después del bloque de "años anteriores", que tiene
+// TELETRABAJO_EXPORT_ANOS_ANTERIORES columnas (una por periodo anterior).
+const COL_PERIODO = 9;
+const COL_PRESENCIALIDAD = 10;
+const COL_INFORME = 11;
+const COL_ANOS_ANTERIORES_START = 12;
+const COL_ANOS_ANTERIORES_END = COL_ANOS_ANTERIORES_START + TELETRABAJO_EXPORT_ANOS_ANTERIORES - 1;
+const COL_VALIDACION_JEFATURA_REPETIR = COL_ANOS_ANTERIORES_END + 1;
+const COL_VALIDACION_DIRECCION = COL_VALIDACION_JEFATURA_REPETIR + 1;
+const COL_APUNTES_RRLL = COL_VALIDACION_DIRECCION + 1;
+const COL_PETICION_MARTES = COL_APUNTES_RRLL + 1;
+const COL_PETICION_MIERCOLES = COL_PETICION_MARTES + 1;
+const COL_PETICION_JUEVES = COL_PETICION_MARTES + 2;
+const COL_CAMBIOS_FUERA_PLAZO = COL_PETICION_JUEVES + 1;
+const COL_OBSERVACIONES = COL_CAMBIOS_FUERA_PLAZO + 1;
+const COL_OBSERVACIONES_RRLL = COL_OBSERVACIONES + 1;
 const ROTIS_FONT = 'TrueRotisSemiSansLightTwo';
 const SOFT_GREEN = '#E2F0D9';
 const SOFT_RED = '#FFC7CE';
@@ -338,6 +365,26 @@ function buildTitle(rows: readonly TeletrabajoSolicitud[], selectedPeriodo?: str
   return 'Solicitudes Teletrabajo';
 }
 
+/**
+ * Periodo de referencia usado únicamente para etiquetar las columnas de años
+ * anteriores con su rango de años (p. ej. "(2025-2026)"). Usa el periodo
+ * filtrado si lo hay; si no, solo lo infiere cuando todas las filas
+ * comparten un único periodo. En cualquier otro caso, las columnas se
+ * etiquetan sin años (no hay un periodo único del que partir).
+ */
+function resolveReferencePeriodo(
+  rows: readonly TeletrabajoSolicitud[],
+  selectedPeriodo?: string,
+): string | null {
+  const trimmed = selectedPeriodo?.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
+  const periodos = Array.from(new Set(rows.map((row) => row.periodo.trim()).filter(Boolean)));
+  return periodos.length === 1 ? periodos[0] : null;
+}
+
 function setValidationCellStyle(cell: ExcelJS.Cell, value: boolean): void {
   setStatusCellStyle({
     cell,
@@ -376,7 +423,7 @@ function setStatusCellStyle({
 
 function applyRowFill(row: ExcelJS.Row, fillColor: string): void {
   row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    if (colNumber < 1 || colNumber > 21) {
+    if (colNumber < 1 || colNumber > COL_OBSERVACIONES_RRLL) {
       return;
     }
 
@@ -462,6 +509,11 @@ export async function exportTeletrabajoDireccionToExcel({
   const gruposById = buildGruposCoberturaByIdMap(gruposCobertura);
   const solicitudesByPuestoDiaCount = buildSolicitudesByPeriodoPuestoCount(solicitudesForAssessment, puestosByKey);
 
+  const anosAnterioresColumns = Array.from(
+    { length: TELETRABAJO_EXPORT_ANOS_ANTERIORES },
+    (_, offsetIndex) => ({ key: `anoAnterior${offsetIndex + 1}`, width: 14 }),
+  );
+
   worksheet.columns = [
     { key: 'nivel', width: 2.27 },
     { key: 'empleado', width: 8.27 },
@@ -474,10 +526,10 @@ export async function exportTeletrabajoDireccionToExcel({
     { key: 'periodo', width: 10.45 },
     { key: 'presencialidad', width: 13.82 },
     { key: 'informe', width: 11.09 },
-    { key: 'anoAnterior', width: 14 },
-    { key: 'validacionJefatura', width: 16.18 },
+    ...anosAnterioresColumns,
+    { key: 'validacionJefaturaRepetir', width: 16.18 },
     { key: 'validacionDireccion', width: 38.54 },
-    { key: 'validacionSeptiembre', width: 48 },
+    { key: 'apuntesRrll', width: 48 },
     { key: 'peticionMartes', width: 8.27 },
     { key: 'peticionMiercoles', width: 8.09 },
     { key: 'peticionJueves', width: 5.63 },
@@ -486,56 +538,60 @@ export async function exportTeletrabajoDireccionToExcel({
     { key: 'observacionesRrll', width: 40.73 },
   ];
 
-  worksheet.mergeCells('B2:D2');
-  const titleCell = worksheet.getCell('B2');
+  worksheet.mergeCells(2, 2, 2, 4);
+  const titleCell = worksheet.getCell(2, 2);
   titleCell.value = buildTitle(rows, periodo);
   titleCell.font = { name: 'Calibri', size: 11, bold: false };
   titleCell.alignment = { horizontal: 'left', vertical: 'middle' };
   worksheet.getRow(2).height = 20.5;
 
-  worksheet.mergeCells('B4:C4');
-  worksheet.mergeCells('D4:E4');
-  worksheet.mergeCells('F4:H4');
-  worksheet.mergeCells('P4:R4');
+  worksheet.mergeCells(4, 2, 4, 3);
+  worksheet.mergeCells(4, 4, 4, 5);
+  worksheet.mergeCells(4, 6, 4, 8);
+  worksheet.mergeCells(4, COL_PETICION_MARTES, 4, COL_PETICION_JUEVES);
 
-  worksheet.getCell('B4').value = 'Solicitante';
-  worksheet.getCell('D4').value = 'Puesto de Trabajo';
-  worksheet.getCell('F4').value = 'Petición original';
-  worksheet.getCell('I4').value = 'Periodo 2025-2026';
-  worksheet.getCell('J4').value = 'Cumplimiento Presencialidad Mínima';
-  worksheet.getCell('K4').value = 'Informe Favorable';
-  worksheet.getCell('L4').value = 'Año Anterior Teletrabajado';
-  worksheet.getCell('M4').value = 'Validación Jefatura de Unidad a Repetir ';
-  worksheet.getCell('N4').value = 'Validación ordinaria de la Dirección ';
-  worksheet.getCell('O4').value = 'Apuntes RRLL';
-  worksheet.getCell('P4').value = 'Petición II';
-  worksheet.getCell('S4').value = 'Cambios fuera de plazo ordinario';
-  worksheet.getCell('T4').value = 'Observaciones';
-  worksheet.getCell('U4').value = 'Observaciones RRLL';
+  worksheet.getCell(4, 2).value = 'Solicitante';
+  worksheet.getCell(4, 4).value = 'Puesto de Trabajo';
+  worksheet.getCell(4, 6).value = 'Petición original';
+  worksheet.getCell(4, COL_PERIODO).value = 'Periodo 2025-2026';
+  worksheet.getCell(4, COL_PRESENCIALIDAD).value = 'Cumplimiento Presencialidad Mínima';
+  worksheet.getCell(4, COL_INFORME).value = 'Informe Favorable';
 
-  worksheet.getRow(5).values = [
-    '',
-    'Nº Empl',
-    'Nombre',
-    'Detalle',
-    'Dirección',
-    'Martes',
-    'Miércoles',
-    'Jueves',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    '',
-    'Martes',
-    'Miércoles',
-    'Jueves',
-    '',
-    '',
-    '',
-  ];
+  // Un periodo de referencia (el filtrado, o el único periodo presente en las
+  // filas) para poder etiquetar cada columna de año anterior con su rango de
+  // años concreto, igual que en el Excel de Dirección de referencia.
+  const referencePeriodo = resolveReferencePeriodo(rows, periodo);
+  for (let offset = 1; offset <= TELETRABAJO_EXPORT_ANOS_ANTERIORES; offset += 1) {
+    const targetPeriodo = referencePeriodo
+      ? getTeletrabajoPeriodoOffset(referencePeriodo, offset)
+      : null;
+    const label = offset === 1 ? 'Año Anterior Teletrabajado' : 'Año Teletrabajado';
+    worksheet.getCell(4, COL_ANOS_ANTERIORES_START + offset - 1).value = targetPeriodo
+      ? `${label} (${targetPeriodo})`
+      : label;
+  }
+
+  worksheet.getCell(4, COL_VALIDACION_JEFATURA_REPETIR).value =
+    'Validación Jefatura de Unidad a Repetir ';
+  worksheet.getCell(4, COL_VALIDACION_DIRECCION).value = 'Validación ordinaria de la Dirección ';
+  worksheet.getCell(4, COL_APUNTES_RRLL).value = 'Apuntes RRLL';
+  worksheet.getCell(4, COL_PETICION_MARTES).value = 'Petición II';
+  worksheet.getCell(4, COL_CAMBIOS_FUERA_PLAZO).value = 'Cambios fuera de plazo ordinario';
+  worksheet.getCell(4, COL_OBSERVACIONES).value = 'Observaciones';
+  worksheet.getCell(4, COL_OBSERVACIONES_RRLL).value = 'Observaciones RRLL';
+
+  const row5Values: string[] = new Array(COL_OBSERVACIONES_RRLL).fill('');
+  row5Values[1] = 'Nº Empl';
+  row5Values[2] = 'Nombre';
+  row5Values[3] = 'Detalle';
+  row5Values[4] = 'Dirección';
+  row5Values[5] = 'Martes';
+  row5Values[6] = 'Miércoles';
+  row5Values[7] = 'Jueves';
+  row5Values[COL_PETICION_MARTES - 1] = 'Martes';
+  row5Values[COL_PETICION_MIERCOLES - 1] = 'Miércoles';
+  row5Values[COL_PETICION_JUEVES - 1] = 'Jueves';
+  worksheet.getRow(5).values = row5Values;
 
   worksheet.getRow(4).height = 42.5;
 
@@ -575,29 +631,34 @@ export async function exportTeletrabajoDireccionToExcel({
     const rowNumber = 6 + index;
     const row = worksheet.getRow(rowNumber);
 
-    row.values = [
-      '',
-      toNumericEmployeeValue(solicitud.empleado),
-      solicitud.nombreApellidos,
-      solicitud.puestoNomina,
-      employee?.direccionOrganizativa ?? '',
-      hasDia(solicitud, 'martes'),
-      hasDia(solicitud, 'miercoles'),
-      hasDia(solicitud, 'jueves'),
-      solicitud.periodo,
-      '',
-      '',
-      solicitud.tipoSolicitud === 'renovacion' ? YES : NO,
-      '',
-      '',
-      assessment.apuntesRrll,
-      '',
-      '',
-      '',
-      '',
-      solicitud.observaciones,
-      solicitud.observacionesRrll ?? '',
-    ];
+    // Para cada año anterior (1 = inmediatamente anterior, 2 = dos periodos
+    // atrás, ...) se mira si el empleado tuvo teletrabajo concedido en ese
+    // periodo concreto, sobre el conjunto completo de solicitudes (todos los
+    // periodos), no solo las filas exportadas.
+    const anosAnterioresTeletrabajados = Array.from(
+      { length: TELETRABAJO_EXPORT_ANOS_ANTERIORES },
+      (_, offsetIndex) => {
+        const yearsBack = offsetIndex + 1;
+        const targetPeriodo = getTeletrabajoPeriodoOffset(solicitud.periodo, yearsBack);
+        return hasTeletrabajoEnPeriodo(solicitud.empleado, targetPeriodo, solicitudesForAssessment, {
+          excludeSolicitudId: solicitud.id,
+        });
+      },
+    );
+
+    const rowValues: Array<string | number> = new Array(COL_OBSERVACIONES_RRLL).fill('');
+    rowValues[1] = toNumericEmployeeValue(solicitud.empleado);
+    rowValues[2] = solicitud.nombreApellidos;
+    rowValues[3] = solicitud.puestoNomina;
+    rowValues[4] = employee?.direccionOrganizativa ?? '';
+    rowValues[5] = hasDia(solicitud, 'martes');
+    rowValues[6] = hasDia(solicitud, 'miercoles');
+    rowValues[7] = hasDia(solicitud, 'jueves');
+    rowValues[8] = solicitud.periodo;
+    rowValues[COL_APUNTES_RRLL - 1] = assessment.apuntesRrll;
+    rowValues[COL_OBSERVACIONES - 1] = solicitud.observaciones;
+    rowValues[COL_OBSERVACIONES_RRLL - 1] = solicitud.observacionesRrll ?? '';
+    row.values = rowValues;
 
     const empleadoCell = row.getCell(2);
     empleadoCell.numFmt = '0';
@@ -605,7 +666,7 @@ export async function exportTeletrabajoDireccionToExcel({
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.font = { name: ROTIS_FONT, size: 11 };
       cell.alignment = {
-        horizontal: [1, 2, 6, 7, 8, 9, 10, 12].includes(colNumber) ? 'center' : 'left',
+        horizontal: [1, 2, 6, 7, 8, 9].includes(colNumber) ? 'center' : 'left',
         vertical: 'middle',
         wrapText: true,
       };
@@ -617,7 +678,7 @@ export async function exportTeletrabajoDireccionToExcel({
     // corresponde (más abajo) y se explican en Apuntes RRLL; no hace falta
     // una segunda celda de cumplimiento combinado, sería redundante.
     setStatusCellStyle({
-      cell: row.getCell(10),
+      cell: row.getCell(COL_PRESENCIALIDAD),
       value:
         presencialidad.status === 'cumple'
           ? YES
@@ -637,9 +698,17 @@ export async function exportTeletrabajoDireccionToExcel({
             ? SOFT_YELLOW_TEXT
             : SOFT_RED_TEXT,
     });
-    setValidationCellStyle(row.getCell(11), solicitud.validacionJefatura);
-    setAnoAnteriorCellStyle(row.getCell(12), solicitud.tipoSolicitud === 'renovacion' ? YES : NO);
-    [13, 14, 15].forEach((columnNumber) => setManualValidationCellStyle(row.getCell(columnNumber)));
+    setValidationCellStyle(row.getCell(COL_INFORME), solicitud.validacionJefatura);
+    anosAnterioresTeletrabajados.forEach((wasTeletrabajando, offsetIndex) => {
+      setAnoAnteriorCellStyle(
+        row.getCell(COL_ANOS_ANTERIORES_START + offsetIndex),
+        wasTeletrabajando ? YES : NO,
+      );
+    });
+    setValidationCellStyle(row.getCell(COL_VALIDACION_DIRECCION), solicitud.validacionDireccion);
+    [COL_VALIDACION_JEFATURA_REPETIR, COL_APUNTES_RRLL].forEach((columnNumber) =>
+      setManualValidationCellStyle(row.getCell(columnNumber)),
+    );
 
     if (assessment.rowFillColor) {
       applyRowFill(row, assessment.rowFillColor);
@@ -647,8 +716,8 @@ export async function exportTeletrabajoDireccionToExcel({
   });
 
   worksheet.autoFilter = {
-    from: 'B5',
-    to: 'U5',
+    from: { row: 5, column: 2 },
+    to: { row: 5, column: COL_OBSERVACIONES_RRLL },
   };
 
   const buffer = await workbook.xlsx.writeBuffer();

@@ -27,6 +27,7 @@ export interface TeletrabajoSolicitud {
   validacionSeguridadInformatica: boolean;
   validacionPrevencion: boolean;
   validacionJefatura: boolean;
+  validacionDireccion: boolean;
   revisado: boolean;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +55,7 @@ export type TeletrabajoDraft = Pick<
   | 'validacionSeguridadInformatica'
   | 'validacionPrevencion'
   | 'validacionJefatura'
+  | 'validacionDireccion'
   | 'revisado'
 >;
 
@@ -91,7 +93,11 @@ export const EMPTY_TELETRABAJO_DRAFT: TeletrabajoDraft = {
   observacionesRrll: '',
   validacionSeguridadInformatica: false,
   validacionPrevencion: false,
-  validacionJefatura: false,
+  // El informe favorable del mando (columna "Informe Favorable" en el Excel de
+  // Dirección) arranca en SI por defecto: es la situación habitual y RRLL solo
+  // necesita desmarcarlo en los casos excepcionales de informe desfavorable.
+  validacionJefatura: true,
+  validacionDireccion: false,
   revisado: false,
 };
 

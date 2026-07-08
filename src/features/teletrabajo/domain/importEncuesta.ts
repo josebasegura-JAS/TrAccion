@@ -305,6 +305,7 @@ export function importHistoricoTeletrabajoRows(
       validacionSeguridadInformatica: previous.validacionSeguridadInformatica,
       validacionPrevencion: previous.validacionPrevencion,
       validacionJefatura: previous.validacionJefatura,
+      validacionDireccion: previous.validacionDireccion,
       createdAt: previous.createdAt,
       updatedAt: now,
       deletedAt: null,
