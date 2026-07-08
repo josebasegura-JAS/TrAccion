@@ -76,6 +76,8 @@ function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
     validacionSeguridadInformatica: solicitud.validacionSeguridadInformatica,
     validacionPrevencion: solicitud.validacionPrevencion,
     validacionJefatura: solicitud.validacionJefatura ?? EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+    validacionJefaturaRepetir:
+      solicitud.validacionJefaturaRepetir ?? EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
     validacionDireccion: solicitud.validacionDireccion,
     revisado: Boolean(solicitud.revisado),
   };
@@ -340,238 +342,261 @@ export function TeletrabajoEditor({
               className="grid gap-2 disabled:opacity-70 sm:grid-cols-2"
               disabled={isFormReadOnly}
             >
-            <div className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted">
-              {draft.empleado.trim().length === 0
-                ? 'Introduce un empleado para buscarlo en Plantilla.'
-                : employeeExists
-                  ? 'Empleado encontrado en Plantilla. Datos básicos rellenados desde Plantilla.'
-                  : 'Empleado no encontrado en Plantilla. Puedes continuar si completas manualmente los datos necesarios.'}
-            </div>
-
-            {plantillaTextFields.map(({ field, label, required, readOnlyWhenFound }) => (
-              <label className="text-xs font-semibold text-metro-muted" key={field}>
-                {label}
+              <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+                Periodo
                 <input
-                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red disabled:bg-metro-surface disabled:text-metro-muted"
-                  onChange={(event) => {
-                    if (field === 'empleado') {
-                      handleEmpleadoChange(event.target.value);
-                      return;
-                    }
-
-                    setDraft((current) => ({ ...current, [field]: event.target.value }));
-                  }}
-                  readOnly={readOnlyWhenFound && employeeExists}
-                  required={required}
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, periodo: event.target.value }))
+                  }
+                  placeholder="2026-2027"
+                  required
                   type="text"
-                  value={draft[field]}
+                  value={draft.periodo}
                 />
               </label>
-            ))}
 
-            <label className="text-xs font-semibold text-metro-muted">
-              Estado
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    estado: event.target.value as TeletrabajoDraft['estado'],
-                  }))
-                }
-                value={draft.estado}
-              >
-                {TELETRABAJO_ESTADOS.map((estado) => {
-                  const labels: Record<string, string> = {
-                    pendiente: 'Pendiente',
-                    analizada: 'Analizada',
-                    aprobada: 'Aprobada',
-                    denegada: 'Rechazada',
-                  };
-                  return (
-                    <option key={estado} value={estado}>
-                      {labels[estado] ?? estado}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
+              <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
+                <h4 className="mb-2 text-sm font-bold text-metro-text">Días de teletrabajo</h4>
+                <div className="flex flex-wrap gap-3">
+                  {TELETRABAJO_DIAS.map((day) => (
+                    <label
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted"
+                      key={day}
+                    >
+                      <input
+                        checked={draft.diasTeletrabajo.includes(day)}
+                        className="h-4 w-4 accent-metro-red"
+                        onChange={(event) => toggleDia(day, event.target.checked)}
+                        type="checkbox"
+                      />
+                      {day}
+                    </label>
+                  ))}
+                </div>
+              </section>
 
-            <label className="text-xs font-semibold text-metro-muted">
-              Tipo solicitud
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none disabled:bg-metro-surface disabled:text-metro-muted"
-                disabled
-                title="Tipo calculado automáticamente según exista teletrabajo aprobado o analizado en el periodo anterior."
-                value={draft.tipoSolicitud}
-              >
-                {TELETRABAJO_TIPOS_SOLICITUD.map((tipoSolicitud) => (
-                  <option key={tipoSolicitud} value={tipoSolicitud}>
-                    {tipoSolicitud}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-[11px] font-medium text-metro-muted">
-                Calculado automáticamente con el periodo anterior.
-              </span>
-            </label>
-
-            <label className="text-xs font-semibold text-metro-muted">
-              Fecha solicitud
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, fechaSolicitud: event.target.value }))
-                }
-                type="date"
-                value={draft.fechaSolicitud}
-              />
-            </label>
-
-            <label className="text-xs font-semibold text-metro-muted">
-              Fecha entrega ordenador
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, fechaOrdenador: event.target.value }))
-                }
-                required
-                type="date"
-                value={draft.fechaOrdenador}
-              />
-            </label>
-
-            <label className="text-xs font-semibold text-metro-muted">
-              Fecha entrega cascos
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, fechaCascos: event.target.value }))
-                }
-                required
-                type="date"
-                value={draft.fechaCascos}
-              />
-            </label>
-
-            <label className="text-xs font-semibold text-metro-muted">
-              Periodo
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, periodo: event.target.value }))
-                }
-                placeholder="2026-2027"
-                required
-                type="text"
-                value={draft.periodo}
-              />
-            </label>
-
-            <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
-              <h4 className="mb-2 text-sm font-bold text-metro-text">Días de teletrabajo</h4>
-              <div className="flex flex-wrap gap-3">
-                {TELETRABAJO_DIAS.map((day) => (
-                  <label
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted"
-                    key={day}
-                  >
+              <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
+                <h4 className="mb-2 text-sm font-bold text-metro-text">Validaciones</h4>
+                <div className="grid gap-2 sm:grid-cols-5">
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
                     <input
-                      checked={draft.diasTeletrabajo.includes(day)}
+                      checked={draft.validacionSeguridadInformatica}
                       className="h-4 w-4 accent-metro-red"
-                      onChange={(event) => toggleDia(day, event.target.checked)}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          validacionSeguridadInformatica: event.target.checked,
+                        }))
+                      }
                       type="checkbox"
                     />
-                    {day}
+                    Seguridad informática
                   </label>
-                ))}
-              </div>
-            </section>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
+                    <input
+                      checked={draft.validacionPrevencion}
+                      className="h-4 w-4 accent-metro-red"
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          validacionPrevencion: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    Prevención
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
+                    <input
+                      checked={draft.validacionJefatura}
+                      className="h-4 w-4 accent-metro-red"
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          validacionJefatura: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    Jefatura evaluación
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
+                    <input
+                      checked={Boolean(draft.validacionJefaturaRepetir)}
+                      className="h-4 w-4 accent-metro-red"
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          validacionJefaturaRepetir: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    Jefatura repetir
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
+                    <input
+                      checked={draft.validacionDireccion}
+                      className="h-4 w-4 accent-metro-red"
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          validacionDireccion: event.target.checked,
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    Dirección
+                  </label>
+                </div>
+              </section>
 
-            <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
-              <h4 className="mb-2 text-sm font-bold text-metro-text">Validaciones</h4>
-              <div className="grid gap-2 sm:grid-cols-4">
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
-                  <input
-                    checked={draft.validacionSeguridadInformatica}
-                    className="h-4 w-4 accent-metro-red"
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        validacionSeguridadInformatica: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  Seguridad informática
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
-                  <input
-                    checked={draft.validacionPrevencion}
-                    className="h-4 w-4 accent-metro-red"
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        validacionPrevencion: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  Prevención
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
-                  <input
-                    checked={draft.validacionJefatura}
-                    className="h-4 w-4 accent-metro-red"
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        validacionJefatura: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  Jefatura
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-metro-muted">
-                  <input
-                    checked={draft.validacionDireccion}
-                    className="h-4 w-4 accent-metro-red"
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        validacionDireccion: event.target.checked,
-                      }))
-                    }
-                    type="checkbox"
-                  />
-                  Dirección
-                </label>
-              </div>
-            </section>
+              <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+                Observaciones
+                <textarea
+                  className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, observaciones: event.target.value }))
+                  }
+                  value={draft.observaciones}
+                />
+              </label>
 
-            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
-              Observaciones
-              <textarea
-                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, observaciones: event.target.value }))
-                }
-                value={draft.observaciones}
-              />
-            </label>
+              <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
+                Observaciones RRLL
+                <textarea
+                  className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, observacionesRrll: event.target.value }))
+                  }
+                  placeholder="Notas internas de RRLL para la exportación a Dirección"
+                  value={draft.observacionesRrll ?? ''}
+                />
+              </label>
 
-            <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
-              Observaciones RRLL
-              <textarea
-                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, observacionesRrll: event.target.value }))
-                }
-                placeholder="Notas internas de RRLL para la exportación a Dirección"
-                value={draft.observacionesRrll ?? ''}
-              />
-            </label>
+              <label className="text-xs font-semibold text-metro-muted">
+                Fecha entrega ordenador
+                <input
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, fechaOrdenador: event.target.value }))
+                  }
+                  required
+                  type="date"
+                  value={draft.fechaOrdenador}
+                />
+              </label>
+
+              <label className="text-xs font-semibold text-metro-muted">
+                Fecha entrega cascos
+                <input
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, fechaCascos: event.target.value }))
+                  }
+                  required
+                  type="date"
+                  value={draft.fechaCascos}
+                />
+              </label>
+
+              <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
+                <h4 className="mb-2 text-sm font-bold text-metro-text">Gestión</h4>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label className="text-xs font-semibold text-metro-muted">
+                    Estado
+                    <select
+                      className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          estado: event.target.value as TeletrabajoDraft['estado'],
+                        }))
+                      }
+                      value={draft.estado}
+                    >
+                      {TELETRABAJO_ESTADOS.map((estado) => {
+                        const labels: Record<string, string> = {
+                          pendiente: 'Pendiente',
+                          analizada: 'Analizada',
+                          aprobada: 'Aprobada',
+                          denegada: 'Rechazada',
+                        };
+                        return (
+                          <option key={estado} value={estado}>
+                            {labels[estado] ?? estado}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+
+                  <label className="text-xs font-semibold text-metro-muted">
+                    Tipo solicitud
+                    <select
+                      className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none disabled:bg-metro-surface disabled:text-metro-muted"
+                      disabled
+                      title="Tipo calculado automáticamente según exista teletrabajo aprobado o analizado en el periodo anterior."
+                      value={draft.tipoSolicitud}
+                    >
+                      {TELETRABAJO_TIPOS_SOLICITUD.map((tipoSolicitud) => (
+                        <option key={tipoSolicitud} value={tipoSolicitud}>
+                          {tipoSolicitud}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-[11px] font-medium text-metro-muted">
+                      Calculado automáticamente con el periodo anterior.
+                    </span>
+                  </label>
+
+                  <label className="text-xs font-semibold text-metro-muted">
+                    Fecha solicitud
+                    <input
+                      className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, fechaSolicitud: event.target.value }))
+                      }
+                      type="date"
+                      value={draft.fechaSolicitud}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="sm:col-span-2 rounded-xl border border-metro-border bg-metro-surface p-3">
+                <h4 className="mb-2 text-sm font-bold text-metro-text">Datos</h4>
+                <div className="mb-3 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">
+                  {draft.empleado.trim().length === 0
+                    ? 'Introduce un empleado para buscarlo en Plantilla.'
+                    : employeeExists
+                      ? 'Empleado encontrado en Plantilla. Datos básicos rellenados desde Plantilla.'
+                      : 'Empleado no encontrado en Plantilla. Puedes continuar si completas manualmente los datos necesarios.'}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {plantillaTextFields.map(({ field, label, required, readOnlyWhenFound }) => (
+                    <label className="text-xs font-semibold text-metro-muted" key={field}>
+                      {label}
+                      <input
+                        className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red disabled:bg-metro-surface disabled:text-metro-muted"
+                        onChange={(event) => {
+                          if (field === 'empleado') {
+                            handleEmpleadoChange(event.target.value);
+                            return;
+                          }
+
+                          setDraft((current) => ({ ...current, [field]: event.target.value }));
+                        }}
+                        readOnly={readOnlyWhenFound && employeeExists}
+                        required={required}
+                        type="text"
+                        value={draft[field]}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </section>
             </fieldset>
 
             {hasExternalSolicitudUpdate && isFormReadOnly && (

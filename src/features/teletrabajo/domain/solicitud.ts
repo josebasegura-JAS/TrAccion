@@ -27,6 +27,7 @@ export interface TeletrabajoSolicitud {
   validacionSeguridadInformatica: boolean;
   validacionPrevencion: boolean;
   validacionJefatura: boolean;
+  validacionJefaturaRepetir?: boolean;
   validacionDireccion: boolean;
   revisado: boolean;
   createdAt: string;
@@ -55,6 +56,7 @@ export type TeletrabajoDraft = Pick<
   | 'validacionSeguridadInformatica'
   | 'validacionPrevencion'
   | 'validacionJefatura'
+  | 'validacionJefaturaRepetir'
   | 'validacionDireccion'
   | 'revisado'
 >;
@@ -97,6 +99,7 @@ export const EMPTY_TELETRABAJO_DRAFT: TeletrabajoDraft = {
   // Dirección) arranca en SI por defecto: es la situación habitual y RRLL solo
   // necesita desmarcarlo en los casos excepcionales de informe desfavorable.
   validacionJefatura: true,
+  validacionJefaturaRepetir: false,
   validacionDireccion: false,
   revisado: false,
 };

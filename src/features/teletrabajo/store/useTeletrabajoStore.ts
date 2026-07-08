@@ -82,7 +82,8 @@ const TELETRABAJO_AUDIT_LABELS = {
   observacionesRrll: 'Observaciones RRLL',
   validacionSeguridadInformatica: 'Validación Seguridad Informática',
   validacionPrevencion: 'Validación Prevención',
-  validacionJefatura: 'Validación Jefatura',
+  validacionJefatura: 'Validación Jefatura evaluación',
+  validacionJefaturaRepetir: 'Validación Jefatura repetir',
   validacionDireccion: 'Validación Dirección',
   revisado: 'Revisado',
 } satisfies Partial<Record<keyof TeletrabajoDraft, string>>;
@@ -107,6 +108,7 @@ const TELETRABAJO_AUDIT_FIELDS: Array<keyof TeletrabajoDraft> = [
   'validacionSeguridadInformatica',
   'validacionPrevencion',
   'validacionJefatura',
+  'validacionJefaturaRepetir',
   'validacionDireccion',
   'revisado',
 ];
@@ -269,6 +271,8 @@ function normalizeSolicitud(solicitud: TeletrabajoSolicitud): TeletrabajoSolicit
     validacionSeguridadInformatica: Boolean(solicitud.validacionSeguridadInformatica),
     validacionPrevencion: Boolean(solicitud.validacionPrevencion),
     validacionJefatura: solicitud.validacionJefatura ?? EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+    validacionJefaturaRepetir:
+      solicitud.validacionJefaturaRepetir ?? EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
     validacionDireccion: Boolean(solicitud.validacionDireccion),
     revisado: Boolean(solicitud.revisado),
     createdAt,
@@ -801,6 +805,7 @@ function buildSolicitudesForNewPeriodo(
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
       validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+      validacionJefaturaRepetir: EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
       validacionDireccion: false,
       createdAt: now,
       updatedAt: now,
@@ -835,6 +840,7 @@ function normalizeDraft(draft: TeletrabajoDraft): TeletrabajoDraft {
     observaciones: draft.observaciones.trim(),
     observacionesRrll: (draft.observacionesRrll ?? '').trim(),
     diasTeletrabajo: normalizeDiasTeletrabajo(draft.diasTeletrabajo),
+    validacionJefaturaRepetir: Boolean(draft.validacionJefaturaRepetir),
     revisado: Boolean(draft.revisado),
   };
 }

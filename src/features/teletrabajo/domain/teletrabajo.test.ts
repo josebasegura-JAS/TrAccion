@@ -251,29 +251,29 @@ describe('datos maestros de Plantilla en teletrabajo', () => {
 });
 
 describe('antigüedad mínima para teletrabajo', () => {
-  it('marca como no cumple cuando la solicitud se realiza antes de cumplir un año en el puesto', () => {
-    const solicitud = buildSolicitud({ fechaSolicitud: '2026-09-10' });
-    const employee = buildEmployee({ antiguedadPuesto: '2025-09-11' });
+  it('marca como no cumple cuando el 1 de septiembre del periodo aún no ha cumplido un año en el puesto', () => {
+    const solicitud = buildSolicitud({ periodo: '2026-2027', fechaSolicitud: '2026-09-10' });
+    const employee = buildEmployee({ antiguedadPuesto: '2025-09-02' });
 
     expect(evaluateTeletrabajoAntiguedad(solicitud, employee)).toMatchObject({
       status: 'no-cumple',
-      antiguedadPuesto: '2025-09-11',
-      fechaReferencia: '2026-09-10',
+      antiguedadPuesto: '2025-09-02',
+      fechaReferencia: '2026-09-01',
     });
   });
 
-  it('marca como cumple desde el día exacto en que alcanza un año en el puesto', () => {
-    const solicitud = buildSolicitud({ fechaSolicitud: '2026-09-11' });
-    const employee = buildEmployee({ antiguedadPuesto: '2025-09-11' });
+  it('marca como cumple si alcanza un año exactamente el 1 de septiembre del periodo', () => {
+    const solicitud = buildSolicitud({ periodo: '2026-2027', fechaSolicitud: '2026-08-01' });
+    const employee = buildEmployee({ antiguedadPuesto: '2025-09-01' });
 
     expect(evaluateTeletrabajoAntiguedad(solicitud, employee)).toMatchObject({
       status: 'cumple',
-      antiguedadPuesto: '2025-09-11',
-      fechaReferencia: '2026-09-11',
+      antiguedadPuesto: '2025-09-01',
+      fechaReferencia: '2026-09-01',
     });
   });
 
-  it('devuelve sin dato cuando falta empleado, antigüedad o fecha de solicitud válida', () => {
+  it('devuelve sin dato cuando falta empleado, antigüedad o periodo válido', () => {
     expect(evaluateTeletrabajoAntiguedad(buildSolicitud({}), null).status).toBe('sin-dato');
     expect(
       evaluateTeletrabajoAntiguedad(
@@ -283,7 +283,7 @@ describe('antigüedad mínima para teletrabajo', () => {
     ).toBe('sin-dato');
     expect(
       evaluateTeletrabajoAntiguedad(
-        buildSolicitud({ fechaSolicitud: '' }),
+        buildSolicitud({ periodo: '' }),
         buildEmployee({ antiguedadPuesto: '2025-09-11' }),
       ).status,
     ).toBe('sin-dato');

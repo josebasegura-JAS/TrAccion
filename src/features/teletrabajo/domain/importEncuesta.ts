@@ -265,6 +265,8 @@ export function importHistoricoTeletrabajoRows(
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
       validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+      validacionJefaturaRepetir: EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
+      validacionDireccion: EMPTY_TELETRABAJO_DRAFT.validacionDireccion,
       revisado: true,
     };
 
@@ -305,6 +307,8 @@ export function importHistoricoTeletrabajoRows(
       validacionSeguridadInformatica: previous.validacionSeguridadInformatica,
       validacionPrevencion: previous.validacionPrevencion,
       validacionJefatura: previous.validacionJefatura,
+      validacionJefaturaRepetir:
+        previous.validacionJefaturaRepetir ?? EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
       validacionDireccion: previous.validacionDireccion,
       createdAt: previous.createdAt,
       updatedAt: now,
@@ -503,6 +507,9 @@ export function rowsToTeletrabajoDrafts(
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
       validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+      validacionJefaturaRepetir: EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
+      validacionDireccion: EMPTY_TELETRABAJO_DRAFT.validacionDireccion,
+      revisado: EMPTY_TELETRABAJO_DRAFT.revisado,
     });
   });
 

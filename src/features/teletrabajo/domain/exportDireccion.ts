@@ -705,10 +705,12 @@ export async function exportTeletrabajoDireccionToExcel({
         wasTeletrabajando ? YES : NO,
       );
     });
-    setValidationCellStyle(row.getCell(COL_VALIDACION_DIRECCION), solicitud.validacionDireccion);
-    [COL_VALIDACION_JEFATURA_REPETIR, COL_APUNTES_RRLL].forEach((columnNumber) =>
-      setManualValidationCellStyle(row.getCell(columnNumber)),
+    setValidationCellStyle(
+      row.getCell(COL_VALIDACION_JEFATURA_REPETIR),
+      Boolean(solicitud.validacionJefaturaRepetir),
     );
+    setValidationCellStyle(row.getCell(COL_VALIDACION_DIRECCION), solicitud.validacionDireccion);
+    setManualValidationCellStyle(row.getCell(COL_APUNTES_RRLL));
 
     if (assessment.rowFillColor) {
       applyRowFill(row, assessment.rowFillColor);

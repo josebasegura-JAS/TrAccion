@@ -43,38 +43,49 @@ function formatIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+function resolvePeriodoStartDate(periodo: string | null | undefined): string {
+  const match = /^(\d{4})\s*-\s*\d{4}$/.exec((periodo ?? '').trim());
+  if (!match) {
+    return '';
+  }
+
+  return `${match[1]}-09-01`;
+}
+
 export function evaluateTeletrabajoAntiguedad(
-  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'fechaSolicitud'>,
+  solicitud: Pick<TeletrabajoSolicitud, 'empleado' | 'fechaSolicitud' | 'periodo'>,
   employee: Pick<Employee, 'antiguedadPuesto'> | null | undefined,
 ): TeletrabajoAntiguedadEvaluation {
+  const fechaReferenciaValue = resolvePeriodoStartDate(solicitud.periodo);
+
   if (!employee) {
     return {
       status: 'sin-dato',
       title: 'Empleado no localizado en Plantilla. No se puede comprobar la antigüedad.',
       antiguedadPuesto: '',
-      fechaReferencia: solicitud.fechaSolicitud,
+      fechaReferencia: fechaReferenciaValue,
     };
   }
 
   const antiguedadPuesto = employee.antiguedadPuesto.trim();
   const fechaAntiguedad = parseIsoDate(antiguedadPuesto);
-  const fechaReferencia = parseIsoDate(solicitud.fechaSolicitud);
+  const fechaReferencia = parseIsoDate(fechaReferenciaValue);
 
   if (!fechaAntiguedad) {
     return {
       status: 'sin-dato',
       title: 'Falta informar la antigüedad en el puesto en Plantilla.',
       antiguedadPuesto,
-      fechaReferencia: solicitud.fechaSolicitud,
+      fechaReferencia: fechaReferenciaValue,
     };
   }
 
   if (!fechaReferencia) {
     return {
       status: 'sin-dato',
-      title: 'Falta informar una fecha de solicitud válida para comprobar la antigüedad.',
+      title: 'Falta informar un periodo válido para comprobar la antigüedad contra el 1 de septiembre.',
       antiguedadPuesto,
-      fechaReferencia: solicitud.fechaSolicitud,
+      fechaReferencia: fechaReferenciaValue,
     };
   }
 
@@ -83,16 +94,16 @@ export function evaluateTeletrabajoAntiguedad(
   if (fechaReferencia < fechaCumplimiento) {
     return {
       status: 'no-cumple',
-      title: `Antigüedad insuficiente: la persona está en el puesto desde ${antiguedadPuesto} y cumple 1 año el ${formatIsoDate(fechaCumplimiento)}.`,
+      title: `Antigüedad insuficiente: la persona está en el puesto desde ${antiguedadPuesto} y cumple 1 año el ${formatIsoDate(fechaCumplimiento)}. Referencia: ${fechaReferenciaValue}.`,
       antiguedadPuesto,
-      fechaReferencia: solicitud.fechaSolicitud,
+      fechaReferencia: fechaReferenciaValue,
     };
   }
 
   return {
     status: 'cumple',
-    title: `Antigüedad correcta: la persona está en el puesto desde ${antiguedadPuesto}.`,
+    title: `Antigüedad correcta: la persona está en el puesto desde ${antiguedadPuesto}. Referencia: ${fechaReferenciaValue}.`,
     antiguedadPuesto,
-    fechaReferencia: solicitud.fechaSolicitud,
+    fechaReferencia: fechaReferenciaValue,
   };
 }
