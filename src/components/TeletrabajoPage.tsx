@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Upload,
   Users,
   XCircle,
 } from 'lucide-react';
@@ -24,7 +25,7 @@ import {
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
 import { TeletrabajoPuestosModal } from './TeletrabajoPuestosModal';
-import { ActionButton } from './ui/ActionButton';
+import { DropdownMenu } from './ui/DropdownMenu';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
@@ -1480,7 +1481,7 @@ export function TeletrabajoPage({
             Listado de solicitudes con alta manual, edición, borrado lógico, búsqueda y filtros.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             accept=".xlsx,.csv,.tsv"
             className="hidden"
@@ -1507,40 +1508,36 @@ export function TeletrabajoPage({
             ref={historicoFileInputRef}
             type="file"
           />
-          <div className="flex items-center gap-1">
-            <ActionButton
-              iconOnly={false}
-              onClick={() => fileInputRef.current?.click()}
-              variant="import"
-            >
-              Importar encuesta
-            </ActionButton>
-            <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red"
-              onClick={() => void handleGenerateSampleEncuestaExcel()}
-              title="Generar un Excel de muestra compatible con el importador de encuesta"
-              type="button"
-            >
-              <Download size={16} />
-            </button>
-          </div>
-          <div className="flex items-center gap-1">
-            <ActionButton
-              iconOnly={false}
-              onClick={() => historicoFileInputRef.current?.click()}
-              variant="import"
-            >
-              Importar histórico
-            </ActionButton>
-            <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-metro-border bg-metro-surface text-metro-text hover:border-metro-red"
-              onClick={() => void handleGenerateSampleHistoricoExcel()}
-              title="Generar un Excel de muestra compatible con el importador de histórico"
-              type="button"
-            >
-              <Download size={16} />
-            </button>
-          </div>
+          <DropdownMenu
+            icon={<Upload size={16} />}
+            items={[
+              {
+                key: 'importar-encuesta',
+                label: 'Importar encuesta',
+                icon: <Upload size={14} />,
+                onClick: () => fileInputRef.current?.click(),
+              },
+              {
+                key: 'muestra-encuesta',
+                label: 'Generar muestra de encuesta',
+                icon: <Download size={14} />,
+                onClick: () => void handleGenerateSampleEncuestaExcel(),
+              },
+              {
+                key: 'importar-historico',
+                label: 'Importar histórico',
+                icon: <Upload size={14} />,
+                onClick: () => historicoFileInputRef.current?.click(),
+              },
+              {
+                key: 'muestra-historico',
+                label: 'Generar muestra de histórico',
+                icon: <Download size={14} />,
+                onClick: () => void handleGenerateSampleHistoricoExcel(),
+              },
+            ]}
+            label="Importar"
+          />
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
             onClick={() => setIsPuestosModalOpen(true)}
@@ -1595,7 +1592,7 @@ export function TeletrabajoPage({
         </div>
       )}
 
-      <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 xl:grid-cols-[minmax(220px,1.2fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)]">
+      <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
         <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
           <Search size={16} />
           <input
@@ -1629,7 +1626,7 @@ export function TeletrabajoPage({
         />
       </div>
 
-      <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="mb-3 flex flex-nowrap gap-1.5 overflow-x-auto">
         {[
           {
             key: '',
@@ -1672,17 +1669,15 @@ export function TeletrabajoPage({
           const isActive = incidentFilter === key;
           return (
             <button
-              className={`rounded-xl border bg-metro-surface px-3 py-2 text-left transition hover:border-metro-red ${item.className} ${
+              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold transition hover:border-metro-red ${item.className} ${
                 isActive ? 'ring-2 ring-metro-red/60' : ''
               }`}
               key={item.label}
               onClick={() => setIncidentFilter(key)}
               type="button"
             >
-              <span className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
-                {item.label}
-              </span>
-              <span className="mt-1 block text-lg font-black">{item.value}</span>
+              <span className="text-metro-muted">{item.label}</span>
+              <span className="font-black">{item.value}</span>
             </button>
           );
         })}
