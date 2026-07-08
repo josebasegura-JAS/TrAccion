@@ -5,10 +5,13 @@ import type {
   MenuItemConstructorOptions,
   OpenDialogOptions,
 } from 'electron';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { inflateRawSync } from 'node:zlib';
+import { readFile } from 'node:fs/promises';
 import { applyAppUpdate, checkForAppUpdate } from './appUpdate.js';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from './msgParser.js';
+import { extractTextFromDocxBuffer, normalizeDocxTextPayload } from './docxZip.js';
+import { createOutlookCalendar, createOutlookDraft } from './outlookIntegration.js';
+import { openExcelWorkbook, openTeletrabajoWord } from './documentOpener.js';
+import { enqueueSqliteIpc } from './sqliteIpcQueue.js';
 import {
   acquireRecordLock,
   changeSqliteDirectory,
@@ -100,9 +103,7 @@ import {
   getCurrentDatabaseLockInfo,
   forceReleaseDatabaseLock,
 } from './sqlitePersistence.js';
-import { spawn } from 'node:child_process';
-import { tmpdir, userInfo } from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -307,683 +308,6 @@ function createWindow(
   return mainWindow;
 }
 
-interface ZipEntryContent {
-  fileName: string;
-  content: Buffer;
-}
-
-function findEndOfCentralDirectory(buffer: Buffer): number {
-  for (let index = buffer.length - 22; index >= 0; index -= 1) {
-    if (buffer.readUInt32LE(index) === 0x06054b50) {
-      return index;
-    }
-  }
-
-  throw new Error('El DOCX no contiene un directorio ZIP válido.');
-}
-
-function readZipEntry(buffer: Buffer, targetFileName: string): ZipEntryContent | null {
-  const eocdOffset = findEndOfCentralDirectory(buffer);
-  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
-  const centralDirectoryOffset = buffer.readUInt32LE(eocdOffset + 16);
-  let offset = centralDirectoryOffset;
-
-  for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) {
-      throw new Error('Estructura ZIP no válida.');
-    }
-
-    const compressionMethod = buffer.readUInt16LE(offset + 10);
-    const compressedSize = buffer.readUInt32LE(offset + 20);
-    const fileNameLength = buffer.readUInt16LE(offset + 28);
-    const extraLength = buffer.readUInt16LE(offset + 30);
-    const commentLength = buffer.readUInt16LE(offset + 32);
-    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
-    const fileName = buffer.toString('utf8', offset + 46, offset + 46 + fileNameLength);
-
-    if (fileName === targetFileName) {
-      if (buffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
-        throw new Error('Cabecera local ZIP no válida.');
-      }
-
-      const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
-      const localExtraLength = buffer.readUInt16LE(localHeaderOffset + 28);
-      const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
-      const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
-
-      if (compressionMethod === 0) {
-        return { fileName, content: compressed };
-      }
-
-      if (compressionMethod === 8) {
-        return { fileName, content: inflateRawSync(compressed) };
-      }
-
-      throw new Error(`Método de compresión DOCX no soportado: ${compressionMethod}.`);
-    }
-
-    offset += 46 + fileNameLength + extraLength + commentLength;
-  }
-
-  return null;
-}
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
-
-function extractTextFromDocxBuffer(buffer: Buffer): string {
-  const documentEntry = readZipEntry(buffer, 'word/document.xml');
-  if (!documentEntry) {
-    throw new Error('El DOCX no contiene word/document.xml.');
-  }
-
-  const xml = documentEntry.content.toString('utf8');
-  return decodeXmlEntities(
-    xml
-      .replace(/<w:tab\s*\/?>/g, '\t')
-      .replace(/<w:br\s*\/?>/g, '\n')
-      .replace(/<\/w:p>/g, '\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/\r/g, '')
-      .split('\n')
-      .map((line) => line.replace(/[ \t]+/g, ' ').trim())
-      .filter(Boolean)
-      .join('\n'),
-  );
-}
-
-function normalizeDocxTextPayload(payload: unknown): Buffer {
-  if (payload instanceof ArrayBuffer) {
-    return Buffer.from(payload);
-  }
-
-  if (ArrayBuffer.isView(payload)) {
-    return Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength);
-  }
-
-  throw new Error('Contenido DOCX no válido.');
-}
-
-interface OutlookDraftAttachment {
-  fileName: string;
-  buffer: Buffer;
-}
-
-interface OutlookDraftPayload {
-  subject: string;
-  html: string;
-  to: string[];
-  cc: string[];
-  attachments: OutlookDraftAttachment[];
-}
-
-interface OutlookCalendarPayload {
-  subject: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  requiredAttendees: string[];
-}
-
-interface OutlookDraftResult {
-  ok: boolean;
-  message: string;
-}
-
-function normalizeRecipientList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item).trim())
-      .filter(Boolean)
-      .slice(0, 200);
-  }
-
-  if (typeof value === 'string') {
-    return value
-      .split(/[;,]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 200);
-  }
-
-  return [];
-}
-
-
-function normalizeOutlookDraftAttachments(value: unknown): OutlookDraftAttachment[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.slice(0, 10).flatMap((item) => {
-    if (!item || typeof item !== 'object') {
-      return [];
-    }
-
-    const candidate = item as { fileName?: unknown; buffer?: unknown };
-    if (typeof candidate.fileName !== 'string' || !candidate.fileName.trim()) {
-      return [];
-    }
-
-    const fileName = path
-      .basename(candidate.fileName)
-      .replace(/[<>:"/\\|?*]/g, '_')
-      .split('')
-      .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
-      .join('');
-
-    const rawBuffer = candidate.buffer;
-    if (rawBuffer instanceof ArrayBuffer) {
-      return [{ fileName, buffer: Buffer.from(rawBuffer) }];
-    }
-
-    if (ArrayBuffer.isView(rawBuffer)) {
-      return [
-        {
-          fileName,
-          buffer: Buffer.from(rawBuffer.buffer, rawBuffer.byteOffset, rawBuffer.byteLength),
-        },
-      ];
-    }
-
-    return [];
-  });
-}
-
-function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<OutlookDraftPayload> & { htmlBody?: unknown };
-  const subject = typeof candidate.subject === 'string' ? candidate.subject.trim() : '';
-  const htmlSource = typeof candidate.html === 'string' ? candidate.html : candidate.htmlBody;
-  const html = typeof htmlSource === 'string' ? htmlSource : '';
-  const to = normalizeRecipientList(candidate.to);
-  const cc = normalizeRecipientList(candidate.cc);
-  const attachments = normalizeOutlookDraftAttachments((candidate as { attachments?: unknown }).attachments);
-
-  if (
-    subject.length > 255 ||
-    html.length > 100_000 ||
-    to.length > 200 ||
-    cc.length > 200 ||
-    (!subject && !html && attachments.length === 0)
-  ) {
-    return null;
-  }
-
-  return { subject, html, to, cc, attachments };
-}
-
-function normalizeOutlookCalendarPayload(value: unknown): OutlookCalendarPayload | null {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const candidate = value as Partial<OutlookCalendarPayload>;
-  const subject = typeof candidate.subject === 'string' ? candidate.subject.trim() : '';
-  const date = typeof candidate.date === 'string' ? candidate.date.trim() : '';
-  const startTime = typeof candidate.startTime === 'string' ? candidate.startTime.trim() : '';
-  const endTime = typeof candidate.endTime === 'string' ? candidate.endTime.trim() : '';
-  const requiredAttendees = normalizeRecipientList(candidate.requiredAttendees);
-
-  if (
-    !subject ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-    !/^\d{2}:\d{2}$/.test(startTime) ||
-    !/^\d{2}:\d{2}$/.test(endTime) ||
-    subject.length > 255 ||
-    requiredAttendees.length > 200
-  ) {
-    return null;
-  }
-
-  return { subject, date, startTime, endTime, requiredAttendees };
-}
-
-function powerShellStringLiteral(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
-
-function vbsStringLiteral(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
-function buildOutlookDraftPowerShellScript(payloadPath: string): string {
-  return [
-    "$ErrorActionPreference = 'Stop'",
-    `$payload = Get-Content -LiteralPath ${powerShellStringLiteral(payloadPath)} -Raw -Encoding UTF8 | ConvertFrom-Json`,
-    '$outlook = New-Object -ComObject Outlook.Application',
-    '$mail = $outlook.CreateItem(0)',
-    '$mail.BodyFormat = 2',
-    '$mail.Subject = [string]$payload.subject',
-    '$mail.To = [string]$payload.to',
-    '$mail.CC = [string]$payload.cc',
-    '$mail.HTMLBody = [string]$payload.html',
-    'foreach ($attachment in @($payload.attachments)) { if ([string]$attachment.path) { $mail.Attachments.Add([string]$attachment.path) | Out-Null } }',
-    '$mail.Display() | Out-Null',
-    "Write-Output 'OK_DRAFT_DISPLAYED'",
-  ].join('\n');
-}
-
-function buildOutlookDraftVbs(payloadPath: string): string {
-  const jsonPath = vbsStringLiteral(payloadPath);
-  return [
-    'Option Explicit',
-    'Dim Stream, Json, Payload, OutlookApp, Mail',
-    'Set Stream = CreateObject("ADODB.Stream")',
-    'Stream.Type = 2',
-    'Stream.Charset = "utf-8"',
-    'Stream.Open',
-    `Stream.LoadFromFile ${jsonPath}`,
-    'Json = Stream.ReadText',
-    'Stream.Close',
-    'Set Payload = ParseJsonObject(Json)',
-    'Set OutlookApp = CreateObject("Outlook.Application")',
-    'Set Mail = OutlookApp.CreateItem(0)',
-    'Mail.BodyFormat = 2',
-    'Mail.Subject = Payload("subject")',
-    'Mail.To = Payload("to")',
-    'Mail.CC = Payload("cc")',
-    'Mail.HTMLBody = Payload("html")',
-    'Dim Attachments, AttachmentIndex',
-    'Set Attachments = Payload("attachments")',
-    'For AttachmentIndex = 0 To Attachments.length - 1',
-    '  If Attachments(AttachmentIndex).path <> "" Then Mail.Attachments.Add Attachments(AttachmentIndex).path',
-    'Next',
-    'Mail.Display',
-    '',
-    'Function ParseJsonObject(ByVal Text)',
-    '  Dim ScriptControl',
-    '  Set ScriptControl = CreateObject("MSScriptControl.ScriptControl")',
-    '  ScriptControl.Language = "JScript"',
-    '  Set ParseJsonObject = ScriptControl.Eval("(" & Text & ")")',
-    'End Function',
-  ].join('\r\n');
-}
-
-function buildOutlookCalendarPowerShellScript(payloadPath: string): string {
-  return [
-    "$ErrorActionPreference = 'Stop'",
-    `$payload = Get-Content -LiteralPath ${powerShellStringLiteral(payloadPath)} -Raw -Encoding UTF8 | ConvertFrom-Json`,
-    '$outlook = New-Object -ComObject Outlook.Application',
-    '$appointment = $outlook.CreateItem(1)',
-    '$appointment.Subject = [string]$payload.subject',
-    '$appointment.Start = [datetime]::ParseExact(([string]$payload.date + \' \' + [string]$payload.startTime), \'yyyy-MM-dd HH:mm\', $null)',
-    '$appointment.End = [datetime]::ParseExact(([string]$payload.date + \' \' + [string]$payload.endTime), \'yyyy-MM-dd HH:mm\', $null)',
-    '$appointment.MeetingStatus = 1',
-    'foreach ($attendee in @($payload.requiredAttendees)) { if ([string]$attendee) { $appointment.Recipients.Add([string]$attendee) | Out-Null } }',
-    '$appointment.Display() | Out-Null',
-    "Write-Output 'OK_APPOINTMENT_DISPLAYED'",
-  ].join('\n');
-}
-
-async function withOutlookDraftTempFiles<T>(
-  payload: OutlookDraftPayload,
-  extension: 'ps1' | 'vbs',
-  buildScript: (payloadPath: string) => string,
-  runScript: (scriptPath: string) => Promise<T>,
-): Promise<T> {
-  const tempRoot = await mkdtemp(path.join(tmpdir(), 'traccion-especiales-'));
-  const payloadPath = path.join(tempRoot, `${randomUUID()}.json`);
-  const scriptPath = path.join(tempRoot, `${randomUUID()}.${extension}`);
-  const attachmentPayload: Array<{ fileName: string; path: string }> = [];
-  for (const attachment of payload.attachments) {
-    const attachmentPath = path.join(tempRoot, attachment.fileName);
-    await writeFile(attachmentPath, attachment.buffer);
-    attachmentPayload.push({ fileName: attachment.fileName, path: attachmentPath });
-  }
-  const serializedPayload = JSON.stringify({
-    subject: payload.subject,
-    html: payload.html,
-    to: payload.to.join(';'),
-    cc: payload.cc.join(';'),
-    attachments: attachmentPayload,
-  });
-
-  try {
-    await writeFile(payloadPath, serializedPayload, 'utf8');
-    await writeFile(scriptPath, buildScript(payloadPath), 'utf8');
-    return await runScript(scriptPath);
-  } finally {
-    await rm(tempRoot, { force: true, recursive: true });
-  }
-}
-
-async function runOutlookPowerShell(payload: OutlookDraftPayload): Promise<void> {
-  await withOutlookDraftTempFiles(
-    payload,
-    'ps1',
-    buildOutlookDraftPowerShellScript,
-    async (scriptPath) => {
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn(
-          'powershell.exe',
-          ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-          { windowsHide: true },
-        );
-        let stderr = '';
-        let stdout = '';
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          child.kill();
-          reject(new Error('Outlook no respondió al intentar crear el borrador.'));
-        }, 15_000);
-
-        child.stdout.on('data', (chunk: Buffer) => {
-          stdout += chunk.toString('utf8');
-        });
-        child.stderr.on('data', (chunk: Buffer) => {
-          stderr += chunk.toString('utf8');
-        });
-        child.on('error', (error) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
-        });
-        child.on('close', (code) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timer);
-          if (code === 0 && stdout.includes('OK_DRAFT_DISPLAYED')) {
-            resolve();
-            return;
-          }
-          reject(
-            new Error(
-              stderr.trim() ||
-                stdout.trim() ||
-                `PowerShell terminó con código ${code ?? 'desconocido'}.`,
-            ),
-          );
-        });
-      });
-    },
-  );
-}
-
-async function runOutlookVbs(payload: OutlookDraftPayload): Promise<void> {
-  await withOutlookDraftTempFiles(payload, 'vbs', buildOutlookDraftVbs, async (scriptPath) => {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn('cscript.exe', ['//NoLogo', scriptPath], { windowsHide: true });
-      let stderr = '';
-      let stdout = '';
-
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString('utf8');
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString('utf8');
-      });
-      child.on('error', reject);
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        reject(
-          new Error(
-            stderr.trim() ||
-              stdout.trim() ||
-              `cscript terminó con código ${code ?? 'desconocido'}.`,
-          ),
-        );
-      });
-    });
-  });
-}
-
-async function withOutlookCalendarTempFiles<T>(
-  payload: OutlookCalendarPayload,
-  buildScript: (payloadPath: string) => string,
-  runScript: (scriptPath: string) => Promise<T>,
-): Promise<T> {
-  const tempRoot = await mkdtemp(path.join(tmpdir(), 'traccion-actas-calendar-'));
-  const payloadPath = path.join(tempRoot, `${randomUUID()}.json`);
-  const scriptPath = path.join(tempRoot, `${randomUUID()}.ps1`);
-  const serializedPayload = JSON.stringify(payload);
-
-  try {
-    await writeFile(payloadPath, serializedPayload, 'utf8');
-    await writeFile(scriptPath, buildScript(payloadPath), 'utf8');
-    return await runScript(scriptPath);
-  } finally {
-    await rm(tempRoot, { force: true, recursive: true });
-  }
-}
-
-async function runOutlookCalendarPowerShell(payload: OutlookCalendarPayload): Promise<void> {
-  await withOutlookCalendarTempFiles(payload, buildOutlookCalendarPowerShellScript, async (scriptPath) => {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(
-        'powershell.exe',
-        ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-        { windowsHide: true },
-      );
-      let stderr = '';
-      let stdout = '';
-      let settled = false;
-      const timer = setTimeout(() => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        child.kill();
-        reject(new Error('Outlook no respondió al intentar crear la cita.'));
-      }, 15_000);
-
-      child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString('utf8');
-      });
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString('utf8');
-      });
-      child.on('error', (error) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        reject(error);
-      });
-      child.on('close', (code) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        if (code === 0 && stdout.includes('OK_APPOINTMENT_DISPLAYED')) {
-          resolve();
-          return;
-        }
-        reject(
-          new Error(
-            stderr.trim() ||
-              stdout.trim() ||
-              `PowerShell terminó con código ${code ?? 'desconocido'}.`,
-          ),
-        );
-      });
-    });
-  });
-}
-
-async function createOutlookCalendar(payload: unknown): Promise<OutlookDraftResult> {
-  if (process.platform !== 'win32') {
-    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
-  }
-
-  const safePayload = normalizeOutlookCalendarPayload(payload);
-  if (!safePayload) {
-    return { ok: false, message: 'Faltan datos obligatorios para crear la cita de Outlook.' };
-  }
-
-  try {
-    await runOutlookCalendarPowerShell(safePayload);
-    return { ok: true, message: 'Cita creada en Outlook.' };
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : 'No se ha podido crear la cita de Outlook.',
-    };
-  }
-}
-
-async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
-  if (process.platform !== 'win32') {
-    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
-  }
-
-  const safePayload = normalizeMailDraftPayload(payload);
-  if (!safePayload) {
-    return { ok: false, message: 'Faltan datos obligatorios para crear el borrador de Outlook.' };
-  }
-
-  try {
-    await runOutlookPowerShell(safePayload);
-    return { ok: true, message: 'Borrador creado en Outlook.' };
-  } catch (powerShellError) {
-    try {
-      await runOutlookVbs(safePayload);
-      return { ok: true, message: 'Borrador creado en Outlook.' };
-    } catch (vbsError) {
-      const powerShellMessage =
-        powerShellError instanceof Error ? powerShellError.message : 'error desconocido';
-      const vbsMessage = vbsError instanceof Error ? vbsError.message : 'error desconocido';
-      return {
-        ok: false,
-        message: `Falló PowerShell y fallback VBS: ${powerShellMessage} / ${vbsMessage}`,
-      };
-    }
-  }
-}
-
-function normalizeDocxOutputPayload(payload: unknown): { buffer: Buffer; fileName: string } {
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('Documento Word no válido.');
-  }
-
-  const candidate = payload as { buffer?: unknown; fileName?: unknown };
-  if (typeof candidate.fileName !== 'string' || !candidate.fileName.trim()) {
-    throw new Error('Nombre del documento Word no válido.');
-  }
-
-  const fileName = path
-    .basename(candidate.fileName)
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .split('')
-    .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
-    .join('');
-  const rawBuffer = candidate.buffer;
-  if (rawBuffer instanceof ArrayBuffer) {
-    return { buffer: Buffer.from(rawBuffer), fileName };
-  }
-
-  if (ArrayBuffer.isView(rawBuffer)) {
-    return {
-      buffer: Buffer.from(rawBuffer.buffer, rawBuffer.byteOffset, rawBuffer.byteLength),
-      fileName,
-    };
-  }
-
-  throw new Error('Contenido del documento Word no válido.');
-}
-
-async function openTeletrabajoWord(payload: unknown): Promise<{ ok: boolean; message: string }> {
-  try {
-    const { buffer, fileName } = normalizeDocxOutputPayload(payload);
-    const directory = await mkdtemp(path.join(tmpdir(), 'traccion-teletrabajo-'));
-    const filePath = path.join(
-      directory,
-      fileName.toLowerCase().endsWith('.docx') ? fileName : `${fileName}.docx`,
-    );
-    await writeFile(filePath, buffer);
-    const openError = await shell.openPath(filePath);
-
-    if (openError) {
-      return { ok: false, message: openError };
-    }
-
-    return { ok: true, message: 'Word abierto para revisión.' };
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : 'No se ha podido abrir el Word generado.',
-    };
-  }
-}
-
-function normalizeExcelWorkbookPayload(payload: unknown): { buffer: Buffer; fileName: string } {
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('Libro Excel no válido.');
-  }
-
-  const candidate = payload as { buffer?: unknown; fileName?: unknown };
-  if (typeof candidate.fileName !== 'string' || !candidate.fileName.trim()) {
-    throw new Error('Nombre del Excel no válido.');
-  }
-
-  const fileName = path
-    .basename(candidate.fileName)
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .split('')
-    .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
-    .join('');
-  const rawBuffer = candidate.buffer;
-  if (rawBuffer instanceof ArrayBuffer) {
-    return { buffer: Buffer.from(rawBuffer), fileName };
-  }
-
-  if (ArrayBuffer.isView(rawBuffer)) {
-    return {
-      buffer: Buffer.from(rawBuffer.buffer, rawBuffer.byteOffset, rawBuffer.byteLength),
-      fileName,
-    };
-  }
-
-  throw new Error('Contenido del Excel no válido.');
-}
-
-async function openExcelWorkbook(payload: unknown): Promise<{ ok: boolean; message: string }> {
-  try {
-    const { buffer, fileName } = normalizeExcelWorkbookPayload(payload);
-    const directory = await mkdtemp(path.join(tmpdir(), 'traccion-excel-'));
-    const filePath = path.join(
-      directory,
-      fileName.toLowerCase().endsWith('.xlsx') ? fileName : `${fileName}.xlsx`,
-    );
-    await writeFile(filePath, buffer);
-    const openError = await shell.openPath(filePath);
-
-    if (openError) {
-      return { ok: false, message: openError };
-    }
-
-    return { ok: true, message: 'Excel abierto para revisión.' };
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : 'No se ha podido abrir el Excel generado.',
-    };
-  }
-}
-
 function assertDocxPath(filePath: string): void {
   if (path.extname(filePath).toLowerCase() !== '.docx') {
     throw new Error('La ruta configurada debe apuntar a un archivo DOCX.');
@@ -1030,34 +354,6 @@ function normalizeRecordLockPayload(payload: unknown): { module: string; recordI
   }
 
   return { module: moduleName, recordId };
-}
-
-
-type QueuedIpcOperation<T> = () => T | Promise<T>;
-
-let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
-
-function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcOperation<T>): Promise<Awaited<T>> {
-  const startedAt = Date.now();
-  const queuedOperation = sqliteIpcQueue.then(async (): Promise<Awaited<T>> => {
-    const queuedMs = Date.now() - startedAt;
-    if (queuedMs > 100) {
-      console.warn(`[sqlite-ipc-queue] ${operationName} esperó ${queuedMs} ms en cola.`);
-    }
-
-    const operationStartedAt = Date.now();
-    try {
-      return (await operation()) as Awaited<T>;
-    } finally {
-      const operationMs = Date.now() - operationStartedAt;
-      if (operationMs > 250) {
-        console.warn(`[sqlite-ipc-queue] ${operationName} tardó ${operationMs} ms.`);
-      }
-    }
-  });
-
-  sqliteIpcQueue = queuedOperation.catch(() => undefined);
-  return queuedOperation;
 }
 
 async function selectTaskDocumentPaths(event: IpcMainInvokeEvent): Promise<string[] | null> {
@@ -1407,7 +703,6 @@ function registerIpcHandlers(): void {
       : { ok: false, status: 'error', lock: null, message: 'Identificador de bloqueo inválido.' };
   });
 
-
   ipcMain.handle('sorteos:load-records', () => enqueueSqliteIpc('sorteos:load-records', () => loadSorteosRecordsSnapshot()));
 
   ipcMain.handle('sorteos:save-snapshot-if-unchanged', (_event, payload: unknown) => {
@@ -1506,7 +801,6 @@ function registerIpcHandlers(): void {
       }),
     );
   });
-
 
   ipcMain.handle('plantilla:save-records-if-unchanged', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { records?: unknown }).records)) {
@@ -1730,8 +1024,6 @@ function registerIpcHandlers(): void {
     );
   });
 
-
-
   ipcMain.handle('vinculograma:load-records', () =>
     enqueueSqliteIpc('vinculograma:load-records', () => loadVinculogramaRecordsSnapshot()),
   );
@@ -1773,7 +1065,6 @@ function registerIpcHandlers(): void {
       }),
     );
   });
-
 
   ipcMain.handle('criterios-rrll:load-records', () =>
     enqueueSqliteIpc('criterios-rrll:load-records', () => loadCriteriosRrllRecordsSnapshot()),
@@ -1859,7 +1150,6 @@ function registerIpcHandlers(): void {
     );
   });
 
-
   ipcMain.handle('acta-types:load-records', () =>
     enqueueSqliteIpc('acta-types:load-records', () => loadActaTypeRecordsSnapshot()),
   );
@@ -1943,7 +1233,6 @@ function registerIpcHandlers(): void {
       saveActaTypeRecordsIfUnchanged(records),
     );
   });
-
 
   ipcMain.handle('ticket-restaurante-calendars:load-records', () =>
     enqueueSqliteIpc('ticket-restaurante-calendars:load-records', () =>
@@ -2031,7 +1320,6 @@ function registerIpcHandlers(): void {
     );
   });
 
-
   ipcMain.handle('ticket-restaurante-people:load-records', () =>
     enqueueSqliteIpc('ticket-restaurante-people:load-records', () =>
       loadTicketRestaurantePersonRecordsSnapshot(),
@@ -2117,7 +1405,6 @@ function registerIpcHandlers(): void {
       saveTicketRestaurantePersonRecordsIfUnchanged(records),
     );
   });
-
 
   ipcMain.handle('ticket-restaurante-absences:load-records', () =>
     enqueueSqliteIpc('ticket-restaurante-absences:load-records', () =>
@@ -2205,7 +1492,6 @@ function registerIpcHandlers(): void {
     );
   });
 
-
   ipcMain.handle('ticket-restaurante-manutenciones:load-records', () =>
     enqueueSqliteIpc('ticket-restaurante-manutenciones:load-records', () =>
       loadTicketRestauranteManutencionRecordsSnapshot(),
@@ -2292,7 +1578,6 @@ function registerIpcHandlers(): void {
     );
   });
 
-
   ipcMain.handle('ticket-restaurante-config:load-records', () =>
     enqueueSqliteIpc('ticket-restaurante-config:load-records', () =>
       loadTicketRestauranteConfigRecordsSnapshot(),
@@ -2336,9 +1621,6 @@ function registerIpcHandlers(): void {
       }),
     );
   });
-
-
-
 
   ipcMain.handle('presupuestos:load-records', () =>
     enqueueSqliteIpc('presupuestos:load-records', () => loadPresupuestosRecordsSnapshot()),
@@ -2440,7 +1722,6 @@ function registerIpcHandlers(): void {
       }),
     );
   });
-
 
   const validateJsonRecordPayload = (
     payload: unknown,
@@ -2584,7 +1865,6 @@ function registerIpcHandlers(): void {
       }),
     );
   });
-
 
   ipcMain.handle('licencias-sin-sueldo:load-records', () =>
     enqueueSqliteIpc('licencias-sin-sueldo:load-records', () => loadLicenciaSinSueldoRecordsSnapshot()),
