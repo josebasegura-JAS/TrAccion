@@ -1,18 +1,11 @@
 import {
   AlertTriangle,
-  BriefcaseBusiness,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Download,
   FileText,
-  Loader2,
-  Plus,
   RotateCcw,
-  Search,
   SlidersHorizontal,
-  Upload,
-  Users,
   XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,9 +16,11 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
+import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/TeletrabajoFiltersBar';
+import { TeletrabajoPageHeader } from '../features/teletrabajo/components/TeletrabajoPageHeader';
+import { TeletrabajoStatusMessages } from '../features/teletrabajo/components/TeletrabajoStatusMessages';
 import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
 import { TeletrabajoPuestosModal } from './TeletrabajoPuestosModal';
-import { DropdownMenu } from './ui/DropdownMenu';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
@@ -36,8 +31,6 @@ import {
   getTeletrabajoIncidentSummary,
 } from '../features/teletrabajo/domain/semaforo';
 import {
-  TELETRABAJO_ESTADOS,
-  TELETRABAJO_TIPOS_SOLICITUD,
   type TeletrabajoSolicitud,
 } from '../features/teletrabajo/domain/solicitud';
 import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/tipoSolicitud';
@@ -54,121 +47,12 @@ import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabaj
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
-import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
-import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { useAppDialog } from '../hooks/useAppDialog';
-
-const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
-  {
-    title: 'Finalidad del módulo',
-    body: 'Registra, revisa y controla las solicitudes de teletrabajo de cada periodo. Cada fila corresponde a una persona solicitante. Un semáforo automático avisa de incidencias, pero la validación final corresponde a RRLL.',
-  },
-  {
-    title: 'Datos de cada solicitud',
-    items: [
-      'Nº de empleado y nombre: identifican a la persona. Si existe en Plantilla, la app toma sus datos actualizados (puesto, residencia, DNI...).',
-      'Puesto organizativo: se usa para agrupar solicitudes y calcular la presencialidad. Si está mal, debe corregirse en Plantilla.',
-      'Días solicitados: martes, miércoles y/o jueves. Son los días que entran en el cálculo de presencialidad.',
-      'Tipo de solicitud (nueva/renovación), fecha de solicitud, fechas de entrega de ordenador y cascos.',
-      'Estado, validaciones (seguridad informática, prevención, jefatura), observaciones y revisado: sirven para seguimiento administrativo y control interno de RRLL.',
-    ],
-  },
-  {
-    title: 'Semáforo de la solicitud',
-    items: [
-      'Verde (sin incidencias): la antigüedad es correcta y se cumple la presencialidad mínima.',
-      'Amarillo (revisar): falta algún dato para poder comprobar el caso (antigüedad sin informar, empleado no localizado en Plantilla, sin días marcados) o la presencialidad queda ajustada.',
-      'Rojo (bloqueante): la persona no cumple la antigüedad mínima exigida, o el puesto no está configurado como teletrabajable, o falta el puesto organizativo en la solicitud.',
-      'El semáforo comprueba primero la antigüedad; solo si esta es correcta pasa a comprobar la presencialidad mínima.',
-    ],
-  },
-  {
-    title: 'Requisito de antigüedad',
-    items: [
-      'Para poder teletrabajar, la persona debe llevar al menos 1 año en el puesto en la fecha de la solicitud.',
-      'Se calcula con el campo "Antigüedad Puesto" de Plantilla frente a la fecha de solicitud de Teletrabajo.',
-      'Si Plantilla no tiene informada esa fecha, o la persona no existe en Plantilla, la solicitud queda en amarillo (revisar) en lugar de bloquearse directamente.',
-    ],
-  },
-  {
-    title: 'Puestos Teletrabajo y Grupos de Cobertura',
-    items: [
-      'Solo los puestos dados de alta como "teletrabajables" (con su presencialidad mínima y, opcionalmente, dotación computable) entran en el cálculo; el resto queda bloqueado por "puesto no teletrabajable".',
-      'Un Grupo de Cobertura agrupa varios puestos que deben cubrirse de forma conjunta: comparten una única presencialidad mínima y su dotación se suma, de modo que las solicitudes de cualquiera de esos puestos compiten por el mismo límite en vez de evaluarse puesto a puesto.',
-      'Un puesto pertenece como máximo a un Grupo de Cobertura; si no pertenece a ninguno, se evalúa con su propia presencialidad mínima y dotación.',
-      'La dotación total de personas del puesto/grupo se toma de la "dotación computable" configurada si está informada; si no, se cuenta el número real de personas activas de ese puesto/grupo en Plantilla.',
-    ],
-  },
-  {
-    title: 'Cálculo de peticiones',
-    items: [
-      '"Peticiones" significa número de personas del mismo puesto/Grupo de Cobertura que solicitan teletrabajo en el periodo.',
-      'No significa número de días solicitados. Una persona que pide martes y jueves cuenta como una petición, no como dos.',
-      'Todas las personas del mismo puesto/grupo muestran el mismo total de peticiones del periodo.',
-      'Ejemplo: si cuatro personas del mismo puesto piden teletrabajo, la app muestra 4 peticiones aunque no pidan los mismos días.',
-    ],
-  },
-  {
-    title: 'Cálculo de presencialidad mínima',
-    items: [
-      'La presencialidad se comprueba por puesto/Grupo de Cobertura y por día concreto (martes, miércoles, jueves por separado).',
-      'Fórmula: personas totales del puesto/grupo menos personas que teletrabajan ese día concreto.',
-      'El resultado se compara con la presencialidad mínima configurada para ese puesto o, si pertenece a uno, para su Grupo de Cobertura.',
-      'Ejemplo: dotación 7, mínimo 4. Si el martes teletrabajan 2, quedan 5 presenciales y no hay incidencia.',
-    ],
-  },
-  {
-    title: 'Cuándo aparece incidencia de presencialidad',
-    items: [
-      'Aparece incidencia si en martes, miércoles o jueves quedan menos personas presenciales que el mínimo exigido para ese puesto/grupo.',
-      'Puede haber muchas peticiones sin incidencia si cada día concreto mantiene el mínimo presencial.',
-      'La incidencia no depende solo del número total de solicitudes, sino de cómo se concentran por día.',
-    ],
-  },
-  {
-    title: 'Importación de encuesta e histórico',
-    items: [
-      'Importar encuesta: da de alta solicitudes nuevas a partir de las respuestas de una encuesta. Solo se importan las filas marcadas como "Sí"; requiere tener cargada antes la tabla de Traducción de puestos en Plantilla para resolver los puestos.',
-      'Importar histórico: vuelca el histórico de campañas anteriores (con su propia estructura de cabeceras e informe favorable/denegado) para dejar constancia de periodos ya cerrados.',
-      'Cada importador tiene un botón de muestra ("Muestra encuesta" / "Muestra histórico") que genera un Excel de ejemplo con las columnas exactas que reconoce cada importador.',
-    ],
-  },
-  {
-    title: 'Cómo modificar datos que afectan al cálculo',
-    items: [
-      'Para cambiar días solicitados, abre la solicitud, marca o desmarca martes, miércoles y/o jueves y guarda.',
-      'Para cambiar el puesto organizativo de una persona, corrígelo en Plantilla; Teletrabajo usará ese puesto en los cálculos posteriores.',
-      'Para cambiar la presencialidad mínima, la dotación computable o los Grupos de Cobertura, usa el botón "Puestos Teletrabajo" del propio módulo.',
-      'Al guardar cambios, se recalculan peticiones, presencialidad, semáforo y exportación a Dirección.',
-    ],
-  },
-  {
-    title: 'Exportación Excel para Dirección',
-    items: [
-      'La Excel consolida las solicitudes del periodo y aplica las mismas reglas de cálculo que la app (peticiones, presencialidad, Grupos de Cobertura).',
-      '"Peticiones" representa personas solicitantes del puesto/grupo, no días solicitados.',
-      'Las incidencias se calculan por día concreto frente a la presencialidad mínima.',
-      'Si una fila tiene color general y una celda tiene color propio por otra condición, se conserva el color específico de la celda.',
-    ],
-  },
-  {
-    title: 'Revisión recomendada por RRLL',
-    ordered: true,
-    items: [
-      'Comprobar que la persona y el número de empleado son correctos.',
-      'Verificar que el puesto organizativo está bien asignado en Plantilla.',
-      'Revisar que los días solicitados son los correctos.',
-      'Comprobar el semáforo (antigüedad y presencialidad) y resolver los casos en amarillo o rojo.',
-      'Actualizar estado, observaciones y validaciones.',
-      'Marcar la solicitud como Revisada cuando la comprobación esté cerrada.',
-    ],
-  },
-];
 
 type TeletrabajoTableColumnId =
   | 'revisado'
@@ -495,8 +379,8 @@ export function TeletrabajoPage({
   const [wordStatus, setWordStatus] = useState<string>('');
   const [generatingWordId, setGeneratingWordId] = useState<string | null>(null);
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const historicoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const historicoFileInputRef = useRef<HTMLInputElement>(null);
   const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
   const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
@@ -1466,165 +1350,26 @@ export function TeletrabajoPage({
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="teletrabajo"
     >
-      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-metro-text">Teletrabajo</h2>
-            <ModuleHelpButton
-              title="Teletrabajo"
-              subtitle="Guía rápida de solicitudes, validaciones, importación e histórico."
-              sections={TELETRABAJO_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-sm text-metro-muted">
-            Listado de solicitudes con alta manual, edición, borrado lógico, búsqueda y filtros.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            accept=".xlsx,.csv,.tsv"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleImportEncuesta(file);
-              }
-              event.target.value = '';
-            }}
-            ref={fileInputRef}
-            type="file"
-          />
-          <input
-            accept=".xlsx,.csv,.tsv"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleImportHistorico(file);
-              }
-              event.target.value = '';
-            }}
-            ref={historicoFileInputRef}
-            type="file"
-          />
-          <DropdownMenu
-            icon={<Upload size={16} />}
-            items={[
-              {
-                key: 'importar-encuesta',
-                label: 'Importar encuesta',
-                icon: <Upload size={14} />,
-                onClick: () => fileInputRef.current?.click(),
-              },
-              {
-                key: 'muestra-encuesta',
-                label: 'Generar muestra de encuesta',
-                icon: <Download size={14} />,
-                onClick: () => void handleGenerateSampleEncuestaExcel(),
-              },
-              {
-                key: 'importar-historico',
-                label: 'Importar histórico',
-                icon: <Upload size={14} />,
-                onClick: () => historicoFileInputRef.current?.click(),
-              },
-              {
-                key: 'muestra-historico',
-                label: 'Generar muestra de histórico',
-                icon: <Download size={14} />,
-                onClick: () => void handleGenerateSampleHistoricoExcel(),
-              },
-            ]}
-            label="Importar"
-          />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => setIsPuestosModalOpen(true)}
-            type="button"
-          >
-            <BriefcaseBusiness size={16} /> Puestos Teletrabajo
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => setIsGruposCoberturaModalOpen(true)}
-            type="button"
-          >
-            <Users size={16} /> Grupos Cobertura
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={openPeriodoModal}
-            type="button"
-          >
-            <Plus size={16} /> Nuevo periodo
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={openCreateEditor}
-            type="button"
-          >
-            <Plus size={16} /> Nueva solicitud
-          </button>
-        </div>
-      </div>
+      <TeletrabajoPageHeader
+        encuestaFileInputRef={fileInputRef}
+        historicoFileInputRef={historicoFileInputRef}
+        onEncuestaFileSelected={(file) => void handleImportEncuesta(file)}
+        onHistoricoFileSelected={(file) => void handleImportHistorico(file)}
+        onGenerateSampleEncuestaExcel={() => void handleGenerateSampleEncuestaExcel()}
+        onGenerateSampleHistoricoExcel={() => void handleGenerateSampleHistoricoExcel()}
+        onOpenPuestosModal={() => setIsPuestosModalOpen(true)}
+        onOpenGruposCoberturaModal={() => setIsGruposCoberturaModalOpen(true)}
+        onOpenPeriodoModal={openPeriodoModal}
+        onCreateSolicitud={openCreateEditor}
+      />
 
-      {isEmployeesLoading && (
-        <div
-          className="mb-3 flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100"
-          role="status"
-          aria-live="polite"
-        >
-          <Loader2 size={16} className="animate-spin" />
-          Cargando datos de Plantilla…
-        </div>
-      )}
+      <TeletrabajoStatusMessages
+        isEmployeesLoading={isEmployeesLoading}
+        importSummary={importSummary}
+        wordStatus={wordStatus}
+      />
 
-      {importSummary && (
-        <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text">
-          {importSummary}
-        </div>
-      )}
-
-      {wordStatus && (
-        <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text">
-          {wordStatus}
-        </div>
-      )}
-
-      <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-          <Search size={16} />
-          <input
-            className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-            onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por empleado o nombre..."
-            type="search"
-            value={filters.search}
-          />
-        </label>
-        <SelectFilter
-          showLabel
-          label="Estado"
-          onChange={(value) => setFilter('estado', value as typeof filters.estado)}
-          options={TELETRABAJO_ESTADOS}
-          value={filters.estado}
-        />
-        <SelectFilter
-          showLabel
-          label="Tipo"
-          onChange={(value) => setFilter('tipoSolicitud', value as typeof filters.tipoSolicitud)}
-          options={TELETRABAJO_TIPOS_SOLICITUD}
-          value={filters.tipoSolicitud}
-        />
-        <SelectFilter
-          showLabel
-          label="Periodo"
-          onChange={(value) => setFilter('periodo', value)}
-          options={periodos}
-          value={filters.periodo}
-        />
-      </div>
+      <TeletrabajoFiltersBar filters={filters} periodos={periodos} onSetFilter={setFilter} />
 
       <div className="mb-3 flex flex-nowrap gap-1.5 overflow-x-auto">
         {[
