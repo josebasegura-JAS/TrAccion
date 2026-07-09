@@ -67,6 +67,8 @@ function suggestNextPeriodo(periodos: readonly string[]): string {
   return `${Number(match[1]) + 1}-${Number(match[2]) + 1}`;
 }
 
+const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos.translationAliases';
+
 interface PendingEncuestaImport {
   file: File;
   unknownPuestos: string[];
@@ -983,7 +985,7 @@ export function TeletrabajoPage({
       <TeletrabajoMainTableSection
         columns={teletrabajoTableColumns}
         employeesByEmpleado={employeesByEmpleado}
-        filterLabel={teletrabajoFilterLabel}
+        filterLabel={teletrabajoFilterLabel ?? ''}
         gruposByIdMap={gruposByIdMap}
         mainPeriodo={mainPeriodo}
         onColumnOrderChange={setColumnOrder}
