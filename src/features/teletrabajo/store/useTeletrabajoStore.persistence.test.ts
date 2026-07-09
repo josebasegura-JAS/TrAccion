@@ -31,13 +31,66 @@ function readPersistedSolicitudes(): TeletrabajoSolicitud[] {
   return JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '[]') as TeletrabajoSolicitud[];
 }
 
+/**
+ * createWithConcurrencyCheck/updateWithConcurrencyCheck/removeWithConcurrencyCheck ya no
+ * caen a un modo "solo localStorage": el camino sin SQLite (window.traccion ausente) sigue
+ * pasando por saveNewSharedArrayRecord/saveSharedArrayRecord, que a su vez requieren
+ * window.traccion.getPersistedRecord / saveLocalStorageRecordIfUnchanged (el key-value
+ * genérico de SQLite con control de concurrencia). Este fake reproduce ese backend en
+ * memoria para poder probar los métodos reales sin depender de Electron.
+ */
+function installFakePersistedRecordsBackend(): void {
+  const store = new Map<string, { value: string; updatedAt: string }>();
+  const status = {
+    ready: true,
+    engine: 'better-sqlite3' as const,
+    phase: 'active' as const,
+    path: '/x.sqlite',
+    schemaVersion: 17,
+    isDefaultPath: false,
+    lockPath: '/x.lockdir',
+  };
+
+  (window as { traccion?: unknown }).traccion = {
+    getPersistedRecord: vi.fn(async (key: string) => {
+      const entry = store.get(key);
+      return {
+        status,
+        record: entry ? { key, value: entry.value, updatedAt: entry.updatedAt } : null,
+      };
+    }),
+    saveLocalStorageRecordIfUnchanged: vi.fn(
+      async ({
+        key,
+        value,
+        expectedUpdatedAt,
+      }: {
+        key: string;
+        value: string;
+        expectedUpdatedAt: string | null;
+      }) => {
+        const entry = store.get(key);
+        const currentUpdatedAt = entry?.updatedAt ?? null;
+        if (currentUpdatedAt !== expectedUpdatedAt) {
+          return { ok: false, status, currentUpdatedAt, message: 'Conflicto de concurrencia.' };
+        }
+        const updatedAt = new Date().toISOString();
+        store.set(key, { value, updatedAt });
+        return { ok: true, status, currentUpdatedAt: updatedAt, message: 'Guardado.' };
+      },
+    ),
+  };
+}
+
 describe('useTeletrabajoStore persistence', () => {
   afterEach(() => {
     vi.useRealTimers();
+    delete (window as { traccion?: unknown }).traccion;
   });
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    installFakePersistedRecordsBackend();
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(timestamp));
     window.localStorage.clear();
     useTeletrabajoStore.setState({
@@ -49,8 +102,8 @@ describe('useTeletrabajoStore persistence', () => {
     });
   });
 
-  it('crea, normaliza, persiste y recarga una solicitud', () => {
-    useTeletrabajoStore.getState().create(draft());
+  it('crea, normaliza, persiste y recarga una solicitud', async () => {
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
 
     const [created] = useTeletrabajoStore.getState().solicitudes;
     expect(created).toMatchObject({
@@ -79,12 +132,12 @@ describe('useTeletrabajoStore persistence', () => {
     expect(useTeletrabajoStore.getState().selectedSolicitudId).toBe(created.id);
   });
 
-  it('actualiza sin cambiar createdAt, marca revisado y conserva el cambio tras recargar', () => {
-    useTeletrabajoStore.getState().create(draft());
+  it('actualiza sin cambiar createdAt, marca revisado y conserva el cambio tras recargar', async () => {
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft());
     const original = useTeletrabajoStore.getState().solicitudes[0];
 
     vi.setSystemTime(new Date('2026-06-18T09:30:00.000Z'));
-    useTeletrabajoStore.getState().update(
+    await useTeletrabajoStore.getState().updateWithConcurrencyCheck(
       original.id,
       draft({
         estado: 'aprobada',
@@ -96,6 +149,7 @@ describe('useTeletrabajoStore persistence', () => {
         validacionJefatura: true,
         revisado: true,
       }),
+      original.updatedAt,
     );
 
     const updated = useTeletrabajoStore.getState().solicitudes[0];
@@ -123,13 +177,13 @@ describe('useTeletrabajoStore persistence', () => {
     });
   });
 
-  it('elimina de forma lógica y selecciona la siguiente solicitud visible', () => {
-    useTeletrabajoStore.getState().create(draft({ empleado: '1001', nombreApellidos: 'Ana García' }));
-    useTeletrabajoStore.getState().create(draft({ empleado: '1002', nombreApellidos: 'Bea Ruiz' }));
+  it('elimina de forma lógica y selecciona la siguiente solicitud visible', async () => {
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft({ empleado: '1001', nombreApellidos: 'Ana García' }));
+    await useTeletrabajoStore.getState().createWithConcurrencyCheck(draft({ empleado: '1002', nombreApellidos: 'Bea Ruiz' }));
     const [first, second] = useTeletrabajoStore.getState().solicitudes;
 
     vi.setSystemTime(new Date('2026-06-19T10:00:00.000Z'));
-    useTeletrabajoStore.getState().remove(first.id);
+    await useTeletrabajoStore.getState().removeWithConcurrencyCheck(first.id, first.updatedAt);
 
     const removed = useTeletrabajoStore.getState().solicitudes.find((solicitud) => solicitud.id === first.id);
     expect(removed).toMatchObject({ deletedAt: '2026-06-19T10:00:00.000Z' });

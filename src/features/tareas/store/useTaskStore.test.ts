@@ -31,6 +31,53 @@ function readPersistedTasks(): Task[] {
   return JSON.parse(window.localStorage.getItem(TASKS_KEY) ?? '[]') as Task[];
 }
 
+/**
+ * createWithConcurrencyCheck (y las demás *WithConcurrencyCheck) no caen a un modo
+ * "solo localStorage" cuando no hay SQLite directo de tareas: pasan por
+ * saveNewSharedArrayRecord/saveSharedArrayRecord, que requieren
+ * window.traccion.getPersistedRecord / saveLocalStorageRecordIfUnchanged (el
+ * key-value genérico de SQLite con control de concurrencia). Este fake
+ * reproduce ese backend en memoria para poder probar los métodos reales sin
+ * depender de Electron.
+ */
+function installFakePersistedRecordsBackend(): void {
+  const store = new Map<string, { value: string; updatedAt: string }>();
+  const status = { ready: true, phase: 'active' as const };
+
+  Object.defineProperty(window, 'traccion', {
+    configurable: true,
+    value: {
+      getPersistedRecord: vi.fn(async (key: string) => {
+        const entry = store.get(key);
+        return {
+          status,
+          record: entry ? { key, value: entry.value, updatedAt: entry.updatedAt } : null,
+        };
+      }),
+      saveLocalStorageRecordIfUnchanged: vi.fn(
+        async ({
+          key,
+          value,
+          expectedUpdatedAt,
+        }: {
+          key: string;
+          value: string;
+          expectedUpdatedAt: string | null;
+        }) => {
+          const entry = store.get(key);
+          const currentUpdatedAt = entry?.updatedAt ?? null;
+          if (currentUpdatedAt !== expectedUpdatedAt) {
+            return { ok: false, status, currentUpdatedAt, message: 'Conflicto de concurrencia.' };
+          }
+          const updatedAt = new Date().toISOString();
+          store.set(key, { value, updatedAt });
+          return { ok: true, status, currentUpdatedAt: updatedAt, message: 'Guardado.' };
+        },
+      ),
+    },
+  });
+}
+
 describe('useTaskStore', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -41,16 +88,11 @@ describe('useTaskStore', () => {
     vi.setSystemTime(new Date('2026-06-08T10:00:00.000Z'));
     window.localStorage.clear();
     useTaskStore.setState({ tasks: [], selectedTaskId: '', filters: EMPTY_TASK_FILTERS });
-    Object.defineProperty(window, 'traccion', {
-      configurable: true,
-      value: {
-        saveLocalStorageRecord: vi.fn().mockResolvedValue({ ready: true, phase: 'active' }),
-      },
-    });
+    installFakePersistedRecordsBackend();
   });
 
-  it('create guarda la tarea con seguimiento inicial y la persiste', () => {
-    useTaskStore.getState().create(draft({ titulo: 'Seguimiento crítico' }), 'Primer seguimiento');
+  it('create guarda la tarea con seguimiento inicial y la persiste', async () => {
+    await useTaskStore.getState().createWithConcurrencyCheck(draft({ titulo: 'Seguimiento crítico' }), 'Primer seguimiento');
 
     const { tasks, selectedTaskId } = useTaskStore.getState();
     expect(tasks).toHaveLength(1);
@@ -100,8 +142,8 @@ describe('useTaskStore', () => {
     expect(task.closedAt).toBe('2025-05-21T00:00:00.000Z');
   });
 
-  it('load reconcilia tareas abiertas vinculadas a sesiones cerradas de comité', () => {
-    useTaskStore.getState().create(draft({ titulo: 'Punto CE pendiente', fase: 'comite' }));
+  it('load reconcilia tareas abiertas vinculadas a sesiones cerradas de comité', async () => {
+    await useTaskStore.getState().createWithConcurrencyCheck(draft({ titulo: 'Punto CE pendiente', fase: 'comite' }));
     const [task] = useTaskStore.getState().tasks;
 
     window.localStorage.setItem(
@@ -140,11 +182,11 @@ describe('useTaskStore', () => {
     );
   });
 
-  it('closeTasksFromSession cierra solo tareas abiertas y añade seguimiento de sesión', () => {
-    useTaskStore.getState().create(draft({ titulo: 'Abierta' }));
-    useTaskStore
+  it('closeTasksFromSession cierra solo tareas abiertas y añade seguimiento de sesión', async () => {
+    await useTaskStore.getState().createWithConcurrencyCheck(draft({ titulo: 'Abierta' }));
+    await useTaskStore
       .getState()
-      .create(draft({ titulo: 'Ya cerrada', estado: 'cerrada', fase: CLOSED_TASK_PHASE }));
+      .createWithConcurrencyCheck(draft({ titulo: 'Ya cerrada', estado: 'cerrada', fase: CLOSED_TASK_PHASE }));
     const [openTask, closedTask] = useTaskStore.getState().tasks;
 
     useTaskStore

@@ -184,7 +184,7 @@ export function TaskEditor({
   const updateTaskWithConcurrencyCheck = useTaskStore(
     (state) => state.updateWithConcurrencyCheck,
   );
-  const removeTask = useTaskStore((state) => state.remove);
+  const removeTaskWithConcurrencyCheck = useTaskStore((state) => state.removeWithConcurrencyCheck);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [newUpdateText, setNewUpdateText] = useState('');
   const [manualDocumentPath, setManualDocumentPath] = useState('');
@@ -893,8 +893,15 @@ export function TaskEditor({
                 className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isFormReadOnly}
                 onClick={() => {
-                  removeTask(task.id);
-                  onDone();
+                  void (async () => {
+                    const result = await removeTaskWithConcurrencyCheck(task.id, loadedTaskUpdatedAt);
+                    if (!result.ok) {
+                      setSaveStatus(result.message);
+                      setSaveStatusIsError(true);
+                      return;
+                    }
+                    onDone();
+                  })();
                 }}
                 type="button"
               >

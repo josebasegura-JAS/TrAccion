@@ -36,12 +36,8 @@ interface EmployeeState {
   lastLoadedAt: number | null;
   load: () => void;
   reloadFromStorage: () => void;
-  save: () => void;
-  create: (draft: EmployeeDraft) => void;
   createWithConcurrencyCheck: (draft: EmployeeDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
-  update: (empleado: string, draft: EmployeeDraft) => void;
   updateWithConcurrencyCheck: (empleado: string, draft: EmployeeDraft, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
-  remove: (empleado: string) => void;
   removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   importExcel: (file: File) => Promise<EmployeeImportResult>;
   importJobPositionTranslations: (file: File) => Promise<number>;
@@ -360,10 +356,6 @@ function buildEmployeeImport(current: Employee[], drafts: EmployeeDraft[]): { em
   };
 }
 
-function upsertEmployees(current: Employee[], drafts: EmployeeDraft[]): Employee[] {
-  return buildEmployeeImport(current, drafts).employees;
-}
-
 function firstVisibleEmployeeId(employees: Employee[]): string {
   return employees.find((employee) => !employee.deletedAt)?.empleado ?? '';
 }
@@ -443,17 +435,6 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       });
     })().catch(() => set({ isLoading: false }));
   },
-  save: () => {
-    void persistEmployeesShared(get().employees, get().employees);
-  },
-  create: (draft) => {
-    void (async () => {
-      const currentEmployees = get().employees;
-      const employees = upsertEmployees(currentEmployees, [draft]);
-      const persistedEmployees = await persistEmployeesShared(employees, currentEmployees);
-      set({ employees: persistedEmployees, selectedEmployeeId: draft.empleado });
-    })();
-  },
   createWithConcurrencyCheck: async (draft) => {
     try {
       const newEmployee = hydrateEmployee(draft, null);
@@ -479,16 +460,6 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido crear la persona.' };
     }
-  },
-  update: (empleado, draft) => {
-    void (async () => {
-      const currentEmployees = get().employees;
-      const employees = currentEmployees.map((employee) =>
-        employee.empleado === empleado ? hydrateEmployee(draft, employee.deletedAt) : employee,
-      );
-      const persistedEmployees = await persistEmployeesShared(employees, currentEmployees);
-      set({ employees: persistedEmployees, selectedEmployeeId: draft.empleado });
-    })();
   },
   updateWithConcurrencyCheck: async (empleado, draft, expectedSnapshot) => {
     try {
@@ -538,16 +509,6 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar la persona.' };
     }
-  },
-  remove: (empleado) => {
-    void (async () => {
-      const currentEmployees = get().employees;
-      const employees = currentEmployees.map((employee) =>
-        employee.empleado === empleado ? { ...employee, deletedAt: new Date().toISOString() } : employee,
-      );
-      const persistedEmployees = await persistEmployeesShared(employees, currentEmployees);
-      set({ employees: persistedEmployees, selectedEmployeeId: firstVisibleEmployeeId(persistedEmployees) });
-    })();
   },
   removeWithConcurrencyCheck: async (empleado, expectedSnapshot) => {
     try {

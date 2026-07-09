@@ -133,19 +133,16 @@ interface TaskStateStore {
   load: () => void;
   reloadFromStorage: () => void;
   loadHistoricalTasks: () => Promise<void>;
-  create: (draft: TaskDraft, seguimientoText?: string) => void;
   createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string) => Promise<TaskUpdateResult>;
   createManyFromImport: (
     drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
   ) => Record<string, string>;
-  update: (id: string, draft: TaskDraft, seguimientoText?: string) => void;
   updateWithConcurrencyCheck: (
     id: string,
     draft: TaskDraft,
     seguimientoText: string | undefined,
     expectedUpdatedAt: string | null,
   ) => Promise<TaskUpdateResult>;
-  remove: (id: string) => void;
   removeWithConcurrencyCheck: (
     id: string,
     expectedUpdatedAt: string | null,
@@ -709,42 +706,6 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       set({ isLoadingHistoricalTasks: false });
     }
   },
-  create: (draft, seguimientoText) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const task: Task = {
-        id: createTaskId(),
-        ...draft,
-        sessionDocumentCode: '',
-        sessionModule: '',
-        sessionDate: '',
-        seguimiento: buildSeguimiento(seguimientoText, now),
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-        closedAt: isTaskClosed(draft) ? now : null,
-      };
-      enqueueAuditEvent({
-        module: 'tareas',
-        entityId: task.id,
-        action: 'created',
-        summary: 'Registro creado',
-        changes: [],
-      });
-      const tasks = [...state.tasks, task];
-      if (hasTaskSqliteRepository()) {
-        void persistTaskDirectly(task, null).catch((error: unknown) => {
-          console.warn('No se ha podido crear la tarea en SQLite directo.', error);
-        });
-      } else {
-        persistTasks(tasks);
-      }
-      return {
-        tasks,
-        selectedTaskId: isTaskClosed(task) ? firstActiveTaskId(tasks) : task.id,
-      };
-    });
-  },
   createWithConcurrencyCheck: async (draft, seguimientoText) => {
     const now = new Date().toISOString();
     const task: Task = {
@@ -889,32 +850,6 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
 
     return createdIds;
   },
-  update: (id, draft, seguimientoText) => {
-    set((state) => {
-      let updatedTask: Task | undefined;
-      let previousUpdatedAt: string | null = null;
-      const tasks = state.tasks.map((task) => {
-        if (task.id !== id) {
-          return task;
-        }
-
-        previousUpdatedAt = task.updatedAt;
-        updatedTask = buildUpdatedTask(task, draft, seguimientoText);
-        return updatedTask;
-      });
-      if (updatedTask && hasTaskSqliteRepository()) {
-        void persistTaskDirectly(updatedTask, previousUpdatedAt).catch((error: unknown) => {
-          console.warn('No se ha podido actualizar la tarea en SQLite directo.', error);
-        });
-      } else {
-        persistTasks(tasks);
-      }
-      return {
-        tasks,
-        selectedTaskId: updatedTask && isTaskClosed(updatedTask) ? firstActiveTaskId(tasks) : id,
-      };
-    });
-  },
   updateWithConcurrencyCheck: async (id, draft, seguimientoText, expectedUpdatedAt) => {
     try {
       if (hasTaskSqliteRepository()) {
@@ -979,35 +914,6 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
         message: error instanceof Error ? error.message : 'No se ha podido guardar la tarea.',
       };
     }
-  },
-  remove: (id) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const tasks = state.tasks.map((task) => {
-        if (task.id !== id) {
-          return task;
-        }
-
-        enqueueAuditEvent({
-          module: 'tareas',
-          entityId: task.id,
-          action: 'deleted',
-          summary: 'Registro eliminado',
-          changes: [],
-        });
-        return { ...task, deletedAt: now, updatedAt: now };
-      });
-      const deletedTask = tasks.find((task) => task.id === id);
-      if (deletedTask && hasTaskSqliteRepository()) {
-        const previousTask = state.tasks.find((task) => task.id === id);
-        void persistTaskDirectly(deletedTask, previousTask?.updatedAt ?? null).catch((error: unknown) => {
-          console.warn('No se ha podido eliminar la tarea en SQLite directo.', error);
-        });
-      } else {
-        persistTasks(tasks);
-      }
-      return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
-    });
   },
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     try {

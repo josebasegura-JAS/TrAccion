@@ -178,9 +178,7 @@ interface TeletrabajoStateStore {
   pendingHistoricoImport: PendingHistoricoImport | null;
   load: () => void;
   reloadFromStorage: () => void;
-  create: (draft: TeletrabajoDraft) => void;
   createWithConcurrencyCheck: (draft: TeletrabajoDraft) => Promise<TeletrabajoUpdateResult>;
-  update: (id: string, draft: TeletrabajoDraft) => void;
   updateWithConcurrencyCheck: (
     id: string,
     draft: TeletrabajoDraft,
@@ -218,7 +216,6 @@ interface TeletrabajoStateStore {
     puestoId: string,
     grupoCoberturaId: string | null,
   ) => Promise<TeletrabajoUpdateResult>;
-  remove: (id: string) => void;
   removeWithConcurrencyCheck: (
     id: string,
     expectedUpdatedAt: string | null,
@@ -1068,28 +1065,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       })
       .catch((error) => logTeletrabajoPersistenceError('reloadTeletrabajoFromStorage', error));
   },
-  create: (draft) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const solicitud: TeletrabajoSolicitud = {
-        id: createSolicitudId(),
-        ...normalizeDraft(draft),
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      };
-      enqueueAuditEvent({
-        module: 'teletrabajo',
-        entityId: solicitud.id,
-        action: 'created',
-        summary: 'Registro creado',
-        changes: [],
-      });
-      const solicitudes = [...state.solicitudes, solicitud];
-      persistSolicitudes(solicitudes);
-      return { solicitudes, selectedSolicitudId: solicitud.id };
-    });
-  },
   createWithConcurrencyCheck: async (draft) => {
     const now = new Date().toISOString();
     const solicitud: TeletrabajoSolicitud = {
@@ -1158,22 +1133,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
       return { ok: false, message };
     }
-  },
-  update: (id, draft) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const normalizedDraft = normalizeDraft(draft);
-      const solicitudes = state.solicitudes.map((solicitud) => {
-        if (solicitud.id !== id) {
-          return solicitud;
-        }
-
-        registerTeletrabajoUpdateAudit(solicitud, normalizedDraft);
-        return { ...solicitud, ...normalizedDraft, updatedAt: now };
-      });
-      persistSolicitudes(solicitudes);
-      return { solicitudes, selectedSolicitudId: id };
-    });
   },
   updateWithConcurrencyCheck: async (id, draft, expectedUpdatedAt) => {
     const normalizedDraft = normalizeDraft(draft);
@@ -1679,27 +1638,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       return { ok: false, message: result.message };
     }
     return { ok: true, message: 'Puesto actualizado.', recordId: puestoId };
-  },
-  remove: (id) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const solicitudes = state.solicitudes.map((solicitud) => {
-        if (solicitud.id !== id) {
-          return solicitud;
-        }
-
-        enqueueAuditEvent({
-          module: 'teletrabajo',
-          entityId: solicitud.id,
-          action: 'deleted',
-          summary: 'Registro eliminado',
-          changes: [],
-        });
-        return { ...solicitud, deletedAt: now, updatedAt: now };
-      });
-      persistSolicitudes(solicitudes);
-      return { solicitudes, selectedSolicitudId: firstVisibleSolicitudId(solicitudes) };
-    });
   },
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
     try {
