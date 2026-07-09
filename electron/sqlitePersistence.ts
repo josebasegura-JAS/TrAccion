@@ -1,9 +1,8 @@
 import { app } from 'electron';
 import { constants, copyFile, mkdir, readFile, readdir, rmdir, stat, unlink, writeFile, access } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
-import type { Database, DatabaseConstructor } from 'better-sqlite3';
+import type { Database } from 'better-sqlite3';
 import {
   createSimpleJsonModuleRepository,
   type SimpleJsonSaveResult,
@@ -13,11 +12,9 @@ import {
   pruneLocalStorageBackups,
 } from './persistence/maintenanceQueries.js';
 import {
-  applyMigrations,
   CONFIGURACION_STATE_ID,
   CURRENT_SCHEMA_VERSION,
   isConfiguracionStateRow,
-  readCurrentSchemaVersion,
 } from './persistence/schemaMigrations.js';
 import {
   acquireRecordLockInTransaction,
@@ -92,6 +89,7 @@ import {
   type VacuumResult,
   type VacuumStatus,
 } from './persistence/vacuumMaintenance.js';
+import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
 const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const LOCK_TTL_MS = 30 * 1000;
@@ -237,7 +235,6 @@ export interface DatabaseStatus {
   message?: string;
 }
 
-const require = createRequire(import.meta.url);
 
 const OWNER_ID_FILE_NAME = 'traccion-owner-id.json';
 
@@ -807,35 +804,7 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 function openDatabase(databasePath: string): Database {
-  const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
-  const db = new BetterSqlite3(databasePath);
-  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-  // En carpetas SMB/WAL se han observado corrupciones con varias instancias.
-  // La concurrencia se coordina con un lock corto por operación, así que usamos
-  // rollback journal clásico, más compatible con red que WAL/-shm.
-  db.pragma('journal_mode = DELETE');
-  // NORMAL es suficiente con journal_mode=DELETE y 2-3 usuarios: solo se
-  // perdería una transacción en un apagado abrupto justo en el fsync, algo
-  // improbable en uso normal. FULL hacía un fsync de red en cada escritura,
-  // añadiendo 50-500 ms de latencia SMB por operación.
-  db.pragma('synchronous = NORMAL');
-  db.pragma('foreign_keys = ON');
-
-  // Protección contra downgrade: si la base tiene un schema más nuevo que esta
-  // versión del ejecutable, rechazar la apertura con un mensaje claro. Abrir una
-  // base con schema superior podría ignorar tablas o columnas nuevas y corromper datos.
-  const existingVersion = readCurrentSchemaVersion(db);
-  if (existingVersion > CURRENT_SCHEMA_VERSION) {
-    db.close();
-    throw new Error(
-      `La base de datos tiene schema v${existingVersion} pero esta versión de TrAccion solo soporta hasta v${CURRENT_SCHEMA_VERSION}. ` +
-      `Actualiza TrAccion antes de continuar.`,
-    );
-  }
-
-  applyMigrations(db);
-  pruneLocalStorageBackups(db);
-  return db;
+  return openSqliteDatabase(databasePath, { busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS });
 }
 
 function closeDatabase(): void {
