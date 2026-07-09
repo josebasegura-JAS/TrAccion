@@ -1,35 +1,36 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  RotateCcw,
-  SlidersHorizontal,
-  XCircle,
-} from 'lucide-react';
+import { AlertTriangle, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
-import {
-  useTableViewPreferences,
-  type TableViewPreferences,
-} from '../shared/table/useTableViewPreferences';
+import { useTableViewPreferences } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/TeletrabajoFiltersBar';
 import { TeletrabajoPageHeader } from '../features/teletrabajo/components/TeletrabajoPageHeader';
 import { TeletrabajoStatusMessages } from '../features/teletrabajo/components/TeletrabajoStatusMessages';
+import { TeletrabajoHistoricoSection, TeletrabajoMainTableSection } from '../features/teletrabajo/components/TeletrabajoTableSections';
+import { buildTeletrabajoTableColumns, type TeletrabajoIncidentTooltipState } from '../features/teletrabajo/components/teletrabajoTableColumns';
+import {
+  defaultTeletrabajoTablePreferences,
+  TELETRABAJO_TABLE_STORAGE_KEY,
+  teletrabajoTableColumnIds,
+  type TeletrabajoTableColumnId,
+} from '../features/teletrabajo/components/teletrabajoTableConfig';
 import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
 import { TeletrabajoPuestosModal } from './TeletrabajoPuestosModal';
 import { normalizeJobPosition } from '../features/plantilla/domain/jobPositionTranslation';
+import type { Employee } from '../features/plantilla/domain/employee';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { filterTeletrabajoSolicitudes } from '../features/teletrabajo/domain/filters';
 import { buildGruposCoberturaByIdMap } from '../features/teletrabajo/domain/gruposCobertura';
 import {
   buildPuestosByKey,
   buildSolicitudesByPeriodoPuestoCount,
-  getTeletrabajoIncidentSummary,
 } from '../features/teletrabajo/domain/semaforo';
+import {
+  getTeletrabajoIncidentMeta,
+  matchesIncidentFilter,
+  TELETRABAJO_INCIDENT_FILTER_LABELS,
+  type TeletrabajoIncidentFilter,
+} from '../features/teletrabajo/domain/incidentView';
 import {
   type TeletrabajoSolicitud,
 } from '../features/teletrabajo/domain/solicitud';
@@ -47,88 +48,8 @@ import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabaj
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
-import type { ExportColumn } from '../shared/export/types';
-import { reorderExportColumns } from '../shared/export/reorderExportColumns';
-import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
-import type { Employee } from '../features/plantilla/domain/employee';
 import { useAppDialog } from '../hooks/useAppDialog';
-
-type TeletrabajoTableColumnId =
-  | 'revisado'
-  | 'estado'
-  | 'empleado'
-  | 'nombreApellidos'
-  | 'puestoOrganizativo'
-  | 'teletrabajable'
-  | 'residencia'
-  | 'tipoSolicitud'
-  | 'diasTeletrabajo'
-  | 'periodo'
-  | 'actions';
-
-const TELETRABAJO_TABLE_STORAGE_KEY = 'traccion.tableView.teletrabajo.solicitudes';
-const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY =
-  'traccion.v1.teletrabajo.puestos.translationAliases';
-const teletrabajoTableColumnIds: readonly TeletrabajoTableColumnId[] = [
-  'revisado',
-  'estado',
-  'empleado',
-  'nombreApellidos',
-  'puestoOrganizativo',
-  'teletrabajable',
-  'residencia',
-  'tipoSolicitud',
-  'diasTeletrabajo',
-  'periodo',
-  'actions',
-];
-const defaultTeletrabajoTablePreferences: TableViewPreferences<TeletrabajoTableColumnId> = {
-  sort: null,
-  columnWidths: {},
-  columnOrder: null,
-};
-
-const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
-  { key: 'revisado', header: 'Revisado', value: (solicitud) => (solicitud.revisado ? 'Sí' : 'No') },
-  {
-    key: 'estado',
-    header: 'Estado',
-    value: (solicitud) => {
-      const labels: Record<string, string> = {
-        pendiente: 'Pendiente',
-        analizada: 'Analizada',
-        aprobada: 'Aprobada',
-        denegada: 'Rechazada',
-      };
-      return labels[solicitud.estado] ?? solicitud.estado;
-    },
-  },
-  { key: 'empleado', header: 'Empleado', value: (solicitud) => solicitud.empleado },
-  {
-    key: 'nombreApellidos',
-    header: 'Nombre y apellidos',
-    value: (solicitud) => solicitud.nombreApellidos,
-  },
-  {
-    key: 'puestoOrganizativo',
-    header: 'Puesto organizativo',
-    value: (solicitud) => solicitud.puestoOrganizativo,
-  },
-  {
-    key: 'teletrabajable',
-    header: 'Incidencias',
-    value: (solicitud) => solicitud.puestoOrganizativo,
-  },
-  { key: 'residencia', header: 'Residencia', value: (solicitud) => solicitud.residencia },
-  { key: 'tipoSolicitud', header: 'Tipo', value: (solicitud) => solicitud.tipoSolicitud },
-  {
-    key: 'diasTeletrabajo',
-    header: 'Días',
-    value: (solicitud) => solicitud.diasTeletrabajo.join(', '),
-  },
-  { key: 'periodo', header: 'Periodo', value: (solicitud) => solicitud.periodo },
-];
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort(
@@ -150,141 +71,6 @@ interface PendingEncuestaImport {
   file: File;
   unknownPuestos: string[];
   mapping: Record<string, string>;
-}
-
-type TeletrabajoIncidentFilter =
-  | ''
-  | 'conflictos'
-  | 'bloqueantes'
-  | 'revisadasPendientes'
-  | 'sinRevisar'
-  | 'listasAprobar';
-
-interface TeletrabajoIncidentMeta {
-  status: 'ok' | 'review' | 'blocked';
-  label: string;
-  title: string;
-  isReviewedPending: boolean;
-  isReadyToApprove: boolean;
-}
-
-const TELETRABAJO_INCIDENT_FILTER_LABELS: Record<Exclude<TeletrabajoIncidentFilter, ''>, string> = {
-  conflictos: 'Con incidencias',
-  bloqueantes: 'Bloqueantes',
-  revisadasPendientes: 'Revisadas pendientes',
-  sinRevisar: 'Sin revisar',
-  listasAprobar: 'Listas para aprobar',
-};
-
-function getTeletrabajoIncidentMeta(
-  solicitud: TeletrabajoSolicitud,
-  puestosByKey: ReturnType<typeof buildPuestosByKey>,
-  solicitudesByPuestoCount: ReturnType<typeof buildSolicitudesByPeriodoPuestoCount>,
-  employeesByEmpleado: Map<string, Employee>,
-  gruposById: ReturnType<typeof buildGruposCoberturaByIdMap>,
-): TeletrabajoIncidentMeta {
-  const summary = getTeletrabajoIncidentSummary(
-    solicitud,
-    puestosByKey,
-    solicitudesByPuestoCount,
-    employeesByEmpleado,
-    gruposById,
-  );
-  const isReviewedPending = solicitud.revisado && solicitud.estado === 'pendiente';
-  const isReadyToApprove =
-    solicitud.revisado && solicitud.estado === 'analizada' && summary.status === 'ok';
-
-  if (summary.status === 'blocked') {
-    return {
-      status: 'blocked',
-      label: summary.label,
-      title: summary.title,
-      isReviewedPending,
-      isReadyToApprove,
-    };
-  }
-
-  if (summary.status === 'review') {
-    return {
-      status: 'review',
-      label: summary.label,
-      title: summary.title,
-      isReviewedPending,
-      isReadyToApprove,
-    };
-  }
-
-  return {
-    status: 'ok',
-    label: summary.label,
-    title: isReviewedPending
-      ? `${summary.title} Solicitud revisada que sigue en estado pendiente: queda una decisión manual por resolver, pero no hay incidencia objetiva de condiciones.`
-      : summary.title,
-    isReviewedPending,
-    isReadyToApprove,
-  };
-}
-
-function matchesIncidentFilter(
-  solicitud: TeletrabajoSolicitud,
-  filter: TeletrabajoIncidentFilter,
-  puestosByKey: ReturnType<typeof buildPuestosByKey>,
-  solicitudesByPuestoCount: ReturnType<typeof buildSolicitudesByPeriodoPuestoCount>,
-  employeesByEmpleado: Map<string, Employee>,
-  gruposById: ReturnType<typeof buildGruposCoberturaByIdMap>,
-): boolean {
-  if (!filter) {
-    return true;
-  }
-
-  const meta = getTeletrabajoIncidentMeta(
-    solicitud,
-    puestosByKey,
-    solicitudesByPuestoCount,
-    employeesByEmpleado,
-    gruposById,
-  );
-
-  if (filter === 'conflictos') {
-    return meta.status !== 'ok';
-  }
-
-  if (filter === 'bloqueantes') {
-    return meta.status === 'blocked';
-  }
-
-  if (filter === 'revisadasPendientes') {
-    return meta.isReviewedPending;
-  }
-
-  if (filter === 'sinRevisar') {
-    return !solicitud.revisado;
-  }
-
-  if (filter === 'listasAprobar') {
-    return meta.isReadyToApprove;
-  }
-
-  return true;
-}
-
-function getTeletrabajoRowClassName(
-  meta: TeletrabajoIncidentMeta,
-  estado: TeletrabajoSolicitud['estado'],
-): string {
-  if (estado === 'denegada') {
-    return 'border-l-4 border-slate-500/50 bg-slate-900/20 text-slate-200 hover:bg-slate-900/30';
-  }
-
-  if (meta.status === 'blocked') {
-    return 'border-l-4 border-red-400 bg-red-950/30 text-red-100 hover:bg-red-950/40';
-  }
-
-  if (meta.status === 'review' || meta.isReviewedPending) {
-    return 'border-l-4 border-amber-400 bg-amber-950/20 text-amber-50 hover:bg-amber-950/30';
-  }
-
-  return '';
 }
 
 function readStoredPuestoAliases(): Record<string, string> {
@@ -385,11 +171,7 @@ export function TeletrabajoPage({
   const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
   const [incidentFilter, setIncidentFilter] = useState<TeletrabajoIncidentFilter>('');
-  const [incidentTooltip, setIncidentTooltip] = useState<{
-    title: string;
-    x: number;
-    y: number;
-  } | null>(null);
+  const [incidentTooltip, setIncidentTooltip] = useState<TeletrabajoIncidentTooltipState | null>(null);
 
   useEffect(() => {
     load();
@@ -600,255 +382,19 @@ export function TeletrabajoPage({
     validColumnIds: teletrabajoTableColumnIds,
   });
 
-  const teletrabajoTableColumns = useMemo<
-    Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>
-  >(
-    () => [
-      {
-        id: 'revisado',
-        header: 'Revisado',
-        accessor: (s) => (s.revisado ? 1 : 0),
-        render: (s) => (
-          <span
-            className={`inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-bold ${
-              s.revisado
-                ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-                : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
-            }`}
-            title={s.revisado ? 'Solicitud revisada' : 'Solicitud pendiente de revisar'}
-          >
-            {s.revisado ? 'Sí' : 'No'}
-          </span>
-        ),
-        width: 96,
-        minWidth: 84,
-        maxWidth: 130,
-        sortable: true,
-        className: 'text-center',
-      },
-      {
-        id: 'estado',
-        header: 'Estado',
-        accessor: (s) => s.estado,
-        render: (s) => {
-          const estadoStyles: Record<string, string> = {
-            pendiente: 'border-amber-400/40 bg-amber-500/15 text-amber-200',
-            analizada: 'border-blue-400/40 bg-blue-500/15 text-blue-200',
-            aprobada: 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200',
-            denegada: 'border-red-400/40 bg-red-500/15 text-red-200',
-          };
-          const estadoLabels: Record<string, string> = {
-            pendiente: 'Pendiente',
-            analizada: 'Analizada',
-            aprobada: 'Aprobada',
-            denegada: 'Rechazada',
-          };
-          const className =
-            estadoStyles[s.estado] ?? 'border-metro-border bg-metro-surface text-metro-muted';
-          const label = estadoLabels[s.estado] ?? s.estado;
-          return (
-            <span
-              className={`inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-bold ${className}`}
-              title={label}
-            >
-              {label}
-            </span>
-          );
-        },
-        width: 110,
-        minWidth: 90,
-        maxWidth: 180,
-        sortable: true,
-        className: 'text-center',
-      },
-      {
-        id: 'empleado',
-        header: 'Empleado',
-        accessor: (s) => Number(s.empleado) || s.empleado,
-        render: (s) => s.empleado,
-        width: 105,
-        minWidth: 85,
-        maxWidth: 170,
-        sortable: true,
-        className: 'font-semibold text-metro-text',
-      },
-      {
-        id: 'nombreApellidos',
-        header: 'Nombre y apellidos',
-        accessor: (s) => s.nombreApellidos,
-        render: (s) => s.nombreApellidos,
-        width: 220,
-        minWidth: 160,
-        maxWidth: 420,
-        sortable: true,
-        className: 'text-metro-text',
-      },
-      {
-        id: 'puestoOrganizativo',
-        header: 'Puesto organizativo',
-        accessor: (s) => s.puestoOrganizativo,
-        render: (s) => s.puestoOrganizativo,
-        width: 190,
-        minWidth: 140,
-        maxWidth: 360,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'teletrabajable',
-        header: 'Incidencias',
-        accessor: (s) =>
-          getTeletrabajoIncidentMeta(
-            s,
-            puestosByKey,
-            solicitudesByPuestoCount,
-            employeesByEmpleado,
-            gruposByIdMap,
-          ).status,
-        render: (s) => {
-          const meta = getTeletrabajoIncidentMeta(
-            s,
-            puestosByKey,
-            solicitudesByPuestoCount,
-            employeesByEmpleado,
-            gruposByIdMap,
-          );
-          const className =
-            meta.status === 'ok'
-              ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-              : meta.status === 'review'
-                ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
-                : 'border-red-400/40 bg-red-500/15 text-red-200';
-          const icon =
-            meta.status === 'ok' ? (
-              <CheckCircle2 size={15} />
-            ) : meta.status === 'review' ? (
-              <AlertTriangle size={15} />
-            ) : (
-              <XCircle size={15} />
-            );
-
-          return (
-            <span
-              aria-label={meta.title}
-              className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
-              onMouseEnter={(event) =>
-                setIncidentTooltip({
-                  title: meta.title,
-                  x: event.clientX,
-                  y: event.clientY,
-                })
-              }
-              onMouseLeave={() => setIncidentTooltip(null)}
-              onMouseMove={(event) =>
-                setIncidentTooltip((current) =>
-                  current ? { ...current, x: event.clientX, y: event.clientY } : current,
-                )
-              }
-            >
-              {icon}
-              <span className="truncate">{meta.label}</span>
-            </span>
-          );
-        },
-        width: 200,
-        minWidth: 160,
-        maxWidth: 280,
-        sortable: true,
-        className: 'text-center',
-      },
-      {
-        id: 'residencia',
-        header: 'Residencia',
-        accessor: (s) => s.residencia,
-        render: (s) => s.residencia,
-        width: 130,
-        minWidth: 100,
-        maxWidth: 240,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'tipoSolicitud',
-        header: 'Tipo',
-        accessor: (s) => s.tipoSolicitud,
-        render: (s) => s.tipoSolicitud,
-        width: 110,
-        minWidth: 90,
-        maxWidth: 180,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'diasTeletrabajo',
-        header: 'Días',
-        accessor: (s) => s.diasTeletrabajo.join(', '),
-        render: (s) => s.diasTeletrabajo.join(', '),
-        width: 150,
-        minWidth: 110,
-        maxWidth: 240,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'periodo',
-        header: 'Periodo',
-        accessor: (s) => s.periodo,
-        render: (s) => s.periodo,
-        width: 110,
-        minWidth: 90,
-        maxWidth: 180,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'actions',
-        header: 'Acciones',
-        render: (solicitud) => (
-          <div className="inline-flex items-center justify-end gap-1">
-            {solicitud.estado === 'aprobada' && (
-              <button
-                aria-label="Generar acuerdo Word"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={generatingWordId !== null}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleGenerateWord(solicitud);
-                }}
-                title="Generar acuerdo Word"
-                type="button"
-              >
-                {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
-              </button>
-            )}
-            <button
-              className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
-              onClick={(event) => {
-                event.stopPropagation();
-                void (async () => {
-                  const result = await removeWithConcurrencyCheck(
-                    solicitud.id,
-                    solicitud.updatedAt,
-                  );
-                  if (!result.ok) {
-                    await alert(result.message, { type: 'error' });
-                  }
-                })();
-              }}
-              type="button"
-            >
-              Eliminar
-            </button>
-          </div>
-        ),
-        width: 100,
-        minWidth: 95,
-        maxWidth: 130,
-        resizable: false,
-        isActionColumn: true,
-        className: 'whitespace-nowrap',
-      },
-    ],
+  const teletrabajoTableColumns = useMemo(
+    () =>
+      buildTeletrabajoTableColumns({
+        alert,
+        employeesByEmpleado,
+        generatingWordId,
+        gruposByIdMap,
+        handleGenerateWord,
+        puestosByKey,
+        removeWithConcurrencyCheck,
+        setIncidentTooltip,
+        solicitudesByPuestoCount,
+      }),
     [
       alert,
       employeesByEmpleado,
@@ -1434,160 +980,49 @@ export function TeletrabajoPage({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo ·{' '}
-            {mainPeriodo || 'Sin periodo'}
-            <ExportPrintButtons
-              payload={{
-                title: 'Solicitudes de teletrabajo',
-                filename: 'teletrabajo-solicitudes',
-                columns: reorderExportColumns(teletrabajoExportColumns, preferences.columnOrder),
-                rows: sortedSolicitudes,
-                filterLabel: teletrabajoFilterLabel,
-              }}
-            />
-            <button
-              className="inline-flex items-center justify-center rounded-xl border border-transparent bg-[#1a5c38] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#217346] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={sortedSolicitudes.length === 0}
-              onClick={() => void handleExportDireccion()}
-              title="Exportar a Dirección"
-              type="button"
-            >
-              Dirección
-            </button>
-          </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-            {sortedSolicitudes.length} registros
-          </span>
-        </div>
-        <div className="flex flex-wrap justify-end pb-2">
-          <button
-            className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={resetPreferences}
-            type="button"
-          >
-            <RotateCcw size={14} /> Restablecer vista
-          </button>
-        </div>
-        <DataTable
-          ariaLabel="Solicitudes de teletrabajo"
-          columnOrder={preferences.columnOrder}
-          columnWidths={preferences.columnWidths}
-          onResetColumnWidths={resetColumnWidths}
+      <TeletrabajoMainTableSection
+        columns={teletrabajoTableColumns}
+        employeesByEmpleado={employeesByEmpleado}
+        filterLabel={teletrabajoFilterLabel}
+        gruposByIdMap={gruposByIdMap}
+        mainPeriodo={mainPeriodo}
+        onColumnOrderChange={setColumnOrder}
+        onColumnWidthChange={setColumnWidth}
+        onExportDireccion={() => void handleExportDireccion()}
+        onResetColumnWidths={resetColumnWidths}
+        onResetPreferences={resetPreferences}
+        onRowClick={openEditor}
+        onSortChange={setSort}
+        preferences={preferences}
+        puestosByKey={puestosByKey}
+        rows={sortedSolicitudes}
+        solicitudesByPuestoCount={solicitudesByPuestoCount}
+      />
+
+      {!filters.periodo && (
+        <TeletrabajoHistoricoSection
           columns={teletrabajoTableColumns}
-          emptyMessage="No hay solicitudes de teletrabajo para los criterios seleccionados."
-          getRowId={(solicitud) => solicitud.id}
+          employeesByEmpleado={employeesByEmpleado}
+          gruposByIdMap={gruposByIdMap}
+          groups={historicoGroups}
+          historicalCount={historicoSolicitudes.length}
+          isOpen={isHistoricoOpen}
           onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}
-          rows={sortedSolicitudes}
-          rowClassName={(solicitud) =>
-            getTeletrabajoRowClassName(
-              getTeletrabajoIncidentMeta(
-                solicitud,
-                puestosByKey,
-                solicitudesByPuestoCount,
-                employeesByEmpleado,
-                gruposByIdMap,
-              ),
-              solicitud.estado,
-            )
+          onToggle={() => setIsHistoricoOpen((current) => !current)}
+          onTogglePeriodo={(periodo) =>
+            setOpenHistoricoPeriodos((current) => ({
+              ...current,
+              [periodo]: !current[periodo],
+            }))
           }
-          sort={preferences.sort}
-          preserveScrollOnRowsChange
+          openPeriodos={openHistoricoPeriodos}
+          preferences={preferences}
+          puestosByKey={puestosByKey}
+          solicitudesByPuestoCount={solicitudesByPuestoCount}
         />
-      </div>
-
-      {!filters.periodo && (
-        <div className="mt-4 overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
-          <button
-            className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-metro-border px-3 py-2 text-left text-sm font-semibold text-metro-text hover:bg-metro-panel"
-            onClick={() => setIsHistoricoOpen((current) => !current)}
-            type="button"
-          >
-            <span className="inline-flex items-center gap-2">
-              {isHistoricoOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              Histórico de teletrabajo
-            </span>
-            <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-              {historicoSolicitudes.length} registros
-            </span>
-          </button>
-
-          {isHistoricoOpen && (
-            <div className="space-y-3 p-3">
-              {historicoGroups.length === 0 ? (
-                <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
-                  No hay solicitudes históricas para los criterios seleccionados.
-                </p>
-              ) : (
-                historicoGroups.map((group) => {
-                  const isPeriodoOpen = Boolean(openHistoricoPeriodos[group.periodo]);
-                  return (
-                    <div
-                      className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel"
-                      key={group.periodo}
-                    >
-                      <button
-                        className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-metro-text hover:bg-metro-surface"
-                        onClick={() =>
-                          setOpenHistoricoPeriodos((current) => ({
-                            ...current,
-                            [group.periodo]: !current[group.periodo],
-                          }))
-                        }
-                        type="button"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          {isPeriodoOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                          Periodo {group.periodo}
-                        </span>
-                        <span className="rounded-full bg-metro-surface px-3 py-1 text-xs font-bold text-metro-muted">
-                          {group.rows.length} registros
-                        </span>
-                      </button>
-                      {isPeriodoOpen && (
-                        <div className="border-t border-metro-border p-2">
-                          <DataTable
-                            ariaLabel={`Solicitudes históricas de teletrabajo ${group.periodo}`}
-                            columnOrder={preferences.columnOrder}
-                            columnWidths={preferences.columnWidths}
-                            columns={teletrabajoTableColumns}
-                            emptyMessage="No hay solicitudes históricas para este periodo."
-                            getRowId={(solicitud) => solicitud.id}
-                            onColumnOrderChange={setColumnOrder}
-                            onColumnWidthChange={setColumnWidth}
-                            onRowClick={openEditor}
-                            onSortChange={setSort}
-                            rows={group.rows}
-                            rowClassName={(solicitud) =>
-                              getTeletrabajoRowClassName(
-                                getTeletrabajoIncidentMeta(
-                                  solicitud,
-                                  puestosByKey,
-                                  solicitudesByPuestoCount,
-                                  employeesByEmpleado,
-                                  gruposByIdMap,
-                                ),
-                                solicitud.estado,
-                              )
-                            }
-                            sort={preferences.sort}
-                            maxHeightClassName="max-h-[360px]"
-                            preserveScrollOnRowsChange
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-        </div>
       )}
 
       {incidentTooltip && (
