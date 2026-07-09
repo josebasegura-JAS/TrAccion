@@ -68,6 +68,7 @@ import {
   writeDailyLocalBackup as writeDailyLocalBackupFromModule,
   writeSharedSqliteBackup,
 } from './persistence/localBackups.js';
+import { createSorteosRepository, getSorteosCollectionUpdatedAt } from './persistence/sorteosRepository.js';
 import { createVinculogramaRepository } from './persistence/vinculogramaRepository.js';
 import { createLicenciaSinSueldoRepository } from './persistence/licenciaSinSueldoRepository.js';
 import { createTicketRestauranteConfigRepository } from './persistence/ticketRestauranteConfigRepository.js';
@@ -218,36 +219,12 @@ export interface ConditionalSqliteEmployeeBatchSaveResult {
   saved: number;
 }
 
-export interface SqliteSorteosRecord {
-  id: string;
-  value: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
-
-export interface SqliteSorteosRecordsSnapshot {
-  status: DatabaseStatus;
-  draws: SqliteSorteosRecord[];
-  exclusions: SqliteSorteosRecord[];
-  drawsUpdatedAt: string | null;
-  exclusionsUpdatedAt: string | null;
-}
-
-export interface ConditionalSqliteSorteosSnapshot {
-  draws: Array<{ id: string; value: string }>;
-  exclusions: Array<{ id: string; value: string }>;
-  expectedDrawsUpdatedAt: string | null;
-  expectedExclusionsUpdatedAt: string | null;
-}
-
-export interface ConditionalSqliteSorteosSaveResult {
-  ok: boolean;
-  status: DatabaseStatus;
-  currentDrawsUpdatedAt: string | null;
-  currentExclusionsUpdatedAt: string | null;
-  message: string;
-}
+export type {
+  SqliteSorteosRecord,
+  SqliteSorteosRecordsSnapshot,
+  ConditionalSqliteSorteosSnapshot,
+  ConditionalSqliteSorteosSaveResult,
+} from './persistence/sorteosRepository.js';
 
 export interface PersistedStorageRecordSnapshot extends PersistedStorageRecord {
   updatedAt: string;
@@ -306,7 +283,6 @@ export interface DatabaseLockInfo {
   createdAt: string;
   updatedAt: string;
 }
-
 
 export type RecordLockOwnerInfo = RecordLockModuleOwnerInfo;
 export type RecordLockPayload = RecordLockModulePayload;
@@ -378,7 +354,6 @@ let paritariaSessionsMigrationDone = false;
 let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let employeesMigrationDone = false;
-let sorteosMigrationDone = false;
 let configuracionMigrationDone = false;
 
 export interface DatabaseConnectivityIssuePayload {
@@ -387,7 +362,6 @@ export interface DatabaseConnectivityIssuePayload {
   failedHeartbeatCount: number;
   updatedAt: string;
 }
-
 
 function logSqliteMetric(message: string, data?: Record<string, unknown>): void {
   if (process.env.NODE_ENV === 'production') {
@@ -411,7 +385,6 @@ function largestPersistedRecordSizes(records: PersistedStorageRecordSnapshot[]):
     .sort((left, right) => right.bytes - left.bytes)
     .slice(0, 10);
 }
-
 
 // --- Mantenimiento de la base: VACUUM ---------------------------------
 
@@ -618,8 +591,6 @@ async function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
   }
 }
 
-
-
 async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   await mkdir(lockPath);
   await writeFile(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), 'utf8');
@@ -630,7 +601,6 @@ async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void
     throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
   }
 }
-
 
 async function removeStaleLock(lockPath: string, staleLock: DatabaseLockInfo): Promise<void> {
   const currentLock = await readLock(lockPath);
@@ -781,8 +751,6 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
     };
   }
 }
-
-
 
 async function withDatabaseOperationLock<T>(
   databasePath: string,
@@ -979,7 +947,6 @@ async function pruneEmergencyDatabaseBackups(databasePath: string, retentionCoun
   );
 }
 
-
 async function backupExistingDatabase(databasePath: string): Promise<void> {
   try {
     await stat(databasePath);
@@ -1021,8 +988,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-
-
 function openDatabase(databasePath: string): Database {
   const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
   const db = new BetterSqlite3(databasePath);
@@ -1062,7 +1027,7 @@ function closeDatabase(): void {
   }
   tasksMigrationDone = false;
   employeesMigrationDone = false;
-  sorteosMigrationDone = false;
+  sorteosModule.resetMigrationState();
   comiteSessionsMigrationDone = false;
   paritariaSessionsMigrationDone = false;
   actasMigrationDone = false;
@@ -1076,7 +1041,7 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   }
   tasksMigrationDone = false;
   employeesMigrationDone = false;
-  sorteosMigrationDone = false;
+  sorteosModule.resetMigrationState();
   comiteSessionsMigrationDone = false;
   paritariaSessionsMigrationDone = false;
   actasMigrationDone = false;
@@ -1327,14 +1292,6 @@ interface TaskRecordRow {
   deleted_at: string | null;
 }
 
-interface SorteosRecordRow {
-  id: string;
-  value_json: string;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-}
-
 interface EmployeeRecordRow {
   id: string;
   value_json: string;
@@ -1366,21 +1323,6 @@ function isTaskRecordRow(value: unknown): value is TaskRecordRow {
   }
 
   const candidate = value as Partial<TaskRecordRow>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.value_json === 'string' &&
-    typeof candidate.created_at === 'string' &&
-    typeof candidate.updated_at === 'string' &&
-    (candidate.deleted_at === null || typeof candidate.deleted_at === 'string')
-  );
-}
-
-function isSorteosRecordRow(value: unknown): value is SorteosRecordRow {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<SorteosRecordRow>;
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.value_json === 'string' &&
@@ -1943,7 +1885,6 @@ function maybeMigrateTasksFromPersistedRecord(db: Database): void {
   tasksMigrationDone = true;
 }
 
-
 function readComiteSessionRecords(db: Database): SqliteComiteSessionRecord[] {
   return readActiveJsonRecords(db, 'comite_session_records');
 }
@@ -1971,7 +1912,6 @@ export async function loadComiteSessionRecordsSnapshot(): Promise<SqliteComiteSe
     (nextStatus) => ({ status: nextStatus, records: [] }),
   );
 }
-
 
 function readParitariaSessionRecords(db: Database): SqliteParitariaSessionRecord[] {
   return readActiveJsonRecords(db, 'paritaria_session_records');
@@ -2145,7 +2085,6 @@ export async function saveComiteSessionRecordIfUnchanged(
   );
 }
 
-
 export async function saveParitariaSessionRecordIfUnchanged(
   record: ConditionalSqliteParitariaSessionRecord,
 ): Promise<ConditionalSqliteTaskSaveResult> {
@@ -2261,7 +2200,6 @@ export async function saveParitariaSessionRecordIfUnchanged(
     }),
   );
 }
-
 
 function readTeletrabajoRecords(db: Database): SqliteTeletrabajoRecord[] {
   return readActiveJsonRecords(db, 'teletrabajo_solicitud_records');
@@ -2820,7 +2758,6 @@ export async function saveEmployeeRecordIfUnchanged(
   );
 }
 
-
 export async function saveEmployeeRecordsIfUnchanged(
   records: ConditionalSqliteEmployeeRecord[],
 ): Promise<ConditionalSqliteEmployeeBatchSaveResult> {
@@ -3078,25 +3015,6 @@ export async function saveTaskRecordIfUnchanged(
   );
 }
 
-function mapSorteosRecordRow(row: SorteosRecordRow): SqliteSorteosRecord {
-  return {
-    id: row.id,
-    value: row.value_json,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    deletedAt: row.deleted_at,
-  };
-}
-
-function readAllSorteosRows(db: Database, tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records'): SqliteSorteosRecord[] {
-  return db
-    .prepare(`SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName} WHERE deleted_at IS NULL ORDER BY created_at, id`)
-    .all()
-    .filter(isSorteosRecordRow)
-    .map(mapSorteosRecordRow);
-}
-
-
 const DIRECT_STORE_UPDATED_AT_TABLES: Record<string, string> = {
   plantilla: 'employee_records',
   teletrabajo: 'teletrabajo_solicitud_records',
@@ -3121,212 +3039,9 @@ function getDirectStoreUpdatedAtSnapshot(db: Database): Record<string, string | 
   );
 }
 
-function getSorteosCollectionUpdatedAt(db: Database, tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records'): string | null {
-  const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
-  return isUpdatedAtRow(row) ? row.updated_at : null;
-}
-
 function getTaskRecordsUpdatedAt(db: Database): string | null {
   const row = db.prepare('SELECT MAX(updated_at) AS updated_at FROM task_records').get();
   return isUpdatedAtRow(row) ? row.updated_at : null;
-}
-
-function migrateSorteosArrayFromPersistedRecord(
-  db: Database,
-  tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
-  storageKey: string,
-): void {
-  const countRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get();
-  const count = isCountRow(countRow) ? countRow.count : 0;
-  if (count > 0) {
-    return;
-  }
-
-  const legacyRecord = readPersistedRecordByKey(db, storageKey);
-  if (!legacyRecord) {
-    return;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(legacyRecord.value);
-  } catch {
-    return;
-  }
-
-  if (!Array.isArray(parsed)) {
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, NULL)`,
-  );
-
-  for (const item of parsed) {
-    if (!isJsonObjectWithStringId(item)) {
-      continue;
-    }
-
-    const createdAt = typeof item.createdAt === 'string' ? item.createdAt : now;
-    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
-    insert.run(item.id, JSON.stringify(item), createdAt, updatedAt);
-  }
-}
-
-function maybeMigrateSorteosFromPersistedRecords(db: Database): void {
-  if (sorteosMigrationDone) {
-    return;
-  }
-
-  migrateSorteosArrayFromPersistedRecord(db, 'sorteos_draw_records', 'traccion.v1.sorteos.draws');
-  migrateSorteosArrayFromPersistedRecord(db, 'sorteos_exclusion_records', 'traccion.v1.sorteos.exclusions');
-  sorteosMigrationDone = true;
-}
-
-export async function loadSorteosRecordsSnapshot(): Promise<SqliteSorteosRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, draws: [], exclusions: [], drawsUpdatedAt: null, exclusionsUpdatedAt: null };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateSorteosFromPersistedRecords(db))();
-      return {
-        status: currentStatus,
-        draws: readAllSorteosRows(db, 'sorteos_draw_records'),
-        exclusions: readAllSorteosRows(db, 'sorteos_exclusion_records'),
-        drawsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records'),
-        exclusionsUpdatedAt: getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records'),
-      };
-    },
-    (nextStatus) => ({
-      status: nextStatus,
-      draws: [],
-      exclusions: [],
-      drawsUpdatedAt: null,
-      exclusionsUpdatedAt: null,
-    }),
-  );
-}
-
-function replaceSorteosTable(
-  db: Database,
-  tableName: 'sorteos_draw_records' | 'sorteos_exclusion_records',
-  records: Array<{ id: string; value: string }>,
-  timestamp: string,
-): void {
-  const incomingIds = new Set(records.map((record) => record.id));
-  const existingRows = db
-    .prepare(`SELECT id, value_json, created_at, updated_at, deleted_at FROM ${tableName}`)
-    .all();
-  const existingById = new Map<string, { value_json: string; created_at: string }>();
-
-  for (const row of existingRows) {
-    if (isSorteosRecordRow(row)) {
-      existingById.set(row.id, { value_json: row.value_json, created_at: row.created_at });
-    }
-  }
-
-  const upsert = db.prepare(
-    `INSERT INTO ${tableName} (id, value_json, created_at, updated_at, deleted_at)
-     VALUES (?, ?, ?, ?, NULL)
-     ON CONFLICT(id) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at, deleted_at = NULL`,
-  );
-
-  for (const record of records) {
-    const existing = existingById.get(record.id);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(record.value);
-    } catch {
-      parsed = null;
-    }
-    const createdAt =
-      existing?.created_at ??
-      (parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
-        ? (parsed as { createdAt: string }).createdAt
-        : timestamp);
-    upsert.run(record.id, record.value, createdAt, timestamp);
-  }
-
-  const markDeleted = db.prepare(`UPDATE ${tableName} SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`);
-  for (const id of existingById.keys()) {
-    if (!incomingIds.has(id)) {
-      markDeleted.run(timestamp, timestamp, id);
-    }
-  }
-}
-
-export async function saveSorteosSnapshotIfUnchanged(
-  snapshot: ConditionalSqliteSorteosSnapshot,
-): Promise<ConditionalSqliteSorteosSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentDrawsUpdatedAt: null,
-          currentExclusionsUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteSorteosSaveResult => {
-        maybeMigrateSorteosFromPersistedRecords(db);
-        const currentDrawsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_draw_records');
-        const currentExclusionsUpdatedAt = getSorteosCollectionUpdatedAt(db, 'sorteos_exclusion_records');
-
-        if (
-          currentDrawsUpdatedAt !== snapshot.expectedDrawsUpdatedAt ||
-          currentExclusionsUpdatedAt !== snapshot.expectedExclusionsUpdatedAt
-        ) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentDrawsUpdatedAt,
-            currentExclusionsUpdatedAt,
-            message:
-              'Los sorteos han cambiado mientras guardabas. Recarga antes de continuar para no sobrescribir cambios.',
-          };
-        }
-
-        const now = new Date().toISOString();
-        replaceSorteosTable(db, 'sorteos_draw_records', snapshot.draws, now);
-        replaceSorteosTable(db, 'sorteos_exclusion_records', snapshot.exclusions, now);
-        updateRefreshMetadata(db, now);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentDrawsUpdatedAt: now,
-          currentExclusionsUpdatedAt: now,
-          message: 'Sorteos guardados en SQLite.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup('save:sorteos_records');
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentDrawsUpdatedAt: null,
-      currentExclusionsUpdatedAt: null,
-      message,
-    }),
-  );
 }
 
 export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
@@ -3686,8 +3401,6 @@ export async function getPersistedRecordsTokenSnapshot(): Promise<PersistedRecor
   );
 }
 
-
-
 type JsonRecordSaveResult = SimpleJsonSaveResult;
 
 function createJsonModuleRepository(
@@ -3717,6 +3430,21 @@ function createJsonModuleRepository(
     },
   );
 }
+
+const sorteosModule = createSorteosRepository({
+  safeDatabaseOperation,
+  getSqliteStatus,
+  requireDatabase,
+  readPersistedRecordByKey,
+  isJsonObjectWithStringId,
+  isCountRow,
+  updateRefreshMetadata,
+  enqueueLocalBackup,
+  assertDatabaseWritesAllowed,
+  isDatabaseWriteBlockedByHeartbeat,
+});
+const { loadSorteosRecordsSnapshot, saveSorteosSnapshotIfUnchanged } = sorteosModule;
+export { loadSorteosRecordsSnapshot, saveSorteosSnapshotIfUnchanged };
 
 const vinculogramaModule = createVinculogramaRepository(createJsonModuleRepository);
 const { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged } = vinculogramaModule;
@@ -3946,7 +3674,6 @@ export async function saveConfiguracionIfUnchanged(record: {
 export async function getSqliteSyncTokensSnapshot(): Promise<PersistedRecordsTokenSnapshot> {
   return getPersistedRecordsTokenSnapshot();
 }
-
 
 function currentOwnerName(): string {
   try {
