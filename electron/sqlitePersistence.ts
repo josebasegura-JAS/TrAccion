@@ -71,6 +71,11 @@ import {
 import { createEmployeeRepository } from './persistence/employeeRepository.js';
 import { createSorteosRepository, getSorteosCollectionUpdatedAt } from './persistence/sorteosRepository.js';
 import { createTaskRepository } from './persistence/taskRepository.js';
+import { createSesionesRepository } from './persistence/sesionesRepository.js';
+import type {
+  SqliteComiteSessionRecord,
+  ConditionalSqliteComiteSessionRecord,
+} from './persistence/sesionesRepository.js';
 import { createVinculogramaRepository } from './persistence/vinculogramaRepository.js';
 import { createLicenciaSinSueldoRepository } from './persistence/licenciaSinSueldoRepository.js';
 import { createTicketRestauranteConfigRepository } from './persistence/ticketRestauranteConfigRepository.js';
@@ -125,42 +130,17 @@ export interface ConditionalSqliteTaskSaveResult {
   message: string;
 }
 
-export interface SqliteComiteSessionRecord {
-  id: string;
-  value: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
-
-export interface SqliteComiteSessionRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteComiteSessionRecord[];
-}
-
-export interface ConditionalSqliteComiteSessionRecord {
-  id: string;
-  value: string;
-  expectedUpdatedAt: string | null;
-}
-
-export type SqliteParitariaSessionRecord = SqliteComiteSessionRecord;
-
-export interface SqliteParitariaSessionRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteParitariaSessionRecord[];
-}
-
-export type ConditionalSqliteParitariaSessionRecord = ConditionalSqliteComiteSessionRecord;
-
-export type SqliteActaRecord = SqliteComiteSessionRecord;
-
-export interface SqliteActaRecordsSnapshot {
-  status: DatabaseStatus;
-  records: SqliteActaRecord[];
-}
-
-export type ConditionalSqliteActaRecord = ConditionalSqliteComiteSessionRecord;
+export type {
+  SqliteComiteSessionRecord,
+  SqliteComiteSessionRecordsSnapshot,
+  ConditionalSqliteComiteSessionRecord,
+  SqliteParitariaSessionRecord,
+  SqliteParitariaSessionRecordsSnapshot,
+  ConditionalSqliteParitariaSessionRecord,
+  SqliteActaRecord,
+  SqliteActaRecordsSnapshot,
+  ConditionalSqliteActaRecord,
+} from './persistence/sesionesRepository.js';
 
 export type SqliteTeletrabajoRecord = SqliteComiteSessionRecord;
 
@@ -308,9 +288,6 @@ let databaseWriteBlockedByHeartbeat = false;
 let heartbeatConsecutiveFailureCount = 0;
 let notifyDatabaseConnectivityIssue: ((payload: DatabaseConnectivityIssuePayload) => void) | null = null;
 // Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
-let comiteSessionsMigrationDone = false;
-let paritariaSessionsMigrationDone = false;
-let actasMigrationDone = false;
 let teletrabajoMigrationDone = false;
 let configuracionMigrationDone = false;
 
@@ -986,9 +963,7 @@ function closeDatabase(): void {
   taskModule.resetMigrationState();
   employeeModule.resetMigrationState();
   sorteosModule.resetMigrationState();
-  comiteSessionsMigrationDone = false;
-  paritariaSessionsMigrationDone = false;
-  actasMigrationDone = false;
+  sesionesModule.resetMigrationState();
   teletrabajoMigrationDone = false;
 }
 
@@ -1000,9 +975,7 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   taskModule.resetMigrationState();
   employeeModule.resetMigrationState();
   sorteosModule.resetMigrationState();
-  comiteSessionsMigrationDone = false;
-  paritariaSessionsMigrationDone = false;
-  actasMigrationDone = false;
+  sesionesModule.resetMigrationState();
   teletrabajoMigrationDone = false;
 
   await releaseActiveSessionLock();
@@ -1720,322 +1693,6 @@ export async function savePersistedRecordIfUnchanged(
   );
 }
 
-function readComiteSessionRecords(db: Database): SqliteComiteSessionRecord[] {
-  return readActiveJsonRecords(db, 'comite_session_records');
-}
-
-function maybeMigrateComiteSessionsFromPersistedRecord(db: Database): void {
-  comiteSessionsMigrationDone = maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'comite_session_records',
-    legacyKey: 'traccion.v1.comite.sessions',
-    migrationDone: comiteSessionsMigrationDone,
-  });
-}
-
-export async function loadComiteSessionRecordsSnapshot(): Promise<SqliteComiteSessionRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, records: [] };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateComiteSessionsFromPersistedRecord(db))();
-      return { status: currentStatus, records: readComiteSessionRecords(db) };
-    },
-    (nextStatus) => ({ status: nextStatus, records: [] }),
-  );
-}
-
-function readParitariaSessionRecords(db: Database): SqliteParitariaSessionRecord[] {
-  return readActiveJsonRecords(db, 'paritaria_session_records');
-}
-
-function maybeMigrateParitariaSessionsFromPersistedRecord(db: Database): void {
-  paritariaSessionsMigrationDone = maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'paritaria_session_records',
-    legacyKey: 'traccion.v1.paritaria.sessions',
-    migrationDone: paritariaSessionsMigrationDone,
-  });
-}
-
-export async function loadParitariaSessionRecordsSnapshot(): Promise<SqliteParitariaSessionRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, records: [] };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateParitariaSessionsFromPersistedRecord(db))();
-      return { status: currentStatus, records: readParitariaSessionRecords(db) };
-    },
-    (nextStatus) => ({ status: nextStatus, records: [] }),
-  );
-}
-
-function readActaRecords(db: Database): SqliteActaRecord[] {
-  return readActiveJsonRecords(db, 'acta_records');
-}
-
-function maybeMigrateActasFromPersistedRecord(db: Database): void {
-  actasMigrationDone = maybeMigrateJsonArrayRecordsFromPersistedRecord(db, {
-    tableName: 'acta_records',
-    legacyKey: 'traccion.v1.actas.records',
-    migrationDone: actasMigrationDone,
-  });
-}
-
-export async function loadActaRecordsSnapshot(): Promise<SqliteActaRecordsSnapshot> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active') {
-        return { status: currentStatus, records: [] };
-      }
-
-      const db = requireDatabase();
-      db.transaction(() => maybeMigrateActasFromPersistedRecord(db))();
-      return { status: currentStatus, records: readActaRecords(db) };
-    },
-    (nextStatus) => ({ status: nextStatus, records: [] }),
-  );
-}
-
-export async function saveComiteSessionRecordIfUnchanged(
-  record: ConditionalSqliteComiteSessionRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
-        maybeMigrateComiteSessionsFromPersistedRecord(db);
-        const row = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message:
-              'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-          };
-        }
-
-        const now = new Date().toISOString();
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(record.value);
-        } catch {
-          parsed = null;
-        }
-        const deletedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
-            ? (parsed as { deletedAt: string }).deletedAt
-            : null;
-        const createdAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
-            ? (parsed as { createdAt: string }).createdAt
-            : now;
-        const updatedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
-            ? (parsed as { updatedAt: string }).updatedAt
-            : now;
-
-        if (currentUpdatedAt === null) {
-          const insertResult = db
-            .prepare(
-              `INSERT OR IGNORE INTO comite_session_records (id, value_json, created_at, updated_at, deleted_at)
-               VALUES (?, ?, ?, ?, ?)`,
-            )
-            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
-
-          if (insertResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message: 'La sesión ya existe en la base compartida. Recarga antes de continuar.',
-            };
-          }
-        } else {
-          const updateResult = db
-            .prepare(
-              `UPDATE comite_session_records
-               SET value_json = ?, updated_at = ?, deleted_at = ?
-               WHERE id = ? AND updated_at = ?`,
-            )
-            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
-
-          if (updateResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM comite_session_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message:
-                'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-            };
-          }
-        }
-
-        updateRefreshMetadata(db, updatedAt);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Sesión de comité guardada en SQLite.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup('save:comite_session_records');
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
-
-export async function saveParitariaSessionRecordIfUnchanged(
-  record: ConditionalSqliteParitariaSessionRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
-        maybeMigrateParitariaSessionsFromPersistedRecord(db);
-        const row = db.prepare('SELECT updated_at FROM paritaria_session_records WHERE id = ?').get(record.id);
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message:
-              'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-          };
-        }
-
-        const now = new Date().toISOString();
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(record.value);
-        } catch {
-          parsed = null;
-        }
-        const deletedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
-            ? (parsed as { deletedAt: string }).deletedAt
-            : null;
-        const createdAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
-            ? (parsed as { createdAt: string }).createdAt
-            : now;
-        const updatedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
-            ? (parsed as { updatedAt: string }).updatedAt
-            : now;
-
-        if (currentUpdatedAt === null) {
-          const insertResult = db
-            .prepare(
-              `INSERT OR IGNORE INTO paritaria_session_records (id, value_json, created_at, updated_at, deleted_at)
-               VALUES (?, ?, ?, ?, ?)`,
-            )
-            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
-
-          if (insertResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM paritaria_session_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message: 'La sesión ya existe en la base compartida. Recarga antes de continuar.',
-            };
-          }
-        } else {
-          const updateResult = db
-            .prepare(
-              `UPDATE paritaria_session_records
-               SET value_json = ?, updated_at = ?, deleted_at = ?
-               WHERE id = ? AND updated_at = ?`,
-            )
-            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
-
-          if (updateResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM paritaria_session_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message:
-                'La sesión ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-            };
-          }
-        }
-
-        updateRefreshMetadata(db, updatedAt);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Sesión de paritaria guardada en SQLite.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup('save:paritaria_session_records');
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
-      message,
-    }),
-  );
-}
-
 function readTeletrabajoRecords(db: Database): SqliteTeletrabajoRecord[] {
   return readActiveJsonRecords(db, 'teletrabajo_solicitud_records');
 }
@@ -2268,120 +1925,6 @@ export async function saveTeletrabajoRecordsIfUnchanged(
       ok: false,
       status: nextStatus,
       results: [],
-      message,
-    }),
-  );
-}
-
-export async function saveActaRecordIfUnchanged(
-  record: ConditionalSqliteActaRecord,
-): Promise<ConditionalSqliteTaskSaveResult> {
-  return safeDatabaseOperation(
-    () => {
-      const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
-        return {
-          ok: false,
-          status: currentStatus,
-          currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
-        };
-      }
-
-      assertDatabaseWritesAllowed();
-
-      const db = requireDatabase();
-      const result = db.transaction((): ConditionalSqliteTaskSaveResult => {
-        maybeMigrateActasFromPersistedRecord(db);
-        const row = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
-        const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
-
-        if (currentUpdatedAt !== record.expectedUpdatedAt) {
-          return {
-            ok: false,
-            status: currentStatus,
-            currentUpdatedAt,
-            message: 'El acta ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-          };
-        }
-
-        const now = new Date().toISOString();
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(record.value);
-        } catch {
-          parsed = null;
-        }
-        const deletedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
-            ? (parsed as { deletedAt: string }).deletedAt
-            : null;
-        const createdAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { createdAt?: unknown }).createdAt === 'string'
-            ? (parsed as { createdAt: string }).createdAt
-            : now;
-        const updatedAt =
-          parsed && typeof parsed === 'object' && typeof (parsed as { updatedAt?: unknown }).updatedAt === 'string'
-            ? (parsed as { updatedAt: string }).updatedAt
-            : now;
-
-        if (currentUpdatedAt === null) {
-          const insertResult = db
-            .prepare(
-              `INSERT OR IGNORE INTO acta_records (id, value_json, created_at, updated_at, deleted_at)
-               VALUES (?, ?, ?, ?, ?)`,
-            )
-            .run(record.id, record.value, createdAt, updatedAt, deletedAt);
-
-          if (insertResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message: 'El acta ya existe en la base compartida. Recarga antes de continuar.',
-            };
-          }
-        } else {
-          const updateResult = db
-            .prepare(
-              `UPDATE acta_records
-               SET value_json = ?, updated_at = ?, deleted_at = ?
-               WHERE id = ? AND updated_at = ?`,
-            )
-            .run(record.value, updatedAt, deletedAt, record.id, currentUpdatedAt);
-
-          if (updateResult.changes !== 1) {
-            const latest = db.prepare('SELECT updated_at FROM acta_records WHERE id = ?').get(record.id);
-            return {
-              ok: false,
-              status: currentStatus,
-              currentUpdatedAt: isUpdatedAtRow(latest) ? latest.updated_at : null,
-              message: 'El acta ha sido modificada por otro usuario. Cierra y vuelve a abrir antes de guardar.',
-            };
-          }
-        }
-
-        updateRefreshMetadata(db, updatedAt);
-
-        return {
-          ok: true,
-          status: currentStatus,
-          currentUpdatedAt: updatedAt,
-          message: 'Acta guardada en SQLite.',
-        };
-      })();
-
-      if (result.ok) {
-        enqueueLocalBackup('save:acta_records');
-      }
-
-      return result;
-    },
-    (nextStatus, message) => ({
-      ok: false,
-      status: nextStatus,
-      currentUpdatedAt: null,
       message,
     }),
   );
@@ -2802,6 +2345,33 @@ function createJsonModuleRepository(
     },
   );
 }
+
+const sesionesModule = createSesionesRepository({
+  safeDatabaseOperation,
+  getSqliteStatus,
+  requireDatabase,
+  isUpdatedAtRow,
+  updateRefreshMetadata,
+  enqueueLocalBackup,
+  assertDatabaseWritesAllowed,
+  isDatabaseWriteBlockedByHeartbeat,
+});
+const {
+  loadComiteSessionRecordsSnapshot,
+  saveComiteSessionRecordIfUnchanged,
+  loadParitariaSessionRecordsSnapshot,
+  saveParitariaSessionRecordIfUnchanged,
+  loadActaRecordsSnapshot,
+  saveActaRecordIfUnchanged,
+} = sesionesModule;
+export {
+  loadComiteSessionRecordsSnapshot,
+  saveComiteSessionRecordIfUnchanged,
+  loadParitariaSessionRecordsSnapshot,
+  saveParitariaSessionRecordIfUnchanged,
+  loadActaRecordsSnapshot,
+  saveActaRecordIfUnchanged,
+};
 
 const taskModule = createTaskRepository({
   safeDatabaseOperation,
