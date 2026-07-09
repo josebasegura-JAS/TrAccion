@@ -1,54 +1,52 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  ExternalLink,
-  X,
   Laptop,
   ListChecks,
   Utensils,
   UsersRound,
-  type LucideIcon,
 } from 'lucide-react';
-import { isTaskClosed, type Task, type TaskState } from '../features/tareas/domain/task';
+import { isTaskClosed, type Task } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
-import type { AppView } from '../navigation/navigation';
 import { readStorageItem } from '../services/persistence';
-
-type CalendarEventType = 'task' | 'committee' | 'paritaria' | 'telework' | 'tickets' | 'actas';
-
-type DashboardPopupItem = {
-  id: string;
-  date?: string;
-  type: CalendarEventType;
-  title: string;
-  detail: string;
-  view: AppView;
-  recordId?: string;
-};
-
-type CalendarEvent = DashboardPopupItem & {
-  date: string;
-};
-
-type DashboardPopup = {
-  eyebrow: string;
-  title: string;
-  subtitle?: string;
-  emptyText: string;
-  items: DashboardPopupItem[];
-};
-
-type DashboardNavigationTarget = {
-  view: AppView;
-  recordId?: string;
-};
+import {
+  CalendarLegend,
+  DashboardHeaderPill,
+  DashboardList,
+  DashboardListRow,
+  DashboardRecordsModal,
+  EmptyDashboardRow,
+  SummaryLine,
+  TodayAlert,
+} from './dashboard/DashboardUi';
+import type {
+  CalendarEvent,
+  CalendarEventType,
+  DashboardNavigationTarget,
+  DashboardPopup,
+  DashboardPopupItem,
+  KpiCard,
+} from './dashboard/dashboardTypes';
+import {
+  eventTone,
+  formatDisplayDate,
+  fullDateFormatter,
+  getLatestTeletrabajoPeriodo,
+  getMonthMatrix,
+  miniDonutStyle,
+  monthFormatter,
+  parseIsoDate,
+  stateSegmentsFromTasks,
+  taskStateLabels,
+  toIsoDate,
+} from './dashboard/dashboardUtils';
 
 
 function getStoredDashboardUserName(): string {
@@ -66,152 +64,6 @@ function getGreetingUserName(value: string): string {
   }
 
   return trimmed;
-}
-
-type KpiCard = {
-  title: string;
-  value: number | string;
-  subtitle: string;
-  helper: string;
-  icon: LucideIcon;
-  tone: string;
-  segments: { label: string; value: number; className: string }[];
-};
-
-const eventTone: Record<CalendarEventType, string> = {
-  task: 'bg-red-500',
-  committee: 'bg-orange-500',
-  paritaria: 'bg-violet-500',
-  telework: 'bg-blue-500',
-  tickets: 'bg-emerald-500',
-  actas: 'bg-amber-400',
-};
-
-const taskStateLabels: Record<TaskState, string> = {
-  pendiente: 'Abiertas',
-  'en curso': 'En curso',
-  bloqueada: 'Bloqueadas',
-  resuelta: 'Resueltas',
-  cerrada: 'Cerradas',
-};
-
-const taskStateBars: Record<TaskState, string> = {
-  pendiente: 'bg-red-500',
-  'en curso': 'bg-orange-500',
-  bloqueada: 'bg-violet-500',
-  resuelta: 'bg-emerald-500',
-  cerrada: 'bg-slate-400',
-};
-
-const monthFormatter = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' });
-const fullDateFormatter = new Intl.DateTimeFormat('es-ES', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-});
-const shortDateFormatter = new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit' });
-
-function toIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function parseIsoDate(value: string): Date | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function formatDisplayDate(value: string): string {
-  const date = parseIsoDate(value);
-  return date ? shortDateFormatter.format(date) : 'Sin fecha';
-}
-
-function getMonthMatrix(monthDate: Date): (Date | null)[] {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const firstWeekday = (firstDay.getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (Date | null)[] = [];
-
-  for (let index = 0; index < firstWeekday; index += 1) {
-    cells.push(null);
-  }
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(new Date(year, month, day));
-  }
-
-  while (cells.length % 7 !== 0 || cells.length < 35) {
-    cells.push(null);
-  }
-
-  return cells;
-}
-
-
-function getLatestTeletrabajoPeriodo(solicitudes: readonly { periodo: string }[]): string {
-  return Array.from(
-    new Set(solicitudes.map((solicitud) => solicitud.periodo.trim()).filter(Boolean)),
-  ).sort((first, second) =>
-    second.localeCompare(first, 'es', { numeric: true, sensitivity: 'base' }),
-  )[0] ?? '';
-}
-
-function groupByState(tasks: readonly Task[]): Record<TaskState, number> {
-  return tasks.reduce<Record<TaskState, number>>(
-    (accumulator, task) => {
-      accumulator[task.estado] += 1;
-      return accumulator;
-    },
-    { pendiente: 0, 'en curso': 0, bloqueada: 0, resuelta: 0, cerrada: 0 },
-  );
-}
-
-function stateSegmentsFromTasks(tasks: readonly Task[]) {
-  const byState = groupByState(tasks);
-  return Object.entries(byState).map(([state, value]) => ({
-    label: taskStateLabels[state as TaskState],
-    value,
-    className: taskStateBars[state as TaskState],
-  }));
-}
-
-function miniDonutStyle(segments: { value: number; className: string }[]) {
-  const colors: Record<string, string> = {
-    'bg-red-500': '#ef4444',
-    'bg-orange-500': '#f97316',
-    'bg-violet-500': '#8b5cf6',
-    'bg-emerald-500': '#10b981',
-    'bg-blue-500': '#3b82f6',
-    'bg-slate-400': '#94a3b8',
-    'bg-amber-400': '#fbbf24',
-  };
-  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
-
-  if (total <= 0) {
-    return { background: 'conic-gradient(#e2e8f0 0deg 360deg)' };
-  }
-
-  let cursor = 0;
-  const stops = segments
-    .filter((segment) => segment.value > 0)
-    .map((segment) => {
-      const start = cursor;
-      const end = cursor + (segment.value / total) * 360;
-      cursor = end;
-      return `${colors[segment.className] ?? '#64748b'} ${start}deg ${end}deg`;
-    })
-    .join(', ');
-
-  return { background: `conic-gradient(${stops})` };
 }
 
 export function DashboardCards({
@@ -1021,257 +873,3 @@ export function DashboardCards({
   );
 }
 
-
-function DashboardRecordsModal({
-  emptyText,
-  eyebrow,
-  items,
-  onClose,
-  onOpenItem,
-  subtitle,
-  title,
-}: {
-  emptyText: string;
-  eyebrow: string;
-  items: DashboardPopupItem[];
-  onClose: () => void;
-  onOpenItem: (item: DashboardPopupItem) => void;
-  subtitle?: string;
-  title: string;
-}) {
-  const visibleItems = items.slice(0, 250);
-  const hiddenCount = Math.max(0, items.length - visibleItems.length);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-metro-border bg-metro-surface text-metro-text shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-metro-red">
-              {eyebrow}
-            </p>
-            <h3 className="mt-1 text-lg font-black capitalize">{title}</h3>
-            {subtitle && <p className="mt-1 text-sm font-medium text-metro-muted">{subtitle}</p>}
-          </div>
-          <button
-            className="rounded-full p-2 text-metro-muted transition hover:bg-metro-panel hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="max-h-[60vh] overflow-auto p-4">
-          {visibleItems.length > 0 ? (
-            <div className="space-y-3">
-              {visibleItems.map((item) => (
-                <div
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-metro-panel/70 p-3 ring-1 ring-metro-border"
-                  key={item.id}
-                >
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 text-sm font-black text-metro-text">
-                      <span
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${eventTone[item.type]}`}
-                      />
-                      <span className="truncate">{item.title}</span>
-                    </p>
-                    <p className="mt-1 truncate text-xs font-medium text-metro-muted">
-                      {item.date ? `${formatDisplayDate(item.date)} · ${item.detail}` : item.detail}
-                    </p>
-                  </div>
-                  <button
-                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-xs font-black text-metro-secondary transition hover:border-metro-red hover:text-metro-text"
-                    onClick={() => onOpenItem(item)}
-                    type="button"
-                  >
-                    Abrir <ExternalLink size={13} />
-                  </button>
-                </div>
-              ))}
-              {hiddenCount > 0 && (
-                <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
-                  Se muestran los primeros 250 registros. Afina desde el módulo para ver los {hiddenCount} restantes.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
-              {emptyText}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DashboardHeaderPill({
-  label,
-  value,
-  tone = 'text-metro-text',
-  onClick,
-}: {
-  label: string;
-  value: number;
-  tone?: string;
-  onClick?: () => void;
-}) {
-  const content = (
-    <>
-      <p className={`text-lg font-black ${tone}`}>{value}</p>
-      <p className="text-[11px] font-bold text-metro-muted">{label}</p>
-    </>
-  );
-
-  if (onClick) {
-    return (
-      <button
-        className="rounded-xl bg-metro-panel/70 px-3 py-2 text-left ring-1 ring-metro-border transition hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-metro-red/40"
-        onClick={onClick}
-        type="button"
-      >
-        {content}
-      </button>
-    );
-  }
-
-  return <div className="rounded-xl bg-metro-panel/70 px-3 py-2 ring-1 ring-metro-border">{content}</div>;
-}
-
-function CalendarLegend({ className, label }: { className: string; label: string }) {
-  return (
-    <span className="flex items-center gap-2">
-      <span className={`h-2.5 w-2.5 rounded-full ${className}`} /> {label}
-    </span>
-  );
-}
-
-function SummaryLine({
-  icon: Icon,
-  label,
-  value,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: number;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      className="flex w-full items-center justify-between gap-3 rounded-xl bg-metro-panel/70 px-3 py-1.5 text-left ring-1 ring-metro-border transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/40"
-      onClick={onClick}
-      type="button"
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="rounded-lg bg-metro-raised p-1.5 text-blue-400 shadow-sm">
-          <Icon size={15} />
-        </span>
-        <span className="truncate text-sm font-bold text-metro-secondary">{label}</span>
-      </div>
-      <span className="text-base font-black text-metro-text">{value}</span>
-    </button>
-  );
-}
-
-function TodayAlert({
-  className,
-  title,
-  subtitle = 'Requiere atención',
-  onClick,
-}: {
-  className: string;
-  title: string;
-  subtitle?: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      className={`w-full rounded-xl border-l-4 bg-metro-panel/70 px-3 py-2 text-left ring-1 ring-metro-border transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/40 ${className}`}
-      onClick={onClick}
-      type="button"
-    >
-      <p className="text-sm font-black text-metro-text">{title}</p>
-      <p className="mt-0.5 text-xs font-medium text-metro-muted">{subtitle}</p>
-    </button>
-  );
-}
-
-function DashboardList({
-  title,
-  action,
-  children,
-  onActionClick,
-}: {
-  title: string;
-  action: string;
-  children: ReactNode;
-  onActionClick?: () => void;
-}) {
-  return (
-    <article className="rounded-[1.25rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
-      <h3 className="mb-3 text-base font-black">{title}</h3>
-      <div className="space-y-2">{children}</div>
-      <button
-        className="mt-3 text-xs font-black text-metro-red hover:text-red-400"
-        onClick={onActionClick}
-        type="button"
-      >
-        {action} <ChevronRight className="inline" size={14} />
-      </button>
-    </article>
-  );
-}
-
-function DashboardListRow({
-  badge,
-  date,
-  label,
-  meta,
-  tone,
-  onClick,
-}: {
-  badge: string;
-  date: string;
-  label: string;
-  meta: string;
-  tone: string;
-  onClick?: () => void;
-}) {
-  const rowClassName = `grid w-full grid-cols-[0.75rem_1fr_auto] items-center gap-2 rounded-xl px-2 py-1 text-left text-sm transition ${
-    onClick ? 'cursor-pointer hover:bg-white/5 focus:bg-white/5 focus:outline-none' : ''
-  }`;
-  const content = (
-    <>
-      <span className={`h-2.5 w-2.5 rounded-full ${tone}`} />
-      <div className="min-w-0">
-        <p className="truncate font-black text-metro-text">{label}</p>
-        <p className="truncate text-xs font-medium text-metro-muted">{meta}</p>
-      </div>
-      <div className="flex items-center gap-2 text-right text-xs font-black">
-        <span className="rounded-full bg-metro-panel px-2 py-1 text-metro-secondary">{badge}</span>
-        {date && <span className="text-metro-muted">{date}</span>}
-      </div>
-    </>
-  );
-
-  if (onClick) {
-    return (
-      <button className={rowClassName} onClick={onClick} type="button">
-        {content}
-      </button>
-    );
-  }
-
-  return <div className={rowClassName}>{content}</div>;
-}
-
-function EmptyDashboardRow({ text }: { text: string }) {
-  return (
-    <p className="rounded-2xl bg-metro-panel/70 px-4 py-3 text-sm font-semibold text-metro-muted">
-      {text}
-    </p>
-  );
-}
