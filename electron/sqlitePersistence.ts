@@ -247,7 +247,6 @@ let ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
-let activeDatabaseLock: { lockPath: string; lock: DatabaseLockInfo; heartbeat: ReturnType<typeof setInterval> } | null = null;
 // Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
 let configuracionMigrationDone = false;
 
@@ -484,19 +483,6 @@ function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
 }
 
 
-async function releaseActiveSessionLock(): Promise<void> {
-  const sessionLock = activeDatabaseLock;
-  if (!sessionLock) {
-    return;
-  }
-
-  activeDatabaseLock = null;
-  clearInterval(sessionLock.heartbeat);
-  await releaseLock(sessionLock.lockPath, sessionLock.lock).catch((error: unknown) => {
-    console.warn('No se ha podido liberar el bloqueo SQLite de sesión.', error);
-  });
-}
-
 async function pruneEmergencyDatabaseBackups(databasePath: string, retentionCount = 1): Promise<void> {
   const directory = path.dirname(databasePath);
   const prefix = `${path.basename(databasePath)}.backup-`;
@@ -580,8 +566,6 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
   sorteosModule.resetMigrationState();
   sesionesModule.resetMigrationState();
   teletrabajoModule.resetMigrationState();
-
-  await releaseActiveSessionLock();
 }
 
 async function prepareDatabaseAtPath(
