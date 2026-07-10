@@ -1,14 +1,15 @@
 import {
   ChevronDown,
   ChevronRight,
-  Plus,
   Search,
   Settings,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
+import { type ModuleHelpSection } from './ModuleHelp';
+import { ActionButton } from './ui/ActionButton';
+import { PageHeader } from './ui/PageHeader';
 import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrigins';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
@@ -710,38 +711,27 @@ export function TareasPage({
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="tareas"
     >
-      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-bold text-metro-text">Tareas</h2>
-            <ModuleHelpButton
-              title="Tareas"
-              subtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
-              sections={TAREAS_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-base text-metro-muted">
-            Centro operativo único para tareas internas y solicitudes sindicales por fase.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => setIsOriginsModalOpen(true)}
-            type="button"
-          >
-            <Settings size={16} /> Orígenes
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={openCreateEditor}
-            type="button"
-          >
-            <Plus size={16} /> Nueva tarea
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        actions={
+          <>
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => setIsOriginsModalOpen(true)}
+              type="button"
+            >
+              <Settings size={16} /> Orígenes
+            </button>
+            <ActionButton iconOnly={false} onClick={openCreateEditor} variant="add">
+              Nueva tarea
+            </ActionButton>
+          </>
+        }
+        eyebrow="Módulo"
+        helpSections={TAREAS_HELP_SECTIONS}
+        helpSubtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
+        subtitle="Centro operativo único para tareas internas y solicitudes sindicales por fase."
+        title="Tareas"
+      />
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex flex-col gap-2 border-b border-metro-border bg-metro-surface px-3 py-2 xl:flex-row xl:items-center xl:justify-between">

@@ -1,7 +1,6 @@
 import {
   Download,
   Languages,
-  Plus,
   RefreshCw,
   RotateCcw,
   Search,
@@ -11,7 +10,9 @@ import {
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { EmployeeEditor } from './EmployeeEditor';
-import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
+import { type ModuleHelpSection } from './ModuleHelp';
+import { ActionButton } from './ui/ActionButton';
+import { PageHeader } from './ui/PageHeader';
 import { DropdownMenu } from './ui/DropdownMenu';
 import { CountBadge } from './ui/CountBadge';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
@@ -447,92 +448,81 @@ export function PlantillaPage() {
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id="plantilla"
     >
-      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-metro-text">Plantilla</h2>
-            <ModuleHelpButton
-              title="Plantilla"
-              subtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
-              sections={PLANTILLA_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-sm text-metro-muted">
-            Listado de personas con alta manual, edición, borrado lógico e importación Excel.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input
-            accept=".xlsx,.xls,.csv,.tsv,.txt"
-            className="hidden"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              if (!file) {
-                return;
-              }
+      <PageHeader
+        actions={
+          <>
+            <input
+              accept=".xlsx,.xls,.csv,.tsv,.txt"
+              className="hidden"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) {
+                  return;
+                }
 
-              try {
-                const result = await importExcel(file);
-                setImportMessage(
-                  result.mode === 'antiguedadPuesto'
-                    ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
-                    : `Importación completada: ${file.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
-                );
-              } catch (error) {
-                setImportMessage(error instanceof Error ? error.message : 'No se ha podido importar la plantilla.');
-              } finally {
-                event.target.value = '';
-              }
-            }}
-            ref={fileInputRef}
-            type="file"
-          />
-          <DropdownMenu
-            icon={<Upload size={16} />}
-            items={[
-              {
-                key: 'traducir-puestos',
-                label: 'Traducir puestos',
-                icon: <Languages size={14} />,
-                onClick: () => setTranslationsModalOpen(true),
-              },
-              {
-                key: 'actualizar-puestos-global',
-                label:
-                  emptyPuestoEusCount === 0
-                    ? 'Actualizar puestos global (sin pendientes)'
-                    : `Actualizar puestos global (${emptyPuestoEusCount} pendientes)`,
-                icon: <RefreshCw size={14} />,
-                disabled: emptyPuestoEusCount === 0,
-                onClick: () => {
-                  void handleGlobalJobPositionUpdate();
+                try {
+                  const result = await importExcel(file);
+                  setImportMessage(
+                    result.mode === 'antiguedadPuesto'
+                      ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
+                      : `Importación completada: ${file.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
+                  );
+                } catch (error) {
+                  setImportMessage(error instanceof Error ? error.message : 'No se ha podido importar la plantilla.');
+                } finally {
+                  event.target.value = '';
+                }
+              }}
+              ref={fileInputRef}
+              type="file"
+            />
+            <DropdownMenu
+              icon={<Upload size={16} />}
+              items={[
+                {
+                  key: 'traducir-puestos',
+                  label: 'Traducir puestos',
+                  icon: <Languages size={14} />,
+                  onClick: () => setTranslationsModalOpen(true),
                 },
-              },
-              {
-                key: 'importar',
-                label: 'Importar Excel',
-                icon: <Upload size={14} />,
-                onClick: () => fileInputRef.current?.click(),
-              },
-              {
-                key: 'generar-muestra',
-                label: 'Generar Excel de muestra',
-                icon: <Download size={14} />,
-                onClick: () => void handleGenerateSampleExcel(),
-              },
-            ]}
-            label="Importar"
-          />
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={openCreateEditor}
-            type="button"
-          >
-            <Plus size={16} /> Nueva persona
-          </button>
-        </div>
-      </div>
+                {
+                  key: 'actualizar-puestos-global',
+                  label:
+                    emptyPuestoEusCount === 0
+                      ? 'Actualizar puestos global (sin pendientes)'
+                      : `Actualizar puestos global (${emptyPuestoEusCount} pendientes)`,
+                  icon: <RefreshCw size={14} />,
+                  disabled: emptyPuestoEusCount === 0,
+                  onClick: () => {
+                    void handleGlobalJobPositionUpdate();
+                  },
+                },
+                {
+                  key: 'importar',
+                  label: 'Importar Excel',
+                  icon: <Upload size={14} />,
+                  onClick: () => fileInputRef.current?.click(),
+                },
+                {
+                  key: 'generar-muestra',
+                  label: 'Generar Excel de muestra',
+                  icon: <Download size={14} />,
+                  onClick: () => void handleGenerateSampleExcel(),
+                },
+              ]}
+              label="Importar"
+            />
+            <ActionButton iconOnly={false} onClick={openCreateEditor} variant="add">
+              Nueva persona
+            </ActionButton>
+          </>
+        }
+        eyebrow="Módulo"
+        helpSections={PLANTILLA_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
+        subtitle="Listado de personas con alta manual, edición, borrado lógico e importación Excel."
+        title="Plantilla"
+      />
 
       {importMessage && (
         <div className="mb-3 rounded-xl border border-metro-success/30 bg-metro-success/10 px-3 py-2 text-sm font-semibold text-emerald-200">

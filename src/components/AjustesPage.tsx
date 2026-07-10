@@ -5,7 +5,7 @@ import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseSt
 import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import { formatLockAge } from '../services/databaseLockView';
 import { Notice } from './ui/Notice';
-import { ModuleHelpButton } from './ModuleHelp';
+import { PageHeader } from './ui/PageHeader';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { AJUSTES_HELP_SECTIONS, formatBytesAsMb, noticeTone } from './ajustes/ajustesCommon';
@@ -549,21 +549,13 @@ export function AjustesPage() {
   return (
     <>
       <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
-      <div className="mb-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Ajustes</p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h2 className="text-2xl font-bold text-metro-text">Configuración</h2>
-          <ModuleHelpButton
-            title="Configuración"
-            subtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
-            sections={AJUSTES_HELP_SECTIONS}
-          />
-        </div>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-metro-muted">
-          Configura rutas externas necesarias para generar documentos sin almacenar plantillas
-          dentro de TrAccion.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Ajustes"
+        helpSections={AJUSTES_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
+        subtitle="Configura rutas externas necesarias para generar documentos sin almacenar plantillas dentro de TrAccion."
+        title="Configuración"
+      />
 
       <DatabaseSettingsSection
         databaseStatus={databaseStatus}

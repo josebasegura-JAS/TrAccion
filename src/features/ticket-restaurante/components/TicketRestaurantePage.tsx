@@ -36,7 +36,8 @@ import {
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../../components/ModuleHelp';
+import { type ModuleHelpSection } from '../../../components/ModuleHelp';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -1316,25 +1317,20 @@ export function TicketRestaurantePage({
       className="rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card"
       id="ticket-restaurante"
     >
-      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-metro-red">
-            Ticket Restaurante
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-metro-text">Ticket Restaurante</h2>
-            <ModuleHelpButton
-              title="Ticket Restaurante"
-              subtitle="Guía rápida de uso, reglas principales e importaciones del módulo."
-              sections={TICKET_RESTAURANTE_HELP_SECTIONS}
-            />
-          </div>
-          <p className="mt-0.5 text-sm text-metro-muted">
+      <PageHeader
+        eyebrow="Ticket Restaurante"
+        helpSections={TICKET_RESTAURANTE_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de uso, reglas principales e importaciones del módulo."
+        subtitle={
+          <>
             Gestión anual de calendarios y ausencias de Ticket Restaurante.
-          </p>
-          <div className="mt-2"><InlineSaveFeedback /></div>
-        </div>
-      </div>
+            <div className="mt-2">
+              <InlineSaveFeedback />
+            </div>
+          </>
+        }
+        title="Ticket Restaurante"
+      />
 
       <input
         accept=".xlsx,.csv,.tsv"

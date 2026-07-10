@@ -5,7 +5,6 @@ import {
   ChevronRight,
   ClipboardList,
   Pencil,
-  Plus,
   Search,
   Trash2,
 } from 'lucide-react';
@@ -21,8 +20,9 @@ import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
 import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
+import { PageHeader } from '../../components/ui/PageHeader';
 import { TaskEditor } from '../../components/TaskEditor';
-import { ModuleHelpButton, type ModuleHelpSection } from '../../components/ModuleHelp';
+import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
 import type { ManagedSessionStateStore } from './createSessionStore';
@@ -818,53 +818,44 @@ export function SessionManagementPage({
       className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
       id={config.moduleId}
     >
-      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-bold text-metro-text">{config.title}</h2>
-            {helpSections ? (
-              <ModuleHelpButton
-                title={config.title}
-                subtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
-                sections={helpSections}
-              />
-            ) : null}
-          </div>
-          <p className="mt-0.5 text-base text-metro-muted">
-            Alta de sesiones, orden del día y cierre automático de tareas en fase {config.taskPhase}
-            .
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <ExportPrintButtons
-            payload={{
-              title: config.exportTitle,
-              filename: config.exportFilename,
-              columns: sessionExportColumns,
-              rows: sessions,
-              filterLabel: sessionFilterLabel,
-            }}
-          />
-          <input
-            accept=".docx,.txt"
-            className="hidden"
-            onChange={(event) => handleImportFile(event.target.files?.[0])}
-            ref={fileInputRef}
-            type="file"
-          />
-          <ActionButton iconOnly={false} onClick={openImporter} variant="word">
-            Importar Word
-          </ActionButton>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={() => setIsCreateOpen((current) => !current)}
-            type="button"
-          >
-            <Plus size={16} /> {config.createButtonLabel}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        actions={
+          <>
+            <ExportPrintButtons
+              payload={{
+                title: config.exportTitle,
+                filename: config.exportFilename,
+                columns: sessionExportColumns,
+                rows: sessions,
+                filterLabel: sessionFilterLabel,
+              }}
+            />
+            <input
+              accept=".docx,.txt"
+              className="hidden"
+              onChange={(event) => handleImportFile(event.target.files?.[0])}
+              ref={fileInputRef}
+              type="file"
+            />
+            <ActionButton iconOnly={false} onClick={openImporter} variant="word">
+              Importar Word
+            </ActionButton>
+            <ActionButton
+              iconOnly={false}
+              onClick={() => setIsCreateOpen((current) => !current)}
+              variant="add"
+            >
+              {config.createButtonLabel}
+            </ActionButton>
+          </>
+        }
+        eyebrow="Módulo"
+        helpSections={helpSections}
+        helpSubtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
+        helpTitle={config.title}
+        subtitle={`Alta de sesiones, orden del día y cierre automático de tareas en fase ${config.taskPhase}.`}
+        title={config.title}
+      />
 
       {isCreateOpen && (
         <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-3">
