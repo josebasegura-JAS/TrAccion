@@ -316,8 +316,8 @@ export function PlantillaPage() {
         id: 'actions',
         header: 'Acciones',
         render: (employee) => (
-          <button
-            className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+          <ActionButton
+            iconOnly={false}
             onClick={(event) => {
               event.stopPropagation();
               void (async () => {
@@ -325,10 +325,11 @@ export function PlantillaPage() {
                 setImportMessage(result.message);
               })();
             }}
-            type="button"
+            size="sm"
+            variant="delete"
           >
             Eliminar
-          </button>
+          </ActionButton>
         ),
         width: 92,
         minWidth: 84,

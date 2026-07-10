@@ -38,6 +38,7 @@ import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -496,13 +497,9 @@ function ManutencionesPanel({
           >
             Modelo
           </button>
-          <button
-            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-            onClick={onImport}
-            type="button"
-          >
+          <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
             Importar desde Excel
-          </button>
+          </ActionButton>
         </div>
       </div>
 
@@ -532,14 +529,15 @@ function ManutencionesPanel({
               ? manualPerson.nombreApellidos
               : 'Introduce una persona con derecho a ticket'}
           </div>
-          <button
-            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+          <ActionButton
             disabled={!manualPerson || !manualDate}
+            iconOnly={false}
             onClick={onAddManual}
-            type="button"
+            size="sm"
+            variant="add"
           >
             Añadir
-          </button>
+          </ActionButton>
         </div>
       </div>
 

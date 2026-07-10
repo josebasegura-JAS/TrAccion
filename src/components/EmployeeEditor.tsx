@@ -10,6 +10,7 @@ import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
+import { ActionButton } from './ui/ActionButton';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
   { field: 'empleado', label: 'Empleado', required: true },
@@ -216,18 +217,14 @@ export function EmployeeEditor({
                 {saveError}
               </p>
             )}
-            <button
-              className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmit}
-              type="submit"
-            >
+            <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
               Guardar
-            </button>
+            </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && employee && (
-              <button
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              <ActionButton
                 disabled={isReadOnly}
+                iconOnly={false}
                 onClick={() => {
                   void (async () => {
                     setSaveError('');
@@ -239,10 +236,10 @@ export function EmployeeEditor({
                     onDone();
                   })();
                 }}
-                type="button"
+                variant="delete"
               >
                 Eliminar
-              </button>
+              </ActionButton>
             )}
             <button
               className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"

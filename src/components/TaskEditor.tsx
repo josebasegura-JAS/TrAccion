@@ -1,6 +1,7 @@
-import { Eye, LockKeyhole, Mail, Search, Trash2, X } from 'lucide-react';
+import { Eye, LockKeyhole, Mail, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CountBadge } from './ui/CountBadge';
+import { ActionButton } from './ui/ActionButton';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import {
   EMPTY_TASK_DRAFT,
@@ -735,14 +736,12 @@ export function TaskEditor({
                         >
                           <Eye size={15} />
                         </button>
-                        <button
-                          aria-label={`Eliminar vínculo ${link.nombre}`}
-                          className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+                        <ActionButton
                           onClick={() => handleRemoveDocumentLink(link.id)}
-                          type="button"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                          size="sm"
+                          title={`Eliminar vínculo ${link.nombre}`}
+                          variant="delete"
+                        />
                       </div>
                     </article>
                   ))}
@@ -863,13 +862,9 @@ export function TaskEditor({
           </fieldset>
 
           <div className="shrink-0 flex flex-wrap gap-2 border-t border-metro-border pt-3">
-            <button
-              className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmit}
-              type="submit"
-            >
+            <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
               Guardar
-            </button>
+            </ActionButton>
             <InlineSaveFeedback />
             {saveStatus && (
               <p
@@ -888,9 +883,9 @@ export function TaskEditor({
               />
             )}
             {!isCreate && task && (
-              <button
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              <ActionButton
                 disabled={isFormReadOnly}
+                iconOnly={false}
                 onClick={() => {
                   void (async () => {
                     const result = await removeTaskWithConcurrencyCheck(task.id, loadedTaskUpdatedAt);
@@ -902,10 +897,10 @@ export function TaskEditor({
                     onDone();
                   })();
                 }}
-                type="button"
+                variant="delete"
               >
                 Eliminar
-              </button>
+              </ActionButton>
             )}
             <button
               className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
