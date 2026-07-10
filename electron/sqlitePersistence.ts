@@ -7,10 +7,7 @@ import {
   createSimpleJsonModuleRepository,
   type SimpleJsonSaveResult,
 } from './persistence/simpleJsonModuleRepository.js';
-import {
-  getDailyLocalBackupWeekdayName,
-  pruneLocalStorageBackups,
-} from './persistence/maintenanceQueries.js';
+import { pruneLocalStorageBackups } from './persistence/maintenanceQueries.js';
 import {
   CONFIGURACION_STATE_ID,
   CURRENT_SCHEMA_VERSION,
@@ -29,13 +26,6 @@ import {
   type RecordLockResult as RecordLockModuleResult,
 } from './persistence/recordLocks.js';
 import {
-  isLocalBackupFileName,
-  isShutdownBackupFileName,
-  localBackupKindFromFileName,
-  LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME,
-  resolveLocalBackupReference as resolveLocalBackupReferenceFromModule,
-} from './persistence/backupReference.js';
-import {
   getConfiguredDatabaseDirectory,
   getDatabasePathForDirectory,
   getDefaultDatabaseDirectory,
@@ -44,24 +34,6 @@ import {
   DAILY_LOCAL_BACKUP_MAX_RETENTION_DAYS,
   DAILY_LOCAL_BACKUP_MIN_RETENTION_DAYS,
 } from './persistence/databasePreferences.js';
-import {
-  backupTimestampForFileName,
-  getLocalBackupDatabasePath,
-  getLocalBackupDirectory,
-  getLocalBackupJsonPath,
-  getLocalShutdownBackupDirectory,
-  getRotatedLocalBackupDatabasePath,
-  getRotatedLocalBackupJsonPath,
-  getShutdownLocalBackupDatabasePath,
-  getShutdownLocalBackupJsonPath,
-  LOCAL_BACKUP_DATABASE_FILE_NAME,
-  LOCAL_BACKUP_JSON_FILE_NAME,
-  pruneRotatedLocalBackups,
-  pruneShutdownLocalBackups,
-  shouldCreateRotatedLocalBackup,
-  writeDailyLocalBackup as writeDailyLocalBackupFromModule,
-  writeSharedSqliteBackup,
-} from './persistence/localBackups.js';
 import { createEmployeeRepository } from './persistence/employeeRepository.js';
 import { createSorteosRepository, getSorteosCollectionUpdatedAt } from './persistence/sorteosRepository.js';
 import { createTaskRepository } from './persistence/taskRepository.js';
@@ -89,9 +61,13 @@ import {
   type VacuumResult,
   type VacuumStatus,
 } from './persistence/vacuumMaintenance.js';
+import {
+  createLocalBackupService,
+  type LocalBackupService,
+  type LocalBackupServiceDependencies,
+} from './persistence/localBackupService.js';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
-const LOCAL_LIVE_BACKUP_DEBOUNCE_MS = 5000;
 const LOCK_TTL_MS = 30 * 1000;
 const LOCK_HEARTBEAT_MS = 10 * 1000;
 const STARTUP_LOCK_WAIT_MS = 15 * 1000;
@@ -274,9 +250,6 @@ let ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
-let localBackupQueue: Promise<void> = Promise.resolve();
-let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingLocalBackupReason: string | null = null;
 let activeDatabaseLock: { lockPath: string; lock: DatabaseLockInfo; heartbeat: ReturnType<typeof setInterval> } | null = null;
 let databaseWriteBlockedByHeartbeat = false;
 let heartbeatConsecutiveFailureCount = 0;
@@ -340,6 +313,38 @@ function createVacuumMaintenanceDependencies(): VacuumMaintenanceDependencies {
     startDatabaseLockHeartbeat,
     isLockContentionError: isSqliteLockContentionError,
   };
+}
+
+// --- Copias de respaldo locales ---------------------------------------
+// A diferencia de las dependencias de VACUUM (sin estado), el servicio de
+// copias locales mantiene una cola y un temporizador de debounce internos,
+// así que se instancia una única vez y se reutiliza en todas las llamadas.
+
+let localBackupServiceInstance: LocalBackupService | null = null;
+
+function createLocalBackupServiceDependencies(): LocalBackupServiceDependencies {
+  return {
+    getDatabase: () => database,
+    getStatus: getSqliteStatus,
+    acquireLock,
+    releaseLock,
+    getLockPath,
+    startDatabaseLockHeartbeat,
+    isLockContentionError: isSqliteLockContentionError,
+    readAllPersistedRecords,
+    migrateLocalStorageSnapshot,
+    withDatabaseOperationLock,
+    backupExistingDatabase,
+    closeDatabaseAndReleaseLock,
+    activateDatabase,
+  };
+}
+
+function getLocalBackupService(): LocalBackupService {
+  if (!localBackupServiceInstance) {
+    localBackupServiceInstance = createLocalBackupService(createLocalBackupServiceDependencies());
+  }
+  return localBackupServiceInstance;
 }
 
 function getLockPath(databasePath: string): string {
@@ -1146,229 +1151,17 @@ function readAllPersistedRecords(db: Database): PersistedStorageRecordSnapshot[]
 }
 
 function enqueueLocalBackup(reason: string): void {
-  pendingLocalBackupReason = pendingLocalBackupReason ? `${pendingLocalBackupReason}, ${reason}` : reason;
-
-  if (localBackupTimer) {
-    clearTimeout(localBackupTimer);
-  }
-
-  localBackupTimer = setTimeout(() => {
-    const reasonToWrite = pendingLocalBackupReason ?? reason;
-    pendingLocalBackupReason = null;
-    localBackupTimer = null;
-
-    localBackupQueue = localBackupQueue
-      .then(() => writeLocalBackupArtifacts(reasonToWrite))
-      .catch((error: unknown) => {
-        console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
-      });
-  }, LOCAL_LIVE_BACKUP_DEBOUNCE_MS);
-}
-
-async function writeLocalBackupArtifacts(reason: string): Promise<void> {
-  const currentDatabase = database;
-  const currentStatus = getSqliteStatus();
-  if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
-    return;
-  }
-
-  const backupDirectory = getLocalBackupDirectory();
-  await mkdir(backupDirectory, { recursive: true });
-
-  let backupLock: DatabaseLockInfo;
-  try {
-    backupLock = await acquireLock(currentStatus.path);
-  } catch (error) {
-    if (isSqliteLockContentionError(error)) {
-      console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
-      return;
-    }
-    throw error;
-  }
-
-  const backupLockPath = getLockPath(currentStatus.path);
-  const backupLockHeartbeat = startDatabaseLockHeartbeat(backupLockPath, backupLock);
-
-  try {
-    const now = new Date().toISOString();
-    const backupTimestamp = backupTimestampForFileName();
-    const records = readAllPersistedRecords(currentDatabase);
-    const payload = {
-      createdAt: now,
-      sourceDatabasePath: currentStatus.path,
-      reason,
-      recordCount: records.length,
-      records,
-    };
-    const serializedPayload = JSON.stringify(payload, null, 2);
-
-    const shouldRotateBackup = await shouldCreateRotatedLocalBackup(reason);
-
-    await writeFile(getLocalBackupJsonPath(), serializedPayload, 'utf8');
-    if (shouldRotateBackup) {
-      await writeFile(getRotatedLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-    }
-    await pruneRotatedLocalBackups('json');
-
-    try {
-      await copyFile(currentStatus.path, getLocalBackupDatabasePath());
-      if (shouldRotateBackup) {
-        await copyFile(currentStatus.path, getRotatedLocalBackupDatabasePath(backupTimestamp));
-      }
-      await pruneRotatedLocalBackups('sqlite');
-    } catch (error) {
-      console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
-    }
-
-    try {
-      await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
-    } catch (error) {
-      console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
-    }
-
-    try {
-      const dailyBackupPreferences = await readDatabasePreferences();
-      await writeDailyLocalBackupFromModule(currentStatus.path, dailyBackupPreferences, getDailyLocalBackupWeekdayName);
-    } catch (error) {
-      console.warn('No se ha podido crear la copia diaria local SQLite.', error);
-    }
-
-    // Copia opcional en carpeta secundaria configurada por el usuario (p.ej. red o USB).
-    try {
-      const secondaryDir = (await readDatabasePreferences()).secondaryBackupDirectoryPath;
-      if (secondaryDir) {
-        await mkdir(secondaryDir, { recursive: true });
-        await writeFile(
-          path.join(secondaryDir, LOCAL_BACKUP_JSON_FILE_NAME),
-          serializedPayload,
-          'utf8',
-        );
-        if (shouldRotateBackup) {
-          await writeFile(
-            path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.json`),
-            serializedPayload,
-            'utf8',
-          );
-        }
-        await copyFile(
-          currentStatus.path,
-          path.join(secondaryDir, LOCAL_BACKUP_DATABASE_FILE_NAME),
-        );
-        if (shouldRotateBackup) {
-          await copyFile(
-            currentStatus.path,
-            path.join(secondaryDir, `traccion-local-backup-${backupTimestamp}.sqlite`),
-          );
-        }
-      }
-    } catch (error) {
-      console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
-    }
-  } finally {
-    clearInterval(backupLockHeartbeat);
-    await releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
-      console.warn('No se ha podido liberar el bloqueo SQLite de respaldo local.', error);
-    });
-  }
-}
-
-async function flushPendingLocalBackup(): Promise<void> {
-  const reasonToWrite = pendingLocalBackupReason;
-
-  if (localBackupTimer) {
-    clearTimeout(localBackupTimer);
-    localBackupTimer = null;
-  }
-
-  pendingLocalBackupReason = null;
-  await localBackupQueue;
-
-  if (reasonToWrite) {
-    await writeLocalBackupArtifacts(reasonToWrite);
-  }
-
-  await localBackupQueue;
-}
-
-async function writeShutdownLocalBackupArtifacts(): Promise<void> {
-  const currentDatabase = database;
-  const currentStatus = getSqliteStatus();
-  if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
-    return;
-  }
-
-  const backupDirectory = getLocalShutdownBackupDirectory();
-  await mkdir(backupDirectory, { recursive: true });
-
-  let backupLock: DatabaseLockInfo;
-  try {
-    backupLock = await acquireLock(currentStatus.path);
-  } catch (error) {
-    if (isSqliteLockContentionError(error)) {
-      console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
-      return;
-    }
-    throw error;
-  }
-
-  const backupLockPath = getLockPath(currentStatus.path);
-  const backupLockHeartbeat = startDatabaseLockHeartbeat(backupLockPath, backupLock);
-
-  try {
-    const now = new Date().toISOString();
-    const backupTimestamp = backupTimestampForFileName();
-    const records = readAllPersistedRecords(currentDatabase);
-    const payload = {
-      createdAt: now,
-      sourceDatabasePath: currentStatus.path,
-      reason: 'shutdown',
-      recordCount: records.length,
-      records,
-    };
-    const serializedPayload = JSON.stringify(payload, null, 2);
-
-    await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-    await pruneShutdownLocalBackups('json');
-
-    try {
-      await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
-      await pruneShutdownLocalBackups('sqlite');
-    } catch (error) {
-      console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
-    }
-
-    try {
-      await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
-    } catch (error) {
-      console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
-    }
-
-    try {
-      const dailyBackupPreferences = await readDatabasePreferences();
-      await writeDailyLocalBackupFromModule(currentStatus.path, dailyBackupPreferences, getDailyLocalBackupWeekdayName);
-    } catch (error) {
-      console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
-    }
-  } finally {
-    clearInterval(backupLockHeartbeat);
-    await releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
-      console.warn('No se ha podido liberar el bloqueo SQLite de respaldo de cierre.', error);
-    });
-  }
+  getLocalBackupService().enqueueLocalBackup(reason);
 }
 
 export async function createShutdownLocalBackup(): Promise<void> {
-  await flushPendingLocalBackup();
-  await writeShutdownLocalBackupArtifacts();
+  await getLocalBackupService().createShutdownLocalBackup();
 }
 
 export async function createManualLocalBackup(): Promise<void> {
-  // Backup "de cierre de fase" a demanda: ignora el debounce de guardado y
-  // siempre fuerza una copia rotada (writeLocalBackupArtifacts ya marca
-  // como rotable cualquier reason que no empiece por "save:").
-  await flushPendingLocalBackup();
-  await writeLocalBackupArtifacts('manual-backup');
+  await getLocalBackupService().createManualLocalBackup();
 }
+
 
 function updateRefreshMetadata(db: Database, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
@@ -1636,162 +1429,11 @@ export async function createLocalStorageBackup(payload: LocalStorageBackupPayloa
 }
 
 export async function listLocalBackups(): Promise<LocalBackupEntry[]> {
-  await pruneRotatedLocalBackups('json');
-  await pruneRotatedLocalBackups('sqlite');
-  await pruneShutdownLocalBackups('json');
-  await pruneShutdownLocalBackups('sqlite');
-
-  const readBackupEntries = async (
-    backupDirectory: string,
-    fileNamePredicate: (fileName: string) => boolean,
-    idPrefix = '',
-  ): Promise<LocalBackupEntry[]> => {
-    const entries = await readdir(backupDirectory).catch(() => []);
-    const backups = await Promise.all(
-      entries
-        .filter(fileNamePredicate)
-        .map(async (fileName): Promise<LocalBackupEntry | null> => {
-          const kind = localBackupKindFromFileName(fileName);
-          if (!kind) {
-            return null;
-          }
-
-          const filePath = path.join(backupDirectory, fileName);
-          const fileStat = await stat(filePath).catch(() => null);
-          if (!fileStat?.isFile()) {
-            return null;
-          }
-
-          return {
-            id: `${idPrefix}${fileName}`,
-            fileName,
-            kind,
-            path: filePath,
-            sizeBytes: fileStat.size,
-            createdAt: fileStat.mtime.toISOString(),
-            isLiveCopy:
-              !idPrefix &&
-              (fileName === LOCAL_BACKUP_DATABASE_FILE_NAME || fileName === LOCAL_BACKUP_JSON_FILE_NAME),
-          };
-        }),
-    );
-
-    return backups.filter((entry): entry is LocalBackupEntry => Boolean(entry));
-  };
-
-  const [localBackups, shutdownBackups] = await Promise.all([
-    readBackupEntries(getLocalBackupDirectory(), isLocalBackupFileName),
-    readBackupEntries(getLocalShutdownBackupDirectory(), isShutdownBackupFileName, `${LOCAL_SHUTDOWN_BACKUP_DIRECTORY_NAME}/`),
-  ]);
-
-  return [...localBackups, ...shutdownBackups]
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-}
-
-function parseLocalBackupJson(raw: string): PersistedStorageRecord[] {
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object') {
-    return [];
-  }
-
-  const records = (parsed as Partial<LocalStorageBackupPayload>).records;
-  if (!Array.isArray(records)) {
-    return [];
-  }
-
-  return records.filter(
-    (record): record is PersistedStorageRecord =>
-      Boolean(record) &&
-      typeof (record as Partial<PersistedStorageRecord>).key === 'string' &&
-      typeof (record as Partial<PersistedStorageRecord>).value === 'string',
-  );
-}
-
-function resolveLocalBackupReference(fileName: string): { safeFileName: string; backupPath: string } | null {
-  return resolveLocalBackupReferenceFromModule(
-    fileName,
-    getLocalBackupDirectory(),
-    getLocalShutdownBackupDirectory(),
-  );
+  return getLocalBackupService().listLocalBackups();
 }
 
 export async function restoreLocalBackup(fileName: string): Promise<RestoreLocalBackupResult> {
-  const currentStatus = getSqliteStatus();
-  const backupReference = resolveLocalBackupReference(fileName);
-
-  if (!backupReference) {
-    return { ok: false, status: currentStatus, message: 'Copia de respaldo no válida.' };
-  }
-
-  const { safeFileName, backupPath } = backupReference;
-  const kind = localBackupKindFromFileName(safeFileName);
-  if (!kind) {
-    return { ok: false, status: currentStatus, message: 'Copia de respaldo no válida.' };
-  }
-
-  const backupStat = await stat(backupPath).catch(() => null);
-  if (!backupStat?.isFile()) {
-    return { ok: false, status: currentStatus, message: 'La copia de respaldo no existe.' };
-  }
-
-  if (kind === 'json') {
-    const records = parseLocalBackupJson(await readFile(backupPath, 'utf8'));
-    if (records.length === 0) {
-      return { ok: false, status: currentStatus, message: 'El respaldo JSON no contiene registros recuperables.' };
-    }
-
-    if (currentStatus.ready && currentStatus.phase === 'active') {
-      enqueueLocalBackup(`pre-restore:${safeFileName}`);
-    }
-
-    const nextStatus = await migrateLocalStorageSnapshot({ records });
-    return {
-      ok: nextStatus.ready && nextStatus.phase === 'active',
-      status: nextStatus,
-      message:
-        nextStatus.ready && nextStatus.phase === 'active'
-          ? 'Copia JSON restaurada. Reinicia o recarga la app para aplicar la caché recuperada.'
-          : (nextStatus.message ?? 'No se ha podido restaurar el respaldo JSON.'),
-    };
-  }
-
-  const configuredDirectory = await getConfiguredDatabaseDirectory();
-  const targetDatabasePath = getDatabasePathForDirectory(configuredDirectory.directoryPath);
-
-  try {
-    await mkdir(path.dirname(targetDatabasePath), { recursive: true });
-
-    await withDatabaseOperationLock(targetDatabasePath, async () => {
-      if (currentStatus.ready) {
-        await backupExistingDatabase(currentStatus.path);
-      } else {
-        await copyFile(targetDatabasePath, `${targetDatabasePath}.backup-${backupTimestampForFileName()}`).catch(
-          () => undefined,
-        );
-      }
-
-      await closeDatabaseAndReleaseLock();
-      await unlink(`${targetDatabasePath}-wal`).catch(() => undefined);
-      await unlink(`${targetDatabasePath}-shm`).catch(() => undefined);
-      await copyFile(backupPath, targetDatabasePath);
-    });
-
-    const nextStatus = await activateDatabase(
-      configuredDirectory.directoryPath,
-      configuredDirectory.isDefaultPath,
-      null,
-    );
-    enqueueLocalBackup(`restore:${safeFileName}`);
-
-    return {
-      ok: nextStatus.ready && nextStatus.phase === 'active',
-      status: nextStatus,
-      message: 'Copia SQLite restaurada. Reinicia o recarga la app para aplicar los datos recuperados.',
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'No se ha podido restaurar el respaldo SQLite.';
-    return { ok: false, status: getSqliteStatus(), message };
-  }
+  return getLocalBackupService().restoreLocalBackup(fileName);
 }
 
 export async function getPersistedRecordSnapshot(key: string): Promise<PersistedRecordSnapshot> {
