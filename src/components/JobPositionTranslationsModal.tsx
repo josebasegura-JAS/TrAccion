@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
+import { CountBadge } from './ui/CountBadge';
 import {
   useTableViewPreferences,
   type TableViewPreferences,
@@ -435,9 +436,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
           <div className="overflow-hidden rounded-xl border border-metro-border">
             <div className="flex items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
               <span>Equivalencias de puestos</span>
-              <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-                {sortedTranslations.length} registros
-              </span>
+              <CountBadge>{sortedTranslations.length} registros</CountBadge>
             </div>
             <div className="flex justify-end px-3 py-2">
               <button

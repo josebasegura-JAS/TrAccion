@@ -20,6 +20,7 @@ import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
 import { ActionButton } from '../../components/ui/ActionButton';
+import { CountBadge } from '../../components/ui/CountBadge';
 import { TaskEditor } from '../../components/TaskEditor';
 import { ModuleHelpButton, type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
@@ -1016,9 +1017,7 @@ export function SessionManagementPage({
                     {isYearOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     {group.year}
                   </span>
-                  <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-                    {group.sessions.length}
-                  </span>
+                  <CountBadge>{group.sessions.length}</CountBadge>
                 </button>
                 {isYearOpen && (
                   <div className="space-y-3 border-t border-metro-border bg-metro-surface p-3">
@@ -1287,9 +1286,7 @@ function SessionPanel({
           {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           {label}
         </span>
-        <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-          {count}
-        </span>
+        <CountBadge>{count}</CountBadge>
       </button>
       {isOpen && (
         <div className="max-h-[640px] space-y-3 overflow-auto bg-metro-surface p-3">{children}</div>

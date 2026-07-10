@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { CountBadge } from '../../../components/ui/CountBadge';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import {
   calculateMonthlyTicketOrder,
@@ -324,10 +325,10 @@ export function CalendarToolbar({
               Acciones calendario
             </p>
             {selectedCalendar ? (
-              <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-[11px] font-semibold text-metro-red">
+              <CountBadge size="xs">
                 {selectedCalendar.activo ? 'Activo' : 'Inactivo'} ·{' '}
                 {selectedCalendar.diasSinTicket.length} días
-              </span>
+              </CountBadge>
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -858,9 +859,7 @@ export function PeoplePanel({
             <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
               Importar personas
             </ActionButton>
-            <span className="rounded-full bg-metro-red/10 px-2 py-0.5 text-xs font-semibold text-metro-red">
-              {people.length}
-            </span>
+            <CountBadge size="xs">{people.length}</CountBadge>
           </div>
         </div>
         <DataTable

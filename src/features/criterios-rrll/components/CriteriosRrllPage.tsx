@@ -20,6 +20,7 @@ import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { CountBadge } from '../../../components/ui/CountBadge';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -396,9 +397,7 @@ export function CriteriosRrllPage() {
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Criterios RRLL
           </div>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-            {filteredCriterios.length} registros
-          </span>
+          <CountBadge>{filteredCriterios.length} registros</CountBadge>
         </div>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full table-fixed text-left text-xs">

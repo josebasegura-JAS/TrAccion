@@ -1,5 +1,6 @@
 import { Eye, LockKeyhole, Mail, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { CountBadge } from './ui/CountBadge';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import {
   EMPTY_TASK_DRAFT,
@@ -816,9 +817,7 @@ export function TaskEditor({
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-metro-text">Seguimiento</h4>
                 {!isCreate && task && (
-                  <span className="rounded-full bg-metro-surface px-2 py-1 text-xs font-semibold text-metro-muted">
-                    {task.seguimiento.length} seguimientos
-                  </span>
+                  <CountBadge tone="muted">{task.seguimiento.length} seguimientos</CountBadge>
                 )}
               </div>
               <label className="text-xs font-semibold text-metro-muted">

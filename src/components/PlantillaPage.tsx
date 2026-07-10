@@ -13,6 +13,7 @@ import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export
 import { EmployeeEditor } from './EmployeeEditor';
 import { ModuleHelpButton, type ModuleHelpSection } from './ModuleHelp';
 import { DropdownMenu } from './ui/DropdownMenu';
+import { CountBadge } from './ui/CountBadge';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
@@ -598,9 +599,7 @@ export function PlantillaPage() {
             >
               <RotateCcw size={14} /> Restablecer vista
             </button>
-            <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-              {filteredEmployees.length} registros
-            </span>
+            <CountBadge>{filteredEmployees.length} registros</CountBadge>
           </div>
         </div>
         <DataTable

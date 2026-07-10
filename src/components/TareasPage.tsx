@@ -14,6 +14,7 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { filterTasks } from '../features/tareas/domain/filters';
 import { getTaskClosedYear } from '../features/tareas/domain/historico';
 import { StatusBadge } from './ui/StatusBadge';
+import { CountBadge } from './ui/CountBadge';
 import {
   sortTasksByDefault,
   type SortDirection,
@@ -746,9 +747,7 @@ export function TareasPage({
         <div className="flex flex-col gap-2 border-b border-metro-border bg-metro-surface px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Tareas activas
-            <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-              {filteredTasks.length} registros
-            </span>
+            <CountBadge>{filteredTasks.length} registros</CountBadge>
             <ExportPrintButtons
               payload={{
                 title: 'Tareas activas',
@@ -839,9 +838,9 @@ export function TareasPage({
           <span className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             {isHistoricOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} Histórico
           </span>
-          <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
+          <CountBadge>
             {historicalTasksLoaded ? historicTasks.length : 'Sin cargar'} registros
-          </span>
+          </CountBadge>
         </button>
         {isHistoricOpen && (
           <div className="bg-metro-surface">

@@ -13,6 +13,7 @@ import {
 } from '../features/teletrabajo/domain/puestosTeletrabajo';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+import { CountBadge } from './ui/CountBadge';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -844,9 +845,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
           <div className="overflow-hidden rounded-xl border border-metro-border">
             <div className="flex items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
               <span>Puestos organizativos con posibilidad de teletrabajo</span>
-              <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-                {sortedPuestos.length} registros
-              </span>
+              <CountBadge>{sortedPuestos.length} registros</CountBadge>
             </div>
             <div className="flex justify-end px-3 py-2">
               <button

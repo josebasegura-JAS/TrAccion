@@ -10,6 +10,7 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { CountBadge } from '../../../components/ui/CountBadge';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -516,7 +517,7 @@ function Block({ children, count, icon, title }: { children: ReactNode; count: n
           <div className="rounded-xl bg-metro-red/10 p-2 text-metro-red">{icon}</div>
           <h2 className="text-base font-semibold text-metro-text">{title}</h2>
         </div>
-        <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">{count}</span>
+        <CountBadge tone="muted">{count}</CountBadge>
       </div>
       {children}
     </section>
@@ -770,7 +771,7 @@ export function LicenciasSinSueldoPage() {
       <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm shadow-slate-950/20">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-metro-text">Histórico por año</h2>
-          <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">{historicalCount}</span>
+          <CountBadge tone="muted">{historicalCount}</CountBadge>
         </div>
         <div className="space-y-3">
           {groupedHistory.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-4 text-sm text-metro-muted">No hay registros históricos.</p>}

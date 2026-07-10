@@ -10,6 +10,7 @@ import type { buildGruposCoberturaByIdMap } from '../domain/gruposCobertura';
 import type { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount } from '../domain/semaforo';
 import type { TeletrabajoTableColumnId } from './teletrabajoTableConfig';
 import { teletrabajoExportColumns } from './teletrabajoTableConfig';
+import { CountBadge } from '../../../components/ui/CountBadge';
 
 interface SharedTableProps {
   columns: Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>;
@@ -76,9 +77,7 @@ export function TeletrabajoMainTableSection({
             Dirección
           </button>
         </div>
-        <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-          {rows.length} registros
-        </span>
+        <CountBadge>{rows.length} registros</CountBadge>
       </div>
       <div className="flex flex-wrap justify-end pb-2">
         <button
@@ -164,9 +163,7 @@ export function TeletrabajoHistoricoSection({
           {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           Histórico de teletrabajo
         </span>
-        <span className="rounded-full bg-metro-red/10 px-3 py-1 text-xs font-bold text-red-200">
-          {historicalCount} registros
-        </span>
+        <CountBadge>{historicalCount} registros</CountBadge>
       </button>
 
       {isOpen && (
@@ -192,9 +189,7 @@ export function TeletrabajoHistoricoSection({
                       {isPeriodoOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       Periodo {group.periodo}
                     </span>
-                    <span className="rounded-full bg-metro-surface px-3 py-1 text-xs font-bold text-metro-muted">
-                      {group.rows.length} registros
-                    </span>
+                    <CountBadge tone="muted">{group.rows.length} registros</CountBadge>
                   </button>
                   {isPeriodoOpen && (
                     <div className="border-t border-metro-border p-2">
