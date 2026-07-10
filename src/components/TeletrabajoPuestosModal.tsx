@@ -14,6 +14,7 @@ import {
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import { CountBadge } from './ui/CountBadge';
+import { ModalShell } from './ui/ModalShell';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -594,14 +595,16 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <section className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-        <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Teletrabajo
-            </p>
-            <h3 className="text-xl font-bold text-metro-text">Puestos Teletrabajo</h3>
+    <>
+      <ModalShell labelledBy="puestos-teletrabajo-modal-title" onClose={onClose}>
+      <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+            Teletrabajo
+          </p>
+          <h3 className="text-xl font-bold text-metro-text" id="puestos-teletrabajo-modal-title">
+            Puestos Teletrabajo
+          </h3>
             <p className="mt-1 text-sm text-metro-muted">
               Importa o mantén los puestos organizativos teletrabajables usando Traducción de puestos como tabla maestra.
               Si varios puestos van coordinados (comparten presencialidad mínima), asígnales el mismo Grupo de cobertura.
@@ -881,11 +884,11 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
             />
           </div>
         </div>
-      </section>
+      </ModalShell>
 
       {isGruposModalOpen && (
         <TeletrabajoGruposCoberturaModal onClose={() => setIsGruposModalOpen(false)} />
       )}
-    </div>
+    </>
   );
 }

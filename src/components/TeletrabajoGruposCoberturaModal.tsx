@@ -6,6 +6,7 @@ import {
   type GrupoCoberturaDraft,
 } from '../features/teletrabajo/domain/gruposCobertura';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
+import { ModalShell } from './ui/ModalShell';
 
 interface TeletrabajoGruposCoberturaModalProps {
   onClose: () => void;
@@ -162,14 +163,20 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <section className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-        <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Teletrabajo
-            </p>
-            <h3 className="text-xl font-bold text-metro-text">Grupos de cobertura</h3>
+    <ModalShell
+      labelledBy="grupos-cobertura-modal-title"
+      maxWidthClassName="max-w-3xl"
+      onClose={onClose}
+      stacked
+    >
+      <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+            Teletrabajo
+          </p>
+          <h3 className="text-xl font-bold text-metro-text" id="grupos-cobertura-modal-title">
+            Grupos de cobertura
+          </h3>
             <p className="mt-1 text-sm text-metro-muted">
               Agrupa puestos que van coordinados (comparten presencialidad mínima): las
               solicitudes de cualquiera de esos puestos competirán juntas por el mismo mínimo.
@@ -351,7 +358,6 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
             </div>
           )}
         </div>
-      </section>
-    </div>
+    </ModalShell>
   );
 }

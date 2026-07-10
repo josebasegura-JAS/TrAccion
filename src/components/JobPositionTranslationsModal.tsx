@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import { CountBadge } from './ui/CountBadge';
+import { ModalShell } from './ui/ModalShell';
 import {
   useTableViewPreferences,
   type TableViewPreferences,
@@ -264,16 +265,18 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <section className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-        <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Plantilla
-            </p>
-            <h3 className="flex items-center gap-2 text-xl font-bold text-metro-text">
-              <Languages size={20} className="text-metro-red" /> Traducción de puestos
-            </h3>
+    <ModalShell labelledBy="job-position-translations-modal-title" onClose={onClose}>
+      <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+            Plantilla
+          </p>
+          <h3
+            className="flex items-center gap-2 text-xl font-bold text-metro-text"
+            id="job-position-translations-modal-title"
+          >
+            <Languages size={20} className="text-metro-red" /> Traducción de puestos
+          </h3>
             <p className="mt-1 text-sm text-metro-muted">
               Crea, edita, importa y consulta la equivalencia entre el puesto en castellano y su
               traducción en euskera.
@@ -468,7 +471,6 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
             />
           </div>
         </div>
-      </section>
-    </div>
+    </ModalShell>
   );
 }
