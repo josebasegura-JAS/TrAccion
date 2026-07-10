@@ -30,6 +30,7 @@ import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -548,15 +549,12 @@ function VinculogramaTable({
         accessor: (record) => `${getVinculogramaStatus(record.expiryDate, today)} ${record.expiryDate}`,
         render: (record) => {
           const status = getVinculogramaStatus(record.expiryDate, today);
-          const statusClass =
-            status === 'Vigente'
-              ? 'bg-metro-success/10 text-emerald-200'
-              : 'bg-metro-warning/10 text-amber-200';
+          const tone = status === 'Vigente' ? 'success' : 'warning';
 
           return (
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusClass}`}>
+            <StatusBadge tone={tone}>
               {status} · {record.expiryDate}
-            </span>
+            </StatusBadge>
           );
         },
         width: 180,

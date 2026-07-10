@@ -28,6 +28,7 @@ import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Input, Select } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import {
   ACTAS_HELP_SECTIONS,
   type ActaColumnId,
@@ -1334,9 +1335,7 @@ export function ActasPage() {
                     </p>
                   </div>
                   {!canAttachFinalActa && (
-                    <span className="rounded-full border border-metro-border px-2 py-1 text-xs text-metro-muted">
-                      Disponible al pasar a firma
-                    </span>
+                    <StatusBadge tone="muted">Disponible al pasar a firma</StatusBadge>
                   )}
                 </div>
                 <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px_120px]">
