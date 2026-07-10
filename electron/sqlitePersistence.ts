@@ -66,19 +66,16 @@ import {
   type LocalBackupService,
   type LocalBackupServiceDependencies,
 } from './persistence/localBackupService.js';
+import {
+  createDatabaseLockManager,
+  DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
+  type DatabaseLockManager,
+} from './persistence/databaseLockManager.js';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
-const LOCK_TTL_MS = 30 * 1000;
-const LOCK_HEARTBEAT_MS = 10 * 1000;
-const STARTUP_LOCK_WAIT_MS = 15 * 1000;
-const STARTUP_LOCK_RETRY_MS = 250;
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
-const SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS = 15 * 1000;
 const SQLITE_RECORD_LOCK_WAIT_MS = 750;
-const SQLITE_OPERATION_LOCK_RETRY_MS = 50;
 const SQLITE_BUSY_RETRY_DELAYS_MS = [100, 300, 700];
-const DATABASE_HEARTBEAT_BLOCKED_MESSAGE =
-  'La conexión con la carpeta compartida de SQLite puede estar interrumpida. Se bloquean nuevas escrituras hasta recuperar el heartbeat.';
 
 export interface PersistedStorageRecord {
   key: string;
@@ -251,9 +248,6 @@ let ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
 let activeDatabaseLock: { lockPath: string; lock: DatabaseLockInfo; heartbeat: ReturnType<typeof setInterval> } | null = null;
-let databaseWriteBlockedByHeartbeat = false;
-let heartbeatConsecutiveFailureCount = 0;
-let notifyDatabaseConnectivityIssue: ((payload: DatabaseConnectivityIssuePayload) => void) | null = null;
 // Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
 let configuracionMigrationDone = false;
 
@@ -347,155 +341,34 @@ function getLocalBackupService(): LocalBackupService {
   return localBackupServiceInstance;
 }
 
+// --- Bloqueo de la base compartida (SMB) ------------------------------
+// El mecanismo del lock (ficheros .lockdir, caducidad, heartbeat, aviso de
+// conectividad) vive en databaseLockManager.ts. Aquí solo se instancia una
+// vez (mantiene contadores de heartbeat y el notifier como estado interno)
+// y se exponen wrappers finos con los mismos nombres que antes, para no
+// tener que tocar cada punto de la base que ya los usa.
+
+let lockManagerInstance: DatabaseLockManager | null = null;
+
+function getLockManager(): DatabaseLockManager {
+  if (!lockManagerInstance) {
+    lockManagerInstance = createDatabaseLockManager({ getOwnerId: () => ownerId });
+  }
+  return lockManagerInstance;
+}
+
 function getLockPath(databasePath: string): string {
-  return `${databasePath}.lockdir`;
+  return getLockManager().getLockPath(databasePath);
 }
 
 function getLockInfoPath(lockPath: string): string {
-  return path.join(lockPath, 'owner.json');
+  return getLockManager().getLockInfoPath(lockPath);
 }
 
-function createLockInfo(): DatabaseLockInfo {
-  let username = 'desconocido';
-  try {
-    username = userInfo().username;
-  } catch {
-    username = 'desconocido';
-  }
-
-  const now = new Date().toISOString();
-  return {
-    ownerId,
-    username,
-    hostname: hostname(),
-    pid: process.pid,
-    createdAt: now,
-    updatedAt: now,
-  };
+function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
+  return getLockManager().readLock(lockPath);
 }
 
-function isDatabaseLockInfo(value: unknown): value is DatabaseLockInfo {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<Record<keyof DatabaseLockInfo, unknown>>;
-  return (
-    typeof candidate.ownerId === 'string' &&
-    typeof candidate.username === 'string' &&
-    typeof candidate.hostname === 'string' &&
-    typeof candidate.pid === 'number' &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string'
-  );
-}
-
-function isLockStale(lock: DatabaseLockInfo): boolean {
-  const updatedAt = Date.parse(lock.updatedAt);
-  return Number.isNaN(updatedAt) || Date.now() - updatedAt > LOCK_TTL_MS;
-}
-
-async function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
-  try {
-    const raw = await readFile(getLockInfoPath(lockPath), 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    return isDatabaseLockInfo(parsed) ? parsed : null;
-  } catch {
-    try {
-      const raw = await readFile(lockPath, 'utf8');
-      const parsed: unknown = JSON.parse(raw);
-      return isDatabaseLockInfo(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-}
-
-async function writeLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  await mkdir(lockPath);
-  await writeFile(getLockInfoPath(lockPath), JSON.stringify(lock, null, 2), 'utf8');
-
-  const confirmedLock = await readLock(lockPath);
-  if (confirmedLock?.ownerId !== lock.ownerId) {
-    await releaseLock(lockPath, lock);
-    throw new Error('Otro proceso ganó la carrera de lock SQLite en SMB.');
-  }
-}
-
-async function removeStaleLock(lockPath: string, staleLock: DatabaseLockInfo): Promise<void> {
-  const currentLock = await readLock(lockPath);
-  if (currentLock?.ownerId !== staleLock.ownerId || !isLockStale(currentLock)) {
-    return;
-  }
-
-  let unlinkFailed = false;
-  let rmdirFailed = false;
-
-  await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
-    unlinkFailed = true;
-    console.warn(
-      `No se ha podido borrar el fichero del lock SQLite caducado (${getLockInfoPath(lockPath)}). Propietario anterior: ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}).`,
-      error,
-    );
-  });
-  await rmdir(lockPath).catch((error: unknown) => {
-    rmdirFailed = true;
-    console.warn(
-      `No se ha podido borrar el directorio del lock SQLite caducado (${lockPath}). Propietario anterior: ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}).`,
-      error,
-    );
-  });
-
-  if (unlinkFailed || rmdirFailed) {
-    console.warn(
-      `El lock SQLite de ${staleLock.username}@${staleLock.hostname} (PID ${staleLock.pid}) está caducado pero no se ha podido limpiar automáticamente. ` +
-        'Puede requerir liberación manual desde Ajustes o borrado manual del directorio .lockdir en la carpeta compartida.',
-    );
-  }
-}
-
-async function removeCorruptStaleLock(lockPath: string): Promise<void> {
-  try {
-    const metadata = await stat(lockPath);
-    if (Date.now() - metadata.mtimeMs <= LOCK_TTL_MS) {
-      return;
-    }
-
-    let cleanupFailed = false;
-    await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
-      cleanupFailed = true;
-      console.warn(
-        `No se ha podido borrar el fichero de un lock SQLite corrupto/caducado (${getLockInfoPath(lockPath)}).`,
-        error,
-      );
-    });
-    await rmdir(lockPath).catch((error: unknown) => {
-      cleanupFailed = true;
-      console.warn(
-        `No se ha podido borrar el directorio de un lock SQLite corrupto/caducado (${lockPath}).`,
-        error,
-      );
-    });
-
-    if (cleanupFailed) {
-      console.warn(
-        `El directorio de lock ${lockPath} parece corrupto o caducado pero no se ha podido limpiar automáticamente. ` +
-          'Puede requerir liberación manual desde Ajustes o borrado manual en la carpeta compartida.',
-      );
-    }
-  } catch {
-    // Si no existe o no se puede leer, dejamos que el bucle normal reintente.
-  }
-}
-
-/**
- * Relee del disco el lock que está bloqueando la base activa, sin intentar
- * adquirirlo. A diferencia de `getSqliteStatus()`, que devuelve el `status`
- * cacheado en el último intento de arranque, esta función consulta el
- * fichero `.lockdir` en el momento de la llamada, para que la pantalla de
- * Ajustes pueda mostrar información actualizada (por ejemplo, la antigüedad
- * real del lock) mientras la app sigue en fase `locked`/`fallback`.
- */
 export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | null> {
   const currentStatus = getSqliteStatus();
   return readLock(currentStatus.lockPath);
@@ -572,171 +445,44 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
   }
 }
 
-async function withDatabaseOperationLock<T>(
+function withDatabaseOperationLock<T>(
   databasePath: string,
   operation: () => Promise<T>,
-  waitMs = SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS,
+  waitMs?: number,
 ): Promise<T> {
-  const lockPath = getLockPath(databasePath);
-  const operationLock = await acquireLock(databasePath, waitMs);
-  try {
-    return await operation();
-  } finally {
-    await releaseLock(lockPath, operationLock).catch((error: unknown) => {
-      console.warn('No se ha podido liberar el bloqueo temporal de operación SQLite.', error);
-    });
-  }
+  return getLockManager().withDatabaseOperationLock(databasePath, operation, waitMs);
 }
 
-async function acquireLock(databasePath: string, waitMs = SQLITE_ASYNC_OPERATION_LOCK_WAIT_MS): Promise<DatabaseLockInfo> {
-  const lockPath = getLockPath(databasePath);
-  await mkdir(path.dirname(lockPath), { recursive: true });
-  const startedAt = Date.now();
-  let lastLock: DatabaseLockInfo | null = null;
-
-  while (Date.now() - startedAt <= waitMs) {
-    const existingLock = await readLock(lockPath);
-    lastLock = existingLock;
-
-    if (existingLock && isLockStale(existingLock)) {
-      await removeStaleLock(lockPath, existingLock);
-    }
-
-    if (!existingLock) {
-      await removeCorruptStaleLock(lockPath);
-    }
-
-    if (!existingLock || isLockStale(existingLock)) {
-      const lock = createLockInfo();
-      try {
-        await writeLock(lockPath, lock);
-        return lock;
-      } catch {
-        lastLock = await readLock(lockPath);
-      }
-    }
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, SQLITE_OPERATION_LOCK_RETRY_MS);
-    });
-  }
-
-  if (lastLock) {
-    throw new Error(
-      `Base ocupada temporalmente por ${lastLock.username}@${lastLock.hostname} (PID ${lastLock.pid}). Inténtalo de nuevo en unos segundos.`,
-    );
-  }
-
-  throw new Error('No se ha podido adquirir el bloqueo temporal de operación SQLite.');
+function acquireLock(databasePath: string, waitMs?: number): Promise<DatabaseLockInfo> {
+  return getLockManager().acquireLock(databasePath, waitMs);
 }
 
-async function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
-  const startedAt = Date.now();
-  let lastError: unknown = null;
-
-  while (Date.now() - startedAt <= STARTUP_LOCK_WAIT_MS) {
-    try {
-      return await acquireLock(databasePath);
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => {
-        setTimeout(resolve, STARTUP_LOCK_RETRY_MS);
-      });
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('No se ha podido adquirir el bloqueo temporal de arranque SQLite.');
+function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
+  return getLockManager().acquireStartupLock(databasePath);
 }
 
 export function setDatabaseConnectivityIssueNotifier(
   notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
 ): void {
-  notifyDatabaseConnectivityIssue = notifier;
-}
-
-function publishDatabaseConnectivityIssue(payload: DatabaseConnectivityIssuePayload): void {
-  notifyDatabaseConnectivityIssue?.(payload);
-}
-
-function markHeartbeatFailure(error: unknown): void {
-  heartbeatConsecutiveFailureCount += 1;
-  console.warn('No se ha podido renovar el bloqueo SQLite de sesión.', error);
-
-  if (heartbeatConsecutiveFailureCount < 5) {
-    return;
-  }
-
-  databaseWriteBlockedByHeartbeat = true;
-  publishDatabaseConnectivityIssue({
-    blocked: true,
-    failedHeartbeatCount: heartbeatConsecutiveFailureCount,
-    updatedAt: new Date().toISOString(),
-    message: DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
-  });
-}
-
-function markHeartbeatRecovered(): void {
-  if (heartbeatConsecutiveFailureCount === 0 && !databaseWriteBlockedByHeartbeat) {
-    return;
-  }
-
-  heartbeatConsecutiveFailureCount = 0;
-
-  if (databaseWriteBlockedByHeartbeat) {
-    databaseWriteBlockedByHeartbeat = false;
-    publishDatabaseConnectivityIssue({
-      blocked: false,
-      failedHeartbeatCount: 0,
-      updatedAt: new Date().toISOString(),
-      message: 'La conexión con la carpeta compartida de SQLite se ha recuperado. Escrituras reactivadas.',
-    });
-  }
+  getLockManager().setConnectivityIssueNotifier(notifier);
 }
 
 function assertDatabaseWritesAllowed(): void {
-  if (!databaseWriteBlockedByHeartbeat) {
-    return;
-  }
-
-  throw new Error(`Escritura bloqueada: ${DATABASE_HEARTBEAT_BLOCKED_MESSAGE}`);
+  getLockManager().assertDatabaseWritesAllowed();
 }
 
 function isDatabaseWriteBlockedByHeartbeat(): boolean {
-  return databaseWriteBlockedByHeartbeat;
-}
-
-async function heartbeatDatabaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  const currentLock = await readLock(lockPath);
-  if (currentLock?.ownerId !== lock.ownerId) {
-    throw new Error('El bloqueo SQLite de sesión ya no pertenece a esta instancia.');
-  }
-
-  await writeFile(
-    getLockInfoPath(lockPath),
-    JSON.stringify({ ...currentLock, updatedAt: new Date().toISOString() }, null, 2),
-    'utf8',
-  );
+  return getLockManager().isDatabaseWriteBlockedByHeartbeat();
 }
 
 function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): ReturnType<typeof setInterval> {
-  return setInterval(() => {
-    heartbeatDatabaseLock(lockPath, lock)
-      .then(() => markHeartbeatRecovered())
-      .catch((error: unknown) => markHeartbeatFailure(error));
-  }, LOCK_HEARTBEAT_MS);
+  return getLockManager().startDatabaseLockHeartbeat(lockPath, lock);
 }
 
-async function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  const currentLock = await readLock(lockPath);
-  if (currentLock?.ownerId !== lock.ownerId) {
-    return;
-  }
-
-  await unlink(getLockInfoPath(lockPath)).catch(() => undefined);
-  await rmdir(lockPath).catch(() => undefined);
+function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
+  return getLockManager().releaseLock(lockPath, lock);
 }
+
 
 async function releaseActiveSessionLock(): Promise<void> {
   const sessionLock = activeDatabaseLock;
@@ -1038,7 +784,7 @@ async function safeDatabaseOperation<T>(
 export function getSqliteStatus(): DatabaseStatus {
   const fallbackPath = getDatabasePathForDirectory(getDefaultDatabaseDirectory());
 
-  if (status?.ready && status.phase === 'active' && databaseWriteBlockedByHeartbeat) {
+  if (status?.ready && status.phase === 'active' && isDatabaseWriteBlockedByHeartbeat()) {
     return {
       ...status,
       message: DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
@@ -1185,7 +931,7 @@ export async function savePersistedRecord(record: PersistedStorageRecord): Promi
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked' || databaseWriteBlockedByHeartbeat) {
+      if (!currentStatus.ready || currentStatus.phase === 'locked' || isDatabaseWriteBlockedByHeartbeat()) {
         return currentStatus;
       }
 
@@ -1225,7 +971,7 @@ export async function savePersistedRecordIfUnchanged(
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || databaseWriteBlockedByHeartbeat) {
+      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
         return {
           ok: false,
           status: currentStatus,
@@ -1354,7 +1100,7 @@ function getTaskRecordsUpdatedAt(db: Database): string | null {
 
 export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
   const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked' || databaseWriteBlockedByHeartbeat) {
+  if (!currentStatus.ready || currentStatus.phase === 'locked' || isDatabaseWriteBlockedByHeartbeat()) {
     return currentStatus;
   }
 
