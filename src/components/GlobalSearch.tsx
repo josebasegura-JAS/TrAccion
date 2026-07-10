@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import type { AppView } from '../navigation/navigation';
+import { StatusBadge } from './ui/StatusBadge';
 import {
   MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH,
   getParsedSearchSummary,
@@ -403,12 +404,12 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                                   <p className="mt-1 line-clamp-1 text-[11px] font-medium text-metro-red/90">{result.matchReason}</p>
                                 </div>
                                 <div className="flex flex-none flex-col items-end gap-1">
-                                  <span className="rounded-full border border-metro-border bg-slate-950/20 px-2 py-0.5 text-[11px] text-metro-muted">
+                                  <StatusBadge size="xs" tone="muted">
                                     {formatResultDate(result.date)}
-                                  </span>
-                                  <span className="rounded-full border border-metro-border bg-slate-950/20 px-2 py-0.5 text-[10px] text-metro-muted">
+                                  </StatusBadge>
+                                  <StatusBadge size="xs" tone="muted">
                                     Relevancia {result.score}
-                                  </span>
+                                  </StatusBadge>
                                 </div>
                               </div>
                             </button>

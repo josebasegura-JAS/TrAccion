@@ -13,6 +13,7 @@ import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrig
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
 import { getTaskClosedYear } from '../features/tareas/domain/historico';
+import { StatusBadge } from './ui/StatusBadge';
 import {
   sortTasksByDefault,
   type SortDirection,
@@ -1032,15 +1033,9 @@ function TaskOriginRow({
         <OriginTypeSelect onChange={setType} value={type} />
       </td>
       <td className="px-3 py-2">
-        <span
-          className={`rounded-full px-2 py-1 text-xs font-bold ${
-            origin.active
-              ? 'bg-emerald-500/15 text-emerald-100'
-              : 'bg-slate-500/20 text-metro-muted'
-          }`}
-        >
+        <StatusBadge tone={origin.active ? 'success' : 'muted'}>
           {origin.active ? 'Activo' : 'Inactivo'}
-        </span>
+        </StatusBadge>
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap justify-end gap-2">

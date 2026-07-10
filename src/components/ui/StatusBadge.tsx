@@ -1,16 +1,16 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 type StatusBadgeTone = 'success' | 'warning' | 'error' | 'info' | 'muted';
 type StatusBadgeSize = 'xs' | 'sm';
 
-type StatusBadgeProps = {
+interface StatusBadgeProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'title'> {
   children: ReactNode;
   className?: string;
   icon?: ReactNode;
   size?: StatusBadgeSize;
   title?: string;
   tone?: StatusBadgeTone;
-};
+}
 
 const toneClassName: Record<StatusBadgeTone, string> = {
   error: 'border-red-500/30 bg-red-500/10 text-red-200',
@@ -36,6 +36,7 @@ export function StatusBadge({
   size = 'sm',
   title,
   tone = 'muted',
+  ...rest
 }: StatusBadgeProps) {
   return (
     <span
@@ -46,6 +47,7 @@ export function StatusBadge({
         className,
       )}
       title={title}
+      {...rest}
     >
       {icon ? <span className="shrink-0">{icon}</span> : null}
       <span className="truncate">{children}</span>

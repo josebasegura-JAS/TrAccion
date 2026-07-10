@@ -19,6 +19,7 @@ import {
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -173,16 +174,13 @@ function SelectFilter({
 
 
 function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
-  const className = sentido === 'aprobado'
-    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-    : sentido === 'denegado'
-      ? 'border-red-500/40 bg-red-500/10 text-red-200'
-      : 'border-metro-border bg-metro-panel text-metro-muted';
+  const tone =
+    sentido === 'aprobado' ? 'success' : sentido === 'denegado' ? 'error' : 'muted';
 
   return (
-    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${className}`}>
+    <StatusBadge size="xs" tone={tone} className="uppercase tracking-wide">
       {sentido}
-    </span>
+    </StatusBadge>
   );
 }
 

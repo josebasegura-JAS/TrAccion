@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, FileText, XCircle } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { DataTableColumn } from '../../../shared/table/DataTable';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { buildGruposCoberturaByIdMap } from '../domain/gruposCobertura';
 import type {
@@ -51,16 +52,12 @@ export function buildTeletrabajoTableColumns({
       header: 'Revisado',
       accessor: (s) => (s.revisado ? 1 : 0),
       render: (s) => (
-        <span
-          className={`inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-bold ${
-            s.revisado
-              ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-              : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
-          }`}
+        <StatusBadge
+          tone={s.revisado ? 'success' : 'warning'}
           title={s.revisado ? 'Solicitud revisada' : 'Solicitud pendiente de revisar'}
         >
           {s.revisado ? 'Sí' : 'No'}
-        </span>
+        </StatusBadge>
       ),
       width: 96,
       minWidth: 84,
@@ -73,11 +70,11 @@ export function buildTeletrabajoTableColumns({
       header: 'Estado',
       accessor: (s) => s.estado,
       render: (s) => {
-        const estadoStyles: Record<string, string> = {
-          pendiente: 'border-amber-400/40 bg-amber-500/15 text-amber-200',
-          analizada: 'border-blue-400/40 bg-blue-500/15 text-blue-200',
-          aprobada: 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200',
-          denegada: 'border-red-400/40 bg-red-500/15 text-red-200',
+        const estadoTones: Record<string, 'warning' | 'info' | 'success' | 'error'> = {
+          pendiente: 'warning',
+          analizada: 'info',
+          aprobada: 'success',
+          denegada: 'error',
         };
         const estadoLabels: Record<string, string> = {
           pendiente: 'Pendiente',
@@ -85,16 +82,12 @@ export function buildTeletrabajoTableColumns({
           aprobada: 'Aprobada',
           denegada: 'Rechazada',
         };
-        const className =
-          estadoStyles[s.estado] ?? 'border-metro-border bg-metro-surface text-metro-muted';
+        const tone = estadoTones[s.estado] ?? 'muted';
         const label = estadoLabels[s.estado] ?? s.estado;
         return (
-          <span
-            className={`inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-bold ${className}`}
-            title={label}
-          >
+          <StatusBadge tone={tone} title={label}>
             {label}
-          </span>
+          </StatusBadge>
         );
       },
       width: 110,
@@ -155,12 +148,8 @@ export function buildTeletrabajoTableColumns({
           employeesByEmpleado,
           gruposByIdMap,
         );
-        const className =
-          meta.status === 'ok'
-            ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-            : meta.status === 'review'
-              ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
-              : 'border-red-400/40 bg-red-500/15 text-red-200';
+        const tone =
+          meta.status === 'ok' ? 'success' : meta.status === 'review' ? 'warning' : 'error';
         const icon =
           meta.status === 'ok' ? (
             <CheckCircle2 size={15} />
@@ -171,9 +160,11 @@ export function buildTeletrabajoTableColumns({
           );
 
         return (
-          <span
+          <StatusBadge
             aria-label={meta.title}
-            className={`inline-flex h-7 min-w-[9.5rem] items-center justify-center gap-1 rounded-full border px-2 text-xs font-bold ${className}`}
+            className="h-7 min-w-[9.5rem]"
+            icon={icon}
+            tone={tone}
             onMouseEnter={(event) =>
               setIncidentTooltip({
                 title: meta.title,
@@ -188,9 +179,8 @@ export function buildTeletrabajoTableColumns({
               )
             }
           >
-            {icon}
-            <span className="truncate">{meta.label}</span>
-          </span>
+            {meta.label}
+          </StatusBadge>
         );
       },
       width: 200,
