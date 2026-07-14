@@ -1,4 +1,4 @@
-import { AlertTriangle, XCircle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import { useTableViewPreferences } from '../shared/table/useTableViewPreferences';
@@ -50,6 +50,7 @@ import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import { useAppDialog } from '../hooks/useAppDialog';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort(
@@ -1052,14 +1053,7 @@ export function TeletrabajoPage({
                   Crea una nueva campaña sin modificar las solicitudes del periodo anterior.
                 </p>
               </div>
-              <button
-                aria-label="Cerrar creación de periodo"
-                className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={() => setIsPeriodoModalOpen(false)}
-                type="button"
-              >
-                <XCircle size={18} />
-              </button>
+              <ModalCloseButton label="Cerrar creación de periodo" onClick={() => setIsPeriodoModalOpen(false)} />
             </header>
             <div className="space-y-4 p-4">
               <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
@@ -1150,14 +1144,7 @@ export function TeletrabajoPage({
                   puestos.
                 </p>
               </div>
-              <button
-                aria-label="Cancelar resolución de puestos"
-                className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={() => setPendingEncuestaImport(null)}
-                type="button"
-              >
-                <XCircle size={18} />
-              </button>
+              <ModalCloseButton label="Cancelar resolución de puestos" onClick={() => setPendingEncuestaImport(null)} />
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
@@ -1253,14 +1240,7 @@ export function TeletrabajoPage({
                   Revisa el resumen antes de aplicar los cambios a la base compartida.
                 </p>
               </div>
-              <button
-                aria-label="Cancelar importación de histórico"
-                className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={handleCancelImportHistorico}
-                type="button"
-              >
-                <XCircle size={18} />
-              </button>
+              <ModalCloseButton label="Cancelar importación de histórico" onClick={handleCancelImportHistorico} />
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <ul className="grid gap-2 text-sm text-metro-text sm:grid-cols-2">

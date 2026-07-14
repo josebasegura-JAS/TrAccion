@@ -241,6 +241,7 @@ export function buildTeletrabajoTableColumns({
           {solicitud.estado === 'aprobada' && (
             <button
               aria-label="Generar acuerdo Word"
+              data-tip="Generar acuerdo Word"
               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
               disabled={generatingWordId !== null}
               onClick={(event) => {

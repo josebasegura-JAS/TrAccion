@@ -738,6 +738,7 @@ export function VinculogramaPage() {
     <section className="space-y-4" id="vinculograma">
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <PageHeader
+          icon={Link2}
           title="Vinculograma"
           subtitle="Gestión de vínculos con cálculo automático de fecha de vigencia."
           helpSections={VINCULOGRAMA_HELP_SECTIONS}

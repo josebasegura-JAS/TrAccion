@@ -1,4 +1,4 @@
-import { Eye, LockKeyhole, Mail, Search, X } from 'lucide-react';
+import { Eye, LockKeyhole, Mail, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { CountBadge } from './ui/CountBadge';
 import { ActionButton } from './ui/ActionButton';
@@ -19,6 +19,7 @@ import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -496,14 +497,7 @@ export function TaskEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <button
-            aria-label="Cerrar editor"
-            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onDone}
-            type="button"
-          >
-            <X size={16} />
-          </button>
+          <ModalCloseButton label="Cerrar editor" onClick={onDone} />
           </div>
         </div>
 
@@ -700,8 +694,8 @@ export function TaskEditor({
                 <button
                   aria-label="Buscar documento en carpetas"
                   className="inline-flex items-center justify-center rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                  data-tip="Buscar documento en carpetas"
                   onClick={() => void handleSelectDocumentPath()}
-                  title="Buscar documento"
                   type="button"
                 >
                   <Search size={16} />
@@ -730,6 +724,7 @@ export function TaskEditor({
                       <div className="flex items-center gap-1">
                         <button
                           aria-label={`Abrir ${link.nombre}`}
+                          data-tip={`Abrir ${link.nombre}`}
                           className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
                           onClick={() => void handleOpenDocumentPath(link.ruta)}
                           type="button"

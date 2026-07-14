@@ -1,4 +1,4 @@
-import { FolderOpen, Plus } from 'lucide-react';
+import { FolderOpen, Plus, Settings } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
@@ -554,6 +554,7 @@ export function AjustesPage() {
         helpSections={AJUSTES_HELP_SECTIONS}
         helpSubtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
         subtitle="Configura rutas externas necesarias para generar documentos sin almacenar plantillas dentro de TrAccion."
+        icon={Settings}
         title="Configuración"
       />
 

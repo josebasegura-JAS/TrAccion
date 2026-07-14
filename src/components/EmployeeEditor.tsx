@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+
 import { useEffect, useState } from 'react';
 import {
   EMPTY_EMPLOYEE_DRAFT,
@@ -11,6 +11,7 @@ import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { ActionButton } from './ui/ActionButton';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
   { field: 'empleado', label: 'Empleado', required: true },
@@ -111,14 +112,7 @@ export function EmployeeEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <button
-            aria-label="Cerrar editor"
-            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onDone}
-            type="button"
-          >
-            <X size={16} />
-          </button>
+          <ModalCloseButton label="Cerrar editor" onClick={onDone} />
           </div>
         </div>
 

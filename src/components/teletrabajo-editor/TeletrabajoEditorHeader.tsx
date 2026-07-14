@@ -1,5 +1,6 @@
-import { X } from 'lucide-react';
+
 import { ModalDatabaseStatus } from '../ModalDatabaseStatus';
+import { ModalCloseButton } from '../ui/ModalCloseButton';
 
 type TeletrabajoEditorHeaderProps = {
   isCreate: boolean;
@@ -43,14 +44,7 @@ export function TeletrabajoEditorHeader({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <ModalDatabaseStatus />
-        <button
-          aria-label="Cerrar editor"
-          className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-          onClick={onDone}
-          type="button"
-        >
-          <X size={16} />
-        </button>
+        <ModalCloseButton label="Cerrar editor" onClick={onDone} />
       </div>
     </div>
   );

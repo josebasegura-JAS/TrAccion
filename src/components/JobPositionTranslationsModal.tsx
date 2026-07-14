@@ -1,15 +1,4 @@
-import {
-  Download,
-  FileUp,
-  Languages,
-  Pencil,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  Save,
-  Search,
-  X,
-} from 'lucide-react';
+import { Download, FileUp, Languages, Pencil, Plus, RefreshCw, RotateCcw, Save, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -22,6 +11,7 @@ import {
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 interface JobPositionTranslationsModalProps {
   onClose: () => void;
@@ -282,14 +272,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               traducción en euskera.
             </p>
           </div>
-          <button
-            aria-label="Cerrar traducción de puestos"
-            className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+          <ModalCloseButton label="Cerrar traducción de puestos" onClick={onClose} />
         </header>
 
         <div className="grid gap-3 border-b border-metro-border p-4 xl:grid-cols-[minmax(220px,1fr)_auto] xl:items-center">

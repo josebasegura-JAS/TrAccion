@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type Re
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { AlertTriangle } from 'lucide-react';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
+import { TooltipLayer } from './components/ui/TooltipLayer';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { Sidebar } from './components/Sidebar';
@@ -363,6 +364,7 @@ export function App() {
 
   return (
     <AppShellErrorBoundary>
+      <TooltipLayer />
       <AppUpdateChecker />
       <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
       <Sidebar

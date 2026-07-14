@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { ModalCloseButton } from '../../components/ui/ModalCloseButton';
 import { useEffect, useState } from 'react';
 import { ActionButton } from '../../components/ui/ActionButton';
 import {
@@ -81,14 +81,7 @@ export function AuditHistoryButton({
                 <h3 className="mt-1 truncate text-base font-bold text-metro-text">{entityTitle}</h3>
                 <p className="text-xs text-metro-muted">{isLoading ? 'Cargando…' : `${events.length} evento(s) registrados.`}</p>
               </div>
-              <button
-                aria-label="Cerrar historial"
-                className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={() => setIsOpen(false)}
-                type="button"
-              >
-                <X size={16} />
-              </button>
+              <ModalCloseButton label="Cerrar historial" onClick={() => setIsOpen(false)} />
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-metro-border bg-metro-surface p-3">

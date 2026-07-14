@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+
 import { useEffect, useState } from 'react';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
@@ -14,6 +14,7 @@ import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 
 const criterioTextFields: Array<{
   field: CriterioRrllDraftField;
@@ -90,14 +91,7 @@ export function CriterioRrllEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <button
-            aria-label="Cerrar editor"
-            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onDone}
-            type="button"
-          >
-            <X size={16} />
-          </button>
+          <ModalCloseButton label="Cerrar editor" onClick={onDone} />
           </div>
         </div>
 

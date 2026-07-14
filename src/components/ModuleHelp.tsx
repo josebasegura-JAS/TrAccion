@@ -1,5 +1,6 @@
-import { HelpCircle, X } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 export type ModuleHelpSection = {
   title: string;
@@ -23,8 +24,8 @@ export function ModuleHelpButton({ title, subtitle, sections, ariaLabel }: Modul
       <button
         aria-label={ariaLabel ?? `Abrir ayuda de ${title}`}
         className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-blue-400/70 bg-blue-500/15 text-blue-200 shadow-sm transition hover:border-blue-300 hover:bg-blue-500/25 hover:text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        data-tip={`Ayuda de ${title}`}
         onClick={() => setIsOpen(true)}
-        title={`Ayuda de ${title}`}
         type="button"
       >
         <HelpCircle size={17} strokeWidth={2.4} />
@@ -41,14 +42,7 @@ export function ModuleHelpButton({ title, subtitle, sections, ariaLabel }: Modul
                 <h3 className="text-lg font-bold text-metro-text">{title}</h3>
                 {subtitle ? <p className="mt-1 text-sm text-metro-muted">{subtitle}</p> : null}
               </div>
-              <button
-                aria-label="Cerrar ayuda"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-metro-border bg-metro-surface text-metro-muted transition hover:border-metro-red hover:text-metro-text"
-                onClick={() => setIsOpen(false)}
-                type="button"
-              >
-                <X size={17} />
-              </button>
+              <ModalCloseButton label="Cerrar ayuda" onClick={() => setIsOpen(false)} />
             </div>
 
             <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4 text-sm text-metro-text">

@@ -386,6 +386,7 @@ export function EspecialesPage() {
     <section className="space-y-4" id="especiales">
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <PageHeader
+          icon={MailPlus}
           title="Especiales"
           subtitle="Generación asistida de comunicaciones Outlook para servicios especiales."
           helpSections={ESPECIALES_HELP_SECTIONS}

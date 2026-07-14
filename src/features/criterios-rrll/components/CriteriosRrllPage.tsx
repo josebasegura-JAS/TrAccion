@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { FileDown, FileUp, Search, SlidersHorizontal, X } from 'lucide-react';
+import { FileDown, FileUp, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
 import { parseCriteriosRrllImportFile, type CriterioRrllImportPreviewRow } from '../domain/importExcel';
@@ -296,6 +296,7 @@ export function CriteriosRrllPage() {
       id="criterios-rrll"
     >
       <PageHeader
+        icon={ShieldCheck}
         title="Criterios RRLL"
         subtitle="Listado de criterios con alta manual, edición, importación Excel, búsqueda y filtros."
         helpSections={CRITERIOS_RRLL_HELP_SECTIONS}

@@ -147,7 +147,7 @@ export function Header({
             <span
               aria-label={`Estado de sincronización: ${syncStatus.message}`}
               className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-metro-panel ${syncDotClass}`}
-              title={syncStatus.message}
+              data-tip={syncStatus.message}
             />
           </div>
           <div className="hidden min-w-0 sm:block">

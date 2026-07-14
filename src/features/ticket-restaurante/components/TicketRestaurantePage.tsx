@@ -1,4 +1,4 @@
-import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
+import { CalendarDays, Euro, Settings, Trash2, Utensils } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildYearCalendar,
@@ -1317,6 +1317,7 @@ export function TicketRestaurantePage({
     >
       <PageHeader
         eyebrow="Ticket Restaurante"
+        icon={Utensils}
         helpSections={TICKET_RESTAURANTE_HELP_SECTIONS}
         helpSubtitle="Guía rápida de uso, reglas principales e importaciones del módulo."
         subtitle={

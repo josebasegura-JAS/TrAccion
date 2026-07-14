@@ -75,6 +75,41 @@ a {
   color: var(--text-primary);
 }
 
+/*
+ * Tooltip global rápido (ver src/components/ui/TooltipLayer.tsx).
+ * Estética alineada con los rótulos flotantes del sidebar.
+ */
+.ui-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 300px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.95);
+  box-shadow: 0 14px 36px rgba(2, 6, 23, 0.5);
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.ui-tooltip--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-tooltip {
+    transition: none;
+  }
+}
+
 ::-webkit-scrollbar {
   height: 10px;
   width: 10px;

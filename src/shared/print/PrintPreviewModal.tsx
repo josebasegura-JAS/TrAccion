@@ -1,4 +1,5 @@
-import { X } from 'lucide-react';
+
+import { ModalCloseButton } from '../../components/ui/ModalCloseButton';
 
 interface PrintPreviewModalProps {
   html: string;
@@ -37,14 +38,7 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
             </p>
             <h3 className="text-lg font-bold text-metro-text">{title}</h3>
           </div>
-          <button
-            className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-            aria-label="Cerrar vista previa"
-          >
-            <X size={18} />
-          </button>
+          <ModalCloseButton label="Cerrar vista previa" onClick={onClose} />
         </div>
         <div className="overflow-auto bg-slate-200 p-5 text-slate-950">
           <div

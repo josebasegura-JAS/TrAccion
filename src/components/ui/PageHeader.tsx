@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ModuleHelpButton, type ModuleHelpSection } from '../ModuleHelp';
 
@@ -6,6 +7,11 @@ function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 interface PageHeaderProps {
+  /**
+   * Icono del módulo (idealmente el mismo que usa el sidebar en
+   * navigation.ts, para dar continuidad visual entre navegación y página).
+   */
+  icon?: LucideIcon;
   /** Small uppercase label above the title, e.g. the module name. Defaults to `title` if omitted. */
   eyebrow?: ReactNode;
   /** Main heading text. */
@@ -36,6 +42,7 @@ export function PageHeader({
   helpSections,
   helpSubtitle,
   helpTitle,
+  icon: Icon,
   subtitle,
   title,
 }: PageHeaderProps) {
@@ -48,6 +55,14 @@ export function PageHeader({
           {eyebrow ?? title}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          {Icon ? (
+            <span
+              aria-hidden="true"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-metro-red/25 bg-metro-red/10 text-red-300"
+            >
+              <Icon size={17} strokeWidth={2.2} />
+            </span>
+          ) : null}
           <h2 className="text-2xl font-bold text-metro-text">{title}</h2>
           {helpSections && resolvedHelpTitle ? (
             <ModuleHelpButton title={resolvedHelpTitle} subtitle={helpSubtitle} sections={helpSections} />

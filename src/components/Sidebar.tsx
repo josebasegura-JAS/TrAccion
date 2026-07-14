@@ -267,8 +267,8 @@ export function Sidebar({
           <button
             aria-label="Reiniciar TrAccion"
             className="rounded-2xl p-1 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-metro-red/60"
+            data-tip="Reiniciar TrAccion"
             onClick={handleLogoSelect}
-            title="Reiniciar TrAccion"
             type="button"
           >
             <img alt="TrAccion" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
@@ -288,8 +288,8 @@ export function Sidebar({
                   ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
                   : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
               }`}
+              data-tip={shouldShowPanel ? 'Inicio' : undefined}
               onClick={handleHomeSelect}
-              title="Inicio"
               type="button"
             >
               {activeView === 'dashboard' && (
@@ -319,8 +319,8 @@ export function Sidebar({
                       : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
                   }`}
                   key={group.id}
+                  data-tip={shouldShowPanel ? group.label : undefined}
                   onClick={() => handleGroupSelect(group.id)}
-                  title={group.label}
                   type="button"
                 >
                   {(isActiveGroup || containsActiveView) && (
@@ -343,8 +343,8 @@ export function Sidebar({
             <button
               aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`}
               className="group/rail relative flex w-12 flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[0.58rem] font-semibold uppercase tracking-[0.08em] text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+              data-tip={shouldShowPanel ? databaseIndicatorTooltip : undefined}
               onClick={handleDatabaseIndicatorSelect}
-              title={databaseIndicatorTooltip}
               type="button"
             >
               <span
@@ -365,7 +365,7 @@ export function Sidebar({
                 />
               )}
               <span className="max-w-full truncate">{databaseIndicator.label}</span>
-              <span className="pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}">
+              <span className={`pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>
                 <span className="block font-semibold">{databaseIndicator.statusText}</span>
                 <span className="mt-1 block break-all text-slate-300">
                   {databaseIndicator.routeText}
@@ -382,8 +382,8 @@ export function Sidebar({
                   ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
                   : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
               }`}
+              data-tip={shouldShowPanel ? 'Ajustes' : undefined}
               onClick={handleSettingsSelect}
-              title="Ajustes"
               type="button"
             >
               {activeView === 'ajustes' && (
@@ -421,8 +421,8 @@ export function Sidebar({
                     ? 'border-red-400/30 bg-red-500/10 text-red-100 hover:bg-red-500/15'
                     : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'
                 }`}
+                data-tip={isPinned ? 'Desfijar panel' : 'Fijar panel'}
                 onClick={handlePinToggle}
-                title={isPinned ? 'Desfijar panel' : 'Fijar panel'}
                 type="button"
               >
                 {isPinned ? <Pin size={15} /> : <PinOff size={15} />}
@@ -430,8 +430,8 @@ export function Sidebar({
               <button
                 aria-label="Cerrar panel"
                 className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+                data-tip="Cerrar panel"
                 onClick={() => setIsPanelOpen(false)}
-                title="Cerrar panel"
                 type="button"
               >
                 <X size={15} />
@@ -461,8 +461,8 @@ export function Sidebar({
                   } ${item.disabled ? 'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-slate-300' : ''}`}
                   disabled={item.disabled}
                   key={item.label}
+                  data-tip={item.disabled ? 'Módulo no disponible en este paquete' : undefined}
                   onClick={() => item.view && handleViewSelect(item.view)}
-                  title={item.disabled ? 'Módulo no disponible en este paquete' : item.label}
                   type="button"
                 >
                   {isActiveItem && (
@@ -479,8 +479,8 @@ export function Sidebar({
             <button
               aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`}
               className="mb-3 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left transition hover:bg-white/[0.07]"
+              data-tip={databaseIndicatorTooltip}
               onClick={handleDatabaseIndicatorSelect}
-              title={databaseIndicatorTooltip}
               type="button"
             >
               <span

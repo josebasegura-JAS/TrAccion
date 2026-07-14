@@ -1,11 +1,4 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  Search,
-  Settings,
-  SlidersHorizontal,
-  X,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, ClipboardList, Search, Settings, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -46,6 +39,7 @@ import {
 } from '../shared/table/useTableViewPreferences';
 import { TaskEditor } from './TaskEditor';
 import { useAppDialog } from '../hooks/useAppDialog';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 
@@ -730,6 +724,7 @@ export function TareasPage({
         helpSections={TAREAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
         subtitle="Centro operativo único para tareas internas y solicitudes sindicales por fase."
+        icon={ClipboardList}
         title="Tareas"
       />
 
@@ -910,14 +905,7 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
               Alta, edición y activación de sindicatos, áreas internas u otros orígenes.
             </p>
           </div>
-          <button
-            aria-label="Cerrar mantenimiento de orígenes"
-            className="rounded-lg border border-metro-border bg-metro-surface p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={16} />
-          </button>
+          <ModalCloseButton label="Cerrar mantenimiento de orígenes" onClick={onClose} />
         </div>
 
         <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-3 md:grid-cols-[minmax(220px,1fr)_160px_110px]">

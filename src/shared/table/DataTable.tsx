@@ -379,7 +379,7 @@ export function DataTable<Row, ColumnId extends string>({
                     <span
                       aria-hidden="true"
                       className="mr-1 inline-block cursor-grab align-middle text-metro-muted/60 active:cursor-grabbing"
-                      title="Arrastrar para reordenar columna"
+                      data-tip="Arrastrar para reordenar columna"
                     >
                       ⠿
                     </span>

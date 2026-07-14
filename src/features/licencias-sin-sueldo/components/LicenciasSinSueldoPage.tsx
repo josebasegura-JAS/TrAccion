@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Search, X } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Clock, FileSignature, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
@@ -711,6 +711,7 @@ export function LicenciasSinSueldoPage() {
       id="licencias-sin-sueldo"
     >
       <PageHeader
+        icon={CalendarDays}
         title="Licencias sin sueldo y permisos no retribuidos"
         subtitle="Seguimiento por aprobación, firma, vigencia e histórico."
         helpSections={LICENCIAS_HELP_SECTIONS}

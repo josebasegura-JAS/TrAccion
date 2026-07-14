@@ -1,4 +1,4 @@
-import { Calculator } from 'lucide-react';
+import { Calculator, Landmark } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ExportColumn } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
@@ -305,6 +305,7 @@ export function PresupuestosPage() {
       <div className="rounded-2xl border border-metro-border bg-metro-panel p-5">
         <PageHeader
           eyebrow="Herramientas RRLL"
+          icon={Landmark}
           title="Presupuestos RRLL"
           subtitle="Escenarios, simulación anual, Ticket Restaurante, comparativas y reales ejecutados."
           helpSections={PRESUPUESTOS_HELP_SECTIONS}

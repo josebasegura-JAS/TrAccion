@@ -274,6 +274,7 @@ export function SorteosPage() {
       id="sorteos"
     >
       <PageHeader
+        icon={Gift}
         title="Sorteos"
         subtitle="Gestión compacta de sorteos, exclusiones e histórico de resultados."
         helpSections={SORTEOS_HELP_SECTIONS}

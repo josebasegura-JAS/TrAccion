@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users, X } from 'lucide-react';
+import { AlertTriangle, Download, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { normalizeJobPosition, isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
@@ -23,6 +23,7 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { TeletrabajoGruposCoberturaModal } from './TeletrabajoGruposCoberturaModal';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 interface TeletrabajoPuestosModalProps {
   onClose: () => void;
@@ -560,7 +561,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 event.stopPropagation();
                 handleStartEdit(puesto);
               }}
-              title="Editar puesto"
+              data-tip="Editar puesto"
               type="button"
             >
               <Pencil size={15} />
@@ -572,7 +573,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                 event.stopPropagation();
                 void handleRemove(puesto);
               }}
-              title="Eliminar puesto"
+              data-tip="Eliminar puesto"
               type="button"
             >
               <Trash2 size={15} />
@@ -610,14 +611,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               Si varios puestos van coordinados (comparten presencialidad mínima), asígnales el mismo Grupo de cobertura.
             </p>
           </div>
-          <button
-            aria-label="Cerrar puestos teletrabajo"
-            className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+          <ModalCloseButton label="Cerrar puestos teletrabajo" onClick={onClose} />
         </header>
 
         <div className="grid gap-3 border-b border-metro-border p-4 lg:grid-cols-[minmax(220px,1fr)_auto] lg:items-center">

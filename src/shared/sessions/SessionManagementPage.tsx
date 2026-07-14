@@ -1,13 +1,4 @@
-import {
-  CalendarDays,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  Pencil,
-  Search,
-  Trash2,
-} from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Pencil, Search, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
@@ -851,6 +842,7 @@ export function SessionManagementPage({
         }
         eyebrow="Módulo"
         helpSections={helpSections}
+        icon={CalendarDays}
         helpSubtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
         helpTitle={config.title}
         subtitle={`Alta de sesiones, orden del día y cierre automático de tareas en fase ${config.taskPhase}.`}
@@ -1543,8 +1535,8 @@ function HistoricSessionCard({
           {onEdit && (
             <button
               className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              data-tip="Editar sesión histórica"
               onClick={() => onEdit(session)}
-              title="Editar sesión histórica"
               type="button"
             >
               <Pencil size={14} /> Editar

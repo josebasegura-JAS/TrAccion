@@ -1,12 +1,4 @@
-import {
-  Download,
-  Languages,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  SlidersHorizontal,
-  Upload,
-} from 'lucide-react';
+import { Download, Languages, RefreshCw, RotateCcw, Search, SlidersHorizontal, Upload, UsersRound } from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { EmployeeEditor } from './EmployeeEditor';
@@ -522,6 +514,7 @@ export function PlantillaPage() {
         helpSections={PLANTILLA_HELP_SECTIONS}
         helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
         subtitle="Listado de personas con alta manual, edición, borrado lógico e importación Excel."
+        icon={UsersRound}
         title="Plantilla"
       />
 

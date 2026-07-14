@@ -31,6 +31,7 @@ export function ActiveFilterChips({ filters, onClearAll }: ActiveFilterChipsProp
           <span>{filter.value}</span>
           <button
             aria-label={`Quitar filtro ${filter.label}`}
+            data-tip={`Quitar filtro ${filter.label}`}
             className="rounded-full p-0.5 text-red-100 hover:bg-metro-red/20 hover:text-white"
             onClick={filter.onClear}
             type="button"

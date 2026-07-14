@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
-import { BriefcaseBusiness, Download, Plus, Upload, Users } from 'lucide-react';
-import { ModuleHelpButton } from '../../../components/ModuleHelp';
+import { BriefcaseBusiness, Download, Laptop, Plus, Upload, Users } from 'lucide-react';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { TELETRABAJO_HELP_SECTIONS } from './teletrabajoHelpSections';
 
@@ -30,22 +30,16 @@ export function TeletrabajoPageHeader({
   onCreateSolicitud,
 }: TeletrabajoPageHeaderProps) {
   return (
-    <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Módulo</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-xl font-bold text-metro-text">Teletrabajo</h2>
-          <ModuleHelpButton
-            title="Teletrabajo"
-            subtitle="Guía rápida de solicitudes, validaciones, importación e histórico."
-            sections={TELETRABAJO_HELP_SECTIONS}
-          />
-        </div>
-        <p className="mt-0.5 text-sm text-metro-muted">
-          Listado de solicitudes con alta manual, edición, borrado lógico, búsqueda y filtros.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+    <PageHeader
+      className="mb-3"
+      eyebrow="Módulo"
+      helpSections={TELETRABAJO_HELP_SECTIONS}
+      helpSubtitle="Guía rápida de solicitudes, validaciones, importación e histórico."
+      icon={Laptop}
+      subtitle="Listado de solicitudes con alta manual, edición, borrado lógico, búsqueda y filtros."
+      title="Teletrabajo"
+      actions={
+        <>
         <input
           accept=".xlsx,.csv,.tsv"
           className="hidden"
@@ -130,7 +124,8 @@ export function TeletrabajoPageHeader({
         >
           <Plus size={16} /> Nueva solicitud
         </button>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

@@ -716,12 +716,8 @@ export function ActasPage() {
       id="actas"
     >
       <PageHeader
-        title={
-          <span className="flex items-center gap-2">
-            <FileText size={24} /> Actas
-          </span>
-        }
-        helpTitle="Actas"
+        icon={FileText}
+        title="Actas"
         subtitle="Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e histórico."
         helpSections={ACTAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."

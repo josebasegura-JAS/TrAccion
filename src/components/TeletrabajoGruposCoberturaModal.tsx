@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
   EMPTY_GRUPO_COBERTURA_DRAFT,
@@ -7,6 +7,7 @@ import {
 } from '../features/teletrabajo/domain/gruposCobertura';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { ModalShell } from './ui/ModalShell';
+import { ModalCloseButton } from './ui/ModalCloseButton';
 
 interface TeletrabajoGruposCoberturaModalProps {
   onClose: () => void;
@@ -182,14 +183,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
               solicitudes de cualquiera de esos puestos competirán juntas por el mismo mínimo.
             </p>
           </div>
-          <button
-            aria-label="Cerrar grupos de cobertura"
-            className="rounded-xl border border-metro-border bg-metro-panel p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+          <ModalCloseButton label="Cerrar grupos de cobertura" onClick={onClose} />
         </header>
 
         <div className="flex justify-end border-b border-metro-border p-4">

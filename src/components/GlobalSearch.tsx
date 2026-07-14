@@ -1,5 +1,6 @@
+import { ModalCloseButton } from './ui/ModalCloseButton';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { AppView } from '../navigation/navigation';
 import { StatusBadge } from './ui/StatusBadge';
 import {
@@ -256,14 +257,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                 placeholder="Buscar por persona, tarea, origen, fecha, módulo..."
                 className="min-w-0 flex-1 bg-transparent text-sm font-medium text-metro-text outline-none placeholder:text-metro-muted"
               />
-              <button
-                type="button"
-                className="rounded-full p-2 text-metro-muted transition hover:bg-white/5 hover:text-metro-text"
-                onClick={closeSearch}
-                aria-label="Cerrar búsqueda"
-              >
-                <X size={18} />
-              </button>
+              <ModalCloseButton label="Cerrar búsqueda" onClick={closeSearch} />
             </div>
 
             {trimmedQuery.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH && parsedSearchSummary.length === 0 && (

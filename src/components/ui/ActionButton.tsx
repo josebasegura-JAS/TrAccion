@@ -158,7 +158,10 @@ export function ActionButton({
         className,
       )}
       aria-label={accessibleTitle}
-      title={accessibleTitle}
+      // Tooltip rápido global (TooltipLayer): siempre en botones de solo
+      // icono; en botones con texto, solo si el llamante aporta un title con
+      // información extra.
+      data-tip={iconOnly ? accessibleTitle : title}
       type={type}
       {...props}
     >

@@ -291,6 +291,7 @@ export function CalendarToolbar({
             </select>
             <button
               aria-label="Año anterior"
+              data-tip="Año anterior"
               className="h-8 rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!selectedCalendar}
               onClick={() => setYear(previousCalendarYear(year))}
@@ -309,6 +310,7 @@ export function CalendarToolbar({
             />
             <button
               aria-label="Año posterior"
+              data-tip="Año posterior"
               className="h-8 rounded-lg border border-metro-border p-1.5 text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!selectedCalendar}
               onClick={() => setYear(nextCalendarYear(year))}
@@ -474,8 +476,8 @@ export function MonthCalendar({
             aria-label={`${day.fecha}${day.sinTicket ? ' sin ticket' : ''}`}
             className={dayButtonClass(day)}
             key={day.fecha}
+            data-tip={`${day.fecha}${day.sinTicket ? ' · sin ticket' : ''}`}
             onClick={() => onToggleDay(day.fecha)}
-            title={day.fecha}
             type="button"
           >
             {day.diaMes}
@@ -905,6 +907,7 @@ export function MonthNavigator({
     <div className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface p-1">
       <button
         aria-label="Mes anterior"
+        data-tip="Mes anterior"
         className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
         onClick={onPreviousMonth}
         type="button"
@@ -934,6 +937,7 @@ export function MonthNavigator({
       />
       <button
         aria-label="Mes posterior"
+        data-tip="Mes posterior"
         className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
         onClick={onNextMonth}
         type="button"
@@ -1336,6 +1340,7 @@ export function CalculationPanel({
             </span>
             <button
               aria-label={`Ver cálculo de ${row.nombreApellidos}`}
+              data-tip="Ver detalle del cálculo"
               className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
               onClick={(event) => {
                 event.stopPropagation();
