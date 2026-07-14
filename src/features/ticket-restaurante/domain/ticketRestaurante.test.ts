@@ -6,6 +6,7 @@ import {
   buildYearCalendar,
   calculateTicketAbsenceMonthImpact,
   calculateTicketContribution,
+  calculateMonthlyTicketOrder,
   calculateTicketMonth,
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
@@ -16,6 +17,7 @@ import {
   toggleDiaSinTicket,
   visibleTicketCalendars,
   type TicketCalendar,
+  type TicketManutencionImpact,
   type TicketRestaurantAbsence,
 } from './ticketRestaurante';
 
@@ -143,7 +145,6 @@ it('nunca considera sábado o domingo como día con ticket aunque el calendario 
 });
 
 describe('ticket restaurante calculation domain', () => {
-
   it('normaliza el número de empleado y elimina ceros a la izquierda', () => {
     expect(normalizeTicketEmployeeNumber('000123')).toBe('123');
     expect(normalizeTicketEmployeeNumber('000000')).toBe('0');
@@ -162,7 +163,6 @@ describe('ticket restaurante calculation domain', () => {
 
     expect(person.empleado).toBe('123');
   });
-
 
   it('cruza personas y ausencias aunque uno de los números tenga ceros a la izquierda', () => {
     const calendar = buildCalendar();
@@ -274,6 +274,88 @@ describe('ticket restaurante calculation domain', () => {
       ausenciasAplicadas: 5,
       deudaPendiente: 0,
     });
+  });
+
+  it('arrastra al mes siguiente las hojas de gasto que no caben tras aplicar la deuda', () => {
+    const calendar = buildCalendar();
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const fullMarchAbsence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-03-01',
+        hasta: '2026-03-31',
+        motivo: 'IT',
+        totalDias: 31,
+        afectaTicket: true,
+      },
+      timestamp,
+      'absence-full-march',
+    );
+    const manutenciones: TicketManutencionImpact[] = ['2026-04-01', '2026-04-02', '2026-04-03'].map(
+      (fechaGasto, index) => ({
+        id: `manutencion-${index + 1}`,
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        fechaGasto,
+        afectaTicket: true,
+        imputacionYear: 2026,
+        imputacionMonth: 4,
+        deletedAt: null,
+      }),
+    );
+
+    const april = calculateMonthlyTicketOrder(
+      [person],
+      [calendar],
+      [fullMarchAbsence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      4,
+      manutenciones,
+    );
+    const may = calculateMonthlyTicketOrder(
+      [person],
+      [calendar],
+      [fullMarchAbsence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      5,
+      manutenciones,
+    );
+
+    expect(april.rows[0]).toMatchObject({
+      diasTeoricos: 22,
+      deudaEntrante: 22,
+      ausenciasAplicadas: 22,
+      hojasGastoMes: 0,
+      deudaPendiente: 3,
+      ticketsFinales: 0,
+    });
+    expect(april.rows[0].deudaAplicadaDetalle).toHaveLength(22);
+    expect(april.rows[0].deudaPendienteDetalle).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ motivo: 'Hoja de gasto', mesOrigen: '2026-04' }),
+      ]),
+    );
+
+    expect(may.rows[0]).toMatchObject({
+      deudaEntrante: 3,
+      ausenciasAplicadas: 3,
+      hojasGastoMes: 3,
+      deudaPendiente: 0,
+      ticketsFinales: 18,
+    });
+    expect(may.rows[0].hojaGastoDetalle).toHaveLength(3);
   });
 
   it('ignora ausencias con fecha de inicio anterior al 1 de marzo de 2026', () => {
