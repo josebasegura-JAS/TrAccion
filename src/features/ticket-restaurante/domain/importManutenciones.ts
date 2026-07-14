@@ -1,4 +1,4 @@
-import type { TicketPerson } from './ticketRestaurante';
+import { normalizeTicketEmployeeNumber, type TicketPerson } from './ticketRestaurante';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseDelimitedText } from '../../../shared/import/delimitedText';
 
@@ -96,7 +96,7 @@ export function buildTicketManutencion(
 ): TicketManutencion {
   return {
     id,
-    empleado: normalizeEmployeeNumber(draft.empleado),
+    empleado: normalizeTicketEmployeeNumber(draft.empleado),
     nombreApellidos: cleanText(draft.nombreApellidos),
     fechaGasto: draft.fechaGasto,
     origen: draft.origen,
@@ -131,7 +131,7 @@ function buildTicketPeopleMap(ticketPeople: readonly TicketPerson[]): Map<string
   return new Map(
     ticketPeople
       .filter((person) => person.activo && !person.deletedAt)
-      .map((person) => [normalizeEmployeeNumber(person.empleado), person]),
+      .map((person) => [normalizeTicketEmployeeNumber(person.empleado), person]),
   );
 }
 
@@ -218,7 +218,7 @@ function readEmployeePair(
   employeeColumn: number,
   nameColumn: number,
 ): { empleado: string; nombreApellidos: string } | null {
-  const empleado = normalizeEmployeeNumber(row[employeeColumn]);
+  const empleado = normalizeTicketEmployeeNumber(row[employeeColumn]);
   if (!/^\d{1,6}$/.test(empleado)) return null;
 
   return {
@@ -260,7 +260,7 @@ function extractEmployees(text: string): { empleado: string; nombreApellidos: st
   const matches = Array.from(text.matchAll(/(?:^|\s)(\d{1,6})(?:\.0)?\s+([^\d;|]+?)(?=\s+\d{1,6}(?:\.0)?\s+|\s+\d{1,2}[/-]\d{1,2}[/-](?:\d{2}|\d{4})|$)/g));
   return matches
     .map((match) => ({
-      empleado: normalizeEmployeeNumber(match[1] ?? ''),
+      empleado: normalizeTicketEmployeeNumber(match[1] ?? ''),
       nombreApellidos: cleanText(match[2] ?? ''),
     }))
     .filter((employee) => employee.empleado);
@@ -282,7 +282,7 @@ function extractDateFromText(text: string): string {
 function deduplicatePreviewRows(rows: readonly TicketManutencionPreviewRow[]): TicketManutencionPreviewRow[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
-    const key = `${normalizeEmployeeNumber(row.empleado)}|${row.fechaGasto}`;
+    const key = `${normalizeTicketEmployeeNumber(row.empleado)}|${row.fechaGasto}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -295,9 +295,6 @@ function isIsoDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function normalizeEmployeeNumber(value: unknown): string {
-  return cleanText(value).replace(/^0+(?=\d)/, '').replace(/\.0$/, '');
-}
 
 function cleanText(value: unknown): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim();

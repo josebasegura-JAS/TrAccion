@@ -309,6 +309,16 @@ export function toggleDiaSinTicket(calendar: TicketCalendar, fecha: string): Tic
   };
 }
 
+export function normalizeTicketEmployeeNumber(value: unknown): string {
+  const trimmed = String(value ?? '').trim().replace(/\.0$/, '');
+  if (!/^\d+$/.test(trimmed)) return trimmed;
+  return trimmed.replace(/^0+(?=\d)/, '');
+}
+
+function sameTicketEmployee(first: string | undefined, second: string | undefined): boolean {
+  return normalizeTicketEmployeeNumber(first) === normalizeTicketEmployeeNumber(second);
+}
+
 function cleanTicketPersonText(value: string | undefined): string {
   return (value ?? '').trim().replace(/\s+/g, ' ');
 }
@@ -359,7 +369,7 @@ export function buildTicketPerson(
   });
 
   return {
-    empleado: draft.empleado.trim(),
+    empleado: normalizeTicketEmployeeNumber(draft.empleado),
     nombre,
     apellido1,
     apellido2,
@@ -448,7 +458,7 @@ export function calculateTicketAbsenceMonthImpact(
   month: number,
 ): TicketAbsenceMonthImpact {
   const person = people.find(
-    (item) => !item.deletedAt && item.activo && item.empleado === absence.empleado,
+    (item) => !item.deletedAt && item.activo && sameTicketEmployee(item.empleado, absence.empleado),
   );
   const calendar = person
     ? calendars.find((item) => !item.deletedAt && item.activo && item.id === person.calendarId)
@@ -912,7 +922,7 @@ function buildPersonManutencionTicketDays(
         (row) =>
           !row.deletedAt &&
           row.afectaTicket &&
-          row.empleado === person.empleado &&
+          sameTicketEmployee(row.empleado, person.empleado) &&
           row.imputacionYear === year &&
           row.imputacionMonth === month &&
           calendarHasTicketRightOnDate(calendar, row.fechaGasto, ticketIsoWeekdays, noTicket),
@@ -937,7 +947,7 @@ function getAppliedManutencionIdsForImputedMonth(
     if (
       row.deletedAt ||
       !row.afectaTicket ||
-      row.empleado !== person.empleado ||
+      !sameTicketEmployee(row.empleado, person.empleado) ||
       row.imputacionYear !== year ||
       row.imputacionMonth !== month ||
       seenDates.has(row.fechaGasto) ||
@@ -981,7 +991,7 @@ function buildPersonManutencionTicketDayDetails(
       (row) =>
         !row.deletedAt &&
         row.afectaTicket &&
-        row.empleado === person.empleado &&
+        sameTicketEmployee(row.empleado, person.empleado) &&
         row.imputacionYear === year &&
         row.imputacionMonth === month &&
         calendarHasTicketRightOnDate(calendar, row.fechaGasto, ticketIsoWeekdays, noTicket),
@@ -1215,7 +1225,7 @@ function getPersonMonthAbsences(
       !absence.deletedAt &&
       absence.afectaTicket &&
       absence.desde >= TICKET_RESTAURANT_MIN_ABSENCE_DATE &&
-      absence.empleado === empleado &&
+      sameTicketEmployee(absence.empleado, empleado) &&
       absence.desde <= monthEnd &&
       absence.hasta >= monthStart,
   );
@@ -1299,7 +1309,7 @@ export function calculateTicketAbsenceTicketImpact(
   config: TicketRestaurantConfig,
 ): TicketAbsenceTicketImpactResult {
   const person = people.find(
-    (item) => !item.deletedAt && item.activo && item.empleado === absence.empleado,
+    (item) => !item.deletedAt && item.activo && sameTicketEmployee(item.empleado, absence.empleado),
   );
   const calendar = person
     ? calendars.find((item) => !item.deletedAt && item.activo && item.id === person.calendarId)

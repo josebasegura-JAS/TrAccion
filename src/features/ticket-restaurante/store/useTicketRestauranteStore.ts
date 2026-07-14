@@ -6,6 +6,7 @@ import {
   normalizeTicketIsoWeekdays,
   normalizeTicketRestaurantConfig,
   buildTicketPerson,
+  normalizeTicketEmployeeNumber,
   splitTicketPersonFullName,
   DEFAULT_TICKET_RESTAURANT_CONFIG,
   toggleDiaSinTicket,
@@ -205,6 +206,7 @@ function normalizeStoredTicketPerson(person: TicketPerson): TicketPerson {
 
   return {
     ...person,
+    empleado: normalizeTicketEmployeeNumber(person.empleado),
     nombre: person.nombre || splitName.nombre,
     apellido1: person.apellido1 || splitName.apellido1,
     apellido2: person.apellido2 || splitName.apellido2,
@@ -876,7 +878,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           }
         } else if (removedPeople.length > 0) {
           people = state.people.map((person) => {
-            const removed = removedPeople.find((item) => item.empleado === person.empleado);
+            const removed = removedPeople.find((item) => normalizeTicketEmployeeNumber(item.empleado) === normalizeTicketEmployeeNumber(person.empleado));
             return removed ?? person;
           });
           writeJsonStorageAsync(PEOPLE_STORAGE_KEY, people).catch((error) =>
@@ -1039,7 +1041,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   upsertPerson: async (draft) => {
     const state = get();
     const now = nowIso();
-    const previous = state.people.find((person) => person.empleado === draft.empleado);
+    const previous = state.people.find((person) => normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado));
     const updatedPerson = buildTicketPerson(draft, now, previous);
 
     if (hasTicketRestaurantePeopleSqliteRepository()) {
@@ -1062,7 +1064,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           personSqliteUpdatedAt.set(updatedPerson.empleado, saveResult.currentUpdatedAt);
         }
         const people = previous
-          ? state.people.map((person) => (person.empleado === draft.empleado ? updatedPerson : person))
+          ? state.people.map((person) => (normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado) ? updatedPerson : person))
           : [...state.people, updatedPerson];
         const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
         set({ people, debtLedger });
@@ -1071,7 +1073,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     }
 
     const people = previous
-      ? state.people.map((person) => (person.empleado === draft.empleado ? updatedPerson : person))
+      ? state.people.map((person) => (normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado) ? updatedPerson : person))
       : [...state.people, updatedPerson];
     const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
     commitTicketState(set, { people, debtLedger }, [
@@ -1174,7 +1176,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   },
   removePerson: async (empleado) => {
     const state = get();
-    const previous = state.people.find((person) => person.empleado === empleado);
+    const previous = state.people.find((person) => normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(empleado));
     if (!previous) {
       return { ok: false, message: 'No se ha encontrado la persona.' };
     }
@@ -1198,14 +1200,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           };
         }
         personSqliteUpdatedAt.delete(empleado);
-        const people = state.people.filter((person) => person.empleado !== empleado);
+        const people = state.people.filter((person) => normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado));
         const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
         set({ people, debtLedger });
         return { ok: true };
       }
     }
 
-    const people = state.people.filter((person) => person.empleado !== empleado);
+    const people = state.people.filter((person) => normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado));
     const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
     commitTicketState(set, { people, debtLedger }, [
       [PEOPLE_STORAGE_KEY, people],

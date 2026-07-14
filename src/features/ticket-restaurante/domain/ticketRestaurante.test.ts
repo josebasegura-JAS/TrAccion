@@ -10,6 +10,7 @@ import {
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
   normalizeTicketCalendarName,
+  normalizeTicketEmployeeNumber,
   normalizeTicketIsoWeekdays,
   previousCalendarYear,
   toggleDiaSinTicket,
@@ -142,6 +143,79 @@ it('nunca considera sábado o domingo como día con ticket aunque el calendario 
 });
 
 describe('ticket restaurante calculation domain', () => {
+
+  it('normaliza el número de empleado y elimina ceros a la izquierda', () => {
+    expect(normalizeTicketEmployeeNumber('000123')).toBe('123');
+    expect(normalizeTicketEmployeeNumber('000000')).toBe('0');
+    expect(normalizeTicketEmployeeNumber(' 00123.0 ')).toBe('123');
+
+    const person = buildTicketPerson(
+      {
+        empleado: '000123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: 'calendar-base',
+        activo: true,
+      },
+      timestamp,
+    );
+
+    expect(person.empleado).toBe('123');
+  });
+
+
+  it('cruza personas y ausencias aunque uno de los números tenga ceros a la izquierda', () => {
+    const calendar = buildCalendar();
+    const person = buildTicketPerson(
+      {
+        empleado: '000123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const absence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-03-02',
+        hasta: '2026-03-06',
+        motivo: 'IT',
+        totalDias: 5,
+        afectaTicket: true,
+      },
+      timestamp,
+      'absence-leading-zero',
+    );
+
+    const result = calculateTicketContribution(
+      [person],
+      [calendar],
+      [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      3,
+    );
+
+    expect(result.rows[0]).toMatchObject({
+      empleado: '123',
+      ausenciasAplicadas: 5,
+      ticketsFinales: 17,
+    });
+    expect(
+      calculateTicketAbsenceMonthImpact(
+        { ...absence, empleado: '000123' },
+        [{ ...person, empleado: '123' }],
+        [calendar],
+        DEFAULT_TICKET_RESTAURANT_CONFIG,
+        2026,
+        3,
+      ).diasTicketMes,
+    ).toBe(5);
+  });
+
   it('arrastra deuda desde marzo cuando no hay tickets suficientes en meses anteriores', () => {
     const calendar = buildCalendar({
       diasSinTicket: Array.from(

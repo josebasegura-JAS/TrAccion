@@ -1,6 +1,7 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   normalizeTicketCalendarName,
+  normalizeTicketEmployeeNumber,
   splitTicketPersonFullName,
   type TicketCalendar,
   type TicketPersonDraft,
@@ -69,7 +70,7 @@ export function rowsToTicketPeopleDrafts(
   const employeesById = new Map(
     employees
       .filter((employee) => !employee.deletedAt)
-      .map((employee) => [normalizeEmployeeId(employee.empleado), employee]),
+      .map((employee) => [normalizeTicketEmployeeNumber(employee.empleado), employee]),
   );
   const calendarIdByName = new Map(
     calendars
@@ -82,7 +83,7 @@ export function rowsToTicketPeopleDrafts(
   let duplicateRows = 0;
 
   dataRows.forEach((row) => {
-    const empleado = normalizeEmployeeId(row[empleadoColumn] ?? '');
+    const empleado = normalizeTicketEmployeeNumber(row[empleadoColumn] ?? '');
     const calendarName = cleanText(row[calendarioColumn] ?? '');
 
     if (!empleado || !calendarName) {
@@ -104,7 +105,7 @@ export function rowsToTicketPeopleDrafts(
     const splitName = splitTicketPersonFullName(employee.nombreApellidos);
 
     draftsByEmpleado.set(empleado, {
-      empleado: employee.empleado.trim(),
+      empleado: normalizeTicketEmployeeNumber(employee.empleado),
       nombre: splitName.nombre,
       apellido1: splitName.apellido1,
       apellido2: splitName.apellido2,
@@ -144,9 +145,6 @@ function normalizeHeader(header: string): string {
     .trim();
 }
 
-function normalizeEmployeeId(value: string): string {
-  return cleanText(value).replace(/\.0$/, '');
-}
 
 function cleanText(value: string): string {
   return value.trim().replace(/\s+/g, ' ');

@@ -1,6 +1,7 @@
 import {
   TICKET_RESTAURANT_MIN_ABSENCE_DATE,
   buildTicketRestaurantAbsence,
+  normalizeTicketEmployeeNumber,
   isIsoDate,
   type TicketRestaurantAbsence,
 } from './ticketRestaurante';
@@ -198,7 +199,7 @@ export function normalizeTicketRestaurantAbsenceRow(
   row: RawAbsenceRow,
   id: string,
 ): TicketRestaurantAbsencePreviewRow {
-  const empleado = normalizeEmployeeNumber(row.empleado ?? '');
+  const empleado = normalizeTicketEmployeeNumber(row.empleado ?? '');
   const desde = normalizeDate(row.desde ?? '');
   const hasta = normalizeDate(row.hasta ?? '') || desde;
   const totalDias =
@@ -384,7 +385,7 @@ function readZerkosEmployee(
   row: readonly string[],
 ): Pick<RawAbsenceRow, 'empleado' | 'nombreApellidos'> {
   const firstCell = cleanText(row[0] ?? '');
-  const employeeNumber = normalizeEmployeeNumber(firstCell);
+  const employeeNumber = normalizeTicketEmployeeNumber(firstCell);
   if (
     /^\d+$/.test(employeeNumber) &&
     cleanText(row[1] ?? '') &&
@@ -414,7 +415,7 @@ function readZerkosEmployee(
   }
 
   return {
-    empleado: normalizeEmployeeNumber(match[1] ?? ''),
+    empleado: normalizeTicketEmployeeNumber(match[1] ?? ''),
     nombreApellidos: cleanText(
       match[2] ?? values.filter((value) => !/^\d+$/.test(value)).join(' '),
     ),
@@ -504,18 +505,13 @@ function isOverlappingSameReason(
   row: TicketRestaurantAbsencePreviewRow,
 ): boolean {
   return (
-    absence.empleado === row.empleado &&
+    normalizeTicketEmployeeNumber(absence.empleado) === normalizeTicketEmployeeNumber(row.empleado) &&
     normalizeHeader(absence.motivo) === normalizeHeader(row.motivo) &&
     absence.desde <= row.hasta &&
     row.desde <= absence.hasta
   );
 }
 
-function normalizeEmployeeNumber(value: unknown): string {
-  return cleanText(value)
-    .replace(/^0+(?=\d)/, '')
-    .replace(/\.0$/, '');
-}
 
 function cleanText(value: unknown): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
