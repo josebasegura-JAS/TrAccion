@@ -829,6 +829,39 @@ function calculatePersonMonthlyDiscountStatus(
   }
 
   const pendingDiscounts: PendingMonthlyDiscount[] = [];
+
+  // La simulación arranca en el primer mes de contribución, así que las
+  // hojas de gasto imputadas al mes de arranque de la deuda (o a meses
+  // anteriores) nunca serían el "mes del cursor" y se perderían. Se siembran
+  // aquí en la cola, en orden cronológico de imputación, para que descuenten
+  // en cuanto haya capacidad.
+  const firstContributionKey = firstContribution.year * 100 + firstContribution.month;
+  Array.from(
+    new Set(
+      manutenciones
+        .filter(
+          (row) =>
+            !row.deletedAt &&
+            row.afectaTicket &&
+            sameTicketEmployee(row.empleado, person.empleado) &&
+            row.imputacionYear * 100 + row.imputacionMonth < firstContributionKey,
+        )
+        .map((row) => row.imputacionYear * 100 + row.imputacionMonth),
+    ),
+  )
+    .sort((first, second) => first - second)
+    .forEach((imputacionKey) => {
+      pendingDiscounts.push(
+        ...buildPersonManutencionDiscountDetails(
+          person,
+          calendar,
+          manutenciones,
+          Math.floor(imputacionKey / 100),
+          imputacionKey % 100,
+        ),
+      );
+    });
+
   let cursorYear = firstContribution.year;
   let cursorMonth = firstContribution.month;
 
@@ -883,7 +916,11 @@ function calculatePersonMonthlyDiscountStatus(
         deudaPendiente: pendingDiscounts.length,
         ausenciaIds: Array.from(new Set(appliedDiscounts.map((detail) => detail.id))),
         ausenciaDiasDescontados: Object.fromEntries(discountedDaysById),
-        deudaAplicadaDetalle: appliedDiscounts.map(stripPendingDiscountKind),
+        // Solo días de ausencia: las hojas de gasto aplicadas ya se listan en
+        // hojaGastoDetalle y duplicarlas aquí inflaba el detalle del modal.
+        deudaAplicadaDetalle: appliedDiscounts
+          .filter((detail) => detail.kind === 'absence')
+          .map(stripPendingDiscountKind),
         deudaPendienteDetalle: pendingDiscounts.map(stripPendingDiscountKind),
         hojaGastoDetalle: appliedManutenciones.map((detail) => ({
           id: detail.id,
@@ -1266,7 +1303,7 @@ export function buildTicketRestaurantAbsence(
 ): TicketRestaurantAbsence {
   return {
     id,
-    empleado: draft.empleado.trim(),
+    empleado: normalizeTicketEmployeeNumber(draft.empleado),
     nombreApellidos: draft.nombreApellidos.trim().replace(/\s+/g, ' '),
     desde: draft.desde,
     hasta: draft.hasta,

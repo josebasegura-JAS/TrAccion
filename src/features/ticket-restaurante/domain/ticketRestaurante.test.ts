@@ -427,6 +427,68 @@ describe('ticket restaurante calculation domain', () => {
     expect(may.rows[0].hojaGastoDetalle).toHaveLength(3);
   });
 
+  it('descuenta las hojas de gasto imputadas al mes de arranque en cuanto hay capacidad', () => {
+    const calendar = buildCalendar();
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const manutenciones: TicketManutencionImpact[] = [
+      {
+        id: 'manutencion-marzo',
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        fechaGasto: '2026-03-04',
+        afectaTicket: true,
+        imputacionYear: 2026,
+        imputacionMonth: 3,
+        deletedAt: null,
+      },
+    ];
+
+    // Marzo es el mes de arranque de la deuda: su pedido no lleva descuentos
+    // (todo empieza en el primer mes de contribución), pero la hoja de gasto
+    // imputada a marzo NO puede perderse: debe descontar en abril.
+    const march = calculateMonthlyTicketOrder(
+      [person],
+      [calendar],
+      [],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      3,
+      manutenciones,
+    );
+    const april = calculateMonthlyTicketOrder(
+      [person],
+      [calendar],
+      [],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      4,
+      manutenciones,
+    );
+
+    expect(march.rows[0]).toMatchObject({ hojasGastoMes: 0, ticketsFinales: 22 });
+    expect(april.rows[0]).toMatchObject({
+      deudaEntrante: 1,
+      ausenciasAplicadas: 1,
+      hojasGastoMes: 1,
+      deudaPendiente: 0,
+      ticketsFinales: 21,
+    });
+    expect(april.rows[0].hojaGastoDetalle).toEqual([
+      { id: 'manutencion-marzo', fecha: '2026-03-04' },
+    ]);
+    // Las hojas aplicadas no deben repetirse en el detalle de deuda aplicada.
+    expect(april.rows[0].deudaAplicadaDetalle).toHaveLength(0);
+  });
+
   it('ignora ausencias con fecha de inicio anterior al 1 de marzo de 2026', () => {
     const calendar = buildCalendar();
     const person = buildTicketPerson(
