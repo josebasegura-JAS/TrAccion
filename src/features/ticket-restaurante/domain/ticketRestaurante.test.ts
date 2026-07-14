@@ -216,6 +216,75 @@ describe('ticket restaurante calculation domain', () => {
     ).toBe(5);
   });
 
+  it('un calendario inactivo no genera tickets ni impacto de ausencias', () => {
+    const calendar = buildCalendar({ activo: false });
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const absence = buildTicketRestaurantAbsence(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        desde: '2026-03-02',
+        hasta: '2026-03-06',
+        motivo: 'IT',
+        totalDias: 5,
+        afectaTicket: true,
+      },
+      timestamp,
+      'absence-inactive-calendar',
+    );
+
+    const monthlyOrder = calculateMonthlyTicketOrder(
+      [person],
+      [calendar],
+      [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      3,
+    );
+    const contribution = calculateTicketContribution(
+      [person],
+      [calendar],
+      [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      3,
+    );
+
+    expect(monthlyOrder.rows[0]).toMatchObject({
+      calendario: 'Sin calendario',
+      diasTeoricos: 0,
+      ausenciasAplicadas: 0,
+      ticketsFinales: 0,
+      importe: 0,
+    });
+    expect(contribution.rows[0]).toMatchObject({
+      calendario: 'Sin calendario',
+      diasTeoricos: 0,
+      ausenciasAplicadas: 0,
+      ticketsFinales: 0,
+      importe: 0,
+    });
+    expect(
+      calculateTicketAbsenceMonthImpact(
+        absence,
+        [person],
+        [calendar],
+        DEFAULT_TICKET_RESTAURANT_CONFIG,
+        2026,
+        3,
+      ),
+    ).toMatchObject({ diasTicketMes: 0, descuentaTicket: false });
+  });
+
   it('arrastra deuda desde marzo cuando no hay tickets suficientes en meses anteriores', () => {
     const calendar = buildCalendar({
       diasSinTicket: Array.from(

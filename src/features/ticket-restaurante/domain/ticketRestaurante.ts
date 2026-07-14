@@ -604,7 +604,9 @@ function calculateTicketMonthInternal(
 ): TicketMonthCalculation {
   const effectiveConfig = normalizeTicketRestaurantConfig(config);
   const calendarById = new Map(
-    calendars.filter((calendar) => !calendar.deletedAt).map((calendar) => [calendar.id, calendar]),
+    calendars
+      .filter((calendar) => !calendar.deletedAt && calendar.activo)
+      .map((calendar) => [calendar.id, calendar]),
   );
 
   const rows = people
