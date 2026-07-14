@@ -27,7 +27,6 @@ describe('useTicketRestauranteStore reloadFromStorage (estabilidad multiusuario)
     await vi.waitFor(() => expect(useTicketRestauranteStore.getState().calendars).toHaveLength(1));
 
     const calendarsBeforeReload = useTicketRestauranteStore.getState().calendars;
-    const debtLedgerBeforeReload = useTicketRestauranteStore.getState().debtLedger;
 
     // El polling detecta que localStorage tiene contenido (porque lo
     // acabamos de escribir nosotros mismos), pero releer y volver a parsear
@@ -37,7 +36,6 @@ describe('useTicketRestauranteStore reloadFromStorage (estabilidad multiusuario)
     // Las referencias deben mantenerse intactas: reloadFromStorage no debe
     // haber llamado a set() si el contenido no cambió realmente.
     expect(useTicketRestauranteStore.getState().calendars).toBe(calendarsBeforeReload);
-    expect(useTicketRestauranteStore.getState().debtLedger).toBe(debtLedgerBeforeReload);
   });
 
   it('reloadFromStorage sí actualiza el estado cuando localStorage cambia (otro usuario añade un calendario)', async () => {
@@ -266,7 +264,7 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
     });
 
     expect(createResult.ok).toBe(true);
-    expect(storedPerson?.id).toBe('00001');
+    expect(storedPerson?.id).toBe('1');
 
     const updateResult = await useTicketRestauranteStore.getState().upsertPerson({
       empleado: '00001',

@@ -526,7 +526,7 @@ function migrateToVersion14(db: Database): void {
 function migrateToVersion15(db: Database): void {
   // Primera tanda de migración de Ticket Restaurante a SQLite: calendars y
   // people (entidades maestras relacionadas por calendarId). absences,
-  // config, debtLedger y manutenciones permanecen en localStorage por ahora.
+  // config y manutenciones permanecen en localStorage por ahora.
   db.exec(`
     CREATE TABLE IF NOT EXISTS ticket_restaurante_calendar_records (
       id TEXT PRIMARY KEY,
@@ -562,7 +562,7 @@ function migrateToVersion16(db: Database): void {
   // (colección con id propio, igual patrón que calendars/people) y config
   // (objeto único, migrado como colección de un solo registro de id fijo
   // para reutilizar createJsonModuleRepository sin código a medida).
-  // debtLedger permanece derivado/recalculable; manutenciones migran en v17.
+  // manutenciones migran en v17.
   db.exec(`
     CREATE TABLE IF NOT EXISTS ticket_restaurante_absence_records (
       id TEXT PRIMARY KEY,
@@ -594,8 +594,7 @@ function migrateToVersion16(db: Database): void {
 }
 
 function migrateToVersion17(db: Database): void {
-  // Tercera tanda de Ticket Restaurante: manutenciones. debtLedger sigue
-  // siendo derivado/recalculable desde fuentes primarias.
+  // Tercera tanda de Ticket Restaurante: manutenciones.
   db.exec(`
     CREATE TABLE IF NOT EXISTS ticket_restaurante_manutencion_records (
       id TEXT PRIMARY KEY,

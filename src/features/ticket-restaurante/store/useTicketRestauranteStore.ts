@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import {
   buildTicketCalendar,
-  calculateTicketContribution,
   normalizeTicketIsoWeekdays,
   normalizeTicketRestaurantConfig,
   buildTicketPerson,
@@ -50,7 +49,6 @@ const CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
 const PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
 const CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
-const DEBT_LEDGER_STORAGE_KEY = 'traccion.v1.ticketRestaurante.debtLedger';
 const MANUTENCIONES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.manutenciones';
 
 interface TicketRestauranteState {
@@ -58,7 +56,6 @@ interface TicketRestauranteState {
   absences: TicketRestaurantAbsence[];
   people: TicketPerson[];
   config: TicketRestaurantConfig;
-  debtLedger: Record<string, number>;
   manutenciones: TicketManutencion[];
   load: () => void;
   reloadFromStorage: () => void;
@@ -255,45 +252,6 @@ function readConfig(): TicketRestaurantConfig {
   });
 }
 
-function readDebtLedger(): Record<string, number> {
-  const stored = readStorageItem(DEBT_LEDGER_STORAGE_KEY);
-  if (!stored) {
-    return {};
-  }
-
-  const parsed: unknown = JSON.parse(stored);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(parsed).filter(
-      (entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] >= 0,
-    ),
-  );
-}
-
-function recalculateDebtLedger(
-  people: readonly TicketPerson[],
-  calendars: readonly TicketCalendar[],
-  absences: readonly TicketRestaurantAbsence[],
-  config: TicketRestaurantConfig,
-): Record<string, number> {
-  const today = new Date();
-  const calculation = calculateTicketContribution(
-    people,
-    calendars,
-    absences,
-    config,
-    today.getFullYear(),
-    today.getMonth() + 1,
-  );
-  return Object.fromEntries(
-    calculation.rows
-      .filter((row) => row.deudaPendiente > 0)
-      .map((row) => [row.empleado, row.deudaPendiente]),
-  );
-}
 
 async function persist<T>(storageKey: string, value: T): Promise<void> {
   const result = await writeJsonStorageAsync(storageKey, value);
@@ -302,7 +260,7 @@ async function persist<T>(storageKey: string, value: T): Promise<void> {
   }
 }
 
-type TicketStatePatch = Partial<Pick<TicketRestauranteState, 'calendars' | 'absences' | 'people' | 'config' | 'debtLedger' | 'manutenciones'>>;
+type TicketStatePatch = Partial<Pick<TicketRestauranteState, 'calendars' | 'absences' | 'people' | 'config' | 'manutenciones'>>;
 
 type TicketWrite = readonly [storageKey: string, value: unknown];
 
@@ -335,7 +293,7 @@ function createId(prefix: string): string {
 
 type TicketRestauranteSnapshot = Pick<
   TicketRestauranteState,
-  'calendars' | 'absences' | 'people' | 'config' | 'debtLedger' | 'manutenciones'
+  'calendars' | 'absences' | 'people' | 'config' | 'manutenciones'
 >;
 
 function areTicketSnapshotsEquivalent(
@@ -347,7 +305,6 @@ function areTicketSnapshotsEquivalent(
     JSON.stringify(left.absences) === JSON.stringify(right.absences) &&
     JSON.stringify(left.people) === JSON.stringify(right.people) &&
     JSON.stringify(left.config) === JSON.stringify(right.config) &&
-    JSON.stringify(left.debtLedger) === JSON.stringify(right.debtLedger) &&
     JSON.stringify(left.manutenciones) === JSON.stringify(right.manutenciones)
   );
 }
@@ -641,8 +598,7 @@ async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutenc
 
 /**
  * Carga calendars + people + absences + config (preferentemente desde
- * SQLite) y recalcula debtLedger a partir de los datos frescos, igual que
- * hacían las acciones de escritura antes de esta migración.
+ * SQLite), manteniendo localStorage como respaldo de compatibilidad.
  */
 async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRestauranteSnapshot> {
   const [calendars, people, absences, config, manutenciones] = await Promise.all([
@@ -652,9 +608,7 @@ async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRe
     loadTicketConfigPreferringSqlite(),
     loadTicketManutencionesPreferringSqlite(),
   ]);
-  const debtLedger = recalculateDebtLedger(people, calendars, absences, config);
-
-  return { calendars, absences, people, config, debtLedger, manutenciones };
+  return { calendars, absences, people, config, manutenciones };
 }
 
 function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
@@ -665,7 +619,6 @@ function readTicketRestauranteSnapshot(): TicketRestauranteSnapshot {
     absences: readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence),
     people: readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson),
     config: readConfig(),
-    debtLedger: readDebtLedger(),
     manutenciones: readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
       normalizeStoredTicketManutencion,
     ),
@@ -677,7 +630,6 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   absences: [],
   people: [],
   config: DEFAULT_TICKET_RESTAURANT_CONFIG,
-  debtLedger: {},
   manutenciones: [],
   load: () => {
     set(readTicketRestauranteSnapshot());
@@ -719,18 +671,15 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
         }
         const calendars = [...state.calendars, newCalendar];
-        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-        set({ calendars, debtLedger });
+        set({ calendars });
         return id;
       }
       console.warn('Ticket Restaurante: no se ha podido crear el calendario en SQLite.', saveResult?.message);
     }
 
     const calendars = [...state.calendars, newCalendar];
-    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-    commitTicketState(set, { calendars, debtLedger }, [
+    commitTicketState(set, { calendars }, [
       [CALENDARS_STORAGE_KEY, calendars],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return id;
   },
@@ -762,17 +711,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
         }
         const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
-        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-        set({ calendars, debtLedger });
+        set({ calendars });
         return { ok: true };
       }
     }
 
     const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
-    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-    commitTicketState(set, { calendars, debtLedger }, [
+    commitTicketState(set, { calendars }, [
       [CALENDARS_STORAGE_KEY, calendars],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -805,17 +751,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
         }
         const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
-        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-        set({ calendars, debtLedger });
+        set({ calendars });
         return { ok: true };
       }
     }
 
     const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
-    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-    commitTicketState(set, { calendars, debtLedger }, [
+    commitTicketState(set, { calendars }, [
       [CALENDARS_STORAGE_KEY, calendars],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -887,8 +830,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         }
 
         const calendars = state.calendars.map((calendar) => (calendar.id === id ? removedCalendar : calendar));
-        const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
-        set({ calendars, people, debtLedger });
+        set({ calendars, people });
         return { ok: true };
       }
     }
@@ -896,11 +838,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const calendars = state.calendars.map((calendar) => (calendar.id === id ? removedCalendar : calendar));
     const removedByEmployee = new Map(removedPeople.map((person) => [person.empleado, person]));
     const people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
-    const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
-    commitTicketState(set, { calendars, people, debtLedger }, [
+    commitTicketState(set, { calendars, people }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [PEOPLE_STORAGE_KEY, people],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -935,8 +875,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         const calendars = state.calendars.map((calendar) =>
           calendar.id === calendarId ? updatedCalendar : calendar,
         );
-        const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-        set({ calendars, debtLedger });
+        set({ calendars });
         return { ok: true };
       }
     }
@@ -944,10 +883,8 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const calendars = state.calendars.map((calendar) =>
       calendar.id === calendarId ? updatedCalendar : calendar,
     );
-    const debtLedger = recalculateDebtLedger(state.people, calendars, state.absences, state.config);
-    commitTicketState(set, { calendars, debtLedger }, [
+    commitTicketState(set, { calendars }, [
       [CALENDARS_STORAGE_KEY, calendars],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -984,16 +921,12 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           };
         }
         updateAbsenceSqliteUpdatedAtMap(absences);
-        const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
-        set({ absences, debtLedger });
+        set({ absences });
         return { ok: true };
       }
     }
-
-    const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
-    commitTicketState(set, { absences, debtLedger }, [
+    commitTicketState(set, { absences }, [
       [ABSENCES_STORAGE_KEY, absences],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -1024,17 +957,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         }
         absenceSqliteUpdatedAt.delete(id);
         const absences = state.absences.map((absence) => (absence.id === id ? removedAbsence : absence));
-        const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
-        set({ absences, debtLedger });
+        set({ absences });
         return { ok: true };
       }
     }
 
     const absences = state.absences.map((absence) => (absence.id === id ? removedAbsence : absence));
-    const debtLedger = recalculateDebtLedger(state.people, state.calendars, absences, state.config);
-    commitTicketState(set, { absences, debtLedger }, [
+    commitTicketState(set, { absences }, [
       [ABSENCES_STORAGE_KEY, absences],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -1045,7 +975,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const updatedPerson = buildTicketPerson(draft, now, previous);
 
     if (hasTicketRestaurantePeopleSqliteRepository()) {
-      const expectedUpdatedAt = previous ? personSqliteUpdatedAt.get(draft.empleado) ?? null : null;
+      const expectedUpdatedAt = previous ? personSqliteUpdatedAt.get(updatedPerson.empleado) ?? null : null;
       const saveResult = await saveTicketRestaurantePersonToSqlite(
         { id: updatedPerson.empleado },
         JSON.stringify(updatedPerson),
@@ -1066,8 +996,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         const people = previous
           ? state.people.map((person) => (normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado) ? updatedPerson : person))
           : [...state.people, updatedPerson];
-        const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
-        set({ people, debtLedger });
+        set({ people });
         return { ok: true };
       }
     }
@@ -1075,10 +1004,8 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const people = previous
       ? state.people.map((person) => (normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado) ? updatedPerson : person))
       : [...state.people, updatedPerson];
-    const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
-    commitTicketState(set, { people, debtLedger }, [
+    commitTicketState(set, { people }, [
       [PEOPLE_STORAGE_KEY, people],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
@@ -1161,16 +1088,12 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
 
       updateCalendarSqliteUpdatedAtMap(calendars);
       updatePersonSqliteUpdatedAtMap(people);
-      const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
-      set({ calendars, people, debtLedger });
+      set({ calendars, people });
       return { ...result, ok: true };
     }
-
-    const debtLedger = recalculateDebtLedger(people, calendars, state.absences, state.config);
-    commitTicketState(set, { calendars, people, debtLedger }, [
+    commitTicketState(set, { calendars, people }, [
       [CALENDARS_STORAGE_KEY, calendars],
       [PEOPLE_STORAGE_KEY, people],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ...result, ok: true };
   },
@@ -1184,9 +1107,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     if (hasTicketRestaurantePeopleSqliteRepository()) {
       const now = nowIso();
       const removedPerson = { ...previous, updatedAt: now, deletedAt: now };
-      const expectedUpdatedAt = personSqliteUpdatedAt.get(empleado) ?? null;
+      const expectedUpdatedAt = personSqliteUpdatedAt.get(previous.empleado) ?? null;
       const saveResult = await saveTicketRestaurantePersonToSqlite(
-        { id: empleado },
+        { id: previous.empleado },
         JSON.stringify(removedPerson),
         expectedUpdatedAt,
       );
@@ -1199,25 +1122,20 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
               'Esta persona ha sido modificada por otro usuario. Recarga antes de continuar.',
           };
         }
-        personSqliteUpdatedAt.delete(empleado);
+        personSqliteUpdatedAt.delete(previous.empleado);
         const people = state.people.filter((person) => normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado));
-        const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
-        set({ people, debtLedger });
+        set({ people });
         return { ok: true };
       }
     }
 
     const people = state.people.filter((person) => normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado));
-    const debtLedger = recalculateDebtLedger(people, state.calendars, state.absences, state.config);
-    commitTicketState(set, { people, debtLedger }, [
+    commitTicketState(set, { people }, [
       [PEOPLE_STORAGE_KEY, people],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },
   updateConfig: async (config) => {
-    const state = get();
-
     if (hasTicketRestauranteConfigSqliteRepository()) {
       const saveResult = await saveTicketRestauranteConfigToSqlite(
         JSON.stringify(config),
@@ -1235,16 +1153,12 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         if (saveResult.currentUpdatedAt) {
           configSqliteUpdatedAt = saveResult.currentUpdatedAt;
         }
-        const debtLedger = recalculateDebtLedger(state.people, state.calendars, state.absences, config);
-        set({ config, debtLedger });
+        set({ config });
         return { ok: true };
       }
     }
-
-    const debtLedger = recalculateDebtLedger(state.people, state.calendars, state.absences, config);
-    commitTicketState(set, { config, debtLedger }, [
+    commitTicketState(set, { config }, [
       [CONFIG_STORAGE_KEY, config],
-      [DEBT_LEDGER_STORAGE_KEY, debtLedger],
     ]);
     return { ok: true };
   },

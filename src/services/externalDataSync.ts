@@ -31,7 +31,6 @@ const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
   'traccion.v1.ticketRestaurante.absences': 'ticket-restaurante',
   'traccion.v1.ticketRestaurante.people': 'ticket-restaurante',
   'traccion.v1.ticketRestaurante.config': 'ticket-restaurante',
-  'traccion.v1.ticketRestaurante.debtLedger': 'ticket-restaurante',
   'traccion.v1.ticketRestaurante.manutenciones': 'ticket-restaurante',
   'traccion.v1.criterios-rrll.criterios': 'criterios-rrll',
   'traccion.v1.vinculograma.records': 'vinculograma',
