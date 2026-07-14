@@ -532,9 +532,8 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
       pedidoMensual: 0,
       priceHistory: [{ amount: 17, effectiveFrom: '2026-06-01' }],
       rules: {
-        debtStartDate: '2026-01-01',
+        debtStartDate: '2026-03-01',
         nonDiscountableMotivesByCalendar: {},
-        applyDebtAtClosedMonth: false,
       },
     };
 

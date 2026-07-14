@@ -27,6 +27,7 @@ import {
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
   type TicketRestaurantConfig,
+  TICKET_RESTAURANT_MIN_ABSENCE_DATE,
 } from '../domain/ticketRestaurante';
 import type { TicketRestaurantAbsencePreviewRow } from '../domain/importAbsences';
 import type { ExportTablePayload } from '../../../shared/export/types';
@@ -182,8 +183,6 @@ const contributionCalculationTableColumnIds: TicketCalculationTableColumnId[] = 
   'calendario',
   'diasTeoricos',
   'ausencias',
-  'deudaEntrante',
-  'deudaPendiente',
   'ticketsFinales',
   'importeTicket',
   'total',
@@ -1076,7 +1075,11 @@ export function TicketRulesModal({
         .map((line) => line.trim())
         .filter(Boolean)
         .map((line): [string, string[]] => {
-          const [calendar = '', motives = ''] = line.split(':');
+          // Solo el primer ':' separa calendario de motivos; los motivos
+          // pueden contener ':' sin truncarse.
+          const separatorIndex = line.indexOf(':');
+          const calendar = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+          const motives = separatorIndex >= 0 ? line.slice(separatorIndex + 1) : '';
           return [
             calendar.trim(),
             motives
@@ -1095,7 +1098,6 @@ export function TicketRulesModal({
         rules: {
           debtStartDate,
           nonDiscountableMotivesByCalendar: parseNonDiscountableRules(),
-          applyDebtAtClosedMonth: true,
         },
       }),
     );
@@ -1116,10 +1118,15 @@ export function TicketRulesModal({
             Fecha inicio cómputo deuda
             <input
               className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+              min={TICKET_RESTAURANT_MIN_ABSENCE_DATE}
               onChange={(event) => setDebtStartDate(event.target.value)}
               type="date"
               value={debtStartDate}
             />
+            <span className="mt-1 block text-[11px] font-normal text-metro-muted">
+              No puede ser anterior al {TICKET_RESTAURANT_MIN_ABSENCE_DATE}: el módulo excluye por
+              diseño las ausencias que empiezan antes de esa fecha.
+            </span>
           </label>
 
           <label className="block text-xs font-semibold text-metro-text">
@@ -1496,16 +1503,24 @@ export function CalculationAbsenceDetailModal({
           </button>
         </div>
         <div className="max-h-[68vh] space-y-3 overflow-auto p-3">
-          <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <div
+            className={`grid gap-2 md:grid-cols-3 ${
+              mode === 'monthly' ? 'xl:grid-cols-6' : 'xl:grid-cols-4'
+            }`}
+          >
             <DetailStat label="Calendario" value={row.calendario} />
             <DetailStat label="Días teóricos" value={row.diasTeoricos} />
             <DetailStat label="Hoja gastos" value={row.hojasGastoMes} />
-            <DetailStat label="Deuda entrante" value={row.deudaEntrante} />
+            {mode === 'monthly' ? (
+              <DetailStat label="Deuda entrante" value={row.deudaEntrante} />
+            ) : null}
             <DetailStat
               label={mode === 'monthly' ? 'Descuento total' : 'Ausencias mes'}
               value={appliedDiscounts}
             />
-            <DetailStat label="Deuda pendiente" value={row.deudaPendiente} />
+            {mode === 'monthly' ? (
+              <DetailStat label="Deuda pendiente" value={row.deudaPendiente} />
+            ) : null}
           </div>
 
           <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
@@ -1533,11 +1548,13 @@ export function CalculationAbsenceDetailModal({
                 rows={appliedDebtRows}
                 title={mode === 'monthly' ? 'Deuda aplicada este mes' : 'Ausencias del mes'}
               />
-              <DetailSection
-                emptyMessage="No queda deuda pendiente tras este mes."
-                rows={pendingDebtRows}
-                title="Deuda pendiente"
-              />
+              {mode === 'monthly' ? (
+                <DetailSection
+                  emptyMessage="No queda deuda pendiente tras este mes."
+                  rows={pendingDebtRows}
+                  title="Deuda pendiente"
+                />
+              ) : null}
               <HojaGastoDetailSection rows={hojaGastoRows} />
             </>
           ) : (

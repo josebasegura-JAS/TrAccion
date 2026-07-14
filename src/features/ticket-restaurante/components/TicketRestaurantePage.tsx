@@ -18,6 +18,7 @@ import {
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
   type TicketRestaurantConfig,
+  normalizeTicketEmployeeNumber,
 } from '../domain/ticketRestaurante';
 import {
   importTicketRestaurantAbsencesFromFile,
@@ -374,13 +375,6 @@ function toAbsencePreviewRow(absence: TicketRestaurantAbsence): TicketRestaurant
     afectaTicket: absence.afectaTicket,
     errors: [],
   };
-}
-
-function normalizeTicketEmployeeNumberForMatch(value: string): string {
-  return value
-    .trim()
-    .replace(/^0+(?=\d)/, '')
-    .replace(/\.0$/, '');
 }
 
 function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
@@ -775,7 +769,7 @@ export function TicketRestaurantePage({
       new Set(
         people
           .filter((person) => person.activo && !person.deletedAt)
-          .map((person) => normalizeTicketEmployeeNumberForMatch(person.empleado)),
+          .map((person) => normalizeTicketEmployeeNumber(person.empleado)),
       ),
     [people],
   );
@@ -791,8 +785,8 @@ export function TicketRestaurantePage({
           (item) =>
             !item.deletedAt &&
             item.activo &&
-            normalizeTicketEmployeeNumberForMatch(item.empleado) ===
-              normalizeTicketEmployeeNumberForMatch(row.empleado),
+            normalizeTicketEmployeeNumber(item.empleado) ===
+              normalizeTicketEmployeeNumber(row.empleado),
         );
         const calendar = person
           ? calendars.find(
@@ -1032,7 +1026,7 @@ export function TicketRestaurantePage({
 
       const rowsWithTicketRight = applyCalendarTicketImpactToPreviewRows(
         rows.filter((row) =>
-          activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumberForMatch(row.empleado)),
+          activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumber(row.empleado)),
         ),
       );
       const ignoredWithoutTicketRight = rows.length - rowsWithTicketRight.length;

@@ -19,6 +19,8 @@ import {
   type TicketCalendar,
   type TicketManutencionImpact,
   type TicketRestaurantAbsence,
+  normalizeTicketCalculationRules,
+  TICKET_RESTAURANT_MIN_ABSENCE_DATE,
 } from './ticketRestaurante';
 
 const timestamp = '2026-01-01T00:00:00.000Z';
@@ -487,6 +489,60 @@ describe('ticket restaurante calculation domain', () => {
     ]);
     // Las hojas aplicadas no deben repetirse en el detalle de deuda aplicada.
     expect(april.rows[0].deudaAplicadaDetalle).toHaveLength(0);
+  });
+
+  it('en cotización las hojas de gasto se informan pero NO descuentan (regla de negocio)', () => {
+    const calendar = buildCalendar();
+    const person = buildTicketPerson(
+      {
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        puesto: 'SSCC',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const manutenciones: TicketManutencionImpact[] = [
+      {
+        id: 'manutencion-abril',
+        empleado: '123',
+        nombreApellidos: 'Ana Metro',
+        fechaGasto: '2026-04-01',
+        afectaTicket: true,
+        imputacionYear: 2026,
+        imputacionMonth: 4,
+        deletedAt: null,
+      },
+    ];
+
+    const contribution = calculateTicketContribution(
+      [person],
+      [calendar],
+      [],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      4,
+      manutenciones,
+    );
+
+    // La cotización refleja las hojas de gasto como información, pero el
+    // descuento de tickets por hoja de gasto pertenece SOLO al pedido mensual.
+    expect(contribution.rows[0]).toMatchObject({
+      hojasGastoMes: 1,
+      ticketsFinales: 22,
+      deudaEntrante: 0,
+      deudaPendiente: 0,
+    });
+  });
+
+  it('acota debtStartDate al mínimo del módulo si se configura una fecha anterior', () => {
+    const normalized = normalizeTicketCalculationRules({
+      debtStartDate: '2026-01-01',
+      nonDiscountableMotivesByCalendar: {},
+    });
+
+    expect(normalized.debtStartDate).toBe(TICKET_RESTAURANT_MIN_ABSENCE_DATE);
   });
 
   it('ignora ausencias con fecha de inicio anterior al 1 de marzo de 2026', () => {
