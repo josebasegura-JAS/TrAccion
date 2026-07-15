@@ -1,6 +1,6 @@
 {
   "name": "traccion-v1",
-  "version": "1.0.54",
+  "version": "1.0.53",
   "description": "TrAccion - RRLL Dashboard moderno con Electron, React y TypeScript",
   "author": "TrAccion",
   "private": true,
@@ -16,6 +16,7 @@
     "version:bump": "node scripts/bump-version.mjs",
     "update-manifest:write": "node scripts/write-update-manifest.mjs",
     "test": "vitest run --fileParallelism=false",
+    "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -25,7 +26,7 @@
     "test:e2e:electron:ci": "tsc -p electron/tsconfig.json && playwright test -c playwright.electron.config.ts",
     "test:ui": "npm run test:e2e:electron:ci",
     "test:critical": "npm run test && npm run test:ui",
-    "test:all": "npm run lint && npm run test && npm run test:ui"
+    "test:all": "npm run typecheck && npm run lint && npm run test && npm run test:ui"
   },
   "dependencies": {
     "@kenjiuno/msgreader": "^1.15.0",
@@ -94,7 +95,7 @@
       "icon": "build/icon/traccion-icon-256.ico"
     },
     "portable": {
-      "artifactName": "TrAccion V1.0.54.exe"
+      "artifactName": "TrAccion V1.0.53.exe"
     },
     "npmRebuild": true,
     "icon": "build/icon/traccion-icon-256.ico"
