@@ -34,10 +34,7 @@ import {
   saveTeletrabajoSolicitudToSqlite,
 } from './teletrabajoSqliteRepository';
 import { enqueueAuditEvent } from '../../../shared/audit/auditTrail';
-import {
-  type TeletrabajoDraft,
-  type TeletrabajoSolicitud,
-} from '../domain/solicitud';
+import { type TeletrabajoDraft, type TeletrabajoSolicitud } from '../domain/solicitud';
 import {
   STORAGE_KEY,
   areSolicitudesEquivalent,
@@ -85,7 +82,7 @@ interface TeletrabajoPeriodoCreationResult extends TeletrabajoUpdateResult {
   ignored: number;
 }
 
-interface PendingHistoricoImport extends ImportHistoricoTeletrabajoResult {
+export interface PendingHistoricoImport extends ImportHistoricoTeletrabajoResult {
   /** Solicitudes existentes en el momento de calcular la previsualización, usadas para auditoría/concurrencia al confirmar. */
   baseSolicitudes: TeletrabajoSolicitud[];
 }
@@ -168,7 +165,9 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           ),
         );
       })
-      .catch((error) => console.warn('Puestos/grupos de cobertura no cargados desde SQLite.', error));
+      .catch((error) =>
+        console.warn('Puestos/grupos de cobertura no cargados desde SQLite.', error),
+      );
     void loadSolicitudesFromSqliteOrStorage()
       .then((nextSolicitudes) =>
         set((state) =>
@@ -184,33 +183,38 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   },
   reloadFromStorage: () => {
     void Promise.all([loadSolicitudesFromSqliteOrStorage(), loadPuestosYGruposConMigracion()])
-      .then(([nextSolicitudes, { puestos: nextPuestosTeletrabajo, gruposCobertura: nextGruposCobertura }]) => {
-        set((state) => {
-          const hasSolicitudesChanged = !areSolicitudesEquivalent(
-            state.solicitudes,
-            nextSolicitudes,
-          );
-          const hasPuestosChanged = !arePuestosTeletrabajoEquivalent(
-            state.puestosTeletrabajo,
-            nextPuestosTeletrabajo,
-          );
-          const hasGruposChanged = !areGruposCoberturaEquivalent(
-            state.gruposCobertura,
-            nextGruposCobertura,
-          );
+      .then(
+        ([
+          nextSolicitudes,
+          { puestos: nextPuestosTeletrabajo, gruposCobertura: nextGruposCobertura },
+        ]) => {
+          set((state) => {
+            const hasSolicitudesChanged = !areSolicitudesEquivalent(
+              state.solicitudes,
+              nextSolicitudes,
+            );
+            const hasPuestosChanged = !arePuestosTeletrabajoEquivalent(
+              state.puestosTeletrabajo,
+              nextPuestosTeletrabajo,
+            );
+            const hasGruposChanged = !areGruposCoberturaEquivalent(
+              state.gruposCobertura,
+              nextGruposCobertura,
+            );
 
-          if (!hasSolicitudesChanged && !hasPuestosChanged && !hasGruposChanged) {
-            return state;
-          }
+            if (!hasSolicitudesChanged && !hasPuestosChanged && !hasGruposChanged) {
+              return state;
+            }
 
-          return buildTeletrabajoState(
-            nextSolicitudes,
-            nextPuestosTeletrabajo,
-            nextGruposCobertura,
-            state.selectedSolicitudId,
-          );
-        });
-      })
+            return buildTeletrabajoState(
+              nextSolicitudes,
+              nextPuestosTeletrabajo,
+              nextGruposCobertura,
+              state.selectedSolicitudId,
+            );
+          });
+        },
+      )
       .catch((error) => logTeletrabajoPersistenceError('reloadTeletrabajoFromStorage', error));
   },
   createWithConcurrencyCheck: async (draft) => {
@@ -586,7 +590,8 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   createPuestoTeletrabajo: async (draft) => {
     const puestosTeletrabajo = upsertPuestosTeletrabajo(get().puestosTeletrabajo, [draft]);
     const created = puestosTeletrabajo.find(
-      (puesto) => normalizeTeletrabajoPuesto(puesto.puesto) === normalizeTeletrabajoPuesto(draft.puesto),
+      (puesto) =>
+        normalizeTeletrabajoPuesto(puesto.puesto) === normalizeTeletrabajoPuesto(draft.puesto),
     );
     set({ puestosTeletrabajo });
 
@@ -675,7 +680,10 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
             idByNombreKey.get(normalizeGrupoCoberturaNombre(row.grupoCoberturaNombre)) ?? null,
         }),
       );
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, normalizedDrafts);
+      const puestosTeletrabajo = upsertPuestosTeletrabajo(
+        state.puestosTeletrabajo,
+        normalizedDrafts,
+      );
       persistPuestosTeletrabajo(puestosTeletrabajo);
       if (gruposCobertura !== state.gruposCobertura) {
         persistGruposCobertura(gruposCobertura);
@@ -755,7 +763,8 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     // Los puestos que quedaron desenlazados también deben persistirse, uno a
     // uno, para no arrastrar el patrón de "guardar toda la lista".
     const puestosDesenlazados = puestosTeletrabajo.filter(
-      (puesto, index) => puesto !== state.puestosTeletrabajo[index] && puesto.grupoCoberturaId === null,
+      (puesto, index) =>
+        puesto !== state.puestosTeletrabajo[index] && puesto.grupoCoberturaId === null,
     );
     for (const puesto of puestosDesenlazados) {
       const puestoResult = await persistPuestoTeletrabajoRecord(puestosTeletrabajo, puesto);
