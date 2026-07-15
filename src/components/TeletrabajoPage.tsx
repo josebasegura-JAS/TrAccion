@@ -6,8 +6,14 @@ import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/TeletrabajoFiltersBar';
 import { TeletrabajoPageHeader } from '../features/teletrabajo/components/TeletrabajoPageHeader';
 import { TeletrabajoStatusMessages } from '../features/teletrabajo/components/TeletrabajoStatusMessages';
-import { TeletrabajoHistoricoSection, TeletrabajoMainTableSection } from '../features/teletrabajo/components/TeletrabajoTableSections';
-import { buildTeletrabajoTableColumns, type TeletrabajoIncidentTooltipState } from '../features/teletrabajo/components/teletrabajoTableColumns';
+import {
+  TeletrabajoHistoricoSection,
+  TeletrabajoMainTableSection,
+} from '../features/teletrabajo/components/TeletrabajoTableSections';
+import {
+  buildTeletrabajoTableColumns,
+  type TeletrabajoIncidentTooltipState,
+} from '../features/teletrabajo/components/teletrabajoTableColumns';
 import {
   defaultTeletrabajoTablePreferences,
   TELETRABAJO_TABLE_STORAGE_KEY,
@@ -31,9 +37,7 @@ import {
   TELETRABAJO_INCIDENT_FILTER_LABELS,
   type TeletrabajoIncidentFilter,
 } from '../features/teletrabajo/domain/incidentView';
-import {
-  type TeletrabajoSolicitud,
-} from '../features/teletrabajo/domain/solicitud';
+import { type TeletrabajoSolicitud } from '../features/teletrabajo/domain/solicitud';
 import { resolveTeletrabajoTipoSolicitud } from '../features/teletrabajo/domain/tipoSolicitud';
 
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
@@ -51,6 +55,7 @@ import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/Acti
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { ModalCloseButton } from './ui/ModalCloseButton';
+import { ModalShell } from './ui/ModalShell';
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort(
@@ -68,7 +73,8 @@ function suggestNextPeriodo(periodos: readonly string[]): string {
   return `${Number(match[1]) + 1}-${Number(match[2]) + 1}`;
 }
 
-const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos.translationAliases';
+const TELETRABAJO_PUESTOS_ALIASES_STORAGE_KEY =
+  'traccion.v1.teletrabajo.puestos.translationAliases';
 
 interface PendingEncuestaImport {
   file: File;
@@ -174,7 +180,9 @@ export function TeletrabajoPage({
   const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
   const [incidentFilter, setIncidentFilter] = useState<TeletrabajoIncidentFilter>('');
-  const [incidentTooltip, setIncidentTooltip] = useState<TeletrabajoIncidentTooltipState | null>(null);
+  const [incidentTooltip, setIncidentTooltip] = useState<TeletrabajoIncidentTooltipState | null>(
+    null,
+  );
 
   useEffect(() => {
     load();
@@ -780,17 +788,29 @@ export function TeletrabajoPage({
       });
 
       const notesSheet = workbook.addWorksheet('Instrucciones');
-      notesSheet.columns = [{ header: 'Campo', width: 26 }, { header: 'Uso', width: 82 }];
+      notesSheet.columns = [
+        { header: 'Campo', width: 26 },
+        { header: 'Uso', width: 82 },
+      ];
       notesSheet.addRows([
         ['Nº Empleado', 'Obligatorio. Debe coincidir con un empleado existente en Plantilla.'],
         ['Nombre Apellidos', 'Opcional. Si no se informa, se usa el nombre de Plantilla.'],
         ['Respuesta', 'Obligatorio. Solo se importan las filas con "Sí"; el resto se ignoran.'],
-        ['Tipo solicitud', 'Opcional. "Nueva" o "Renovación" (si no contiene "nueva" se asume renovación).'],
+        [
+          'Tipo solicitud',
+          'Opcional. "Nueva" o "Renovación" (si no contiene "nueva" se asume renovación).',
+        ],
         ['Días teletrabajo', 'Opcional. Debe mencionar martes, miércoles y/o jueves.'],
         ['Periodo', 'Opcional. Si se deja vacío se usa el periodo por defecto de la campaña.'],
         ['Fecha entrega ordenador / Fecha entrega cascos', 'Opcionales.'],
-        ['Observaciones', 'Opcional. Texto libre; también se usa para detectar los días de teletrabajo.'],
-        ['Requisito previo', 'Antes de importar debes tener cargada la tabla de Traducción de puestos en Plantilla.'],
+        [
+          'Observaciones',
+          'Opcional. Texto libre; también se usa para detectar los días de teletrabajo.',
+        ],
+        [
+          'Requisito previo',
+          'Antes de importar debes tener cargada la tabla de Traducción de puestos en Plantilla.',
+        ],
       ]);
       notesSheet.getRow(1).font = { bold: true };
 
@@ -865,17 +885,41 @@ export function TeletrabajoPage({
       });
 
       const notesSheet = workbook.addWorksheet('Instrucciones');
-      notesSheet.columns = [{ header: 'Campo', width: 26 }, { header: 'Uso', width: 82 }];
+      notesSheet.columns = [
+        { header: 'Campo', width: 26 },
+        { header: 'Uso', width: 82 },
+      ];
       notesSheet.addRows([
-        ['Título', 'Obligatorio. En algún texto del fichero debe aparecer el periodo, por ejemplo "2026-2027".'],
+        [
+          'Título',
+          'Obligatorio. En algún texto del fichero debe aparecer el periodo, por ejemplo "2026-2027".',
+        ],
         ['Nº Empleado', 'Obligatorio. Debe coincidir con un empleado existente en Plantilla.'],
-        ['Nombre / Detalle / Dirección', 'Opcionales. "Detalle" se usa como puesto y "Dirección" como residencia si Plantilla no los tiene.'],
-        ['Martes / Miércoles / Jueves', 'Marcar con "X" o "Sí" los días de teletrabajo concedidos.'],
-        ['Periodo 20XX-20XX', 'Opcional. Periodo concreto solicitado; se añade a las observaciones.'],
-        ['Informe favorable', '"No" o cualquier texto con "denegado" marca la solicitud como denegada; en otro caso se considera aprobada.'],
-        ['Año anterior teletrabajado', '"Sí" marca la solicitud como renovación; en otro caso se considera nueva.'],
+        [
+          'Nombre / Detalle / Dirección',
+          'Opcionales. "Detalle" se usa como puesto y "Dirección" como residencia si Plantilla no los tiene.',
+        ],
+        [
+          'Martes / Miércoles / Jueves',
+          'Marcar con "X" o "Sí" los días de teletrabajo concedidos.',
+        ],
+        [
+          'Periodo 20XX-20XX',
+          'Opcional. Periodo concreto solicitado; se añade a las observaciones.',
+        ],
+        [
+          'Informe favorable',
+          '"No" o cualquier texto con "denegado" marca la solicitud como denegada; en otro caso se considera aprobada.',
+        ],
+        [
+          'Año anterior teletrabajado',
+          '"Sí" marca la solicitud como renovación; en otro caso se considera nueva.',
+        ],
         ['Observaciones', 'Opcional. Texto libre.'],
-        ['Estructura', 'Se esperan dos filas de cabecera: una fila superior de agrupación y, justo debajo, la fila con los nombres de columna ("Nº Empleado", "Nombre", "Martes", "Miércoles", "Jueves" son obligatorias para localizarla).'],
+        [
+          'Estructura',
+          'Se esperan dos filas de cabecera: una fila superior de agrupación y, justo debajo, la fila con los nombres de columna ("Nº Empleado", "Nombre", "Martes", "Miércoles", "Jueves" son obligatorias para localizarla).',
+        ],
       ]);
       notesSheet.getRow(1).font = { bold: true };
 
@@ -1041,181 +1085,199 @@ export function TeletrabajoPage({
       )}
 
       {isPeriodoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <section className="w-full max-w-xl rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-            <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-                  Teletrabajo
-                </p>
-                <h3 className="text-xl font-bold text-metro-text">Nuevo periodo</h3>
-                <p className="mt-1 text-sm text-metro-muted">
-                  Crea una nueva campaña sin modificar las solicitudes del periodo anterior.
-                </p>
-              </div>
-              <ModalCloseButton label="Cerrar creación de periodo" onClick={() => setIsPeriodoModalOpen(false)} />
-            </header>
-            <div className="space-y-4 p-4">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
-                Nombre del nuevo periodo
-                <input
-                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => setNewPeriodoName(event.target.value)}
-                  placeholder="2027-2028"
-                  type="text"
-                  value={newPeriodoName}
-                />
-              </label>
-              <label className="flex items-start gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 text-sm font-semibold text-metro-text">
-                <input
-                  checked={copyFromPreviousPeriodo}
-                  className="mt-1"
-                  disabled={periodos.length === 0}
-                  onChange={(event) => setCopyFromPreviousPeriodo(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>
-                  Generar renovaciones desde un periodo anterior
-                  <span className="mt-1 block text-xs font-normal text-metro-muted">
-                    Copia solicitudes aprobadas o analizadas, las marca como renovación, las deja
-                    pendientes y limpia revisión y validaciones.
-                  </span>
-                </span>
-              </label>
-              {copyFromPreviousPeriodo && (
-                <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
-                  Periodo origen
-                  <select
-                    className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
-                    onChange={(event) => setSourcePeriodo(event.target.value)}
-                    value={sourcePeriodo}
-                  >
-                    <option value="">Selecciona periodo...</option>
-                    {periodos.map((periodo) => (
-                      <option key={periodo} value={periodo}>
-                        {periodo}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {periodoStatus && (
-                <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
-                  {periodoStatus}
-                </div>
-              )}
+        <ModalShell
+          labelledBy="teletrabajo-periodo-modal-title"
+          maxWidthClassName="max-w-xl"
+          onClose={() => setIsPeriodoModalOpen(false)}
+        >
+          <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+                Teletrabajo
+              </p>
+              <h3
+                className="text-xl font-bold text-metro-text"
+                id="teletrabajo-periodo-modal-title"
+              >
+                Nuevo periodo
+              </h3>
+              <p className="mt-1 text-sm text-metro-muted">
+                Crea una nueva campaña sin modificar las solicitudes del periodo anterior.
+              </p>
             </div>
-            <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
-              <button
-                className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-                onClick={() => setIsPeriodoModalOpen(false)}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={
-                  !newPeriodoName.trim() || (copyFromPreviousPeriodo && !sourcePeriodo.trim())
-                }
-                onClick={() => void handleCreatePeriodo()}
-                type="button"
-              >
-                Crear periodo
-              </button>
-            </footer>
-          </section>
-        </div>
+            <ModalCloseButton
+              label="Cerrar creación de periodo"
+              onClick={() => setIsPeriodoModalOpen(false)}
+            />
+          </header>
+          <div className="space-y-4 p-4">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+              Nombre del nuevo periodo
+              <input
+                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => setNewPeriodoName(event.target.value)}
+                placeholder="2027-2028"
+                type="text"
+                value={newPeriodoName}
+              />
+            </label>
+            <label className="flex items-start gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 text-sm font-semibold text-metro-text">
+              <input
+                checked={copyFromPreviousPeriodo}
+                className="mt-1"
+                disabled={periodos.length === 0}
+                onChange={(event) => setCopyFromPreviousPeriodo(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                Generar renovaciones desde un periodo anterior
+                <span className="mt-1 block text-xs font-normal text-metro-muted">
+                  Copia solicitudes aprobadas o analizadas, las marca como renovación, las deja
+                  pendientes y limpia revisión y validaciones.
+                </span>
+              </span>
+            </label>
+            {copyFromPreviousPeriodo && (
+              <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                Periodo origen
+                <select
+                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => setSourcePeriodo(event.target.value)}
+                  value={sourcePeriodo}
+                >
+                  <option value="">Selecciona periodo...</option>
+                  {periodos.map((periodo) => (
+                    <option key={periodo} value={periodo}>
+                      {periodo}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {periodoStatus && (
+              <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">
+                {periodoStatus}
+              </div>
+            )}
+          </div>
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
+            <button
+              className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => setIsPeriodoModalOpen(false)}
+              type="button"
+            >
+              Cancelar
+            </button>
+            <button
+              className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={
+                !newPeriodoName.trim() || (copyFromPreviousPeriodo && !sourcePeriodo.trim())
+              }
+              onClick={() => void handleCreatePeriodo()}
+              type="button"
+            >
+              Crear periodo
+            </button>
+          </footer>
+        </ModalShell>
       )}
 
       {pendingEncuestaImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <section className="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-            <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-                  Importar encuesta
-                </p>
-                <h3 className="text-xl font-bold text-metro-text">
-                  Resolver puestos no reconocidos
-                </h3>
-                <p className="mt-1 text-sm text-metro-muted">
-                  Asigna cada puesto de Plantilla al puesto correcto de la tabla de Traducción de
-                  puestos.
-                </p>
-              </div>
-              <ModalCloseButton label="Cancelar resolución de puestos" onClick={() => setPendingEncuestaImport(null)} />
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
-                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-                <span>
-                  Hay {pendingEncuestaImport.unknownPuestos.length} puesto
-                  {pendingEncuestaImport.unknownPuestos.length === 1 ? '' : 's'} que no cuadran con
-                  la tabla maestra.
-                </span>
-              </div>
-              <div className="space-y-2">
-                {pendingEncuestaImport.unknownPuestos.map((puesto) => {
-                  const key = normalizeJobPosition(puesto);
-                  return (
-                    <div
-                      className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.2fr)] lg:items-center"
-                      key={key}
-                    >
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
-                          Puesto en Plantilla
-                        </p>
-                        <p className="font-semibold text-metro-text">{puesto}</p>
-                      </div>
-                      <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
-                        Puesto correcto
-                        <select
-                          className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                          onChange={(event) =>
-                            setPendingEncuestaImport((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    mapping: { ...current.mapping, [key]: event.target.value },
-                                  }
-                                : current,
-                            )
-                          }
-                          value={pendingEncuestaImport.mapping[key] ?? ''}
-                        >
-                          <option value="">Selecciona puesto...</option>
-                          {masterPuestos.map((candidate) => (
-                            <option key={candidate} value={candidate}>
-                              {candidate}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
+        <ModalShell
+          labelledBy="teletrabajo-encuesta-import-modal-title"
+          maxWidthClassName="max-w-4xl"
+          onClose={() => setPendingEncuestaImport(null)}
+        >
+          <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+                Importar encuesta
+              </p>
+              <h3
+                className="text-xl font-bold text-metro-text"
+                id="teletrabajo-encuesta-import-modal-title"
+              >
+                Resolver puestos no reconocidos
+              </h3>
+              <p className="mt-1 text-sm text-metro-muted">
+                Asigna cada puesto de Plantilla al puesto correcto de la tabla de Traducción de
+                puestos.
+              </p>
             </div>
-            <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
-              <button
-                className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-                onClick={() => setPendingEncuestaImport(null)}
-                type="button"
-              >
-                Cancelar importación
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                onClick={() => void handleResolvePendingEncuestaImport()}
-                type="button"
-              >
-                Confirmar e importar
-              </button>
-            </footer>
-          </section>
-        </div>
+            <ModalCloseButton
+              label="Cancelar resolución de puestos"
+              onClick={() => setPendingEncuestaImport(null)}
+            />
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <span>
+                Hay {pendingEncuestaImport.unknownPuestos.length} puesto
+                {pendingEncuestaImport.unknownPuestos.length === 1 ? '' : 's'} que no cuadran con la
+                tabla maestra.
+              </span>
+            </div>
+            <div className="space-y-2">
+              {pendingEncuestaImport.unknownPuestos.map((puesto) => {
+                const key = normalizeJobPosition(puesto);
+                return (
+                  <div
+                    className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_minmax(280px,1.2fr)] lg:items-center"
+                    key={key}
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                        Puesto en Plantilla
+                      </p>
+                      <p className="font-semibold text-metro-text">{puesto}</p>
+                    </div>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                      Puesto correcto
+                      <select
+                        className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                        onChange={(event) =>
+                          setPendingEncuestaImport((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  mapping: { ...current.mapping, [key]: event.target.value },
+                                }
+                              : current,
+                          )
+                        }
+                        value={pendingEncuestaImport.mapping[key] ?? ''}
+                      >
+                        <option value="">Selecciona puesto...</option>
+                        {masterPuestos.map((candidate) => (
+                          <option key={candidate} value={candidate}>
+                            {candidate}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
+            <button
+              className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={() => setPendingEncuestaImport(null)}
+              type="button"
+            >
+              Cancelar importación
+            </button>
+            <button
+              className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+              onClick={() => void handleResolvePendingEncuestaImport()}
+              type="button"
+            >
+              Confirmar e importar
+            </button>
+          </footer>
+        </ModalShell>
       )}
 
       {isPuestosModalOpen && (
@@ -1226,87 +1288,95 @@ export function TeletrabajoPage({
       )}
 
       {pendingHistoricoImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <section className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-            <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-                  Importar histórico
-                </p>
-                <h3 className="text-xl font-bold text-metro-text">
-                  Confirmar importación del periodo {pendingHistoricoImport.periodo}
-                </h3>
-                <p className="mt-1 text-sm text-metro-muted">
-                  Revisa el resumen antes de aplicar los cambios a la base compartida.
-                </p>
-              </div>
-              <ModalCloseButton label="Cancelar importación de histórico" onClick={handleCancelImportHistorico} />
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <ul className="grid gap-2 text-sm text-metro-text sm:grid-cols-2">
-                <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-                  <span className="font-semibold text-emerald-300">
-                    {pendingHistoricoImport.summary.imported}
-                  </span>{' '}
-                  registros nuevos
-                </li>
-                <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-                  <span className="font-semibold text-amber-300">
-                    {pendingHistoricoImport.summary.updated}
-                  </span>{' '}
-                  registros existentes actualizados
-                </li>
-                <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-                  <span className="font-semibold text-metro-muted">
-                    {pendingHistoricoImport.summary.unchanged}
-                  </span>{' '}
-                  sin cambios
-                </li>
-                <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-                  <span className="font-semibold text-red-300">
-                    {pendingHistoricoImport.summary.denegados}
-                  </span>{' '}
-                  denegados
-                </li>
-                <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 sm:col-span-2">
-                  <span className="font-semibold text-metro-muted">
-                    {pendingHistoricoImport.summary.ignored}
-                  </span>{' '}
-                  filas ignoradas (sin empleado o auxiliares)
-                </li>
-              </ul>
-              {pendingHistoricoImport.summary.updated > 0 && (
-                <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
-                  <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-                  <span>
-                    {pendingHistoricoImport.summary.updated} solicitud
-                    {pendingHistoricoImport.summary.updated === 1 ? '' : 'es'} ya existente
-                    {pendingHistoricoImport.summary.updated === 1 ? '' : 's'} se actualizará
-                    {pendingHistoricoImport.summary.updated === 1 ? '' : 'n'} con los datos del
-                    fichero (estado, días, observaciones...). Las validaciones de seguridad,
-                    prevención y jefatura ya realizadas en la app se conservan.
-                  </span>
-                </div>
-              )}
+        <ModalShell
+          labelledBy="teletrabajo-historico-import-modal-title"
+          maxWidthClassName="max-w-2xl"
+          onClose={handleCancelImportHistorico}
+        >
+          <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+                Importar histórico
+              </p>
+              <h3
+                className="text-xl font-bold text-metro-text"
+                id="teletrabajo-historico-import-modal-title"
+              >
+                Confirmar importación del periodo {pendingHistoricoImport.periodo}
+              </h3>
+              <p className="mt-1 text-sm text-metro-muted">
+                Revisa el resumen antes de aplicar los cambios a la base compartida.
+              </p>
             </div>
-            <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
-              <button
-                className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-                onClick={handleCancelImportHistorico}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                onClick={() => void handleConfirmImportHistorico()}
-                type="button"
-              >
-                Confirmar e importar
-              </button>
-            </footer>
-          </section>
-        </div>
+            <ModalCloseButton
+              label="Cancelar importación de histórico"
+              onClick={handleCancelImportHistorico}
+            />
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <ul className="grid gap-2 text-sm text-metro-text sm:grid-cols-2">
+              <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
+                <span className="font-semibold text-emerald-300">
+                  {pendingHistoricoImport.summary.imported}
+                </span>{' '}
+                registros nuevos
+              </li>
+              <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
+                <span className="font-semibold text-amber-300">
+                  {pendingHistoricoImport.summary.updated}
+                </span>{' '}
+                registros existentes actualizados
+              </li>
+              <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
+                <span className="font-semibold text-metro-muted">
+                  {pendingHistoricoImport.summary.unchanged}
+                </span>{' '}
+                sin cambios
+              </li>
+              <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
+                <span className="font-semibold text-red-300">
+                  {pendingHistoricoImport.summary.denegados}
+                </span>{' '}
+                denegados
+              </li>
+              <li className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 sm:col-span-2">
+                <span className="font-semibold text-metro-muted">
+                  {pendingHistoricoImport.summary.ignored}
+                </span>{' '}
+                filas ignoradas (sin empleado o auxiliares)
+              </li>
+            </ul>
+            {pendingHistoricoImport.summary.updated > 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                <span>
+                  {pendingHistoricoImport.summary.updated} solicitud
+                  {pendingHistoricoImport.summary.updated === 1 ? '' : 'es'} ya existente
+                  {pendingHistoricoImport.summary.updated === 1 ? '' : 's'} se actualizará
+                  {pendingHistoricoImport.summary.updated === 1 ? '' : 'n'} con los datos del
+                  fichero (estado, días, observaciones...). Las validaciones de seguridad,
+                  prevención y jefatura ya realizadas en la app se conservan.
+                </span>
+              </div>
+            )}
+          </div>
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
+            <button
+              className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              onClick={handleCancelImportHistorico}
+              type="button"
+            >
+              Cancelar
+            </button>
+            <button
+              className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+              onClick={() => void handleConfirmImportHistorico()}
+              type="button"
+            >
+              Confirmar e importar
+            </button>
+          </footer>
+        </ModalShell>
       )}
 
       {editorMode && (
