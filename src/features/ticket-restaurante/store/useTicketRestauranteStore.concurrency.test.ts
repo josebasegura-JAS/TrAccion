@@ -64,7 +64,10 @@ describe('useTicketRestauranteStore reloadFromStorage (estabilidad multiusuario)
         deletedAt: null,
       },
     ];
-    window.localStorage.setItem('traccion.v1.ticketRestaurante.calendars', JSON.stringify(updatedCalendars));
+    window.localStorage.setItem(
+      'traccion.v1.ticketRestaurante.calendars',
+      JSON.stringify(updatedCalendars),
+    );
 
     useTicketRestauranteStore.getState().reloadFromStorage();
 
@@ -78,7 +81,9 @@ describe('useTicketRestauranteStore reloadFromStorage (estabilidad multiusuario)
 describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () => {
   function buildSqliteRecord(value: unknown, updatedAt: string) {
     return {
-      id: (value as { id?: string; empleado?: string }).id ?? (value as { empleado: string }).empleado,
+      id:
+        (value as { id?: string; empleado?: string }).id ??
+        (value as { empleado: string }).empleado,
       value: JSON.stringify(value),
       createdAt: updatedAt,
       updatedAt,
@@ -106,25 +111,34 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
           records: storedCalendar ? [storedCalendar] : [],
         })),
-        saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(async (record: { id: string; value: string; expectedUpdatedAt: string | null }) => {
-          const currentUpdatedAt = storedCalendar?.updatedAt ?? null;
-          if (currentUpdatedAt !== record.expectedUpdatedAt) {
-            return {
-              ok: false,
-              status: { ready: true, phase: 'active', message: 'SQLite activo' },
-              currentUpdatedAt,
-              message: 'Calendario de Ticket Restaurante ha sido modificado por otro usuario. Recarga antes de guardar.',
+        saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(
+          async (record: { id: string; value: string; expectedUpdatedAt: string | null }) => {
+            const currentUpdatedAt = storedCalendar?.updatedAt ?? null;
+            if (currentUpdatedAt !== record.expectedUpdatedAt) {
+              return {
+                ok: false,
+                status: { ready: true, phase: 'active', message: 'SQLite activo' },
+                currentUpdatedAt,
+                message:
+                  'Calendario de Ticket Restaurante ha sido modificado por otro usuario. Recarga antes de guardar.',
+              };
+            }
+            const nextUpdatedAt = `${Date.now()}`;
+            storedCalendar = {
+              id: record.id,
+              value: record.value,
+              createdAt: nextUpdatedAt,
+              updatedAt: nextUpdatedAt,
+              deletedAt: null,
             };
-          }
-          const nextUpdatedAt = `${Date.now()}`;
-          storedCalendar = { id: record.id, value: record.value, createdAt: nextUpdatedAt, updatedAt: nextUpdatedAt, deletedAt: null };
-          return {
-            ok: true,
-            status: { ready: true, phase: 'active', message: 'SQLite activo' },
-            currentUpdatedAt: nextUpdatedAt,
-            message: 'Registro guardado en SQLite.',
-          };
-        }),
+            return {
+              ok: true,
+              status: { ready: true, phase: 'active', message: 'SQLite activo' },
+              currentUpdatedAt: nextUpdatedAt,
+              message: 'Registro guardado en SQLite.',
+            };
+          },
+        ),
         loadTicketRestaurantePersonRecords: vi.fn(async () => ({
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
           records: [],
@@ -149,7 +163,9 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
     });
 
     expect(updateResult.ok).toBe(true);
-    expect(useTicketRestauranteStore.getState().calendars[0]?.nombre).toBe('Calendario central (renombrado)');
+    expect(useTicketRestauranteStore.getState().calendars[0]?.nombre).toBe(
+      'Calendario central (renombrado)',
+    );
   });
 
   it('updateCalendar devuelve ok:false cuando otro usuario modificó el calendario primero (conflicto OCC)', async () => {
@@ -178,7 +194,8 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
           ok: false,
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
           currentUpdatedAt: '2026-06-17T10:00:00.000Z',
-          message: 'Calendario de Ticket Restaurante ha sido modificado por otro usuario. Recarga antes de guardar.',
+          message:
+            'Calendario de Ticket Restaurante ha sido modificado por otro usuario. Recarga antes de guardar.',
         })),
         loadTicketRestaurantePersonRecords: vi.fn(async () => ({
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
@@ -218,38 +235,51 @@ describe('useTicketRestauranteStore con repositorio SQLite simulado (OCC)', () =
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
           records: storedPerson ? [storedPerson] : [],
         })),
-        saveTicketRestaurantePersonRecordIfUnchanged: vi.fn(async (record: { id: string; value: string; expectedUpdatedAt: string | null }) => {
-          const currentUpdatedAt = storedPerson?.updatedAt ?? null;
-          if (currentUpdatedAt !== record.expectedUpdatedAt) {
-            return {
-              ok: false,
-              status: { ready: true, phase: 'active', message: 'SQLite activo' },
-              currentUpdatedAt,
-              message: 'Persona de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
+        saveTicketRestaurantePersonRecordIfUnchanged: vi.fn(
+          async (record: { id: string; value: string; expectedUpdatedAt: string | null }) => {
+            const currentUpdatedAt = storedPerson?.updatedAt ?? null;
+            if (currentUpdatedAt !== record.expectedUpdatedAt) {
+              return {
+                ok: false,
+                status: { ready: true, phase: 'active', message: 'SQLite activo' },
+                currentUpdatedAt,
+                message:
+                  'Persona de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
+              };
+            }
+            const nextUpdatedAt = `${Date.now()}`;
+            storedPerson = {
+              id: record.id,
+              value: record.value,
+              createdAt: nextUpdatedAt,
+              updatedAt: nextUpdatedAt,
+              deletedAt: null,
             };
-          }
-          const nextUpdatedAt = `${Date.now()}`;
-          storedPerson = { id: record.id, value: record.value, createdAt: nextUpdatedAt, updatedAt: nextUpdatedAt, deletedAt: null };
-          return {
-            ok: true,
-            status: { ready: true, phase: 'active', message: 'SQLite activo' },
-            currentUpdatedAt: nextUpdatedAt,
-            message: 'Registro guardado en SQLite.',
-          };
-        }),
+            return {
+              ok: true,
+              status: { ready: true, phase: 'active', message: 'SQLite activo' },
+              currentUpdatedAt: nextUpdatedAt,
+              message: 'Registro guardado en SQLite.',
+            };
+          },
+        ),
       },
     });
 
-    useTicketRestauranteStore.setState({ calendars: [{
-      id: 'calendar-1',
-      nombre: 'Calendario central',
-      activo: true,
-      diasSinTicket: [],
-      ticketIsoWeekdays: [1, 2, 3, 4, 5],
-      createdAt: '2026-06-17T09:00:00.000Z',
-      updatedAt: '2026-06-17T09:00:00.000Z',
-      deletedAt: null,
-    }] });
+    useTicketRestauranteStore.setState({
+      calendars: [
+        {
+          id: 'calendar-1',
+          nombre: 'Calendario central',
+          activo: true,
+          diasSinTicket: [],
+          ticketIsoWeekdays: [1, 2, 3, 4, 5],
+          createdAt: '2026-06-17T09:00:00.000Z',
+          updatedAt: '2026-06-17T09:00:00.000Z',
+          deletedAt: null,
+        },
+      ],
+    });
 
     const createResult = await useTicketRestauranteStore.getState().upsertPerson({
       empleado: '00001',
@@ -341,7 +371,9 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
         })),
         saveTicketRestauranteAbsenceRecordIfUnchanged: vi.fn(),
         saveTicketRestauranteAbsenceRecordsIfUnchanged: vi.fn(
-          async (records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>) => {
+          async (
+            records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>,
+          ) => {
             batchCallCount += 1;
             for (const record of records) {
               const current = store[record.id];
@@ -352,7 +384,8 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
                   status: { ready: true, phase: 'active', message: 'SQLite activo' },
                   results: [],
                   failedRecordId: record.id,
-                  message: 'Ausencia de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
+                  message:
+                    'Ausencia de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
                 };
               }
             }
@@ -450,7 +483,8 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
           ok: false,
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
           currentUpdatedAt: '2026-06-01T00:00:00.000Z',
-          message: 'Ausencia de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
+          message:
+            'Ausencia de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
         })),
         loadTicketRestauranteConfigRecords: vi.fn(async () => ({
           status: { ready: true, phase: 'active', message: 'SQLite activo' },
@@ -508,11 +542,18 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
                 ok: false,
                 status: { ready: true, phase: 'active', message: 'SQLite activo' },
                 currentUpdatedAt,
-                message: 'La configuración ha sido modificada por otro usuario. Recarga antes de continuar.',
+                message:
+                  'La configuración ha sido modificada por otro usuario. Recarga antes de continuar.',
               };
             }
             const nextUpdatedAt = `${Date.now()}`;
-            storedConfig = { id: record.id, value: record.value, createdAt: nextUpdatedAt, updatedAt: nextUpdatedAt, deletedAt: null };
+            storedConfig = {
+              id: record.id,
+              value: record.value,
+              createdAt: nextUpdatedAt,
+              updatedAt: nextUpdatedAt,
+              deletedAt: null,
+            };
             return {
               ok: true,
               status: { ready: true, phase: 'active', message: 'SQLite activo' },
@@ -555,5 +596,219 @@ describe('useTicketRestauranteStore — absences y config con repositorio SQLite
 
     expect(staleUpdateResult.ok).toBe(false);
     expect(staleUpdateResult.message).toContain('modificada por otro usuario');
+  });
+});
+
+describe('useTicketRestauranteStore — manutenciones con repositorio SQLite simulado (OCC)', () => {
+  function buildSqliteRecord(value: unknown, updatedAt: string) {
+    return {
+      id: (value as { id: string }).id,
+      value: JSON.stringify(value),
+      createdAt: updatedAt,
+      updatedAt,
+      deletedAt: null,
+    };
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    useTicketRestauranteStore.setState({
+      calendars: [],
+      absences: [],
+      people: [],
+      manutenciones: [],
+    });
+  });
+
+  const baseTraccionMocks = {
+    loadTicketRestauranteCalendarRecords: vi.fn(async () => ({
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      records: [],
+    })),
+    saveTicketRestauranteCalendarRecordIfUnchanged: vi.fn(),
+    loadTicketRestaurantePersonRecords: vi.fn(async () => ({
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      records: [],
+    })),
+    saveTicketRestaurantePersonRecordIfUnchanged: vi.fn(),
+    loadTicketRestauranteAbsenceRecords: vi.fn(async () => ({
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      records: [],
+    })),
+    saveTicketRestauranteAbsenceRecordIfUnchanged: vi.fn(),
+    saveTicketRestauranteAbsenceRecordsIfUnchanged: vi.fn(),
+    loadTicketRestauranteConfigRecords: vi.fn(async () => ({
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      records: [],
+    })),
+    saveTicketRestauranteConfigRecordIfUnchanged: vi.fn(async () => ({
+      ok: true,
+      status: { ready: true, phase: 'active', message: 'SQLite activo' },
+      currentUpdatedAt: `${Date.now()}`,
+      message: 'Configuración guardada en SQLite.',
+    })),
+  };
+
+  it('saveManutenciones inserta las manutenciones nuevas en SQLite y actualiza el estado', async () => {
+    const store: Record<string, ReturnType<typeof buildSqliteRecord>> = {};
+    const existingManutencion = {
+      id: 'manutencion-previa',
+      empleado: '00002',
+      nombreApellidos: 'Luis Pérez',
+      fechaGasto: '2026-05-15',
+      origen: 'Pagador' as const,
+      afectaTicket: true,
+      imputacionYear: 2026,
+      imputacionMonth: 5,
+      createdAt: '2026-05-16T00:00:00.000Z',
+      updatedAt: '2026-05-16T00:00:00.000Z',
+      deletedAt: null,
+    };
+    store['manutencion-previa'] = buildSqliteRecord(
+      existingManutencion,
+      '2026-05-16T00:00:00.000Z',
+    );
+
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        ...baseTraccionMocks,
+        loadTicketRestauranteManutencionRecords: vi.fn(async () => ({
+          status: { ready: true, phase: 'active', message: 'SQLite activo' },
+          records: Object.values(store),
+        })),
+        saveTicketRestauranteManutencionRecordIfUnchanged: vi.fn(),
+        saveTicketRestauranteManutencionRecordsIfUnchanged: vi.fn(
+          async (
+            records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>,
+          ) => {
+            for (const record of records) {
+              const current = store[record.id];
+              const currentUpdatedAt = current?.updatedAt ?? null;
+              if (currentUpdatedAt !== record.expectedUpdatedAt) {
+                return {
+                  ok: false,
+                  status: { ready: true, phase: 'active', message: 'SQLite activo' },
+                  results: [],
+                  failedRecordId: record.id,
+                  message:
+                    'Manutención de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
+                };
+              }
+            }
+            const nextUpdatedAt = `${Date.now()}`;
+            for (const record of records) {
+              store[record.id] = {
+                id: record.id,
+                value: record.value,
+                createdAt: nextUpdatedAt,
+                updatedAt: nextUpdatedAt,
+                deletedAt: null,
+              };
+            }
+            return {
+              ok: true,
+              status: { ready: true, phase: 'active', message: 'SQLite activo' },
+              results: [],
+              message: `${records.length} registros guardados en SQLite.`,
+            };
+          },
+        ),
+      },
+    });
+
+    useTicketRestauranteStore.getState().load();
+    await vi.waitFor(() =>
+      expect(useTicketRestauranteStore.getState().manutenciones).toHaveLength(1),
+    );
+
+    const result = await useTicketRestauranteStore.getState().saveManutenciones([
+      {
+        empleado: '00001',
+        nombreApellidos: 'Ana García',
+        fechaGasto: '2026-06-10',
+        origen: 'Pagador',
+        afectaTicket: true,
+        imputacionYear: 2026,
+        imputacionMonth: 6,
+      },
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(useTicketRestauranteStore.getState().manutenciones).toHaveLength(2);
+    expect(Object.values(store)).toHaveLength(2);
+  });
+
+  it('removeManutencion devuelve ok:false cuando otro usuario modificó la manutención primero (conflicto OCC)', async () => {
+    const manutencion = {
+      id: 'manutencion-1',
+      empleado: '00001',
+      nombreApellidos: 'Ana García',
+      fechaGasto: '2026-06-10',
+      origen: 'Pagador' as const,
+      afectaTicket: true,
+      imputacionYear: 2026,
+      imputacionMonth: 6,
+      createdAt: '2026-06-01T00:00:00.000Z',
+      updatedAt: '2026-06-01T00:00:00.000Z',
+      deletedAt: null,
+    };
+
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        ...baseTraccionMocks,
+        loadTicketRestauranteManutencionRecords: vi.fn(async () => ({
+          status: { ready: true, phase: 'active', message: 'SQLite activo' },
+          records: [buildSqliteRecord(manutencion, '2026-06-01T00:00:00.000Z')],
+        })),
+        // Simula que, entre la carga y el borrado, otro usuario ya cambió
+        // el updatedAt en SQLite.
+        saveTicketRestauranteManutencionRecordIfUnchanged: vi.fn(async () => ({
+          ok: false,
+          status: { ready: true, phase: 'active', message: 'SQLite activo' },
+          currentUpdatedAt: '2026-06-15T00:00:00.000Z',
+          message:
+            'Manutención de Ticket Restaurante ha sido modificada por otro usuario. Recarga antes de guardar.',
+        })),
+        saveTicketRestauranteManutencionRecordsIfUnchanged: vi.fn(),
+      },
+    });
+
+    useTicketRestauranteStore.getState().load();
+    await vi.waitFor(() =>
+      expect(useTicketRestauranteStore.getState().manutenciones).toHaveLength(1),
+    );
+
+    const result = await useTicketRestauranteStore.getState().removeManutencion('manutencion-1');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('modificada por otro usuario');
+    expect(useTicketRestauranteStore.getState().manutenciones[0]?.deletedAt).toBeNull();
+  });
+
+  it('removeManutencion devuelve ok:false cuando la manutención ya no existe en el estado local', async () => {
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        ...baseTraccionMocks,
+        loadTicketRestauranteManutencionRecords: vi.fn(async () => ({
+          status: { ready: true, phase: 'active', message: 'SQLite activo' },
+          records: [],
+        })),
+        saveTicketRestauranteManutencionRecordIfUnchanged: vi.fn(),
+        saveTicketRestauranteManutencionRecordsIfUnchanged: vi.fn(),
+      },
+    });
+
+    useTicketRestauranteStore.getState().load();
+    await vi.waitFor(() =>
+      expect(useTicketRestauranteStore.getState().manutenciones).toHaveLength(0),
+    );
+
+    const result = await useTicketRestauranteStore.getState().removeManutencion('no-existe');
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('No se ha encontrado');
   });
 });

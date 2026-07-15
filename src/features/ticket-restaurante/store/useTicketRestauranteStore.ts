@@ -60,7 +60,10 @@ interface TicketRestauranteState {
   load: () => void;
   reloadFromStorage: () => void;
   createCalendar: (draft: TicketCalendarDraft) => Promise<string>;
-  updateCalendar: (id: string, draft: TicketCalendarDraft) => Promise<{ ok: boolean; message?: string }>;
+  updateCalendar: (
+    id: string,
+    draft: TicketCalendarDraft,
+  ) => Promise<{ ok: boolean; message?: string }>;
   toggleCalendarActive: (id: string) => Promise<{ ok: boolean; message?: string }>;
   removeCalendar: (id: string) => Promise<{ ok: boolean; message?: string }>;
   toggleDay: (calendarId: string, fecha: string) => Promise<{ ok: boolean; message?: string }>;
@@ -75,8 +78,10 @@ interface TicketRestauranteState {
   }>;
   removePerson: (empleado: string) => Promise<{ ok: boolean; message?: string }>;
   updateConfig: (config: TicketRestaurantConfig) => Promise<{ ok: boolean; message?: string }>;
-  saveManutenciones: (drafts: TicketManutencionDraft[]) => void;
-  removeManutencion: (id: string) => void;
+  saveManutenciones: (
+    drafts: TicketManutencionDraft[],
+  ) => Promise<{ ok: boolean; message?: string }>;
+  removeManutencion: (id: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
 function isTicketCalendar(value: unknown): value is TicketCalendar {
@@ -136,7 +141,6 @@ function isTicketRestaurantAbsence(value: unknown): value is TicketRestaurantAbs
   );
 }
 
-
 function isTicketManutencion(value: unknown): value is TicketManutencion {
   if (!value || typeof value !== 'object') {
     return false;
@@ -150,8 +154,10 @@ function isTicketManutencion(value: unknown): value is TicketManutencion {
     typeof candidate.fechaGasto === 'string' &&
     typeof candidate.origen === 'string' &&
     typeof candidate.afectaTicket === 'boolean' &&
-    (typeof candidate.imputacionYear === 'number' || typeof candidate.imputacionYear === 'undefined') &&
-    (typeof candidate.imputacionMonth === 'number' || typeof candidate.imputacionMonth === 'undefined') &&
+    (typeof candidate.imputacionYear === 'number' ||
+      typeof candidate.imputacionYear === 'undefined') &&
+    (typeof candidate.imputacionMonth === 'number' ||
+      typeof candidate.imputacionMonth === 'undefined') &&
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string' &&
     (typeof candidate.deletedAt === 'string' || candidate.deletedAt === null)
@@ -179,7 +185,6 @@ function normalizeStoredTicketCalendar(calendar: TicketCalendar): TicketCalendar
   };
 }
 
-
 function normalizeStoredTicketManutencion(row: TicketManutencion): TicketManutencion {
   const now = new Date();
   return {
@@ -189,7 +194,9 @@ function normalizeStoredTicketManutencion(row: TicketManutencion): TicketManuten
         ? row.imputacionYear
         : now.getFullYear(),
     imputacionMonth:
-      typeof row.imputacionMonth === 'number' && row.imputacionMonth >= 1 && row.imputacionMonth <= 12
+      typeof row.imputacionMonth === 'number' &&
+      row.imputacionMonth >= 1 &&
+      row.imputacionMonth <= 12
         ? row.imputacionMonth
         : now.getMonth() + 1,
   };
@@ -252,7 +259,6 @@ function readConfig(): TicketRestaurantConfig {
   });
 }
 
-
 async function persist<T>(storageKey: string, value: T): Promise<void> {
   const result = await writeJsonStorageAsync(storageKey, value);
   if (!result.ok) {
@@ -260,7 +266,9 @@ async function persist<T>(storageKey: string, value: T): Promise<void> {
   }
 }
 
-type TicketStatePatch = Partial<Pick<TicketRestauranteState, 'calendars' | 'absences' | 'people' | 'config' | 'manutenciones'>>;
+type TicketStatePatch = Partial<
+  Pick<TicketRestauranteState, 'calendars' | 'absences' | 'people' | 'config' | 'manutenciones'>
+>;
 
 type TicketWrite = readonly [storageKey: string, value: unknown];
 
@@ -346,7 +354,9 @@ function parseTicketCalendarRecords(
     .map(normalizeStoredTicketCalendar);
 }
 
-function parseTicketPersonRecords(records: readonly TicketRestauranteSqliteRecord[]): TicketPerson[] {
+function parseTicketPersonRecords(
+  records: readonly TicketRestauranteSqliteRecord[],
+): TicketPerson[] {
   return records
     .flatMap((record) => {
       try {
@@ -400,12 +410,16 @@ function parseTicketManutencionRecords(
  */
 async function loadTicketCalendarsPreferringSqlite(): Promise<TicketCalendar[]> {
   if (!hasTicketRestauranteCalendarsSqliteRepository()) {
-    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar);
+    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
+      normalizeStoredTicketCalendar,
+    );
   }
 
   const sqliteRecords = await loadTicketRestauranteCalendarRecordsFromSqlite();
   if (sqliteRecords === null) {
-    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar);
+    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
+      normalizeStoredTicketCalendar,
+    );
   }
 
   if (sqliteRecords.length > 0) {
@@ -532,7 +546,10 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
     // SQLite sí está activo, se siembra desde localStorage.
     const fallbackConfig = readConfig();
     if (hasTicketRestauranteConfigSqliteRepository()) {
-      const seedResult = await saveTicketRestauranteConfigToSqlite(JSON.stringify(fallbackConfig), null);
+      const seedResult = await saveTicketRestauranteConfigToSqlite(
+        JSON.stringify(fallbackConfig),
+        null,
+      );
       if (seedResult?.ok && seedResult.currentUpdatedAt) {
         configSqliteUpdatedAt = seedResult.currentUpdatedAt;
       }
@@ -553,7 +570,6 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
   }
   return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
 }
-
 
 async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutencion[]> {
   if (!hasTicketRestauranteManutencionesSqliteRepository()) {
@@ -635,7 +651,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     set(readTicketRestauranteSnapshot());
     void loadTicketRestauranteStateFromSqliteOrStorage()
       .then((nextSnapshot) => set(nextSnapshot))
-      .catch((error) => console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error));
+      .catch((error) =>
+        console.warn('Ticket Restaurante: no se ha podido cargar desde SQLite.', error),
+      );
   },
   reloadFromStorage: () => {
     // Compara contenido antes de actualizar el estado para evitar el
@@ -652,7 +670,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           set(nextSnapshot);
         }
       })
-      .catch((error) => console.warn('Ticket Restaurante: no se ha podido recargar desde SQLite.', error));
+      .catch((error) =>
+        console.warn('Ticket Restaurante: no se ha podido recargar desde SQLite.', error),
+      );
   },
   createCalendar: async (draft) => {
     const id = createId('ticket-calendar');
@@ -674,13 +694,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         set({ calendars });
         return id;
       }
-      console.warn('Ticket Restaurante: no se ha podido crear el calendario en SQLite.', saveResult?.message);
+      console.warn(
+        'Ticket Restaurante: no se ha podido crear el calendario en SQLite.',
+        saveResult?.message,
+      );
     }
 
     const calendars = [...state.calendars, newCalendar];
-    commitTicketState(set, { calendars }, [
-      [CALENDARS_STORAGE_KEY, calendars],
-    ]);
+    commitTicketState(set, { calendars }, [[CALENDARS_STORAGE_KEY, calendars]]);
     return id;
   },
   updateCalendar: async (id, draft) => {
@@ -710,16 +731,18 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         if (saveResult.currentUpdatedAt) {
           calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
         }
-        const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
+        const calendars = state.calendars.map((calendar) =>
+          calendar.id === id ? updatedCalendar : calendar,
+        );
         set({ calendars });
         return { ok: true };
       }
     }
 
-    const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
-    commitTicketState(set, { calendars }, [
-      [CALENDARS_STORAGE_KEY, calendars],
-    ]);
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === id ? updatedCalendar : calendar,
+    );
+    commitTicketState(set, { calendars }, [[CALENDARS_STORAGE_KEY, calendars]]);
     return { ok: true };
   },
   toggleCalendarActive: async (id) => {
@@ -750,16 +773,18 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         if (saveResult.currentUpdatedAt) {
           calendarSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
         }
-        const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
+        const calendars = state.calendars.map((calendar) =>
+          calendar.id === id ? updatedCalendar : calendar,
+        );
         set({ calendars });
         return { ok: true };
       }
     }
 
-    const calendars = state.calendars.map((calendar) => (calendar.id === id ? updatedCalendar : calendar));
-    commitTicketState(set, { calendars }, [
-      [CALENDARS_STORAGE_KEY, calendars],
-    ]);
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === id ? updatedCalendar : calendar,
+    );
+    commitTicketState(set, { calendars }, [[CALENDARS_STORAGE_KEY, calendars]]);
     return { ok: true };
   },
   removeCalendar: async (id) => {
@@ -811,7 +836,9 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           );
           if (peopleSaveResult?.ok) {
             removedPeople.forEach((person) => personSqliteUpdatedAt.delete(person.empleado));
-            const removedByEmployee = new Map(removedPeople.map((person) => [person.empleado, person]));
+            const removedByEmployee = new Map(
+              removedPeople.map((person) => [person.empleado, person]),
+            );
             people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
           } else {
             console.warn(
@@ -821,21 +848,32 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           }
         } else if (removedPeople.length > 0) {
           people = state.people.map((person) => {
-            const removed = removedPeople.find((item) => normalizeTicketEmployeeNumber(item.empleado) === normalizeTicketEmployeeNumber(person.empleado));
+            const removed = removedPeople.find(
+              (item) =>
+                normalizeTicketEmployeeNumber(item.empleado) ===
+                normalizeTicketEmployeeNumber(person.empleado),
+            );
             return removed ?? person;
           });
           writeJsonStorageAsync(PEOPLE_STORAGE_KEY, people).catch((error) =>
-            console.warn('Ticket Restaurante: no se ha podido persistir personas tras eliminar calendario.', error),
+            console.warn(
+              'Ticket Restaurante: no se ha podido persistir personas tras eliminar calendario.',
+              error,
+            ),
           );
         }
 
-        const calendars = state.calendars.map((calendar) => (calendar.id === id ? removedCalendar : calendar));
+        const calendars = state.calendars.map((calendar) =>
+          calendar.id === id ? removedCalendar : calendar,
+        );
         set({ calendars, people });
         return { ok: true };
       }
     }
 
-    const calendars = state.calendars.map((calendar) => (calendar.id === id ? removedCalendar : calendar));
+    const calendars = state.calendars.map((calendar) =>
+      calendar.id === id ? removedCalendar : calendar,
+    );
     const removedByEmployee = new Map(removedPeople.map((person) => [person.empleado, person]));
     const people = state.people.map((person) => removedByEmployee.get(person.empleado) ?? person);
     commitTicketState(set, { calendars, people }, [
@@ -883,9 +921,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const calendars = state.calendars.map((calendar) =>
       calendar.id === calendarId ? updatedCalendar : calendar,
     );
-    commitTicketState(set, { calendars }, [
-      [CALENDARS_STORAGE_KEY, calendars],
-    ]);
+    commitTicketState(set, { calendars }, [[CALENDARS_STORAGE_KEY, calendars]]);
     return { ok: true };
   },
   saveAbsences: async (absences) => {
@@ -901,7 +937,11 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
       const removedAbsences = state.absences.filter(
         (absence) => !absence.deletedAt && !nextIds.has(absence.id),
       );
-      const tombstones = removedAbsences.map((absence) => ({ ...absence, updatedAt: now, deletedAt: now }));
+      const tombstones = removedAbsences.map((absence) => ({
+        ...absence,
+        updatedAt: now,
+        deletedAt: now,
+      }));
 
       const batchSaveResult = await saveTicketRestauranteAbsencesToSqlite(
         [...absences, ...tombstones].map((absence) => ({
@@ -925,9 +965,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         return { ok: true };
       }
     }
-    commitTicketState(set, { absences }, [
-      [ABSENCES_STORAGE_KEY, absences],
-    ]);
+    commitTicketState(set, { absences }, [[ABSENCES_STORAGE_KEY, absences]]);
     return { ok: true };
   },
   removeAbsence: async (id) => {
@@ -956,26 +994,34 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           };
         }
         absenceSqliteUpdatedAt.delete(id);
-        const absences = state.absences.map((absence) => (absence.id === id ? removedAbsence : absence));
+        const absences = state.absences.map((absence) =>
+          absence.id === id ? removedAbsence : absence,
+        );
         set({ absences });
         return { ok: true };
       }
     }
 
-    const absences = state.absences.map((absence) => (absence.id === id ? removedAbsence : absence));
-    commitTicketState(set, { absences }, [
-      [ABSENCES_STORAGE_KEY, absences],
-    ]);
+    const absences = state.absences.map((absence) =>
+      absence.id === id ? removedAbsence : absence,
+    );
+    commitTicketState(set, { absences }, [[ABSENCES_STORAGE_KEY, absences]]);
     return { ok: true };
   },
   upsertPerson: async (draft) => {
     const state = get();
     const now = nowIso();
-    const previous = state.people.find((person) => normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado));
+    const previous = state.people.find(
+      (person) =>
+        normalizeTicketEmployeeNumber(person.empleado) ===
+        normalizeTicketEmployeeNumber(draft.empleado),
+    );
     const updatedPerson = buildTicketPerson(draft, now, previous);
 
     if (hasTicketRestaurantePeopleSqliteRepository()) {
-      const expectedUpdatedAt = previous ? personSqliteUpdatedAt.get(updatedPerson.empleado) ?? null : null;
+      const expectedUpdatedAt = previous
+        ? (personSqliteUpdatedAt.get(updatedPerson.empleado) ?? null)
+        : null;
       const saveResult = await saveTicketRestaurantePersonToSqlite(
         { id: updatedPerson.empleado },
         JSON.stringify(updatedPerson),
@@ -994,7 +1040,12 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           personSqliteUpdatedAt.set(updatedPerson.empleado, saveResult.currentUpdatedAt);
         }
         const people = previous
-          ? state.people.map((person) => (normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado) ? updatedPerson : person))
+          ? state.people.map((person) =>
+              normalizeTicketEmployeeNumber(person.empleado) ===
+              normalizeTicketEmployeeNumber(draft.empleado)
+                ? updatedPerson
+                : person,
+            )
           : [...state.people, updatedPerson];
         set({ people });
         return { ok: true };
@@ -1002,11 +1053,14 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     }
 
     const people = previous
-      ? state.people.map((person) => (normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(draft.empleado) ? updatedPerson : person))
+      ? state.people.map((person) =>
+          normalizeTicketEmployeeNumber(person.empleado) ===
+          normalizeTicketEmployeeNumber(draft.empleado)
+            ? updatedPerson
+            : person,
+        )
       : [...state.people, updatedPerson];
-    commitTicketState(set, { people }, [
-      [PEOPLE_STORAGE_KEY, people],
-    ]);
+    commitTicketState(set, { people }, [[PEOPLE_STORAGE_KEY, people]]);
     return { ok: true };
   },
   importPeople: async (drafts) => {
@@ -1066,7 +1120,8 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
             ...result,
             ok: false,
             message:
-              calendarsSaveResult?.message ?? 'No se han podido crear los calendarios nuevos en SQLite.',
+              calendarsSaveResult?.message ??
+              'No se han podido crear los calendarios nuevos en SQLite.',
           };
         }
       }
@@ -1099,7 +1154,10 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
   },
   removePerson: async (empleado) => {
     const state = get();
-    const previous = state.people.find((person) => normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(empleado));
+    const previous = state.people.find(
+      (person) =>
+        normalizeTicketEmployeeNumber(person.empleado) === normalizeTicketEmployeeNumber(empleado),
+    );
     if (!previous) {
       return { ok: false, message: 'No se ha encontrado la persona.' };
     }
@@ -1123,16 +1181,21 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           };
         }
         personSqliteUpdatedAt.delete(previous.empleado);
-        const people = state.people.filter((person) => normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado));
+        const people = state.people.filter(
+          (person) =>
+            normalizeTicketEmployeeNumber(person.empleado) !==
+            normalizeTicketEmployeeNumber(empleado),
+        );
         set({ people });
         return { ok: true };
       }
     }
 
-    const people = state.people.filter((person) => normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado));
-    commitTicketState(set, { people }, [
-      [PEOPLE_STORAGE_KEY, people],
-    ]);
+    const people = state.people.filter(
+      (person) =>
+        normalizeTicketEmployeeNumber(person.empleado) !== normalizeTicketEmployeeNumber(empleado),
+    );
+    commitTicketState(set, { people }, [[PEOPLE_STORAGE_KEY, people]]);
     return { ok: true };
   },
   updateConfig: async (config) => {
@@ -1157,17 +1220,17 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         return { ok: true };
       }
     }
-    commitTicketState(set, { config }, [
-      [CONFIG_STORAGE_KEY, config],
-    ]);
+    commitTicketState(set, { config }, [[CONFIG_STORAGE_KEY, config]]);
     return { ok: true };
   },
-  saveManutenciones: (drafts) => {
+  saveManutenciones: async (drafts) => {
     const state = get();
     const now = nowIso();
     const result = state.manutenciones.filter((row) => !row.deletedAt).map((row) => ({ ...row }));
     const existingKeys = new Set(
-      result.map((row) => `${row.empleado}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`),
+      result.map(
+        (row) => `${row.empleado}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`,
+      ),
     );
     const newRows: TicketManutencion[] = [];
 
@@ -1188,66 +1251,77 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     const manutenciones = [...result, ...newRows];
 
     if (hasTicketRestauranteManutencionesSqliteRepository()) {
-      void (async () => {
-        try {
-          const saveResult = await saveTicketRestauranteManutencionesToSqlite(
-            newRows.map((row) => ({
-              id: row.id,
-              serializedValue: JSON.stringify(row),
-              expectedUpdatedAt: null,
-            })),
-          );
-          if (saveResult?.ok) {
-            const reloadedRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
-            if (reloadedRecords) {
-              const reloadedManutenciones = parseTicketManutencionRecords(reloadedRecords);
-              updateManutencionSqliteUpdatedAtMap(reloadedManutenciones);
-              set({ manutenciones: reloadedManutenciones });
-              return;
-            }
-            newRows.forEach((row) => manutencionSqliteUpdatedAt.set(row.id, row.updatedAt));
-            set({ manutenciones });
-          }
-        } catch (error) {
-          console.warn('Ticket Restaurante: no se han podido guardar las manutenciones en SQLite.', error);
+      const saveResult = await saveTicketRestauranteManutencionesToSqlite(
+        newRows.map((row) => ({
+          id: row.id,
+          serializedValue: JSON.stringify(row),
+          expectedUpdatedAt: null,
+        })),
+      );
+      if (!saveResult) {
+        // Sin repositorio disponible pese al check anterior (caso límite):
+        // sigue con el camino localStorage más abajo.
+      } else if (!saveResult.ok) {
+        return {
+          ok: false,
+          message:
+            saveResult.message ??
+            'No se han podido guardar las manutenciones. Recarga antes de continuar.',
+        };
+      } else {
+        const reloadedRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
+        if (reloadedRecords) {
+          const reloadedManutenciones = parseTicketManutencionRecords(reloadedRecords);
+          updateManutencionSqliteUpdatedAtMap(reloadedManutenciones);
+          set({ manutenciones: reloadedManutenciones });
+        } else {
+          newRows.forEach((row) => manutencionSqliteUpdatedAt.set(row.id, row.updatedAt));
+          set({ manutenciones });
         }
-      })();
-      return;
+        return { ok: true };
+      }
     }
 
     commitTicketState(set, { manutenciones }, [[MANUTENCIONES_STORAGE_KEY, manutenciones]]);
+    return { ok: true };
   },
-  removeManutencion: (id) => {
+  removeManutencion: async (id) => {
     const state = get();
     const updatedAt = nowIso();
     const previous = state.manutenciones.find((row) => row.id === id);
+    if (!previous) {
+      return { ok: false, message: 'No se ha encontrado la manutención.' };
+    }
     const manutenciones = state.manutenciones.map((row) =>
       row.id === id ? { ...row, updatedAt, deletedAt: updatedAt } : row,
     );
 
-    if (previous && hasTicketRestauranteManutencionesSqliteRepository()) {
+    if (hasTicketRestauranteManutencionesSqliteRepository()) {
       const removedRow = { ...previous, updatedAt, deletedAt: updatedAt };
       const expectedUpdatedAt = manutencionSqliteUpdatedAt.get(id) ?? null;
-      void (async () => {
-        try {
-          const saveResult = await saveTicketRestauranteManutencionToSqlite(
-            { id },
-            JSON.stringify(removedRow),
-            expectedUpdatedAt,
-          );
-          if (saveResult?.ok) {
-            if (saveResult.currentUpdatedAt) {
-              manutencionSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
-            }
-            set({ manutenciones });
-          }
-        } catch (error) {
-          console.warn('Ticket Restaurante: no se ha podido eliminar la manutención en SQLite.', error);
+      const saveResult = await saveTicketRestauranteManutencionToSqlite(
+        { id },
+        JSON.stringify(removedRow),
+        expectedUpdatedAt,
+      );
+      if (saveResult) {
+        if (!saveResult.ok) {
+          return {
+            ok: false,
+            message:
+              saveResult.message ??
+              'Esta manutención ha sido modificada por otro usuario. Recarga antes de continuar.',
+          };
         }
-      })();
-      return;
+        if (saveResult.currentUpdatedAt) {
+          manutencionSqliteUpdatedAt.set(id, saveResult.currentUpdatedAt);
+        }
+        set({ manutenciones });
+        return { ok: true };
+      }
     }
 
     commitTicketState(set, { manutenciones }, [[MANUTENCIONES_STORAGE_KEY, manutenciones]]);
+    return { ok: true };
   },
 }));
