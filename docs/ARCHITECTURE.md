@@ -100,7 +100,9 @@ Pendiente: Plantilla, Tareas, Teletrabajo, Ajustes, Comité, Paritaria, resto de
 
 ## 9. Multiusuario: estado real por módulo
 
-Todos los módulos en `src/features/` con repositorio SQLite tienen `expectedUpdatedAt` en sus operaciones de escritura, **excepto Ticket Restaurante**, que no tiene ninguna protección de concurrencia. Antes de añadir funcionalidad nueva a Ticket Restaurante, considerar si ese hueco afecta al cambio.
+Todos los módulos en `src/features/` con repositorio SQLite tienen `expectedUpdatedAt` en sus operaciones de escritura, incluido Ticket Restaurante (calendarios, personas, ausencias, configuración y manutenciones), que se completó en julio de 2026 — antes era la única excepción. Además, todas las escrituras de `TicketRestaurantePage.tsx` están envueltas en `withSharedModuleLocks(['ticket-restaurante'])`, igual que Sorteos y Especiales. Ver `DECISIONS.md` para el detalle de qué se cambió y por qué.
+
+Nota de nomenclatura: las funciones de escritura de Ticket Restaurante (`updateCalendar`, `upsertPerson`, `removeAbsence`, etc.) hacen la comprobación OCC completa pero **no** llevan el sufijo `WithConcurrencyCheck` que sí usan Especiales/Sorteos/Actas. Es una inconsistencia de nombres heredada, no un hueco funcional — no renombrar sin motivo, ya que tocaría toda la superficie pública del store.
 
 ## 10. Tests: huecos conocidos
 
