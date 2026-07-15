@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('traccion', {
   getVacuumStatus: () => ipcRenderer.invoke('database:get-vacuum-status'),
   vacuumDatabaseNow: () => ipcRenderer.invoke('database:vacuum-now'),
   runDataIntegrityAudit: () => ipcRenderer.invoke('database:run-integrity-audit'),
+  getIntegrityAuditSummary: () => ipcRenderer.invoke('database:get-integrity-audit-summary'),
   getCurrentDatabaseLock: () => ipcRenderer.invoke('database:get-current-lock'),
   forceReleaseDatabaseLock: () => ipcRenderer.invoke('database:force-release-lock'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
