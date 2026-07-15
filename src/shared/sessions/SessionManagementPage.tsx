@@ -1,23 +1,29 @@
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Pencil, Search, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CalendarDays, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
 import { withSharedModuleLocks } from '../../services/sharedModuleLock';
-import { useSharedRecordLock } from '../../services/useSharedRecordLock';
 import { useAppDialog } from '../../hooks/useAppDialog';
 import { buildFilterLabel } from '../export/filterLabel';
-import type { ExportColumn, ExportTablePayload } from '../export/types';
-import { sanitizeFilenamePart } from '../export/tableExport';
 import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { TaskEditor } from '../../components/TaskEditor';
 import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
-import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
 import type { ManagedSessionStateStore } from './createSessionStore';
 import { parseSessionImportText, type SessionImportPreview } from './sessionImport';
+import { HistoricSessionCard, SessionCard, SessionPanel } from './SessionManagementPageCards';
+import { SessionImportPreviewModal } from './SessionImportPreviewModal';
+import { SessionEditModal } from './SessionEditModal';
+import { SessionCloseModal } from './SessionCloseModal';
+import {
+  matchesSessionSearch,
+  groupClosedSessionsByYear,
+  sessionExportColumns,
+  sortOpenSessions,
+} from './sessionManagementPage.helpers';
 import {
   EMPTY_MANAGED_SESSION_DRAFT,
   isTaskInSessionPhase,
@@ -27,42 +33,6 @@ import {
   type SessionModuleConfig,
 } from './session';
 
-const sessionExportColumns: ExportColumn<ManagedSession>[] = [
-  {
-    key: 'status',
-    header: 'Estado',
-    value: (session) => (session.status === 'closed' ? 'Cerrada' : 'Abierta'),
-  },
-  { key: 'code', header: 'Código', value: (session) => session.code },
-  { key: 'date', header: 'Fecha', value: (session) => session.date || null },
-  { key: 'title', header: 'Título', value: (session) => session.title },
-  { key: 'notes', header: 'Notas', value: (session) => session.notes || null },
-  { key: 'items', header: 'Puntos', value: (session) => session.items.length },
-  { key: 'closedAt', header: 'Cerrada', value: (session) => session.closedAt || null },
-];
-
-type SessionPointRow = {
-  order: number;
-  title: string;
-  status: string;
-  origin: string;
-  union: string;
-  responsible: string;
-  dueDate: string;
-  description: string;
-};
-
-const sessionPointExportColumns: ExportColumn<SessionPointRow>[] = [
-  { key: 'order', header: 'Orden', value: (row) => row.order },
-  { key: 'title', header: 'Punto / tarea', value: (row) => row.title },
-  { key: 'status', header: 'Situación', value: (row) => row.status },
-  { key: 'origin', header: 'Origen', value: (row) => row.origin || null },
-  { key: 'union', header: 'Sindicato', value: (row) => row.union || null },
-  { key: 'responsible', header: 'Responsable', value: (row) => row.responsible || null },
-  { key: 'dueDate', header: 'Fecha límite', value: (row) => row.dueDate || null },
-  { key: 'description', header: 'Descripción', value: (row) => row.description || null },
-];
-
 interface SessionManagementPageProps {
   config: SessionModuleConfig;
   useSessionStore: UseBoundStore<StoreApi<ManagedSessionStateStore>>;
@@ -70,208 +40,6 @@ interface SessionManagementPageProps {
   navigationNonce?: number;
   onClosedSession?: (session: ManagedSession, treatedTasks: Task[]) => void | Promise<void>;
   helpSections?: ModuleHelpSection[];
-}
-
-function sortOpenSessions(sessions: ManagedSession[]): ManagedSession[] {
-  return [...sessions].sort(
-    (first, second) =>
-      String(first.date || '').localeCompare(String(second.date || '')) ||
-      String(first.code || '').localeCompare(String(second.code || ''), 'es', {
-        numeric: true,
-        sensitivity: 'base',
-      }),
-  );
-}
-
-function normalizeSessionSearch(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('es')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function getSessionSearchHaystack(
-  session: ManagedSession,
-  tasksById: Map<string, Task>,
-  config: SessionModuleConfig,
-): string {
-  const taskValues = session.items.flatMap((taskId) => {
-    const task = tasksById.get(taskId);
-    if (!task) {
-      return [taskId];
-    }
-
-    return [
-      task.id,
-      task.titulo,
-      task.descripcion,
-      task.observaciones,
-      task.origen,
-      task.sindicato,
-      task.responsable,
-      task.estado,
-      task.prioridad,
-      task.fechaLimite,
-      task.mail,
-      ...task.documentLinks.flatMap((link) => [link.nombre, link.ruta]),
-      ...task.seguimiento.map((entry) => `${entry.fechaHora} ${entry.texto}`),
-    ];
-  });
-
-  return normalizeSessionSearch(
-    [
-      config.title,
-      config.shortTitle,
-      session.id,
-      session.code,
-      session.date,
-      session.title,
-      session.notes,
-      session.status,
-      session.closedAt ?? '',
-      ...session.treatedTaskIds,
-      ...session.untreatedTaskIds,
-      ...taskValues,
-    ].join(' '),
-  );
-}
-
-function matchesSessionSearch(
-  session: ManagedSession,
-  tasksById: Map<string, Task>,
-  config: SessionModuleConfig,
-  search: string,
-): boolean {
-  const terms = normalizeSessionSearch(search).split(' ').filter(Boolean);
-  if (terms.length === 0) {
-    return true;
-  }
-
-  const haystack = getSessionSearchHaystack(session, tasksById, config);
-  return terms.every((term) => haystack.includes(term));
-}
-
-function getSessionHistoryYear(session: ManagedSession): string {
-  const year = session.date.match(/^(\d{4})/)?.[1];
-  return year ?? 'Sin año';
-}
-
-function groupClosedSessionsByYear(
-  sessions: ManagedSession[],
-): Array<{ year: string; sessions: ManagedSession[] }> {
-  const groups = new Map<string, ManagedSession[]>();
-
-  sessions.forEach((session) => {
-    const year = getSessionHistoryYear(session);
-    groups.set(year, [...(groups.get(year) ?? []), session]);
-  });
-
-  return Array.from(groups.entries())
-    .sort(([firstYear], [secondYear]) =>
-      secondYear.localeCompare(firstYear, 'es', { numeric: true }),
-    )
-    .map(([year, yearSessions]) => ({
-      year,
-      sessions: yearSessions.sort(
-        (first, second) =>
-          String(second.date || '').localeCompare(String(first.date || '')) ||
-          String(second.code || '').localeCompare(String(first.code || ''), 'es', {
-            numeric: true,
-            sensitivity: 'base',
-          }),
-      ),
-    }));
-}
-
-function getTaskTitle(tasksById: Map<string, Task>, taskId: string): string {
-  return tasksById.get(taskId)?.titulo ?? 'Tarea no encontrada';
-}
-
-function describeTask(task: Task | undefined): string {
-  if (!task) {
-    return 'La tarea ya no existe o fue eliminada.';
-  }
-
-  return [
-    task.origen ? `Origen: ${task.origen}` : '',
-    task.sindicato ? `Sindicato: ${task.sindicato}` : '',
-    task.responsable ? `Responsable: ${task.responsable}` : '',
-    task.fechaLimite ? `Límite: ${task.fechaLimite}` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function getTaskDescription(task: Task | undefined): string {
-  if (!task) {
-    return 'La tarea ya no existe o fue eliminada.';
-  }
-
-  return task.descripcion || task.observaciones || '';
-}
-
-function getSessionPointStatus(session: ManagedSession, taskId: string): string {
-  if (session.status === 'open') {
-    return 'Pendiente de tratar';
-  }
-
-  if (session.treatedTaskIds.includes(taskId)) {
-    return 'Tratada';
-  }
-
-  if (session.untreatedTaskIds.includes(taskId)) {
-    return 'No tratada';
-  }
-
-  return 'Sin clasificar';
-}
-
-function buildSessionPointRows(
-  session: ManagedSession,
-  tasksById: Map<string, Task>,
-): SessionPointRow[] {
-  return session.items.map((taskId, index) => {
-    const task = tasksById.get(taskId);
-
-    return {
-      order: index + 1,
-      title: getTaskTitle(tasksById, taskId),
-      status: getSessionPointStatus(session, taskId),
-      origin: task?.origen ?? '',
-      union: task?.sindicato ?? '',
-      responsible: task?.responsable ?? '',
-      dueDate: task?.fechaLimite ?? '',
-      description: getTaskDescription(task),
-    };
-  });
-}
-
-function buildSessionExportPayload(
-  session: ManagedSession,
-  tasksById: Map<string, Task>,
-  config: SessionModuleConfig,
-): ExportTablePayload<SessionPointRow> {
-  const label = managedSessionLabel(session);
-  const filenameParts = [config.moduleId, session.date, session.code, session.title]
-    .map((part) => sanitizeFilenamePart(part))
-    .filter(Boolean)
-    .join('-');
-  const filterLabel = buildFilterLabel([
-    ['Sesión', label],
-    ['Título', session.title],
-    ['Estado', session.status === 'closed' ? 'Cerrada' : 'Abierta'],
-    ['Notas', session.notes],
-  ]);
-
-  return {
-    title: `${config.title} · ${label}`,
-    filename: filenameParts || `${config.moduleId}-sesion`,
-    columns: sessionPointExportColumns,
-    rows: buildSessionPointRows(session, tasksById),
-    filterLabel,
-  };
 }
 
 export function SessionManagementPage({
@@ -384,7 +152,9 @@ export function SessionManagementPage({
   const editingSession = editingSessionId
     ? (sessions.find((session) => session.id === editingSessionId) ?? null)
     : null;
-  const editingTask = editingTaskId ? (tasks.find((task) => task.id === editingTaskId) ?? null) : null;
+  const editingTask = editingTaskId
+    ? (tasks.find((task) => task.id === editingTaskId) ?? null)
+    : null;
   const canEditSessions = config.moduleId === 'comite';
   const sessionFilterLabel = buildFilterLabel([
     ['Módulo', config.title],
@@ -536,17 +306,23 @@ export function SessionManagementPage({
     }
   };
 
-
-  const openEditTaskModal = async (session: ManagedSession, taskId: string, isReadOnly: boolean) => {
+  const openEditTaskModal = async (
+    session: ManagedSession,
+    taskId: string,
+    isReadOnly: boolean,
+  ) => {
     if (session.status !== 'open' || isReadOnly) {
       return;
     }
 
     const task = tasksById.get(taskId);
     if (!task) {
-      await alert('No se ha encontrado el punto seleccionado. Recarga la sesión antes de continuar.', {
-        type: 'warning',
-      });
+      await alert(
+        'No se ha encontrado el punto seleccionado. Recarga la sesión antes de continuar.',
+        {
+          type: 'warning',
+        },
+      );
       return;
     }
 
@@ -1030,570 +806,42 @@ export function SessionManagementPage({
       )}
 
       {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[86vh] w-full max-w-4xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">
-              Previsualización de importación · {config.title}
-            </h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Se importarán solo las sesiones compatibles con este módulo. Las sesiones con el mismo
-              código y fecha se omiten.
-            </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <ImportMetric label="Sesiones detectadas" value={relevantImportSessions.length} />
-              <ImportMetric label="Puntos detectados" value={relevantImportTasks.length} />
-              <ImportMetric label="Líneas ignoradas" value={importPreview.ignoredLines.length} />
-            </div>
-            <div className="mt-3 max-h-[380px] overflow-auto rounded-xl border border-metro-border">
-              <table className="w-full table-fixed text-left text-xs">
-                <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
-                  <tr>
-                    <th className="w-[130px] px-3 py-2">Fecha</th>
-                    <th className="w-[160px] px-3 py-2">Código</th>
-                    <th className="px-3 py-2">Título</th>
-                    <th className="w-[90px] px-3 py-2 text-right">Puntos</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45">
-                  {relevantImportSessions.map((session) => (
-                    <tr key={session.externalKey}>
-                      <td className="px-3 py-2 text-metro-muted">{session.draft.date || '—'}</td>
-                      <td className="px-3 py-2 font-semibold text-metro-text">
-                        {session.draft.code}
-                      </td>
-                      <td
-                        className="truncate px-3 py-2 text-metro-muted"
-                        title={session.draft.title}
-                      >
-                        {session.draft.title}
-                      </td>
-                      <td className="px-3 py-2 text-right font-bold text-metro-text">
-                        {session.taskExternalKeys.length}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={() => setImportPreview(null)}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={relevantImportSessions.length === 0}
-                onClick={confirmImport}
-                type="button"
-              >
-                Confirmar importación
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">
-              Editar sesión de {config.shortTitle}
-            </h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Modifica la fecha, el código documental, el título o las notas. El estado de la sesión
-              no se cambia.
-            </p>
-            <div className="mt-4 grid grid-cols-[150px_180px_minmax(220px,1fr)] gap-2 overflow-x-auto">
-              <input
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => updateEditDraft('date', event.target.value)}
-                type="date"
-                value={editDraft.date}
-              />
-              <input
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => updateEditDraft('code', event.target.value)}
-                placeholder="Código documento"
-                value={editDraft.code}
-              />
-              <input
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-                onChange={(event) => updateEditDraft('title', event.target.value)}
-                placeholder="Título / referencia de la sesión"
-                value={editDraft.title}
-              />
-            </div>
-            <textarea
-              className="mt-2 min-h-[120px] w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => updateEditDraft('notes', event.target.value)}
-              placeholder="Notas de la sesión, documentación asociada, observaciones, etc."
-              value={editDraft.notes}
-            />
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={cancelEditSession}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                onClick={saveEditSession}
-                type="button"
-              >
-                Guardar cambios
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingTaskId && (
-        <TaskEditor
-          mode="edit"
-          onDone={() => setEditingTaskId(null)}
-          task={editingTask}
+        <SessionImportPreviewModal
+          config={config}
+          ignoredLineCount={importPreview.ignoredLines.length}
+          onCancel={() => setImportPreview(null)}
+          onConfirm={() => void confirmImport()}
+          relevantImportSessions={relevantImportSessions}
+          relevantImportTaskCount={relevantImportTasks.length}
         />
       )}
 
-      {closingSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-metro-text">
-              Cerrar sesión de {config.shortTitle}
-            </h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Revisa los puntos tratados. Desmarca los no tratados para mantener sus tareas
-              abiertas.
-            </p>
-            <div className="mt-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-sm text-metro-muted">
-              <strong className="text-metro-text">{closingSession.title}</strong>
-              <br />
-              {managedSessionLabel(closingSession)}
-            </div>
-            <div className="mt-3 space-y-2">
-              {closingSession.items.length === 0 && (
-                <p className="rounded-xl border border-metro-border bg-metro-panel p-3 text-sm text-metro-muted">
-                  Esta sesión no tiene tareas asignadas. Puede cerrarse sin modificar tareas.
-                </p>
-              )}
-              {closingSession.items.map((taskId, index) => {
-                const task = tasksById.get(taskId);
+      {editingSession && (
+        <SessionEditModal
+          config={config}
+          editDraft={editDraft}
+          onCancel={cancelEditSession}
+          onSave={() => void saveEditSession()}
+          updateEditDraft={updateEditDraft}
+        />
+      )}
 
-                return (
-                  <label
-                    className="flex cursor-pointer gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 hover:border-metro-red/60"
-                    key={taskId}
-                  >
-                    <input
-                      checked={treatedTaskIds[taskId] ?? true}
-                      className="mt-1 h-4 w-4"
-                      onChange={(event) =>
-                        setTreatedTaskIds((current) => ({
-                          ...current,
-                          [taskId]: event.target.checked,
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    <span>
-                      <span className="block font-semibold text-metro-text">
-                        {index + 1}. {getTaskTitle(tasksById, taskId)}
-                      </span>
-                      <span className="mt-1 block text-xs text-metro-muted">
-                        {describeTask(task)}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button
-                className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={() => setClosingSessionId(null)}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-                onClick={confirmCloseSession}
-                type="button"
-              >
-                Confirmar cierre
-              </button>
-            </div>
-          </div>
-        </div>
+      {editingTaskId && (
+        <TaskEditor mode="edit" onDone={() => setEditingTaskId(null)} task={editingTask} />
+      )}
+
+      {closingSession && (
+        <SessionCloseModal
+          closingSession={closingSession}
+          config={config}
+          onCancel={() => setClosingSessionId(null)}
+          onConfirm={() => void confirmCloseSession()}
+          setTreatedTaskIds={setTreatedTaskIds}
+          tasksById={tasksById}
+          treatedTaskIds={treatedTaskIds}
+        />
       )}
       {dialogNode}
     </section>
-  );
-}
-
-function ImportMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
-      <p className="mt-1 text-xl font-black text-metro-text">{value}</p>
-    </div>
-  );
-}
-
-function SessionPanel({
-  children,
-  count,
-  isOpen,
-  label,
-  onToggle,
-}: {
-  children: ReactNode;
-  count: number;
-  isOpen: boolean;
-  label: string;
-  onToggle: () => void;
-}) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-metro-border">
-      <button
-        className="flex w-full items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-left"
-        onClick={onToggle}
-        type="button"
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold text-metro-text">
-          {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          {label}
-        </span>
-        <CountBadge>{count}</CountBadge>
-      </button>
-      {isOpen && (
-        <div className="max-h-[640px] space-y-3 overflow-auto bg-metro-surface p-3">{children}</div>
-      )}
-    </div>
-  );
-}
-
-function SessionCard({
-  addTask,
-  availableTasks,
-  config,
-  isExpanded,
-  moveTask,
-  onClose,
-  onEdit,
-  onEditTask,
-  onRemove,
-  onToggle,
-  removeTask,
-  session,
-  tasksById,
-}: {
-  addTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
-  availableTasks: Task[];
-  config: SessionModuleConfig;
-  isExpanded: boolean;
-  moveTask: (
-    session: ManagedSession,
-    taskId: string,
-    direction: 'up' | 'down',
-  ) => void | Promise<void>;
-  onClose: (session: ManagedSession) => void;
-  onEdit?: (session: ManagedSession) => void;
-  onEditTask: (session: ManagedSession, taskId: string, isReadOnly: boolean) => void | Promise<void>;
-  onRemove: (session: ManagedSession) => void | Promise<void>;
-  onToggle: () => void;
-  removeTask: (session: ManagedSession, taskId: string) => void | Promise<void>;
-  session: ManagedSession;
-  tasksById: Map<string, Task>;
-}) {
-  const unassignedTasks = availableTasks.filter((task) => !session.items.includes(task.id));
-  const recordLock = useSharedRecordLock({
-    module: config.moduleId,
-    recordId: session.id,
-    enabled: isExpanded && session.status === 'open',
-  });
-  const isReadOnly = recordLock.isReadOnly;
-  const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
-  const sessionPrintBuilder =
-    config.moduleId === 'comite'
-      ? () =>
-          buildPrintableCommitteeSessionHtml({
-            session,
-            tasksById,
-            config,
-            generatedAt: new Date(),
-          })
-      : undefined;
-
-  return (
-    <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-        <button className="min-w-0 flex-1 text-left" onClick={onToggle} type="button">
-          <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
-            {isExpanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-            <CalendarDays size={17} className="text-metro-red" /> {session.title}
-          </h3>
-          <p className="mt-1 text-xs text-metro-muted">
-            {managedSessionLabel(session)} · {session.items.length} puntos
-          </p>
-          {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
-        </button>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} />
-          {onEdit && (
-            <button
-              className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!isExpanded || isReadOnly}
-              onClick={() => onEdit(session)}
-              title={
-                !isExpanded ? 'Abre la sesión para bloquearla antes de editarla' : 'Editar sesión'
-              }
-              type="button"
-            >
-              <Pencil size={14} /> Editar
-            </button>
-          )}
-          <button
-            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!isExpanded || isReadOnly}
-            title={!isExpanded ? 'Abre la sesión para bloquearla antes de cerrarla' : undefined}
-            onClick={() => onClose(session)}
-            type="button"
-          >
-            Cerrar sesión
-          </button>
-          <button
-            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!isExpanded || isReadOnly}
-            title={!isExpanded ? 'Abre la sesión para bloquearla antes de eliminarla' : undefined}
-            onClick={() => void onRemove(session)}
-            type="button"
-          >
-            <Trash2 size={14} /> Eliminar
-          </button>
-        </div>
-      </div>
-
-      {isExpanded && (
-        <div className="mt-3 rounded-xl border border-metro-border bg-metro-app/40 p-3">
-          {recordLock.message && (
-            <p
-              className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
-                isReadOnly
-                  ? 'border-red-400/40 bg-red-950/20 text-red-100'
-                  : 'border-metro-border bg-metro-surface text-metro-muted'
-              }`}
-            >
-              {recordLock.message}
-            </p>
-          )}
-          <div className="flex flex-col gap-2 lg:flex-row">
-            <select
-              className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-              disabled={isReadOnly}
-              onChange={(event) => {
-                if (!isReadOnly && event.target.value) {
-                  void addTask(session, event.target.value);
-                  event.target.value = '';
-                }
-              }}
-              value=""
-            >
-              <option value="">{config.taskSelectPlaceholder}</option>
-              {unassignedTasks.map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.titulo}
-                </option>
-              ))}
-            </select>
-            <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
-              {unassignedTasks.length} tareas disponibles
-            </span>
-          </div>
-
-          <div className="mt-3 space-y-2">
-            {session.items.length === 0 && (
-              <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
-                Sin tareas en el orden del día.
-              </p>
-            )}
-            {session.items.map((taskId, index) => {
-              const task = tasksById.get(taskId);
-
-              return (
-                <div
-                  className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
-                  key={taskId}
-                >
-                  <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="truncate text-sm font-semibold text-metro-text"
-                      title={getTaskTitle(tasksById, taskId)}
-                    >
-                      {getTaskTitle(tasksById, taskId)}
-                    </p>
-                    <p className="truncate text-xs text-metro-muted" title={describeTask(task)}>
-                      {describeTask(task)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                      disabled={isReadOnly || index === 0}
-                      onClick={() => void moveTask(session, taskId, 'up')}
-                      type="button"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
-                      disabled={isReadOnly || index === session.items.length - 1}
-                      onClick={() => void moveTask(session, taskId, 'down')}
-                      type="button"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      className="inline-flex items-center gap-1 rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={isReadOnly || !task}
-                      onClick={() => void onEditTask(session, taskId, isReadOnly)}
-                      title={task ? 'Editar punto' : 'No se ha encontrado el punto'}
-                      type="button"
-                    >
-                      <Pencil size={12} /> Editar
-                    </button>
-                    <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={isReadOnly}
-                      onClick={() => void removeTask(session, taskId)}
-                      type="button"
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
-function HistoricSessionCard({
-  config,
-  onEdit,
-  onRemove,
-  onConfirm,
-  session,
-  tasksById,
-}: {
-  config: SessionModuleConfig;
-  onEdit?: (session: ManagedSession) => void;
-  onRemove: (session: ManagedSession) => void | Promise<void>;
-  onConfirm: (
-    message: string,
-    options?: { cancelLabel?: string; confirmLabel?: string; danger?: boolean; title?: string },
-  ) => Promise<boolean>;
-  session: ManagedSession;
-  tasksById: Map<string, Task>;
-}) {
-  const sessionExportPayload = buildSessionExportPayload(session, tasksById, config);
-  const sessionPrintBuilder =
-    config.moduleId === 'comite'
-      ? () =>
-          buildPrintableCommitteeSessionHtml({
-            session,
-            tasksById,
-            config,
-            generatedAt: new Date(),
-          })
-      : undefined;
-
-  return (
-    <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
-            <CheckCircle2 size={17} className="text-metro-red" /> {session.title}
-          </h3>
-          <p className="mt-1 text-xs text-metro-muted">
-            {managedSessionLabel(session)} · Cerrada:{' '}
-            {session.closedAt ? new Date(session.closedAt).toLocaleString('es-ES') : '—'}
-          </p>
-          {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} />
-          {onEdit && (
-            <button
-              className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-              data-tip="Editar sesión histórica"
-              onClick={() => onEdit(session)}
-              type="button"
-            >
-              <Pencil size={14} /> Editar
-            </button>
-          )}
-          <button
-            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10"
-            onClick={() => {
-              void (async () => {
-                const confirmed = await onConfirm(
-                  '¿Eliminar definitivamente esta sesión histórica?\n\nEsta acción no puede deshacerse.',
-                  { confirmLabel: 'Eliminar', danger: true, title: 'Eliminar sesión histórica' },
-                );
-
-                if (confirmed) {
-                  void onRemove(session);
-                }
-              })();
-            }}
-            type="button"
-          >
-            <Trash2 size={14} /> Eliminar
-          </button>
-        </div>
-      </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted">
-            <ClipboardList size={14} /> Tratadas ({session.treatedTaskIds.length})
-          </p>
-          <ol className="space-y-1 text-sm text-metro-text">
-            {session.treatedTaskIds.length === 0 && (
-              <li className="text-metro-muted">Sin tareas tratadas.</li>
-            )}
-            {session.treatedTaskIds.map((taskId, index) => (
-              <li className="truncate" key={taskId} title={getTaskTitle(tasksById, taskId)}>
-                {index + 1}. {getTaskTitle(tasksById, taskId)}
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">
-            No tratadas ({session.untreatedTaskIds.length})
-          </p>
-          <ol className="space-y-1 text-sm text-metro-text">
-            {session.untreatedTaskIds.length === 0 && (
-              <li className="text-metro-muted">Sin pendientes.</li>
-            )}
-            {session.untreatedTaskIds.map((taskId, index) => (
-              <li className="truncate" key={taskId} title={getTaskTitle(tasksById, taskId)}>
-                {index + 1}. {getTaskTitle(tasksById, taskId)}
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    </article>
   );
 }
