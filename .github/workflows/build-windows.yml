@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.13.1
+          node-version-file: '.nvmrc'
 
       - name: Cache npm download cache
         uses: actions/cache@v4
@@ -56,24 +56,6 @@ jobs:
         run: |
           npm config set registry https://registry.npmjs.org/
 
-      - name: Reparar package-lock con registry público
-        shell: pwsh
-        run: |
-          $lock = "package-lock.json"
-
-          if (!(Test-Path $lock)) {
-            throw "No existe package-lock.json"
-          }
-
-          $content = Get-Content $lock -Raw
-
-          $content = $content.Replace(
-            "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
-            "https://registry.npmjs.org/"
-          )
-
-          Set-Content $lock $content -NoNewline
-
       - name: Install dependencies from lockfile
         shell: pwsh
         run: |
@@ -82,6 +64,9 @@ jobs:
           }
           npm ci --include=dev --no-audit --no-fund
           npm rebuild better-sqlite3
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint

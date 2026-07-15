@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.13.1
+          node-version-file: '.nvmrc'
 
       - name: Configurar npm
         shell: pwsh
@@ -35,21 +35,6 @@ jobs:
           npm config set fund false
           npm config set audit false
           npm cache clean --force
-
-      - name: Reparar package-lock
-        shell: pwsh
-        run: |
-          $lock = "package-lock.json"
-          if (!(Test-Path $lock)) {
-            throw "No existe package-lock.json"
-          }
-
-          $content = Get-Content $lock -Raw
-          $content = $content.Replace(
-            "https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/",
-            "https://registry.npmjs.org/"
-          )
-          Set-Content $lock $content -NoNewline
 
       - name: Instalar dependencias
         shell: pwsh
