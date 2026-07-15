@@ -11,7 +11,7 @@ import {
   writeFile,
   access,
 } from 'node:fs/promises';
-import { hostname, userInfo } from 'node:os';
+import { hostname } from 'node:os';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
 import {
@@ -25,17 +25,14 @@ import {
   isConfiguracionStateRow,
 } from './persistence/schemaMigrations.js';
 import {
-  acquireRecordLockInTransaction,
-  getRecordLockInTransaction,
-  heartbeatRecordLockInTransaction,
-  releaseRecordLockInTransaction,
-  recordLockError as buildRecordLockError,
-  validateRecordLockPayload,
-  type OwnerContext,
   type RecordLockOwnerInfo as RecordLockModuleOwnerInfo,
   type RecordLockPayload as RecordLockModulePayload,
   type RecordLockResult as RecordLockModuleResult,
 } from './persistence/recordLocks.js';
+import {
+  createRecordLockService,
+  type RecordLockService,
+} from './persistence/recordLockService.js';
 import {
   getConfiguredDatabaseDirectory,
   getDatabasePathForDirectory,
@@ -93,7 +90,6 @@ import {
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
-const SQLITE_RECORD_LOCK_WAIT_MS = 750;
 const SQLITE_BUSY_RETRY_DELAYS_MS = [100, 300, 700];
 
 export interface PersistedStorageRecord {
@@ -1761,142 +1757,30 @@ export async function getSqliteSyncTokensSnapshot(): Promise<PersistedRecordsTok
   return getPersistedRecordsTokenSnapshot();
 }
 
-function currentOwnerName(): string {
-  try {
-    return userInfo().username || 'desconocido';
-  } catch {
-    return 'desconocido';
-  }
-}
-
-function currentOwnerContext(): OwnerContext {
-  return { ownerId, ownerName: currentOwnerName(), hostname: hostname() };
-}
-
-function ensureRecordLockDatabase(): Database | null {
-  const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked') {
-    return null;
-  }
-
-  return requireDatabase();
+function getRecordLockService(): RecordLockService {
+  return createRecordLockService({
+    getSqliteStatus,
+    requireDatabase,
+    withDatabaseOperationLock,
+    getOwnerId: () => ownerId,
+    getDatabasePath: () => getSqliteStatus().path,
+  });
 }
 
 export async function acquireRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
-  if (!validateRecordLockPayload(payload)) {
-    return buildRecordLockError('Identificador de bloqueo inválido.');
-  }
-
-  const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(
-    currentStatus.path,
-    async () => {
-      try {
-        const db = ensureRecordLockDatabase();
-        if (!db) {
-          return buildRecordLockError('SQLite no está disponible para coordinar bloqueos.');
-        }
-
-        return acquireRecordLockInTransaction(db, payload, currentOwnerContext());
-      } catch (error) {
-        return buildRecordLockError(
-          error instanceof Error
-            ? error.message
-            : 'No se ha podido adquirir el bloqueo del registro.',
-        );
-      }
-    },
-    SQLITE_RECORD_LOCK_WAIT_MS,
-  );
+  return getRecordLockService().acquireRecordLock(payload);
 }
 
 export async function heartbeatRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
-  if (!validateRecordLockPayload(payload)) {
-    return buildRecordLockError('Identificador de bloqueo inválido.');
-  }
-
-  const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(
-    currentStatus.path,
-    async () => {
-      try {
-        const db = ensureRecordLockDatabase();
-        if (!db) {
-          return buildRecordLockError('SQLite no está disponible para renovar bloqueos.');
-        }
-
-        return heartbeatRecordLockInTransaction(db, payload, currentOwnerContext());
-      } catch (error) {
-        return buildRecordLockError(
-          error instanceof Error
-            ? error.message
-            : 'No se ha podido renovar el bloqueo del registro.',
-        );
-      }
-    },
-    SQLITE_RECORD_LOCK_WAIT_MS,
-  );
+  return getRecordLockService().heartbeatRecordLock(payload);
 }
 
 export async function releaseRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
-  if (!validateRecordLockPayload(payload)) {
-    return buildRecordLockError('Identificador de bloqueo inválido.');
-  }
-
-  const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(
-    currentStatus.path,
-    async () => {
-      try {
-        const db = ensureRecordLockDatabase();
-        if (!db) {
-          return buildRecordLockError('SQLite no está disponible para liberar bloqueos.');
-        }
-
-        return releaseRecordLockInTransaction(db, payload, currentOwnerContext());
-      } catch (error) {
-        return buildRecordLockError(
-          error instanceof Error
-            ? error.message
-            : 'No se ha podido liberar el bloqueo del registro.',
-        );
-      }
-    },
-    SQLITE_RECORD_LOCK_WAIT_MS,
-  );
+  return getRecordLockService().releaseRecordLock(payload);
 }
 
 export async function getRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
-  if (!validateRecordLockPayload(payload)) {
-    return buildRecordLockError('Identificador de bloqueo inválido.');
-  }
-
-  const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(
-    currentStatus.path,
-    async () => {
-      try {
-        const db = ensureRecordLockDatabase();
-        if (!db) {
-          return buildRecordLockError('SQLite no está disponible para consultar bloqueos.');
-        }
-
-        return getRecordLockInTransaction(
-          db,
-          payload,
-          currentOwnerContext(),
-          new Date().toISOString(),
-        );
-      } catch (error) {
-        return buildRecordLockError(
-          error instanceof Error
-            ? error.message
-            : 'No se ha podido consultar el bloqueo del registro.',
-        );
-      }
-    },
-    SQLITE_RECORD_LOCK_WAIT_MS,
-  );
+  return getRecordLockService().getRecordLock(payload);
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {
