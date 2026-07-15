@@ -1,0 +1,457 @@
+import { CalendarClock, Eye, FolderOpen, X } from 'lucide-react';
+import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
+import {
+  ACTA_STATES,
+  type Acta,
+  type ActaAlegacion,
+  type ActaDraft,
+  type ActaTypeDefinition,
+} from '../domain/acta';
+import {
+  createEmptyAlegacion,
+  formatDate,
+  formatDateTime,
+  getNextState,
+  getNextStateLabel,
+} from './actasPage.helpers';
+
+export function ActaEditorModal({
+  addDraftUpdate,
+  advanceState,
+  applyStateChange,
+  canAttachFinalActa,
+  canCreateOutlookDraftFromEditor,
+  createActaOutlookCalendar,
+  createActaOutlookDraft,
+  deadlineWasAutoUpdated,
+  displayedCreationDate,
+  draft,
+  editingActa,
+  editingActaId,
+  isEditorReadOnly,
+  newUpdateText,
+  onClose,
+  openActaPath,
+  outlookDraftStatus,
+  outlookDraftStatusIsError,
+  pathStatus,
+  pathStatusIsError,
+  recordLock,
+  saveActa,
+  saveError,
+  selectActaPath,
+  selectableActaTypes,
+  setNewUpdateText,
+  sindicatoOptions,
+  updateAlegacion,
+  updateDraft,
+}: {
+  addDraftUpdate: () => void;
+  advanceState: () => void;
+  applyStateChange: (nextState: ActaDraft['estado']) => void;
+  canAttachFinalActa: boolean;
+  canCreateOutlookDraftFromEditor: boolean;
+  createActaOutlookCalendar: (acta: Pick<Acta, 'titulo' | 'fechaLimite'>) => Promise<void>;
+  createActaOutlookDraft: (
+    acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>,
+  ) => Promise<void>;
+  deadlineWasAutoUpdated: boolean;
+  displayedCreationDate: string;
+  draft: ActaDraft;
+  editingActa: Acta | null | undefined;
+  editingActaId: string | null;
+  isEditorReadOnly: boolean;
+  newUpdateText: string;
+  onClose: () => void;
+  openActaPath: () => Promise<void>;
+  outlookDraftStatus: string;
+  outlookDraftStatusIsError: boolean;
+  pathStatus: string;
+  pathStatusIsError: boolean;
+  recordLock: ReturnType<typeof useSharedRecordLock>;
+  saveActa: () => Promise<void>;
+  saveError: string;
+  selectActaPath: () => Promise<void>;
+  selectableActaTypes: ActaTypeDefinition[];
+  setNewUpdateText: (value: string) => void;
+  sindicatoOptions: string[];
+  updateAlegacion: <K extends keyof ActaAlegacion>(
+    index: number,
+    key: K,
+    value: ActaAlegacion[K],
+  ) => void;
+  updateDraft: <K extends keyof ActaDraft>(key: K, value: ActaDraft[K]) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div
+        aria-labelledby="actas-editor-title"
+        aria-modal="true"
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl"
+        role="dialog"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-metro-border px-4 py-3">
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-metro-text" id="actas-editor-title">
+              {editingActaId ? 'Editar acta' : 'Nueva acta'}
+            </h3>
+            <p className="text-xs text-metro-muted">Estado actual: {draft.estado}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ModalDatabaseStatus />
+            <button
+              className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={onClose}
+              title="Cerrar"
+              type="button"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          {recordLock.status === 'locked' && recordLock.lockedBy && (
+            <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
+              📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@
+              {recordLock.lockedBy.machineName}
+            </div>
+          )}
+          <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
+            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+              Tipo
+              <select
+                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateDraft('tipo', event.target.value)}
+                value={draft.tipo}
+              >
+                {selectableActaTypes.map((type) => (
+                  <option key={type.id} value={type.nombre}>
+                    {type.nombre}
+                    {type.disabled ? ' (deshabilitado)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+              Fecha sesión
+              <input
+                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateDraft('fechaSesion', event.target.value)}
+                type="date"
+                value={draft.fechaSesion}
+              />
+            </label>
+            <div className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+              Fecha creación
+              <div className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text">
+                {formatDate(displayedCreationDate)}
+              </div>
+            </div>
+            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+              Fecha límite
+              <span className="relative block">
+                <input
+                  className="w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 pr-9 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                  onChange={(event) => updateDraft('fechaLimite', event.target.value)}
+                  title="Fecha límite"
+                  type="date"
+                  value={draft.fechaLimite}
+                />
+                {deadlineWasAutoUpdated && (
+                  <CalendarClock
+                    aria-label="Fecha límite recalculada automáticamente"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-metro-red"
+                    size={16}
+                  />
+                )}
+              </span>
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+              Título
+              <input
+                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => updateDraft('titulo', event.target.value)}
+                placeholder="Título"
+                value={draft.titulo}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-2 xl:grid-cols-[260px_minmax(220px,1fr)]">
+            <select
+              className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => applyStateChange(event.target.value as ActaDraft['estado'])}
+              value={draft.estado}
+            >
+              {ACTA_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+            <button
+              className="rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!getNextState(draft.estado)}
+              onClick={advanceState}
+              type="button"
+            >
+              {getNextStateLabel(draft.estado)}
+            </button>
+          </div>
+
+          <textarea
+            className="min-h-[120px] w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => updateDraft('observaciones', event.target.value)}
+            placeholder="Observaciones"
+            value={draft.observaciones}
+          />
+
+          <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                Actualizaciones
+              </h4>
+              <span className="text-xs text-metro-muted">
+                {draft.actualizaciones.length} registro(s)
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_140px]">
+              <input
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => setNewUpdateText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addDraftUpdate();
+                  }
+                }}
+                placeholder="Nueva actualización..."
+                value={newUpdateText}
+              />
+              <button
+                className="rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={addDraftUpdate}
+                type="button"
+              >
+                Añadir
+              </button>
+            </div>
+            <div className="mt-3 max-h-36 space-y-2 overflow-y-auto pr-1">
+              {draft.actualizaciones.length === 0 && (
+                <p className="text-sm text-metro-muted">Sin actualizaciones.</p>
+              )}
+              {draft.actualizaciones.map((entry) => (
+                <div
+                  className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
+                  key={entry.id}
+                >
+                  <p className="text-xs font-semibold text-metro-muted">
+                    {formatDateTime(entry.fecha)}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-metro-text">{entry.texto}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                Alegaciones
+              </h4>
+              <button
+                className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() =>
+                  updateDraft('alegaciones', [...draft.alegaciones, createEmptyAlegacion()])
+                }
+                type="button"
+              >
+                Añadir sindicato
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {draft.alegaciones.length === 0 && (
+                <p className="text-sm text-metro-muted">Sin alegaciones configuradas.</p>
+              )}
+              {draft.alegaciones.map((alegacion, index) => (
+                <div
+                  className="grid gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 xl:grid-cols-[180px_110px_150px_minmax(220px,1fr)_80px]"
+                  key={`${alegacion.sindicato}-${index}`}
+                >
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                    list="actas-sindicatos"
+                    onChange={(event) => updateAlegacion(index, 'sindicato', event.target.value)}
+                    placeholder="Sindicato"
+                    value={alegacion.sindicato}
+                  />
+                  <label className="flex items-center gap-2 text-sm text-metro-muted">
+                    <input
+                      checked={alegacion.presentada}
+                      onChange={(event) =>
+                        updateAlegacion(index, 'presentada', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    Presentada
+                  </label>
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateAlegacion(index, 'fecha', event.target.value)}
+                    type="date"
+                    value={alegacion.fecha}
+                  />
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateAlegacion(index, 'observacion', event.target.value)}
+                    placeholder="Observación"
+                    value={alegacion.observacion}
+                  />
+                  <button
+                    className="rounded-lg border border-red-500/40 px-2 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/10"
+                    onClick={() =>
+                      updateDraft(
+                        'alegaciones',
+                        draft.alegaciones.filter((_, currentIndex) => currentIndex !== index),
+                      )
+                    }
+                    type="button"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+            <datalist id="actas-sindicatos">
+              {sindicatoOptions.map((sindicato) => (
+                <option key={sindicato} value={sindicato} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                  Acta firmada
+                </h4>
+                <p className="text-xs text-metro-muted">
+                  Se habilita en estado Pendiente de firma para vincular la ruta de red del acta.
+                </p>
+              </div>
+              {!canAttachFinalActa && (
+                <StatusBadge tone="muted">Disponible al pasar a firma</StatusBadge>
+              )}
+            </div>
+            <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px_120px]">
+              <input
+                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!canAttachFinalActa}
+                onChange={(event) => updateDraft('actaPath', event.target.value)}
+                placeholder="Ruta de red del acta firmada..."
+                value={draft.actaPath}
+              />
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canAttachFinalActa}
+                onClick={() => void selectActaPath()}
+                type="button"
+              >
+                <FolderOpen size={15} /> Ruta
+              </button>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canAttachFinalActa || !draft.actaPath.trim()}
+                onClick={() => void openActaPath()}
+                type="button"
+              >
+                <Eye size={15} /> Ver
+              </button>
+            </div>
+            {pathStatus && (
+              <p
+                className={`mt-2 text-xs ${pathStatusIsError ? 'text-red-200' : 'text-metro-muted'}`}
+              >
+                {pathStatus}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {outlookDraftStatus && (
+          <p
+            className={`mx-4 rounded-lg border px-3 py-2 text-xs font-semibold ${outlookDraftStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
+          >
+            {outlookDraftStatus}
+          </p>
+        )}
+
+        {saveError && (
+          <p className="mx-4 rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
+            {saveError}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
+          <button
+            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={onClose}
+            type="button"
+          >
+            Cancelar
+          </button>
+          {canAttachFinalActa && draft.estado !== 'Cerrada' && (
+            <button
+              className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={() => applyStateChange('Cerrada')}
+              type="button"
+            >
+              Cerrar acta
+            </button>
+          )}
+          {canCreateOutlookDraftFromEditor && (
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-sky-400/60 bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-200 hover:bg-sky-500/20"
+              onClick={() => void createActaOutlookDraft(draft)}
+              title="Abrir borrador Outlook de alegaciones"
+              type="button"
+            >
+              O Outlook
+            </button>
+          )}
+          {canCreateOutlookDraftFromEditor && (
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-400/60 bg-blue-500/10 px-3 py-2 text-sm font-bold text-blue-200 hover:bg-blue-500/20"
+              onClick={() => void createActaOutlookCalendar(draft)}
+              title="Abrir cita Outlook para fin de alegaciones"
+              type="button"
+            >
+              <CalendarClock className="h-4 w-4" />
+              Calendario
+            </button>
+          )}
+          <button
+            className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+            disabled={isEditorReadOnly}
+            onClick={() => void saveActa()}
+            type="button"
+          >
+            Guardar acta
+          </button>
+          {editingActa && (
+            <AuditHistoryButton
+              entityId={editingActa.id}
+              entityTitle={editingActa.titulo || 'Acta sin título'}
+              module="actas"
+            />
+          )}
+          <InlineSaveFeedback />
+        </div>
+      </div>
+    </div>
+  );
+}
