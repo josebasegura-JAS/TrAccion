@@ -44,6 +44,14 @@ export const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Diagnóstico de integridad',
+    items: [
+      'Comprueba, sin modificar nada, la integridad física de SQLite (PRAGMA integrity_check), la versión de esquema, el tamaño de la base, las copias de seguridad disponibles, los bloqueos caducados sin liberar y algunas referencias cruzadas conocidas (por ejemplo, personas de Ticket Restaurante con calendario inexistente).',
+      'Se ejecuta solo cuando pulsas "Ejecutar diagnóstico ahora"; no corre en segundo plano ni corrige nada automáticamente.',
+      '"Exportar informe" descarga el resultado en JSON para adjuntarlo si necesitas ayuda a distancia.',
+    ],
+  },
+  {
     title: 'Uso recomendado',
     items: [
       'Modifica rutas solo cuando cambie la ubicación real de la base de datos o de las plantillas.',

@@ -188,6 +188,44 @@ interface TraccionVacuumResult {
   durationMs: number | null;
 }
 
+interface TraccionSqliteIntegrityCheckResult {
+  ok: boolean;
+  problems: string[];
+}
+
+interface TraccionSchemaVersionInfo {
+  current: number;
+  expected: number;
+  upToDate: boolean;
+}
+
+interface TraccionExpiredLockInfo {
+  module: string;
+  recordId: string;
+  ownerName: string;
+  machineName: string;
+  expiresAt: string;
+}
+
+interface TraccionOrphanCheckResult {
+  label: string;
+  count: number;
+  sampleIds: string[];
+}
+
+interface TraccionDataIntegrityReport {
+  generatedAt: string;
+  databaseReady: boolean;
+  sqliteIntegrityCheck: TraccionSqliteIntegrityCheckResult;
+  schemaVersion: TraccionSchemaVersionInfo;
+  databaseSizeBytes: number | null;
+  heaviestTables: TraccionTableSizeBreakdownEntry[];
+  expiredLocks: TraccionExpiredLockInfo[];
+  orphanChecks: TraccionOrphanCheckResult[];
+  mostRecentBackup: { fileName: string; kind: 'sqlite' | 'json'; createdAt: string } | null;
+  backupCount: number;
+}
+
 interface TraccionRecordLockOwnerInfo {
   ownerId: string;
   ownerName: string;
@@ -520,13 +558,19 @@ interface TraccionApi {
   applyAppUpdate?: () => Promise<TraccionAppUpdateApplyResult>;
   getDailyLocalBackupSettings?: () => Promise<TraccionDailyLocalBackupSettings>;
   setDailyLocalBackupEnabled?: (enabled: boolean) => Promise<TraccionDailyLocalBackupSettings>;
-  setDailyLocalBackupRetentionDays?: (retentionDays: number) => Promise<TraccionDailyLocalBackupSettings>;
-  setDailyLocalBackupDirectory?: () => Promise<{ ok: boolean; settings: TraccionDailyLocalBackupSettings }>;
+  setDailyLocalBackupRetentionDays?: (
+    retentionDays: number,
+  ) => Promise<TraccionDailyLocalBackupSettings>;
+  setDailyLocalBackupDirectory?: () => Promise<{
+    ok: boolean;
+    settings: TraccionDailyLocalBackupSettings;
+  }>;
   clearDailyLocalBackupDirectory?: () => Promise<TraccionDailyLocalBackupSettings>;
   listLocalBackups?: () => Promise<TraccionLocalBackupEntry[]>;
   createManualBackup?: () => Promise<{ ok: boolean }>;
   getVacuumStatus?: () => Promise<TraccionVacuumStatus>;
   vacuumDatabaseNow?: () => Promise<TraccionVacuumResult>;
+  runDataIntegrityAudit?: () => Promise<TraccionDataIntegrityReport>;
   getCurrentDatabaseLock?: () => Promise<TraccionDatabaseLockInfo | null>;
   forceReleaseDatabaseLock?: () => Promise<TraccionForceReleaseDatabaseLockResult>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
@@ -672,7 +716,9 @@ interface TraccionApi {
     fileName: string,
   ) => Promise<TraccionOpenExcelWorkbookResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
-  createOutlookCalendar?: (payload: EspecialOutlookCalendarPayload) => Promise<EspecialOutlookCalendarResult>;
+  createOutlookCalendar?: (
+    payload: EspecialOutlookCalendarPayload,
+  ) => Promise<EspecialOutlookCalendarResult>;
   parseOutlookMsg?: (payload: ArrayBuffer) => Promise<ElectronParsedOutlookMsgResult>;
   extractDocxText?: (payload: ArrayBuffer) => Promise<TraccionDocxTextResult>;
 }
@@ -685,7 +731,9 @@ interface RrllOutlookApi {
   createDraft: (
     payload: EspecialOutlookDraftPayload | LegacyEspecialOutlookDraftPayload,
   ) => Promise<EspecialOutlookDraftResult>;
-  createCalendar?: (payload: EspecialOutlookCalendarPayload) => Promise<EspecialOutlookCalendarResult>;
+  createCalendar?: (
+    payload: EspecialOutlookCalendarPayload,
+  ) => Promise<EspecialOutlookCalendarResult>;
 }
 
 interface Window {

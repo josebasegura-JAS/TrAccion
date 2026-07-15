@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld('traccion', {
   resetDatabaseDirectory: () => ipcRenderer.invoke('database:reset-directory'),
   getSecondaryBackupDirectory: () => ipcRenderer.invoke('database:get-secondary-backup-directory'),
   setSecondaryBackupDirectory: () => ipcRenderer.invoke('database:set-secondary-backup-directory'),
-  clearSecondaryBackupDirectory: () => ipcRenderer.invoke('database:clear-secondary-backup-directory'),
+  clearSecondaryBackupDirectory: () =>
+    ipcRenderer.invoke('database:clear-secondary-backup-directory'),
   getUpdatesDirectory: () => ipcRenderer.invoke('app-update:get-updates-directory'),
   setUpdatesDirectory: () => ipcRenderer.invoke('app-update:set-updates-directory'),
   clearUpdatesDirectory: () => ipcRenderer.invoke('app-update:clear-updates-directory'),
@@ -28,18 +29,20 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('database:set-daily-local-backup-enabled', { enabled }),
   setDailyLocalBackupRetentionDays: (retentionDays: number) =>
     ipcRenderer.invoke('database:set-daily-local-backup-retention-days', { retentionDays }),
-  setDailyLocalBackupDirectory: () => ipcRenderer.invoke('database:set-daily-local-backup-directory'),
-  clearDailyLocalBackupDirectory: () => ipcRenderer.invoke('database:clear-daily-local-backup-directory'),
+  setDailyLocalBackupDirectory: () =>
+    ipcRenderer.invoke('database:set-daily-local-backup-directory'),
+  clearDailyLocalBackupDirectory: () =>
+    ipcRenderer.invoke('database:clear-daily-local-backup-directory'),
   listLocalBackups: () => ipcRenderer.invoke('database:list-local-backups'),
   createManualBackup: () => ipcRenderer.invoke('database:create-manual-backup'),
   getVacuumStatus: () => ipcRenderer.invoke('database:get-vacuum-status'),
   vacuumDatabaseNow: () => ipcRenderer.invoke('database:vacuum-now'),
+  runDataIntegrityAudit: () => ipcRenderer.invoke('database:run-integrity-audit'),
   getCurrentDatabaseLock: () => ipcRenderer.invoke('database:get-current-lock'),
   forceReleaseDatabaseLock: () => ipcRenderer.invoke('database:force-release-lock'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
-  getPersistedRecord: (key: string) =>
-    ipcRenderer.invoke('database:get-persisted-record', { key }),
+  getPersistedRecord: (key: string) => ipcRenderer.invoke('database:get-persisted-record', { key }),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
   getSqliteSyncTokens: () => ipcRenderer.invoke('database:get-sqlite-sync-tokens'),
   onDatabaseConnectivityIssue: (listener: (payload: unknown) => void) => {
@@ -79,11 +82,13 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedValue: string | null;
   }) => ipcRenderer.invoke('plantilla:save-record-if-unchanged', record),
-  saveEmployeeRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedValue: string | null;
-  }>) => ipcRenderer.invoke('plantilla:save-records-if-unchanged', { records }),
+  saveEmployeeRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedValue: string | null;
+    }>,
+  ) => ipcRenderer.invoke('plantilla:save-records-if-unchanged', { records }),
   loadTaskRecords: (filter?: { mode?: 'all' | 'active' | 'historical' }) =>
     ipcRenderer.invoke('tasks:load-records', filter),
   saveTaskRecordIfUnchanged: (record: {
@@ -121,22 +126,26 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('criterios-rrll:save-record-if-unchanged', record),
-  saveCriteriosRrllRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('criterios-rrll:save-records-if-unchanged', { records }),
+  saveCriteriosRrllRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) => ipcRenderer.invoke('criterios-rrll:save-records-if-unchanged', { records }),
   loadActaTypeRecords: () => ipcRenderer.invoke('acta-types:load-records'),
   saveActaTypeRecordIfUnchanged: (record: {
     id: string;
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('acta-types:save-record-if-unchanged', record),
-  saveActaTypeRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('acta-types:save-records-if-unchanged', { records }),
+  saveActaTypeRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) => ipcRenderer.invoke('acta-types:save-records-if-unchanged', { records }),
   loadTicketRestauranteCalendarRecords: () =>
     ipcRenderer.invoke('ticket-restaurante-calendars:load-records'),
   saveTicketRestauranteCalendarRecordIfUnchanged: (record: {
@@ -144,11 +153,13 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('ticket-restaurante-calendars:save-record-if-unchanged', record),
-  saveTicketRestauranteCalendarRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('ticket-restaurante-calendars:save-records-if-unchanged', { records }),
+  saveTicketRestauranteCalendarRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) => ipcRenderer.invoke('ticket-restaurante-calendars:save-records-if-unchanged', { records }),
   loadTicketRestaurantePersonRecords: () =>
     ipcRenderer.invoke('ticket-restaurante-people:load-records'),
   saveTicketRestaurantePersonRecordIfUnchanged: (record: {
@@ -156,11 +167,13 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('ticket-restaurante-people:save-record-if-unchanged', record),
-  saveTicketRestaurantePersonRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('ticket-restaurante-people:save-records-if-unchanged', { records }),
+  saveTicketRestaurantePersonRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) => ipcRenderer.invoke('ticket-restaurante-people:save-records-if-unchanged', { records }),
   loadTicketRestauranteAbsenceRecords: () =>
     ipcRenderer.invoke('ticket-restaurante-absences:load-records'),
   saveTicketRestauranteAbsenceRecordIfUnchanged: (record: {
@@ -168,11 +181,13 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('ticket-restaurante-absences:save-record-if-unchanged', record),
-  saveTicketRestauranteAbsenceRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('ticket-restaurante-absences:save-records-if-unchanged', { records }),
+  saveTicketRestauranteAbsenceRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) => ipcRenderer.invoke('ticket-restaurante-absences:save-records-if-unchanged', { records }),
 
   loadTicketRestauranteManutencionRecords: () =>
     ipcRenderer.invoke('ticket-restaurante-manutenciones:load-records'),
@@ -181,11 +196,14 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('ticket-restaurante-manutenciones:save-record-if-unchanged', record),
-  saveTicketRestauranteManutencionRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('ticket-restaurante-manutenciones:save-records-if-unchanged', { records }),
+  saveTicketRestauranteManutencionRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) =>
+    ipcRenderer.invoke('ticket-restaurante-manutenciones:save-records-if-unchanged', { records }),
   loadTicketRestauranteConfigRecords: () =>
     ipcRenderer.invoke('ticket-restaurante-config:load-records'),
   saveTicketRestauranteConfigRecordIfUnchanged: (record: {
@@ -213,23 +231,23 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('teletrabajo-puestos:save-record-if-unchanged', record),
-  loadTeletrabajoGrupoCoberturaRecords: () => ipcRenderer.invoke('teletrabajo-grupos-cobertura:load-records'),
+  loadTeletrabajoGrupoCoberturaRecords: () =>
+    ipcRenderer.invoke('teletrabajo-grupos-cobertura:load-records'),
   saveTeletrabajoGrupoCoberturaRecordIfUnchanged: (record: {
     id: string;
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('teletrabajo-grupos-cobertura:save-record-if-unchanged', record),
-  loadJobPositionTranslationRecords: () => ipcRenderer.invoke('plantilla-job-translations:load-records'),
+  loadJobPositionTranslationRecords: () =>
+    ipcRenderer.invoke('plantilla-job-translations:load-records'),
   saveJobPositionTranslationRecordIfUnchanged: (record: {
     id: string;
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('plantilla-job-translations:save-record-if-unchanged', record),
   loadConfiguracion: () => ipcRenderer.invoke('configuracion:load'),
-  saveConfiguracionIfUnchanged: (record: {
-    value: string;
-    expectedUpdatedAt: string | null;
-  }) => ipcRenderer.invoke('configuracion:save-if-unchanged', record),
+  saveConfiguracionIfUnchanged: (record: { value: string; expectedUpdatedAt: string | null }) =>
+    ipcRenderer.invoke('configuracion:save-if-unchanged', record),
   selectTaskDocument: () => ipcRenderer.invoke('tasks:select-document'),
   openTaskDocument: (filePath: string) => ipcRenderer.invoke('tasks:open-document', filePath),
   loadTeletrabajoRecords: () => ipcRenderer.invoke('teletrabajo:load-records'),
@@ -238,23 +256,25 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('teletrabajo:save-record-if-unchanged', record),
-  saveTeletrabajoRecordsIfUnchanged: (records: Array<{
-    id: string;
-    value: string;
-    expectedUpdatedAt: string | null;
-  }>) => ipcRenderer.invoke('teletrabajo:save-records-if-unchanged', { records }),
+  saveTeletrabajoRecordsIfUnchanged: (
+    records: Array<{
+      id: string;
+      value: string;
+      expectedUpdatedAt: string | null;
+    }>,
+  ) => ipcRenderer.invoke('teletrabajo:save-records-if-unchanged', { records }),
   selectTeletrabajoTemplate: () => ipcRenderer.invoke('teletrabajo:select-template'),
   readTeletrabajoTemplate: (path: string) => ipcRenderer.invoke('teletrabajo:read-template', path),
   selectVinculogramaTemplate: () => ipcRenderer.invoke('vinculograma:select-template'),
-  readVinculogramaTemplate: (path: string) => ipcRenderer.invoke('vinculograma:read-template', path),
+  readVinculogramaTemplate: (path: string) =>
+    ipcRenderer.invoke('vinculograma:read-template', path),
   loadLicenciaSinSueldoRecords: () => ipcRenderer.invoke('licencias-sin-sueldo:load-records'),
   saveLicenciaSinSueldoRecordIfUnchanged: (record: {
     id: string;
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('licencias-sin-sueldo:save-record-if-unchanged', record),
-  selectLicenciaSinSueldoTemplate: () =>
-    ipcRenderer.invoke('licencias-sin-sueldo:select-template'),
+  selectLicenciaSinSueldoTemplate: () => ipcRenderer.invoke('licencias-sin-sueldo:select-template'),
   readLicenciaSinSueldoTemplate: (path: string) =>
     ipcRenderer.invoke('licencias-sin-sueldo:read-template', path),
   openTeletrabajoWord: (buffer: ArrayBuffer, fileName: string) =>

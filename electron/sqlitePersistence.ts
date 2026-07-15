@@ -1,5 +1,16 @@
 import { app } from 'electron';
-import { constants, copyFile, mkdir, readFile, readdir, rmdir, stat, unlink, writeFile, access } from 'node:fs/promises';
+import {
+  constants,
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  rmdir,
+  stat,
+  unlink,
+  writeFile,
+  access,
+} from 'node:fs/promises';
 import { hostname, userInfo } from 'node:os';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
@@ -35,7 +46,10 @@ import {
   DAILY_LOCAL_BACKUP_MIN_RETENTION_DAYS,
 } from './persistence/databasePreferences.js';
 import { createEmployeeRepository } from './persistence/employeeRepository.js';
-import { createSorteosRepository, getSorteosCollectionUpdatedAt } from './persistence/sorteosRepository.js';
+import {
+  createSorteosRepository,
+  getSorteosCollectionUpdatedAt,
+} from './persistence/sorteosRepository.js';
 import { createTaskRepository } from './persistence/taskRepository.js';
 import { createSesionesRepository } from './persistence/sesionesRepository.js';
 import { createTeletrabajoRepository } from './persistence/teletrabajoRepository.js';
@@ -61,6 +75,11 @@ import {
   type VacuumResult,
   type VacuumStatus,
 } from './persistence/vacuumMaintenance.js';
+import {
+  runDataIntegrityAudit as runDataIntegrityAuditFromModule,
+  type DataIntegrityAuditDependencies,
+  type DataIntegrityReport,
+} from './persistence/dataIntegrityAudit.js';
 import {
   createLocalBackupService,
   type LocalBackupService,
@@ -208,7 +227,6 @@ export interface DatabaseStatus {
   message?: string;
 }
 
-
 const OWNER_ID_FILE_NAME = 'traccion-owner-id.json';
 
 function getOwnerIdFilePath(): string {
@@ -225,7 +243,11 @@ async function resolveStableOwnerId(): Promise<string> {
   try {
     const raw = await readFile(filePath, 'utf8');
     const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && typeof (parsed as { id?: unknown }).id === 'string') {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof (parsed as { id?: unknown }).id === 'string'
+    ) {
       return (parsed as { id: string }).id;
     }
   } catch {
@@ -305,6 +327,22 @@ function createVacuumMaintenanceDependencies(): VacuumMaintenanceDependencies {
     getLockPath,
     startDatabaseLockHeartbeat,
     isLockContentionError: isSqliteLockContentionError,
+  };
+}
+
+// --- Diagnóstico de integridad de datos (solo lectura) -----------------
+
+export type { DataIntegrityReport } from './persistence/dataIntegrityAudit.js';
+
+export async function runDataIntegrityAuditNow(): Promise<DataIntegrityReport> {
+  return runDataIntegrityAuditFromModule(createDataIntegrityAuditDependencies());
+}
+
+function createDataIntegrityAuditDependencies(): DataIntegrityAuditDependencies {
+  return {
+    getDatabase: () => database,
+    getStatus: getSqliteStatus,
+    listLocalBackups: () => listLocalBackups(),
   };
 }
 
@@ -392,10 +430,16 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
 
   if (previousLock) {
     await unlink(getLockInfoPath(lockPath)).catch((error: unknown) => {
-      console.warn(`No se ha podido borrar manualmente el fichero del lock SQLite (${getLockInfoPath(lockPath)}).`, error);
+      console.warn(
+        `No se ha podido borrar manualmente el fichero del lock SQLite (${getLockInfoPath(lockPath)}).`,
+        error,
+      );
     });
     await rmdir(lockPath).catch((error: unknown) => {
-      console.warn(`No se ha podido borrar manualmente el directorio del lock SQLite (${lockPath}).`, error);
+      console.warn(
+        `No se ha podido borrar manualmente el directorio del lock SQLite (${lockPath}).`,
+        error,
+      );
     });
   }
 
@@ -419,7 +463,11 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
 
   try {
     const configured = await getConfiguredDatabaseDirectory();
-    const nextStatus = await activateDatabase(configured.directoryPath, configured.isDefaultPath, null);
+    const nextStatus = await activateDatabase(
+      configured.directoryPath,
+      configured.isDefaultPath,
+      null,
+    );
     return {
       ok: true,
       status: nextStatus,
@@ -474,7 +522,10 @@ function isDatabaseWriteBlockedByHeartbeat(): boolean {
   return getLockManager().isDatabaseWriteBlockedByHeartbeat();
 }
 
-function startDatabaseLockHeartbeat(lockPath: string, lock: DatabaseLockInfo): ReturnType<typeof setInterval> {
+function startDatabaseLockHeartbeat(
+  lockPath: string,
+  lock: DatabaseLockInfo,
+): ReturnType<typeof setInterval> {
   return getLockManager().startDatabaseLockHeartbeat(lockPath, lock);
 }
 
@@ -482,8 +533,10 @@ function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
   return getLockManager().releaseLock(lockPath, lock);
 }
 
-
-async function pruneEmergencyDatabaseBackups(databasePath: string, retentionCount = 1): Promise<void> {
+async function pruneEmergencyDatabaseBackups(
+  databasePath: string,
+  retentionCount = 1,
+): Promise<void> {
   const directory = path.dirname(databasePath);
   const prefix = `${path.basename(databasePath)}.backup-`;
   const entries = await readdir(directory).catch(() => []);
@@ -493,9 +546,9 @@ async function pruneEmergencyDatabaseBackups(databasePath: string, retentionCoun
     .reverse();
 
   await Promise.all(
-    backups.slice(retentionCount).map((entry) =>
-      unlink(path.join(directory, entry)).catch(() => undefined),
-    ),
+    backups
+      .slice(retentionCount)
+      .map((entry) => unlink(path.join(directory, entry)).catch(() => undefined)),
   );
 }
 
@@ -512,9 +565,15 @@ async function backupExistingDatabase(databasePath: string): Promise<void> {
     await copyFile(databasePath, `${databasePath}.backup-${timestamp}`);
     await pruneEmergencyDatabaseBackups(databasePath, 1);
   } catch (error) {
-    const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code) : '';
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code)
+        : '';
     if (code === 'ENOSPC') {
-      console.warn('No hay espacio para crear la copia preventiva SQLite. Se continúa sin bloquear el guardado.', error);
+      console.warn(
+        'No hay espacio para crear la copia preventiva SQLite. Se continúa sin bloquear el guardado.',
+        error,
+      );
       await pruneEmergencyDatabaseBackups(databasePath, 1);
       return;
     }
@@ -683,7 +742,8 @@ function requireDatabase(): Database {
 }
 
 function isSqliteCorruptionError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return (
     message.includes('database disk image is malformed') ||
     message.includes('database corruption') ||
@@ -692,7 +752,8 @@ function isSqliteCorruptionError(error: unknown): boolean {
 }
 
 function isSqliteLockContentionError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return message.includes('base ocupada') || message.includes('bloqueo temporal');
 }
 
@@ -704,7 +765,8 @@ function isSqliteBusyOrLockedError(error: unknown): boolean {
     }
   }
 
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return message.includes('database is locked') || message.includes('database table is locked');
 }
 
@@ -828,7 +890,9 @@ function isCountRow(value: unknown): value is CountRow {
   return typeof candidate.count === 'number';
 }
 
-function isJsonObjectWithStringId(value: unknown): value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } {
+function isJsonObjectWithStringId(
+  value: unknown,
+): value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } {
   if (!value || typeof value !== 'object') {
     return false;
   }
@@ -892,7 +956,6 @@ export async function createManualLocalBackup(): Promise<void> {
   await getLocalBackupService().createManualLocalBackup();
 }
 
-
 function updateRefreshMetadata(db: Database, updatedAt: string): void {
   const token = `${updatedAt}:${ownerId}`;
   db.prepare(
@@ -915,7 +978,11 @@ export async function savePersistedRecord(record: PersistedStorageRecord): Promi
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase === 'locked' || isDatabaseWriteBlockedByHeartbeat()) {
+      if (
+        !currentStatus.ready ||
+        currentStatus.phase === 'locked' ||
+        isDatabaseWriteBlockedByHeartbeat()
+      ) {
         return currentStatus;
       }
 
@@ -955,12 +1022,18 @@ export async function savePersistedRecordIfUnchanged(
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
+      if (
+        !currentStatus.ready ||
+        currentStatus.phase !== 'active' ||
+        isDatabaseWriteBlockedByHeartbeat()
+      ) {
         return {
           ok: false,
           status: currentStatus,
           currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+          message:
+            currentStatus.message ??
+            'SQLite no está activo. No se permite guardar sin base compartida.',
         };
       }
 
@@ -1082,9 +1155,15 @@ function getTaskRecordsUpdatedAt(db: Database): string | null {
   return isUpdatedAtRow(row) ? row.updated_at : null;
 }
 
-export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
+export async function migrateLocalStorageSnapshot(
+  payload: LocalStorageBackupPayload,
+): Promise<DatabaseStatus> {
   const currentStatus = getSqliteStatus();
-  if (!currentStatus.ready || currentStatus.phase === 'locked' || isDatabaseWriteBlockedByHeartbeat()) {
+  if (
+    !currentStatus.ready ||
+    currentStatus.phase === 'locked' ||
+    isDatabaseWriteBlockedByHeartbeat()
+  ) {
     return currentStatus;
   }
 
@@ -1098,8 +1177,10 @@ export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPay
     );
 
     const migrateSnapshotTransaction = db.transaction(() => {
-      db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
-        .run(now, JSON.stringify({ records }));
+      db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)').run(
+        now,
+        JSON.stringify({ records }),
+      );
       pruneLocalStorageBackups(db);
 
       const upsert = db.prepare(
@@ -1130,7 +1211,9 @@ export async function migrateLocalStorageSnapshot(payload: LocalStorageBackupPay
   });
 }
 
-export async function createLocalStorageBackup(payload: LocalStorageBackupPayload): Promise<DatabaseStatus> {
+export async function createLocalStorageBackup(
+  payload: LocalStorageBackupPayload,
+): Promise<DatabaseStatus> {
   return safeDatabaseOperation(
     () => {
       assertDatabaseWritesAllowed();
@@ -1145,8 +1228,9 @@ export async function createLocalStorageBackup(payload: LocalStorageBackupPayloa
       );
       const db = requireDatabase();
       const createBackupTransaction = db.transaction(() => {
-        db.prepare('INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)')
-          .run(new Date().toISOString(), JSON.stringify({ records }));
+        db.prepare(
+          'INSERT INTO local_storage_backups (created_at, payload_json) VALUES (?, ?)',
+        ).run(new Date().toISOString(), JSON.stringify({ records }));
         pruneLocalStorageBackups(db);
       });
       createBackupTransaction();
@@ -1328,9 +1412,16 @@ const teletrabajoModule = createTeletrabajoRepository({
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
 });
-const { loadTeletrabajoRecordsSnapshot, saveTeletrabajoRecordIfUnchanged, saveTeletrabajoRecordsIfUnchanged } =
-  teletrabajoModule;
-export { loadTeletrabajoRecordsSnapshot, saveTeletrabajoRecordIfUnchanged, saveTeletrabajoRecordsIfUnchanged };
+const {
+  loadTeletrabajoRecordsSnapshot,
+  saveTeletrabajoRecordIfUnchanged,
+  saveTeletrabajoRecordsIfUnchanged,
+} = teletrabajoModule;
+export {
+  loadTeletrabajoRecordsSnapshot,
+  saveTeletrabajoRecordIfUnchanged,
+  saveTeletrabajoRecordsIfUnchanged,
+};
 
 const sesionesModule = createSesionesRepository({
   safeDatabaseOperation,
@@ -1386,8 +1477,16 @@ const employeeModule = createEmployeeRepository({
   assertDatabaseWritesAllowed,
   isDatabaseWriteBlockedByHeartbeat,
 });
-const { loadEmployeeRecordsSnapshot, saveEmployeeRecordIfUnchanged, saveEmployeeRecordsIfUnchanged } = employeeModule;
-export { loadEmployeeRecordsSnapshot, saveEmployeeRecordIfUnchanged, saveEmployeeRecordsIfUnchanged };
+const {
+  loadEmployeeRecordsSnapshot,
+  saveEmployeeRecordIfUnchanged,
+  saveEmployeeRecordsIfUnchanged,
+} = employeeModule;
+export {
+  loadEmployeeRecordsSnapshot,
+  saveEmployeeRecordIfUnchanged,
+  saveEmployeeRecordsIfUnchanged,
+};
 
 const sorteosModule = createSorteosRepository({
   safeDatabaseOperation,
@@ -1409,7 +1508,8 @@ const { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged } = v
 export { loadVinculogramaRecordsSnapshot, saveVinculogramaRecordIfUnchanged };
 
 const licenciaSinSueldoModule = createLicenciaSinSueldoRepository(createJsonModuleRepository);
-const { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged } = licenciaSinSueldoModule;
+const { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged } =
+  licenciaSinSueldoModule;
 export { loadLicenciaSinSueldoRecordsSnapshot, saveLicenciaSinSueldoRecordIfUnchanged };
 
 const criteriosRrllModule = createCriteriosRrllRepository(createJsonModuleRepository);
@@ -1425,11 +1525,20 @@ export {
 };
 
 const actaTypesModule = createActaTypesRepository(createJsonModuleRepository);
-const { loadActaTypeRecordsSnapshot, saveActaTypeRecordIfUnchanged, saveActaTypeRecordsIfUnchanged } =
-  actaTypesModule;
-export { loadActaTypeRecordsSnapshot, saveActaTypeRecordIfUnchanged, saveActaTypeRecordsIfUnchanged };
+const {
+  loadActaTypeRecordsSnapshot,
+  saveActaTypeRecordIfUnchanged,
+  saveActaTypeRecordsIfUnchanged,
+} = actaTypesModule;
+export {
+  loadActaTypeRecordsSnapshot,
+  saveActaTypeRecordIfUnchanged,
+  saveActaTypeRecordsIfUnchanged,
+};
 
-const ticketRestauranteCalendarsModule = createTicketRestauranteCalendarsRepository(createJsonModuleRepository);
+const ticketRestauranteCalendarsModule = createTicketRestauranteCalendarsRepository(
+  createJsonModuleRepository,
+);
 const {
   loadTicketRestauranteCalendarRecordsSnapshot,
   saveTicketRestauranteCalendarRecordIfUnchanged,
@@ -1441,7 +1550,9 @@ export {
   saveTicketRestauranteCalendarRecordsIfUnchanged,
 };
 
-const ticketRestaurantePeopleModule = createTicketRestaurantePeopleRepository(createJsonModuleRepository);
+const ticketRestaurantePeopleModule = createTicketRestaurantePeopleRepository(
+  createJsonModuleRepository,
+);
 const {
   loadTicketRestaurantePersonRecordsSnapshot,
   saveTicketRestaurantePersonRecordIfUnchanged,
@@ -1453,7 +1564,9 @@ export {
   saveTicketRestaurantePersonRecordsIfUnchanged,
 };
 
-const ticketRestauranteAbsencesModule = createTicketRestauranteAbsencesRepository(createJsonModuleRepository);
+const ticketRestauranteAbsencesModule = createTicketRestauranteAbsencesRepository(
+  createJsonModuleRepository,
+);
 const {
   loadTicketRestauranteAbsenceRecordsSnapshot,
   saveTicketRestauranteAbsenceRecordIfUnchanged,
@@ -1465,11 +1578,11 @@ export {
   saveTicketRestauranteAbsenceRecordsIfUnchanged,
 };
 
-const ticketRestauranteConfigModule = createTicketRestauranteConfigRepository(createJsonModuleRepository);
-const {
-  loadTicketRestauranteConfigRecordsSnapshot,
-  saveTicketRestauranteConfigRecordIfUnchanged,
-} = ticketRestauranteConfigModule;
+const ticketRestauranteConfigModule = createTicketRestauranteConfigRepository(
+  createJsonModuleRepository,
+);
+const { loadTicketRestauranteConfigRecordsSnapshot, saveTicketRestauranteConfigRecordIfUnchanged } =
+  ticketRestauranteConfigModule;
 export { loadTicketRestauranteConfigRecordsSnapshot, saveTicketRestauranteConfigRecordIfUnchanged };
 
 const ticketRestauranteManutencionesModule = createTicketRestauranteManutencionesRepository(
@@ -1487,31 +1600,32 @@ export {
 };
 
 const especialesRecipientModule = createEspecialesRecipientRepository(createJsonModuleRepository);
-const {
-  loadEspecialesRecipientRecordsSnapshot,
-  saveEspecialesRecipientRecordIfUnchanged,
-} = especialesRecipientModule;
+const { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged } =
+  especialesRecipientModule;
 export { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged };
 
 const teletrabajoPuestosModule = createTeletrabajoPuestosRepository(createJsonModuleRepository);
-const {
-  loadTeletrabajoPuestoRecordsSnapshot,
-  saveTeletrabajoPuestoRecordIfUnchanged,
-} = teletrabajoPuestosModule;
+const { loadTeletrabajoPuestoRecordsSnapshot, saveTeletrabajoPuestoRecordIfUnchanged } =
+  teletrabajoPuestosModule;
 export { loadTeletrabajoPuestoRecordsSnapshot, saveTeletrabajoPuestoRecordIfUnchanged };
 
-const teletrabajoGruposCoberturaModule = createTeletrabajoGruposCoberturaRepository(createJsonModuleRepository);
+const teletrabajoGruposCoberturaModule = createTeletrabajoGruposCoberturaRepository(
+  createJsonModuleRepository,
+);
 const {
   loadTeletrabajoGrupoCoberturaRecordsSnapshot,
   saveTeletrabajoGrupoCoberturaRecordIfUnchanged,
 } = teletrabajoGruposCoberturaModule;
-export { loadTeletrabajoGrupoCoberturaRecordsSnapshot, saveTeletrabajoGrupoCoberturaRecordIfUnchanged };
+export {
+  loadTeletrabajoGrupoCoberturaRecordsSnapshot,
+  saveTeletrabajoGrupoCoberturaRecordIfUnchanged,
+};
 
-const jobPositionTranslationsModule = createJobPositionTranslationsRepository(createJsonModuleRepository);
-const {
-  loadJobPositionTranslationRecordsSnapshot,
-  saveJobPositionTranslationRecordIfUnchanged,
-} = jobPositionTranslationsModule;
+const jobPositionTranslationsModule = createJobPositionTranslationsRepository(
+  createJsonModuleRepository,
+);
+const { loadJobPositionTranslationRecordsSnapshot, saveJobPositionTranslationRecordIfUnchanged } =
+  jobPositionTranslationsModule;
 export { loadJobPositionTranslationRecordsSnapshot, saveJobPositionTranslationRecordIfUnchanged };
 
 const presupuestosModule = createPresupuestosRepository({
@@ -1532,7 +1646,9 @@ function maybeMigrateConfiguracionFromPersistedRecord(db: Database): void {
     return;
   }
 
-  const row = db.prepare('SELECT value_json, updated_at FROM persisted_records WHERE key = ?').get('traccion.v1.configuracion');
+  const row = db
+    .prepare('SELECT value_json, updated_at FROM persisted_records WHERE key = ?')
+    .get('traccion.v1.configuracion');
   if (!isConfiguracionStateRow(row)) {
     configuracionMigrationDone = true;
     return;
@@ -1560,7 +1676,11 @@ export async function loadConfiguracionSnapshot(): Promise<{
 
       const db = requireDatabase();
       db.transaction(() => maybeMigrateConfiguracionFromPersistedRecord(db))();
-      const row = db.prepare('SELECT value_json, updated_at FROM configuracion_state WHERE id = ? AND deleted_at IS NULL').get(CONFIGURACION_STATE_ID);
+      const row = db
+        .prepare(
+          'SELECT value_json, updated_at FROM configuracion_state WHERE id = ? AND deleted_at IS NULL',
+        )
+        .get(CONFIGURACION_STATE_ID);
       if (!isConfiguracionStateRow(row)) {
         return { status: currentStatus, value: null, updatedAt: null };
       }
@@ -1577,12 +1697,18 @@ export async function saveConfiguracionIfUnchanged(record: {
   return safeDatabaseOperation(
     () => {
       const currentStatus = getSqliteStatus();
-      if (!currentStatus.ready || currentStatus.phase !== 'active' || isDatabaseWriteBlockedByHeartbeat()) {
+      if (
+        !currentStatus.ready ||
+        currentStatus.phase !== 'active' ||
+        isDatabaseWriteBlockedByHeartbeat()
+      ) {
         return {
           ok: false,
           status: currentStatus,
           currentUpdatedAt: null,
-          message: currentStatus.message ?? 'SQLite no está activo. No se permite guardar sin base compartida.',
+          message:
+            currentStatus.message ??
+            'SQLite no está activo. No se permite guardar sin base compartida.',
         };
       }
 
@@ -1590,7 +1716,9 @@ export async function saveConfiguracionIfUnchanged(record: {
       const db = requireDatabase();
       return db.transaction((): JsonRecordSaveResult => {
         maybeMigrateConfiguracionFromPersistedRecord(db);
-        const row = db.prepare('SELECT updated_at FROM configuracion_state WHERE id = ?').get(CONFIGURACION_STATE_ID);
+        const row = db
+          .prepare('SELECT updated_at FROM configuracion_state WHERE id = ?')
+          .get(CONFIGURACION_STATE_ID);
         const currentUpdatedAt = isUpdatedAtRow(row) ? row.updated_at : null;
         if (currentUpdatedAt !== record.expectedUpdatedAt) {
           return {
@@ -1660,20 +1788,26 @@ export async function acquireRecordLock(payload: RecordLockPayload): Promise<Rec
   }
 
   const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(currentStatus.path, async () => {
-    try {
-      const db = ensureRecordLockDatabase();
-      if (!db) {
-        return buildRecordLockError('SQLite no está disponible para coordinar bloqueos.');
-      }
+  return withDatabaseOperationLock(
+    currentStatus.path,
+    async () => {
+      try {
+        const db = ensureRecordLockDatabase();
+        if (!db) {
+          return buildRecordLockError('SQLite no está disponible para coordinar bloqueos.');
+        }
 
-      return acquireRecordLockInTransaction(db, payload, currentOwnerContext());
-    } catch (error) {
-      return buildRecordLockError(
-        error instanceof Error ? error.message : 'No se ha podido adquirir el bloqueo del registro.',
-      );
-    }
-  }, SQLITE_RECORD_LOCK_WAIT_MS);
+        return acquireRecordLockInTransaction(db, payload, currentOwnerContext());
+      } catch (error) {
+        return buildRecordLockError(
+          error instanceof Error
+            ? error.message
+            : 'No se ha podido adquirir el bloqueo del registro.',
+        );
+      }
+    },
+    SQLITE_RECORD_LOCK_WAIT_MS,
+  );
 }
 
 export async function heartbeatRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
@@ -1682,20 +1816,26 @@ export async function heartbeatRecordLock(payload: RecordLockPayload): Promise<R
   }
 
   const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(currentStatus.path, async () => {
-    try {
-      const db = ensureRecordLockDatabase();
-      if (!db) {
-        return buildRecordLockError('SQLite no está disponible para renovar bloqueos.');
-      }
+  return withDatabaseOperationLock(
+    currentStatus.path,
+    async () => {
+      try {
+        const db = ensureRecordLockDatabase();
+        if (!db) {
+          return buildRecordLockError('SQLite no está disponible para renovar bloqueos.');
+        }
 
-      return heartbeatRecordLockInTransaction(db, payload, currentOwnerContext());
-    } catch (error) {
-      return buildRecordLockError(
-        error instanceof Error ? error.message : 'No se ha podido renovar el bloqueo del registro.',
-      );
-    }
-  }, SQLITE_RECORD_LOCK_WAIT_MS);
+        return heartbeatRecordLockInTransaction(db, payload, currentOwnerContext());
+      } catch (error) {
+        return buildRecordLockError(
+          error instanceof Error
+            ? error.message
+            : 'No se ha podido renovar el bloqueo del registro.',
+        );
+      }
+    },
+    SQLITE_RECORD_LOCK_WAIT_MS,
+  );
 }
 
 export async function releaseRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
@@ -1704,20 +1844,26 @@ export async function releaseRecordLock(payload: RecordLockPayload): Promise<Rec
   }
 
   const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(currentStatus.path, async () => {
-    try {
-      const db = ensureRecordLockDatabase();
-      if (!db) {
-        return buildRecordLockError('SQLite no está disponible para liberar bloqueos.');
-      }
+  return withDatabaseOperationLock(
+    currentStatus.path,
+    async () => {
+      try {
+        const db = ensureRecordLockDatabase();
+        if (!db) {
+          return buildRecordLockError('SQLite no está disponible para liberar bloqueos.');
+        }
 
-      return releaseRecordLockInTransaction(db, payload, currentOwnerContext());
-    } catch (error) {
-      return buildRecordLockError(
-        error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo del registro.',
-      );
-    }
-  }, SQLITE_RECORD_LOCK_WAIT_MS);
+        return releaseRecordLockInTransaction(db, payload, currentOwnerContext());
+      } catch (error) {
+        return buildRecordLockError(
+          error instanceof Error
+            ? error.message
+            : 'No se ha podido liberar el bloqueo del registro.',
+        );
+      }
+    },
+    SQLITE_RECORD_LOCK_WAIT_MS,
+  );
 }
 
 export async function getRecordLock(payload: RecordLockPayload): Promise<RecordLockResult> {
@@ -1726,20 +1872,31 @@ export async function getRecordLock(payload: RecordLockPayload): Promise<RecordL
   }
 
   const currentStatus = getSqliteStatus();
-  return withDatabaseOperationLock(currentStatus.path, async () => {
-    try {
-      const db = ensureRecordLockDatabase();
-      if (!db) {
-        return buildRecordLockError('SQLite no está disponible para consultar bloqueos.');
-      }
+  return withDatabaseOperationLock(
+    currentStatus.path,
+    async () => {
+      try {
+        const db = ensureRecordLockDatabase();
+        if (!db) {
+          return buildRecordLockError('SQLite no está disponible para consultar bloqueos.');
+        }
 
-      return getRecordLockInTransaction(db, payload, currentOwnerContext(), new Date().toISOString());
-    } catch (error) {
-      return buildRecordLockError(
-        error instanceof Error ? error.message : 'No se ha podido consultar el bloqueo del registro.',
-      );
-    }
-  }, SQLITE_RECORD_LOCK_WAIT_MS);
+        return getRecordLockInTransaction(
+          db,
+          payload,
+          currentOwnerContext(),
+          new Date().toISOString(),
+        );
+      } catch (error) {
+        return buildRecordLockError(
+          error instanceof Error
+            ? error.message
+            : 'No se ha podido consultar el bloqueo del registro.',
+        );
+      }
+    },
+    SQLITE_RECORD_LOCK_WAIT_MS,
+  );
 }
 
 export async function changeSqliteDirectory(directoryPath: string): Promise<DatabaseStatus> {

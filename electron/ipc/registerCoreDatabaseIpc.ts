@@ -40,6 +40,7 @@ import {
   clearDailyLocalBackupDirectory,
   getVacuumStatus,
   vacuumDatabaseNow,
+  runDataIntegrityAuditNow,
   getCurrentDatabaseLockInfo,
   forceReleaseDatabaseLock,
 } from '../sqlitePersistence.js';
@@ -91,9 +92,13 @@ export function registerCoreDatabaseIpc(): void {
       return getSqliteStatus();
     }
 
-    return enqueueSqliteIpc('database:select-directory', () => changeSqliteDirectory(selectedDirectory));
+    return enqueueSqliteIpc('database:select-directory', () =>
+      changeSqliteDirectory(selectedDirectory),
+    );
   });
-  ipcMain.handle('database:reset-directory', () => enqueueSqliteIpc('database:reset-directory', () => resetSqliteDirectory()));
+  ipcMain.handle('database:reset-directory', () =>
+    enqueueSqliteIpc('database:reset-directory', () => resetSqliteDirectory()),
+  );
   ipcMain.handle('database:get-secondary-backup-directory', () => getSecondaryBackupDirectory());
   ipcMain.handle('database:set-secondary-backup-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -161,12 +166,16 @@ export function registerCoreDatabaseIpc(): void {
     await setDailyLocalBackupEnabled(enabled);
     return getDailyLocalBackupSettings();
   });
-  ipcMain.handle('database:set-daily-local-backup-retention-days', async (_event, payload: unknown) => {
-    const candidate = payload as { retentionDays?: unknown } | null;
-    const retentionDays = typeof candidate?.retentionDays === 'number' ? candidate.retentionDays : 7;
-    await setDailyLocalBackupRetentionDays(retentionDays);
-    return getDailyLocalBackupSettings();
-  });
+  ipcMain.handle(
+    'database:set-daily-local-backup-retention-days',
+    async (_event, payload: unknown) => {
+      const candidate = payload as { retentionDays?: unknown } | null;
+      const retentionDays =
+        typeof candidate?.retentionDays === 'number' ? candidate.retentionDays : 7;
+      await setDailyLocalBackupRetentionDays(retentionDays);
+      return getDailyLocalBackupSettings();
+    },
+  );
   ipcMain.handle('database:set-daily-local-backup-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
@@ -188,7 +197,9 @@ export function registerCoreDatabaseIpc(): void {
     await clearDailyLocalBackupDirectory();
     return getDailyLocalBackupSettings();
   });
-  ipcMain.handle('database:list-local-backups', () => enqueueSqliteIpc('database:list-local-backups', () => listLocalBackups()));
+  ipcMain.handle('database:list-local-backups', () =>
+    enqueueSqliteIpc('database:list-local-backups', () => listLocalBackups()),
+  );
   ipcMain.handle('database:create-manual-backup', () =>
     enqueueSqliteIpc('database:create-manual-backup', async () => {
       await createManualLocalBackup();
@@ -200,6 +211,9 @@ export function registerCoreDatabaseIpc(): void {
   );
   ipcMain.handle('database:vacuum-now', () =>
     enqueueSqliteIpc('database:vacuum-now', () => vacuumDatabaseNow()),
+  );
+  ipcMain.handle('database:run-integrity-audit', () =>
+    enqueueSqliteIpc('database:run-integrity-audit', () => runDataIntegrityAuditNow()),
   );
   ipcMain.handle('database:get-current-lock', () =>
     enqueueSqliteIpc('database:get-current-lock', () => getCurrentDatabaseLockInfo()),
@@ -217,7 +231,9 @@ export function registerCoreDatabaseIpc(): void {
       restoreLocalBackup(typeof candidate.id === 'string' ? candidate.id : ''),
     );
   });
-  ipcMain.handle('database:load-persisted-records', () => enqueueSqliteIpc('database:load-persisted-records', () => loadPersistedRecordsSnapshot()));
+  ipcMain.handle('database:load-persisted-records', () =>
+    enqueueSqliteIpc('database:load-persisted-records', () => loadPersistedRecordsSnapshot()),
+  );
   ipcMain.handle('database:get-persisted-record', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
       return { status: getSqliteStatus(), record: null };
@@ -229,12 +245,16 @@ export function registerCoreDatabaseIpc(): void {
     }
 
     const key = candidate.key;
-    return enqueueSqliteIpc('database:get-persisted-record', () =>
-      getPersistedRecordSnapshot(key),
-    );
+    return enqueueSqliteIpc('database:get-persisted-record', () => getPersistedRecordSnapshot(key));
   });
-  ipcMain.handle('database:get-persisted-records-token', () => enqueueSqliteIpc('database:get-persisted-records-token', () => getPersistedRecordsTokenSnapshot()));
-  ipcMain.handle('database:get-sqlite-sync-tokens', () => enqueueSqliteIpc('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot()));
+  ipcMain.handle('database:get-persisted-records-token', () =>
+    enqueueSqliteIpc('database:get-persisted-records-token', () =>
+      getPersistedRecordsTokenSnapshot(),
+    ),
+  );
+  ipcMain.handle('database:get-sqlite-sync-tokens', () =>
+    enqueueSqliteIpc('database:get-sqlite-sync-tokens', () => getSqliteSyncTokensSnapshot()),
+  );
   ipcMain.handle('database:backup-local-storage', (_event, payload: unknown) => {
     if (
       !payload ||
