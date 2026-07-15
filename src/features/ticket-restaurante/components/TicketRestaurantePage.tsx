@@ -1395,16 +1395,24 @@ export function TicketRestaurantePage({
       }));
 
     void (async () => {
+      let result: Awaited<ReturnType<typeof saveManutenciones>>;
       try {
-        await withSharedModuleLocks(
+        result = await withSharedModuleLocks(
           [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
-          async () => saveManutenciones(drafts),
+          () => saveManutenciones(drafts),
         );
       } catch (error) {
         setManutencionImportMessage(
           error instanceof Error
             ? error.message
             : 'No se han podido guardar las manutenciones. Recarga e inténtalo de nuevo.',
+        );
+        return;
+      }
+      if (!result.ok) {
+        setManutencionImportMessage(
+          result.message ??
+            'No se han podido guardar las manutenciones. Recarga e inténtalo de nuevo.',
         );
         return;
       }
@@ -1422,10 +1430,13 @@ export function TicketRestaurantePage({
   const handleRemoveManutencion = (manutencionId: string) => {
     void (async () => {
       try {
-        await withSharedModuleLocks(
+        const result = await withSharedModuleLocks(
           [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
-          async () => removeManutencion(manutencionId),
+          () => removeManutencion(manutencionId),
         );
+        if (!result.ok) {
+          setManutencionImportMessage(result.message ?? 'No se ha podido eliminar la manutención.');
+        }
       } catch (error) {
         setManutencionImportMessage(
           error instanceof Error ? error.message : 'No se ha podido eliminar la manutención.',
