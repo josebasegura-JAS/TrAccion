@@ -100,7 +100,9 @@ function stripHtmlToPlainText(value: string): string {
 }
 
 function normalizeMailBodyAsPlainText(value: string): string {
-  const withoutHtml = /<[^>]+>/.test(value) ? stripHtmlToPlainText(value) : decodeHtmlEntities(value);
+  const withoutHtml = /<[^>]+>/.test(value)
+    ? stripHtmlToPlainText(value)
+    : decodeHtmlEntities(value);
 
   return withoutHtml
     .replace(/\r\n?/g, '\n')
@@ -112,9 +114,7 @@ function normalizeMailBodyAsPlainText(value: string): string {
     .trim();
 }
 
-function formatMailFromMsg(data: {
-  body: string;
-}): string {
+function formatMailFromMsg(data: { body: string }): string {
   return normalizeMailBodyAsPlainText(data.body);
 }
 
@@ -184,9 +184,7 @@ export function TaskEditor({
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const createTaskWithConcurrencyCheck = useTaskStore((state) => state.createWithConcurrencyCheck);
-  const updateTaskWithConcurrencyCheck = useTaskStore(
-    (state) => state.updateWithConcurrencyCheck,
-  );
+  const updateTaskWithConcurrencyCheck = useTaskStore((state) => state.updateWithConcurrencyCheck);
   const removeTaskWithConcurrencyCheck = useTaskStore((state) => state.removeWithConcurrencyCheck);
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [newUpdateText, setNewUpdateText] = useState('');
@@ -285,7 +283,10 @@ export function TaskEditor({
       return;
     }
 
-    const liveLock = await window.traccion?.getRecordLock?.({ module: 'tareas', recordId: task.id });
+    const liveLock = await window.traccion?.getRecordLock?.({
+      module: 'tareas',
+      recordId: task.id,
+    });
     if (!liveLock || liveLock.status !== 'acquired' || !liveLock.ok) {
       setSaveStatus(
         liveLock?.message
@@ -486,7 +487,10 @@ export function TaskEditor({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
               {isCreate ? 'Nueva tarea' : 'Editar tarea'}
             </p>
-            <h3 className="mt-1 truncate text-base font-bold text-metro-text" id="task-editor-title">
+            <h3
+              className="mt-1 truncate text-base font-bold text-metro-text"
+              id="task-editor-title"
+            >
               {isCreate ? 'Nueva tarea' : task?.titulo || 'Sin selección'}
             </h3>
             <p className="text-xs text-metro-muted">
@@ -497,7 +501,7 @@ export function TaskEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <ModalCloseButton label="Cerrar editor" onClick={onDone} />
+            <ModalCloseButton label="Cerrar editor" onClick={onDone} />
           </div>
         </div>
 
@@ -700,13 +704,14 @@ export function TaskEditor({
                 >
                   <Search size={16} />
                 </button>
-                <button
-                  className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-semibold text-metro-text hover:border-metro-red"
+                <ActionButton
+                  iconOnly={false}
                   onClick={handleAddManualDocumentPath}
-                  type="button"
+                  size="sm"
+                  variant="add"
                 >
                   Añadir ruta
-                </button>
+                </ActionButton>
               </div>
               {draft.documentLinks.length > 0 && (
                 <div className="mt-3 space-y-2">
@@ -784,8 +789,8 @@ export function TaskEditor({
                 }}
               >
                 <p className="mb-2 text-xs font-semibold text-metro-muted">
-                  Arrastra aquí un mensaje .msg de Outlook. Se copiará solo el texto plano del cuerpo
-                  al campo Email.
+                  Arrastra aquí un mensaje .msg de Outlook. Se copiará solo el texto plano del
+                  cuerpo al campo Email.
                 </p>
                 <textarea
                   className="min-h-32 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
@@ -883,7 +888,10 @@ export function TaskEditor({
                 iconOnly={false}
                 onClick={() => {
                   void (async () => {
-                    const result = await removeTaskWithConcurrencyCheck(task.id, loadedTaskUpdatedAt);
+                    const result = await removeTaskWithConcurrencyCheck(
+                      task.id,
+                      loadedTaskUpdatedAt,
+                    );
                     if (!result.ok) {
                       setSaveStatus(result.message);
                       setSaveStatusIsError(true);

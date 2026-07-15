@@ -1,4 +1,11 @@
-import { ChevronDown, ChevronRight, ClipboardList, Search, Settings, SlidersHorizontal } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  Search,
+  Settings,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -219,7 +226,6 @@ function groupHistoricTasks(tasks: Task[]): HistoricYearGroup[] {
     .map(([year, groupTasks]) => ({ year, tasks: groupTasks }));
 }
 
-
 function HistoricYearSection({
   group,
   isOpen,
@@ -335,7 +341,10 @@ function HistoricYearSection({
               <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
                 {visibleTasks.map((task) => (
                   <tr className="cursor-pointer" key={task.id} onClick={() => onOpenTask(task)}>
-                    <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>
+                    <td
+                      className="truncate px-3 py-1.5 font-semibold text-metro-text"
+                      title={task.titulo}
+                    >
                       {task.titulo}
                     </td>
                     <td
@@ -344,10 +353,7 @@ function HistoricYearSection({
                     >
                       {formatDateTime(task.closedAt)}
                     </td>
-                    <td
-                      className="truncate px-3 py-1.5 text-metro-muted"
-                      title={task.responsable}
-                    >
+                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>
                       {task.responsable || '—'}
                     </td>
                     <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
@@ -490,13 +496,12 @@ export function TareasPage({
     setFilter('origen', '');
   };
 
-  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } = useTableViewPreferences<ActiveTaskTableColumnId>(
-    {
+  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
+    useTableViewPreferences<ActiveTaskTableColumnId>({
       storageKey: TAREAS_TABLE_STORAGE_KEY,
       defaultPreferences: defaultTareasTablePreferences,
       validColumnIds: tareasTableColumnIds,
-    },
-  );
+    });
 
   const activeTaskRows = useMemo(
     () => (preferences.sort ? filteredTasks : sortTasksByDefault(filteredTasks)),
@@ -608,8 +613,7 @@ export function TareasPage({
         id: 'actions',
         header: 'Acción',
         render: (task) => (
-          <button
-            className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+          <ActionButton
             onClick={(event) => {
               event.stopPropagation();
               void (async () => {
@@ -619,10 +623,9 @@ export function TareasPage({
                 }
               })();
             }}
-            type="button"
-          >
-            Eliminar
-          </button>
+            size="sm"
+            variant="delete"
+          />
         ),
         width: 88,
         minWidth: 82,
@@ -917,14 +920,14 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
             value={newOriginName}
           />
           <OriginTypeSelect onChange={setNewOriginType} value={newOriginType} />
-          <button
-            className="rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
+          <ActionButton
             disabled={!newOriginName.trim()}
+            iconOnly={false}
             onClick={submitNewOrigin}
-            type="button"
+            variant="add"
           >
             Añadir
-          </button>
+          </ActionButton>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-metro-border">
@@ -999,47 +1002,44 @@ function TaskOriginRow({
         </tr>
       )}
       <tr className="align-top">
-      <td className="px-3 py-2">
-        <input
-          className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-          onChange={(event) => setName(event.target.value)}
-          value={name}
-        />
-      </td>
-      <td className="px-3 py-2">
-        <OriginTypeSelect onChange={setType} value={type} />
-      </td>
-      <td className="px-3 py-2">
-        <StatusBadge tone={origin.active ? 'success' : 'muted'}>
-          {origin.active ? 'Activo' : 'Inactivo'}
-        </StatusBadge>
-      </td>
-      <td className="px-3 py-2">
-        <div className="flex flex-wrap justify-end gap-2">
-        <button
-          className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!hasChanges || !name.trim()}
-          onClick={() => onUpdate(origin.id, name, type)}
-          type="button"
-        >
-          Guardar
-        </button>
-        <button
-          className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-          onClick={() => onToggle(origin.id)}
-          type="button"
-        >
-          {origin.active ? 'Desactivar' : 'Activar'}
-        </button>
-        <button
-          className="rounded-lg border border-red-500/40 px-2 py-1 font-semibold text-red-200 hover:border-red-400 hover:text-white"
-          onClick={handleDelete}
-          type="button"
-        >
-          Eliminar
-        </button>
-        </div>
-      </td>
+        <td className="px-3 py-2">
+          <input
+            className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => setName(event.target.value)}
+            value={name}
+          />
+        </td>
+        <td className="px-3 py-2">
+          <OriginTypeSelect onChange={setType} value={type} />
+        </td>
+        <td className="px-3 py-2">
+          <StatusBadge tone={origin.active ? 'success' : 'muted'}>
+            {origin.active ? 'Activo' : 'Inactivo'}
+          </StatusBadge>
+        </td>
+        <td className="px-3 py-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            <ActionButton
+              disabled={!hasChanges || !name.trim()}
+              iconOnly={false}
+              onClick={() => onUpdate(origin.id, name, type)}
+              size="sm"
+              variant="save"
+            >
+              Guardar
+            </ActionButton>
+            <button
+              className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              onClick={() => onToggle(origin.id)}
+              type="button"
+            >
+              {origin.active ? 'Desactivar' : 'Activar'}
+            </button>
+            <ActionButton iconOnly={false} onClick={handleDelete} size="sm" variant="delete">
+              Eliminar
+            </ActionButton>
+          </div>
+        </td>
       </tr>
     </>
   );
