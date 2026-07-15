@@ -1,5 +1,6 @@
 import { CalendarDays, Euro, Settings, Trash2, Utensils } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { withSharedModuleLocks } from '../../../services/sharedModuleLock';
 import {
   buildYearCalendar,
   calculateMonthlyTicketOrder,
@@ -881,24 +882,54 @@ export function TicketRestaurantePage({
       return;
     }
 
-    if (editingCalendarId) {
-      const result = await updateCalendar(editingCalendarId, calendarDraft);
-      if (!result.ok) {
-        await alert(result.message ?? 'No se ha podido guardar el calendario.');
-        return;
+    try {
+      if (editingCalendarId) {
+        const result = await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          () => updateCalendar(editingCalendarId, calendarDraft),
+        );
+        if (!result.ok) {
+          await alert(result.message ?? 'No se ha podido guardar el calendario.');
+          return;
+        }
+        setSelectedCalendarId(editingCalendarId);
+      } else {
+        const id = await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          () => createCalendar(calendarDraft),
+        );
+        setSelectedCalendarId(id);
       }
-      setSelectedCalendarId(editingCalendarId);
-    } else {
-      const id = await createCalendar(calendarDraft);
-      setSelectedCalendarId(id);
+      resetForm();
+    } catch (error) {
+      await alert(
+        error instanceof Error ? error.message : 'No se ha podido guardar el calendario.',
+      );
     }
-    resetForm();
   };
 
   const editCalendar = (calendar: TicketCalendar) => {
     setCalendarDraft(toCalendarDraft(calendar));
     setEditingCalendarId(calendar.id);
     setSelectedCalendarId(calendar.id);
+  };
+
+  const handleToggleCalendarActive = (calendarId: string) => {
+    void (async () => {
+      try {
+        const result = await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          () => toggleCalendarActive(calendarId),
+        );
+        if (!result.ok) {
+          await alert(result.message ?? 'No se ha podido actualizar el calendario.');
+        }
+      } catch (error) {
+        await alert(
+          error instanceof Error ? error.message : 'No se ha podido actualizar el calendario.',
+        );
+      }
+    })();
   };
 
   const resetPersonForm = () => {
@@ -911,17 +942,42 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const result = await upsertPerson(personDraft);
-    if (!result.ok) {
-      await alert(result.message ?? 'No se ha podido guardar la persona.');
-      return;
+    try {
+      const result = await withSharedModuleLocks(
+        [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+        () => upsertPerson(personDraft),
+      );
+      if (!result.ok) {
+        await alert(result.message ?? 'No se ha podido guardar la persona.');
+        return;
+      }
+      resetPersonForm();
+    } catch (error) {
+      await alert(error instanceof Error ? error.message : 'No se ha podido guardar la persona.');
     }
-    resetPersonForm();
   };
 
   const editPerson = (person: TicketPerson) => {
     setPersonDraft(toPersonDraft(person));
     setEditingPersonId(person.empleado);
+  };
+
+  const handleRemovePerson = (empleado: string) => {
+    void (async () => {
+      try {
+        const result = await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          () => removePerson(empleado),
+        );
+        if (!result.ok) {
+          await alert(result.message ?? 'No se ha podido eliminar la persona.');
+        }
+      } catch (error) {
+        await alert(
+          error instanceof Error ? error.message : 'No se ha podido eliminar la persona.',
+        );
+      }
+    })();
   };
 
   const removeCalendarAndPeople = async (calendarId: string) => {
@@ -949,9 +1005,18 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const result = await removeCalendar(calendarId);
-    if (!result.ok) {
-      await alert(result.message ?? 'No se ha podido eliminar el calendario.');
+    try {
+      const result = await withSharedModuleLocks(
+        [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+        () => removeCalendar(calendarId),
+      );
+      if (!result.ok) {
+        await alert(result.message ?? 'No se ha podido eliminar el calendario.');
+      }
+    } catch (error) {
+      await alert(
+        error instanceof Error ? error.message : 'No se ha podido eliminar el calendario.',
+      );
     }
   };
 
@@ -960,6 +1025,26 @@ export function TicketRestaurantePage({
     if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
       setYear(parsedYear);
     }
+  };
+
+  const handleToggleDay = (calendarId: string, fecha: string) => {
+    void (async () => {
+      try {
+        const result = await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          () => toggleDay(calendarId, fecha),
+        );
+        if (!result.ok) {
+          await alert(result.message ?? 'No se ha podido actualizar el día del calendario.');
+        }
+      } catch (error) {
+        await alert(
+          error instanceof Error
+            ? error.message
+            : 'No se ha podido actualizar el día del calendario.',
+        );
+      }
+    })();
   };
 
   const handleAbsenceYearChange = (value: string) => {
@@ -1092,7 +1177,20 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const saveResult = await importPeople(result.drafts);
+    let saveResult: Awaited<ReturnType<typeof importPeople>>;
+    try {
+      saveResult = await withSharedModuleLocks(
+        [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+        () => importPeople(result.drafts),
+      );
+    } catch (error) {
+      setPeopleImportMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
+      );
+      return;
+    }
     if (!saveResult.ok) {
       setPeopleImportMessage(
         saveResult.message ??
@@ -1157,7 +1255,20 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const saveResult = await saveAbsences(result.absences);
+    let saveResult: Awaited<ReturnType<typeof saveAbsences>>;
+    try {
+      saveResult = await withSharedModuleLocks(
+        [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+        () => saveAbsences(result.absences),
+      );
+    } catch (error) {
+      setImportMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se han podido guardar las ausencias. Recarga e inténtalo de nuevo.',
+      );
+      return;
+    }
     if (!saveResult.ok) {
       setImportMessage(
         saveResult.message ??
@@ -1177,6 +1288,24 @@ export function TicketRestaurantePage({
     setImportMessage('Edita la ausencia y confirma para guardar los cambios.');
     setIsPreviewOpen(true);
   }, []);
+
+  const handleRemoveAbsence = (absenceId: string) => {
+    void (async () => {
+      try {
+        const result = await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          () => removeAbsence(absenceId),
+        );
+        if (!result.ok) {
+          await alert(result.message ?? 'No se ha podido eliminar la ausencia.');
+        }
+      } catch (error) {
+        await alert(
+          error instanceof Error ? error.message : 'No se ha podido eliminar la ausencia.',
+        );
+      }
+    })();
+  };
 
   const handleManutencionesImportFile = async (file: File | null) => {
     if (!file) {
@@ -1265,15 +1394,44 @@ export function TicketRestaurantePage({
         imputacionMonth: manutencionImputationMonth,
       }));
 
-    saveManutenciones(drafts);
-    setManutencionPreviewRows([]);
-    setIsManutencionMonthModalOpen(false);
-    setManutencionImportMessage(
-      `Manutenciones guardadas: ${drafts.length}. Imputación: ${formatManutencionMonth(
-        manutencionImputationYear,
-        manutencionImputationMonth,
-      )}.`,
-    );
+    void (async () => {
+      try {
+        await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          async () => saveManutenciones(drafts),
+        );
+      } catch (error) {
+        setManutencionImportMessage(
+          error instanceof Error
+            ? error.message
+            : 'No se han podido guardar las manutenciones. Recarga e inténtalo de nuevo.',
+        );
+        return;
+      }
+      setManutencionPreviewRows([]);
+      setIsManutencionMonthModalOpen(false);
+      setManutencionImportMessage(
+        `Manutenciones guardadas: ${drafts.length}. Imputación: ${formatManutencionMonth(
+          manutencionImputationYear,
+          manutencionImputationMonth,
+        )}.`,
+      );
+    })();
+  };
+
+  const handleRemoveManutencion = (manutencionId: string) => {
+    void (async () => {
+      try {
+        await withSharedModuleLocks(
+          [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+          async () => removeManutencion(manutencionId),
+        );
+      } catch (error) {
+        setManutencionImportMessage(
+          error instanceof Error ? error.message : 'No se ha podido eliminar la manutención.',
+        );
+      }
+    })();
   };
 
   const moveManutencionImputationMonth = (offset: number) => {
@@ -1414,7 +1572,7 @@ export function TicketRestaurantePage({
             onEdit={editCalendar}
             onRemove={removeCalendarAndPeople}
             onSave={saveCalendar}
-            onToggleActive={toggleCalendarActive}
+            onToggleActive={handleToggleCalendarActive}
             onYearChange={handleYearChange}
             selectedCalendar={selectedCalendar ?? undefined}
             selectedCalendarId={selectedCalendarId}
@@ -1445,7 +1603,7 @@ export function TicketRestaurantePage({
                     monthName={month.nombre}
                     leadingBlanks={month.blancosIniciales}
                     days={month.dias}
-                    onToggleDay={(fecha) => toggleDay(selectedCalendar.id, fecha)}
+                    onToggleDay={(fecha) => handleToggleDay(selectedCalendar.id, fecha)}
                   />
                 ))}
               </div>
@@ -1473,7 +1631,7 @@ export function TicketRestaurantePage({
             exportCsv('modelo-personas-ticket-restaurante.csv', PEOPLE_EXPORT_HEADERS, [])
           }
           onImport={() => peopleFileInputRef.current?.click()}
-          onRemove={removePerson}
+          onRemove={handleRemovePerson}
           onSave={savePerson}
           people={visiblePeople}
         />
@@ -1555,7 +1713,7 @@ export function TicketRestaurantePage({
           onMonthChange={handleAbsenceMonthChange}
           onNextMonth={() => moveAbsenceMonth(1)}
           onPreviousMonth={() => moveAbsenceMonth(-1)}
-          onRemove={removeAbsence}
+          onRemove={handleRemoveAbsence}
           onYearChange={handleAbsenceYearChange}
           year={absenceYear}
         />
@@ -1579,7 +1737,7 @@ export function TicketRestaurantePage({
           onPreviewChange={(rows) =>
             setManutencionPreviewRows(validateTicketManutencionPreviewRows(rows))
           }
-          onRemove={removeManutencion}
+          onRemove={handleRemoveManutencion}
           onSavePreview={saveManutencionPreview}
           previewRows={manutencionPreviewRows}
           ticketPeople={visiblePeople}
@@ -1647,7 +1805,20 @@ export function TicketRestaurantePage({
           config={config}
           onClose={() => setIsPriceModalOpen(false)}
           onSave={async (nextConfig) => {
-            const result = await updateConfig(nextConfig);
+            let result: Awaited<ReturnType<typeof updateConfig>>;
+            try {
+              result = await withSharedModuleLocks(
+                [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+                () => updateConfig(nextConfig),
+              );
+            } catch (error) {
+              await alert(
+                error instanceof Error
+                  ? error.message
+                  : 'No se ha podido guardar el precio del ticket.',
+              );
+              return;
+            }
             if (!result.ok) {
               await alert(result.message ?? 'No se ha podido guardar el precio del ticket.');
               return;
@@ -1662,7 +1833,20 @@ export function TicketRestaurantePage({
           config={config}
           onClose={() => setIsRulesModalOpen(false)}
           onSave={async (nextConfig) => {
-            const result = await updateConfig(nextConfig);
+            let result: Awaited<ReturnType<typeof updateConfig>>;
+            try {
+              result = await withSharedModuleLocks(
+                [{ module: 'ticket-restaurante', label: 'Ticket Restaurante' }],
+                () => updateConfig(nextConfig),
+              );
+            } catch (error) {
+              await alert(
+                error instanceof Error
+                  ? error.message
+                  : 'No se han podido guardar las reglas de cálculo.',
+              );
+              return;
+            }
             if (!result.ok) {
               await alert(result.message ?? 'No se han podido guardar las reglas de cálculo.');
               return;
