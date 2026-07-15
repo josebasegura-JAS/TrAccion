@@ -129,7 +129,35 @@ ya evita `npm run` a propósito por un problema de bin-links en Windows
 documentado en otro workflow (`tests-ci.yml`), y cambiarlo habría
 reintroducido ese riesgo sin necesidad.
 
-## Decisiones heredadas de sesiones anteriores (referencia)
+## Migración a "SQLite autoritativo" — investigado, sin acción (julio 2026)
+
+Se evaluó la propuesta de declarar explícitamente `persistenceMode: 'sqlite-authoritative'`,
+`migrationVersion` y `legacyMigrationCompletedAt` por módulo, para que `localStorage`
+dejara de poder "competir" con SQLite tras completarse la migración.
+
+Antes de escribir código se comprobó el estado real:
+
+1. **Los 12+ módulos ya tienen su propio `<módulo>SqliteRepository.ts`** (`actaSqliteRepository`,
+   `criteriosRrllSqliteRepository`, `licenciaSinSueldoSqliteRepository`,
+   `employeeSqliteRepository`, `presupuestosSqliteRepository`,
+   `teletrabajoSqliteRepository`, `vinculogramaSqliteRepository`, y el resto ya
+   revisados en sesiones anteriores). No queda ningún módulo pendiente de migrar.
+2. **`load()` y `reloadFromStorage()` de cada store solo leen `localStorage`
+   cuando `hasXSqliteRepository()` es `false`, o en el `catch` si la promesa
+   de SQLite falla** (comprobado en Sorteos, extensible al resto por ser el
+   mismo patrón documentado en `ARCHITECTURE.md` §2 "Fallback a
+   localStorage"). Cuando SQLite está disponible y responde, `localStorage`
+   nunca se toca — ni en la carga inicial ni en el polling multiusuario.
+
+Conclusión: el riesgo que motivaba la propuesta (datos de negocio antiguos en
+`localStorage` "ganando" a SQLite) no existe en el código actual. Añadir los
+campos `persistenceMode`/`migrationVersion` habría formalizado por escrito
+algo que el comportamiento ya garantiza, sin cerrar ningún hueco real — y sí
+con el riesgo de tocar los ~12 stores para un cambio puramente declarativo.
+Se decide no implementarlo. Si en el futuro se detecta un caso concreto
+donde `localStorage` sobrescribe SQLite estando este disponible, es un bug
+puntual a corregir en ese módulo, no una señal de que falta la
+infraestructura general.
 
 Estas ya estaban documentadas en el historial de sesiones antes de este
 archivo; se listan aquí para que quede todo en un solo sitio:
