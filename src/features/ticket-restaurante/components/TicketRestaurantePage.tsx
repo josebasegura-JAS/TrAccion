@@ -45,19 +45,20 @@ import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import type { ExportColumn } from '../../../shared/export/types';
 import {
-  AbsencePreviewModal,
-  AbsencesTable,
   CalendarToolbar,
-  CalculationPanel,
   EmptyCalendar,
   Legend,
   MonthCalendar,
-  PeoplePanel,
   SubviewButton,
-  TicketPriceModal,
-  TicketRulesModal,
-} from './TicketRestaurantePanels';
-
+} from './TicketRestauranteCalendarPanels';
+import { PeoplePanel } from './TicketRestaurantePeoplePanel';
+import { TicketPriceModal, TicketRulesModal } from './TicketRestauranteConfigModals';
+import { CalculationPanel } from './TicketRestauranteCalculationPanel';
+import {
+  AbsencePreviewModal,
+  AbsencesTable,
+  type TicketAbsenceDisplayRow,
+} from './TicketRestauranteAbsencesTable';
 
 const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -170,12 +171,6 @@ type TicketRestauranteSubview =
   | 'computoCotizacion'
   | 'ausencias'
   | 'manutenciones';
-
-type TicketAbsenceDisplayRow = TicketRestaurantAbsence & {
-  calendario: string;
-  diasTicketMes: number;
-  descuentaTicket: boolean;
-};
 
 function toPersonDraft(person: TicketPerson): TicketPersonDraft {
   return {
@@ -944,7 +939,13 @@ export function TicketRestaurantePage({
       if (!confirmed) {
         return;
       }
-    } else if (!(await confirm(`¿Eliminar el calendario "${calendarName}"?`, { confirmLabel: 'Eliminar', danger: true, title: 'Eliminar calendario' }))) {
+    } else if (
+      !(await confirm(`¿Eliminar el calendario "${calendarName}"?`, {
+        confirmLabel: 'Eliminar',
+        danger: true,
+        title: 'Eliminar calendario',
+      }))
+    ) {
       return;
     }
 
@@ -1094,7 +1095,8 @@ export function TicketRestaurantePage({
     const saveResult = await importPeople(result.drafts);
     if (!saveResult.ok) {
       setPeopleImportMessage(
-        saveResult.message ?? 'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
+        saveResult.message ??
+          'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
       );
       return;
     }
@@ -1158,7 +1160,8 @@ export function TicketRestaurantePage({
     const saveResult = await saveAbsences(result.absences);
     if (!saveResult.ok) {
       setImportMessage(
-        saveResult.message ?? 'No se han podido guardar las ausencias. Recarga e inténtalo de nuevo.',
+        saveResult.message ??
+          'No se han podido guardar las ausencias. Recarga e inténtalo de nuevo.',
       );
       return;
     }
@@ -1638,7 +1641,6 @@ export function TicketRestaurantePage({
           </div>
         </div>
       ) : null}
-
 
       {isPriceModalOpen ? (
         <TicketPriceModal
