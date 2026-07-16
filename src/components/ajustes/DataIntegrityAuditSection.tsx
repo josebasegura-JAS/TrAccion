@@ -45,7 +45,7 @@ export function DataIntegrityAuditSection({
           <ActionButton
             iconOnly={false}
             variant="save"
-            disabled={isRunningIntegrityAudit}
+            loading={isRunningIntegrityAudit}
             onClick={() => void handleRunIntegrityAudit()}
           >
             {isRunningIntegrityAudit ? 'Diagnosticando...' : 'Ejecutar diagnóstico ahora'}

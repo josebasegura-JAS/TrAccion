@@ -1,4 +1,13 @@
-import { type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type DragEvent as ReactDragEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Inbox } from 'lucide-react';
 import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
@@ -216,10 +225,7 @@ export function DataTable<Row, ColumnId extends string>({
     return () => observer.disconnect();
   }, [sortedRows]);
 
-  const visibleRows = useMemo(
-    () => sortedRows.slice(0, renderLimit),
-    [renderLimit, sortedRows],
-  );
+  const visibleRows = useMemo(() => sortedRows.slice(0, renderLimit), [renderLimit, sortedRows]);
   const hasHiddenRows = visibleRows.length < sortedRows.length;
 
   const tableMinWidth = visibleColumns.reduce((sum, column) => sum + column.minWidth, 0);
@@ -277,7 +283,10 @@ export function DataTable<Row, ColumnId extends string>({
     setDraggedColumnId(columnId);
   };
 
-  const handleColumnDragOver = (event: ReactDragEvent<HTMLTableCellElement>, columnId: ColumnId) => {
+  const handleColumnDragOver = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    columnId: ColumnId,
+  ) => {
     if (!draggedColumnId || draggedColumnId === columnId) {
       return;
     }
@@ -285,7 +294,10 @@ export function DataTable<Row, ColumnId extends string>({
     setDragOverColumnId(columnId);
   };
 
-  const handleColumnDrop = (event: ReactDragEvent<HTMLTableCellElement>, targetColumnId: ColumnId) => {
+  const handleColumnDrop = (
+    event: ReactDragEvent<HTMLTableCellElement>,
+    targetColumnId: ColumnId,
+  ) => {
     event.preventDefault();
     setDragOverColumnId(null);
 
@@ -332,145 +344,150 @@ export function DataTable<Row, ColumnId extends string>({
         className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}
         ref={scrollContainerRef}
       >
-      <table
-        aria-label={ariaLabel}
-        className="w-full table-fixed text-left text-xs"
-        style={{ minWidth: tableMinWidth }}
-      >
-        <colgroup>
-          {visibleColumns.map((column) => (
-            <col key={column.id} style={{ width: column.width }} />
-          ))}
-        </colgroup>
-        <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.18)]">
-          <tr>
-            {visibleColumns.map((column) => {
-              const isSorted = sort?.columnId === column.id;
-              const canSort = Boolean(column.sortable && column.accessor);
-              const ariaSort = isSorted
-                ? sort?.direction === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none';
+        <table
+          aria-label={ariaLabel}
+          className="w-full table-fixed text-left text-xs"
+          style={{ minWidth: tableMinWidth }}
+        >
+          <colgroup>
+            {visibleColumns.map((column) => (
+              <col key={column.id} style={{ width: column.width }} />
+            ))}
+          </colgroup>
+          <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.18)]">
+            <tr>
+              {visibleColumns.map((column) => {
+                const isSorted = sort?.columnId === column.id;
+                const canSort = Boolean(column.sortable && column.accessor);
+                const ariaSort = isSorted
+                  ? sort?.direction === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none';
 
-              // El <th> entero es "draggable" cuando la columna es reordenable, incluido
-              // el botón de ordenar que pueda contener. Un click simple sigue disparando
-              // onSortChange con normalidad: los navegadores solo inician un drag HTML5
-              // tras un movimiento real del puntero, no con un click sin desplazamiento.
-              const isReorderable = isColumnReorderable(column) && Boolean(onColumnOrderChange);
-              const isDragging = draggedColumnId === column.id;
-              const isDragOver = dragOverColumnId === column.id && draggedColumnId !== column.id;
+                // El <th> entero es "draggable" cuando la columna es reordenable, incluido
+                // el botón de ordenar que pueda contener. Un click simple sigue disparando
+                // onSortChange con normalidad: los navegadores solo inician un drag HTML5
+                // tras un movimiento real del puntero, no con un click sin desplazamiento.
+                const isReorderable = isColumnReorderable(column) && Boolean(onColumnOrderChange);
+                const isDragging = draggedColumnId === column.id;
+                const isDragOver = dragOverColumnId === column.id && draggedColumnId !== column.id;
 
-              return (
-                <th
-                  aria-sort={canSort ? ariaSort : undefined}
-                  className={`relative px-3 py-2 ${column.headerClassName ?? ''} ${
-                    isDragging ? 'opacity-40' : ''
-                  } ${isDragOver ? 'bg-metro-red/10' : ''}`}
-                  draggable={isReorderable}
-                  key={column.id}
-                  onDragEnd={isReorderable ? handleColumnDragEnd : undefined}
-                  onDragOver={isReorderable ? (event) => handleColumnDragOver(event, column.id) : undefined}
-                  onDragStart={isReorderable ? () => handleColumnDragStart(column.id) : undefined}
-                  onDrop={isReorderable ? (event) => handleColumnDrop(event, column.id) : undefined}
-                  scope="col"
-                >
-                  {isReorderable && (
-                    <span
-                      aria-hidden="true"
-                      className="mr-1 inline-block cursor-grab align-middle text-metro-muted/60 active:cursor-grabbing"
-                      data-tip="Arrastrar para reordenar columna"
-                    >
-                      ⠿
-                    </span>
-                  )}
-                  {canSort ? (
-                    <button
-                      className={`flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text ${
-                        column.isActionColumn ? 'justify-end' : ''
-                      }`}
-                      onClick={() => onSortChange(nextSortState(sort, column.id))}
-                      type="button"
-                    >
-                      <span className="truncate" title={column.header}>
+                return (
+                  <th
+                    aria-sort={canSort ? ariaSort : undefined}
+                    className={`relative px-3 py-2 ${column.headerClassName ?? ''} ${
+                      isDragging ? 'opacity-40' : ''
+                    } ${isDragOver ? 'bg-metro-red/10' : ''}`}
+                    draggable={isReorderable}
+                    key={column.id}
+                    onDragEnd={isReorderable ? handleColumnDragEnd : undefined}
+                    onDragOver={
+                      isReorderable ? (event) => handleColumnDragOver(event, column.id) : undefined
+                    }
+                    onDragStart={isReorderable ? () => handleColumnDragStart(column.id) : undefined}
+                    onDrop={
+                      isReorderable ? (event) => handleColumnDrop(event, column.id) : undefined
+                    }
+                    scope="col"
+                  >
+                    {isReorderable && (
+                      <span
+                        aria-hidden="true"
+                        className="mr-1 inline-block cursor-grab align-middle text-metro-muted/60 active:cursor-grabbing"
+                        data-tip="Arrastrar para reordenar columna"
+                      >
+                        ⠿
+                      </span>
+                    )}
+                    {canSort ? (
+                      <button
+                        className={`flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text ${
+                          column.isActionColumn ? 'justify-end' : ''
+                        }`}
+                        onClick={() => onSortChange(nextSortState(sort, column.id))}
+                        type="button"
+                      >
+                        <span className="truncate" title={column.header}>
+                          {column.header}
+                        </span>
+                        <span aria-hidden="true" className="inline-block w-3 text-metro-red">
+                          {isSorted ? (sort?.direction === 'asc' ? '↑' : '↓') : ''}
+                        </span>
+                        <span className="sr-only">
+                          {isSorted
+                            ? `Orden ${sort?.direction === 'asc' ? 'ascendente' : 'descendente'}`
+                            : 'Sin ordenar'}
+                        </span>
+                      </button>
+                    ) : (
+                      <span
+                        className={`block truncate font-bold ${column.isActionColumn ? 'text-right' : ''}`}
+                      >
                         {column.header}
                       </span>
-                      <span aria-hidden="true" className="inline-block w-3 text-metro-red">
-                        {isSorted ? (sort?.direction === 'asc' ? '↑' : '↓') : ''}
+                    )}
+                    {column.resizable !== false && !column.isActionColumn && (
+                      <span
+                        aria-label={`Redimensionar columna ${column.header}`}
+                        className="absolute right-0 top-0 h-full cursor-col-resize touch-none"
+                        onPointerDown={(event) => startResize(event, column)}
+                        role="separator"
+                        style={{ width: RESIZE_HANDLE_WIDTH }}
+                        tabIndex={-1}
+                      >
+                        <span className="absolute right-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-transparent transition-colors hover:bg-metro-red/70" />
                       </span>
-                      <span className="sr-only">
-                        {isSorted
-                          ? `Orden ${sort?.direction === 'asc' ? 'ascendente' : 'descendente'}`
-                          : 'Sin ordenar'}
-                      </span>
-                    </button>
-                  ) : (
-                    <span
-                      className={`block truncate font-bold ${column.isActionColumn ? 'text-right' : ''}`}
-                    >
-                      {column.header}
-                    </span>
-                  )}
-                  {column.resizable !== false && !column.isActionColumn && (
-                    <span
-                      aria-label={`Redimensionar columna ${column.header}`}
-                      className="absolute right-0 top-0 h-full cursor-col-resize touch-none"
-                      onPointerDown={(event) => startResize(event, column)}
-                      role="separator"
-                      style={{ width: RESIZE_HANDLE_WIDTH }}
-                      tabIndex={-1}
-                    >
-                      <span className="absolute right-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-transparent transition-colors hover:bg-metro-red/70" />
-                    </span>
-                  )}
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody className="bg-metro-surface">
-          {sortedRows.length === 0 ? (
-            <tr>
-              <td
-                className="px-3 py-6 text-center text-sm font-semibold text-metro-muted"
-                colSpan={visibleColumns.length}
-              >
-                {emptyMessage}
-              </td>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
-          ) : (
-            visibleRows.map((row, rowIndex) => (
-              <tr
-                className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
-                key={getRowId(row)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
-              >
-                {visibleColumns.map((column) => {
-                  const cellContent = column.render
-                    ? column.render(row)
-                    : String(column.accessor?.(row) ?? '');
-
-                  return (
-                    <td
-                      className={`truncate px-3 py-1.5 ${column.isActionColumn ? 'text-right' : ''} ${
-                        column.className ?? ''
-                      }`}
-                      key={column.id}
-                      title={typeof cellContent === 'string' ? cellContent : undefined}
-                    >
-                      {cellContent}
-                    </td>
-                  );
-                })}
+          </thead>
+          <tbody className="bg-metro-surface">
+            {sortedRows.length === 0 ? (
+              <tr>
+                <td
+                  className="px-3 py-10 text-center text-sm font-semibold text-metro-muted"
+                  colSpan={visibleColumns.length}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <Inbox aria-hidden="true" className="text-metro-muted/60" size={28} />
+                    <span>{emptyMessage}</span>
+                  </div>
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-      {hasHiddenRows && (
-        <div aria-hidden="true" ref={sentinelRef} style={{ height: 1 }} />
-      )}
+            ) : (
+              visibleRows.map((row, rowIndex) => (
+                <tr
+                  className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                  key={getRowId(row)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
+                >
+                  {visibleColumns.map((column) => {
+                    const cellContent = column.render
+                      ? column.render(row)
+                      : String(column.accessor?.(row) ?? '');
+
+                    return (
+                      <td
+                        className={`truncate px-3 py-1.5 ${column.isActionColumn ? 'text-right' : ''} ${
+                          column.className ?? ''
+                        }`}
+                        key={column.id}
+                        title={typeof cellContent === 'string' ? cellContent : undefined}
+                      >
+                        {cellContent}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        {hasHiddenRows && <div aria-hidden="true" ref={sentinelRef} style={{ height: 1 }} />}
       </div>
       {hasHiddenRows && (
         <div className="flex items-center justify-between rounded-xl border border-metro-border bg-metro-panel/45 px-3 py-2 text-xs text-metro-muted">

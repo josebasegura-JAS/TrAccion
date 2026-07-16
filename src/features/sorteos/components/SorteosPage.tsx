@@ -20,6 +20,7 @@ import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -191,9 +192,8 @@ export function SorteosPage() {
     void (async () => {
       setBusyAction('draw');
       try {
-        const result = await withSharedModuleLocks(
-          [{ module: 'sorteos', label: 'Sorteos' }],
-          () => createDrawWithConcurrencyCheck(draft, people),
+        const result = await withSharedModuleLocks([{ module: 'sorteos', label: 'Sorteos' }], () =>
+          createDrawWithConcurrencyCheck(draft, people),
         );
         setErrors(result.errors);
         if (result.valid) {
@@ -227,12 +227,8 @@ export function SorteosPage() {
     void (async () => {
       setBusyAction('delete-draw');
       try {
-        const result = await withSharedModuleLocks(
-          [{ module: 'sorteos', label: 'Sorteos' }],
-          () => deleteDrawWithConcurrencyCheck(
-            pendingConfirmation.drawId,
-            removeLinkedWinnerExclusions,
-          ),
+        const result = await withSharedModuleLocks([{ module: 'sorteos', label: 'Sorteos' }], () =>
+          deleteDrawWithConcurrencyCheck(pendingConfirmation.drawId, removeLinkedWinnerExclusions),
         );
         if (!result.ok) {
           setErrors([result.message]);
@@ -251,9 +247,8 @@ export function SorteosPage() {
     void (async () => {
       setBusyAction('reset-all-exclusions');
       try {
-        const result = await withSharedModuleLocks(
-          [{ module: 'sorteos', label: 'Sorteos' }],
-          () => resetAllExclusionsWithConcurrencyCheck(),
+        const result = await withSharedModuleLocks([{ module: 'sorteos', label: 'Sorteos' }], () =>
+          resetAllExclusionsWithConcurrencyCheck(),
         );
         if (!result.ok) {
           setErrors([result.message]);
@@ -261,7 +256,9 @@ export function SorteosPage() {
         }
         setPendingConfirmation(null);
       } catch (error) {
-        setErrors([error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.']);
+        setErrors([
+          error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.',
+        ]);
       } finally {
         setBusyAction(null);
       }
@@ -276,7 +273,14 @@ export function SorteosPage() {
       <PageHeader
         icon={Gift}
         title="Sorteos"
-        subtitle="Gestión compacta de sorteos, exclusiones e histórico de resultados."
+        subtitle={
+          <>
+            Gestión compacta de sorteos, exclusiones e histórico de resultados.
+            <div className="mt-2">
+              <InlineSaveFeedback />
+            </div>
+          </>
+        }
         helpSections={SORTEOS_HELP_SECTIONS}
         helpSubtitle="Guía rápida de creación de sorteos, exclusiones, ganadores e histórico."
         className="mb-0"
@@ -448,7 +452,11 @@ export function SorteosPage() {
                                 setErrors([result.message]);
                               }
                             } catch (error) {
-                              setErrors([error instanceof Error ? error.message : 'No se ha podido añadir la exclusión.']);
+                              setErrors([
+                                error instanceof Error
+                                  ? error.message
+                                  : 'No se ha podido añadir la exclusión.',
+                              ]);
                             } finally {
                               setBusyAction(null);
                             }
@@ -524,7 +532,11 @@ export function SorteosPage() {
                                       setErrors([result.message]);
                                     }
                                   } catch (error) {
-                                    setErrors([error instanceof Error ? error.message : 'No se ha podido quitar la exclusión.']);
+                                    setErrors([
+                                      error instanceof Error
+                                        ? error.message
+                                        : 'No se ha podido quitar la exclusión.',
+                                    ]);
                                   } finally {
                                     setBusyAction(null);
                                   }
@@ -686,7 +698,11 @@ export function SorteosPage() {
                                     setErrors([result.message]);
                                   }
                                 } catch (error) {
-                                  setErrors([error instanceof Error ? error.message : 'No se han podido resetear las exclusiones.']);
+                                  setErrors([
+                                    error instanceof Error
+                                      ? error.message
+                                      : 'No se han podido resetear las exclusiones.',
+                                  ]);
                                 } finally {
                                   setBusyAction(null);
                                 }

@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
+  Loader2,
   Pencil,
   Plus,
   Printer,
@@ -34,6 +35,8 @@ interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant: ActionButtonVariant;
   children?: ReactNode;
   iconOnly?: boolean;
+  /** Muestra un spinner en lugar del icono de la variante y deshabilita el botón. Pensado para operaciones que tardan (guardar, importar, compactar, diagnosticar...). */
+  loading?: boolean;
   size?: ActionButtonSize;
 }
 
@@ -137,7 +140,9 @@ function cx(...classes: Array<string | false | null | undefined>) {
 export function ActionButton({
   children,
   className,
+  disabled,
   iconOnly = true,
+  loading = false,
   size = 'md',
   title,
   type = 'button',
@@ -147,6 +152,7 @@ export function ActionButton({
   const Icon = iconByVariant[variant];
   const label = children ?? labelByVariant[variant];
   const accessibleTitle = title ?? (typeof label === 'string' ? label : labelByVariant[variant]);
+  const iconSize = size === 'sm' ? 14 : 16;
 
   return (
     <button
@@ -157,7 +163,9 @@ export function ActionButton({
         iconOnly && 'aspect-square px-0',
         className,
       )}
+      aria-busy={loading}
       aria-label={accessibleTitle}
+      disabled={disabled || loading}
       // Tooltip rápido global (TooltipLayer): siempre en botones de solo
       // icono; en botones con texto, solo si el llamante aporta un title con
       // información extra.
@@ -165,7 +173,7 @@ export function ActionButton({
       type={type}
       {...props}
     >
-      <Icon size={size === 'sm' ? 14 : 16} />
+      {loading ? <Loader2 className="animate-spin" size={iconSize} /> : <Icon size={iconSize} />}
       {!iconOnly && <span>{label}</span>}
     </button>
   );

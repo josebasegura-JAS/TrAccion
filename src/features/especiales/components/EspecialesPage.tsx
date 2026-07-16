@@ -23,6 +23,7 @@ import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Textarea } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 
 const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -224,7 +225,7 @@ export function EspecialesPage() {
       type: editingRecipientId ? editingRecipientType : (type ?? recipientDraft.type),
     };
     const expectedUpdatedAt = editingRecipientId
-      ? recipients.find((recipient) => recipient.id === editingRecipientId)?.updatedAt ?? null
+      ? (recipients.find((recipient) => recipient.id === editingRecipientId)?.updatedAt ?? null)
       : null;
 
     void (async () => {
@@ -249,7 +250,9 @@ export function EspecialesPage() {
         setOutlookStatus('');
         setOutlookStatusTone('neutral');
       } catch (error) {
-        setOutlookStatus(error instanceof Error ? error.message : 'No se ha podido guardar el destinatario.');
+        setOutlookStatus(
+          error instanceof Error ? error.message : 'No se ha podido guardar el destinatario.',
+        );
         setOutlookStatusTone('error');
       }
     })();
@@ -262,7 +265,8 @@ export function EspecialesPage() {
   };
 
   const deleteRecipient = (recipientId: string) => {
-    const expectedUpdatedAt = recipients.find((recipient) => recipient.id === recipientId)?.updatedAt ?? null;
+    const expectedUpdatedAt =
+      recipients.find((recipient) => recipient.id === recipientId)?.updatedAt ?? null;
     void (async () => {
       try {
         const result = await withSharedModuleLocks(
@@ -280,7 +284,9 @@ export function EspecialesPage() {
           setEditingRecipientType('to');
         }
       } catch (error) {
-        setOutlookStatus(error instanceof Error ? error.message : 'No se ha podido eliminar el destinatario.');
+        setOutlookStatus(
+          error instanceof Error ? error.message : 'No se ha podido eliminar el destinatario.',
+        );
         setOutlookStatusTone('error');
       }
     })();
@@ -388,7 +394,14 @@ export function EspecialesPage() {
         <PageHeader
           icon={MailPlus}
           title="Especiales"
-          subtitle="Generación asistida de comunicaciones Outlook para servicios especiales."
+          subtitle={
+            <>
+              Generación asistida de comunicaciones Outlook para servicios especiales.
+              <div className="mt-2">
+                <InlineSaveFeedback />
+              </div>
+            </>
+          }
           helpSections={ESPECIALES_HELP_SECTIONS}
           helpSubtitle="Guía rápida de comunicaciones Outlook, destinatarios, plantilla HTML y mensajes .msg."
           actions={
@@ -400,7 +413,9 @@ export function EspecialesPage() {
                 onClick={() => void createOutlookDraft()}
               >
                 <MailPlus size={16} />
-                {isGeneratingDraft ? 'Generando borrador en Outlook...' : 'Generar borrador en Outlook'}
+                {isGeneratingDraft
+                  ? 'Generando borrador en Outlook...'
+                  : 'Generar borrador en Outlook'}
               </ActionButton>
               <ActionButton variant="secondary" iconOnly={false} onClick={resetForm}>
                 <RotateCcw size={16} /> Limpiar formulario

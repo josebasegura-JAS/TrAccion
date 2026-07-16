@@ -9,6 +9,7 @@ import { buildFilterLabel } from '../export/filterLabel';
 import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { InlineSaveFeedback } from '../../components/InlineSaveFeedback';
 import { TaskEditor } from '../../components/TaskEditor';
 import { type ModuleHelpSection } from '../../components/ModuleHelp';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
@@ -621,7 +622,14 @@ export function SessionManagementPage({
         icon={CalendarDays}
         helpSubtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
         helpTitle={config.title}
-        subtitle={`Alta de sesiones, orden del día y cierre automático de tareas en fase ${config.taskPhase}.`}
+        subtitle={
+          <>
+            {`Alta de sesiones, orden del día y cierre automático de tareas en fase ${config.taskPhase}.`}
+            <div className="mt-2">
+              <InlineSaveFeedback />
+            </div>
+          </>
+        }
         title={config.title}
       />
 

@@ -6,6 +6,7 @@ import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import { formatLockAge } from '../services/databaseLockView';
 import { Notice } from './ui/Notice';
 import { PageHeader } from './ui/PageHeader';
+import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { AJUSTES_HELP_SECTIONS, formatBytesAsMb, noticeTone } from './ajustes/ajustesCommon';
@@ -607,7 +608,15 @@ export function AjustesPage() {
           eyebrow="Ajustes"
           helpSections={AJUSTES_HELP_SECTIONS}
           helpSubtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
-          subtitle="Configura rutas externas necesarias para generar documentos sin almacenar plantillas dentro de TrAccion."
+          subtitle={
+            <>
+              Configura rutas externas necesarias para generar documentos sin almacenar plantillas
+              dentro de TrAccion.
+              <div className="mt-2">
+                <InlineSaveFeedback />
+              </div>
+            </>
+          }
           icon={Settings}
           title="Configuración"
         />
