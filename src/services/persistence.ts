@@ -396,7 +396,9 @@ function upsertPendingSqliteWrite(
   // el schema o si hay un conflicto persistente que no se puede resolver.
   if (attempts > MAX_PENDING_WRITE_ATTEMPTS) {
     const discardMessage = `No se ha podido sincronizar un cambio tras ${attempts} intentos y se ha descartado. Revisa y vuelve a aplicar el cambio si sigue siendo necesario. Clave: ${key}.`;
-    console.warn(`[pending-writes] Descartando write pendiente tras ${attempts} intentos fallidos. Clave: ${key}. Último error: ${lastError}`);
+    console.warn(
+      `[pending-writes] Descartando write pendiente tras ${attempts} intentos fallidos. Clave: ${key}. Último error: ${lastError}`,
+    );
     emitPersistenceFeedback({
       kind: 'error',
       updatedAt: now,
@@ -1035,9 +1037,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     };
   } catch (error) {
     console.warn('No se ha podido rehidratar localStorage desde SQLite.', error);
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       status: 'sqlite-unavailable',
-      reason: 'Error leyendo SQLite; se mantiene localStorage.',
+      reason: detail
+        ? `Error leyendo SQLite: ${detail}`
+        : 'Error leyendo SQLite; se mantiene localStorage.',
     };
   }
 }

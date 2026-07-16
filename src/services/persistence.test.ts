@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SQLITE_PENDING_WRITES_KEY } from './persistenceKeys';
-import { flushPendingSqliteWrites, isTemporarySqliteLockMessage, subscribeToPersistenceFeedback, type PersistenceFeedback } from './persistence';
+import {
+  flushPendingSqliteWrites,
+  hydrateLocalStorageFromSqlite,
+  isTemporarySqliteLockMessage,
+  subscribeToPersistenceFeedback,
+  type PersistenceFeedback,
+} from './persistence';
 
 // Clave de negocio real (PERSISTED_STORAGE_KEYS) usada como ejemplo en los
 // tests: cualquier escritura pendiente con una clave fuera de esa lista se
@@ -39,7 +45,8 @@ describe('persistence — cola de writes pendientes', () => {
     window.localStorage.clear();
     Object.defineProperty(window, 'requestAnimationFrame', {
       configurable: true,
-      value: (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0),
+      value: (callback: FrameRequestCallback) =>
+        window.setTimeout(() => callback(performance.now()), 0),
     });
   });
 
@@ -164,12 +171,51 @@ describe('isTemporarySqliteLockMessage', () => {
   });
 
   it('no marca como bloqueo otros errores de guardado, como un conflicto de concurrencia', () => {
-    expect(
-      isTemporarySqliteLockMessage('El registro ha sido modificado por otro usuario.'),
-    ).toBe(false);
+    expect(isTemporarySqliteLockMessage('El registro ha sido modificado por otro usuario.')).toBe(
+      false,
+    );
   });
 
   it('no es sensible a mayúsculas/minúsculas', () => {
     expect(isTemporarySqliteLockMessage('BASE OCUPADA TEMPORALMENTE por X')).toBe(true);
+  });
+});
+
+describe('hydrateLocalStorageFromSqlite — errores inesperados', () => {
+  afterEach(() => {
+    Object.defineProperty(window, 'traccion', { configurable: true, value: undefined });
+  });
+
+  it('incluye el mensaje real del error en el motivo, no solo un texto genérico', async () => {
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        loadPersistedRecords: vi.fn(async () => {
+          throw new Error("EPERM: operation not permitted, open 'Z:\\datos\\traccion.sqlite'");
+        }),
+      },
+    });
+
+    const result = await hydrateLocalStorageFromSqlite();
+
+    expect(result.status).toBe('sqlite-unavailable');
+    expect(result.reason).toContain('EPERM');
+    expect(result.reason).toContain('traccion.sqlite');
+  });
+
+  it('cae en un texto genérico si el valor lanzado no es un Error con mensaje', async () => {
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        loadPersistedRecords: vi.fn(async () => {
+          throw 'fallo sin forma de Error';
+        }),
+      },
+    });
+
+    const result = await hydrateLocalStorageFromSqlite();
+
+    expect(result.status).toBe('sqlite-unavailable');
+    expect(result.reason).toContain('Error leyendo SQLite');
   });
 });
