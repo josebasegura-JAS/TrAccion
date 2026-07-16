@@ -1,4 +1,4 @@
-import { FileText, Mail, Settings2, Trash2 } from 'lucide-react';
+import { Mail, Settings2, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -711,9 +711,7 @@ export function ActasPage() {
       id="actas"
     >
       <PageHeader
-        icon={FileText}
         title="Actas"
-        subtitle="Registro de actas de Comité y Comisión Paritaria con seguimiento, alegaciones, firma e histórico."
         helpSections={ACTAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
         actions={

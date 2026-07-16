@@ -1,4 +1,4 @@
-import { FolderOpen, Plus, Settings } from 'lucide-react';
+import { FolderOpen, Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
@@ -605,19 +605,9 @@ export function AjustesPage() {
     <>
       <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
         <PageHeader
-          eyebrow="Ajustes"
           helpSections={AJUSTES_HELP_SECTIONS}
           helpSubtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
-          subtitle={
-            <>
-              Configura rutas externas necesarias para generar documentos sin almacenar plantillas
-              dentro de TrAccion.
-              <div className="mt-2">
-                <InlineSaveFeedback />
-              </div>
-            </>
-          }
-          icon={Settings}
+          status={<InlineSaveFeedback />}
           title="Configuración"
         />
 

@@ -1,11 +1,4 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  Search,
-  Settings,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, Settings, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -724,18 +717,9 @@ export function TareasPage({
             </ActionButton>
           </>
         }
-        eyebrow="Módulo"
         helpSections={TAREAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
-        subtitle={
-          <>
-            Centro operativo único para tareas internas y solicitudes sindicales por fase.
-            <div className="mt-2">
-              <InlineSaveFeedback />
-            </div>
-          </>
-        }
-        icon={ClipboardList}
+        status={<InlineSaveFeedback />}
         title="Tareas"
       />
 

@@ -1,4 +1,3 @@
-import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ModuleHelpButton, type ModuleHelpSection } from '../ModuleHelp';
 
@@ -8,21 +7,19 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 interface PageHeaderProps {
   /**
-   * Icono del módulo (idealmente el mismo que usa el sidebar en
-   * navigation.ts, para dar continuidad visual entre navegación y página).
+   * Título del módulo. Ya no se muestra en pantalla (la barra superior fija
+   * de la app siempre indica en qué módulo estás), pero se mantiene como
+   * encabezado accesible para lectores de pantalla y como valor por defecto
+   * del título del diálogo de ayuda.
    */
-  icon?: LucideIcon;
-  /** Small uppercase label above the title, e.g. the module name. Defaults to `title` if omitted. */
-  eyebrow?: ReactNode;
-  /** Main heading text. */
-  title: ReactNode;
-  /** Short description shown under the title. */
-  subtitle?: ReactNode;
+  title: string;
+  /** Indicador de estado ambiental, p. ej. <InlineSaveFeedback />. Se renderiza en línea junto al botón de ayuda, no como línea aparte. */
+  status?: ReactNode;
   /** Buttons / controls aligned to the right (e.g. ActionButton group). */
   actions?: ReactNode;
-  /** If provided, renders a ModuleHelpButton next to the title using these sections. */
+  /** If provided, renders a ModuleHelpButton next to the actions using these sections. */
   helpSections?: ModuleHelpSection[];
-  /** Help dialog title; defaults to `title` (must be a string when helpSections is used and title is a ReactNode). */
+  /** Help dialog title; defaults to `title`. */
   helpTitle?: string;
   /** Help dialog subtitle. */
   helpSubtitle?: string;
@@ -30,45 +27,37 @@ interface PageHeaderProps {
 }
 
 /**
- * Standard page/module header: eyebrow label, title (+ optional help button),
- * subtitle, and right-aligned actions. Mirrors the header block already used
- * across feature pages (e.g. Especiales, Criterios RRLL) so it can be dropped
- * in without changing the page's outer wrapper/card.
+ * Barra de cabecera de módulo: solo botón de ayuda + acciones + un hueco para
+ * un indicador de estado ambiental (p. ej. "Guardado"). Deliberadamente NO
+ * repite el icono/título/subtítulo del módulo: la barra superior fija de la
+ * app (`Header.tsx`) ya los muestra de forma permanente, así que duplicarlos
+ * aquí solo restaba espacio de trabajo sin aportar orientación adicional.
+ * El título sigue existiendo como prop por accesibilidad (encabezado oculto
+ * para lectores de pantalla) y para el diálogo de ayuda.
  */
 export function PageHeader({
   actions,
   className,
-  eyebrow,
   helpSections,
   helpSubtitle,
   helpTitle,
-  icon: Icon,
-  subtitle,
+  status,
   title,
 }: PageHeaderProps) {
-  const resolvedHelpTitle = helpTitle ?? (typeof title === 'string' ? title : undefined);
+  const resolvedHelpTitle = helpTitle ?? title;
 
   return (
-    <div className={cx('mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between', className)}>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-          {eyebrow ?? title}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {Icon ? (
-            <span
-              aria-hidden="true"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-metro-red/25 bg-metro-red/10 text-red-300"
-            >
-              <Icon size={17} strokeWidth={2.2} />
-            </span>
-          ) : null}
-          <h2 className="text-2xl font-bold text-metro-text">{title}</h2>
-          {helpSections && resolvedHelpTitle ? (
-            <ModuleHelpButton title={resolvedHelpTitle} subtitle={helpSubtitle} sections={helpSections} />
-          ) : null}
-        </div>
-        {subtitle ? <p className="mt-0.5 text-base text-metro-muted">{subtitle}</p> : null}
+    <div className={cx('mb-3 flex flex-wrap items-center justify-between gap-3', className)}>
+      <h2 className="sr-only">{title}</h2>
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        {helpSections ? (
+          <ModuleHelpButton
+            title={resolvedHelpTitle}
+            subtitle={helpSubtitle}
+            sections={helpSections}
+          />
+        ) : null}
+        {status}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
     </div>

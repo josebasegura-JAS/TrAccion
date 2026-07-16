@@ -1,7 +1,11 @@
 import { Link2, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
-import { useTableViewPreferences, type TableSortState, type TableViewPreferences } from '../../../shared/table/useTableViewPreferences';
+import {
+  useTableViewPreferences,
+  type TableSortState,
+  type TableViewPreferences,
+} from '../../../shared/table/useTableViewPreferences';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import type { Employee } from '../../plantilla/domain/employee';
@@ -31,7 +35,6 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
-
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -64,7 +67,12 @@ const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
   },
 ];
 
-type VinculogramaTableColumnId = 'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'status' | 'actions';
+type VinculogramaTableColumnId =
+  | 'employeeNumber'
+  | 'nombreCompleto'
+  | 'linkedPerson'
+  | 'status'
+  | 'actions';
 const VINCULOGRAMA_TABLE_STORAGE_KEY = 'traccion.tableView.vinculograma.main';
 const vinculogramaTableColumnIds: readonly VinculogramaTableColumnId[] = [
   'employeeNumber',
@@ -186,87 +194,85 @@ function VinculogramaModal({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <button
-            className="rounded-lg p-2 text-metro-muted hover:bg-metro-surface hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+            <button
+              className="rounded-lg p-2 text-metro-muted hover:bg-metro-surface hover:text-metro-text"
+              onClick={onClose}
+              type="button"
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
 
         <div className="px-5 py-4">
           {lockMessage && (
-            <p className={`mb-4 rounded-lg border px-3 py-2 text-xs font-semibold ${
-              isReadOnly
-                ? 'border-red-400/40 bg-red-950/20 text-red-100'
-                : 'border-metro-border bg-metro-surface text-metro-muted'
-            }`}>
+            <p
+              className={`mb-4 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                isReadOnly
+                  ? 'border-red-400/40 bg-red-950/20 text-red-100'
+                  : 'border-metro-border bg-metro-surface text-metro-muted'
+              }`}
+            >
               {lockMessage}
             </p>
           )}
           <fieldset disabled={isReadOnly} className="grid gap-4 disabled:opacity-70 md:grid-cols-2">
-          <FieldLabel>
-            Nº empleado
-            <Input
-              onChange={(event) => updateEmployeeNumber(event.target.value)}
-              value={draft.employeeNumber}
-            />
-          </FieldLabel>
-          <div className="relative">
             <FieldLabel>
-              Nombre
+              Nº empleado
               <Input
-                onBlur={() => window.setTimeout(() => setShowSuggestions(false), 100)}
-                onChange={(event) => {
-                  onChange({ ...draft, nombreCompleto: event.target.value });
-                  setShowSuggestions(true);
-                }}
-                onFocus={() => setShowSuggestions(true)}
-                value={draft.nombreCompleto}
+                onChange={(event) => updateEmployeeNumber(event.target.value)}
+                value={draft.employeeNumber}
               />
             </FieldLabel>
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-metro-border bg-metro-surface shadow-xl">
-                {suggestions.map((suggestion) => (
-                  <button
-                    className="block w-full px-3 py-2 text-left text-sm hover:bg-metro-red/10"
-                    key={suggestion.empleado}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => selectSuggestion(suggestion)}
-                    type="button"
-                  >
-                    <span className="font-semibold text-metro-text">{suggestion.empleado}</span>
-                    <span className="ml-2 text-metro-muted">{suggestion.nombreApellidos}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <FieldLabel>
-            Persona vinculada
-            <Input
-              onChange={(event) => onChange({ ...draft, linkedPerson: event.target.value })}
-              value={draft.linkedPerson}
-            />
-          </FieldLabel>
-          <FieldLabel>
-            Fecha solicitud
-            <Input
-              onChange={(event) => onChange({ ...draft, requestDate: event.target.value })}
-              type="date"
-              value={draft.requestDate}
-            />
-          </FieldLabel>
-          <FieldLabel>
-            Fecha vigencia
-            <Input
-              className="font-semibold"
-              readOnly
-              value={expiryDate}
-            />
-          </FieldLabel>
+            <div className="relative">
+              <FieldLabel>
+                Nombre
+                <Input
+                  onBlur={() => window.setTimeout(() => setShowSuggestions(false), 100)}
+                  onChange={(event) => {
+                    onChange({ ...draft, nombreCompleto: event.target.value });
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
+                  value={draft.nombreCompleto}
+                />
+              </FieldLabel>
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-metro-border bg-metro-surface shadow-xl">
+                  {suggestions.map((suggestion) => (
+                    <button
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-metro-red/10"
+                      key={suggestion.empleado}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectSuggestion(suggestion)}
+                      type="button"
+                    >
+                      <span className="font-semibold text-metro-text">{suggestion.empleado}</span>
+                      <span className="ml-2 text-metro-muted">{suggestion.nombreApellidos}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <FieldLabel>
+              Persona vinculada
+              <Input
+                onChange={(event) => onChange({ ...draft, linkedPerson: event.target.value })}
+                value={draft.linkedPerson}
+              />
+            </FieldLabel>
+            <FieldLabel>
+              Fecha solicitud
+              <Input
+                onChange={(event) => onChange({ ...draft, requestDate: event.target.value })}
+                type="date"
+                value={draft.requestDate}
+              />
+            </FieldLabel>
+            <FieldLabel>
+              Fecha vigencia
+              <Input className="font-semibold" readOnly value={expiryDate} />
+            </FieldLabel>
           </fieldset>
         </div>
 
@@ -279,7 +285,12 @@ function VinculogramaModal({
         <div className="flex flex-wrap justify-between gap-2 border-t border-metro-border px-5 py-4">
           <div>
             {mode === 'edit' && (
-              <ActionButton variant="delete" iconOnly={false} disabled={isReadOnly || isSaving} onClick={onDelete}>
+              <ActionButton
+                variant="delete"
+                iconOnly={false}
+                disabled={isReadOnly || isSaving}
+                onClick={onDelete}
+              >
                 Eliminar
               </ActionButton>
             )}
@@ -295,11 +306,13 @@ function VinculogramaModal({
               onClick={() => {
                 setIsSaving(true);
                 setSaveStatus('');
-                void onSave().then((result) => {
-                  if (!result.ok) {
-                    setSaveStatus(result.message);
-                  }
-                }).finally(() => setIsSaving(false));
+                void onSave()
+                  .then((result) => {
+                    if (!result.ok) {
+                      setSaveStatus(result.message);
+                    }
+                  })
+                  .finally(() => setIsSaving(false));
               }}
             >
               {isSaving ? 'Guardando…' : 'Guardar'}
@@ -311,7 +324,6 @@ function VinculogramaModal({
     </div>
   );
 }
-
 
 function SolicitudVinculogramaModal({
   employees,
@@ -336,7 +348,9 @@ function SolicitudVinculogramaModal({
       .filter((employee) => !employee.deletedAt)
       .filter((employee) => {
         const normalizedName = employee.nombreApellidos.toLowerCase();
-        return employee.empleado.includes(normalizedQuery) || normalizedName.includes(normalizedQuery);
+        return (
+          employee.empleado.includes(normalizedQuery) || normalizedName.includes(normalizedQuery)
+        );
       })
       .slice(0, 12);
   }, [employees, query]);
@@ -416,7 +430,8 @@ function SolicitudVinculogramaModal({
 
         <div className="space-y-4 px-5 py-4">
           <p className="text-sm text-metro-muted">
-            Busca la persona solicitante en Plantilla. El DOCX se generará con nombre, DNI y fecha actual; los datos de la persona vinculada quedan en blanco.
+            Busca la persona solicitante en Plantilla. El DOCX se generará con nombre, DNI y fecha
+            actual; los datos de la persona vinculada quedan en blanco.
           </p>
 
           <div className="relative">
@@ -458,12 +473,17 @@ function SolicitudVinculogramaModal({
             <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm">
               <p className="font-semibold text-metro-text">{selectedEmployee.nombreApellidos}</p>
               <p className="text-metro-muted">
-                Nº {selectedEmployee.empleado} · DNI {selectedEmployee.dni || selectedEmployee.nif || 'sin informar'}
+                Nº {selectedEmployee.empleado} · DNI{' '}
+                {selectedEmployee.dni || selectedEmployee.nif || 'sin informar'}
               </p>
             </div>
           )}
 
-          {status && <p className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusClass}`}>{status}</p>}
+          {status && (
+            <p className={`rounded-xl border px-3 py-2 text-xs font-semibold ${statusClass}`}>
+              {status}
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-metro-border px-5 py-4">
@@ -508,7 +528,8 @@ function VinculogramaTable({
   setColumnOrder: (columnOrder: VinculogramaTableColumnId[]) => void;
   resetColumnWidths: () => void;
   resetPreferences: () => void;
-}) {  const columns = useMemo<Array<DataTableColumn<Vinculograma, VinculogramaTableColumnId>>>(
+}) {
+  const columns = useMemo<Array<DataTableColumn<Vinculograma, VinculogramaTableColumnId>>>(
     () => [
       {
         id: 'employeeNumber',
@@ -546,7 +567,8 @@ function VinculogramaTable({
       {
         id: 'status',
         header: 'Estado / Fecha vigencia',
-        accessor: (record) => `${getVinculogramaStatus(record.expiryDate, today)} ${record.expiryDate}`,
+        accessor: (record) =>
+          `${getVinculogramaStatus(record.expiryDate, today)} ${record.expiryDate}`,
         render: (record) => {
           const status = getVinculogramaStatus(record.expiryDate, today);
           const tone = status === 'Vigente' ? 'success' : 'warning';
@@ -600,7 +622,7 @@ function VinculogramaTable({
         ariaLabel="Vinculograma"
         columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
-          onResetColumnWidths={resetColumnWidths}
+        onResetColumnWidths={resetColumnWidths}
         columns={columns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
@@ -616,9 +638,17 @@ function VinculogramaTable({
 }
 
 export function VinculogramaPage() {
-  const { records, load, createWithConcurrencyCheck, updateWithConcurrencyCheck, removeWithConcurrencyCheck } = useVinculogramaStore();
+  const {
+    records,
+    load,
+    createWithConcurrencyCheck,
+    updateWithConcurrencyCheck,
+    removeWithConcurrencyCheck,
+  } = useVinculogramaStore();
   const { employees, load: loadEmployees } = useEmployeeStore();
-  const rutaPlantillaVinculograma = useConfiguracionStore((state) => state.rutaPlantillaVinculograma);
+  const rutaPlantillaVinculograma = useConfiguracionStore(
+    (state) => state.rutaPlantillaVinculograma,
+  );
   const [draft, setDraft] = useState<VinculogramaDraft>(EMPTY_VINCULOGRAMA_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -669,16 +699,19 @@ export function VinculogramaPage() {
     setDraft(EMPTY_VINCULOGRAMA_DRAFT);
   };
 
-  const acquireMutationLock = useCallback(async (recordId: string) => {
-    const payload = { module: 'vinculograma', recordId };
-    const api = window.traccion;
-    const result = await api?.acquireRecordLock?.(payload);
-    if (result?.status === 'locked') {
-      await alert(result.message, { type: 'warning' });
-      return false;
-    }
-    return true;
-  }, [alert]);
+  const acquireMutationLock = useCallback(
+    async (recordId: string) => {
+      const payload = { module: 'vinculograma', recordId };
+      const api = window.traccion;
+      const result = await api?.acquireRecordLock?.(payload);
+      if (result?.status === 'locked') {
+        await alert(result.message, { type: 'warning' });
+        return false;
+      }
+      return true;
+    },
+    [alert],
+  );
 
   const releaseMutationLock = useCallback(async (recordId: string) => {
     await window.traccion?.releaseRecordLock?.({ module: 'vinculograma', recordId });
@@ -691,7 +724,11 @@ export function VinculogramaPage() {
 
     if (editingId) {
       const currentRecord = records.find((record) => record.id === editingId);
-      const result = await updateWithConcurrencyCheck(editingId, draft, currentRecord?.updatedAt ?? null);
+      const result = await updateWithConcurrencyCheck(
+        editingId,
+        draft,
+        currentRecord?.updatedAt ?? null,
+      );
       if (result.ok) {
         closeModal();
       }
@@ -738,15 +775,17 @@ export function VinculogramaPage() {
     <section className="space-y-4" id="vinculograma">
       <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
         <PageHeader
-          icon={Link2}
           title="Vinculograma"
-          subtitle="Gestión de vínculos con cálculo automático de fecha de vigencia."
           helpSections={VINCULOGRAMA_HELP_SECTIONS}
           helpSubtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
           className="mb-0"
           actions={
             <div className="flex flex-wrap gap-2">
-              <ActionButton variant="word" iconOnly={false} onClick={() => setShowSolicitudModal(true)}>
+              <ActionButton
+                variant="word"
+                iconOnly={false}
+                onClick={() => setShowSolicitudModal(true)}
+              >
                 Enviar solicitud Word
               </ActionButton>
               <ActionButton variant="add" iconOnly={false} onClick={openCreateModal}>
@@ -765,7 +804,10 @@ export function VinculogramaPage() {
               payload={{
                 title: 'Vinculogramas vigentes',
                 filename: 'vinculogramas-vigentes',
-                columns: reorderExportColumns(vinculogramaExportColumns(today), tablePreferences.columnOrder),
+                columns: reorderExportColumns(
+                  vinculogramaExportColumns(today),
+                  tablePreferences.columnOrder,
+                ),
                 rows: vigentes,
                 filterLabel: 'Estado: vigente',
               }}
@@ -803,7 +845,10 @@ export function VinculogramaPage() {
               payload={{
                 title: 'Vinculogramas vencidos',
                 filename: 'vinculogramas-vencidos',
-                columns: reorderExportColumns(vinculogramaExportColumns(today), tablePreferences.columnOrder),
+                columns: reorderExportColumns(
+                  vinculogramaExportColumns(today),
+                  tablePreferences.columnOrder,
+                ),
                 rows: vencidos,
                 filterLabel: 'Estado: vencido',
               }}
@@ -848,7 +893,9 @@ export function VinculogramaPage() {
           mode={editingId ? 'edit' : 'create'}
           onChange={setDraft}
           onClose={closeModal}
-          onDelete={() => { void deleteRecord(); }}
+          onDelete={() => {
+            void deleteRecord();
+          }}
           onSave={saveRecord}
           recordId={editingId}
         />

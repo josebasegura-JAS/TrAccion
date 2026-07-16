@@ -271,16 +271,8 @@ export function SorteosPage() {
       id="sorteos"
     >
       <PageHeader
-        icon={Gift}
         title="Sorteos"
-        subtitle={
-          <>
-            Gestión compacta de sorteos, exclusiones e histórico de resultados.
-            <div className="mt-2">
-              <InlineSaveFeedback />
-            </div>
-          </>
-        }
+        status={<InlineSaveFeedback />}
         helpSections={SORTEOS_HELP_SECTIONS}
         helpSubtitle="Guía rápida de creación de sorteos, exclusiones, ganadores e histórico."
         className="mb-0"

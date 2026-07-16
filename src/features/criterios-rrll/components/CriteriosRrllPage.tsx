@@ -1,8 +1,11 @@
 import ExcelJS from 'exceljs';
-import { FileDown, FileUp, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
+import { FileDown, FileUp, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
-import { parseCriteriosRrllImportFile, type CriterioRrllImportPreviewRow } from '../domain/importExcel';
+import {
+  parseCriteriosRrllImportFile,
+  type CriterioRrllImportPreviewRow,
+} from '../domain/importExcel';
 import {
   sortCriteriosRrllByColumn,
   sortCriteriosRrllByDefault,
@@ -134,7 +137,6 @@ async function downloadCriteriosRrllTemplate(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-
 const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; className: string }> = [
   { key: 'tema', label: 'Tema', className: 'w-[220px]' },
   { key: 'estado', label: 'Estado', className: 'w-[120px]' },
@@ -173,10 +175,8 @@ function SelectFilter({
   );
 }
 
-
 function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
-  const tone =
-    sentido === 'aprobado' ? 'success' : sentido === 'denegado' ? 'error' : 'muted';
+  const tone = sentido === 'aprobado' ? 'success' : sentido === 'denegado' ? 'error' : 'muted';
 
   return (
     <StatusBadge size="xs" tone={tone} className="uppercase tracking-wide">
@@ -186,7 +186,15 @@ function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
 }
 
 export function CriteriosRrllPage() {
-  const { criterios, filters, importDrafts, load, removeWithConcurrencyCheck, selectCriterio, setFilter } = useCriteriosRrllStore();
+  const {
+    criterios,
+    filters,
+    importDrafts,
+    load,
+    removeWithConcurrencyCheck,
+    selectCriterio,
+    setFilter,
+  } = useCriteriosRrllStore();
   const { alert, dialogNode } = useAppDialog();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingCriterioId, setEditingCriterioId] = useState<string | null>(null);
@@ -251,7 +259,9 @@ export function CriteriosRrllPage() {
       current
         ? {
             ...current,
-            rows: current.rows.map((row) => (row.id === id ? { ...row, selected: !row.selected } : row)),
+            rows: current.rows.map((row) =>
+              row.id === id ? { ...row, selected: !row.selected } : row,
+            ),
           }
         : current,
     );
@@ -276,7 +286,9 @@ export function CriteriosRrllPage() {
       );
       setImportPreview(null);
     } catch (error) {
-      setImportMessage(error instanceof Error ? error.message : 'No se ha podido completar la importación.');
+      setImportMessage(
+        error instanceof Error ? error.message : 'No se ha podido completar la importación.',
+      );
     }
   };
 
@@ -296,9 +308,7 @@ export function CriteriosRrllPage() {
       id="criterios-rrll"
     >
       <PageHeader
-        icon={ShieldCheck}
         title="Criterios RRLL"
-        subtitle="Listado de criterios con alta manual, edición, importación Excel, búsqueda y filtros."
         helpSections={CRITERIOS_RRLL_HELP_SECTIONS}
         helpSubtitle="Guía rápida del repositorio de criterios, sentido, filtros e importación."
         className="mb-3"
@@ -318,11 +328,17 @@ export function CriteriosRrllPage() {
                   setImportMessage('');
                   setImportPreview({
                     fileName: file.name,
-                    rows: rows.map((row) => ({ ...row, id: createPreviewRowId(row), selected: true })),
+                    rows: rows.map((row) => ({
+                      ...row,
+                      id: createPreviewRowId(row),
+                      selected: true,
+                    })),
                   });
                 } catch (error) {
                   console.error('Error al previsualizar la importación de Criterios RRLL:', error);
-                  setImportMessage('No se ha podido leer la Excel. Revisa que respete la plantilla.');
+                  setImportMessage(
+                    'No se ha podido leer la Excel. Revisa que respete la plantilla.',
+                  );
                 } finally {
                   event.target.value = '';
                 }
@@ -491,16 +507,18 @@ export function CriteriosRrllPage() {
         </div>
       </div>
 
-
       {importPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-metro-border bg-metro-surface px-4 py-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Previsualización</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+                  Previsualización
+                </p>
                 <h3 className="text-xl font-bold text-metro-text">Importar Criterios RRLL</h3>
                 <p className="text-sm text-metro-muted">
-                  {importPreview.fileName} · {selectedImportRows.length} de {importPreview.rows.length} registros seleccionados
+                  {importPreview.fileName} · {selectedImportRows.length} de{' '}
+                  {importPreview.rows.length} registros seleccionados
                 </p>
               </div>
               <button
@@ -516,10 +534,18 @@ export function CriteriosRrllPage() {
                 Desmarca los registros que no quieras importar. Tema y Criterio son obligatorios.
               </p>
               <div className="flex flex-wrap gap-2">
-                <ActionButton variant="secondary" iconOnly={false} onClick={() => setAllImportRowsSelected(true)}>
+                <ActionButton
+                  variant="secondary"
+                  iconOnly={false}
+                  onClick={() => setAllImportRowsSelected(true)}
+                >
                   Marcar todos
                 </ActionButton>
-                <ActionButton variant="secondary" iconOnly={false} onClick={() => setAllImportRowsSelected(false)}>
+                <ActionButton
+                  variant="secondary"
+                  iconOnly={false}
+                  onClick={() => setAllImportRowsSelected(false)}
+                >
                   Desmarcar todos
                 </ActionButton>
               </div>
@@ -549,19 +575,31 @@ export function CriteriosRrllPage() {
                         />
                       </td>
                       <td className="px-3 py-2 text-metro-muted">{row.rowNumber}</td>
-                      <td className="truncate px-3 py-2 font-semibold text-metro-text" title={row.draft.tema}>
+                      <td
+                        className="truncate px-3 py-2 font-semibold text-metro-text"
+                        title={row.draft.tema}
+                      >
                         {row.draft.tema}
                       </td>
-                      <td className="truncate px-3 py-2 text-metro-muted" title={row.draft.fecha || '—'}>
+                      <td
+                        className="truncate px-3 py-2 text-metro-muted"
+                        title={row.draft.fecha || '—'}
+                      >
                         {row.draft.fecha || '—'}
                       </td>
-                      <td className="truncate px-3 py-2 text-metro-muted" title={row.draft.responsable || '—'}>
+                      <td
+                        className="truncate px-3 py-2 text-metro-muted"
+                        title={row.draft.responsable || '—'}
+                      >
                         {row.draft.responsable || '—'}
                       </td>
                       <td className="px-3 py-2 text-metro-muted">
                         <SentidoBadge sentido={row.draft.sentido} />
                       </td>
-                      <td className="truncate px-3 py-2 text-metro-muted" title={row.draft.criterio}>
+                      <td
+                        className="truncate px-3 py-2 text-metro-muted"
+                        title={row.draft.criterio}
+                      >
                         {row.draft.criterio}
                       </td>
                     </tr>
@@ -570,12 +608,17 @@ export function CriteriosRrllPage() {
               </table>
               {importPreview.rows.length === 0 && (
                 <p className="px-4 py-5 text-sm text-metro-muted">
-                  No se han encontrado registros importables. Revisa que la hoja tenga las columnas Tema, Fecha, Responsable, Criterio y Sentido.
+                  No se han encontrado registros importables. Revisa que la hoja tenga las columnas
+                  Tema, Fecha, Responsable, Criterio y Sentido.
                 </p>
               )}
             </div>
             <div className="flex flex-wrap justify-end gap-2 border-t border-metro-border bg-metro-surface px-4 py-3">
-              <ActionButton variant="secondary" iconOnly={false} onClick={() => setImportPreview(null)}>
+              <ActionButton
+                variant="secondary"
+                iconOnly={false}
+                onClick={() => setImportPreview(null)}
+              >
                 Cancelar
               </ActionButton>
               <ActionButton

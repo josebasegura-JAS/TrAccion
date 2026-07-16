@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
@@ -617,19 +617,10 @@ export function SessionManagementPage({
             </ActionButton>
           </>
         }
-        eyebrow="Módulo"
         helpSections={helpSections}
-        icon={CalendarDays}
         helpSubtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
         helpTitle={config.title}
-        subtitle={
-          <>
-            {`Alta de sesiones, orden del día y cierre automático de tareas en fase ${config.taskPhase}.`}
-            <div className="mt-2">
-              <InlineSaveFeedback />
-            </div>
-          </>
-        }
+        status={<InlineSaveFeedback />}
         title={config.title}
       />
 

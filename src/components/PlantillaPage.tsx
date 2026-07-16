@@ -1,4 +1,12 @@
-import { Download, Languages, RefreshCw, RotateCcw, Search, SlidersHorizontal, Upload, UsersRound } from 'lucide-react';
+import {
+  Download,
+  Languages,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  Upload,
+} from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { EmployeeEditor } from './EmployeeEditor';
@@ -114,8 +122,16 @@ const employeeExportColumns: ExportColumn<Employee>[] = [
   { key: 'puestoEus', header: 'Puesto EUS', value: (employee) => employee.puestoEus || null },
   { key: 'residencia', header: 'Residencia', value: (employee) => employee.residencia },
   { key: 'unidad', header: 'Unidad', value: (employee) => employee.unidad || null },
-  { key: 'direccionOrganizativa', header: 'Dirección organizativa', value: (employee) => employee.direccionOrganizativa || null },
-  { key: 'antiguedadPuesto', header: 'Antigüedad puesto', value: (employee) => employee.antiguedadPuesto || null },
+  {
+    key: 'direccionOrganizativa',
+    header: 'Dirección organizativa',
+    value: (employee) => employee.direccionOrganizativa || null,
+  },
+  {
+    key: 'antiguedadPuesto',
+    header: 'Antigüedad puesto',
+    value: (employee) => employee.antiguedadPuesto || null,
+  },
 ];
 
 export function PlantillaPage() {
@@ -172,7 +188,9 @@ export function PlantillaPage() {
 
   const residencias = uniqueSorted(visibleEmployees.map((employee) => employee.residencia));
   const niveles = uniqueSorted(visibleEmployees.map((employee) => employee.nivelRetributivo));
-  const direcciones = uniqueSorted(visibleEmployees.map((employee) => employee.direccionOrganizativa));
+  const direcciones = uniqueSorted(
+    visibleEmployees.map((employee) => employee.direccionOrganizativa),
+  );
   const emptyPuestoEusCount = visibleEmployees.filter(
     (employee) => !employee.puestoEus.trim(),
   ).length;
@@ -184,16 +202,36 @@ export function PlantillaPage() {
   ]);
   const activeFilterChips: ActiveFilterChip[] = [
     filters.search.trim()
-      ? { key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') }
+      ? {
+          key: 'search',
+          label: 'Búsqueda',
+          value: filters.search.trim(),
+          onClear: () => setFilter('search', ''),
+        }
       : null,
     filters.residencia
-      ? { key: 'residencia', label: 'Residencia', value: filters.residencia, onClear: () => setFilter('residencia', '') }
+      ? {
+          key: 'residencia',
+          label: 'Residencia',
+          value: filters.residencia,
+          onClear: () => setFilter('residencia', ''),
+        }
       : null,
     filters.nivelRetributivo
-      ? { key: 'nivelRetributivo', label: 'Nivel retributivo', value: filters.nivelRetributivo, onClear: () => setFilter('nivelRetributivo', '') }
+      ? {
+          key: 'nivelRetributivo',
+          label: 'Nivel retributivo',
+          value: filters.nivelRetributivo,
+          onClear: () => setFilter('nivelRetributivo', ''),
+        }
       : null,
     filters.direccionOrganizativa
-      ? { key: 'direccionOrganizativa', label: 'Dirección', value: filters.direccionOrganizativa, onClear: () => setFilter('direccionOrganizativa', '') }
+      ? {
+          key: 'direccionOrganizativa',
+          label: 'Dirección',
+          value: filters.direccionOrganizativa,
+          onClear: () => setFilter('direccionOrganizativa', ''),
+        }
       : null,
   ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
@@ -204,12 +242,18 @@ export function PlantillaPage() {
     setFilter('direccionOrganizativa', '');
   };
 
-  const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths, resetPreferences } =
-    useTableViewPreferences<EmployeeTableColumnId>({
-      storageKey: PLANTILLA_TABLE_STORAGE_KEY,
-      defaultPreferences: defaultPlantillaTablePreferences,
-      validColumnIds: plantillaTableColumnIds,
-    });
+  const {
+    preferences,
+    setSort,
+    setColumnWidth,
+    setColumnOrder,
+    resetColumnWidths,
+    resetPreferences,
+  } = useTableViewPreferences<EmployeeTableColumnId>({
+    storageKey: PLANTILLA_TABLE_STORAGE_KEY,
+    defaultPreferences: defaultPlantillaTablePreferences,
+    validColumnIds: plantillaTableColumnIds,
+  });
 
   const employeeTableColumns = useMemo<Array<DataTableColumn<Employee, EmployeeTableColumnId>>>(
     () => [
@@ -313,7 +357,10 @@ export function PlantillaPage() {
             onClick={(event) => {
               event.stopPropagation();
               void (async () => {
-                const result = await removeWithConcurrencyCheck(employee.empleado, JSON.stringify(employee));
+                const result = await removeWithConcurrencyCheck(
+                  employee.empleado,
+                  JSON.stringify(employee),
+                );
                 setImportMessage(result.message);
               })();
             }}
@@ -346,7 +393,9 @@ export function PlantillaPage() {
         `Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`,
       );
     } catch (error) {
-      setImportMessage(error instanceof Error ? error.message : 'No se han podido actualizar los puestos EUS.');
+      setImportMessage(
+        error instanceof Error ? error.message : 'No se han podido actualizar los puestos EUS.',
+      );
     }
   };
 
@@ -409,25 +458,43 @@ export function PlantillaPage() {
       });
 
       const notesSheet = workbook.addWorksheet('Instrucciones');
-      notesSheet.columns = [{ header: 'Campo', width: 26 }, { header: 'Uso', width: 82 }];
+      notesSheet.columns = [
+        { header: 'Campo', width: 26 },
+        { header: 'Uso', width: 82 },
+      ];
       notesSheet.addRows([
-        ['Empleado', 'Obligatorio. Número de empleado; identifica a la persona y evita duplicados.'],
+        [
+          'Empleado',
+          'Obligatorio. Número de empleado; identifica a la persona y evita duplicados.',
+        ],
         ['Nombre Apellidos', 'Recomendado. Nombre completo de la persona.'],
-        ['Puesto Nomina / Puesto Organizativo / Puesto EUS', 'Opcionales. Se usan en Teletrabajo para resolver el puesto de cada persona.'],
+        [
+          'Puesto Nomina / Puesto Organizativo / Puesto EUS',
+          'Opcionales. Se usan en Teletrabajo para resolver el puesto de cada persona.',
+        ],
         ['Residencia', 'Opcional. Centro de trabajo.'],
         ['Unidad', 'Opcional. Unidad organizativa corta.'],
         ['Nivel Retributivo', 'Opcional.'],
         ['Direccion Organizativa', 'Opcional. Área o dirección a la que pertenece la persona.'],
         ['Antiguedad Puesto', 'Opcional. Fecha en formato AAAA-MM-DD.'],
         ['Sexo', 'Opcional.'],
-        ['Calle, Numero, Piso, Codigo Postal, Poblacion, Provincia', 'Opcionales. Domicilio particular.'],
+        [
+          'Calle, Numero, Piso, Codigo Postal, Poblacion, Provincia',
+          'Opcionales. Domicilio particular.',
+        ],
         ['NIF', 'Opcional.'],
-        ['General', 'Los nombres de columnas admiten variantes habituales (con/sin acentos, "Nº Empleado", etc.). Fila de ejemplo: sustituir o borrar antes de importar.'],
+        [
+          'General',
+          'Los nombres de columnas admiten variantes habituales (con/sin acentos, "Nº Empleado", etc.). Fila de ejemplo: sustituir o borrar antes de importar.',
+        ],
       ]);
       notesSheet.getRow(1).font = { bold: true };
 
       const buffer = await workbook.xlsx.writeBuffer();
-      await openWorkbookInExcel(buffer, buildStableExportFilename('muestra-plantilla', generatedAt));
+      await openWorkbookInExcel(
+        buffer,
+        buildStableExportFilename('muestra-plantilla', generatedAt),
+      );
       setImportMessage('Excel de muestra generado.');
     } catch (error) {
       setImportMessage(
@@ -461,7 +528,11 @@ export function PlantillaPage() {
                       : `Importación completada: ${file.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
                   );
                 } catch (error) {
-                  setImportMessage(error instanceof Error ? error.message : 'No se ha podido importar la plantilla.');
+                  setImportMessage(
+                    error instanceof Error
+                      ? error.message
+                      : 'No se ha podido importar la plantilla.',
+                  );
                 } finally {
                   event.target.value = '';
                 }
@@ -510,11 +581,8 @@ export function PlantillaPage() {
             </ActionButton>
           </>
         }
-        eyebrow="Módulo"
         helpSections={PLANTILLA_HELP_SECTIONS}
         helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
-        subtitle="Listado de personas con alta manual, edición, borrado lógico e importación Excel."
-        icon={UsersRound}
         title="Plantilla"
       />
 

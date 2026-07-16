@@ -1,4 +1,4 @@
-import { CalendarDays, Euro, Settings, Trash2, Utensils } from 'lucide-react';
+import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
@@ -1374,18 +1374,9 @@ export function TicketRestaurantePage({
       id="ticket-restaurante"
     >
       <PageHeader
-        eyebrow="Ticket Restaurante"
-        icon={Utensils}
         helpSections={TICKET_RESTAURANTE_HELP_SECTIONS}
         helpSubtitle="Guía rápida de uso, reglas principales e importaciones del módulo."
-        subtitle={
-          <>
-            Gestión anual de calendarios y ausencias de Ticket Restaurante.
-            <div className="mt-2">
-              <InlineSaveFeedback />
-            </div>
-          </>
-        }
+        status={<InlineSaveFeedback />}
         title="Ticket Restaurante"
       />
 
