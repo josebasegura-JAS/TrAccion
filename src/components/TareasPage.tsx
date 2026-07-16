@@ -706,13 +706,13 @@ export function TareasPage({
         actions={
           <>
             <button
-              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
               onClick={() => setIsOriginsModalOpen(true)}
               type="button"
             >
-              <Settings size={16} /> Orígenes
+              <Settings size={14} /> Orígenes
             </button>
-            <ActionButton iconOnly={false} onClick={openCreateEditor} variant="add">
+            <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva tarea
             </ActionButton>
           </>

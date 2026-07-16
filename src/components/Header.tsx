@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { UserRound } from 'lucide-react';
 import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
+import { ModuleHelpButton } from './ModuleHelp';
+import { useModuleHelpRegistry } from '../services/moduleHelpRegistry';
 import { useDatabaseStatus } from '../services/databaseStatus';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
-
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: {
@@ -88,6 +89,7 @@ export function Header({
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
   const breadcrumb = useMemo(() => getNavigationBreadcrumb(activeView), [activeView]);
+  const moduleHelp = useModuleHelpRegistry((state) => state.content);
   const dbStatus = useDatabaseStatus();
   const syncStatus = useExternalDataSyncStatus();
 
@@ -126,7 +128,7 @@ export function Header({
 
   return (
     <header className="flex h-[72px] items-center justify-between border-b border-metro-border bg-metro-topbar/95 px-6 shadow-sm shadow-slate-950/20">
-      <div className="flex min-w-0 items-center">
+      <div className="flex min-w-0 items-center gap-3">
         <div className="min-w-0">
           <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-metro-muted">
             {breadcrumb}
@@ -136,6 +138,13 @@ export function Header({
           </h1>
           <p className="truncate text-xs text-metro-muted">{headerCopy.subtitle}</p>
         </div>
+        {moduleHelp ? (
+          <ModuleHelpButton
+            title={moduleHelp.title}
+            subtitle={moduleHelp.subtitle}
+            sections={moduleHelp.sections}
+          />
+        ) : null}
       </div>
 
       <div className="flex min-w-0 items-center gap-4">
