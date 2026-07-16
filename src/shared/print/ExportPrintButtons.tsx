@@ -9,16 +9,27 @@ import { PrintPreviewModal } from './PrintPreviewModal';
 interface ExportPrintButtonsProps<T> {
   payload: ExportTablePayload<T>;
   htmlBuilder?: () => string;
+  /** 'sm' para usarlo junto a otras acciones compactas de cabecera de módulo. Por defecto 'md'. */
+  size?: 'sm' | 'md';
 }
 
-export function ExportPrintButtons<T>({ payload, htmlBuilder }: ExportPrintButtonsProps<T>) {
+export function ExportPrintButtons<T>({
+  payload,
+  htmlBuilder,
+  size = 'md',
+}: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const { alert, dialogNode } = useAppDialog();
   return (
     <>
       <ActionButton
         disabled={payload.rows.length === 0}
-        onClick={() => exportTableToExcel({ ...payload, generatedAt: new Date() }, (message) => { void alert(message, { type: 'error' }); })}
+        onClick={() =>
+          exportTableToExcel({ ...payload, generatedAt: new Date() }, (message) => {
+            void alert(message, { type: 'error' });
+          })
+        }
+        size={size}
         variant="excel"
       >
         Exportar Excel
@@ -26,8 +37,13 @@ export function ExportPrintButtons<T>({ payload, htmlBuilder }: ExportPrintButto
       <ActionButton
         disabled={payload.rows.length === 0}
         onClick={() =>
-          setPreviewHtml(htmlBuilder ? htmlBuilder() : buildPrintableTableHtml({ ...payload, generatedAt: new Date() }))
+          setPreviewHtml(
+            htmlBuilder
+              ? htmlBuilder()
+              : buildPrintableTableHtml({ ...payload, generatedAt: new Date() }),
+          )
         }
+        size={size}
         variant="print"
       >
         Imprimir

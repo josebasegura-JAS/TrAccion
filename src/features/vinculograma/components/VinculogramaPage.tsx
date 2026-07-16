@@ -785,10 +785,11 @@ export function VinculogramaPage() {
                 variant="word"
                 iconOnly={false}
                 onClick={() => setShowSolicitudModal(true)}
+                size="sm"
               >
                 Enviar solicitud Word
               </ActionButton>
-              <ActionButton variant="add" iconOnly={false} onClick={openCreateModal}>
+              <ActionButton variant="add" iconOnly={false} onClick={openCreateModal} size="sm">
                 Nuevo vínculo
               </ActionButton>
             </div>

@@ -541,7 +541,8 @@ export function PlantillaPage() {
               type="file"
             />
             <DropdownMenu
-              icon={<Upload size={16} />}
+              icon={<Upload size={14} />}
+              size="sm"
               items={[
                 {
                   key: 'traducir-puestos',
@@ -576,7 +577,7 @@ export function PlantillaPage() {
               ]}
               label="Importar"
             />
-            <ActionButton iconOnly={false} onClick={openCreateEditor} variant="add">
+            <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva persona
             </ActionButton>
           </>

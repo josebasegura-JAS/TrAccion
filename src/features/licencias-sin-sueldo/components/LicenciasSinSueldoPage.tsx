@@ -1029,6 +1029,7 @@ export function LicenciasSinSueldoPage() {
             variant="add"
             iconOnly={false}
             onClick={() => setEditor({ mode: 'create', record: null })}
+            size="sm"
           >
             Nueva solicitud
           </ActionButton>

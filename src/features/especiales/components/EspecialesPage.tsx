@@ -403,14 +403,15 @@ export function EspecialesPage() {
                 iconOnly={false}
                 disabled={Boolean(draftUnavailableReason) || isGeneratingDraft}
                 onClick={() => void createOutlookDraft()}
+                size="sm"
               >
-                <MailPlus size={16} />
+                <MailPlus size={14} />
                 {isGeneratingDraft
                   ? 'Generando borrador en Outlook...'
                   : 'Generar borrador en Outlook'}
               </ActionButton>
-              <ActionButton variant="secondary" iconOnly={false} onClick={resetForm}>
-                <RotateCcw size={16} /> Limpiar formulario
+              <ActionButton variant="secondary" iconOnly={false} onClick={resetForm} size="sm">
+                <RotateCcw size={14} /> Limpiar formulario
               </ActionButton>
             </>
           }

@@ -720,18 +720,20 @@ export function ActasPage() {
               variant="secondary"
               iconOnly={false}
               onClick={() => setIsTypeManagerOpen(true)}
+              size="sm"
               title="Gestionar tipos de acta"
             >
-              <Settings2 size={16} />
+              <Settings2 size={14} />
               Nuevo tipo
             </ActionButton>
             <ActionButton
               variant="secondary"
               iconOnly={false}
               onClick={openOutlookTemplateManager}
+              size="sm"
               title="Configurar plantilla Outlook de Actas"
             >
-              <Mail size={16} />
+              <Mail size={14} />
               Outlook
             </ActionButton>
             <ExportPrintButtons
@@ -742,8 +744,9 @@ export function ActasPage() {
                 rows: filteredActas,
                 filterLabel,
               }}
+              size="sm"
             />
-            <ActionButton variant="add" onClick={() => openEditor()} title="Nueva acta" />
+            <ActionButton variant="add" onClick={() => openEditor()} size="sm" title="Nueva acta" />
           </>
         }
       />

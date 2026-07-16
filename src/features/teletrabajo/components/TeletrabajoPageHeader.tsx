@@ -64,7 +64,8 @@ export function TeletrabajoPageHeader({
             type="file"
           />
           <DropdownMenu
-            icon={<Upload size={16} />}
+            icon={<Upload size={14} />}
+            size="sm"
             items={[
               {
                 key: 'importar-encuesta',
@@ -94,32 +95,32 @@ export function TeletrabajoPageHeader({
             label="Importar"
           />
           <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
             onClick={onOpenPuestosModal}
             type="button"
           >
-            <BriefcaseBusiness size={16} /> Puestos Teletrabajo
+            <BriefcaseBusiness size={14} /> Puestos Teletrabajo
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
             onClick={onOpenGruposCoberturaModal}
             type="button"
           >
-            <Users size={16} /> Grupos Cobertura
+            <Users size={14} /> Grupos Cobertura
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
             onClick={onOpenPeriodoModal}
             type="button"
           >
-            <Plus size={16} /> Nuevo periodo
+            <Plus size={14} /> Nuevo periodo
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
             onClick={onCreateSolicitud}
             type="button"
           >
-            <Plus size={16} /> Nueva solicitud
+            <Plus size={14} /> Nueva solicitud
           </button>
         </>
       }

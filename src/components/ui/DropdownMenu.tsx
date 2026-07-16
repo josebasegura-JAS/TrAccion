@@ -15,6 +15,8 @@ interface DropdownMenuProps {
   items: DropdownMenuItem[];
   align?: 'left' | 'right';
   className?: string;
+  /** 'sm' para usarlo junto a otras acciones compactas de cabecera de módulo. Por defecto 'md'. */
+  size?: 'sm' | 'md';
 }
 
 /**
@@ -22,7 +24,14 @@ interface DropdownMenuProps {
  * relacionadas (por ejemplo "Importar encuesta" + "Generar muestra") bajo un
  * único control, en vez de ocupar una fila entera con botones sueltos.
  */
-export function DropdownMenu({ label, icon, items, align = 'left', className }: DropdownMenuProps) {
+export function DropdownMenu({
+  align = 'left',
+  className,
+  icon,
+  items,
+  label,
+  size = 'md',
+}: DropdownMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +64,9 @@ export function DropdownMenu({ label, icon, items, align = 'left', className }: 
       <button
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+        className={`inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface font-semibold text-metro-text hover:border-metro-red ${
+          size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'
+        }`}
         onClick={() => setIsOpen((previous) => !previous)}
         type="button"
       >
@@ -63,7 +74,7 @@ export function DropdownMenu({ label, icon, items, align = 'left', className }: 
         {label}
         <ChevronDown
           className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          size={14}
+          size={size === 'sm' ? 12 : 14}
         />
       </button>
       {isOpen && (

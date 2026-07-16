@@ -347,7 +347,8 @@ export function CriteriosRrllPage() {
               type="file"
             />
             <DropdownMenu
-              icon={<FileUp size={16} />}
+              icon={<FileUp size={14} />}
+              size="sm"
               items={[
                 {
                   key: 'descargar-plantilla',
@@ -366,7 +367,7 @@ export function CriteriosRrllPage() {
               ]}
               label="Importar"
             />
-            <ActionButton variant="add" iconOnly={false} onClick={openCreateEditor}>
+            <ActionButton variant="add" iconOnly={false} onClick={openCreateEditor} size="sm">
               Nuevo criterio
             </ActionButton>
           </>

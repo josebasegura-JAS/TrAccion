@@ -597,6 +597,7 @@ export function SessionManagementPage({
                 rows: sessions,
                 filterLabel: sessionFilterLabel,
               }}
+              size="sm"
             />
             <input
               accept=".docx,.txt"
@@ -605,13 +606,14 @@ export function SessionManagementPage({
               ref={fileInputRef}
               type="file"
             />
-            <ActionButton iconOnly={false} onClick={openImporter} variant="word">
+            <ActionButton iconOnly={false} onClick={openImporter} variant="word" size="sm">
               Importar Word
             </ActionButton>
             <ActionButton
               iconOnly={false}
               onClick={() => setIsCreateOpen((current) => !current)}
               variant="add"
+              size="sm"
             >
               {config.createButtonLabel}
             </ActionButton>
