@@ -915,6 +915,9 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-metro-muted">
               Alta, edición y activación de sindicatos, áreas internas u otros orígenes.
             </p>
+            <div className="mt-1">
+              <InlineSaveFeedback />
+            </div>
           </div>
           <ModalCloseButton label="Cerrar mantenimiento de orígenes" onClick={onClose} />
         </div>
