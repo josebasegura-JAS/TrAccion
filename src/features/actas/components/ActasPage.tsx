@@ -1,4 +1,4 @@
-import { Mail, Settings2, Trash2 } from 'lucide-react';
+import { Mail, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -496,22 +496,22 @@ export function ActasPage() {
           >
             {acta.estado === 'Pendiente de alegaciones' && (
               <button
-                className="inline-flex items-center gap-1 rounded-lg border border-sky-400/50 px-2 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/10"
+                aria-label="Abrir borrador Outlook de alegaciones"
+                className="inline-flex aspect-square items-center justify-center rounded-lg border border-sky-400/50 px-0 py-1.5 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10"
+                data-tip="Abrir borrador Outlook de alegaciones"
                 onClick={() => void createActaOutlookDraft(acta)}
                 title="Abrir borrador Outlook de alegaciones"
                 type="button"
               >
-                O
+                <Mail size={14} />
               </button>
             )}
-            <button
-              className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-500/10"
+            <ActionButton
               onClick={() => void deleteActa(acta.id)}
+              size="sm"
               title="Eliminar acta"
-              type="button"
-            >
-              <Trash2 size={13} />
-            </button>{' '}
+              variant="delete"
+            />
           </div>
         ),
         width: 80,
@@ -746,7 +746,15 @@ export function ActasPage() {
               }}
               size="sm"
             />
-            <ActionButton variant="add" onClick={() => openEditor()} size="sm" title="Nueva acta" />
+            <ActionButton
+              iconOnly={false}
+              onClick={() => openEditor()}
+              size="sm"
+              title="Nueva acta"
+              variant="add"
+            >
+              Nueva acta
+            </ActionButton>
           </>
         }
       />
