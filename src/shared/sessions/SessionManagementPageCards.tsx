@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from 'react';
 import type { Task } from '../../features/tareas/domain/task';
 import { useSharedRecordLock } from '../../services/useSharedRecordLock';
+import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
@@ -132,38 +133,41 @@ export function SessionCard({
           {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
         </button>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} />
+          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} size="sm" />
           {onEdit && (
-            <button
-              className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+            <ActionButton
               disabled={!isExpanded || isReadOnly}
+              iconOnly={false}
               onClick={() => onEdit(session)}
+              size="sm"
               title={
                 !isExpanded ? 'Abre la sesión para bloquearla antes de editarla' : 'Editar sesión'
               }
-              type="button"
+              variant="edit"
             >
-              <Pencil size={14} /> Editar
-            </button>
+              Editar
+            </ActionButton>
           )}
-          <button
-            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+          <ActionButton
             disabled={!isExpanded || isReadOnly}
-            title={!isExpanded ? 'Abre la sesión para bloquearla antes de cerrarla' : undefined}
+            iconOnly={false}
             onClick={() => onClose(session)}
-            type="button"
+            size="sm"
+            title={!isExpanded ? 'Abre la sesión para bloquearla antes de cerrarla' : undefined}
+            variant="secondary"
           >
             Cerrar sesión
-          </button>
-          <button
-            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+          </ActionButton>
+          <ActionButton
             disabled={!isExpanded || isReadOnly}
-            title={!isExpanded ? 'Abre la sesión para bloquearla antes de eliminarla' : undefined}
+            iconOnly={false}
             onClick={() => void onRemove(session)}
-            type="button"
+            size="sm"
+            title={!isExpanded ? 'Abre la sesión para bloquearla antes de eliminarla' : undefined}
+            variant="delete"
           >
-            <Trash2 size={14} /> Eliminar
-          </button>
+            Eliminar
+          </ActionButton>
         </div>
       </div>
 
@@ -319,10 +323,10 @@ export function HistoricSessionCard({
           {session.notes && <p className="mt-2 text-sm text-metro-muted">{session.notes}</p>}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} />
+          <ExportPrintButtons htmlBuilder={sessionPrintBuilder} payload={sessionExportPayload} size="sm" />
           {onEdit && (
             <button
-              className="inline-flex items-center gap-1 rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
               data-tip="Editar sesión histórica"
               onClick={() => onEdit(session)}
               type="button"
@@ -331,7 +335,7 @@ export function HistoricSessionCard({
             </button>
           )}
           <button
-            className="inline-flex items-center gap-1 rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/10"
             onClick={() => {
               void (async () => {
                 const confirmed = await onConfirm(

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
@@ -157,6 +157,7 @@ export function SessionManagementPage({
     ? (tasks.find((task) => task.id === editingTaskId) ?? null)
     : null;
   const canEditSessions = config.moduleId === 'comite';
+  const showSearchInHeader = config.moduleId === 'comite';
   const sessionFilterLabel = buildFilterLabel([
     ['Módulo', config.title],
     ['Búsqueda', sessionSearch],
@@ -589,6 +590,41 @@ export function SessionManagementPage({
       <PageHeader
         actions={
           <>
+            {showSearchInHeader && (
+              <div className="flex min-w-[280px] flex-1 items-center gap-2 sm:min-w-[360px]">
+                <label className="sr-only" htmlFor={`${config.moduleId}-session-search`}>
+                  Buscar en {config.shortTitle}
+                </label>
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-metro-red"
+                    size={14}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-metro-border bg-metro-surface py-1.5 pl-8 pr-8 text-xs text-metro-text outline-none focus:border-metro-red"
+                    id={`${config.moduleId}-session-search`}
+                    onChange={(event) => setSessionSearch(event.target.value)}
+                    placeholder="Buscar sesiones o puntos..."
+                    type="search"
+                    value={sessionSearch}
+                  />
+                  {sessionSearch && (
+                    <button
+                      aria-label="Limpiar búsqueda"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-metro-muted hover:bg-metro-panel hover:text-metro-text"
+                      onClick={() => setSessionSearch('')}
+                      type="button"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                <CountBadge>
+                  {filteredOpenSessions.length + closedSessionCount}/{sessions.length}
+                </CountBadge>
+              </div>
+            )}
             <ExportPrintButtons
               payload={{
                 title: config.exportTitle,
@@ -673,36 +709,38 @@ export function SessionManagementPage({
         </div>
       )}
 
-      <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel/80 p-3">
-        <label
-          className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted"
-          htmlFor={`${config.moduleId}-session-search`}
-        >
-          <Search size={14} className="text-metro-red" /> Buscar en {config.shortTitle}
-        </label>
-        <div className="mt-2 flex flex-row flex-wrap items-center gap-2">
-          <input
-            className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
-            id={`${config.moduleId}-session-search`}
-            onChange={(event) => setSessionSearch(event.target.value)}
-            placeholder="Buscar por sesión, fecha, código, punto, sindicato, responsable, descripción..."
-            type="search"
-            value={sessionSearch}
-          />
-          <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
-            {filteredOpenSessions.length + closedSessionCount} de {sessions.length} sesiones
-          </span>
-          {sessionSearch && (
-            <button
-              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-              onClick={() => setSessionSearch('')}
-              type="button"
-            >
-              Limpiar
-            </button>
-          )}
+      {!showSearchInHeader && (
+        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel/80 p-3">
+          <label
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted"
+            htmlFor={`${config.moduleId}-session-search`}
+          >
+            <Search size={14} className="text-metro-red" /> Buscar en {config.shortTitle}
+          </label>
+          <div className="mt-2 flex flex-row flex-wrap items-center gap-2">
+            <input
+              className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              id={`${config.moduleId}-session-search`}
+              onChange={(event) => setSessionSearch(event.target.value)}
+              placeholder="Buscar por sesión, fecha, código, punto, sindicato, responsable, descripción..."
+              type="search"
+              value={sessionSearch}
+            />
+            <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
+              {filteredOpenSessions.length + closedSessionCount} de {sessions.length} sesiones
+            </span>
+            {sessionSearch && (
+              <button
+                className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                onClick={() => setSessionSearch('')}
+                type="button"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(310px,0.85fr)]">
         <SessionPanel
