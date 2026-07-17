@@ -715,7 +715,34 @@ export function ActasPage() {
         helpSections={ACTAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
         actions={
-          <>
+          <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
+            <div className="min-w-[300px] flex-1">
+              <Input
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por título, estado, actualización, alegación o ruta..."
+                value={search}
+              />
+            </div>
+            <div className="w-[210px] shrink-0">
+              <Select onChange={(event) => setStateFilter(event.target.value)} value={stateFilter}>
+                <option value="">Todos los estados</option>
+                {ACTA_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-[150px] shrink-0">
+              <Select onChange={(event) => setYearFilter(event.target.value)} value={yearFilter}>
+                <option value="">Todos los años</option>
+                {years.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <ActionButton
               variant="secondary"
               iconOnly={false}
@@ -755,33 +782,9 @@ export function ActasPage() {
             >
               Nueva acta
             </ActionButton>
-          </>
+          </div>
         }
       />
-
-      <div className="grid grid-cols-[minmax(220px,1fr)_220px_160px] gap-2 overflow-x-auto">
-        <Input
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar por título, estado, actualización, alegación o ruta..."
-          value={search}
-        />
-        <Select onChange={(event) => setStateFilter(event.target.value)} value={stateFilter}>
-          <option value="">Todos los estados</option>
-          {ACTA_STATES.map((state) => (
-            <option key={state} value={state}>
-              {state}
-            </option>
-          ))}
-        </Select>
-        <Select onChange={(event) => setYearFilter(event.target.value)} value={yearFilter}>
-          <option value="">Todos los años</option>
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </Select>
-      </div>
 
       {outlookDraftStatus && (
         <p
