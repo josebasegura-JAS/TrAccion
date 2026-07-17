@@ -7,6 +7,7 @@ import {
   hydrateLocalStorageFromSqlite,
   reportStartupHydrationResult,
 } from './services/persistence';
+import { getDirtyEditorCount } from './services/dirtyEditors';
 import './styles.css';
 
 function waitForNextPaint(): Promise<void> {
@@ -100,15 +101,17 @@ startApp().catch((error: unknown) => {
 // da al usuario la oportunidad de cancelar el cierre.
 window.addEventListener('beforeunload', (event) => {
   const pending = getPendingSqliteWriteCount();
-  if (pending === 0) {
+  const dirtyEditors = getDirtyEditorCount();
+  if (pending === 0 && dirtyEditors === 0) {
     return;
   }
 
-  // Intentar flush en background — puede completarse si SQLite responde rápido.
-  void flushPendingSqliteWrites().catch(() => undefined);
+  if (pending > 0) {
+    void flushPendingSqliteWrites().catch(() => undefined);
+  }
 
-  // Mostrar confirmación nativa para que el usuario pueda esperar o cancelar.
   event.preventDefault();
-  // returnValue es necesario para que Electron muestre el diálogo de confirmación.
-  event.returnValue = `Hay ${pending} cambio${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''} de sincronizar con la base de datos compartida. ¿Cerrar de todas formas?`;
+  event.returnValue = dirtyEditors > 0
+    ? `Hay ${dirtyEditors} formulario${dirtyEditors > 1 ? 's' : ''} con cambios sin guardar. ¿Cerrar de todas formas?`
+    : `Hay ${pending} cambio${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''} de sincronizar con la base de datos compartida. ¿Cerrar de todas formas?`;
 });

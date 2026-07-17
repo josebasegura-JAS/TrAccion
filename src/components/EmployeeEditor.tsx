@@ -12,6 +12,7 @@ import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { ActionButton } from './ui/ActionButton';
 import { ModalCloseButton } from './ui/ModalCloseButton';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
   { field: 'empleado', label: 'Empleado', required: true },
@@ -88,6 +89,12 @@ export function EmployeeEditor({
   });
   const isReadOnly = recordLock.isReadOnly;
   const canSubmit = Boolean(draft.empleado.trim() && draft.nombreApellidos.trim()) && !isReadOnly;
+  const { requestClose, dialogNode } = useUnsavedChanges({
+    currentValue: draft,
+    initialValue: toDraft(employee),
+    enabled: !isReadOnly,
+    onDiscard: onDone,
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -112,7 +119,7 @@ export function EmployeeEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <ModalCloseButton label="Cerrar editor" onClick={onDone} />
+          <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
           </div>
         </div>
 
@@ -237,7 +244,7 @@ export function EmployeeEditor({
             )}
             <button
               className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
-              onClick={onDone}
+              onClick={() => void requestClose()}
               type="button"
             >
               Cancelar
@@ -245,6 +252,7 @@ export function EmployeeEditor({
           </div>
         </form>
       </aside>
+      {dialogNode}
     </div>
   );
 }

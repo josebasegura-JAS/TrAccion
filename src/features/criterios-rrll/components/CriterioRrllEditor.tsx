@@ -15,6 +15,7 @@ import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
 
 const criterioTextFields: Array<{
   field: CriterioRrllDraftField;
@@ -69,6 +70,12 @@ export function CriterioRrllEditor({
   });
   const isReadOnly = recordLock.isReadOnly;
   const canSubmit = draft.tema.trim().length > 0 && draft.criterio.trim().length > 0 && !isReadOnly;
+  const { requestClose, dialogNode } = useUnsavedChanges({
+    currentValue: draft,
+    initialValue: toDraft(criterio),
+    enabled: !isReadOnly,
+    onDiscard: onDone,
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -91,7 +98,7 @@ export function CriterioRrllEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-          <ModalCloseButton label="Cerrar editor" onClick={onDone} />
+          <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
           </div>
         </div>
 
@@ -233,12 +240,13 @@ export function CriterioRrllEditor({
                 Eliminar
               </ActionButton>
             )}
-            <ActionButton variant="secondary" iconOnly={false} onClick={onDone}>
+            <ActionButton variant="secondary" iconOnly={false} onClick={() => void requestClose()}>
               Cancelar
             </ActionButton>
           </div>
         </form>
       </aside>
+      {dialogNode}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Fiel
 import { Notice } from '../../../components/ui/Notice';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
+import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   EMPTY_LICENCIA_SIN_SUELDO_DRAFT,
@@ -65,6 +66,12 @@ export function LicenciasSinSueldoEditor({
   const lockMessage =
     recordLock.message ||
     (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
+  const { requestClose, dialogNode } = useUnsavedChanges({
+    currentValue: draft,
+    initialValue: record ? toDraft(record) : { ...EMPTY_LICENCIA_SIN_SUELDO_DRAFT, fechaSolicitud: todayIso() },
+    enabled: !isReadOnly,
+    onDiscard: onClose,
+  });
 
   const suggestions = useMemo(
     () =>
@@ -151,7 +158,7 @@ export function LicenciasSinSueldoEditor({
             <ModalDatabaseStatus />
             <button
               className="rounded-full p-2 text-metro-muted transition hover:bg-white/5 hover:text-metro-text"
-              onClick={onClose}
+              onClick={() => void requestClose()}
               type="button"
             >
               <X size={18} />
@@ -357,7 +364,7 @@ export function LicenciasSinSueldoEditor({
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>
+            <ActionButton variant="secondary" iconOnly={false} onClick={() => void requestClose()}>
               Cancelar
             </ActionButton>
             {mode === 'edit' && record && (
@@ -380,6 +387,7 @@ export function LicenciasSinSueldoEditor({
           </div>
         </div>
       </div>
+      {dialogNode}
     </div>
   );
 }

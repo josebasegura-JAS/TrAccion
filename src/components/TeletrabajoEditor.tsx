@@ -20,6 +20,7 @@ import { ActionButton } from './ui/ActionButton';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 import { TeletrabajoEditorFields } from './teletrabajo-editor/TeletrabajoEditorFields';
 import { TeletrabajoEditorHeader } from './teletrabajo-editor/TeletrabajoEditorHeader';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 
 function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   if (!solicitud) {
@@ -169,6 +170,12 @@ export function TeletrabajoEditor({
   const canEdit = Boolean(solicitud);
   const canSubmit = (isCreate ? canCreate : canEdit) && !isFormReadOnly && !isSaving;
   const canGenerateWord = canCreate && !isFormReadOnly && !isSaving;
+  const { requestClose, dialogNode } = useUnsavedChanges({
+    currentValue: draftForSave,
+    initialValue: toDraft(solicitud),
+    enabled: !isFormReadOnly,
+    onDiscard: onDone,
+  });
 
   const handleEmpleadoChange = (empleado: string) => {
     const employee = findActiveEmployeeByEmpleado(employees, empleado);
@@ -215,7 +222,7 @@ export function TeletrabajoEditor({
           isCreate={isCreate}
           isNuevaPeticion={isNuevaPeticion}
           nombreApellidos={draft.nombreApellidos || solicitud?.nombreApellidos || ''}
-          onDone={onDone}
+          onDone={() => void requestClose()}
           solicitudId={solicitud?.id ?? null}
         />
 
@@ -362,7 +369,7 @@ export function TeletrabajoEditor({
             )}
             <button
               className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
-              onClick={onDone}
+              onClick={() => void requestClose()}
               type="button"
             >
               Cancelar
@@ -370,6 +377,7 @@ export function TeletrabajoEditor({
           </div>
         </form>
       </aside>
+      {dialogNode}
     </div>
   );
 }

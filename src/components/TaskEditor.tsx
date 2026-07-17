@@ -20,6 +20,7 @@ import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 import { ModalCloseButton } from './ui/ModalCloseButton';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -253,6 +254,12 @@ export function TaskEditor({
   const isWaitingForSharedDatabase = lockMessage.startsWith('Esperando base compartida');
   const shouldShowReadOnlyBadge = isFormReadOnly && !isWaitingForSharedDatabase;
   const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
+  const { requestClose, dialogNode } = useUnsavedChanges({
+    currentValue: { draft, newUpdateText },
+    initialValue: { draft: toDraft(task), newUpdateText: '' },
+    enabled: !isFormReadOnly,
+    onDiscard: onDone,
+  });
 
   const handleSubmit = async () => {
     if (!canSubmit || isFormReadOnly) {
@@ -501,7 +508,7 @@ export function TaskEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-            <ModalCloseButton label="Cerrar editor" onClick={onDone} />
+            <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
           </div>
         </div>
 
@@ -907,7 +914,7 @@ export function TaskEditor({
             )}
             <button
               className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
-              onClick={onDone}
+              onClick={() => void requestClose()}
               type="button"
             >
               Cancelar
@@ -915,6 +922,7 @@ export function TaskEditor({
           </div>
         </form>
       </aside>
+      {dialogNode}
     </div>
   );
 }
