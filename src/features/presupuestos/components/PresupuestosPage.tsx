@@ -1,13 +1,11 @@
-import { Calculator } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ExportColumn } from '../../../shared/export/types';
+import { useEffect, useMemo, useState } from 'react';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
-import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { FieldLabel, Input, Select } from '../../../components/ui/Field';
+import { FieldLabel, Select } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { Notice } from '../../../components/ui/Notice';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
 import {
   BUDGET_ACTUAL_BLOCKS,
@@ -24,7 +22,6 @@ import {
   type BudgetComparisonRow,
   type BudgetManualItem,
   type BudgetScenario,
-  type BudgetScenarioExportRow,
   type BudgetScenarioMonthlyTotal,
   type BudgetTicketCalculationType,
   type BudgetTicketGroup,
@@ -36,227 +33,28 @@ import {
   type BudgetScenarioDraft,
   type BudgetTicketGroupDraft,
 } from '../store/usePresupuestosStore';
-
-const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
-  {
-    title: 'Para qué sirve',
-    body: 'Permite crear escenarios presupuestarios anuales de RRLL, combinando conceptos manuales con grupos de Ticket Restaurante, y compararlos entre sí o frente al gasto real ejecutado.',
-  },
-  {
-    title: 'Conceptos manuales',
-    items: [
-      'Cada concepto puede definirse con un importe mensual o con un importe anual directo.',
-      'Si se informa el importe anual, este tiene prioridad: el mensual se calcula dividiéndolo entre 12. Si no hay importe anual, el anual se calcula multiplicando el mensual por 12.',
-    ],
-  },
-  {
-    title: 'Grupos de Ticket Restaurante: 4 formas de calcular',
-    items: [
-      'Personas por calendario: días con derecho a ticket del calendario asignado × nº de personas × (1 − % de ausentismo) × precio del ticket. Es el cálculo más ajustado a la realidad, siempre que el calendario y el nº de personas estén bien informados.',
-      'Tickets mensuales: un nº de tickets manual cada mes × precio del ticket.',
-      'Tickets anuales: un nº de tickets manual para todo el año × precio del ticket; para la vista mensual se reparte entre 12.',
-      'Importe manual: un importe fijo cada mes (× 12 para el anual), sin ningún cálculo de días o personas.',
-      'Cada grupo puede tener su propio precio de ticket o heredar el precio general definido en el escenario.',
-    ],
-  },
-  {
-    title: 'Comparativa entre escenarios',
-    items: [
-      'Permite comparar dos escenarios del mismo año mes a mes, mostrando la diferencia en importe y en porcentaje.',
-      'Es la forma recomendada de valorar una alternativa (por ejemplo, subir el precio del ticket o cambiar una plantilla) sin tocar el escenario original: duplica el escenario y compáralo con el de partida.',
-    ],
-  },
-  {
-    title: 'Comparativa con lo real ejecutado',
-    items: [
-      'Se pueden registrar importes reales ejecutados por año, mes, bloque (Ticket Restaurante, Formación, Vestuario, Consultoría, Reconocimientos médicos, Gastos sindicales, Otros) y concepto.',
-      'La comparativa acumula el presupuesto hasta un mes de corte elegido y lo enfrenta a lo realmente gastado en ese periodo, separando "Ticket Restaurante" del resto de partidas manuales.',
-      'Muestra la diferencia total y por bloque, en importe y en porcentaje, para detectar desviaciones cuanto antes.',
-    ],
-  },
-  {
-    title: 'Uso recomendado',
-    items: [
-      'Crea un escenario por año y añade primero los grupos de Ticket Restaurante (suelen ser el bloque más previsible) y después los conceptos manuales.',
-      'Duplica escenarios cuando quieras probar una alternativa sin perder el cálculo original.',
-      'Revisa la comparativa antes de exportar para comprobar que meses, importes y grupos son coherentes.',
-    ],
-  },
-];
-
-type ScenarioColumnId = 'name' | 'year' | 'ticket' | 'manual' | 'ticketTotal' | 'total' | 'actions';
-type ManualColumnId = 'concept' | 'category' | 'monthly' | 'annual' | 'total' | 'actions';
-type TicketColumnId = 'name' | 'type' | 'people' | 'calendar' | 'amount' | 'actions';
-type MonthColumnId = 'month' | 'manual' | 'ticket' | 'total';
-type ActualColumnId = 'year' | 'month' | 'block' | 'concept' | 'amount' | 'actions';
-type ComparisonColumnId =
-  | 'month'
-  | 'scenarioATotal'
-  | 'scenarioBTotal'
-  | 'difference'
-  | 'differenceRate';
-type ActualComparisonColumnId =
-  | 'block'
-  | 'budgetTotal'
-  | 'actualTotal'
-  | 'difference'
-  | 'differenceRate';
-
-const MONTH_NAMES = [
-  'Enero',
-  'Febrero',
-  'Marzo',
-  'Abril',
-  'Mayo',
-  'Junio',
-  'Julio',
-  'Agosto',
-  'Septiembre',
-  'Octubre',
-  'Noviembre',
-  'Diciembre',
-];
-const calculationTypeLabels: Record<BudgetTicketCalculationType, string> = {
-  calendar_people: 'Personas por calendario',
-  manual_tickets: 'Tickets mensuales',
-  annual_tickets: 'Tickets anuales',
-  manual_amount: 'Importe manual',
-};
-
-const emptyScenarioDraft = (year = new Date().getFullYear()): BudgetScenarioDraft => ({
-  name: '',
-  year,
-  ticketAmount: 0,
-  notes: '',
-});
-const emptyManualDraft = (scenarioId: string): BudgetManualItemDraft => ({
-  scenarioId,
-  concept: '',
-  category: '',
-  monthlyAmount: 0,
-  annualAmount: 0,
-  notes: '',
-});
-const emptyTicketDraft = (scenarioId: string, ticketAmount: number): BudgetTicketGroupDraft => ({
-  scenarioId,
-  name: '',
-  peopleCount: 0,
-  ticketCalendar: '',
-  absenceRate: 0,
-  ticketAmount,
-  calculationType: 'calendar_people',
-  manualTickets: 0,
-  annualTickets: 0,
-  manualMonthlyAmount: 0,
-  notes: '',
-});
-const emptyActualDraft = (year = new Date().getFullYear()): BudgetActualDraft => ({
-  year,
-  month: 1,
-  block: 'Ticket Restaurante',
-  concept: '',
-  amount: 0,
-  notes: '',
-});
-
-function euro(value: number): string {
-  return value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-}
-
-function percent(value: number): string {
-  return value.toLocaleString('es-ES', {
-    style: 'percent',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function NumberField({
-  label,
-  min = 0,
-  onChange,
-  step = '0.01',
-  value,
-}: {
-  label: string;
-  min?: number;
-  onChange: (value: number) => void;
-  step?: string;
-  value: number;
-}) {
-  return (
-    <FieldLabel className="space-y-1">
-      {label}
-      <Input
-        className="mt-1"
-        min={min}
-        onChange={(event) => onChange(Number(event.target.value))}
-        step={step}
-        type="number"
-        value={value}
-      />
-    </FieldLabel>
-  );
-}
-
-function TextField({
-  label,
-  onChange,
-  placeholder,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <FieldLabel className="space-y-1">
-      {label}
-      <Input
-        className="mt-1"
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        type="text"
-        value={value}
-      />
-    </FieldLabel>
-  );
-}
-
-function Section({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm">
-      <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-metro-text">
-        <Calculator size={18} className="text-metro-red" />
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-const scenarioExportColumns: ExportColumn<BudgetScenarioExportRow>[] = [
-  { key: 'block', header: 'Bloque', value: (row) => row.block },
-  { key: 'concept', header: 'Concepto', value: (row) => row.concept },
-  { key: 'category', header: 'Categoría / tipo', value: (row) => row.category },
-  { key: 'annualTotal', header: 'Total anual', value: (row) => row.annualTotal },
-  { key: 'notes', header: 'Notas', value: (row) => row.notes },
-];
-const comparisonExportColumns: ExportColumn<BudgetComparisonRow>[] = [
-  { key: 'month', header: 'Mes', value: (row) => MONTH_NAMES[row.month - 1] },
-  { key: 'scenarioATotal', header: 'Escenario A', value: (row) => row.scenarioATotal },
-  { key: 'scenarioBTotal', header: 'Escenario B', value: (row) => row.scenarioBTotal },
-  { key: 'difference', header: 'Diferencia €', value: (row) => row.difference },
-  { key: 'differenceRate', header: 'Diferencia %', value: (row) => percent(row.differenceRate) },
-];
-const actualComparisonExportColumns: ExportColumn<BudgetActualComparisonRow>[] = [
-  { key: 'block', header: 'Bloque', value: (row) => row.block },
-  { key: 'budgetTotal', header: 'Presupuesto', value: (row) => row.budgetTotal },
-  { key: 'actualTotal', header: 'Real', value: (row) => row.actualTotal },
-  { key: 'difference', header: 'Desviación €', value: (row) => row.difference },
-  { key: 'differenceRate', header: 'Desviación %', value: (row) => percent(row.differenceRate) },
-];
+import { NumberField, Section, TextField } from './PresupuestosPageFields';
+import {
+  MONTH_NAMES,
+  PRESUPUESTOS_HELP_SECTIONS,
+  actualComparisonExportColumns,
+  calculationTypeLabels,
+  comparisonExportColumns,
+  emptyActualDraft,
+  emptyManualDraft,
+  emptyScenarioDraft,
+  emptyTicketDraft,
+  euro,
+  percent,
+  scenarioExportColumns,
+  type ActualColumnId,
+  type ActualComparisonColumnId,
+  type ComparisonColumnId,
+  type ManualColumnId,
+  type MonthColumnId,
+  type ScenarioColumnId,
+  type TicketColumnId,
+} from './presupuestosPage.helpers';
 
 export function PresupuestosPage() {
   const { calendars, load: loadTicketData } = useTicketRestauranteStore();
@@ -855,9 +653,9 @@ export function PresupuestosPage() {
           className="mb-0"
         />
         {message && (
-          <p className="mt-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-muted">
+          <Notice className="mt-2" tone="muted">
             {message}
-          </p>
+          </Notice>
         )}
       </div>
 
