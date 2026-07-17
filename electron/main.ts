@@ -1,24 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
-import { registerCoreDatabaseIpc } from './ipc/registerCoreDatabaseIpc.js';
-import { registerSorteosIpc } from './ipc/registerSorteosIpc.js';
-import { registerPlantillaIpc } from './ipc/registerPlantillaIpc.js';
-import { registerTareasIpc } from './ipc/registerTareasIpc.js';
-import { registerSesionesIpc } from './ipc/registerSesionesIpc.js';
-import { registerVinculogramaIpc } from './ipc/registerVinculogramaIpc.js';
-import { registerCriteriosRrllIpc } from './ipc/registerCriteriosRrllIpc.js';
-import { registerTicketRestauranteIpc } from './ipc/registerTicketRestauranteIpc.js';
-import { registerPresupuestosIpc } from './ipc/registerPresupuestosIpc.js';
-import { registerEspecialesIpc } from './ipc/registerEspecialesIpc.js';
-import { registerTeletrabajoIpc } from './ipc/registerTeletrabajoIpc.js';
-import { registerConfiguracionIpc } from './ipc/registerConfiguracionIpc.js';
-import { registerLicenciasSinSueldoIpc } from './ipc/registerLicenciasSinSueldoIpc.js';
-import { registerSharedDocumentIpc } from './ipc/registerSharedDocumentIpc.js';
-import {
-  closeSqlitePersistence,
-  initializeSqlitePersistence,
-  setDatabaseConnectivityIssueNotifier,
-} from './sqlitePersistence.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,8 +9,24 @@ const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
-const splashMinimumVisibleMs = 1_400;
+const splashMinimumVisibleMs = 800;
 const splashMaximumVisibleMs = 25_000;
+
+type SqlitePersistenceModule = typeof import('./sqlitePersistence.js');
+type ConnectivityIssueNotifier = Parameters<
+  SqlitePersistenceModule['setDatabaseConnectivityIssueNotifier']
+>[0];
+
+let sqlitePersistenceModulePromise: Promise<SqlitePersistenceModule> | null = null;
+
+function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
+  sqlitePersistenceModulePromise ??= import('./sqlitePersistence.js');
+  return sqlitePersistenceModulePromise;
+}
+
+function logStartupPhase(startedAt: number, phase: string): void {
+  console.info(`[startup] ${phase}: ${Date.now() - startedAt} ms`);
+}
 
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -129,6 +126,7 @@ function showMainAfterSplash(
 function createWindow(
   splashWindow: BrowserWindow | null = null,
   splashStartedAt = Date.now(),
+  setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void,
 ): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1360,
@@ -160,7 +158,7 @@ function createWindow(
 
   createContextMenu(mainWindow);
 
-  setDatabaseConnectivityIssueNotifier((payload) => {
+  setConnectivityIssueNotifier?.((payload) => {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send('database:connectivity-issue', payload);
     }
@@ -205,7 +203,7 @@ function createWindow(
     clearTimeout(forceShowTimer);
     ipcMain.removeListener('app:boot-visible', onBootVisible);
     ipcMain.removeListener('app:renderer-ready', onRendererReady);
-    setDatabaseConnectivityIssueNotifier(null);
+    setConnectivityIssueNotifier?.(null);
   });
 
   if (isDev) {
@@ -223,7 +221,39 @@ function createWindow(
   return mainWindow;
 }
 
-function registerIpcHandlers(): void {
+async function registerIpcHandlers(): Promise<void> {
+  const [
+    { registerCoreDatabaseIpc },
+    { registerSorteosIpc },
+    { registerPlantillaIpc },
+    { registerTareasIpc },
+    { registerSesionesIpc },
+    { registerVinculogramaIpc },
+    { registerCriteriosRrllIpc },
+    { registerTicketRestauranteIpc },
+    { registerPresupuestosIpc },
+    { registerEspecialesIpc },
+    { registerTeletrabajoIpc },
+    { registerConfiguracionIpc },
+    { registerLicenciasSinSueldoIpc },
+    { registerSharedDocumentIpc },
+  ] = await Promise.all([
+    import('./ipc/registerCoreDatabaseIpc.js'),
+    import('./ipc/registerSorteosIpc.js'),
+    import('./ipc/registerPlantillaIpc.js'),
+    import('./ipc/registerTareasIpc.js'),
+    import('./ipc/registerSesionesIpc.js'),
+    import('./ipc/registerVinculogramaIpc.js'),
+    import('./ipc/registerCriteriosRrllIpc.js'),
+    import('./ipc/registerTicketRestauranteIpc.js'),
+    import('./ipc/registerPresupuestosIpc.js'),
+    import('./ipc/registerEspecialesIpc.js'),
+    import('./ipc/registerTeletrabajoIpc.js'),
+    import('./ipc/registerConfiguracionIpc.js'),
+    import('./ipc/registerLicenciasSinSueldoIpc.js'),
+    import('./ipc/registerSharedDocumentIpc.js'),
+  ]);
+
   registerCoreDatabaseIpc();
   registerSorteosIpc();
   registerPlantillaIpc();
@@ -255,18 +285,31 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    const startupStartedAt = Date.now();
     app.setAppUserModelId('com.metro.rrll.traccion');
     Menu.setApplicationMenu(null);
+
     const splashStartedAt = Date.now();
     const splashWindow = createSplashWindow();
     await waitForSplashPaint(splashWindow);
-    await initializeSqlitePersistence();
-    registerIpcHandlers();
-    createWindow(splashWindow, splashStartedAt);
+    logStartupPhase(startupStartedAt, 'splash visible');
+
+    const persistence = await loadSqlitePersistenceModule();
+    logStartupPhase(startupStartedAt, 'persistence module loaded');
+
+    await Promise.all([persistence.initializeSqlitePersistence(), registerIpcHandlers()]);
+    logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
+
+    createWindow(
+      splashWindow,
+      splashStartedAt,
+      persistence.setDatabaseConnectivityIssueNotifier,
+    );
+    logStartupPhase(startupStartedAt, 'main window loading');
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
+        createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier);
       }
     });
   });
@@ -279,7 +322,8 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     event.preventDefault();
-    closeSqlitePersistence()
+    loadSqlitePersistenceModule()
+      .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
       .catch((error: unknown) => {
         console.warn('No se ha podido crear la copia de cierre antes de salir.', error);
       })
