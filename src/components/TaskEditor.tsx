@@ -1,5 +1,5 @@
 import { Eye, LockKeyhole, Mail, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CountBadge } from './ui/CountBadge';
 import { ActionButton } from './ui/ActionButton';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
@@ -22,6 +22,7 @@ import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -255,11 +256,30 @@ export function TaskEditor({
   const isWaitingForSharedDatabase = lockMessage.startsWith('Esperando base compartida');
   const shouldShowReadOnlyBadge = isFormReadOnly && !isWaitingForSharedDatabase;
   const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
+  const recoveryInitialValue = useMemo(
+    () => ({ draft: toDraft(task), newUpdateText: '' }),
+    [task],
+  );
+  const recoveryStorageKey = buildRecoverableDraftKey('tareas', task?.id ?? 'new');
+  const handleRecoverDraft = useCallback((value: typeof recoveryInitialValue) => {
+    setDraft(value.draft);
+    setNewUpdateText(value.newUpdateText);
+  }, []);
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: { draft, newUpdateText },
+    initialValue: recoveryInitialValue,
+    enabled: !isFormReadOnly,
+    onRecover: handleRecoverDraft,
+    storageKey: recoveryStorageKey,
+  });
   const { requestClose, dialogNode } = useUnsavedChanges({
     currentValue: { draft, newUpdateText },
-    initialValue: { draft: toDraft(task), newUpdateText: '' },
+    initialValue: recoveryInitialValue,
     enabled: !isFormReadOnly,
-    onDiscard: onDone,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      onDone();
+    },
   });
 
   const handleSubmit = async () => {
@@ -277,6 +297,7 @@ export function TaskEditor({
         setSaveStatusIsError(true);
         return;
       }
+      clearRecoveryDraft();
       onDone();
       return;
     }
@@ -319,6 +340,7 @@ export function TaskEditor({
         return;
       }
 
+      clearRecoveryDraft();
       onDone();
     } catch (error) {
       setSaveStatus(
@@ -912,6 +934,7 @@ export function TaskEditor({
                       setSaveStatusIsError(true);
                       return;
                     }
+                    clearRecoveryDraft();
                     onDone();
                   })();
                 }}
@@ -931,6 +954,7 @@ export function TaskEditor({
         </form>
       </aside>
       {dialogNode}
+      {recoveryDialogNode}
     </div>
   );
 }

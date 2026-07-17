@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import {
   EMPTY_TELETRABAJO_DRAFT,
@@ -22,6 +22,7 @@ import { TeletrabajoEditorFields } from './teletrabajo-editor/TeletrabajoEditorF
 import { TeletrabajoEditorHeader } from './teletrabajo-editor/TeletrabajoEditorHeader';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 
 function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   if (!solicitud) {
@@ -171,11 +172,24 @@ export function TeletrabajoEditor({
   const canEdit = Boolean(solicitud);
   const canSubmit = (isCreate ? canCreate : canEdit) && !isFormReadOnly && !isSaving;
   const canGenerateWord = canCreate && !isFormReadOnly && !isSaving;
+  const recoveryInitialValue = useMemo(() => toDraft(solicitud), [solicitud]);
+  const recoveryStorageKey = buildRecoverableDraftKey('teletrabajo', solicitud?.id ?? 'new');
+  const handleRecoverDraft = useCallback((value: TeletrabajoDraft) => setDraft(value), []);
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draftForSave,
+    initialValue: recoveryInitialValue,
+    enabled: !isFormReadOnly,
+    onRecover: handleRecoverDraft,
+    storageKey: recoveryStorageKey,
+  });
   const { requestClose, dialogNode } = useUnsavedChanges({
     currentValue: draftForSave,
-    initialValue: toDraft(solicitud),
+    initialValue: recoveryInitialValue,
     enabled: !isFormReadOnly,
-    onDiscard: onDone,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      onDone();
+    },
   });
   const formRef = useRef<HTMLFormElement>(null);
   useEditorShortcuts({
@@ -258,6 +272,7 @@ export function TeletrabajoEditor({
               void createSolicitud(draftForSave)
                 .then((result) => {
                   if (result.ok) {
+                    clearRecoveryDraft();
                     onDone();
                     return;
                   }
@@ -276,6 +291,7 @@ export function TeletrabajoEditor({
             void updateSolicitud(solicitud.id, draftForSave, loadedSolicitudUpdatedAt)
               .then((result) => {
                 if (result.ok) {
+                  clearRecoveryDraft();
                   onDone();
                   return;
                 }
@@ -364,6 +380,7 @@ export function TeletrabajoEditor({
                   setSaveStatus('');
                   void removeSolicitud(solicitud.id, loadedSolicitudUpdatedAt).then((result) => {
                     if (result.ok) {
+                      clearRecoveryDraft();
                       onDone();
                       return;
                     }
@@ -386,6 +403,7 @@ export function TeletrabajoEditor({
         </form>
       </aside>
       {dialogNode}
+      {recoveryDialogNode}
     </div>
   );
 }
