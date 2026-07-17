@@ -509,8 +509,41 @@ export function PlantillaPage() {
       id="plantilla"
     >
       <PageHeader
+        className="flex-nowrap overflow-x-auto"
+        status={
+          <div className="flex min-w-max items-center gap-2">
+            <label className="flex w-64 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
+              <Search size={16} />
+              <input
+                className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
+                onChange={(event) => setFilter('search', event.target.value)}
+                placeholder="Buscar por empleado o nombre..."
+                type="search"
+                value={filters.search}
+              />
+            </label>
+            <SelectFilter
+              label="Residencia"
+              onChange={(value) => setFilter('residencia', value)}
+              options={residencias}
+              value={filters.residencia}
+            />
+            <SelectFilter
+              label="Nivel retributivo"
+              onChange={(value) => setFilter('nivelRetributivo', value)}
+              options={niveles}
+              value={filters.nivelRetributivo}
+            />
+            <SelectFilter
+              label="Dirección"
+              onChange={(value) => setFilter('direccionOrganizativa', value)}
+              options={direcciones}
+              value={filters.direccionOrganizativa}
+            />
+          </div>
+        }
         actions={
-          <>
+          <div className="flex min-w-max items-center gap-2">
             <input
               accept=".xlsx,.xls,.csv,.tsv,.txt"
               className="hidden"
@@ -580,7 +613,7 @@ export function PlantillaPage() {
             <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva persona
             </ActionButton>
-          </>
+          </div>
         }
         helpSections={PLANTILLA_HELP_SECTIONS}
         helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
@@ -592,37 +625,6 @@ export function PlantillaPage() {
           {importMessage}
         </div>
       )}
-
-      <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-          <Search size={16} />
-          <input
-            className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-            onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por empleado o nombre..."
-            type="search"
-            value={filters.search}
-          />
-        </label>
-        <SelectFilter
-          label="Residencia"
-          onChange={(value) => setFilter('residencia', value)}
-          options={residencias}
-          value={filters.residencia}
-        />
-        <SelectFilter
-          label="Nivel retributivo"
-          onChange={(value) => setFilter('nivelRetributivo', value)}
-          options={niveles}
-          value={filters.nivelRetributivo}
-        />
-        <SelectFilter
-          label="Dirección"
-          onChange={(value) => setFilter('direccionOrganizativa', value)}
-          options={direcciones}
-          value={filters.direccionOrganizativa}
-        />
-      </div>
 
       {activeFilterChips.length > 0 && (
         <div className="mb-3">
