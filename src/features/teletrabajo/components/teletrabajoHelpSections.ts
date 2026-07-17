@@ -76,6 +76,14 @@ export const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Nuevo periodo (campaña)',
+    items: [
+      'El botón "Nuevo periodo" crea una campaña nueva (p. ej. "2027-2028") sin modificar ni borrar las solicitudes del periodo anterior.',
+      'Con la opción de generar renovaciones activada, copia las solicitudes aprobadas o analizadas del periodo origen elegido, las marca como renovación, las deja en estado pendiente y limpia su revisión y validaciones — quedan listas para revisarse de cero en la campaña nueva.',
+      'Sin esa opción, el periodo se crea vacío y las solicitudes se dan de alta a mano o por importación.',
+    ],
+  },
+  {
     title: 'Cómo modificar datos que afectan al cálculo',
     items: [
       'Para cambiar días solicitados, abre la solicitud, marca o desmarca martes, miércoles y/o jueves y guarda.',
@@ -106,4 +114,3 @@ export const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
 ];
-
