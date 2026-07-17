@@ -313,7 +313,33 @@ export function CriteriosRrllPage() {
         helpSubtitle="Guía rápida del repositorio de criterios, sentido, filtros e importación."
         className="mb-3"
         actions={
-          <>
+          <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
+            <label className="flex min-w-[320px] flex-1 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
+              <Search size={16} className="shrink-0" />
+              <input
+                className="min-w-0 flex-1 bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
+                onChange={(event) => setFilter('search', event.target.value)}
+                placeholder="Buscar por tema, criterio, sentido u observaciones..."
+                type="search"
+                value={filters.search}
+              />
+            </label>
+            <div className="w-[180px] shrink-0">
+              <SelectFilter
+                label="Estado"
+                onChange={(value) => setFilter('estado', value as '' | CriterioRrllEstado)}
+                options={CRITERIO_RRLL_ESTADOS}
+                value={filters.estado}
+              />
+            </div>
+            <div className="w-[180px] shrink-0">
+              <SelectFilter
+                label="Sentido"
+                onChange={(value) => setFilter('sentido', value as '' | CriterioRrllSentido)}
+                options={CRITERIO_RRLL_SENTIDOS}
+                value={filters.sentido}
+              />
+            </div>
             <input
               accept=".xlsx,.xls,.csv,.tsv,.txt"
               className="hidden"
@@ -370,7 +396,7 @@ export function CriteriosRrllPage() {
             <ActionButton variant="add" iconOnly={false} onClick={openCreateEditor} size="sm">
               Nuevo criterio
             </ActionButton>
-          </>
+          </div>
         }
       />
 
@@ -384,31 +410,6 @@ export function CriteriosRrllPage() {
           {templateMessage}
         </p>
       )}
-
-      <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
-        <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-          <Search size={16} />
-          <input
-            className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-            onChange={(event) => setFilter('search', event.target.value)}
-            placeholder="Buscar por tema, criterio, sentido u observaciones..."
-            type="search"
-            value={filters.search}
-          />
-        </label>
-        <SelectFilter
-          label="Estado"
-          onChange={(value) => setFilter('estado', value as '' | CriterioRrllEstado)}
-          options={CRITERIO_RRLL_ESTADOS}
-          value={filters.estado}
-        />
-        <SelectFilter
-          label="Sentido"
-          onChange={(value) => setFilter('sentido', value as '' | CriterioRrllSentido)}
-          options={CRITERIO_RRLL_SENTIDOS}
-          value={filters.sentido}
-        />
-      </div>
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
         <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
