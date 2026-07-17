@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 
 interface ModalShellProps {
   children: ReactNode;
@@ -29,16 +30,8 @@ export function ModalShell({
   onClose,
   stacked = false,
 }: ModalShellProps) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalFocusTrap(dialogRef, onClose);
 
   return (
     <div
@@ -48,10 +41,12 @@ export function ModalShell({
       }`}
     >
       <section
+        ref={dialogRef}
         aria-labelledby={labelledBy}
         aria-modal="true"
         className={`flex max-h-[88vh] w-full ${maxWidthClassName} flex-col rounded-2xl border border-metro-border bg-metro-surface shadow-card`}
         role="dialog"
+        tabIndex={-1}
       >
         {children}
       </section>

@@ -1,6 +1,7 @@
 import { AlertTriangle, Check, Info, X, CircleHelp } from 'lucide-react';
-import { useEffect } from 'react';
+import { useRef } from 'react';
 import { ModalDatabaseStatus } from '../ModalDatabaseStatus';
+import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 
 type AppDialogAlertType = 'info' | 'warning' | 'error';
 
@@ -59,20 +60,14 @@ export function AppDialog({
   title,
   type = 'info',
 }: AppDialogProps) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (mode === 'confirm') {
-          onCancel?.();
-          return;
-        }
-        onConfirm();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mode, onCancel, onConfirm]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialogRef, () => {
+    if (mode === 'confirm') {
+      onCancel?.();
+      return;
+    }
+    onConfirm();
+  });
 
   const resolvedTitle = title ?? (mode === 'confirm' ? 'Confirmar acción' : 'Aviso');
   const resolvedConfirmLabel = confirmLabel ?? (mode === 'confirm' ? 'Aceptar' : 'OK');
@@ -84,9 +79,11 @@ export function AppDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
       data-block-editor-shortcuts="true">
       <div
+        ref={dialogRef}
         aria-modal="true"
         className={`flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
         role="dialog"
+        tabIndex={-1}
       >
         <div className="mb-3 flex shrink-0 justify-end">
           <ModalDatabaseStatus />
