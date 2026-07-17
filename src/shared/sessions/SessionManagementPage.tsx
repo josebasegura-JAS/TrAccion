@@ -157,7 +157,7 @@ export function SessionManagementPage({
     ? (tasks.find((task) => task.id === editingTaskId) ?? null)
     : null;
   const canEditSessions = config.moduleId === 'comite';
-  const showSearchInHeader = config.moduleId === 'comite';
+  const showSearchInHeader = config.moduleId === 'comite' || config.moduleId === 'paritaria';
   const sessionFilterLabel = buildFilterLabel([
     ['Módulo', config.title],
     ['Búsqueda', sessionSearch],
