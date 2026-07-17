@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
@@ -16,6 +16,7 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { useEditorShortcuts } from '../../../hooks/useEditorShortcuts';
 
 const criterioTextFields: Array<{
   field: CriterioRrllDraftField;
@@ -76,6 +77,12 @@ export function CriterioRrllEditor({
     enabled: !isReadOnly,
     onDiscard: onDone,
   });
+  const formRef = useRef<HTMLFormElement>(null);
+  useEditorShortcuts({
+    canSave: canSubmit,
+    onClose: () => void requestClose(),
+    onSave: () => formRef.current?.requestSubmit(),
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -109,6 +116,7 @@ export function CriterioRrllEditor({
         )}
 
         <form
+          ref={formRef}
           className="flex min-h-0 flex-1 flex-col space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
@@ -217,7 +225,7 @@ export function CriterioRrllEditor({
               </p>
             )}
             <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
-              Guardar
+              Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
             </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && criterio && (
@@ -241,7 +249,7 @@ export function CriterioRrllEditor({
               </ActionButton>
             )}
             <ActionButton variant="secondary" iconOnly={false} onClick={() => void requestClose()}>
-              Cancelar
+              Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
             </ActionButton>
           </div>
         </form>

@@ -21,6 +21,7 @@ import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -481,6 +482,13 @@ export function TaskEditor({
         .join(' · ')
     : '';
 
+
+  useEditorShortcuts({
+    canSave: canSubmit,
+    onClose: () => void requestClose(),
+    onSave: () => void handleSubmit(),
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <aside
@@ -870,7 +878,7 @@ export function TaskEditor({
 
           <div className="shrink-0 flex flex-wrap gap-2 border-t border-metro-border pt-3">
             <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
-              Guardar
+              Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
             </ActionButton>
             <InlineSaveFeedback />
             {saveStatus && (
@@ -917,7 +925,7 @@ export function TaskEditor({
               onClick={() => void requestClose()}
               type="button"
             >
-              Cancelar
+              Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
             </button>
           </div>
         </form>

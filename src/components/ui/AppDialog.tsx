@@ -81,7 +81,8 @@ export function AppDialog({
     : 'border-metro-border bg-metro-surface shadow-black/40';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+      data-block-editor-shortcuts="true">
       <div
         aria-modal="true"
         className={`flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}

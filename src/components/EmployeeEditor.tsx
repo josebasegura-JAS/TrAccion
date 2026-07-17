@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   EMPTY_EMPLOYEE_DRAFT,
   type Employee,
@@ -13,6 +13,7 @@ import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { ActionButton } from './ui/ActionButton';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
   { field: 'empleado', label: 'Empleado', required: true },
@@ -95,6 +96,12 @@ export function EmployeeEditor({
     enabled: !isReadOnly,
     onDiscard: onDone,
   });
+  const formRef = useRef<HTMLFormElement>(null);
+  useEditorShortcuts({
+    canSave: canSubmit,
+    onClose: () => void requestClose(),
+    onSave: () => formRef.current?.requestSubmit(),
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -130,6 +137,7 @@ export function EmployeeEditor({
         )}
 
         <form
+          ref={formRef}
           className="flex min-h-0 flex-1 flex-col space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
@@ -219,7 +227,7 @@ export function EmployeeEditor({
               </p>
             )}
             <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
-              Guardar
+              Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
             </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && employee && (
@@ -247,7 +255,7 @@ export function EmployeeEditor({
               onClick={() => void requestClose()}
               type="button"
             >
-              Cancelar
+              Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
             </button>
           </div>
         </form>

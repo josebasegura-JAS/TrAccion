@@ -42,6 +42,7 @@ export function ModalShell({
 
   return (
     <div
+      data-block-editor-shortcuts="true"
       className={`fixed inset-0 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm ${
         stacked ? 'z-[60]' : 'z-50'
       }`}

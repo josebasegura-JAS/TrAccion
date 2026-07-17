@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import {
   EMPTY_TELETRABAJO_DRAFT,
@@ -21,6 +21,7 @@ import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 import { TeletrabajoEditorFields } from './teletrabajo-editor/TeletrabajoEditorFields';
 import { TeletrabajoEditorHeader } from './teletrabajo-editor/TeletrabajoEditorHeader';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 
 function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   if (!solicitud) {
@@ -176,6 +177,12 @@ export function TeletrabajoEditor({
     enabled: !isFormReadOnly,
     onDiscard: onDone,
   });
+  const formRef = useRef<HTMLFormElement>(null);
+  useEditorShortcuts({
+    canSave: canSubmit,
+    onClose: () => void requestClose(),
+    onSave: () => formRef.current?.requestSubmit(),
+  });
 
   const handleEmpleadoChange = (empleado: string) => {
     const employee = findActiveEmployeeByEmpleado(employees, empleado);
@@ -237,6 +244,7 @@ export function TeletrabajoEditor({
         )}
 
         <form
+          ref={formRef}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
           onSubmit={(event) => {
             event.preventDefault();
@@ -307,7 +315,7 @@ export function TeletrabajoEditor({
 
           <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-t border-metro-border bg-metro-panel pt-3">
             <ActionButton disabled={!canSubmit} iconOnly={false} size="sm" type="submit" variant="save">
-              {isSaving ? 'Guardando…' : 'Guardar'}
+              {isSaving ? 'Guardando…' : <>Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></>}
             </ActionButton>
             <InlineSaveFeedback />
             {!isCreate && solicitud && (
@@ -372,7 +380,7 @@ export function TeletrabajoEditor({
               onClick={() => void requestClose()}
               type="button"
             >
-              Cancelar
+              Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
             </button>
           </div>
         </form>

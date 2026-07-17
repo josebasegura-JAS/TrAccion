@@ -8,6 +8,7 @@ import { Notice } from '../../../components/ui/Notice';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { useEditorShortcuts } from '../../../hooks/useEditorShortcuts';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   EMPTY_LICENCIA_SIN_SUELDO_DRAFT,
@@ -141,6 +142,13 @@ export function LicenciasSinSueldoEditor({
       })
       .finally(() => setIsSaving(false));
   };
+
+
+  useEditorShortcuts({
+    canSave: !isReadOnly && !isSaving,
+    onClose: () => void requestClose(),
+    onSave: handleSave,
+  });
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -365,7 +373,7 @@ export function LicenciasSinSueldoEditor({
           </div>
           <div className="flex flex-wrap gap-2">
             <ActionButton variant="secondary" iconOnly={false} onClick={() => void requestClose()}>
-              Cancelar
+              Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
             </ActionButton>
             {mode === 'edit' && record && (
               <AuditHistoryButton
@@ -381,7 +389,7 @@ export function LicenciasSinSueldoEditor({
               size="sm"
               variant="save"
             >
-              {isSaving ? 'Guardando…' : 'Guardar'}
+              {isSaving ? 'Guardando…' : <>Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></>}
             </ActionButton>
             <InlineSaveFeedback />
           </div>
