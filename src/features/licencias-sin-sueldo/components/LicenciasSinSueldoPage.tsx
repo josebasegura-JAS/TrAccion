@@ -292,59 +292,69 @@ export function LicenciasSinSueldoPage() {
         helpSubtitle="Guía rápida de estados, reglas, vigencia, histórico y generación documental."
         className="mb-0"
         actions={
-          <ActionButton
-            variant="add"
-            iconOnly={false}
-            onClick={() => setEditor({ mode: 'create', record: null })}
-            size="sm"
-          >
-            Nueva solicitud
-          </ActionButton>
+          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
+            <FieldLabel className="min-w-[18rem] shrink-0">
+              <span className="sr-only">Buscar</span>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted"
+                  size={15}
+                />
+                <Input
+                  className="h-9 pl-9"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Buscar por número, nombre, tipo o estado"
+                  value={query}
+                />
+              </div>
+            </FieldLabel>
+
+            <FieldLabel className="w-48 shrink-0">
+              <span className="sr-only">Tipo</span>
+              <Select
+                className="h-9"
+                aria-label="Filtrar por tipo"
+                onChange={(event) =>
+                  setTypeFilter(event.target.value as 'todos' | LicenciaSinSueldoTipo)
+                }
+                value={typeFilter}
+              >
+                <option value="todos">Todos los tipos</option>
+                {licenciaSinSueldoTipos.map((tipo) => (
+                  <option key={tipo}>{tipo}</option>
+                ))}
+              </Select>
+            </FieldLabel>
+
+            <FieldLabel className="w-40 shrink-0">
+              <span className="sr-only">Año histórico</span>
+              <Select
+                className="h-9"
+                aria-label="Filtrar por año histórico"
+                onChange={(event) => setYearFilter(event.target.value)}
+                value={yearFilter}
+              >
+                <option value="todos">Todos los años</option>
+                {historicalYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year || 'Sin año'}
+                  </option>
+                ))}
+              </Select>
+            </FieldLabel>
+
+            <ActionButton
+              variant="add"
+              iconOnly={false}
+              onClick={() => setEditor({ mode: 'create', record: null })}
+              size="sm"
+              className="shrink-0"
+            >
+              Nueva solicitud
+            </ActionButton>
+          </div>
         }
       />
-
-      <div className="grid grid-cols-3 gap-3 overflow-x-auto rounded-2xl border border-metro-border bg-metro-panel p-4">
-        <FieldLabel>
-          Buscar
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted"
-              size={15}
-            />
-            <Input
-              className="pl-9"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Número, nombre, tipo o estado"
-              value={query}
-            />
-          </div>
-        </FieldLabel>
-        <FieldLabel>
-          Tipo
-          <Select
-            onChange={(event) =>
-              setTypeFilter(event.target.value as 'todos' | LicenciaSinSueldoTipo)
-            }
-            value={typeFilter}
-          >
-            <option value="todos">Todos</option>
-            {licenciaSinSueldoTipos.map((tipo) => (
-              <option key={tipo}>{tipo}</option>
-            ))}
-          </Select>
-        </FieldLabel>
-        <FieldLabel>
-          Año histórico
-          <Select onChange={(event) => setYearFilter(event.target.value)} value={yearFilter}>
-            <option value="todos">Todos</option>
-            {historicalYears.map((year) => (
-              <option key={year} value={year}>
-                {year || 'Sin año'}
-              </option>
-            ))}
-          </Select>
-        </FieldLabel>
-      </div>
 
       {wordStatus && <Notice tone="muted">{wordStatus}</Notice>}
 
