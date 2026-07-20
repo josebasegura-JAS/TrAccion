@@ -1,6 +1,6 @@
-import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, LockKeyhole } from 'lucide-react';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { TooltipLayer } from './components/ui/TooltipLayer';
 import { Header } from './components/Header';
@@ -11,6 +11,7 @@ import {
   startExternalDataSyncPolling,
   stopExternalDataSyncPolling,
 } from './services/externalDataSync';
+import { useDatabaseStatus } from './services/databaseStatus';
 import {
   bootstrapSqlitePersistence,
   isTemporarySqliteLockMessage,
@@ -229,6 +230,62 @@ function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }
   );
 }
 
+
+function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
+  const databaseStatus = useDatabaseStatus();
+  const editingAllowed = databaseStatus?.ready === true && databaseStatus.phase === 'active';
+
+  if (editingAllowed) {
+    return null;
+  }
+
+  const detail = databaseStatus?.message
+    ?? (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
+
+  return (
+    <section className="sqlite-readonly-banner" role="alert" aria-live="assertive">
+      <LockKeyhole size={20} aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <strong>Modo consulta: edición bloqueada</strong>
+        <p>{detail} No se permitirá ninguna modificación hasta confirmar la conexión con la base compartida.</p>
+      </div>
+      <button className="sqlite-readonly-banner__action" onClick={onGoToAjustes} type="button">
+        Revisar en Ajustes
+      </button>
+    </section>
+  );
+}
+
+function OperationalModuleGuard({ activeView, children }: { activeView: AppView; children: ReactNode }) {
+  const databaseStatus = useDatabaseStatus();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const editingAllowed = databaseStatus?.ready === true && databaseStatus.phase === 'active';
+  const guardInteraction = !editingAllowed && activeView !== 'dashboard' && activeView !== 'ajustes';
+
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) {
+      return;
+    }
+
+    if (guardInteraction) {
+      element.setAttribute('inert', '');
+    } else {
+      element.removeAttribute('inert');
+    }
+  }, [guardInteraction]);
+
+  return (
+    <div
+      ref={contentRef}
+      aria-disabled={guardInteraction || undefined}
+      className={guardInteraction ? 'sqlite-readonly-content' : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
 function ModuleLoading({ activeView }: { activeView: AppView }) {
   const title = moduleLoadingLabels[activeView] ?? 'Cargando módulo...';
 
@@ -378,9 +435,11 @@ export function App() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-metro-app/95">
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
+          <SqliteReadOnlyBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <PersistenceErrorBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <GlobalBusyIndicator />
           <ModuleErrorBoundary activeView={activeView}>
+            <OperationalModuleGuard activeView={activeView}>
             <Suspense fallback={<ModuleLoading activeView={activeView} />}>
               {activeView === 'dashboard' && (
                 <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
@@ -441,6 +500,7 @@ export function App() {
             {activeView === 'especiales' && <EspecialesPage />}
             {activeView === 'ajustes' && <AjustesPage />}
             </Suspense>
+            </OperationalModuleGuard>
           </ModuleErrorBoundary>
         </main>
         <Footer />

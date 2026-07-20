@@ -687,7 +687,7 @@ function shouldBlockSharedWrite(): string | null {
   }
 
   if (!window.traccion) {
-    return null;
+    return 'IPC de persistencia no disponible. Edición bloqueada para evitar cambios locales no confirmados.';
   }
 
   if (sharedWritesBlockedByConnectivity) {
