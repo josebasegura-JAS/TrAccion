@@ -42,6 +42,17 @@ describe('schemaMigrations', () => {
     expect(() => applyMigrations(db)).not.toThrow();
   });
 
+  it('devuelve 0 sobre una base completamente nueva, antes de crear ninguna tabla (regresión)', () => {
+    // Bug real: sqliteConnection.ts llama a readCurrentSchemaVersion() para
+    // la protección contra downgrade ANTES de applyMigrations(), es decir,
+    // sobre un fichero recién creado donde schema_migrations todavía no
+    // existe. Antes de este fix lanzaba "no such table: schema_migrations"
+    // en cada instalación desde cero (máquina nueva, sin traccion.sqlite
+    // previo), forzando el arranque en modo "sin SQLite activo".
+    expect(() => readCurrentSchemaVersion(db)).not.toThrow();
+    expect(readCurrentSchemaVersion(db)).toBe(0);
+  });
+
   it('deja la versión de schema en CURRENT_SCHEMA_VERSION tras aplicar todas las migraciones', () => {
     applyMigrations(db);
 

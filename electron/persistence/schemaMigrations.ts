@@ -16,7 +16,27 @@ function isSchemaMigrationRow(value: unknown): value is SchemaMigrationRow {
   return Boolean(value) && typeof (value as SchemaMigrationRow).version === 'number';
 }
 
+function hasSchemaMigrationsTable(db: Database): boolean {
+  const row = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
+    .get();
+  return row !== undefined;
+}
+
+/**
+ * En una base de datos completamente nueva (fichero recién creado, primer
+ * arranque de TrAccion en una máquina) la tabla schema_migrations todavía no
+ * existe: la crea migrateToVersion1, que es la propia primera migración. Si
+ * no se comprueba antes, la consulta lanza "no such table: schema_migrations"
+ * en vez de devolver 0 (versión "sin migraciones aplicadas todavía"), lo que
+ * antes rompía sqliteConnection.ts al llamar a esta función para la
+ * protección contra downgrade justo antes de aplicar las migraciones.
+ */
 export function readCurrentSchemaVersion(db: Database): number {
+  if (!hasSchemaMigrationsTable(db)) {
+    return 0;
+  }
+
   const row = db
     .prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1')
     .get();
