@@ -7,7 +7,12 @@ import {
   type PersistedStorageKey,
   isPersistedStorageKey as isKnownPersistedStorageKey,
 } from './persistenceKeys';
-import { getCachedDatabaseStatus, publishDatabaseStatus } from './databaseStatus';
+import { publishDatabaseStatus } from './databaseStatus';
+import {
+  getEditingAvailability,
+  publishDatabaseConnectivityBlock,
+  resetDatabaseConnectivityBlock,
+} from './editingAvailability';
 
 export type PersistenceFeedbackKind = 'saving' | 'saved' | 'error';
 export type PersistenceFeedbackVisibility = 'visible' | 'silent';
@@ -23,7 +28,6 @@ export interface PersistenceFeedback {
 const PERSISTENCE_FEEDBACK_EVENT = 'traccion:persistence-feedback';
 const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-recovered';
 
-let sharedWritesBlockedByConnectivity = false;
 let latestPersistenceFeedback: PersistenceFeedback | null = null;
 let silentPersistenceFeedbackDepth = 0;
 
@@ -53,7 +57,7 @@ export function startDatabaseConnectivityIssueListener(): void {
       return;
     }
 
-    sharedWritesBlockedByConnectivity = payload.blocked;
+    publishDatabaseConnectivityBlock(payload.blocked, payload.message);
     emitPersistenceFeedback({
       kind: payload.blocked ? 'error' : 'saved',
       updatedAt: payload.updatedAt,
@@ -69,7 +73,7 @@ export function startDatabaseConnectivityIssueListener(): void {
 export function stopDatabaseConnectivityIssueListener(): void {
   unsubscribeDatabaseConnectivityIssue?.();
   unsubscribeDatabaseConnectivityIssue = null;
-  sharedWritesBlockedByConnectivity = false;
+  resetDatabaseConnectivityBlock();
 }
 
 const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
@@ -686,27 +690,8 @@ function shouldBlockSharedWrite(): string | null {
     return null;
   }
 
-  if (!window.traccion) {
-    return 'IPC de persistencia no disponible. Edición bloqueada para evitar cambios locales no confirmados.';
-  }
-
-  if (sharedWritesBlockedByConnectivity) {
-    return 'Escritura bloqueada: la conexión con la carpeta compartida SQLite está en recuperación.';
-  }
-
-  const status = getCachedDatabaseStatus();
-  if (!status) {
-    return 'Estado SQLite desconocido. Recarga la app o espera a que termine la conexión antes de editar.';
-  }
-
-  if (!status.ready || status.phase !== 'active') {
-    return (
-      status.message ??
-      'SQLite no está activo. Edición bloqueada para evitar cambios locales divergentes.'
-    );
-  }
-
-  return null;
+  const availability = getEditingAvailability();
+  return availability.allowed ? null : availability.reason;
 }
 
 export interface WriteSharedStorageItemResult {
@@ -829,8 +814,11 @@ export function readStorageItem(key: string): string | null {
   return isRecoverablePersistedValue(key, value, 'localStorage') ? value : null;
 }
 
-export function writeStorageItem(key: string, value: string): void {
-  void writeSharedStorageItemAsync(key, value);
+export function writeStorageItem(
+  key: string,
+  value: string,
+): Promise<WriteSharedStorageItemResult> {
+  return writeSharedStorageItemAsync(key, value);
 }
 
 export function readJsonStorage<T>(

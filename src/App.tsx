@@ -12,6 +12,7 @@ import {
   stopExternalDataSyncPolling,
 } from './services/externalDataSync';
 import { useDatabaseStatus } from './services/databaseStatus';
+import { useEditingAvailability } from './services/editingAvailability';
 import {
   bootstrapSqlitePersistence,
   isTemporarySqliteLockMessage,
@@ -233,14 +234,16 @@ function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }
 
 function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
   const databaseStatus = useDatabaseStatus();
-  const editingAllowed = databaseStatus?.ready === true && databaseStatus.phase === 'active';
+  const editingAvailability = useEditingAvailability();
+  const editingAllowed = editingAvailability.allowed;
 
   if (editingAllowed) {
     return null;
   }
 
-  const detail = databaseStatus?.message
-    ?? (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
+  const detail = editingAvailability.reason
+    || databaseStatus?.message
+    || (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
 
   return (
     <section className="sqlite-readonly-banner" role="alert" aria-live="assertive">
@@ -257,9 +260,9 @@ function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) 
 }
 
 function OperationalModuleGuard({ activeView, children }: { activeView: AppView; children: ReactNode }) {
-  const databaseStatus = useDatabaseStatus();
+  const editingAvailability = useEditingAvailability();
   const contentRef = useRef<HTMLDivElement>(null);
-  const editingAllowed = databaseStatus?.ready === true && databaseStatus.phase === 'active';
+  const editingAllowed = editingAvailability.allowed;
   const guardInteraction = !editingAllowed && activeView !== 'dashboard' && activeView !== 'ajustes';
 
   useEffect(() => {
