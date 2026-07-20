@@ -49,24 +49,24 @@ interface ActasStateStore {
   load: () => void;
   loadHistoricalActas: () => void;
   reloadFromStorage: () => void;
-  create: (draft: ActaDraft) => string;
+  create: (draft: ActaDraft) => Promise<string>;
   createWithConcurrencyCheck: (
     draft: ActaDraft,
   ) => Promise<{ ok: boolean; message: string; recordId?: string }>;
-  update: (actaId: string, draft: ActaDraft) => void;
+  update: (actaId: string, draft: ActaDraft) => Promise<void>;
   updateWithConcurrencyCheck: (
     actaId: string,
     draft: ActaDraft,
     expectedUpdatedAt: string | null,
   ) => Promise<{ ok: boolean; message: string }>;
-  addUpdate: (actaId: string, text: string) => void;
-  closeActa: (actaId: string) => void;
-  remove: (actaId: string) => void;
+  addUpdate: (actaId: string, text: string) => Promise<void>;
+  closeActa: (actaId: string) => Promise<void>;
+  remove: (actaId: string) => Promise<void>;
   removeWithConcurrencyCheck: (
     actaId: string,
     expectedUpdatedAt: string | null,
   ) => Promise<{ ok: boolean; message: string }>;
-  createFromSession: (input: CreateActaFromSessionInput) => string;
+  createFromSession: (input: CreateActaFromSessionInput) => Promise<string>;
   createFromSessionWithConcurrencyCheck: (
     input: CreateActaFromSessionInput,
   ) => Promise<{ ok: boolean; message: string; recordId?: string }>;
@@ -100,19 +100,28 @@ function mergeActasById(primary: Acta[], secondary: Acta[]): Acta[] {
   return [...byId.values()];
 }
 
-function persistActas(actas: Acta[]): Acta[] {
+async function persistActas(actas: Acta[]): Promise<Acta[]> {
   const mergedActas = mergeActasById(actas, readActas());
-  writeStorageItem(STORAGE_KEY, JSON.stringify(mergedActas));
+  const result = await writeStorageItem(STORAGE_KEY, JSON.stringify(mergedActas));
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
   return mergedActas;
 }
 
-function persistExactActas(actas: Acta[]): Acta[] {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(actas));
+async function persistExactActas(actas: Acta[]): Promise<Acta[]> {
+  const result = await writeStorageItem(STORAGE_KEY, JSON.stringify(actas));
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
   return actas;
 }
 
-function persistActaTypes(actaTypes: ActaTypeDefinition[]): void {
-  writeStorageItem(ACTA_TYPES_STORAGE_KEY, JSON.stringify(actaTypes));
+async function persistActaTypes(actaTypes: ActaTypeDefinition[]): Promise<void> {
+  const result = await writeStorageItem(ACTA_TYPES_STORAGE_KEY, JSON.stringify(actaTypes));
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
 }
 
 function isActaAlegacion(value: unknown): value is ActaAlegacion {
@@ -282,10 +291,6 @@ function readActaTypes(actas: Acta[]): ActaTypeDefinition[] {
     deletedAt: null,
   }));
   const types = dedupeActaTypes([...createDefaultActaTypes(), ...storedTypes, ...typesFromActas]);
-
-  if (!stored || storedTypes.length !== types.length) {
-    persistActaTypes(types);
-  }
 
   return types;
 }
@@ -476,17 +481,16 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       .then((nextState) => set(nextState))
       .catch((error) => logActaPersistenceError('reloadActasFromStorage', error));
   },
-  create: (draft) => {
+  create: async (draft) => {
     const acta = buildActaFromDraft(draft, null);
-    set((state) => {
-      const actas = persistActas([acta, ...state.actas]);
-      const visibleActas = selectVisibleActasForState(
-        actas,
-        state.hasLoadedHistoricalActas,
-        acta.id,
-      );
-      return { actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) };
-    });
+    const state = get();
+    const actas = await persistActas([acta, ...state.actas]);
+    const visibleActas = selectVisibleActasForState(
+      actas,
+      state.hasLoadedHistoricalActas,
+      acta.id,
+    );
+    set({ actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) });
     return acta.id;
   },
   createWithConcurrencyCheck: async (draft) => {
@@ -537,21 +541,20 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       };
     }
   },
-  update: (actaId, draft) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const actas = persistActas(
-        state.actas.map((acta) =>
-          acta.id === actaId ? buildUpdatedActaFromDraft(acta, draft, now) : acta,
-        ),
-      );
-      const visibleActas = selectVisibleActasForState(
-        actas,
-        state.hasLoadedHistoricalActas,
-        actaId,
-      );
-      return { actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) };
-    });
+  update: async (actaId, draft) => {
+    const state = get();
+    const now = new Date().toISOString();
+    const actas = await persistActas(
+      state.actas.map((acta) =>
+        acta.id === actaId ? buildUpdatedActaFromDraft(acta, draft, now) : acta,
+      ),
+    );
+    const visibleActas = selectVisibleActasForState(
+      actas,
+      state.hasLoadedHistoricalActas,
+      actaId,
+    );
+    set({ actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) });
   },
   updateWithConcurrencyCheck: async (actaId, draft, expectedUpdatedAt) => {
     try {
@@ -648,68 +651,65 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       };
     }
   },
-  addUpdate: (actaId, text) => {
+  addUpdate: async (actaId, text) => {
     const trimmedText = text.trim();
     if (!trimmedText) {
       return;
     }
 
-    set((state) => {
-      const now = new Date().toISOString();
-      const actas = state.actas.map((acta) =>
-        acta.id === actaId
-          ? {
-              ...acta,
-              actualizaciones: [
-                {
-                  id: `acta-update-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-                  fecha: now,
-                  texto: trimmedText,
-                },
-                ...acta.actualizaciones,
-              ],
-              updatedAt: now,
-            }
-          : acta,
-      );
-      const persistedActas = persistActas(actas);
-      const visibleActas = selectVisibleActasForState(
-        persistedActas,
-        state.hasLoadedHistoricalActas,
-        actaId,
-      );
-      return { actas: sortActasForState(visibleActas) };
-    });
+    const state = get();
+    const now = new Date().toISOString();
+    const actas = state.actas.map((acta) =>
+      acta.id === actaId
+        ? {
+            ...acta,
+            actualizaciones: [
+              {
+                id: `acta-update-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+                fecha: now,
+                texto: trimmedText,
+              },
+              ...acta.actualizaciones,
+            ],
+            updatedAt: now,
+          }
+        : acta,
+    );
+    const persistedActas = await persistActas(actas);
+    const visibleActas = selectVisibleActasForState(
+      persistedActas,
+      state.hasLoadedHistoricalActas,
+      actaId,
+    );
+    set({ actas: sortActasForState(visibleActas) });
   },
-  closeActa: (actaId) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const closedState: ActaState = 'Cerrada';
-      const actas: Acta[] = state.actas.map((acta) =>
-        acta.id === actaId
-          ? {
-              ...acta,
-              estado: closedState,
-              closedAt: acta.closedAt ?? now,
-              updatedAt: now,
-            }
-          : acta,
-      );
-      const persistedActas = persistActas(actas);
-      const visibleActas = selectVisibleActasForState(
-        persistedActas,
-        state.hasLoadedHistoricalActas,
-        actaId,
-      );
-      return { actas: sortActasForState(visibleActas) };
-    });
+  closeActa: async (actaId) => {
+    const state = get();
+    const now = new Date().toISOString();
+    const closedState: ActaState = 'Cerrada';
+    const actas: Acta[] = state.actas.map((acta) =>
+      acta.id === actaId
+        ? {
+            ...acta,
+            estado: closedState,
+            closedAt: acta.closedAt ?? now,
+            updatedAt: now,
+          }
+        : acta,
+    );
+    const persistedActas = await persistActas(actas);
+    const visibleActas = selectVisibleActasForState(
+      persistedActas,
+      state.hasLoadedHistoricalActas,
+      actaId,
+    );
+    set({ actas: sortActasForState(visibleActas) });
   },
-  remove: (actaId) => {
-    set((state) => {
-      const actas = persistExactActas(readActas().filter((acta) => acta.id !== actaId));
-      const visibleActas = selectVisibleActasForState(actas, state.hasLoadedHistoricalActas);
-      return { actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) };
-    });
+  remove: async (actaId) => {
+    const state = get();
+    const actas = await persistExactActas(readActas().filter((acta) => acta.id !== actaId));
+    const visibleActas = selectVisibleActasForState(actas, state.hasLoadedHistoricalActas);
+    set({ actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) });
   },
   removeWithConcurrencyCheck: async (actaId, expectedUpdatedAt) => {
     try {
@@ -769,7 +769,7 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       };
     }
   },
-  createFromSession: (input) => {
+  createFromSession: async (input) => {
     const existing = readActas().find((acta) => acta.sourceSessionId === input.session.id);
     if (existing) {
       return existing.id;
@@ -783,11 +783,10 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       observaciones: buildActaObservacionesFromSession(input.session, input.treatedTasks),
     };
     const acta = buildActaFromDraft(draft, input.session.id);
-    set((state) => {
-      const actas = persistActas([acta, ...state.actas]);
-      const visibleActas = selectVisibleActasForState(actas, state.hasLoadedHistoricalActas);
-      return { actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) };
-    });
+    const state = get();
+    const actas = await persistActas([acta, ...state.actas]);
+    const visibleActas = selectVisibleActasForState(actas, state.hasLoadedHistoricalActas);
+    set({ actas: sortActasForState(visibleActas), actaTypes: readActaTypes(actas) });
     return acta.id;
   },
   createFromSessionWithConcurrencyCheck: async (input) => {
@@ -914,13 +913,17 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       }
     }
 
-    set((state) => {
-      const actaTypes = dedupeActaTypes([...state.actaTypes, newType]);
-      persistActaTypes(actaTypes);
-      return { actaTypes };
-    });
-
-    return { ok: true };
+    try {
+      const actaTypes = dedupeActaTypes([...get().actaTypes, newType]);
+      await persistActaTypes(actaTypes);
+      set({ actaTypes });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido crear el tipo de acta.',
+      };
+    }
   },
   toggleActaType: async (typeId) => {
     const type = get().actaTypes.find((item) => item.id === typeId);
@@ -956,12 +959,17 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       }
     }
 
-    set((state) => {
-      const actaTypes = state.actaTypes.map((item) => (item.id === typeId ? updatedType : item));
-      persistActaTypes(actaTypes);
-      return { actaTypes };
-    });
-    return { ok: true };
+    try {
+      const actaTypes = get().actaTypes.map((item) => (item.id === typeId ? updatedType : item));
+      await persistActaTypes(actaTypes);
+      set({ actaTypes });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido actualizar el tipo de acta.',
+      };
+    }
   },
   removeActaType: async (typeId) => {
     const type = get().actaTypes.find((item) => item.id === typeId);
@@ -1000,12 +1008,16 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       }
     }
 
-    set((state) => {
-      const actaTypes = state.actaTypes.filter((item) => item.id !== typeId);
-      persistActaTypes(actaTypes);
-      return { actaTypes };
-    });
-
-    return { ok: true };
+    try {
+      const actaTypes = get().actaTypes.filter((item) => item.id !== typeId);
+      await persistActaTypes(actaTypes);
+      set({ actaTypes });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido eliminar el tipo de acta.',
+      };
+    }
   },
 }));
