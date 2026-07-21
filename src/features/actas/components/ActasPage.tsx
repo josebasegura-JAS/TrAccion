@@ -1,4 +1,4 @@
-import { Mail, Settings2 } from 'lucide-react';
+import { ClipboardList, Mail, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -23,6 +23,8 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActasOutlookTemplateModal } from './ActasOutlookTemplateModal';
 import { ActaTypeManagerModal } from './ActaTypeManagerModal';
 import { ActaEditorModal } from './ActaEditorModal';
+import { ActaContenidoModal } from './ActaContenidoModal';
+import { CensoManagerModal } from './CensoManagerModal';
 import {
   ACTAS_HELP_SECTIONS,
   type ActaColumnId,
@@ -73,6 +75,8 @@ export function ActasPage() {
   const [pathStatusIsError, setPathStatusIsError] = useState(false);
   const [deadlineWasAutoUpdated, setDeadlineWasAutoUpdated] = useState(false);
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
+  const [isCensoManagerOpen, setIsCensoManagerOpen] = useState(false);
+  const [contenidoActaId, setContenidoActaId] = useState<string | null>(null);
   const [newActaTypeName, setNewActaTypeName] = useState('');
   const [openHistoryYears, setOpenHistoryYears] = useState<Record<string, boolean>>({});
   const [pendingDeleteActaTypeId, setPendingDeleteActaTypeId] = useState<string | null>(null);
@@ -507,6 +511,14 @@ export function ActasPage() {
               </button>
             )}
             <ActionButton
+              onClick={() => setContenidoActaId(acta.id)}
+              size="sm"
+              title="Contenido de la sesión"
+              variant="secondary"
+            >
+              <ClipboardList size={14} />
+            </ActionButton>
+            <ActionButton
               onClick={() => void deleteActa(acta.id)}
               size="sm"
               title="Eliminar acta"
@@ -756,6 +768,16 @@ export function ActasPage() {
             <ActionButton
               variant="secondary"
               iconOnly={false}
+              onClick={() => setIsCensoManagerOpen(true)}
+              size="sm"
+              title="Gestionar censo de miembros"
+            >
+              <ClipboardList size={14} />
+              Censo
+            </ActionButton>
+            <ActionButton
+              variant="secondary"
+              iconOnly={false}
               onClick={openOutlookTemplateManager}
               size="sm"
               title="Configurar plantilla Outlook de Actas"
@@ -935,6 +957,14 @@ export function ActasPage() {
           updateDraft={updateDraft}
         />
       )}
+      {isCensoManagerOpen && (
+        <CensoManagerModal actaTypes={actaTypes.map((type) => type.nombre)} onClose={() => setIsCensoManagerOpen(false)} />
+      )}
+      {contenidoActaId &&
+        (() => {
+          const acta = actas.find((item) => item.id === contenidoActaId);
+          return acta ? <ActaContenidoModal acta={acta} onClose={() => setContenidoActaId(null)} /> : null;
+        })()}
       {dialogNode}
     </section>
   );
