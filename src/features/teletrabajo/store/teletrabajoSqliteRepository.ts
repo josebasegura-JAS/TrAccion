@@ -4,11 +4,27 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 import type { TeletrabajoSolicitud } from '../domain/solicitud';
 
 const TELETRABAJO_STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
+const TELETRABAJO_PENDING_WRITE_MODULE = 'teletrabajo-solicitudes';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+registerPendingWriteReplayer(TELETRABAJO_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
+  const saver = window.traccion?.saveTeletrabajoRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  const result = await saver({ id: recordId, value, expectedUpdatedAt });
+  publishDatabaseStatus(result.status);
+  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -126,25 +142,28 @@ export async function saveTeletrabajoSolicitudToSqlite(
     await waitForNextPaint();
   }
 
-  try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({
-        id: solicitud.id,
-        value: JSON.stringify(solicitud),
-        expectedUpdatedAt,
-      }),
-    );
+  const value = JSON.stringify(solicitud);
 
-    publishDatabaseStatus(result.status);
+  try {
+    const result = await saveRecordWithPendingFallback({
+      module: TELETRABAJO_PENDING_WRITE_MODULE,
+      recordId: solicitud.id,
+      value,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: solicitud.id, value, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
+
     if (!options.silentPersistenceFeedback) {
       clearPersistenceBusy(TELETRABAJO_STORAGE_KEY, result.message);
     }
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     if (!options.silentPersistenceFeedback) {
       clearPersistenceBusy(
@@ -166,6 +185,9 @@ export interface TeletrabajoBatchSaveResult {
  * Guarda varias solicitudes en una sola llamada IPC / transacción SQLite,
  * en vez de una por una. Pensado para importadores masivos (encuesta e
  * histórico): antes disparaban N llamadas IPC secuenciales, ahora 1.
+ *
+ * Deliberadamente fuera de la cola de pendientes, mismo motivo que en
+ * `saveActaTypesToSqlite`.
  */
 export async function saveTeletrabajoSolicitudesToSqlite(
   items: Array<{ solicitud: TeletrabajoSolicitud; expectedUpdatedAt: string | null }>,

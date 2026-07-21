@@ -4,11 +4,27 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 import type { CriterioRrll } from '../domain/criterioRrll';
 
 const CRITERIOS_RRLL_STORAGE_KEY = 'traccion.v1.criterios-rrll.criterios';
+const CRITERIOS_RRLL_PENDING_WRITE_MODULE = 'criterios-rrll';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+registerPendingWriteReplayer(CRITERIOS_RRLL_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
+  const saver = window.traccion?.saveCriteriosRrllRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  const result = await saver({ id: recordId, value, expectedUpdatedAt });
+  publishDatabaseStatus(result.status);
+  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -117,23 +133,26 @@ export async function saveCriterioRrllToSqlite(
   publishPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, 'Guardando criterio en SQLite…');
   await waitForNextPaint();
 
-  try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({
-        id: record.id,
-        value: JSON.stringify(record),
-        expectedUpdatedAt,
-      }),
-    );
+  const value = JSON.stringify(record);
 
-    publishDatabaseStatus(result.status);
+  try {
+    const result = await saveRecordWithPendingFallback({
+      module: CRITERIOS_RRLL_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
+
     clearPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, 'No se ha podido guardar el criterio en SQLite.');
     throw error;
@@ -150,6 +169,10 @@ export interface CriterioRrllBatchSaveResult {
  * Guarda varios criterios en una sola llamada IPC / transacción SQLite, en
  * vez de uno por uno. Pensado para importaciones masivas desde Excel: antes
  * disparaba N llamadas IPC secuenciales (una por fila), ahora dispara 1.
+ *
+ * Deliberadamente fuera de la cola de pendientes, mismo motivo que en
+ * `saveActaTypesToSqlite`: es una importación puntual, no una edición del
+ * día a día.
  */
 export async function saveCriteriosRrllToSqlite(
   records: Array<{ record: CriterioRrll; expectedUpdatedAt: string | null }>,

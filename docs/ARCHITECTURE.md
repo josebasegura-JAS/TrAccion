@@ -54,7 +54,7 @@ Esto cubre el arranque en frío, pero no una caída de conectividad SMB a media 
 
 Es hermana, no sustituta, de la cola más antigua de `persistence.ts` (`SQLITE_PENDING_WRITES_KEY`, atada a `writeStorageItem`): esa protege el camino genérico de clave plana, que hoy usan sobre todo escrituras espejo en `localStorage`, no el guardado real de la mayoría de módulos.
 
-**Migrado a la nueva cola** (sirven de plantilla para el resto): Tareas (`taskSqliteRepository.ts`), Licencias sin sueldo (`licenciaSinSueldoSqliteRepository.ts`). El resto de módulos con `<modulo>SqliteRepository.ts` sigue sin red de seguridad ante una caída en caliente — son candidatos a migrar con el mismo patrón, no una reescritura distinta por módulo.
+**Migrado a la nueva cola**: todos los módulos con `<modulo>SqliteRepository.ts` — Tareas, Licencias sin sueldo, Actas (registros y tipos), Criterios RRLL, Plantilla (empleados), Vinculograma, Teletrabajo (solicitudes) y las 5 entidades de Ticket Restaurante (calendarios, personas, ausencias, config, manutenciones). Quedan deliberadamente fuera los guardados por lote (`saveXsToSqlite`, usados por importadores masivos): encolar un lote entero complicaría la reconciliación sin aportar nada — si un import falla, el usuario lo repite.
 
 ## 3. Importadores masivos
 

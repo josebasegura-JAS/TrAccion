@@ -140,10 +140,26 @@ su guardado real con `saveRecordWithPendingFallback`; el flush se engancha
 en los mismos sitios que ya disparaban la cola antigua (arranque, polling,
 reconexión, `beforeunload`), así que no hace falta un ciclo nuevo.
 
-Migrados como plantilla: Tareas y Licencias sin sueldo. El resto de módulos
-con `<modulo>SqliteRepository.ts` queda pendiente de migrar con el mismo
-patrón — es mecánico (registrar + envolver la llamada de guardado), no
-requiere rediseño por módulo.
+Migrados: Tareas, Licencias sin sueldo, Actas (registros y tipos), Criterios
+RRLL, Plantilla (empleados), Vinculograma, Teletrabajo (solicitudes) y las 5
+entidades de Ticket Restaurante (calendarios, personas, ausencias, config,
+manutenciones) — es decir, todos los módulos con `<modulo>SqliteRepository.ts`
+existentes en julio de 2026. Dos matices encontrados al migrar:
+
+- **Plantilla usa `expectedValue`/`currentValue`** en vez de
+  `expectedUpdatedAt`/`currentUpdatedAt` (compara el JSON completo, no un
+  timestamp). La cola no necesita saberlo — trata ese campo como un token
+  opaco — pero el repositorio adapta el nombre al envolver/desenvolver.
+- **Presupuestos guarda un snapshot único de 4 colecciones**, no registros
+  sueltos, así que a efectos de la cola se trata como un solo "registro" con
+  id fijo (`'snapshot'`).
+
+Los guardados por lote (`saveActaTypesToSqlite`, `saveCriteriosRrllToSqlite`,
+`saveTeletrabajoSolicitudesToSqlite`, `saveTicketRestaurante*sToSqlite`,
+`saveEmployeesToSqlite`) se dejaron fuera a propósito: son importaciones
+puntuales (Excel, histórico), no ediciones del día a día — encolar un lote
+entero de golpe complicaría la reconciliación al reconectar sin aportar
+nada real.
 
 ## CI y control de versiones (julio 2026)
 

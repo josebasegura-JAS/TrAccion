@@ -27,7 +27,7 @@ registerPendingWriteReplayer(
 
     const result = await saver({ id: recordId, value, expectedUpdatedAt });
     publishDatabaseStatus(result.status);
-    return result;
+    return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
   },
 );
 
@@ -151,7 +151,7 @@ export async function saveLicenciaSinSueldoToSqlite(
           saver({ id: record.id, value, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
-        return rawResult;
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
       },
     });
 

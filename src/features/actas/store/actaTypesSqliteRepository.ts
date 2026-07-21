@@ -4,11 +4,27 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 import type { ActaTypeDefinition } from '../domain/acta';
 
 const ACTA_TYPES_STORAGE_KEY = 'traccion.v1.actas.types';
+const ACTA_TYPES_PENDING_WRITE_MODULE = 'actas-tipos';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+registerPendingWriteReplayer(ACTA_TYPES_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
+  const saver = window.traccion?.saveActaTypeRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  const result = await saver({ id: recordId, value, expectedUpdatedAt });
+  publishDatabaseStatus(result.status);
+  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -114,23 +130,26 @@ export async function saveActaTypeToSqlite(
   publishPersistenceBusy(ACTA_TYPES_STORAGE_KEY, 'Guardando tipo de acta en SQLite…');
   await waitForNextPaint();
 
-  try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({
-        id: record.id,
-        value: JSON.stringify(record),
-        expectedUpdatedAt,
-      }),
-    );
+  const value = JSON.stringify(record);
 
-    publishDatabaseStatus(result.status);
+  try {
+    const result = await saveRecordWithPendingFallback({
+      module: ACTA_TYPES_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
+
     clearPersistenceBusy(ACTA_TYPES_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(ACTA_TYPES_STORAGE_KEY, 'No se ha podido guardar el tipo de acta en SQLite.');
     throw error;
@@ -147,6 +166,11 @@ export interface ActaTypeBatchSaveResult {
  * Guarda varios tipos de acta en una sola llamada IPC / transacción SQLite,
  * en vez de uno por uno. Pensado para la migración inicial desde
  * createDefaultActaTypes() / localStorage, que puede traer varios tipos a la vez.
+ *
+ * Deliberadamente fuera de la cola de pendientes: es una operación de
+ * importación puntual, no una edición del día a día, y encolar un lote
+ * completo complicaría la reconciliación sin aportar nada — si falla, el
+ * usuario repite la importación.
  */
 export async function saveActaTypesToSqlite(
   records: Array<{ record: ActaTypeDefinition; expectedUpdatedAt: string | null }>,

@@ -1,10 +1,26 @@
 import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 import type { Acta } from '../domain/acta';
 
 const ACTAS_STORAGE_KEY = 'traccion.v1.actas.records';
+const ACTAS_PENDING_WRITE_MODULE = 'actas';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+registerPendingWriteReplayer(ACTAS_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
+  const saver = window.traccion?.saveActaRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  const result = await saver({ id: recordId, value, expectedUpdatedAt });
+  publishDatabaseStatus(result.status);
+  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -103,23 +119,26 @@ export async function saveActaToSqlite(
   publishPersistenceBusy(ACTAS_STORAGE_KEY, 'Guardando acta en SQLite…');
   await waitForNextPaint();
 
-  try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({
-        id: acta.id,
-        value: JSON.stringify(acta),
-        expectedUpdatedAt,
-      }),
-    );
+  const value = JSON.stringify(acta);
 
-    publishDatabaseStatus(result.status);
+  try {
+    const result = await saveRecordWithPendingFallback({
+      module: ACTAS_PENDING_WRITE_MODULE,
+      recordId: acta.id,
+      value,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: acta.id, value, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
+
     clearPersistenceBusy(ACTAS_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(ACTAS_STORAGE_KEY, 'No se ha podido guardar el acta en SQLite.');
     throw error;

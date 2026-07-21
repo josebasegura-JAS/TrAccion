@@ -4,14 +4,92 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 
 const TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
 const TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.absences';
 const TICKET_RESTAURANTE_CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.config';
 const TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.manutenciones';
+// Ticket Restaurante tiene 5 entidades independientes en el mismo repositorio:
+// cada una necesita su propio nombre de módulo para la cola de pendientes,
+// para que un calendario encolado no se confunda con una persona encolada
+// con el mismo id.
+const TICKET_RESTAURANTE_CALENDARS_PENDING_WRITE_MODULE = 'ticket-restaurante-calendarios';
+const TICKET_RESTAURANTE_PEOPLE_PENDING_WRITE_MODULE = 'ticket-restaurante-personas';
+const TICKET_RESTAURANTE_ABSENCES_PENDING_WRITE_MODULE = 'ticket-restaurante-ausencias';
+const TICKET_RESTAURANTE_CONFIG_PENDING_WRITE_MODULE = 'ticket-restaurante-config';
+const TICKET_RESTAURANTE_MANUTENCIONES_PENDING_WRITE_MODULE = 'ticket-restaurante-manutenciones';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+registerPendingWriteReplayer(
+  TICKET_RESTAURANTE_CALENDARS_PENDING_WRITE_MODULE,
+  async (recordId, value, expectedUpdatedAt) => {
+    const saver = window.traccion?.saveTicketRestauranteCalendarRecordIfUnchanged;
+    if (!saver) {
+      return null;
+    }
+    const result = await saver({ id: recordId, value, expectedUpdatedAt });
+    publishDatabaseStatus(result.status);
+    return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+  },
+);
+
+registerPendingWriteReplayer(
+  TICKET_RESTAURANTE_PEOPLE_PENDING_WRITE_MODULE,
+  async (recordId, value, expectedUpdatedAt) => {
+    const saver = window.traccion?.saveTicketRestaurantePersonRecordIfUnchanged;
+    if (!saver) {
+      return null;
+    }
+    const result = await saver({ id: recordId, value, expectedUpdatedAt });
+    publishDatabaseStatus(result.status);
+    return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+  },
+);
+
+registerPendingWriteReplayer(
+  TICKET_RESTAURANTE_ABSENCES_PENDING_WRITE_MODULE,
+  async (recordId, value, expectedUpdatedAt) => {
+    const saver = window.traccion?.saveTicketRestauranteAbsenceRecordIfUnchanged;
+    if (!saver) {
+      return null;
+    }
+    const result = await saver({ id: recordId, value, expectedUpdatedAt });
+    publishDatabaseStatus(result.status);
+    return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+  },
+);
+
+registerPendingWriteReplayer(
+  TICKET_RESTAURANTE_CONFIG_PENDING_WRITE_MODULE,
+  async (recordId, value, expectedUpdatedAt) => {
+    const saver = window.traccion?.saveTicketRestauranteConfigRecordIfUnchanged;
+    if (!saver) {
+      return null;
+    }
+    const result = await saver({ id: recordId, value, expectedUpdatedAt });
+    publishDatabaseStatus(result.status);
+    return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+  },
+);
+
+registerPendingWriteReplayer(
+  TICKET_RESTAURANTE_MANUTENCIONES_PENDING_WRITE_MODULE,
+  async (recordId, value, expectedUpdatedAt) => {
+    const saver = window.traccion?.saveTicketRestauranteManutencionRecordIfUnchanged;
+    if (!saver) {
+      return null;
+    }
+    const result = await saver({ id: recordId, value, expectedUpdatedAt });
+    publishDatabaseStatus(result.status);
+    return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
+  },
+);
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -116,18 +194,23 @@ export async function saveTicketRestauranteCalendarToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
-    );
+    const result = await saveRecordWithPendingFallback({
+      module: TICKET_RESTAURANTE_CALENDARS_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value: serializedValue,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
 
-    publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(
       TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY,
@@ -231,18 +314,23 @@ export async function saveTicketRestaurantePersonToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
-    );
+    const result = await saveRecordWithPendingFallback({
+      module: TICKET_RESTAURANTE_PEOPLE_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value: serializedValue,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
 
-    publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(
       TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY,
@@ -347,18 +435,23 @@ export async function saveTicketRestauranteAbsenceToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
-    );
+    const result = await saveRecordWithPendingFallback({
+      module: TICKET_RESTAURANTE_ABSENCES_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value: serializedValue,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
 
-    publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(
       TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY,
@@ -470,18 +563,23 @@ export async function saveTicketRestauranteConfigToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({ id: TICKET_RESTAURANTE_CONFIG_RECORD_ID, value: serializedValue, expectedUpdatedAt }),
-    );
+    const result = await saveRecordWithPendingFallback({
+      module: TICKET_RESTAURANTE_CONFIG_PENDING_WRITE_MODULE,
+      recordId: TICKET_RESTAURANTE_CONFIG_RECORD_ID,
+      value: serializedValue,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: TICKET_RESTAURANTE_CONFIG_RECORD_ID, value: serializedValue, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
 
-    publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_CONFIG_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(
       TICKET_RESTAURANTE_CONFIG_STORAGE_KEY,
@@ -536,18 +634,23 @@ export async function saveTicketRestauranteManutencionToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
-    );
+    const result = await saveRecordWithPendingFallback({
+      module: TICKET_RESTAURANTE_MANUTENCIONES_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value: serializedValue,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
+      },
+    });
 
-    publishDatabaseStatus(result.status);
     clearPersistenceBusy(TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(
       TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY,
