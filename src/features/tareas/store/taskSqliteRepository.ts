@@ -1,7 +1,23 @@
 import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from '../../../services/persistence';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 import type { Task } from '../domain/task';
 
 const TASKS_DIRECT_STORAGE_KEY = 'traccion.v1.tareas.tasks';
+const TASKS_PENDING_WRITE_MODULE = 'tasks';
+
+// Réplica "cruda" del guardado, sin pasar por saveRecordWithPendingFallback,
+// para que el flush de la cola no vuelva a encolarse sobre sí mismo.
+registerPendingWriteReplayer(TASKS_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
+  const saver = window.traccion?.saveTaskRecordIfUnchanged;
+  if (!saver) {
+    return null;
+  }
+
+  return saver({ id: recordId, value, expectedUpdatedAt });
+});
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -81,22 +97,20 @@ export async function saveTaskToSqlite(
   publishPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'Guardando tarea en SQLite…');
   await waitForNextPaint();
 
+  const value = JSON.stringify(task);
+
   try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({
-        id: task.id,
-        value: JSON.stringify(task),
-        expectedUpdatedAt,
-      }),
-    );
+    const result = await saveRecordWithPendingFallback({
+      module: TASKS_PENDING_WRITE_MODULE,
+      recordId: task.id,
+      value,
+      expectedUpdatedAt,
+      save: () => withTemporarySqliteRetry(() => saver({ id: task.id, value, expectedUpdatedAt })),
+    });
 
     clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'No se ha podido guardar la tarea en SQLite.');
     throw error;

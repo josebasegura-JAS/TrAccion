@@ -8,8 +8,21 @@ import {
   readHydrationMetadata,
   subscribeToPersistenceFeedback,
 } from './persistence';
+import { flushPendingRecordWrites } from './pendingRecordWrites';
 
 const POLLING_INTERVAL_MS = 12_000;
+
+// Ambas colas de pendientes (la genérica de persistence.ts y la de
+// pendingRecordWrites.ts, por-módulo) se vacían siempre juntas: desde el
+// punto de vista del polling son "sincronizar lo que quedó atrás", da igual
+// por qué camino se guardó originalmente.
+async function flushAllPendingWrites(): Promise<number> {
+  const [legacyFlushed, recordFlushed] = await Promise.all([
+    flushPendingSqliteWrites(),
+    flushPendingRecordWrites(),
+  ]);
+  return legacyFlushed + recordFlushed;
+}
 const DATABASE_CONNECTIVITY_RECOVERED_EVENT = 'traccion:database-connectivity-recovered';
 
 const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
@@ -233,7 +246,7 @@ async function pollOnce(): Promise<void> {
     const hasOnlyRefreshTokenChanged = refreshTokenChangedWithoutKnownStoreChange(tokenSnapshot);
 
     if (!hasPersistedRecordsChanged && changedDirectStoreIds.length === 0) {
-      const flushedCount = await flushPendingSqliteWrites();
+      const flushedCount = await flushAllPendingWrites();
       updateSeenTokens(tokenSnapshot);
       if (flushedCount > 0) {
         setState({
@@ -256,7 +269,7 @@ async function pollOnce(): Promise<void> {
     }
 
     if (changedDirectStoreIds.length > 0 && !hasPersistedRecordsChanged) {
-      await flushPendingSqliteWrites();
+      await flushAllPendingWrites();
       updateSeenTokens(tokenSnapshot);
       reloadIntegratedStores(changedDirectStoreIds);
       const appliedAt = new Date().toISOString();
@@ -283,7 +296,7 @@ async function pollOnce(): Promise<void> {
 
     const changedLegacyStoreIds = collectChangedLegacyStores(snapshot);
     applyPersistedRecordsSnapshotToLocalStorage(snapshot);
-    await flushPendingSqliteWrites();
+    await flushAllPendingWrites();
     updateSeenTokens(snapshot);
     reloadIntegratedStores(changedLegacyStoreIds ?? undefined);
     const appliedAt = new Date().toISOString();

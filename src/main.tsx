@@ -7,6 +7,7 @@ import {
   hydrateLocalStorageFromSqlite,
   reportStartupHydrationResult,
 } from './services/persistence';
+import { flushPendingRecordWrites, getPendingRecordWriteCount } from './services/pendingRecordWrites';
 import { getDirtyEditorCount } from './services/dirtyEditors';
 import './styles.css';
 
@@ -82,6 +83,7 @@ async function startApp(): Promise<void> {
   // Flush de writes pendientes en background, después de que la App ya es visible.
   // No bloquea el arranque — el polling lo reintentará si falla.
   void flushPendingSqliteWrites().catch(() => undefined);
+  void flushPendingRecordWrites().catch(() => undefined);
 }
 
 startApp().catch((error: unknown) => {
@@ -100,7 +102,7 @@ startApp().catch((error: unknown) => {
 // Si quedan writes pendientes tras el intento, el diálogo nativo de Electron
 // da al usuario la oportunidad de cancelar el cierre.
 window.addEventListener('beforeunload', (event) => {
-  const pending = getPendingSqliteWriteCount();
+  const pending = getPendingSqliteWriteCount() + getPendingRecordWriteCount();
   const dirtyEditors = getDirtyEditorCount();
   if (pending === 0 && dirtyEditors === 0) {
     return;
@@ -108,6 +110,7 @@ window.addEventListener('beforeunload', (event) => {
 
   if (pending > 0) {
     void flushPendingSqliteWrites().catch(() => undefined);
+    void flushPendingRecordWrites().catch(() => undefined);
   }
 
   event.preventDefault();

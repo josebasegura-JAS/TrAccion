@@ -38,6 +38,7 @@ export type PersistedStorageKey = (typeof PERSISTED_STORAGE_KEYS)[number];
 export const SQLITE_MIGRATION_FLAG_KEY = 'traccion.v1.sqlite.localStorageBackupCreated';
 export const SQLITE_HYDRATION_METADATA_KEY = 'traccion.v1.sqlite.hydrationMetadata';
 export const SQLITE_PENDING_WRITES_KEY = 'traccion.v1.sqlite.pendingWrites';
+export const SQLITE_PENDING_RECORD_WRITES_KEY = 'traccion.v1.sqlite.pendingRecordWrites';
 export const SQLITE_RECORD_METADATA_KEY = 'traccion.v1.sqlite.recordMetadata';
 
 const PERSISTED_STORAGE_PREFIXES = [] as const;

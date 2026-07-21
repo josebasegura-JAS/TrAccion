@@ -6,6 +6,7 @@ import {
   subscribeToPersistenceFeedback,
   type PersistenceFeedback,
 } from '../services/persistence';
+import { getPendingRecordWriteCount } from '../services/pendingRecordWrites';
 import { useDatabaseStatus } from '../services/databaseStatus';
 import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
 import { StatusBadge } from './ui/StatusBadge';
@@ -74,7 +75,7 @@ export function Footer() {
     if (!isPersistenceFeedbackSilent(nextFeedback)) {
       setFeedback(nextFeedback);
     }
-    setPendingCount(getPendingSqliteWriteCount());
+    setPendingCount(getPendingSqliteWriteCount() + getPendingRecordWriteCount());
   }), []);
 
   return (

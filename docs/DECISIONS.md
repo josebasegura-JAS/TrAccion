@@ -109,6 +109,42 @@ entrada.
 Es de solo lectura por diseño: nunca corrige automáticamente. Detecta,
 informa, y permite exportar el informe en JSON.
 
+## Cola de escrituras pendientes para el patrón por-módulo (julio 2026)
+
+Se detectó que `src/services/persistence.ts` ya tenía una cola de escrituras
+pendientes bastante completa (`SQLITE_PENDING_WRITES_KEY`, con reintentos,
+límite de 20 intentos, distinción entre conflicto OCC y fallo de
+conectividad), pero **solo se alimentaba a sí misma**: `upsertPendingSqliteWrite`
+únicamente se llamaba desde dentro del propio `flushPendingSqliteWrites`, en
+el `catch` de un reintento fallido — nunca desde el punto donde una escritura
+nueva fracasa por primera vez (`writeSharedStorageItemAsync`, que en su
+`catch` solo devolvía `{ok:false}` sin encolar nada).
+
+Además, esa cola está atada al camino genérico de `writeStorageItem`, que ya
+no es el que usa la mayoría de módulos para guardar de verdad: el patrón
+`<modulo>SqliteRepository.ts` (`saveXToSqlite`, documentado en
+`ARCHITECTURE.md` §2) es el que protege hoy la mayoría de escrituras reales,
+y no tenía ninguna cola. Resultado: si el SMB se caía a media sesión, el
+guardado fallaba con un mensaje de error y no había forma de que el cambio
+se sincronizara solo al reconectar — el usuario tenía que reintentar a mano
+una vez volviera la red, y solo si no cerraba el formulario mientras tanto.
+
+**Decisión**: no tocar la cola existente (sigue protegiendo su camino), sino
+añadir una hermana genérica (`src/services/pendingRecordWrites.ts`) para el
+patrón por-módulo, con la misma filosofía (localStorage, límite de
+intentos, distinción conflicto/conectividad) pero indexada por
+`(módulo, recordId)` en vez de por clave plana, porque el patrón por-módulo
+guarda registros individuales, no un array serializado completo. Cada
+repositorio se registra una vez (`registerPendingWriteReplayer`) y envuelve
+su guardado real con `saveRecordWithPendingFallback`; el flush se engancha
+en los mismos sitios que ya disparaban la cola antigua (arranque, polling,
+reconexión, `beforeunload`), así que no hace falta un ciclo nuevo.
+
+Migrados como plantilla: Tareas y Licencias sin sueldo. El resto de módulos
+con `<modulo>SqliteRepository.ts` queda pendiente de migrar con el mismo
+patrón — es mecánico (registrar + envolver la llamada de guardado), no
+requiere rediseño por módulo.
+
 ## CI y control de versiones (julio 2026)
 
 Se detectó que el paso "Reparar package-lock con registry público",

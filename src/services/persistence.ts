@@ -165,7 +165,7 @@ function isRecoverablePersistedValue(
   }
 }
 
-function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
+export function emitPersistenceFeedback(feedback: PersistenceFeedback): void {
   const effectiveFeedback: PersistenceFeedback =
     silentPersistenceFeedbackDepth > 0 && typeof feedback.visibility === 'undefined'
       ? { ...feedback, visibility: 'silent' }

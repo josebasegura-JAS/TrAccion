@@ -46,6 +46,16 @@ Las funciones de carga (`load`, `reloadFromStorage`, `mirrorX`) solo escriben en
 
 Cuando `window.traccion?.loadXRecords` no existe (SQLite no disponible), el store cae a `localStorage` vía `writeStorageItem`/`readStorageItem` (capa unificada en `src/services/persistence.ts`). Esto es intencional, no deuda técnica: es la red de seguridad de arranque cuando SQLite aún no está montado. La clave debe estar en `PERSISTED_STORAGE_KEYS` (`src/services/persistenceKeys.ts`) para entrar en esa capa.
 
+Esto cubre el arranque en frío, pero no una caída de conectividad SMB a media sesión: en ese caso `window.traccion.saveXRecordIfUnchanged` sigue existiendo (el puente IPC no ha desaparecido), así que el store nunca activa el fallback de arriba, y hasta julio de 2026 el guardado simplemente fallaba con un mensaje de error, sin más red de seguridad.
+
+### Cola de escrituras pendientes ante caída de conectividad
+
+`src/services/pendingRecordWrites.ts` cubre ese hueco para el patrón `<modulo>SqliteRepository.ts`: cada repositorio envuelve su `saveXToSqlite` con `saveRecordWithPendingFallback` y se registra una vez con `registerPendingWriteReplayer(module, replayer)`. Si el guardado falla por un mensaje identificable como problema de conectividad (heartbeat SMB bloqueado, base ocupada, IPC caído — ver `isConnectivityFailureMessage`), el cambio se encola en `localStorage` (`SQLITE_PENDING_RECORD_WRITES_KEY`) en vez de perderse, y se reintenta automáticamente en el siguiente ciclo de polling (`externalDataSync.ts`) o al reconectar. Un conflicto OCC real (otro usuario ya modificó el registro) **no** se encola — se deja pasar tal cual para que el usuario lo vea, igual que hoy.
+
+Es hermana, no sustituta, de la cola más antigua de `persistence.ts` (`SQLITE_PENDING_WRITES_KEY`, atada a `writeStorageItem`): esa protege el camino genérico de clave plana, que hoy usan sobre todo escrituras espejo en `localStorage`, no el guardado real de la mayoría de módulos.
+
+**Migrado a la nueva cola** (sirven de plantilla para el resto): Tareas (`taskSqliteRepository.ts`), Licencias sin sueldo (`licenciaSinSueldoSqliteRepository.ts`). El resto de módulos con `<modulo>SqliteRepository.ts` sigue sin red de seguridad ante una caída en caliente — son candidatos a migrar con el mismo patrón, no una reescritura distinta por módulo.
+
 ## 3. Importadores masivos
 
 Regla extraída de arreglar el importador de histórico de Teletrabajo (`previewImportHistorico` / `confirmImportHistorico` en `useTeletrabajoStore.ts`):

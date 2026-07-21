@@ -4,11 +4,32 @@ import {
   waitForNextPaint,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import {
+  registerPendingWriteReplayer,
+  saveRecordWithPendingFallback,
+} from '../../../services/pendingRecordWrites';
 import type { LicenciaSinSueldoRecord } from '../domain/licenciaSinSueldo';
 
 const LICENCIA_SIN_SUELDO_STORAGE_KEY = 'traccion.v1.licenciasSinSueldo.records';
+const LICENCIA_SIN_SUELDO_PENDING_WRITE_MODULE = 'licencias-sin-sueldo';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
+
+// Réplica "cruda" del guardado, sin pasar por saveRecordWithPendingFallback,
+// para que el flush de la cola no vuelva a encolarse sobre sí mismo.
+registerPendingWriteReplayer(
+  LICENCIA_SIN_SUELDO_PENDING_WRITE_MODULE,
+  async (recordId, value, expectedUpdatedAt) => {
+    const saver = window.traccion?.saveLicenciaSinSueldoRecordIfUnchanged;
+    if (!saver) {
+      return null;
+    }
+
+    const result = await saver({ id: recordId, value, expectedUpdatedAt });
+    publishDatabaseStatus(result.status);
+    return result;
+  },
+);
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -117,23 +138,26 @@ export async function saveLicenciaSinSueldoToSqlite(
   publishPersistenceBusy(LICENCIA_SIN_SUELDO_STORAGE_KEY, 'Guardando licencia en SQLite…');
   await waitForNextPaint();
 
-  try {
-    const result = await withTemporarySqliteRetry(() =>
-      saver({
-        id: record.id,
-        value: JSON.stringify(record),
-        expectedUpdatedAt,
-      }),
-    );
+  const value = JSON.stringify(record);
 
-    publishDatabaseStatus(result.status);
+  try {
+    const result = await saveRecordWithPendingFallback({
+      module: LICENCIA_SIN_SUELDO_PENDING_WRITE_MODULE,
+      recordId: record.id,
+      value,
+      expectedUpdatedAt,
+      save: async () => {
+        const rawResult = await withTemporarySqliteRetry(() =>
+          saver({ id: record.id, value, expectedUpdatedAt }),
+        );
+        publishDatabaseStatus(rawResult.status);
+        return rawResult;
+      },
+    });
+
     clearPersistenceBusy(LICENCIA_SIN_SUELDO_STORAGE_KEY, result.message);
 
-    return {
-      ok: result.ok,
-      message: result.message,
-      currentUpdatedAt: result.currentUpdatedAt,
-    };
+    return result;
   } catch (error) {
     clearPersistenceBusy(LICENCIA_SIN_SUELDO_STORAGE_KEY, 'No se ha podido guardar la licencia en SQLite.');
     throw error;
