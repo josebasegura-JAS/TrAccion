@@ -1,4 +1,9 @@
-import ExcelJS from 'exceljs';
+// Import solo de tipos: ExcelJS pesa ~940 KB minificado, con diferencia la
+// dependencia más pesada de todo el proyecto. Un import de valor aquí lo
+// metería en el chunk de TeletrabajoPage y se cargaría en cuanto alguien
+// abriera el módulo, aunque nunca exportara a Excel. La instancia real se
+// carga bajo demanda dentro de exportTeletrabajoDireccionToExcel.
+import type ExcelJS from 'exceljs';
 
 import type { Employee } from '../../plantilla/domain/employee';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
@@ -495,8 +500,9 @@ export async function exportTeletrabajoDireccionToExcel({
   solicitudesForAssessment?: readonly TeletrabajoSolicitud[];
   periodo?: string;
 }): Promise<void> {
+  const { default: ExcelJSRuntime } = await import('exceljs');
   const generatedAt = new Date();
-  const workbook = new ExcelJS.Workbook();
+  const workbook = new ExcelJSRuntime.Workbook();
   workbook.creator = 'TrAccion';
   workbook.created = generatedAt;
   workbook.modified = generatedAt;

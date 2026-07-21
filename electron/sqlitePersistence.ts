@@ -88,9 +88,18 @@ import {
   type DatabaseLockManager,
 } from './persistence/databaseLockManager.js';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
+import {
+  SQLITE_BUSY_RETRY_DELAYS_MS,
+  isSqliteBusyOrLockedError,
+  isSqliteCorruptionError,
+  isSqliteLockContentionError,
+} from './persistence/sqliteOperationGuard.js';
+import {
+  getDirectStoreUpdatedAtSnapshot,
+  getJsonRecordTableUpdatedAt,
+} from './persistence/directStoreUpdatedAt.js';
 
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
-const SQLITE_BUSY_RETRY_DELAYS_MS = [100, 300, 700];
 
 export interface PersistedStorageRecord {
   key: string;
@@ -737,35 +746,6 @@ function requireDatabase(): Database {
   return database;
 }
 
-function isSqliteCorruptionError(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return (
-    message.includes('database disk image is malformed') ||
-    message.includes('database corruption') ||
-    message.includes('file is not a database')
-  );
-}
-
-function isSqliteLockContentionError(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes('base ocupada') || message.includes('bloqueo temporal');
-}
-
-function isSqliteBusyOrLockedError(error: unknown): boolean {
-  if (error && typeof error === 'object' && 'code' in error) {
-    const code = (error as { code?: unknown }).code;
-    if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
-      return true;
-    }
-  }
-
-  const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes('database is locked') || message.includes('database table is locked');
-}
-
 function markDatabaseAsCorrupted(error: unknown): DatabaseStatus {
   const previousStatus = getSqliteStatus();
   const message =
@@ -1119,30 +1099,6 @@ export async function savePersistedRecordIfUnchanged(
       currentUpdatedAt: null,
       message,
     }),
-  );
-}
-
-const DIRECT_STORE_UPDATED_AT_TABLES: Record<string, string> = {
-  plantilla: 'employee_records',
-  teletrabajo: 'teletrabajo_solicitud_records',
-  actas: 'acta_records',
-  'comite-sesiones': 'comite_session_records',
-  'paritaria-sesiones': 'paritaria_session_records',
-  tareas: 'task_records',
-  sorteos: 'sorteos_draw_records',
-};
-
-function getJsonRecordTableUpdatedAt(db: Database, tableName: string): string | null {
-  const row = db.prepare(`SELECT MAX(updated_at) AS updated_at FROM ${tableName}`).get();
-  return isUpdatedAtRow(row) ? row.updated_at : null;
-}
-
-function getDirectStoreUpdatedAtSnapshot(db: Database): Record<string, string | null> {
-  return Object.fromEntries(
-    Object.entries(DIRECT_STORE_UPDATED_AT_TABLES).map(([storeId, tableName]) => [
-      storeId,
-      getJsonRecordTableUpdatedAt(db, tableName),
-    ]),
   );
 }
 

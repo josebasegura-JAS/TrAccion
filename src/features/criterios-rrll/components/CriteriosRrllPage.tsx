@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { FileDown, FileUp, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
@@ -82,6 +81,7 @@ function createPreviewRowId(row: CriterioRrllImportPreviewRow): string {
 }
 
 async function downloadCriteriosRrllTemplate(): Promise<void> {
+  const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Criterios RRLL');
 

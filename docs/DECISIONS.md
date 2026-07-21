@@ -161,6 +161,72 @@ puntuales (Excel, histórico), no ediciones del día a día — encolar un lote
 entero de golpe complicaría la reconciliación al reconectar sin aportar
 nada real.
 
+## Extracción de piezas testables de sqlitePersistence.ts (julio 2026)
+
+`electron/sqlitePersistence.ts` importa `electron` (`app`), así que nunca ha
+podido correr bajo Vitest normal — de ahí el hueco de tests documentado en
+`ARCHITECTURE.md` §10. Se extrajeron dos piezas puras que sí lo permiten,
+mismo patrón que `sqliteConnection.ts`/`schemaMigrations.ts`:
+
+- `electron/persistence/sqliteOperationGuard.ts`: clasificación de errores
+  SQLite (corrupción, contención de lock, `SQLITE_BUSY`/`SQLITE_LOCKED`) de
+  la que depende `safeDatabaseOperation`, la función que envuelve
+  literalmente toda lectura/escritura de la base. 12 tests nuevos.
+- `electron/persistence/directStoreUpdatedAt.ts`: el mapa de tablas que el
+  polling multiusuario consulta cada ~12s para saber si otro usuario cambió
+  algo. Al extraerlo se encontró y arregló un bug real (ver más abajo). 5
+  tests nuevos, con SQLite real vía `applyMigrations`.
+
+`safeDatabaseOperation` en sí (con estado: apertura/cierre de conexión,
+lock de operación) se queda en el monolito — desacoplarlo del estado
+module-scoped (`database`, `status`) sería una refactorización mucho mayor,
+fuera de alcance de esta sesión.
+
+## Bug real: Licencias sin sueldo y Especiales sin detección de cambios en vivo (julio 2026)
+
+Al extraer `directStoreUpdatedAt.ts` se comprobó qué módulos tienen entrada
+en el mapa de polling rápido (`DIRECT_STORE_UPDATED_AT_TABLES`) frente a
+cuáles se detectan por el camino alternativo (escritura espejo al layer
+genérico `persisted_records`, vía `writeStorageItem` en el store). Ninguno
+de los dos cubría Licencias sin sueldo ni Especiales: sus stores no escriben
+en `persisted_records` en absoluto, y no tenían entrada en el mapa rápido.
+Resultado real: si un usuario creaba una solicitud o un destinatario, el
+resto de usuarios con la página abierta no lo veían hasta recargar la app
+entera — el polling de `externalDataSync.ts` (cada ~12s) nunca detectaba el
+cambio porque no consultaba ninguna fuente que reflejara esos dos módulos.
+
+**Arreglo**: añadir sus tablas reales (`licencia_sin_sueldo_records`,
+`especiales_recipient_records`, ya indexadas por `updated_at` desde su
+creación) al mapa rápido, en vez de añadir el mirror-write que sí usan otros
+módulos (Presupuestos, Criterios RRLL, Ticket Restaurante, Vinculograma,
+Actas-tipos). El mapa rápido es la opción más barata (una consulta
+`MAX(updated_at)` indexada, sin escritura extra por guardado) y no depende
+de que cada store recuerde replicar el mirror-write — que es precisamente
+lo que falló aquí. `SessionManagement`/resto de stores registrados como
+`syncableStore` no necesitaron ningún cambio: la detección y la recarga ya
+estaban conectadas por id, solo faltaba el disparador.
+
+## Bundle: ExcelJS cargado de forma estática en 2 sitios (julio 2026)
+
+`exceljs` pesa 940 KB minificados (271 KB gzip), la dependencia más pesada
+del proyecto con diferencia. En 6 de 8 puntos de uso ya se cargaba con
+`await import('exceljs')`; `exportDireccion.ts` (usado por
+`TeletrabajoPage.tsx`) y `CriteriosRrllPage.tsx` lo importaban de forma
+estática, arrastrando el chunk completo en cuanto se abría el módulo,
+aunque el usuario nunca exportara a Excel. `CriteriosRrllPage.tsx` ya es
+`lazy()` a nivel de ruta, pero eso no evita que un import estático interno
+fuerce sus propias dependencias pesadas junto con el resto del chunk.
+
+Arreglo: en `exportDireccion.ts`, `import type ExcelJS` (los tipos
+`ExcelJS.Cell`/`ExcelJS.Row`/`ExcelJS.Borders` se usan en firmas de función
+a lo largo del fichero, así que no se podía quitar el import del todo) más
+`await import('exceljs')` dentro de `exportTeletrabajoDireccionToExcel`. En
+`CriteriosRrllPage.tsx`, que solo usaba el valor en un sitio, se quitó el
+import y se cargó dentro de `downloadCriteriosRrllTemplate`. Verificado en
+el build: el chunk `exceljs.min-*.js` pasa a referenciarse solo vía
+`import(...)` dinámico en ambos ficheros, cero referencias estáticas ni en
+`index.html`.
+
 ## CI y control de versiones (julio 2026)
 
 Se detectó que el paso "Reparar package-lock con registry público",
