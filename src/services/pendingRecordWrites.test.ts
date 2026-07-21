@@ -89,7 +89,7 @@ describe('pendingRecordWrites', () => {
 
   it('flushPendingRecordWrites reintenta contra el repositorio registrado y limpia la cola al tener éxito', async () => {
     const flushModule = 'flush-module';
-    const replay = vi.fn(async (recordId: string, value: string, expectedUpdatedAt: string | null) => ({
+    const replay = vi.fn(async () => ({
       ok: true,
       message: 'Sincronizado.',
       currentUpdatedAt: 't2',
