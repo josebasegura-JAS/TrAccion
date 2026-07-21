@@ -93,6 +93,10 @@ export interface ActaPunto {
    * en una secuencia limpia, y forzar esa estructura mientras se toma nota
    * en vivo iría más lento que escribir directo. Queda para una fase
    * posterior si el texto libre resulta insuficiente en la práctica.
+   *
+   * HTML, no texto plano: un subconjunto reducido (p, br, strong/b, em/i,
+   * ul, ol, li — sin atributos) producido por RichTextEditor. Ver
+   * sanitizeRichText en components/ui/RichTextEditor.tsx.
    */
   contenido: string;
   resultado: ActaPuntoResultado;

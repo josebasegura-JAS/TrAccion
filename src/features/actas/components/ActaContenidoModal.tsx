@@ -2,6 +2,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Input, Select, Textarea } from '../../../components/ui/Field';
+import { RichTextEditor } from '../../../components/ui/RichTextEditor';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalShell } from '../../../components/ui/ModalShell';
 import { Notice } from '../../../components/ui/Notice';
@@ -336,10 +337,9 @@ export function ActaContenidoModal({ acta, onClose }: { acta: Acta; onClose: () 
                     variant="delete"
                   />
                 </div>
-                <Textarea
-                  onChange={(event) => void commit(withUpdatedPunto(punto.id, { contenido: event.target.value }))}
+                <RichTextEditor
+                  onChange={(html) => void commit(withUpdatedPunto(punto.id, { contenido: html }))}
                   placeholder="Qué se trató en este punto..."
-                  rows={4}
                   value={punto.contenido}
                 />
                 <div className="flex gap-2">
