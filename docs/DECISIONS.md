@@ -182,29 +182,56 @@ lock de operación) se queda en el monolito — desacoplarlo del estado
 module-scoped (`database`, `status`) sería una refactorización mucho mayor,
 fuera de alcance de esta sesión.
 
-## Bug real: Licencias sin sueldo y Especiales sin detección de cambios en vivo (julio 2026)
+## Bug real: seis módulos sin detección de cambios en vivo (julio 2026)
 
 Al extraer `directStoreUpdatedAt.ts` se comprobó qué módulos tienen entrada
 en el mapa de polling rápido (`DIRECT_STORE_UPDATED_AT_TABLES`) frente a
 cuáles se detectan por el camino alternativo (escritura espejo al layer
-genérico `persisted_records`, vía `writeStorageItem` en el store). Ninguno
-de los dos cubría Licencias sin sueldo ni Especiales: sus stores no escriben
-en `persisted_records` en absoluto, y no tenían entrada en el mapa rápido.
-Resultado real: si un usuario creaba una solicitud o un destinatario, el
-resto de usuarios con la página abierta no lo veían hasta recargar la app
-entera — el polling de `externalDataSync.ts` (cada ~12s) nunca detectaba el
-cambio porque no consultaba ninguna fuente que reflejara esos dos módulos.
+genérico `persisted_records`, vía `writeStorageItem` en el store). Primera
+pasada: Licencias sin sueldo y Especiales no cubiertos por ninguno de los
+dos caminos — sus stores no escriben en `persisted_records` en absoluto.
 
-**Arreglo**: añadir sus tablas reales (`licencia_sin_sueldo_records`,
-`especiales_recipient_records`, ya indexadas por `updated_at` desde su
-creación) al mapa rápido, en vez de añadir el mirror-write que sí usan otros
-módulos (Presupuestos, Criterios RRLL, Ticket Restaurante, Vinculograma,
-Actas-tipos). El mapa rápido es la opción más barata (una consulta
-`MAX(updated_at)` indexada, sin escritura extra por guardado) y no depende
-de que cada store recuerde replicar el mirror-write — que es precisamente
-lo que falló aquí. `SessionManagement`/resto de stores registrados como
-`syncableStore` no necesitaron ningún cambio: la detección y la recarga ya
-estaban conectadas por id, solo faltaba el disparador.
+Al auditar el resto de módulos que sí parecían tener el mirror-write (por
+grep de presencia, no de alcanzabilidad) se encontró un problema más
+extendido: en **Criterios RRLL, Ticket Restaurante (las 5 entidades),
+Vinculograma, tipos de Acta y Configuración**, la llamada a
+`writeStorageItem`/`writeJsonStorageAsync` existe en el fichero, pero solo
+dentro de la rama `else` de fallback (cuando `hasXSqliteRepository()` es
+`false`). El camino real —`xWithConcurrencyCheck` guardando con éxito contra
+SQLite, que es lo que pasa siempre en un despliegue normal— hace
+`set(...)` directamente o, como mucho, un `window.localStorage.setItem`
+puramente local (sin tocar SQLite), y vuelve (`return`) antes de llegar al
+mirror-write. Ese código lleva ahí desde que se migró cada módulo al patrón
+`WithConcurrencyCheck`, pero en la práctica nunca se ejecutaba porque el
+repositorio SQLite directo casi siempre está disponible.
+
+Confirmado por contraste que sí funciona correctamente en **Presupuestos**
+(`commitPresupuestosState` llama a `persist(nextState)` incondicionalmente,
+salvo que el guardado SQLite falle explícitamente) y en **Teletrabajo**
+puestos/grupos de cobertura (`persistPuestoTeletrabajoRecord`/
+`persistGrupoCoberturaRecord` escriben el mirror antes incluso de intentar
+el guardado SQLite). La diferencia entre "funciona" y "no funciona" no es
+visible con un grep superficial — hay que seguir el flujo de control hasta
+el `return` de cada acción.
+
+**Arreglo**: en vez de parchear cada punto de guardado para que el
+mirror-write se ejecute también en el camino de éxito (más superficie,
+más riesgo de que se repita el mismo despiste en el futuro), se añadieron
+las tablas reales de los 6 módulos afectados al mapa rápido
+(`DIRECT_STORE_UPDATED_AT_TABLES`), extendiendo su tipo para aceptar varias
+tablas por `storeId` (`string | string[]`) donde hace falta:
+
+- Ticket Restaurante: 5 tablas bajo un único storeId (`ticket-restaurante`,
+  ya registrado así en `syncableStoreRegistrations.ts`).
+- Actas: `acta_type_records` se añadió junto a `acta_records` bajo el mismo
+  storeId `actas` — su `reloadFromStorage` ya recarga ambos a la vez
+  (`loadActasStateFromSqliteOrStorage`), no hacía falta un storeId nuevo.
+
+No se tocó ningún store ni componente de UI: el fix entero vive en
+`electron/persistence/directStoreUpdatedAt.ts`. Test de regresión con
+SQLite real cubriendo los 6 módulos y el caso multi-tabla (que el valor más
+reciente entre varias tablas del mismo storeId gane, no solo el de la
+primera).
 
 ## Bundle: ExcelJS cargado de forma estática en 2 sitios (julio 2026)
 

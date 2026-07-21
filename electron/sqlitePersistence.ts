@@ -96,7 +96,6 @@ import {
 } from './persistence/sqliteOperationGuard.js';
 import {
   getDirectStoreUpdatedAtSnapshot,
-  getJsonRecordTableUpdatedAt,
 } from './persistence/directStoreUpdatedAt.js';
 
 const SQLITE_BUSY_TIMEOUT_MS = 15_000;
