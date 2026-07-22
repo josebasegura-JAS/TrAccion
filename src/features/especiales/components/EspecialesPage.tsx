@@ -1,4 +1,4 @@
-import { MailPlus, RotateCcw, Save, Upload } from 'lucide-react';
+import { RotateCcw, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildEspecialesHtmlBody,
@@ -399,19 +399,24 @@ export function EspecialesPage() {
           actions={
             <>
               <ActionButton
-                variant="save"
+                variant="outlook"
                 iconOnly={false}
                 disabled={Boolean(draftUnavailableReason) || isGeneratingDraft}
                 onClick={() => void createOutlookDraft()}
                 size="sm"
               >
-                <MailPlus size={14} />
                 {isGeneratingDraft
                   ? 'Generando borrador en Outlook...'
                   : 'Generar borrador en Outlook'}
               </ActionButton>
-              <ActionButton variant="secondary" iconOnly={false} onClick={resetForm} size="sm">
-                <RotateCcw size={14} /> Limpiar formulario
+              <ActionButton
+                variant="secondary"
+                icon={RotateCcw}
+                iconOnly={false}
+                onClick={resetForm}
+                size="sm"
+              >
+                Limpiar formulario
               </ActionButton>
             </>
           }
@@ -459,10 +464,11 @@ export function EspecialesPage() {
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 <ActionButton
                   variant="secondary"
+                  icon={Upload}
                   iconOnly={false}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Upload size={16} /> Seleccionar mensaje
+                  Seleccionar mensaje
                 </ActionButton>
                 <ActionButton variant="save" iconOnly={false} onClick={() => void importMessage()}>
                   Importar mensaje
@@ -616,7 +622,6 @@ export function EspecialesPage() {
                 </FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   <ActionButton variant="save" iconOnly={false} onClick={() => saveRecipient('to')}>
-                    <Save size={16} />
                     {editingRecipientId ? 'Guardar cambios' : 'Añadir a Para'}
                   </ActionButton>
                   {!editingRecipientId && (

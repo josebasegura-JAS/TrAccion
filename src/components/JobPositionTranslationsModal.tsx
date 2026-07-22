@@ -1,7 +1,8 @@
-import { Download, FileUp, Languages, Pencil, Plus, RefreshCw, RotateCcw, Save, Search } from 'lucide-react';
+import { Download, Languages, Pencil, Plus, RefreshCw, RotateCcw, Save, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
 import { sortDataTableRows } from '../shared/table/tableSorting';
+import { ActionButton } from './ui/ActionButton';
 import { CountBadge } from './ui/CountBadge';
 import { ModalShell } from './ui/ModalShell';
 import {
@@ -315,8 +316,10 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               ref={fileInputRef}
               type="file"
             />
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            <ActionButton
+              variant="secondary"
+              icon={RefreshCw}
+              iconOnly={false}
               onClick={() => {
                 void (async () => {
                   try {
@@ -335,25 +338,25 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
                   }
                 })();
               }}
-              type="button"
             >
-              <RefreshCw size={16} /> Actualizar plantilla
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              Actualizar plantilla
+            </ActionButton>
+            <ActionButton
+              variant="secondary"
+              icon={Download}
+              iconOnly={false}
               onClick={() => void handleGenerateSampleExcel()}
               title="Generar un Excel de muestra compatible con el importador de Traducción de puestos"
-              type="button"
             >
-              <Download size={16} /> Generar muestra
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+              Generar muestra
+            </ActionButton>
+            <ActionButton
+              variant="import"
+              iconOnly={false}
               onClick={() => fileInputRef.current?.click()}
-              type="button"
             >
-              <FileUp size={16} /> Importar Excel
-            </button>
+              Importar Excel
+            </ActionButton>
           </div>
         </div>
 

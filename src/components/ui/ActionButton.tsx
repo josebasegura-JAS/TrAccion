@@ -3,6 +3,7 @@ import {
   Clock3,
   Copy,
   Loader2,
+  Mail,
   Pencil,
   Plus,
   Printer,
@@ -18,6 +19,7 @@ type ActionButtonVariant =
   | 'save'
   | 'excel'
   | 'word'
+  | 'outlook'
   | 'import'
   | 'print'
   | 'delete'
@@ -35,6 +37,8 @@ interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant: ActionButtonVariant;
   children?: ReactNode;
   iconOnly?: boolean;
+  /** Sobrescribe el icono por defecto de la variante (p. ej. cuando el texto no encaja con el icono habitual, como "Nuevo tipo" sobre la variante "secondary"). Evita tener que colar un icono a mano dentro de children, que duplicaría el icono. */
+  icon?: ActionButtonIcon;
   /** Muestra un spinner en lugar del icono de la variante y deshabilita el botón. Pensado para operaciones que tardan (guardar, importar, compactar, diagnosticar...). */
   loading?: boolean;
   size?: ActionButtonSize;
@@ -89,6 +93,7 @@ const iconByVariant: Record<ActionButtonVariant, ActionButtonIcon> = {
   excel: ExcelIcon,
   history: Clock3,
   import: Upload,
+  outlook: Mail,
   print: Printer,
   reject: XCircle,
   save: Save,
@@ -105,6 +110,7 @@ const labelByVariant: Record<ActionButtonVariant, string> = {
   excel: 'Excel',
   history: 'Historial',
   import: 'Importar',
+  outlook: 'Outlook',
   print: 'Imprimir',
   reject: 'Rechazar',
   save: 'Guardar',
@@ -121,6 +127,7 @@ const colorClassByVariant: Record<ActionButtonVariant, string> = {
   excel: 'bg-[#1a5c38] text-white hover:bg-[#217346] border-transparent',
   history: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   import: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
+  outlook: 'bg-[#0078d4] text-white hover:bg-[#106ebe] border-transparent',
   print: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   reject: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
   save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',

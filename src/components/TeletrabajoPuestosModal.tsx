@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, Download, Pencil, Plus, RotateCcw, Search, Trash2, Users } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { normalizeJobPosition, isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
@@ -14,6 +14,7 @@ import {
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import { CountBadge } from './ui/CountBadge';
+import { ActionButton } from './ui/ActionButton';
 import { ModalShell } from './ui/ModalShell';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
@@ -639,30 +640,32 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
               ref={fileInputRef}
               type="file"
             />
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+            <ActionButton
+              variant="secondary"
+              icon={Users}
+              iconOnly={false}
               onClick={() => setIsGruposModalOpen(true)}
-              type="button"
             >
-              <Users size={16} /> Grupos de cobertura
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+              Grupos de cobertura
+            </ActionButton>
+            <ActionButton
+              variant="secondary"
+              icon={Download}
+              iconOnly={false}
               onClick={() => void handleGenerateSampleExcel()}
               title="Generar un Excel compatible con el importador de puestos teletrabajables"
-              type="button"
             >
-              <Download size={16} /> Excel muestra
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+              Excel muestra
+            </ActionButton>
+            <ActionButton
+              variant="import"
+              iconOnly={false}
               disabled={masterPuestos.length === 0}
               onClick={() => fileInputRef.current?.click()}
               title={masterPuestos.length === 0 ? 'Importa primero la tabla de Traducción de puestos en Plantilla.' : 'Importar puestos'}
-              type="button"
             >
-              <FileUp size={16} /> Importar puestos
-            </button>
+              Importar puestos
+            </ActionButton>
             <button
               className="inline-flex items-center gap-2 rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
               onClick={() => {

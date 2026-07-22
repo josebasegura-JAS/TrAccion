@@ -78,4 +78,10 @@ describe('ActionButton', () => {
 
     expect(screen.getByRole('button', { name: 'Eliminar tarea concreta' })).toBeInTheDocument();
   });
+
+  it('la variante outlook usa "Outlook" como etiqueta por defecto', () => {
+    render(<ActionButton variant="outlook" onClick={() => undefined} />);
+
+    expect(screen.getByRole('button', { name: 'Outlook' })).toBeInTheDocument();
+  });
 });

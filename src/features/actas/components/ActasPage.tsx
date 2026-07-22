@@ -495,16 +495,12 @@ export function ActasPage() {
             onClick={(event) => event.stopPropagation()}
           >
             {acta.estado === 'Pendiente de alegaciones' && (
-              <button
-                aria-label="Abrir borrador Outlook de alegaciones"
-                className="inline-flex aspect-square items-center justify-center rounded-lg border border-sky-400/50 px-0 py-1.5 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10"
-                data-tip="Abrir borrador Outlook de alegaciones"
+              <ActionButton
                 onClick={() => void createActaOutlookDraft(acta)}
+                size="sm"
                 title="Abrir borrador Outlook de alegaciones"
-                type="button"
-              >
-                <Mail size={14} />
-              </button>
+                variant="outlook"
+              />
             )}
             <ActionButton
               onClick={() => void deleteActa(acta.id)}
@@ -745,22 +741,22 @@ export function ActasPage() {
             </div>
             <ActionButton
               variant="secondary"
+              icon={Settings2}
               iconOnly={false}
               onClick={() => setIsTypeManagerOpen(true)}
               size="sm"
               title="Gestionar tipos de acta"
             >
-              <Settings2 size={14} />
               Nuevo tipo
             </ActionButton>
             <ActionButton
               variant="secondary"
+              icon={Mail}
               iconOnly={false}
               onClick={openOutlookTemplateManager}
               size="sm"
               title="Configurar plantilla Outlook de Actas"
             >
-              <Mail size={14} />
               Outlook
             </ActionButton>
             <ExportPrintButtons

@@ -1,4 +1,4 @@
-import { Database, RotateCcw, Save } from 'lucide-react';
+import { Database, RotateCcw } from 'lucide-react';
 import { formatLockAge } from '../../services/databaseLockView';
 import type { DatabaseStatusBadgeViewModel } from '../../services/databaseStatusView';
 import { ActionButton } from '../ui/ActionButton';
@@ -210,7 +210,6 @@ export function DatabaseSettingsSection({
           onClick={() => void handleCreateManualBackup()}
           title="Crear una copia de respaldo ahora, sin esperar al guardado automático"
         >
-          <Save size={16} />
           {isCreatingManualBackup ? 'Creando copia...' : 'Crear copia ahora'}
         </ActionButton>
       </div>

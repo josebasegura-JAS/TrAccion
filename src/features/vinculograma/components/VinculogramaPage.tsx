@@ -603,8 +603,14 @@ function VinculogramaTable({
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
-        <ActionButton size="sm" variant="secondary" iconOnly={false} onClick={resetPreferences}>
-          <RotateCcw size={14} /> Restablecer vista
+        <ActionButton
+          size="sm"
+          variant="secondary"
+          icon={RotateCcw}
+          iconOnly={false}
+          onClick={resetPreferences}
+        >
+          Restablecer vista
         </ActionButton>
       </div>
       <DataTable

@@ -322,12 +322,12 @@ export function SorteosPage() {
             </label>
             <ActionButton
               variant="save"
+              icon={Gift}
               iconOnly={false}
               className="w-full md:w-auto md:self-end"
               disabled={isActionDisabled}
               onClick={handleDraw}
             >
-              <Gift className="h-4 w-4" />
               Sortear
             </ActionButton>
           </div>

@@ -2,6 +2,7 @@ import { CalendarClock, Eye, FolderOpen } from 'lucide-react';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
@@ -188,14 +189,14 @@ export function ActaEditorModal({
                 </option>
               ))}
             </select>
-            <button
-              className="rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+            <ActionButton
               disabled={!getNextState(draft.estado)}
+              iconOnly={false}
               onClick={advanceState}
-              type="button"
+              variant="secondary"
             >
               {getNextStateLabel(draft.estado)}
-            </button>
+            </ActionButton>
           </div>
 
           <textarea
@@ -227,13 +228,9 @@ export function ActaEditorModal({
                 placeholder="Nueva actualización..."
                 value={newUpdateText}
               />
-              <button
-                className="rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={addDraftUpdate}
-                type="button"
-              >
+              <ActionButton iconOnly={false} onClick={addDraftUpdate} variant="add">
                 Añadir
-              </button>
+              </ActionButton>
             </div>
             <div className="mt-3 max-h-36 space-y-2 overflow-y-auto pr-1">
               {draft.actualizaciones.length === 0 && (
@@ -258,15 +255,16 @@ export function ActaEditorModal({
               <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
                 Alegaciones
               </h4>
-              <button
-                className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              <ActionButton
+                iconOnly={false}
                 onClick={() =>
                   updateDraft('alegaciones', [...draft.alegaciones, createEmptyAlegacion()])
                 }
-                type="button"
+                size="sm"
+                variant="add"
               >
                 Añadir sindicato
-              </button>
+              </ActionButton>
             </div>
             <div className="mt-3 space-y-2">
               {draft.alegaciones.length === 0 && (
@@ -306,18 +304,19 @@ export function ActaEditorModal({
                     placeholder="Observación"
                     value={alegacion.observacion}
                   />
-                  <button
-                    className="rounded-lg border border-red-500/40 px-2 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/10"
+                  <ActionButton
+                    iconOnly={false}
                     onClick={() =>
                       updateDraft(
                         'alegaciones',
                         draft.alegaciones.filter((_, currentIndex) => currentIndex !== index),
                       )
                     }
-                    type="button"
+                    size="sm"
+                    variant="delete"
                   >
                     Quitar
-                  </button>
+                  </ActionButton>
                 </div>
               ))}
             </div>
@@ -391,51 +390,47 @@ export function ActaEditorModal({
           </p>
         )}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
-          <button
-            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
+          <ActionButton iconOnly={false} onClick={onClose} variant="secondary">
             Cancelar
-          </button>
+          </ActionButton>
           {canAttachFinalActa && draft.estado !== 'Cerrada' && (
-            <button
-              className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            <ActionButton
+              iconOnly={false}
               onClick={() => applyStateChange('Cerrada')}
-              type="button"
+              variant="secondary"
             >
               Cerrar acta
-            </button>
+            </ActionButton>
           )}
           {canCreateOutlookDraftFromEditor && (
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-sky-400/60 bg-sky-500/10 px-3 py-2 text-sm font-bold text-sky-200 hover:bg-sky-500/20"
+            <ActionButton
+              iconOnly={false}
               onClick={() => void createActaOutlookDraft(draft)}
               title="Abrir borrador Outlook de alegaciones"
-              type="button"
+              variant="outlook"
             >
-              O Outlook
-            </button>
+              Borrador Outlook
+            </ActionButton>
           )}
           {canCreateOutlookDraftFromEditor && (
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-400/60 bg-blue-500/10 px-3 py-2 text-sm font-bold text-blue-200 hover:bg-blue-500/20"
+            <ActionButton
+              icon={CalendarClock}
+              iconOnly={false}
               onClick={() => void createActaOutlookCalendar(draft)}
               title="Abrir cita Outlook para fin de alegaciones"
-              type="button"
+              variant="outlook"
             >
-              <CalendarClock className="h-4 w-4" />
               Calendario
-            </button>
+            </ActionButton>
           )}
-          <button
-            className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+          <ActionButton
             disabled={isEditorReadOnly}
+            iconOnly={false}
             onClick={() => void saveActa()}
-            type="button"
+            variant="save"
           >
             Guardar acta
-          </button>
+          </ActionButton>
           {editingActa && (
             <AuditHistoryButton
               entityId={editingActa.id}
