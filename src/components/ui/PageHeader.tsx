@@ -64,8 +64,8 @@ export function PageHeader({
   return (
     <div className={cx('mb-3 flex flex-wrap items-center justify-between gap-3', className)}>
       <h2 className="sr-only">{title}</h2>
-      <div className="flex min-w-0 flex-wrap items-center gap-3">{status}</div>
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      {status ? <div className="flex min-w-0 flex-wrap items-center gap-2">{status}</div> : null}
+      {actions ? <div className="flex min-w-0 flex-1 items-center">{actions}</div> : null}
     </div>
   );
 }

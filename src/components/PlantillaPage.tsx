@@ -3,7 +3,6 @@ import {
   Languages,
   RefreshCw,
   RotateCcw,
-  Search,
   SlidersHorizontal,
   Upload,
 } from 'lucide-react';
@@ -13,6 +12,9 @@ import { EmployeeEditor } from './EmployeeEditor';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
 import { PageHeader } from './ui/PageHeader';
+import { Toolbar } from './ui/Toolbar';
+import { SearchField } from './ui/SearchField';
+import { FilterSelect } from './ui/FilterSelect';
 import { DropdownMenu } from './ui/DropdownMenu';
 import { CountBadge } from './ui/CountBadge';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
@@ -21,7 +23,6 @@ import { uniqueSorted } from '../features/plantilla/domain/filters';
 import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
-import { SelectFilter } from '../shared/filters/SelectFilter';
 import type { ExportColumn } from '../shared/export/types';
 import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
@@ -509,41 +510,45 @@ export function PlantillaPage() {
       id="plantilla"
     >
       <PageHeader
-        className="flex-nowrap overflow-x-auto"
-        status={
-          <div className="flex min-w-max items-center gap-2">
-            <label className="flex w-64 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-              <Search size={16} />
-              <input
-                className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-                onChange={(event) => setFilter('search', event.target.value)}
-                placeholder="Buscar por empleado o nombre..."
-                type="search"
-                value={filters.search}
-              />
-            </label>
-            <SelectFilter
-              label="Residencia"
-              onChange={(value) => setFilter('residencia', value)}
-              options={residencias}
-              value={filters.residencia}
-            />
-            <SelectFilter
-              label="Nivel retributivo"
-              onChange={(value) => setFilter('nivelRetributivo', value)}
-              options={niveles}
-              value={filters.nivelRetributivo}
-            />
-            <SelectFilter
-              label="Dirección"
-              onChange={(value) => setFilter('direccionOrganizativa', value)}
-              options={direcciones}
-              value={filters.direccionOrganizativa}
-            />
-          </div>
-        }
         actions={
-          <div className="flex min-w-max items-center gap-2">
+          <Toolbar
+            filters={
+              <>
+                <SearchField
+                  onChange={(event) => setFilter('search', event.target.value)}
+                  onClear={() => setFilter('search', '')}
+                  placeholder="Buscar por empleado o nombre..."
+                  value={filters.search}
+                  wrapperClassName="min-w-[280px]"
+                />
+                <FilterSelect
+                  allLabel="Todas las residencias"
+                  aria-label="Filtrar plantilla por residencia"
+                  onChange={(event) => setFilter('residencia', event.target.value)}
+                  options={residencias}
+                  value={filters.residencia}
+                  wrapperClassName="w-[190px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los niveles"
+                  aria-label="Filtrar plantilla por nivel retributivo"
+                  onChange={(event) => setFilter('nivelRetributivo', event.target.value)}
+                  options={niveles}
+                  value={filters.nivelRetributivo}
+                  wrapperClassName="w-[190px]"
+                />
+                <FilterSelect
+                  allLabel="Todas las direcciones"
+                  aria-label="Filtrar plantilla por dirección"
+                  onChange={(event) => setFilter('direccionOrganizativa', event.target.value)}
+                  options={direcciones}
+                  value={filters.direccionOrganizativa}
+                  wrapperClassName="w-[190px]"
+                />
+              </>
+            }
+            actions={
+              <>
             <input
               accept=".xlsx,.xls,.csv,.tsv,.txt"
               className="hidden"
@@ -613,7 +618,9 @@ export function PlantillaPage() {
             <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva persona
             </ActionButton>
-          </div>
+              </>
+            }
+          />
         }
         helpSections={PLANTILLA_HELP_SECTIONS}
         helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."

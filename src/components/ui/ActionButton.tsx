@@ -84,7 +84,7 @@ function WordIcon({ size }: { size: number }) {
   );
 }
 
-const iconByVariant: Record<ActionButtonVariant, ActionButtonIcon> = {
+const iconByVariant: Partial<Record<ActionButtonVariant, ActionButtonIcon>> = {
   add: Plus,
   approve: CheckCircle2,
   delete: Trash2,
@@ -97,7 +97,6 @@ const iconByVariant: Record<ActionButtonVariant, ActionButtonIcon> = {
   print: Printer,
   reject: XCircle,
   save: Save,
-  secondary: Pencil,
   word: WordIcon,
 };
 
@@ -136,8 +135,8 @@ const colorClassByVariant: Record<ActionButtonVariant, string> = {
 };
 
 const sizeClassBySize: Record<ActionButtonSize, string> = {
-  md: 'rounded-xl px-3 py-2 text-sm',
-  sm: 'rounded-lg px-3 py-1.5 text-xs',
+  md: 'h-9 rounded-lg px-3 text-sm',
+  sm: 'h-8 rounded-lg px-2.5 text-xs',
 };
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -157,7 +156,7 @@ export function ActionButton({
   variant,
   ...props
 }: ActionButtonProps) {
-  const Icon = iconOverride ?? (variant === 'secondary' ? null : iconByVariant[variant]);
+  const Icon = iconOverride ?? iconByVariant[variant];
   const label = children ?? labelByVariant[variant];
   const accessibleTitle = title ?? (typeof label === 'string' ? label : labelByVariant[variant]);
   const iconSize = size === 'sm' ? 14 : 16;

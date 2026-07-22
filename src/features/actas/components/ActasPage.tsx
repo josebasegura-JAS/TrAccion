@@ -18,8 +18,10 @@ import { relativeDate } from '../../../utils/relativeDate';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { Input, Select } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { Toolbar } from '../../../components/ui/Toolbar';
+import { SearchField } from '../../../components/ui/SearchField';
+import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { ActasOutlookTemplateModal } from './ActasOutlookTemplateModal';
 import { ActaTypeManagerModal } from './ActaTypeManagerModal';
 import { ActaEditorModal } from './ActaEditorModal';
@@ -711,34 +713,36 @@ export function ActasPage() {
         helpSections={ACTAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
         actions={
-          <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
-            <div className="min-w-[300px] flex-1">
-              <Input
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Buscar por título, estado, actualización, alegación o ruta..."
-                value={search}
-              />
-            </div>
-            <div className="w-[210px] shrink-0">
-              <Select onChange={(event) => setStateFilter(event.target.value)} value={stateFilter}>
-                <option value="">Todos los estados</option>
-                {ACTA_STATES.map((state) => (
-                  <option key={state} value={state}>
-                    {state}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="w-[150px] shrink-0">
-              <Select onChange={(event) => setYearFilter(event.target.value)} value={yearFilter}>
-                <option value="">Todos los años</option>
-                {years.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </Select>
-            </div>
+          <Toolbar
+            filters={
+              <>
+                <SearchField
+                  onChange={(event) => setSearch(event.target.value)}
+                  onClear={() => setSearch('')}
+                  placeholder="Buscar por título, estado, actualización, alegación o ruta..."
+                  value={search}
+                  wrapperClassName="min-w-[320px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los estados"
+                  aria-label="Filtrar actas por estado"
+                  onChange={(event) => setStateFilter(event.target.value)}
+                  options={ACTA_STATES}
+                  value={stateFilter}
+                  wrapperClassName="w-[210px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los años"
+                  aria-label="Filtrar actas por año"
+                  onChange={(event) => setYearFilter(event.target.value)}
+                  options={years.map((year) => ({ label: year, value: year }))}
+                  value={yearFilter}
+                  wrapperClassName="w-[150px]"
+                />
+              </>
+            }
+            actions={
+              <>
             <ActionButton
               variant="secondary"
               icon={Settings2}
@@ -778,7 +782,9 @@ export function ActasPage() {
             >
               Nueva acta
             </ActionButton>
-          </div>
+              </>
+            }
+          />
         }
       />
 

@@ -4,12 +4,13 @@ import {
   ChevronRight,
   Clock,
   FileSignature,
-  Search,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { FieldLabel, Input, Select } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { Toolbar } from '../../../components/ui/Toolbar';
+import { SearchField } from '../../../components/ui/SearchField';
+import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { Notice } from '../../../components/ui/Notice';
 import { CountBadge } from '../../../components/ui/CountBadge';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -292,57 +293,45 @@ export function LicenciasSinSueldoPage() {
         helpSubtitle="Guía rápida de estados, reglas, vigencia, histórico y generación documental."
         className="mb-0"
         actions={
-          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
-            <FieldLabel className="min-w-[18rem] shrink-0">
-              <span className="sr-only">Buscar</span>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted"
-                  size={15}
-                />
-                <Input
-                  className="h-9 pl-9"
+          <Toolbar
+            filters={
+              <>
+                <SearchField
                   onChange={(event) => setQuery(event.target.value)}
+                  onClear={() => setQuery('')}
                   placeholder="Buscar por número, nombre, tipo o estado"
                   value={query}
+                  wrapperClassName="min-w-[288px]"
                 />
-              </div>
-            </FieldLabel>
-
-            <FieldLabel className="w-48 shrink-0">
-              <span className="sr-only">Tipo</span>
-              <Select
-                className="h-9"
-                aria-label="Filtrar por tipo"
-                onChange={(event) =>
-                  setTypeFilter(event.target.value as 'todos' | LicenciaSinSueldoTipo)
-                }
-                value={typeFilter}
-              >
-                <option value="todos">Todos los tipos</option>
-                {licenciaSinSueldoTipos.map((tipo) => (
-                  <option key={tipo}>{tipo}</option>
-                ))}
-              </Select>
-            </FieldLabel>
-
-            <FieldLabel className="w-40 shrink-0">
-              <span className="sr-only">Año histórico</span>
-              <Select
-                className="h-9"
-                aria-label="Filtrar por año histórico"
-                onChange={(event) => setYearFilter(event.target.value)}
-                value={yearFilter}
-              >
-                <option value="todos">Todos los años</option>
-                {historicalYears.map((year) => (
-                  <option key={year} value={year}>
-                    {year || 'Sin año'}
-                  </option>
-                ))}
-              </Select>
-            </FieldLabel>
-
+                <FilterSelect
+                  aria-label="Filtrar licencias por tipo"
+                  onChange={(event) =>
+                    setTypeFilter(event.target.value as 'todos' | LicenciaSinSueldoTipo)
+                  }
+                  options={[
+                    { label: 'Todos los tipos', value: 'todos' },
+                    ...licenciaSinSueldoTipos.map((tipo) => ({ label: tipo, value: tipo })),
+                  ]}
+                  value={typeFilter}
+                  wrapperClassName="w-48"
+                />
+                <FilterSelect
+                  aria-label="Filtrar licencias por año histórico"
+                  onChange={(event) => setYearFilter(event.target.value)}
+                  options={[
+                    { label: 'Todos los años', value: 'todos' },
+                    ...historicalYears.map((year) => ({
+                      label: year ? String(year) : 'Sin año',
+                      value: String(year),
+                    })),
+                  ]}
+                  value={yearFilter}
+                  wrapperClassName="w-40"
+                />
+              </>
+            }
+            actions={
+              <>
             <ActionButton
               variant="add"
               iconOnly={false}
@@ -352,7 +341,9 @@ export function LicenciasSinSueldoPage() {
             >
               Nueva solicitud
             </ActionButton>
-          </div>
+              </>
+            }
+          />
         }
       />
 

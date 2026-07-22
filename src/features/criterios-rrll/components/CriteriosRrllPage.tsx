@@ -1,4 +1,4 @@
-import { FileDown, FileUp, Search, SlidersHorizontal } from 'lucide-react';
+import { FileDown, FileUp, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
 import {
@@ -27,6 +27,9 @@ import { CountBadge } from '../../../components/ui/CountBadge';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { Toolbar } from '../../../components/ui/Toolbar';
+import { SearchField } from '../../../components/ui/SearchField';
+import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { CompactTable, CompactTableBody, CompactTableEmpty, CompactTableHead } from '../../../shared/table/CompactTable';
 
@@ -146,36 +149,6 @@ const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; classNam
   { key: 'fecha', label: 'Fecha', className: 'w-[115px]' },
   { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
 ];
-
-function SelectFilter({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  options: readonly string[];
-  value: string;
-}) {
-  return (
-    <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-      <span className="shrink-0 text-xs font-bold uppercase tracking-wide">{label}</span>
-      <select
-        className="w-full bg-transparent text-metro-text outline-none"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        <option value="">Todos</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
   const tone = sentido === 'aprobado' ? 'success' : sentido === 'denegado' ? 'error' : 'muted';
@@ -315,33 +288,40 @@ export function CriteriosRrllPage() {
         helpSubtitle="Guía rápida del repositorio de criterios, sentido, filtros e importación."
         className="mb-3"
         actions={
-          <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5">
-            <label className="flex min-w-[320px] flex-1 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
-              <Search size={16} className="shrink-0" />
-              <input
-                className="min-w-0 flex-1 bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-                onChange={(event) => setFilter('search', event.target.value)}
-                placeholder="Buscar por tema, criterio, sentido u observaciones..."
-                type="search"
-                value={filters.search}
-              />
-            </label>
-            <div className="w-[180px] shrink-0">
-              <SelectFilter
-                label="Estado"
-                onChange={(value) => setFilter('estado', value as '' | CriterioRrllEstado)}
-                options={CRITERIO_RRLL_ESTADOS}
-                value={filters.estado}
-              />
-            </div>
-            <div className="w-[180px] shrink-0">
-              <SelectFilter
-                label="Sentido"
-                onChange={(value) => setFilter('sentido', value as '' | CriterioRrllSentido)}
-                options={CRITERIO_RRLL_SENTIDOS}
-                value={filters.sentido}
-              />
-            </div>
+          <Toolbar
+            filters={
+              <>
+                <SearchField
+                  onChange={(event) => setFilter('search', event.target.value)}
+                  onClear={() => setFilter('search', '')}
+                  placeholder="Buscar por tema, criterio, sentido u observaciones..."
+                  value={filters.search}
+                  wrapperClassName="min-w-[320px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los estados"
+                  aria-label="Filtrar criterios por estado"
+                  onChange={(event) =>
+                    setFilter('estado', event.target.value as '' | CriterioRrllEstado)
+                  }
+                  options={CRITERIO_RRLL_ESTADOS}
+                  value={filters.estado}
+                  wrapperClassName="w-[180px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los sentidos"
+                  aria-label="Filtrar criterios por sentido"
+                  onChange={(event) =>
+                    setFilter('sentido', event.target.value as '' | CriterioRrllSentido)
+                  }
+                  options={CRITERIO_RRLL_SENTIDOS}
+                  value={filters.sentido}
+                  wrapperClassName="w-[180px]"
+                />
+              </>
+            }
+            actions={
+              <>
             <input
               accept=".xlsx,.xls,.csv,.tsv,.txt"
               className="hidden"
@@ -398,7 +378,9 @@ export function CriteriosRrllPage() {
             <ActionButton variant="add" iconOnly={false} onClick={openCreateEditor} size="sm">
               Nuevo criterio
             </ActionButton>
-          </div>
+              </>
+            }
+          />
         }
       />
 
