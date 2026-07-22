@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runDataIntegrityAudit, type DatabaseStatus } from './dataIntegrityAudit';
+import { CURRENT_SCHEMA_VERSION } from './schemaMigrations';
 
 /**
  * Tests directos sobre electron/persistence/dataIntegrityAudit.ts, contra un
@@ -69,7 +70,7 @@ describe('dataIntegrityAudit — auditoría de solo lectura', () => {
       ready: true,
       phase: 'active',
       path: dbPath,
-      schemaVersion: 17,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       ...overrides,
     };
   }
@@ -89,7 +90,7 @@ describe('dataIntegrityAudit — auditoría de solo lectura', () => {
   it('devuelve integrity_check ok y versión de schema al día cuando todo está bien', async () => {
     const report = await runDataIntegrityAudit({
       getDatabase: () => db,
-      getStatus: () => buildStatus({ schemaVersion: 17 }),
+      getStatus: () => buildStatus({ schemaVersion: CURRENT_SCHEMA_VERSION }),
       listLocalBackups: async () => [],
     });
 

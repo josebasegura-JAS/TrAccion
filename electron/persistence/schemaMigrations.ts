@@ -6,7 +6,7 @@ import type { Database } from 'better-sqlite3';
  * abrir una base con un schema más nuevo que el que sabe manejar) y para
  * reportar el estado de la base de datos.
  */
-export const CURRENT_SCHEMA_VERSION = 17;
+export const CURRENT_SCHEMA_VERSION = 18;
 
 interface SchemaMigrationRow {
   version: number;
@@ -635,6 +635,23 @@ function migrateToVersion17(db: Database): void {
   }
 }
 
+function migrateToVersion18(db: Database): void {
+  // El editor de contenido estructurado de Actas (puntos/acuerdos/votaciones)
+  // y el censo de miembros se revirtieron: las actas vuelven a editarse en
+  // Word. Se purgan las claves huérfanas que quedaron en persisted_records.
+  db.prepare('DELETE FROM persisted_records WHERE key IN (?, ?)').run(
+    'traccion.v1.actas.censo',
+    'traccion.v1.actas.contenidos',
+  );
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 18) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+      18,
+      new Date().toISOString(),
+    );
+  }
+}
+
 export function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -653,4 +670,5 @@ export function applyMigrations(db: Database): void {
   migrateToVersion15(db);
   migrateToVersion16(db);
   migrateToVersion17(db);
+  migrateToVersion18(db);
 }
