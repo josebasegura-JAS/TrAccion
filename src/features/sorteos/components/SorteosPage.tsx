@@ -562,14 +562,14 @@ export function SorteosPage() {
       </div>
 
       {pendingConfirmation?.type === 'delete-draw' && (
-        <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-metro-text">
-          <p className="font-semibold">¿Eliminar sorteo?</p>
-          <p className="mt-1 text-metro-muted">
+        <div className="rounded-xl border border-red-400/30 bg-red-950/20 p-4 shadow-lg shadow-red-950/20">
+          <p className="text-sm font-semibold text-red-200">¿Eliminar sorteo?</p>
+          <p className="mt-1 text-xs text-red-300/70">
             Indica si quieres quitar también las exclusiones vinculadas a ganadores de ese sorteo.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
-              className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
               disabled={isActionDisabled}
               onClick={() => confirmDeleteDraw(true)}
               type="button"
@@ -577,7 +577,7 @@ export function SorteosPage() {
               Eliminar y quitar exclusiones
             </button>
             <button
-              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:text-metro-text"
               disabled={isActionDisabled}
               onClick={() => confirmDeleteDraw(false)}
               type="button"
@@ -585,7 +585,7 @@ export function SorteosPage() {
               Eliminar solo sorteo
             </button>
             <button
-              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:text-metro-text"
               onClick={cancelConfirmation}
               type="button"
             >
@@ -596,14 +596,14 @@ export function SorteosPage() {
       )}
 
       {pendingConfirmation?.type === 'reset-all-exclusions' && (
-        <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-3 text-sm text-metro-text">
-          <p className="font-semibold">¿Resetear todas las exclusiones?</p>
-          <p className="mt-1 text-metro-muted">
+        <div className="rounded-xl border border-red-400/30 bg-red-950/20 p-4 shadow-lg shadow-red-950/20">
+          <p className="text-sm font-semibold text-red-200">¿Resetear todas las exclusiones?</p>
+          <p className="mt-1 text-xs text-red-300/70">
             Esta acción elimina exclusiones manuales y de ganadores.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
-              className="rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
               disabled={isActionDisabled}
               onClick={confirmResetAllExclusions}
               type="button"
@@ -611,7 +611,7 @@ export function SorteosPage() {
               Resetear todas las exclusiones
             </button>
             <button
-              className="rounded-lg border border-metro-border px-3 py-2 text-xs font-bold text-metro-text hover:border-metro-red"
+              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:text-metro-text"
               onClick={cancelConfirmation}
               type="button"
             >

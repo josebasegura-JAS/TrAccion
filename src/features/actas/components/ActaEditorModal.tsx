@@ -5,6 +5,7 @@ import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
+import { RecordLockNotice } from '../../../components/ui/RecordLockNotice';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import {
@@ -103,10 +104,7 @@ export function ActaEditorModal({
 
       <ModalBody className="space-y-4">
           {recordLock.status === 'locked' && recordLock.lockedBy && (
-            <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
-              📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@
-              {recordLock.lockedBy.machineName}
-            </div>
+            <RecordLockNotice lockedBy={recordLock.lockedBy} />
           )}
           <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
             <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">

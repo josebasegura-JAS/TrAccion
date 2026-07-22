@@ -13,6 +13,7 @@ import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { ActionButton } from './ui/ActionButton';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
+import { RecordLockNotice } from './ui/RecordLockNotice';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 
@@ -125,9 +126,7 @@ export function EmployeeEditor({
       </ModalHeader>
 
         {recordLock.status === 'locked' && recordLock.lockedBy && (
-          <div className="mb-3 rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
-            📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@{recordLock.lockedBy.machineName}
-          </div>
+          <RecordLockNotice className="mb-3" lockedBy={recordLock.lockedBy} />
         )}
 
         <form
