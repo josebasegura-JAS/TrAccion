@@ -718,7 +718,7 @@ function RecipientTable({
                 </td>
               </tr>
             ))}
-            {items.length === 0 && <CompactTableEmpty colSpan={3}>Sin destinatarios.</CompactTableEmpty>}
+            {items.length === 0 && <CompactTableEmpty colSpan={3} message="Sin destinatarios." />}
           </CompactTableBody>
         </CompactTable>
       </div>
