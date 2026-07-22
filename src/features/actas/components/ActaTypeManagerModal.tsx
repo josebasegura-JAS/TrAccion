@@ -1,5 +1,6 @@
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import type { ActaTypeDefinition } from '../domain/acta';
 
 export function ActaTypeManagerModal({
@@ -35,14 +36,7 @@ export function ActaTypeManagerModal({
               Alta, deshabilitado y borrado seguro de tipos sin actas asociadas.
             </p>
           </div>
-          <button
-            className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            title="Cerrar"
-            type="button"
-          >
-            <X size={16} />
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">

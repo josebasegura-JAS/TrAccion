@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { ChevronRight, ExternalLink, X, type LucideIcon } from 'lucide-react';
+import { ChevronRight, ExternalLink, type LucideIcon } from 'lucide-react';
+import { ModalCloseButton } from '../ui/ModalCloseButton';
 import type { DashboardPopupItem } from './dashboardTypes';
 import { eventTone, formatDisplayDate } from './dashboardUtils';
 
@@ -34,13 +35,7 @@ export function DashboardRecordsModal({
             <h3 className="mt-1 text-lg font-black capitalize">{title}</h3>
             {subtitle && <p className="mt-1 text-sm font-medium text-metro-muted">{subtitle}</p>}
           </div>
-          <button
-            className="rounded-full p-2 text-metro-muted transition hover:bg-metro-panel hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </div>
 
         <div className="max-h-[60vh] overflow-auto p-4">

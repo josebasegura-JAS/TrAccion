@@ -1,6 +1,7 @@
-import { Link2, RotateCcw, Search, X } from 'lucide-react';
+import { Link2, RotateCcw, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import {
   useTableViewPreferences,
   type TableSortState,
@@ -194,13 +195,7 @@ function VinculogramaModal({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-            <button
-              className="rounded-lg p-2 text-metro-muted hover:bg-metro-surface hover:text-metro-text"
-              onClick={onClose}
-              type="button"
-            >
-              <X size={18} />
-            </button>
+            <ModalCloseButton onClick={onClose} />
           </div>
         </div>
 
@@ -419,13 +414,7 @@ function SolicitudVinculogramaModal({
             </p>
             <h3 className="text-xl font-bold text-metro-text">Enviar solicitud</h3>
           </div>
-          <button
-            className="rounded-lg p-2 text-metro-muted hover:bg-metro-surface hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            <X size={18} />
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </div>
 
         <div className="space-y-4 px-5 py-4">

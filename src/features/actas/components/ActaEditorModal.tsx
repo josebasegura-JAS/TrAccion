@@ -1,7 +1,8 @@
-import { CalendarClock, Eye, FolderOpen, X } from 'lucide-react';
+import { CalendarClock, Eye, FolderOpen } from 'lucide-react';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import {
@@ -103,14 +104,7 @@ export function ActaEditorModal({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-            <button
-              className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-              onClick={onClose}
-              title="Cerrar"
-              type="button"
-            >
-              <X size={16} />
-            </button>
+            <ModalCloseButton onClick={onClose} />
           </div>
         </div>
 

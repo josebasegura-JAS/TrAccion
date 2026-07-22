@@ -1,5 +1,5 @@
-import { X } from 'lucide-react';
 import type { MutableRefObject } from 'react';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import type { ActasOutlookTemplate } from './actasPage.helpers';
 
 export function ActasOutlookTemplateModal({
@@ -30,14 +30,7 @@ export function ActasOutlookTemplateModal({
               vacíos.
             </p>
           </div>
-          <button
-            className="rounded-lg border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            title="Cerrar"
-            type="button"
-          >
-            <X size={16} />
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </div>
 
         {outlookTemplateStatus && (

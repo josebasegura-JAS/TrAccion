@@ -1,9 +1,9 @@
-import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { Notice } from '../../../components/ui/Notice';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
@@ -164,13 +164,7 @@ export function LicenciasSinSueldoEditor({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
-            <button
-              className="rounded-full p-2 text-metro-muted transition hover:bg-white/5 hover:text-metro-text"
-              onClick={() => void requestClose()}
-              type="button"
-            >
-              <X size={18} />
-            </button>
+            <ModalCloseButton onClick={() => void requestClose()} />
           </div>
         </div>
 

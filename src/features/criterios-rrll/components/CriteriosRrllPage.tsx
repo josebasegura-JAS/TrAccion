@@ -1,4 +1,4 @@
-import { FileDown, FileUp, Search, SlidersHorizontal, X } from 'lucide-react';
+import { FileDown, FileUp, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
 import {
@@ -21,6 +21,7 @@ import {
 import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { CountBadge } from '../../../components/ui/CountBadge';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -523,13 +524,7 @@ export function CriteriosRrllPage() {
                   {importPreview.rows.length} registros seleccionados
                 </p>
               </div>
-              <button
-                className="rounded-full border border-metro-border p-2 text-metro-muted hover:border-metro-red hover:text-metro-text"
-                onClick={() => setImportPreview(null)}
-                type="button"
-              >
-                <X size={18} />
-              </button>
+              <ModalCloseButton onClick={() => setImportPreview(null)} />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border px-4 py-2 text-sm">
               <p className="text-metro-muted">
