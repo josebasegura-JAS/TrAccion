@@ -23,8 +23,8 @@ import {
 
 export function ImportMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+    <div className="rounded-lg bg-metro-panel px-3 py-2">
+      <p className="text-xs font-semibold text-metro-muted">{label}</p>
       <p className="mt-1 text-xl font-black text-metro-text">{value}</p>
     </div>
   );
@@ -44,9 +44,9 @@ export function SessionPanel({
   onToggle: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-metro-border">
+    <div className="overflow-hidden rounded-lg border border-metro-border/80">
       <button
-        className="flex w-full items-center justify-between border-b border-metro-border bg-metro-panel px-3 py-2 text-left"
+        className="flex w-full items-center justify-between border-b border-metro-border/70 bg-metro-panel px-3 py-2 text-left"
         onClick={onToggle}
         type="button"
       >
@@ -120,7 +120,7 @@ export function SessionCard({
       : undefined;
 
   return (
-    <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
+    <article className="rounded-lg bg-metro-panel p-3 shadow-sm">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <button className="min-w-0 flex-1 text-left" onClick={onToggle} type="button">
           <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
@@ -172,7 +172,7 @@ export function SessionCard({
       </div>
 
       {isExpanded && (
-        <div className="mt-3 rounded-xl border border-metro-border bg-metro-app/40 p-3">
+        <div className="mt-3 rounded-lg bg-metro-app/45 p-3">
           {recordLock.message && (
             <p
               className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
@@ -219,7 +219,7 @@ export function SessionCard({
 
               return (
                 <div
-                  className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2"
+                  className="flex items-center gap-2 rounded-lg bg-metro-surface px-3 py-2"
                   key={taskId}
                 >
                   <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
@@ -310,7 +310,7 @@ export function HistoricSessionCard({
       : undefined;
 
   return (
-    <article className="rounded-xl border border-metro-border bg-metro-panel p-3">
+    <article className="rounded-lg bg-metro-panel p-3 shadow-sm">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
@@ -355,8 +355,8 @@ export function HistoricSessionCard({
         </div>
       </div>
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-          <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted">
+        <div className="rounded-lg bg-metro-surface p-2">
+          <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-metro-muted">
             <ClipboardList size={14} /> Tratadas ({session.treatedTaskIds.length})
           </p>
           <ol className="space-y-1 text-sm text-metro-text">
@@ -370,8 +370,8 @@ export function HistoricSessionCard({
             ))}
           </ol>
         </div>
-        <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">
+        <div className="rounded-lg bg-metro-surface p-2">
+          <p className="mb-2 text-xs font-semibold text-metro-muted">
             No tratadas ({session.untreatedTaskIds.length})
           </p>
           <ol className="space-y-1 text-sm text-metro-text">

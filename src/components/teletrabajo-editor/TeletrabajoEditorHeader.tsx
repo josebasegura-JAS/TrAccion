@@ -20,9 +20,9 @@ export function TeletrabajoEditorHeader({
   onDone,
 }: TeletrabajoEditorHeaderProps) {
   return (
-    <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
+    <div className="mb-3 flex items-start justify-between gap-3 border-b border-metro-border/70 pb-3">
       <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
+        <p className="text-xs font-semibold text-metro-red">
           {isCreate ? 'Nueva solicitud' : 'Editar solicitud'}
         </p>
         <h3 className="mt-1 truncate text-base font-bold text-metro-text">
@@ -34,7 +34,7 @@ export function TeletrabajoEditorHeader({
           </p>
           {isNuevaPeticion && empleado.trim().length > 0 && (
             <span
-              className="rounded-full border border-amber-400/60 bg-amber-300 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-950"
+              className="rounded-full bg-amber-300 px-2 py-0.5 text-xs font-bold text-slate-950"
               title="No consta teletrabajo aprobado o analizado para esta persona en el periodo anterior."
             >
               Nueva petición, enviar documentación

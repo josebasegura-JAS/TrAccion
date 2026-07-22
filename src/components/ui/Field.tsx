@@ -77,7 +77,7 @@ export function Field({ children, className, error, hint, htmlFor, label, requir
       </FieldLabel>
       {children}
       {error ? <p className="mt-1 text-xs font-semibold text-red-300">{error}</p> : null}
-      {!error && hint ? <p className="mt-1 text-[11px] text-metro-muted">{hint}</p> : null}
+      {!error && hint ? <p className="mt-1 text-xs leading-4 text-metro-muted">{hint}</p> : null}
     </div>
   );
 }

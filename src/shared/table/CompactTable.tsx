@@ -13,7 +13,7 @@ export function CompactTable({
 }: CompactTableProps) {
   return (
     <table
-      className={`${minWidthClassName} table-fixed text-left text-xs ${className ?? ''}`}
+      className={`${minWidthClassName} table-fixed text-left text-xs leading-5 ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -28,7 +28,7 @@ export function CompactTableHead({
 }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <thead
-      className={`sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.18)] ${className ?? ''}`}
+      className={`sticky top-0 z-10 bg-metro-panel text-xs font-semibold text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.14)] ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -43,7 +43,7 @@ export function CompactTableBody({
 }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <tbody
-      className={`divide-y divide-metro-border bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45 ${className ?? ''}`}
+      className={`divide-y divide-metro-border/70 bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/40 ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -59,7 +59,7 @@ interface CompactTableEmptyProps {
 export function CompactTableEmpty({ colSpan, message }: CompactTableEmptyProps) {
   return (
     <tr>
-      <td className="px-3 py-6 text-center text-sm font-semibold text-metro-muted" colSpan={colSpan}>
+      <td className="px-3 py-5 text-center text-sm font-semibold text-metro-muted" colSpan={colSpan}>
         {message}
       </td>
     </tr>

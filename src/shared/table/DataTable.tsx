@@ -330,13 +330,13 @@ export function DataTable<Row, ColumnId extends string>({
   return (
     <div className="space-y-2">
       <div
-        className={`relative ${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}
+        className={`relative ${maxHeightClassName} overflow-auto rounded-lg border border-metro-border/80`}
         ref={scrollContainerRef}
       >
         {onResetColumnWidths && (
           <button
             aria-label="Restablecer columnas"
-            className="absolute right-1 top-1 z-20 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-panel/95 text-metro-muted shadow-sm transition-colors hover:border-metro-red hover:text-metro-text"
+            className="absolute right-1 top-1 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent bg-metro-panel/95 text-metro-muted transition-colors hover:border-metro-border hover:text-metro-text"
             data-tip="Restablecer columnas"
             onClick={onResetColumnWidths}
             type="button"
@@ -354,7 +354,7 @@ export function DataTable<Row, ColumnId extends string>({
               <col key={column.id} style={{ width: column.width }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.18)]">
+          <thead className="sticky top-0 z-10 bg-metro-panel text-xs font-semibold text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.14)]">
             <tr>
               {visibleColumns.map((column) => {
                 const isSorted = sort?.columnId === column.id;
@@ -402,7 +402,7 @@ export function DataTable<Row, ColumnId extends string>({
                     )}
                     {canSort ? (
                       <button
-                        className={`flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text ${
+                        className={`flex w-full items-center gap-1 text-left font-semibold hover:text-metro-text ${
                           column.isActionColumn ? 'justify-end' : ''
                         }`}
                         onClick={() => onSortChange(nextSortState(sort, column.id))}
@@ -448,7 +448,7 @@ export function DataTable<Row, ColumnId extends string>({
             {sortedRows.length === 0 ? (
               <tr>
                 <td
-                  className="px-3 py-10 text-center text-sm font-semibold text-metro-muted"
+                  className="px-3 py-8 text-center text-sm font-semibold text-metro-muted"
                   colSpan={visibleColumns.length}
                 >
                   <div className="flex flex-col items-center gap-2">
@@ -490,12 +490,12 @@ export function DataTable<Row, ColumnId extends string>({
         {hasHiddenRows && <div aria-hidden="true" ref={sentinelRef} style={{ height: 1 }} />}
       </div>
       {hasHiddenRows && (
-        <div className="flex items-center justify-between rounded-xl border border-metro-border bg-metro-panel/45 px-3 py-2 text-xs text-metro-muted">
+        <div className="flex items-center justify-between rounded-lg bg-metro-panel/45 px-3 py-2 text-xs text-metro-muted">
           <span>
             Mostrando {visibleRows.length} de {sortedRows.length} registros.
           </span>
           <button
-            className="rounded-lg border border-metro-border px-3 py-1 font-semibold transition-colors hover:border-metro-red hover:text-metro-text"
+            className="rounded-md border border-metro-border/80 px-3 py-1 font-semibold transition-colors hover:border-metro-red hover:text-metro-text"
             type="button"
             onClick={() => setRenderLimit((currentLimit) => currentLimit + RENDER_BATCH_INCREMENT)}
           >
