@@ -226,7 +226,7 @@ export function LicenciasBlock({
   title: string;
 }) {
   return (
-    <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm shadow-slate-950/20">
+    <section className="rounded-xl bg-metro-panel/45 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-metro-red/10 p-2 text-metro-red">{icon}</div>

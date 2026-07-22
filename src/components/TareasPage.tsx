@@ -31,6 +31,7 @@ import type { ExportColumn } from '../shared/export/types';
 import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../shared/table/CompactTable';
 import { relativeDate } from '../utils/relativeDate';
 import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 import { sortDataTableRows } from '../shared/table/tableSorting';
@@ -41,6 +42,8 @@ import {
 import { TaskEditor } from './TaskEditor';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { ModalCloseButton } from './ui/ModalCloseButton';
+import { Input, Select } from './ui/Field';
+import { ModalBody, ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
 
 type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 
@@ -311,16 +314,15 @@ function HistoricYearSection({
             </div>
           </div>
           <div className="max-h-[320px] overflow-auto">
-            <table className="w-full table-fixed text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+            <CompactTable className="table-fixed">
+              <CompactTableHead>
                 <tr>
                   {historicColumns.map((column) => {
                     const isActive = sortState.key === column.key;
-
                     return (
                       <th className={`${column.className} px-3 py-2`} key={column.key}>
                         <button
-                          className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
+                          className="flex w-full items-center gap-1 text-left font-semibold hover:text-metro-text"
                           onClick={() => onSortChange(column.key)}
                           type="button"
                         >
@@ -331,32 +333,18 @@ function HistoricYearSection({
                     );
                   })}
                 </tr>
-              </thead>
-              <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+              </CompactTableHead>
+              <CompactTableBody>
                 {visibleTasks.map((task) => (
-                  <tr className="cursor-pointer" key={task.id} onClick={() => onOpenTask(task)}>
-                    <td
-                      className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                      title={task.titulo}
-                    >
-                      {task.titulo}
-                    </td>
-                    <td
-                      className="truncate px-3 py-1.5 text-metro-muted"
-                      title={formatDateTime(task.closedAt)}
-                    >
-                      {formatDateTime(task.closedAt)}
-                    </td>
-                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>
-                      {task.responsable || '—'}
-                    </td>
-                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>
-                      {task.prioridad}
-                    </td>
+                  <tr className="cursor-pointer hover:bg-metro-red/10" key={task.id} onClick={() => onOpenTask(task)}>
+                    <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>{task.titulo}</td>
+                    <td className="truncate px-3 py-1.5 text-metro-muted" title={formatDateTime(task.closedAt)}>{formatDateTime(task.closedAt)}</td>
+                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>{task.responsable || '—'}</td>
+                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>{task.prioridad}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+              </CompactTableBody>
+            </CompactTable>
           </div>
         </div>
       )}
@@ -705,13 +693,15 @@ export function TareasPage({
       <PageHeader
         actions={
           <>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
+            <ActionButton
+              icon={Settings}
+              iconOnly={false}
               onClick={() => setIsOriginsModalOpen(true)}
-              type="button"
+              size="sm"
+              variant="secondary"
             >
-              <Settings size={14} /> Orígenes
-            </button>
+              Orígenes
+            </ActionButton>
             <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva tarea
             </ActionButton>
@@ -866,76 +856,54 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
   const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('sindicato');
 
   const sortedOrigins = useMemo(
-    () =>
-      taskOrigins
-        .filter((origin) => !origin.deletedAt)
-        .sort((first, second) => first.nombre.localeCompare(second.nombre, 'es')),
+    () => taskOrigins.filter((origin) => !origin.deletedAt).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
     [taskOrigins],
   );
 
   const submitNewOrigin = () => {
-    if (!newOriginName.trim()) {
-      return;
-    }
-
+    if (!newOriginName.trim()) return;
     addTaskOrigin(newOriginName, newOriginType);
     setNewOriginName('');
     setNewOriginType('sindicato');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <aside
-        aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
-        role="dialog"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
-          <div>
-            <p className="text-xs font-semibold text-metro-red">
-              Mantenimiento
-            </p>
-            <h3 className="mt-1 text-base font-bold text-metro-text">Orígenes de tareas</h3>
-            <p className="text-xs text-metro-muted">
-              Alta, edición y activación de sindicatos, áreas internas u otros orígenes.
-            </p>
-            <div className="mt-1">
-              <InlineSaveFeedback />
-            </div>
-          </div>
+    <ModalShell labelledBy="task-origins-title" maxWidthClassName="max-w-3xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle
+          id="task-origins-title"
+          subtitle="Alta, edición y activación de sindicatos, áreas internas u otros orígenes."
+        >
+          Orígenes de tareas
+        </ModalTitle>
+        <div className="flex items-center gap-2">
+          <InlineSaveFeedback />
           <ModalCloseButton label="Cerrar mantenimiento de orígenes" onClick={onClose} />
         </div>
-
-        <div className="mb-3 grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-3 md:grid-cols-[minmax(220px,1fr)_160px_110px]">
-          <input
-            className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+      </ModalHeader>
+      <ModalBody className="space-y-3">
+        <div className="grid gap-2 rounded-xl bg-metro-panel/45 p-3 md:grid-cols-[minmax(220px,1fr)_160px_110px]">
+          <Input
             onChange={(event) => setNewOriginName(event.target.value)}
             placeholder="Nuevo origen"
-            type="text"
             value={newOriginName}
           />
           <OriginTypeSelect onChange={setNewOriginType} value={newOriginType} />
-          <ActionButton
-            disabled={!newOriginName.trim()}
-            iconOnly={false}
-            onClick={submitNewOrigin}
-            variant="add"
-          >
+          <ActionButton disabled={!newOriginName.trim()} iconOnly={false} onClick={submitNewOrigin} variant="add">
             Añadir
           </ActionButton>
         </div>
-
-        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-metro-border">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+        <div className="min-h-0 overflow-auto rounded-xl border border-metro-border">
+          <CompactTable className="table-fixed">
+            <CompactTableHead>
               <tr>
                 <th className="w-[38%] px-3 py-2">Nombre</th>
                 <th className="w-[24%] px-3 py-2">Tipo</th>
                 <th className="w-[16%] px-3 py-2">Estado</th>
                 <th className="w-[26%] px-3 py-2 text-right">Acciones</th>
               </tr>
-            </thead>
-            <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45">
+            </CompactTableHead>
+            <CompactTableBody>
               {sortedOrigins.map((origin) => (
                 <TaskOriginRow
                   key={origin.id}
@@ -945,11 +913,11 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
                   onUpdate={updateTaskOrigin}
                 />
               ))}
-            </tbody>
-          </table>
+            </CompactTableBody>
+          </CompactTable>
         </div>
-      </aside>
-    </div>
+      </ModalBody>
+    </ModalShell>
   );
 }
 
@@ -998,11 +966,7 @@ function TaskOriginRow({
       )}
       <tr className="align-top">
         <td className="px-3 py-2">
-          <input
-            className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => setName(event.target.value)}
-            value={name}
-          />
+          <Input onChange={(event) => setName(event.target.value)} value={name} />
         </td>
         <td className="px-3 py-2">
           <OriginTypeSelect onChange={setType} value={type} />
@@ -1023,13 +987,9 @@ function TaskOriginRow({
             >
               Guardar
             </ActionButton>
-            <button
-              className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-              onClick={() => onToggle(origin.id)}
-              type="button"
-            >
+            <ActionButton iconOnly={false} onClick={() => onToggle(origin.id)} size="sm" variant="secondary">
               {origin.active ? 'Desactivar' : 'Activar'}
-            </button>
+            </ActionButton>
             <ActionButton iconOnly={false} onClick={handleDelete} size="sm" variant="delete">
               Eliminar
             </ActionButton>
@@ -1048,14 +1008,13 @@ function OriginTypeSelect({
   onChange: (value: TaskOriginConfig['tipo']) => void;
 }) {
   return (
-    <select
-      className="w-full rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+    <Select
       onChange={(event) => onChange(event.target.value as TaskOriginConfig['tipo'])}
       value={value}
     >
       <option value="sindicato">Sindicato</option>
       <option value="empresa">Empresa</option>
       <option value="otro">Otro</option>
-    </select>
+    </Select>
   );
 }

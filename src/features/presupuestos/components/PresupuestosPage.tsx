@@ -643,8 +643,8 @@ export function PresupuestosPage() {
   };
 
   return (
-    <div className="space-y-5 pb-8">
-      <div className="rounded-2xl border border-metro-border bg-metro-panel p-5">
+    <div className="space-y-3 pb-6">
+      <div>
         <PageHeader
           title="Presupuestos RRLL"
           status={<InlineSaveFeedback />}
@@ -764,7 +764,7 @@ export function PresupuestosPage() {
                   className="rounded-xl border border-metro-border bg-metro-surface p-4"
                   key={String(label)}
                 >
-                  <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+                  <p className="text-xs font-semibold text-metro-muted">
                     {label}
                   </p>
                   <p className="text-2xl font-bold text-metro-text">{euro(Number(value))}</p>

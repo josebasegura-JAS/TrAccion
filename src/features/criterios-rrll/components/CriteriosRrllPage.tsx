@@ -22,6 +22,7 @@ import { useCriteriosRrllStore } from '../store/useCriteriosRrllStore';
 import { CriterioRrllEditor } from './CriterioRrllEditor';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { CountBadge } from '../../../components/ui/CountBadge';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -412,7 +413,7 @@ export function CriteriosRrllPage() {
                   return (
                     <th className={`${column.className} px-3 py-2`} key={column.key}>
                       <button
-                        className="flex w-full items-center gap-1 text-left font-bold uppercase tracking-wide hover:text-metro-text"
+                        className="flex w-full items-center gap-1 text-left font-semibold hover:text-metro-text"
                         onClick={() => toggleSort(column.key)}
                         type="button"
                       >
@@ -491,43 +492,35 @@ export function CriteriosRrllPage() {
       </div>
 
       {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="flex max-h-[86vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-metro-border bg-metro-surface px-4 py-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-                  Previsualización
-                </p>
-                <h3 className="text-xl font-bold text-metro-text">Importar Criterios RRLL</h3>
-                <p className="text-sm text-metro-muted">
-                  {importPreview.fileName} · {selectedImportRows.length} de{' '}
-                  {importPreview.rows.length} registros seleccionados
-                </p>
-              </div>
-              <ModalCloseButton onClick={() => setImportPreview(null)} />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border px-4 py-2 text-sm">
+        <ModalShell
+          labelledBy="criterios-import-preview-title"
+          maxWidthClassName="max-w-6xl"
+          onClose={() => setImportPreview(null)}
+        >
+          <ModalHeader>
+            <ModalTitle
+              id="criterios-import-preview-title"
+              subtitle={`${importPreview.fileName} · ${selectedImportRows.length} de ${importPreview.rows.length} registros seleccionados`}
+            >
+              Importar Criterios RRLL
+            </ModalTitle>
+            <ModalCloseButton onClick={() => setImportPreview(null)} />
+          </ModalHeader>
+          <ModalBody className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <p className="text-metro-muted">
                 Desmarca los registros que no quieras importar. Tema y Criterio son obligatorios.
               </p>
               <div className="flex flex-wrap gap-2">
-                <ActionButton
-                  variant="secondary"
-                  iconOnly={false}
-                  onClick={() => setAllImportRowsSelected(true)}
-                >
+                <ActionButton variant="secondary" iconOnly={false} onClick={() => setAllImportRowsSelected(true)}>
                   Marcar todos
                 </ActionButton>
-                <ActionButton
-                  variant="secondary"
-                  iconOnly={false}
-                  onClick={() => setAllImportRowsSelected(false)}
-                >
+                <ActionButton variant="secondary" iconOnly={false} onClick={() => setAllImportRowsSelected(false)}>
                   Desmarcar todos
                 </ActionButton>
               </div>
             </div>
-            <div className="overflow-auto">
+            <div className="overflow-auto rounded-xl border border-metro-border">
               <CompactTable>
                 <CompactTableHead>
                   <tr>
@@ -552,31 +545,19 @@ export function CriteriosRrllPage() {
                         />
                       </td>
                       <td className="px-3 py-2 text-metro-muted">{row.rowNumber}</td>
-                      <td
-                        className="truncate px-3 py-2 font-semibold text-metro-text"
-                        title={row.draft.tema}
-                      >
+                      <td className="truncate px-3 py-2 font-semibold text-metro-text" title={row.draft.tema}>
                         {row.draft.tema}
                       </td>
-                      <td
-                        className="truncate px-3 py-2 text-metro-muted"
-                        title={row.draft.fecha || '—'}
-                      >
+                      <td className="truncate px-3 py-2 text-metro-muted" title={row.draft.fecha || '—'}>
                         {row.draft.fecha || '—'}
                       </td>
-                      <td
-                        className="truncate px-3 py-2 text-metro-muted"
-                        title={row.draft.responsable || '—'}
-                      >
+                      <td className="truncate px-3 py-2 text-metro-muted" title={row.draft.responsable || '—'}>
                         {row.draft.responsable || '—'}
                       </td>
                       <td className="px-3 py-2 text-metro-muted">
                         <SentidoBadge sentido={row.draft.sentido} />
                       </td>
-                      <td
-                        className="truncate px-3 py-2 text-metro-muted"
-                        title={row.draft.criterio}
-                      >
+                      <td className="truncate px-3 py-2 text-metro-muted" title={row.draft.criterio}>
                         {row.draft.criterio}
                       </td>
                     </tr>
@@ -585,32 +566,25 @@ export function CriteriosRrllPage() {
               </CompactTable>
               {importPreview.rows.length === 0 && (
                 <p className="px-4 py-5 text-sm text-metro-muted">
-                  No se han encontrado registros importables. Revisa que la hoja tenga las columnas
-                  Tema, Fecha, Responsable, Criterio y Sentido.
+                  No se han encontrado registros importables. Revisa que la hoja tenga las columnas Tema, Fecha, Responsable, Criterio y Sentido.
                 </p>
               )}
             </div>
-            <div className="flex flex-wrap justify-end gap-2 border-t border-metro-border bg-metro-surface px-4 py-3">
-              <ActionButton
-                variant="secondary"
-                iconOnly={false}
-                onClick={() => setImportPreview(null)}
-              >
-                Cancelar
-              </ActionButton>
-              <ActionButton
-                variant="save"
-                iconOnly={false}
-                disabled={selectedImportRows.length === 0}
-                onClick={() => {
-                  void confirmImport();
-                }}
-              >
-                Importar seleccionados
-              </ActionButton>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton variant="secondary" iconOnly={false} onClick={() => setImportPreview(null)}>
+              Cancelar
+            </ActionButton>
+            <ActionButton
+              variant="save"
+              iconOnly={false}
+              disabled={selectedImportRows.length === 0}
+              onClick={() => { void confirmImport(); }}
+            >
+              Importar seleccionados
+            </ActionButton>
+          </ModalFooter>
+        </ModalShell>
       )}
 
       {editorMode && (

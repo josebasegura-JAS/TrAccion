@@ -24,6 +24,7 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Textarea } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { CompactTable, CompactTableBody, CompactTableEmpty, CompactTableHead } from '../../../shared/table/CompactTable';
 
 const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -425,7 +426,7 @@ export function EspecialesPage() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
           <div className="space-y-4">
             <div
-              className={`flex min-h-[120px] flex-col items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center text-sm font-semibold transition ${
+              className={`flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-sm font-semibold transition ${
                 isDropActive
                   ? 'border-metro-red bg-metro-red/10'
                   : 'border-metro-border bg-metro-panel'
@@ -549,7 +550,7 @@ export function EspecialesPage() {
               </FieldLabel>
             </div>
 
-            <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
+            <div className="rounded-xl bg-metro-panel/45 p-3">
               <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
@@ -598,7 +599,7 @@ export function EspecialesPage() {
               title="Con copia (CC)"
             />
 
-            <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
+            <div className="rounded-xl bg-metro-panel/45 p-3">
               <h3 className="text-base font-bold text-metro-text">Destinatario</h3>
               <div className="mt-3 space-y-3">
                 <FieldLabel>
@@ -680,7 +681,7 @@ function RecipientTable({
   onDelete: (recipientId: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
+    <div className="rounded-xl bg-metro-panel/45 p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-metro-text">
           {title} ({items.length})
@@ -695,38 +696,31 @@ function RecipientTable({
           }}
         />
       </div>
-      <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-metro-panel text-metro-muted">
+      <div className="overflow-hidden rounded-xl border border-metro-border">
+        <CompactTable>
+          <CompactTableHead>
             <tr>
-              <th className="px-3 py-2 font-semibold">Nombre</th>
-              <th className="px-3 py-2 font-semibold">Email</th>
-              <th className="px-3 py-2 text-right font-semibold">Acciones</th>
+              <th className="px-3 py-2">Nombre</th>
+              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2 text-right">Acciones</th>
             </tr>
-          </thead>
-          <tbody>
-            {items.length ? (
-              items.map((item) => (
-                <tr key={item.id} className="border-t border-metro-border">
-                  <td className="px-3 py-2 text-metro-text">{item.name}</td>
-                  <td className="px-3 py-2 text-metro-muted">{item.email}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex justify-end gap-1">
-                      <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} />
-                      <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="px-3 py-3 text-metro-muted" colSpan={3}>
-                  Sin destinatarios.
+          </CompactTableHead>
+          <CompactTableBody>
+            {items.map((item) => (
+              <tr key={item.id}>
+                <td className="px-3 py-2 text-metro-text">{item.name}</td>
+                <td className="px-3 py-2 text-metro-muted">{item.email}</td>
+                <td className="px-3 py-2">
+                  <div className="flex justify-end gap-1">
+                    <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} />
+                    <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} />
+                  </div>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
+            ))}
+            {items.length === 0 && <CompactTableEmpty colSpan={3}>Sin destinatarios.</CompactTableEmpty>}
+          </CompactTableBody>
+        </CompactTable>
       </div>
     </div>
   );
