@@ -1,5 +1,4 @@
 import { useActasStore } from '../features/actas/store/useActasStore';
-import { useActasContenidoStore } from '../features/actas/store/useActasContenidoStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
@@ -70,8 +69,4 @@ registerSyncableStore({
 registerSyncableStore({
   id: 'presupuestos',
   reloadFromStorage: () => usePresupuestosStore.getState().reloadFromStorage(),
-});
-registerSyncableStore({
-  id: 'actas-contenido',
-  reloadFromStorage: () => useActasContenidoStore.getState().reloadFromStorage(),
 });
