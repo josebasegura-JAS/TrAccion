@@ -262,7 +262,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
 
             {trimmedQuery.length < MIN_GLOBAL_SEARCH_FREE_TEXT_LENGTH && parsedSearchSummary.length === 0 && (
               <div className="border-b border-metro-border bg-slate-950/10 px-4 py-3">
-                <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-metro-muted">Búsquedas rápidas</div>
+                <div className="mb-2 text-xs font-semibold text-metro-muted">Búsquedas rápidas</div>
                 <div className="flex flex-wrap gap-2">
                   {QUICK_SEARCHES.map((quickSearch) => (
                     <button
@@ -369,7 +369,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
               {groupedResults.map((yearGroup) => (
                 <section key={yearGroup.year} className="mb-5 last:mb-0">
                   <div className="mb-2 flex items-center justify-between">
-                    <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-metro-muted">
+                    <h2 className="text-xs font-bold text-metro-muted">
                       {getResultYearLabel(yearGroup.year)}
                     </h2>
                     <span className="text-[11px] text-metro-muted">
@@ -380,7 +380,7 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                   <div className="space-y-3">
                     {yearGroup.modules.map((moduleGroup) => (
                       <div key={`${yearGroup.year}-${moduleGroup.module}`} className="rounded-2xl border border-metro-border bg-slate-950/10 p-2">
-                        <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-metro-red">
+                        <div className="px-2 pb-1 text-xs font-semibold text-metro-red">
                           {moduleGroup.module}
                         </div>
                         <div className="space-y-1">

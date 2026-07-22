@@ -584,7 +584,7 @@ export function SessionManagementPage({
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      className="space-y-3"
       id={config.moduleId}
     >
       <PageHeader
@@ -712,7 +712,7 @@ export function SessionManagementPage({
       {!showSearchInHeader && (
         <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel/80 p-3">
           <label
-            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-metro-muted"
+            className="flex items-center gap-2 text-xs font-bold text-metro-muted"
             htmlFor={`${config.moduleId}-session-search`}
           >
             <Search size={14} className="text-metro-red" /> Buscar en {config.shortTitle}

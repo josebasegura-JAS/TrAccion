@@ -19,7 +19,7 @@ export function ActiveFilterChips({ filters, onClearAll }: ActiveFilterChipsProp
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
-      <span className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+      <span className="text-xs font-semibold text-metro-muted">
         Filtros activos
       </span>
       {filters.map((filter) => (

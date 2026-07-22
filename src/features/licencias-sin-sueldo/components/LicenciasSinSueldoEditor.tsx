@@ -193,7 +193,7 @@ export function LicenciasSinSueldoEditor({
           <fieldset disabled={isReadOnly} className="space-y-4 disabled:opacity-70">
             {mode === 'edit' && draft.estado !== 'historico' && (
               <div className="flex flex-wrap gap-2 rounded-xl border border-metro-border bg-slate-950/10 p-3">
-                <span className="w-full text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <span className="w-full text-xs font-semibold text-metro-muted">
                   Flujo
                 </span>
                 <ActionButton
@@ -321,7 +321,7 @@ export function LicenciasSinSueldoEditor({
 
             <section className="rounded-xl border border-metro-border bg-slate-950/10 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+                <h3 className="text-xs font-bold text-metro-muted">
                   Actualizaciones
                 </h3>
                 <ActionButton variant="add" iconOnly={false} onClick={addUpdate}>

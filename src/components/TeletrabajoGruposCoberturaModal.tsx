@@ -172,7 +172,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
     >
       <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+          <p className="text-xs font-semibold text-metro-red">
             Teletrabajo
           </p>
           <h3 className="text-xl font-bold text-metro-text" id="grupos-cobertura-modal-title">
@@ -200,7 +200,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
           <div className="space-y-3 border-b border-metro-border p-4">
             {(isCreating || editingGrupoId) && (
               <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 sm:grid-cols-[minmax(200px,1fr)_160px_auto_auto] sm:items-end">
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Nombre del grupo
                   <input
                     autoFocus
@@ -211,7 +211,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
                     value={draft.nombre}
                   />
                 </label>
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Presencialidad mínima
                   <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
@@ -304,7 +304,7 @@ export function TeletrabajoGruposCoberturaModal({ onClose }: TeletrabajoGruposCo
                     </button>
                     {isExpanded && (
                       <div className="border-t border-metro-border p-3">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                        <p className="mb-2 text-xs font-semibold text-metro-muted">
                           Puestos en este grupo
                         </p>
                         {visiblePuestos.length === 0 ? (

@@ -16,7 +16,7 @@ export function SelectFilter({
   onChange,
   placeholder,
   showLabel = false,
-  labelClassName = 'whitespace-nowrap text-xs font-bold uppercase tracking-wide',
+  labelClassName = 'whitespace-nowrap text-xs font-semibold',
   className,
 }: SelectFilterProps) {
   if (showLabel) {

@@ -601,7 +601,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       <ModalShell labelledBy="puestos-teletrabajo-modal-title" onClose={onClose}>
       <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+          <p className="text-xs font-semibold text-metro-red">
             Teletrabajo
           </p>
           <h3 className="text-xl font-bold text-metro-text" id="puestos-teletrabajo-modal-title">
@@ -684,7 +684,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
           <div className="space-y-3 border-b border-metro-border p-4">
             {(isCreating || editingPuestoId) && (
               <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 lg:grid-cols-[minmax(220px,1fr)_110px_110px_minmax(160px,0.9fr)_minmax(180px,1fr)_auto_auto] lg:items-end">
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Puesto
                   <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
@@ -700,7 +700,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                     ))}
                   </datalist>
                 </label>
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Presencialidad mínima
                   <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:opacity-50"
@@ -716,7 +716,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                     value={draft.maxSolicitudes}
                   />
                 </label>
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Dotación computable
                   <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
@@ -726,7 +726,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                     value={draft.dotacionComputable}
                   />
                 </label>
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Grupo cobertura
                   <select
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
@@ -743,7 +743,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                     ))}
                   </select>
                 </label>
-                <label className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                <label className="text-xs font-semibold text-metro-muted">
                   Observaciones
                   <input
                     className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
@@ -786,10 +786,10 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
                     return (
                       <div key={key} className="grid gap-2 rounded-lg border border-amber-400/20 bg-metro-surface/80 p-2 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,1.2fr)] lg:items-center">
                         <div>
-                          <p className="text-xs uppercase tracking-wide text-amber-200/80">Puesto importado</p>
+                          <p className="text-xs text-amber-200/80">Puesto importado</p>
                           <p className="font-semibold text-metro-text">{puesto}</p>
                         </div>
-                        <label className="text-xs font-semibold uppercase tracking-wide text-amber-200/80">
+                        <label className="text-xs font-semibold text-amber-200/80">
                           Puesto válido
                           <select
                             className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"

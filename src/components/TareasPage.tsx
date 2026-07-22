@@ -699,7 +699,7 @@ export function TareasPage({
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      className="space-y-3"
       id="tareas"
     >
       <PageHeader
@@ -887,12 +887,12 @@ function TaskOriginsModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <aside
         aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
+        className="flex max-h-[calc(100vh-2rem)] w-[min(760px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
         role="dialog"
       >
         <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
+            <p className="text-xs font-semibold text-metro-red">
               Mantenimiento
             </p>
             <h3 className="mt-1 text-base font-bold text-metro-text">Orígenes de tareas</h3>

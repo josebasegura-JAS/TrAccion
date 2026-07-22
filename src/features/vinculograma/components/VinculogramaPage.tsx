@@ -758,8 +758,8 @@ export function VinculogramaPage() {
   };
 
   return (
-    <section className="space-y-4" id="vinculograma">
-      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
+    <section className="space-y-3" id="vinculograma">
+      <div>
         <PageHeader
           title="Vinculograma"
           helpSections={VINCULOGRAMA_HELP_SECTIONS}
@@ -783,7 +783,7 @@ export function VinculogramaPage() {
         />
       </div>
 
-      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
+      <div className="rounded-xl border border-metro-border/80 bg-metro-surface p-3">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <Link2 size={16} className="text-metro-red" /> Vinculogramas vigentes
@@ -821,7 +821,7 @@ export function VinculogramaPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
+      <div className="rounded-xl border border-metro-border/80 bg-metro-surface p-3">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
             <Search size={16} className="text-metro-red" /> Vinculogramas vencidos

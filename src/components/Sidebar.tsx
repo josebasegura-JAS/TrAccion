@@ -266,7 +266,7 @@ export function Sidebar({
         <div className="flex h-16 items-center justify-center border-b border-white/10 px-2">
           <button
             aria-label="Reiniciar TrAccion"
-            className="rounded-2xl p-1 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-metro-red/60"
+            className="rounded-xl p-1 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-metro-red/60"
             data-tip="Reiniciar TrAccion"
             onClick={handleLogoSelect}
             type="button"
@@ -283,7 +283,7 @@ export function Sidebar({
             <button
               aria-current={activeView === 'dashboard' ? 'page' : undefined}
               aria-label="Inicio"
-              className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+              className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${
                 activeView === 'dashboard'
                   ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
                   : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
@@ -300,7 +300,7 @@ export function Sidebar({
                 size={21}
                 strokeWidth={2.1}
               />
-              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
+              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
                 Inicio
               </span>
             </button>
@@ -313,7 +313,7 @@ export function Sidebar({
               return (
                 <button
                   aria-label={group.label}
-                  className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+                  className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${
                     isActiveGroup || containsActiveView
                       ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
                       : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
@@ -331,7 +331,7 @@ export function Sidebar({
                     size={21}
                     strokeWidth={2.1}
                   />
-                  <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
+                  <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
                     {group.label}
                   </span>
                 </button>
@@ -342,7 +342,7 @@ export function Sidebar({
           <div className="mt-auto flex flex-col items-center gap-2 border-t border-white/10 pt-3">
             <button
               aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`}
-              className="group/rail relative flex w-12 flex-col items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[0.58rem] font-semibold uppercase tracking-[0.08em] text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+              className="group/rail relative flex w-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
               data-tip={shouldShowPanel ? databaseIndicatorTooltip : undefined}
               onClick={handleDatabaseIndicatorSelect}
               type="button"
@@ -377,7 +377,7 @@ export function Sidebar({
             <button
               aria-current={activeView === 'ajustes' ? 'page' : undefined}
               aria-label="Ajustes"
-              className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-2xl border border-transparent transition ${
+              className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${
                 activeView === 'ajustes'
                   ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25'
                   : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
@@ -394,7 +394,7 @@ export function Sidebar({
                 size={21}
                 strokeWidth={2.1}
               />
-              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
+              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? "hidden" : "group-hover/rail:translate-x-1 group-hover/rail:opacity-100"}`}>
                 Ajustes
               </span>
             </button>
@@ -406,7 +406,7 @@ export function Sidebar({
         <div className="fixed inset-y-0 left-[4.5rem] z-30 flex w-60 flex-col border-r border-slate-700/80 bg-[#0F172A]/98 text-white shadow-2xl shadow-slate-950/45 backdrop-blur-xl transition-transform duration-300 ease-out">
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
             <div className="min-w-0">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-metro-red">
+              <p className="text-xs font-semibold text-metro-red">
                 Navegación
               </p>
               <h2 className="truncate text-base font-semibold text-metro-text">
@@ -454,7 +454,7 @@ export function Sidebar({
               return (
                 <button
                   aria-current={isActiveItem ? 'page' : undefined}
-                  className={`relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm font-medium transition ${
+                  className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
                     isActiveItem
                       ? 'bg-white/10 text-metro-text shadow-sm shadow-slate-950/20'
                       : 'text-slate-300 hover:bg-white/[0.05] hover:text-white'
@@ -504,10 +504,10 @@ export function Sidebar({
                 <span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>
                   {databaseIndicator.label}
                 </span>
-                <span className="block truncate text-[0.68rem] text-slate-400">
+                <span className="block truncate text-[11px] text-slate-400">
                   {databaseIndicator.statusText}
                 </span>
-                <span className="block truncate text-[0.68rem] text-slate-500">
+                <span className="block truncate text-[11px] text-slate-500">
                   {externalDataSyncStatus.message}
                 </span>
               </span>

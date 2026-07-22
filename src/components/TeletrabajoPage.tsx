@@ -937,7 +937,7 @@ export function TeletrabajoPage({
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      className="space-y-3"
       id="teletrabajo"
     >
       <TeletrabajoPageHeader

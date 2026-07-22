@@ -550,7 +550,7 @@ export function TaskEditor({
             <LockKeyhole className="shrink-0 opacity-70" size={15} />
             <span className="text-xs font-semibold">{lockMessage}</span>
             {shouldShowReadOnlyBadge && (
-              <span className="ml-auto shrink-0 rounded-md border border-red-400/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-300">
+              <span className="ml-auto shrink-0 rounded-md border border-red-400/30 px-2 py-0.5 text-[11px] font-bold text-red-300">
                 Solo lectura
               </span>
             )}
@@ -565,14 +565,14 @@ export function TaskEditor({
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button
-                className="rounded-md border border-amber-300/40 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-50 hover:bg-amber-400/10"
+                className="rounded-md border border-amber-300/40 px-2 py-1 text-xs font-bold text-amber-50 hover:bg-amber-400/10"
                 onClick={handleReloadExternalTask}
                 type="button"
               >
                 Recargar
               </button>
               <button
-                className="rounded-md border border-amber-300/20 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-100 hover:bg-amber-400/10"
+                className="rounded-md border border-amber-300/20 px-2 py-1 text-xs font-bold text-amber-100 hover:bg-amber-400/10"
                 onClick={handleIgnoreExternalTask}
                 type="button"
               >

@@ -552,7 +552,7 @@ export function DashboardCards({
                   <span className="text-sm font-black">
                     {kpi.segments.reduce((sum, segment) => sum + segment.value, 0)}
                   </span>
-                  <span className="text-[10px] font-bold text-metro-muted">Total</span>
+                  <span className="text-xs font-semibold text-metro-muted">Total</span>
                 </div>
               </div>
             </div>
@@ -683,7 +683,7 @@ export function DashboardCards({
                       />
                     ))}
                     {events.length > 4 && (
-                      <span className="text-[9px] leading-none text-metro-muted">
+                      <span className="text-[11px] leading-none text-metro-muted">
                         +{events.length - 4}
                       </span>
                     )}
@@ -738,7 +738,7 @@ export function DashboardCards({
               />
             </div>
             <div className="min-w-0 overflow-hidden border-t border-metro-border pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
-              <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-metro-muted">
+              <p className="mb-2 text-xs font-bold text-metro-muted">
                 Tareas por estado
               </p>
               <div className="space-y-2">

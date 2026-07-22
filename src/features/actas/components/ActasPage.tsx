@@ -705,7 +705,7 @@ export function ActasPage() {
 
   return (
     <section
-      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      className="space-y-3"
       id="actas"
     >
       <PageHeader
@@ -797,7 +797,7 @@ export function ActasPage() {
       )}
 
       <div className="rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-metro-muted">
+        <h3 className="mb-3 text-sm font-bold text-metro-muted">
           Actas abiertas
         </h3>
         <DataTable
@@ -818,7 +818,7 @@ export function ActasPage() {
       </div>
 
       <div className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+        <h3 className="text-sm font-bold text-metro-muted">
           Histórico de actas
         </h3>
         {!hasLoadedHistoricalActas && !search.trim() && !yearFilter && (

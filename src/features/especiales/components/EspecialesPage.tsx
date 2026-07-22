@@ -389,8 +389,8 @@ export function EspecialesPage() {
   };
 
   return (
-    <section className="space-y-4" id="especiales">
-      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
+    <section className="space-y-3" id="especiales">
+      <div>
         <PageHeader
           title="Especiales"
           status={<InlineSaveFeedback />}

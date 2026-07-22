@@ -29,7 +29,7 @@ export function DashboardRecordsModal({
       <div className="w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-metro-border bg-metro-surface text-metro-text shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-metro-red">
+            <p className="text-xs font-bold text-metro-red">
               {eyebrow}
             </p>
             <h3 className="mt-1 text-lg font-black capitalize">{title}</h3>

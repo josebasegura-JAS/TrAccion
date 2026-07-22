@@ -284,7 +284,7 @@ export function LicenciasSinSueldoPage() {
 
   return (
     <section
-      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      className="space-y-3"
       id="licencias-sin-sueldo"
     >
       <PageHeader

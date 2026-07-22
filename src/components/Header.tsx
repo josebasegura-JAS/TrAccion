@@ -130,7 +130,7 @@ export function Header({
     <header className="flex h-[72px] items-center justify-between border-b border-metro-border bg-metro-topbar/95 px-6 shadow-sm shadow-slate-950/20">
       <div className="flex min-w-0 items-center gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-metro-muted">
+          <p className="truncate text-xs font-semibold text-metro-muted">
             {breadcrumb}
           </p>
           <h1 className="truncate text-xl font-semibold tracking-tight text-metro-text">
@@ -160,7 +160,7 @@ export function Header({
             />
           </div>
           <div className="hidden min-w-0 sm:block">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-metro-muted">Usuario</p>
+            <p className="text-xs text-metro-muted">Usuario</p>
             <p className="max-w-[11rem] truncate text-sm font-semibold text-metro-text">
               {windowsUserName}
             </p>

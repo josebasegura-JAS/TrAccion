@@ -33,7 +33,7 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
       <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
         <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+            <p className="text-xs font-semibold text-metro-red">
               Vista previa
             </p>
             <h3 className="text-lg font-bold text-metro-text">{title}</h3>

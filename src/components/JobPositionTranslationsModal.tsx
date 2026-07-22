@@ -259,7 +259,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
     <ModalShell labelledBy="job-position-translations-modal-title" onClose={onClose}>
       <header className="flex items-start justify-between gap-3 border-b border-metro-border p-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
+          <p className="text-xs font-semibold text-metro-red">
             Plantilla
           </p>
           <h3
@@ -361,7 +361,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
         </div>
 
         <div className="grid gap-3 border-b border-metro-border bg-metro-panel/45 p-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-end">
-          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-metro-muted">
+          <label className="grid gap-1 text-xs font-semibold text-metro-muted">
             Puesto
             <input
               className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
@@ -373,7 +373,7 @@ export function JobPositionTranslationsModal({ onClose }: JobPositionTranslation
               value={draft.puestoCastellano}
             />
           </label>
-          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-metro-muted">
+          <label className="grid gap-1 text-xs font-semibold text-metro-muted">
             Traducción
             <input
               className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"

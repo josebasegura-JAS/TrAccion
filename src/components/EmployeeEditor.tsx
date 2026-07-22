@@ -188,7 +188,7 @@ export function EmployeeEditor({
 
           {!isCreate && employee && (
             <section className="rounded-lg border border-metro-border bg-metro-surface p-3 text-xs text-metro-muted">
-              <p className="mb-2 font-semibold uppercase tracking-wide text-metro-text">
+              <p className="mb-2 font-semibold text-metro-text">
                 Campos derivados
               </p>
               <dl className="space-y-1">

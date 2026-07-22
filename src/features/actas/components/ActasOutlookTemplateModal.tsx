@@ -57,7 +57,7 @@ export function ActasOutlookTemplateModal({
           </FieldLabel>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Cuerpo plantilla
             </p>
             <div

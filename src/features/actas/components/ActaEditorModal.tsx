@@ -109,7 +109,7 @@ export function ActaEditorModal({
             </div>
           )}
           <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
               Tipo
               <select
                 className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
@@ -124,7 +124,7 @@ export function ActaEditorModal({
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
               Fecha sesión
               <input
                 className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
@@ -133,13 +133,13 @@ export function ActaEditorModal({
                 value={draft.fechaSesion}
               />
             </label>
-            <div className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+            <div className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
               Fecha creación
               <div className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text">
                 {formatDate(displayedCreationDate)}
               </div>
             </div>
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
               Fecha límite
               <span className="relative block">
                 <input
@@ -158,7 +158,7 @@ export function ActaEditorModal({
                 )}
               </span>
             </label>
-            <label className="flex flex-col gap-1 text-[11px] font-semibold uppercase tracking-wide text-metro-muted">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
               Título
               <input
                 className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
@@ -200,7 +200,7 @@ export function ActaEditorModal({
 
           <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+              <h4 className="text-sm font-bold text-metro-muted">
                 Actualizaciones
               </h4>
               <span className="text-xs text-metro-muted">
@@ -244,7 +244,7 @@ export function ActaEditorModal({
 
           <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+              <h4 className="text-sm font-bold text-metro-muted">
                 Alegaciones
               </h4>
               <ActionButton
@@ -322,7 +322,7 @@ export function ActaEditorModal({
           <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h4 className="text-sm font-bold uppercase tracking-wide text-metro-muted">
+                <h4 className="text-sm font-bold text-metro-muted">
                   Acta firmada
                 </h4>
                 <p className="text-xs text-metro-muted">
