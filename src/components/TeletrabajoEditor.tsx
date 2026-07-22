@@ -23,6 +23,7 @@ import { TeletrabajoEditorHeader } from './teletrabajo-editor/TeletrabajoEditorH
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
+import { ModalShell } from './ui/ModalShell';
 
 function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   if (!solicitud) {
@@ -232,11 +233,13 @@ export function TeletrabajoEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <aside
-        aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(820px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
-        role="dialog"
+    <>
+      <ModalShell
+        blockEditorShortcuts={false}
+        labelledBy="teletrabajo-editor-title"
+        maxWidthClassName="max-w-[820px]"
+        onClose={() => void requestClose()}
+        panelClassName="bg-metro-panel"
       >
         <TeletrabajoEditorHeader
           empleado={draft.empleado}
@@ -247,6 +250,7 @@ export function TeletrabajoEditor({
           solicitudId={solicitud?.id ?? null}
         />
 
+        <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-3">
         {lockMessage && (
           <p className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
             isFormReadOnly
@@ -401,9 +405,10 @@ export function TeletrabajoEditor({
             </button>
           </div>
         </form>
-      </aside>
+        </div>
+      </ModalShell>
       {dialogNode}
       {recoveryDialogNode}
-    </div>
+    </>
   );
 }

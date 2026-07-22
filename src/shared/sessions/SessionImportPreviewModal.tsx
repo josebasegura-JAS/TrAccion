@@ -2,6 +2,8 @@ import type { SessionImportPreview } from './sessionImport';
 import { ImportMetric } from './SessionManagementPageCards';
 import type { SessionModuleConfig } from './session';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../table/CompactTable';
+import { ActionButton } from '../../components/ui/ActionButton';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../components/ui/ModalShell';
 
 export function SessionImportPreviewModal({
   config,
@@ -18,22 +20,25 @@ export function SessionImportPreviewModal({
   relevantImportSessions: SessionImportPreview['sessions'];
   relevantImportTaskCount: number;
 }) {
+  const titleId = 'session-import-preview-modal-title';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[86vh] w-full max-w-4xl overflow-auto rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-2xl">
-        <h3 className="text-lg font-bold text-metro-text">
+    <ModalShell labelledBy={titleId} maxWidthClassName="max-w-4xl" onClose={onCancel}>
+      <ModalHeader>
+        <ModalTitle
+          id={titleId}
+          subtitle="Se importarán solo las sesiones compatibles. Los duplicados por código y fecha se omiten."
+        >
           Previsualización de importación · {config.title}
-        </h3>
-        <p className="mt-1 text-sm text-metro-muted">
-          Se importarán solo las sesiones compatibles con este módulo. Las sesiones con el mismo
-          código y fecha se omiten.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        </ModalTitle>
+      </ModalHeader>
+      <ModalBody className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-3">
           <ImportMetric label="Sesiones detectadas" value={relevantImportSessions.length} />
           <ImportMetric label="Puntos detectados" value={relevantImportTaskCount} />
           <ImportMetric label="Líneas ignoradas" value={ignoredLineCount} />
         </div>
-        <div className="mt-3 max-h-[380px] overflow-auto rounded-xl border border-metro-border">
+        <div className="max-h-[380px] overflow-auto rounded-xl border border-metro-border">
           <CompactTable>
             <CompactTableHead>
               <tr>
@@ -59,24 +64,20 @@ export function SessionImportPreviewModal({
             </CompactTableBody>
           </CompactTable>
         </div>
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <button
-            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onCancel}
-            type="button"
-          >
-            Cancelar
-          </button>
-          <button
-            className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={relevantImportSessions.length === 0}
-            onClick={onConfirm}
-            type="button"
-          >
-            Confirmar importación
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter>
+        <ActionButton iconOnly={false} onClick={onCancel} variant="secondary">
+          Cancelar
+        </ActionButton>
+        <ActionButton
+          disabled={relevantImportSessions.length === 0}
+          iconOnly={false}
+          onClick={onConfirm}
+          variant="save"
+        >
+          Confirmar importación
+        </ActionButton>
+      </ModalFooter>
+    </ModalShell>
   );
 }

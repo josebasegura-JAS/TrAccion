@@ -35,6 +35,7 @@ import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -181,25 +182,21 @@ function VinculogramaModal({
     });
   };
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
-        <div className="flex items-start justify-between border-b border-metro-border px-5 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Vinculograma
-            </p>
-            <h3 className="text-xl font-bold text-metro-text">
-              {mode === 'create' ? 'Nuevo vínculo' : 'Editar vínculo'}
-            </h3>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ModalDatabaseStatus />
-            <ModalCloseButton onClick={onClose} />
-          </div>
-        </div>
+  const titleId = 'vinculograma-editor-modal-title';
 
-        <div className="px-5 py-4">
+  return (
+    <ModalShell labelledBy={titleId} maxWidthClassName="max-w-2xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle id={titleId} subtitle="Vinculograma">
+          {mode === 'create' ? 'Nuevo vínculo' : 'Editar vínculo'}
+        </ModalTitle>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModalDatabaseStatus />
+          <ModalCloseButton onClick={onClose} />
+        </div>
+      </ModalHeader>
+
+      <ModalBody>
           {lockMessage && (
             <p
               className={`mb-4 rounded-lg border px-3 py-2 text-xs font-semibold ${
@@ -269,7 +266,7 @@ function VinculogramaModal({
               <Input className="font-semibold" readOnly value={expiryDate} />
             </FieldLabel>
           </fieldset>
-        </div>
+      </ModalBody>
 
         {saveStatus && (
           <p className="mx-5 mt-4 rounded-xl border border-red-400/40 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-100">
@@ -277,7 +274,7 @@ function VinculogramaModal({
           </p>
         )}
 
-        <div className="flex flex-wrap justify-between gap-2 border-t border-metro-border px-5 py-4">
+      <ModalFooter className="justify-between">
           <div>
             {mode === 'edit' && (
               <ActionButton
@@ -314,9 +311,8 @@ function VinculogramaModal({
             </ActionButton>
             <InlineSaveFeedback />
           </div>
-        </div>
-      </div>
-    </div>
+      </ModalFooter>
+    </ModalShell>
   );
 }
 
@@ -404,20 +400,16 @@ function SolicitudVinculogramaModal({
         ? 'border-red-400/40 bg-red-950/20 text-red-100'
         : 'border-metro-border bg-metro-panel text-metro-muted';
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
-        <div className="flex items-start justify-between border-b border-metro-border px-5 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-              Vinculograma
-            </p>
-            <h3 className="text-xl font-bold text-metro-text">Enviar solicitud</h3>
-          </div>
-          <ModalCloseButton onClick={onClose} />
-        </div>
+  const titleId = 'vinculograma-request-modal-title';
 
-        <div className="space-y-4 px-5 py-4">
+  return (
+    <ModalShell labelledBy={titleId} maxWidthClassName="max-w-2xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle id={titleId} subtitle="Vinculograma">Enviar solicitud</ModalTitle>
+        <ModalCloseButton onClick={onClose} />
+      </ModalHeader>
+
+      <ModalBody className="space-y-4">
           <p className="text-sm text-metro-muted">
             Busca la persona solicitante en Plantilla. El DOCX se generará con nombre, DNI y fecha
             actual; los datos de la persona vinculada quedan en blanco.
@@ -473,9 +465,9 @@ function SolicitudVinculogramaModal({
               {status}
             </p>
           )}
-        </div>
+      </ModalBody>
 
-        <div className="flex justify-end gap-2 border-t border-metro-border px-5 py-4">
+      <ModalFooter>
           <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>
             Cancelar
           </ActionButton>
@@ -487,9 +479,8 @@ function SolicitudVinculogramaModal({
           >
             {isGenerating ? 'Generando…' : 'Generar Word'}
           </ActionButton>
-        </div>
-      </div>
-    </div>
+      </ModalFooter>
+    </ModalShell>
   );
 }
 

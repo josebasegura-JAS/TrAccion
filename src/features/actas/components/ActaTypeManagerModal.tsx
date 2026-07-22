@@ -1,6 +1,9 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { Input } from '../../../components/ui/Field';
+import { ModalBody, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import type { ActaTypeDefinition } from '../domain/acta';
 
 export function ActaTypeManagerModal({
@@ -26,23 +29,22 @@ export function ActaTypeManagerModal({
   setPendingDeleteActaTypeId: (typeId: string | null) => void;
   toggleActaTypeWithFeedback: (typeId: string) => Promise<void>;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
-        <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
-          <div>
-            <h3 className="text-lg font-bold text-metro-text">Tipos de acta</h3>
-            <p className="text-xs text-metro-muted">
-              Alta, deshabilitado y borrado seguro de tipos sin actas asociadas.
-            </p>
-          </div>
-          <ModalCloseButton onClick={onClose} />
-        </div>
+  const titleId = 'acta-type-manager-modal-title';
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+  return (
+    <ModalShell labelledBy={titleId} maxWidthClassName="max-w-2xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle
+          id={titleId}
+          subtitle="Alta, deshabilitado y borrado seguro de tipos sin actas asociadas."
+        >
+          Tipos de acta
+        </ModalTitle>
+        <ModalCloseButton onClick={onClose} />
+      </ModalHeader>
+      <ModalBody className="space-y-4">
           <div className="grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px]">
-            <input
-              className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            <Input
               onChange={(event) => setNewActaTypeName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -53,14 +55,9 @@ export function ActaTypeManagerModal({
               placeholder="Nuevo tipo de acta..."
               value={newActaTypeName}
             />
-            <button
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-              onClick={() => void saveNewActaType()}
-              type="button"
-            >
-              <Plus size={16} />
+            <ActionButton icon={Plus} iconOnly={false} onClick={() => void saveNewActaType()} variant="save">
               Alta
-            </button>
+            </ActionButton>
           </div>
 
           <div className="space-y-2">
@@ -121,8 +118,7 @@ export function ActaTypeManagerModal({
               </p>
             )}
           </div>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+    </ModalShell>
   );
 }

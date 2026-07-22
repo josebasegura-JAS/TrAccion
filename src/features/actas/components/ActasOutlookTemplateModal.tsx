@@ -1,5 +1,8 @@
 import type { MutableRefObject } from 'react';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { FieldLabel, Input } from '../../../components/ui/Field';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import type { ActasOutlookTemplate } from './actasPage.helpers';
 
 export function ActasOutlookTemplateModal({
@@ -19,19 +22,19 @@ export function ActasOutlookTemplateModal({
   outlookTemplateStatusIsError: boolean;
   setOutlookTemplate: (update: (current: ActasOutlookTemplate) => ActasOutlookTemplate) => void;
 }) {
+  const titleId = 'actas-outlook-template-modal-title';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl">
-        <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
-          <div>
-            <h3 className="text-lg font-bold text-metro-text">Plantilla Outlook Actas</h3>
-            <p className="text-xs text-metro-muted">
-              Pega el cuerpo desde Outlook. No se configuran destinatarios: Para y CC quedarán
-              vacíos.
-            </p>
-          </div>
-          <ModalCloseButton onClick={onClose} />
-        </div>
+    <ModalShell labelledBy={titleId} maxWidthClassName="max-w-4xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle
+          id={titleId}
+          subtitle="Pega el cuerpo desde Outlook. Los campos Para y CC quedarán vacíos."
+        >
+          Plantilla Outlook Actas
+        </ModalTitle>
+        <ModalCloseButton onClick={onClose} />
+      </ModalHeader>
 
         {outlookTemplateStatus && (
           <p
@@ -41,18 +44,17 @@ export function ActasOutlookTemplateModal({
           </p>
         )}
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
+      <ModalBody className="space-y-4">
+          <FieldLabel>
             Asunto plantilla
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+            <Input
               onChange={(event) =>
                 setOutlookTemplate((current) => ({ ...current, subject: event.target.value }))
               }
               placeholder="Akta ZIRRIBORROA BORRADOR Acta [Título Acta]"
               value={outlookTemplate.subject}
             />
-          </label>
+          </FieldLabel>
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">
@@ -74,25 +76,16 @@ export function ActasOutlookTemplateModal({
               AAAA/MM/DD] · [Fecha Límite formato DD/MM/AAAA]
             </p>
           </div>
-        </div>
+      </ModalBody>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
-          <button
-            className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-            onClick={onClose}
-            type="button"
-          >
-            Cancelar
-          </button>
-          <button
-            className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={onSave}
-            type="button"
-          >
-            Guardar plantilla
-          </button>
-        </div>
-      </div>
-    </div>
+      <ModalFooter>
+        <ActionButton iconOnly={false} onClick={onClose} variant="secondary">
+          Cancelar
+        </ActionButton>
+        <ActionButton iconOnly={false} onClick={onSave} variant="save">
+          Guardar plantilla
+        </ActionButton>
+      </ModalFooter>
+    </ModalShell>
   );
 }

@@ -23,6 +23,7 @@ import { ModalCloseButton } from './ui/ModalCloseButton';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
+import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -512,35 +513,31 @@ export function TaskEditor({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <aside
-        aria-labelledby="task-editor-title"
-        aria-modal="true"
-        className="flex max-h-[calc(100vh-1rem)] w-[min(1040px,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
-        role="dialog"
+    <>
+      <ModalShell
+        blockEditorShortcuts={false}
+        labelledBy="task-editor-title"
+        maxWidthClassName="max-w-[1040px]"
+        onClose={() => void requestClose()}
+        panelClassName="bg-metro-panel"
       >
-        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
-              {isCreate ? 'Nueva tarea' : 'Editar tarea'}
-            </p>
-            <h3
-              className="mt-1 truncate text-base font-bold text-metro-text"
-              id="task-editor-title"
-            >
-              {isCreate ? 'Nueva tarea' : task?.titulo || 'Sin selección'}
-            </h3>
-            <p className="text-xs text-metro-muted">
-              {isCreate
+        <ModalHeader>
+          <ModalTitle
+            id="task-editor-title"
+            subtitle={
+              isCreate
                 ? 'Alta manual compacta para tarea interna o sindical.'
-                : `Editando tarea ${task?.id ?? '—'}`}
-            </p>
-          </div>
+                : `Editando tarea ${task?.id ?? '—'}`
+            }
+          >
+            {isCreate ? 'Nueva tarea' : task?.titulo || 'Sin selección'}
+          </ModalTitle>
           <div className="flex shrink-0 items-center gap-2">
             <ModalDatabaseStatus />
             <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
           </div>
-        </div>
+        </ModalHeader>
+        <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-3">
 
         {lockMessage && (
           <div
@@ -952,9 +949,10 @@ export function TaskEditor({
             </button>
           </div>
         </form>
-      </aside>
+        </div>
+      </ModalShell>
       {dialogNode}
       {recoveryDialogNode}
-    </div>
+    </>
   );
 }

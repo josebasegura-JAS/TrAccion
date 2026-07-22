@@ -8,6 +8,8 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 interface ModalShellProps {
   children: ReactNode;
+  /** Bloquea los atajos globales de editores mientras el modal está abierto. */
+  blockEditorShortcuts?: boolean;
   /** id del elemento que sirve de título del diálogo (para aria-labelledby). */
   labelledBy: string;
   /** Clase de ancho máximo del panel, p.ej. 'max-w-5xl' o 'max-w-3xl'. */
@@ -19,6 +21,7 @@ interface ModalShellProps {
 
 /** Contenedor común para editores y modales de contenido amplio. */
 export function ModalShell({
+  blockEditorShortcuts = true,
   children,
   labelledBy,
   maxWidthClassName = 'max-w-5xl',
@@ -31,7 +34,7 @@ export function ModalShell({
 
   return (
     <div
-      data-block-editor-shortcuts="true"
+      data-block-editor-shortcuts={blockEditorShortcuts ? 'true' : undefined}
       className={cx(
         'fixed inset-0 flex items-center justify-center bg-slate-950/72 p-3',
         stacked ? 'z-[60]' : 'z-50',
