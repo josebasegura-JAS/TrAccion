@@ -15,6 +15,7 @@ import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../../../hooks/useEditorShortcuts';
 
@@ -85,29 +86,24 @@ export function CriterioRrllEditor({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <aside
-        aria-modal="true"
-        className="flex max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-2xl"
-        role="dialog"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-metro-border bg-metro-surface px-3 py-2">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-metro-red">
-              {isCreate ? 'Nuevo criterio RRLL' : 'Editar criterio RRLL'}
-            </p>
-            <h3 className="mt-1 truncate text-base font-bold text-metro-text">
-              {isCreate ? 'Nuevo criterio' : criterio?.tema || 'Sin selección'}
-            </h3>
-            <p className="text-xs text-metro-muted">
-              {isCreate ? 'Alta manual compacta.' : `Editando criterio ${criterio?.id ?? '—'}`}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ModalDatabaseStatus />
+    <ModalShell
+      labelledBy="criterio-rrll-editor-title"
+      maxWidthClassName="max-w-[720px]"
+      onClose={() => void requestClose()}
+      panelClassName="bg-metro-panel"
+    >
+      <ModalHeader>
+        <ModalTitle
+          id="criterio-rrll-editor-title"
+          subtitle={isCreate ? 'Alta manual compacta.' : `Editando criterio ${criterio?.id ?? '—'}`}
+        >
+          {isCreate ? 'Nuevo criterio RRLL' : criterio?.tema || 'Editar criterio RRLL'}
+        </ModalTitle>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModalDatabaseStatus />
           <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
-          </div>
         </div>
+      </ModalHeader>
 
         {recordLock.status === 'locked' && recordLock.lockedBy && (
           <div className="mb-3 rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
@@ -253,8 +249,7 @@ export function CriterioRrllEditor({
             </ActionButton>
           </div>
         </form>
-      </aside>
       {dialogNode}
-    </div>
+    </ModalShell>
   );
 }

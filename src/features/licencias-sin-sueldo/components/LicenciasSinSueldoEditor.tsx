@@ -4,6 +4,7 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select, Textarea } from '../../../components/ui/Field';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { Notice } from '../../../components/ui/Notice';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
@@ -151,28 +152,30 @@ export function LicenciasSinSueldoEditor({
   });
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl shadow-slate-950/50">
-        <div className="flex items-center justify-between border-b border-metro-border px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-metro-text">
-              {mode === 'create' ? 'Nueva licencia o permiso' : 'Ficha de licencia o permiso'}
-            </h2>
-            <p className="text-xs text-metro-muted">
-              Doble clic en una fila abre esta ficha para editar el flujo.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ModalDatabaseStatus />
-            <ModalCloseButton onClick={() => void requestClose()} />
-          </div>
+    <ModalShell
+      labelledBy="licencia-editor-title"
+      maxWidthClassName="max-w-4xl"
+      onClose={() => void requestClose()}
+      panelClassName="bg-metro-panel"
+    >
+      <ModalHeader>
+        <ModalTitle
+          id="licencia-editor-title"
+          subtitle="Doble clic en una fila abre esta ficha para editar el flujo."
+        >
+          {mode === 'create' ? 'Nueva licencia o permiso' : 'Ficha de licencia o permiso'}
+        </ModalTitle>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModalDatabaseStatus />
+          <ModalCloseButton onClick={() => void requestClose()} />
         </div>
+      </ModalHeader>
 
-        <div className="max-h-[70vh] space-y-4 overflow-auto px-5 py-4">
+      <ModalBody className="space-y-4">
           {lockMessage && <Notice tone={isReadOnly ? 'error' : 'muted'}>{lockMessage}</Notice>}
 
           {saveStatus && (
-            <Notice className="mx-5 mt-4" tone="error">
+            <Notice tone="error">
               {saveStatus}
             </Notice>
           )}
@@ -350,9 +353,9 @@ export function LicenciasSinSueldoEditor({
               </div>
             </section>
           </fieldset>
-        </div>
+      </ModalBody>
 
-        <div className="flex items-center justify-between gap-2 border-t border-metro-border px-5 py-4">
+      <ModalFooter className="justify-between">
           <div>
             {mode === 'edit' && (
               <ActionButton
@@ -387,9 +390,8 @@ export function LicenciasSinSueldoEditor({
             </ActionButton>
             <InlineSaveFeedback />
           </div>
-        </div>
-      </div>
+      </ModalFooter>
       {dialogNode}
-    </div>
+    </ModalShell>
   );
 }

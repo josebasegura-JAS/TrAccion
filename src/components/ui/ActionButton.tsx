@@ -148,6 +148,7 @@ export function ActionButton({
   children,
   className,
   disabled,
+  icon: iconOverride,
   iconOnly = true,
   loading = false,
   size = 'md',
@@ -156,7 +157,7 @@ export function ActionButton({
   variant,
   ...props
 }: ActionButtonProps) {
-  const Icon = iconByVariant[variant];
+  const Icon = iconOverride ?? (variant === 'secondary' ? null : iconByVariant[variant]);
   const label = children ?? labelByVariant[variant];
   const accessibleTitle = title ?? (typeof label === 'string' ? label : labelByVariant[variant]);
   const iconSize = size === 'sm' ? 14 : 16;
@@ -180,7 +181,11 @@ export function ActionButton({
       type={type}
       {...props}
     >
-      {loading ? <Loader2 className="animate-spin" size={iconSize} /> : <Icon size={iconSize} />}
+      {loading ? (
+        <Loader2 className="animate-spin" size={iconSize} />
+      ) : Icon ? (
+        <Icon size={iconSize} />
+      ) : null}
       {!iconOnly && <span>{label}</span>}
     </button>
   );

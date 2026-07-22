@@ -4,6 +4,7 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import {
@@ -89,27 +90,18 @@ export function ActaEditorModal({
   updateDraft: <K extends keyof ActaDraft>(key: K, value: ActaDraft[K]) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div
-        aria-labelledby="actas-editor-title"
-        aria-modal="true"
-        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-2xl"
-        role="dialog"
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-metro-border px-4 py-3">
-          <div className="min-w-0">
-            <h3 className="text-lg font-bold text-metro-text" id="actas-editor-title">
-              {editingActaId ? 'Editar acta' : 'Nueva acta'}
-            </h3>
-            <p className="text-xs text-metro-muted">Estado actual: {draft.estado}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ModalDatabaseStatus />
-            <ModalCloseButton onClick={onClose} />
-          </div>
+    <ModalShell labelledBy="actas-editor-title" maxWidthClassName="max-w-5xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle id="actas-editor-title" subtitle={`Estado actual: ${draft.estado}`}>
+          {editingActaId ? 'Editar acta' : 'Nueva acta'}
+        </ModalTitle>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModalDatabaseStatus />
+          <ModalCloseButton onClick={onClose} />
         </div>
+      </ModalHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+      <ModalBody className="space-y-4">
           {recordLock.status === 'locked' && recordLock.lockedBy && (
             <div className="rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-4 py-3 text-sm font-semibold text-yellow-100">
               📖 Modo consulta — editando: {recordLock.lockedBy.ownerName}@
@@ -374,9 +366,9 @@ export function ActaEditorModal({
               </p>
             )}
           </div>
-        </div>
+      </ModalBody>
 
-        {outlookDraftStatus && (
+      {outlookDraftStatus && (
           <p
             className={`mx-4 rounded-lg border px-3 py-2 text-xs font-semibold ${outlookDraftStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
           >
@@ -389,7 +381,7 @@ export function ActaEditorModal({
             {saveError}
           </p>
         )}
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-metro-border px-4 py-3">
+      <ModalFooter>
           <ActionButton iconOnly={false} onClick={onClose} variant="secondary">
             Cancelar
           </ActionButton>
@@ -439,8 +431,7 @@ export function ActaEditorModal({
             />
           )}
           <InlineSaveFeedback />
-        </div>
-      </div>
-    </div>
+      </ModalFooter>
+    </ModalShell>
   );
 }
