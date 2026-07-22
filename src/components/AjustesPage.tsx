@@ -603,7 +603,7 @@ export function AjustesPage() {
 
   return (
     <>
-      <section className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
+      <section className="rounded-3xl border border-metro-border bg-metro-surface p-5">
         <PageHeader
           helpSections={AJUSTES_HELP_SECTIONS}
           helpSubtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
@@ -663,7 +663,7 @@ export function AjustesPage() {
           handleExportIntegrityReport={handleExportIntegrityReport}
         />
 
-        <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
           <div className="mb-4">
             <h3 className="text-base font-bold text-metro-text">Plantilla Teletrabajo</h3>
             <p className="mt-1 text-sm text-metro-muted">
@@ -697,7 +697,7 @@ export function AjustesPage() {
           </div>
         </div>
 
-        <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
           <div className="mb-4">
             <h3 className="text-base font-bold text-metro-text">Plantilla Licencia sin sueldo</h3>
             <p className="mt-1 text-sm text-metro-muted">
@@ -734,7 +734,7 @@ export function AjustesPage() {
           </div>
         </div>
 
-        <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
           <div className="mb-4">
             <h3 className="text-base font-bold text-metro-text">Plantilla Vinculograma</h3>
             <p className="mt-1 text-sm text-metro-muted">
@@ -773,7 +773,7 @@ export function AjustesPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="rounded-xl border border-metro-border bg-metro-panel p-4">
           <div className="mb-4">
             <h3 className="text-base font-bold text-metro-text">Fases de tareas</h3>
             <p className="mt-1 text-sm text-metro-muted">

@@ -21,6 +21,7 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -99,7 +100,7 @@ const drawHistoryExportColumns: ExportColumn<SorteosDraw>[] = [
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-0 rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 shadow-sm">
-      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-metro-muted">
+      <p className="truncate text-xs font-semibold text-metro-muted">
         {label}
       </p>
       <p className="mt-0.5 text-xl font-bold leading-none text-metro-text">{value}</p>
@@ -110,8 +111,8 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 function WinnersTable({ draw }: { draw: SorteosDraw }) {
   return (
     <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
-      <table className="w-full table-auto text-left text-sm">
-        <thead className="bg-metro-panel text-[11px] uppercase tracking-[0.16em] text-metro-muted">
+      <CompactTable>
+        <CompactTableHead>
           <tr>
             <th className="px-3 py-2 font-semibold">Posición</th>
             <th className="px-3 py-2 font-semibold">Nº empleado</th>
@@ -119,8 +120,8 @@ function WinnersTable({ draw }: { draw: SorteosDraw }) {
             <th className="px-3 py-2 font-semibold">Sorteo</th>
             <th className="px-3 py-2 font-semibold">Fecha</th>
           </tr>
-        </thead>
-        <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+        </CompactTableHead>
+        <CompactTableBody className="[&>tr:hover]:bg-metro-red/10">
           {draw.winners.map((winner: SorteosWinner) => (
             <tr
               className="hover:bg-metro-panel/70"
@@ -133,8 +134,8 @@ function WinnersTable({ draw }: { draw: SorteosDraw }) {
               <td className="px-3 py-2 text-metro-muted">{draw.date}</td>
             </tr>
           ))}
-        </tbody>
-      </table>
+        </CompactTableBody>
+      </CompactTable>
     </div>
   );
 }
@@ -267,7 +268,7 @@ export function SorteosPage() {
 
   return (
     <section
-      className="space-y-4 rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"
+      className="space-y-3"
       id="sorteos"
     >
       <PageHeader
@@ -279,11 +280,11 @@ export function SorteosPage() {
       />
 
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)] xl:items-start">
-        <div className="min-w-0 rounded-xl border border-metro-border bg-metro-panel p-3">
+        <div className="min-w-0 rounded-xl bg-metro-panel p-3">
           <div className="mb-2 flex items-center gap-2">
             <Gift className="h-4 w-4 shrink-0 text-metro-red" />
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-metro-red">
+              <p className="text-xs font-semibold text-metro-red">
                 Acciones
               </p>
               <h3 className="truncate text-base font-bold text-metro-text">Crear sorteo</h3>
@@ -342,9 +343,9 @@ export function SorteosPage() {
           )}
         </div>
 
-        <div className="min-w-0 rounded-xl border border-metro-border bg-metro-panel p-3">
+        <div className="min-w-0 rounded-xl bg-metro-panel p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-metro-red">
+            <p className="text-xs font-semibold text-metro-red">
               Plantilla / disponibilidad
             </p>
           </div>
@@ -357,7 +358,7 @@ export function SorteosPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+      <div className="rounded-xl bg-metro-panel p-3">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-base font-bold text-metro-text">Resultado del sorteo</h3>
@@ -401,7 +402,7 @@ export function SorteosPage() {
         {exclusionsOpen && (
           <div className="space-y-3 border-t border-metro-border p-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.2fr)]">
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="rounded-xl bg-metro-surface p-3">
                 <label className="block text-sm font-semibold text-metro-text">
                   Buscar persona a excluir
                   <div className="mt-1 flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 focus-within:border-metro-red">
@@ -469,7 +470,7 @@ export function SorteosPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="rounded-xl bg-metro-surface p-3">
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h4 className="text-sm font-bold text-metro-text">Personas excluidas</h4>
                   <ExportPrintButtons
@@ -490,8 +491,8 @@ export function SorteosPage() {
                   </button>
                 </div>
                 <div className="overflow-hidden rounded-lg border border-metro-border">
-                  <table className="w-full table-auto text-left text-sm">
-                    <thead className="bg-metro-panel text-[11px] uppercase tracking-[0.16em] text-metro-muted">
+                  <CompactTable>
+                    <CompactTableHead>
                       <tr>
                         <th className="px-3 py-2">Nº empleado</th>
                         <th className="px-3 py-2">Nombre</th>
@@ -499,8 +500,8 @@ export function SorteosPage() {
                         <th className="px-3 py-2">Fecha</th>
                         <th className="px-3 py-2">Acción</th>
                       </tr>
-                    </thead>
-                    <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+                    </CompactTableHead>
+                    <CompactTableBody className="[&>tr:hover]:bg-metro-red/10">
                       {exclusions.map((exclusion) => (
                         <tr key={exclusion.id}>
                           <td className="px-3 py-2 text-metro-text">{exclusion.empleado}</td>
@@ -551,8 +552,8 @@ export function SorteosPage() {
                           </td>
                         </tr>
                       )}
-                    </tbody>
-                  </table>
+                    </CompactTableBody>
+                  </CompactTable>
                 </div>
               </div>
             </div>
@@ -643,16 +644,16 @@ export function SorteosPage() {
         {historyOpen && (
           <div className="border-t border-metro-border p-3">
             <div className="overflow-hidden rounded-lg border border-metro-border bg-metro-surface">
-              <table className="w-full table-auto text-left text-sm">
-                <thead className="bg-metro-panel text-[11px] uppercase tracking-[0.16em] text-metro-muted">
+              <CompactTable>
+                <CompactTableHead>
                   <tr>
                     <th className="px-3 py-2">Sorteo</th>
                     <th className="px-3 py-2">Fecha</th>
                     <th className="px-3 py-2">Ganadores</th>
                     <th className="px-3 py-2">Acciones</th>
                   </tr>
-                </thead>
-                <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+                </CompactTableHead>
+                <CompactTableBody className="[&>tr:hover]:bg-metro-red/10">
                   {draws.map((draw) => (
                     <tr key={draw.id}>
                       <td className="px-3 py-2 font-semibold text-metro-text">{draw.title}</td>
@@ -727,8 +728,8 @@ export function SorteosPage() {
                       </td>
                     </tr>
                   )}
-                </tbody>
-              </table>
+                </CompactTableBody>
+              </CompactTable>
             </div>
           </div>
         )}

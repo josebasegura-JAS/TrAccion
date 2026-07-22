@@ -3,6 +3,7 @@ import { ActionButton } from '../ui/ActionButton';
 import { Notice } from '../ui/Notice';
 import { StatusBadge } from '../ui/StatusBadge';
 import { formatBackupDate, formatBytesAsMb } from './ajustesCommon';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../shared/table/CompactTable';
 
 interface DataIntegrityAuditSectionProps {
   integrityReport: TraccionDataIntegrityReport | null;
@@ -22,7 +23,7 @@ export function DataIntegrityAuditSection({
   return (
     <div
       id="diagnostico-integridad"
-      className="mb-4 scroll-mt-6 rounded-2xl border border-metro-border bg-metro-panel p-4"
+      className="mb-3 scroll-mt-6 rounded-xl bg-metro-panel p-3"
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -63,7 +64,7 @@ export function DataIntegrityAuditSection({
 
           <div className="grid gap-3 text-sm text-metro-text md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+              <p className="text-xs font-semibold text-metro-muted">
                 Integridad SQLite
               </p>
               <div className="mt-1.5">
@@ -90,7 +91,7 @@ export function DataIntegrityAuditSection({
             </div>
 
             <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+              <p className="text-xs font-semibold text-metro-muted">
                 Esquema
               </p>
               <p className="mt-1 font-medium">
@@ -106,7 +107,7 @@ export function DataIntegrityAuditSection({
             </div>
 
             <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+              <p className="text-xs font-semibold text-metro-muted">
                 Tamaño de base de datos
               </p>
               <p className="mt-1 font-medium">
@@ -117,7 +118,7 @@ export function DataIntegrityAuditSection({
             </div>
 
             <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+              <p className="text-xs font-semibold text-metro-muted">
                 Copias de seguridad
               </p>
               <p className="mt-1 font-medium">{integrityReport.backupCount} disponibles</p>
@@ -131,7 +132,7 @@ export function DataIntegrityAuditSection({
           </div>
 
           <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Bloqueos caducados sin liberar
             </p>
             {integrityReport.expiredLocks.length === 0 ? (
@@ -140,16 +141,16 @@ export function DataIntegrityAuditSection({
               </p>
             ) : (
               <div className="mt-2 overflow-hidden rounded-lg border border-metro-border">
-                <table className="w-full text-xs">
-                  <thead className="bg-metro-panel text-metro-muted">
+                <CompactTable>
+                  <CompactTableHead>
                     <tr>
                       <th className="px-2 py-1 text-left font-semibold">Módulo</th>
                       <th className="px-2 py-1 text-left font-semibold">Registro</th>
                       <th className="px-2 py-1 text-left font-semibold">Propietario</th>
                       <th className="px-2 py-1 text-left font-semibold">Caducó</th>
                     </tr>
-                  </thead>
-                  <tbody>
+                  </CompactTableHead>
+                  <CompactTableBody>
                     {integrityReport.expiredLocks.map((lock) => (
                       <tr
                         className="border-t border-metro-border"
@@ -165,14 +166,14 @@ export function DataIntegrityAuditSection({
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
+                  </CompactTableBody>
+                </CompactTable>
               </div>
             )}
           </div>
 
           <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Comprobaciones de referencias
             </p>
             <div className="mt-2 space-y-2">

@@ -12,6 +12,7 @@ import {
   formatBytesAsMb,
   noticeTone,
 } from './ajustesCommon';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../shared/table/CompactTable';
 
 interface DatabaseSettingsSectionProps {
   databaseStatus: TraccionDatabaseStatus | null;
@@ -103,7 +104,7 @@ export function DatabaseSettingsSection({
   return (
     <div
       id="base-de-datos"
-      className="mb-4 scroll-mt-6 rounded-2xl border border-metro-border bg-metro-panel p-4"
+      className="mb-3 scroll-mt-6 rounded-xl bg-metro-panel p-3"
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -125,7 +126,7 @@ export function DatabaseSettingsSection({
 
       <div className="grid gap-3 text-sm text-metro-text md:grid-cols-2">
         <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+          <p className="text-xs font-semibold text-metro-muted">
             Ruta activa
           </p>
           <p className="mt-1 break-all font-medium">
@@ -133,7 +134,7 @@ export function DatabaseSettingsSection({
           </p>
         </div>
         <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+          <p className="text-xs font-semibold text-metro-muted">
             Estado
           </p>
           <p className="mt-1 font-medium">{databasePhaseLabel}</p>
@@ -217,7 +218,7 @@ export function DatabaseSettingsSection({
       <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Copias locales de respaldo
             </p>
             <p className="mt-1 text-xs text-metro-muted">
@@ -267,7 +268,7 @@ export function DatabaseSettingsSection({
       </div>
 
       <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+        <p className="text-xs font-semibold text-metro-muted">
           Carpeta de respaldo secundario
         </p>
         <p className="mt-1 text-xs text-metro-muted">
@@ -310,7 +311,7 @@ export function DatabaseSettingsSection({
         className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3"
         id="actualizaciones"
       >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+        <p className="text-xs font-semibold text-metro-muted">
           Carpeta de actualizaciones
         </p>
         <p className="mt-1 text-xs text-metro-muted">
@@ -392,7 +393,7 @@ export function DatabaseSettingsSection({
       <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Copia diaria local
             </p>
             <p className="mt-1 max-w-xl text-xs text-metro-muted">
@@ -466,7 +467,7 @@ export function DatabaseSettingsSection({
       <div className="mt-4 rounded-xl border border-metro-border bg-metro-surface p-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Compactar base de datos
             </p>
             <p className="mt-1 max-w-xl text-xs text-metro-muted">
@@ -507,19 +508,19 @@ export function DatabaseSettingsSection({
 
         {vacuumStatus?.heaviestTables && vacuumStatus.heaviestTables.length > 0 && (
           <div className="mt-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-muted">
+            <p className="text-xs font-semibold text-metro-muted">
               Tablas más pesadas
             </p>
             <div className="mt-2 overflow-hidden rounded-lg border border-metro-border">
-              <table className="w-full text-xs">
-                <thead className="bg-metro-panel text-metro-muted">
+              <CompactTable>
+                <CompactTableHead>
                   <tr>
                     <th className="px-2 py-1 text-left font-semibold">Tabla</th>
                     <th className="px-2 py-1 text-right font-semibold">Filas</th>
                     <th className="px-2 py-1 text-right font-semibold">Tamaño</th>
                   </tr>
-                </thead>
-                <tbody>
+                </CompactTableHead>
+                <CompactTableBody>
                   {vacuumStatus.heaviestTables.map((entry) => (
                     <tr className="border-t border-metro-border" key={entry.table}>
                       <td className="px-2 py-1 font-mono text-metro-text">{entry.table}</td>
@@ -531,11 +532,11 @@ export function DatabaseSettingsSection({
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                </CompactTableBody>
+              </CompactTable>
             </div>
             {!vacuumStatus.heaviestTables[0]?.isExactSize && (
-              <p className="mt-1 text-[11px] text-metro-muted">
+              <p className="mt-1 text-xs text-metro-muted">
                 Tamaño no disponible en este equipo; ordenado por número de filas.
               </p>
             )}

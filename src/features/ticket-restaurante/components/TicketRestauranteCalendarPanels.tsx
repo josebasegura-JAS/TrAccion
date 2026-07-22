@@ -87,7 +87,7 @@ export function CalendarToolbar({
     <div className="mb-3 rounded-xl border border-metro-border bg-metro-panel p-2">
       <div className="grid gap-2 xl:grid-cols-[minmax(260px,0.85fr)_minmax(300px,0.9fr)_minmax(420px,1.25fr)]">
         <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-metro-muted">
+          <p className="mb-1 text-xs font-bold text-metro-muted">
             Selector calendario
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -138,7 +138,7 @@ export function CalendarToolbar({
 
         <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+            <p className="text-xs font-bold text-metro-muted">
               Acciones calendario
             </p>
             {selectedCalendar ? (
@@ -180,12 +180,12 @@ export function CalendarToolbar({
 
         <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">
+            <p className="text-xs font-bold text-metro-muted">
               {editingCalendarId ? 'Editar calendario' : 'Crear calendario'}
             </p>
             {editingCalendarId ? (
               <button
-                className="text-[11px] font-semibold text-metro-muted hover:text-metro-red"
+                className="text-xs font-semibold text-metro-muted hover:text-metro-red"
                 onClick={onCancel}
                 type="button"
               >
@@ -219,8 +219,8 @@ export function CalendarToolbar({
                   <label
                     className={
                       checked
-                        ? 'rounded-md bg-metro-red px-1.5 py-1 text-[11px] font-bold text-white'
-                        : 'rounded-md px-1.5 py-1 text-[11px] font-bold text-metro-muted'
+                        ? 'rounded-md bg-metro-red px-1.5 py-1 text-xs font-bold text-white'
+                        : 'rounded-md px-1.5 py-1 text-xs font-bold text-metro-muted'
                     }
                     key={label}
                   >
@@ -274,10 +274,10 @@ export function MonthCalendar({
 }) {
   return (
     <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-      <h4 className="mb-1.5 text-center text-xs font-bold uppercase tracking-wide text-metro-text">
+      <h4 className="mb-1.5 text-center text-xs font-bold text-metro-text">
         {monthName}
       </h4>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-bold text-metro-muted">
+      <div className="grid grid-cols-7 gap-0.5 text-center text-xs font-bold text-metro-muted">
         {WEEK_DAYS.map((weekDay) => (
           <div key={weekDay}>{weekDay}</div>
         ))}
@@ -305,7 +305,7 @@ export function MonthCalendar({
 
 function dayButtonClass(day: CalendarDay): string {
   const base =
-    'aspect-square rounded border text-[11px] font-semibold transition hover:border-metro-red focus:outline-none focus:ring-2 focus:ring-metro-red/50';
+    'aspect-square rounded border text-xs font-semibold transition hover:border-metro-red focus:outline-none focus:ring-2 focus:ring-metro-red/50';
 
   if (day.sinTicket) {
     return `${base} border-metro-red bg-metro-red text-white`;
@@ -320,7 +320,7 @@ function dayButtonClass(day: CalendarDay): string {
 
 export function Legend() {
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-metro-muted">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-metro-muted">
       <LegendItem className="border-metro-border bg-metro-surface" label="Día normal" />
       <LegendItem className="border-metro-border bg-metro-panel" label="Fin de semana" />
       <LegendItem className="border-metro-red bg-metro-red" label="Sin ticket" />

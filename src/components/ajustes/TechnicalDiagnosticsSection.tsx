@@ -13,7 +13,7 @@ export function TechnicalDiagnosticsSection({
   onExport,
 }: TechnicalDiagnosticsSectionProps) {
   return (
-    <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+    <div className="mb-3 rounded-xl bg-metro-panel p-3">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

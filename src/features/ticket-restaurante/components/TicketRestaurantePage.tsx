@@ -41,6 +41,8 @@ import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -498,7 +500,7 @@ function ManutencionesPanel({
       ) : null}
 
       <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">
+        <p className="mb-2 text-xs font-bold text-metro-muted">
           Alta manual
         </p>
         <div className="grid gap-2 lg:grid-cols-[140px_190px_1fr_auto] lg:items-center">
@@ -535,7 +537,7 @@ function ManutencionesPanel({
         <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
           <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">Preview</p>
+              <p className="text-xs font-bold text-metro-muted">Preview</p>
               <p className="text-xs text-metro-muted">
                 {rowsToImport} registros marcados para importar.
               </p>
@@ -550,8 +552,8 @@ function ManutencionesPanel({
             </button>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-xs">
-              <thead className="text-metro-muted">
+            <CompactTable>
+              <CompactTableHead>
                 <tr>
                   <th className="px-2 py-1">Importar</th>
                   <th className="px-2 py-1">Afecta a ticket</th>
@@ -561,8 +563,8 @@ function ManutencionesPanel({
                   <th className="px-2 py-1">Origen</th>
                   <th className="px-2 py-1">Errores</th>
                 </tr>
-              </thead>
-              <tbody>
+              </CompactTableHead>
+              <CompactTableBody>
                 {previewRows.map((row) => (
                   <tr className="border-t border-metro-border" key={row.id}>
                     <td className="px-2 py-1">
@@ -594,15 +596,15 @@ function ManutencionesPanel({
                     <td className="px-2 py-1 text-metro-red">{row.errors.join(' ')}</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+              </CompactTableBody>
+            </CompactTable>
           </div>
         </div>
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-surface">
-        <table className="min-w-full text-left text-xs">
-          <thead className="bg-metro-panel text-metro-muted">
+        <CompactTable>
+          <CompactTableHead>
             <tr>
               <th className="px-2 py-2">Nº empleado</th>
               <th className="px-2 py-2">Nombre</th>
@@ -612,8 +614,8 @@ function ManutencionesPanel({
               <th className="px-2 py-2">Afecta a ticket</th>
               <th className="px-2 py-2">Acciones</th>
             </tr>
-          </thead>
-          <tbody>
+          </CompactTableHead>
+          <CompactTableBody>
             {manutenciones.length === 0 ? (
               <tr>
                 <td className="px-2 py-6 text-center text-sm text-metro-muted" colSpan={7}>
@@ -635,7 +637,7 @@ function ManutencionesPanel({
                   <td className="px-2 py-1 text-metro-text">{row.afectaTicket ? 'Sí' : 'No'}</td>
                   <td className="px-2 py-1">
                     <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
+                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
                       onClick={() => onRemove(row.id)}
                       type="button"
                     >
@@ -646,8 +648,8 @@ function ManutencionesPanel({
                 </tr>
               ))
             )}
-          </tbody>
-        </table>
+          </CompactTableBody>
+        </CompactTable>
       </div>
     </div>
   );
@@ -1370,7 +1372,7 @@ export function TicketRestaurantePage({
 
   return (
     <section
-      className="rounded-2xl border border-metro-border bg-metro-surface p-3 shadow-card"
+      className="space-y-3"
       id="ticket-restaurante"
     >
       <PageHeader
@@ -1436,22 +1438,12 @@ export function TicketRestaurantePage({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => setIsPriceModalOpen(true)}
-            type="button"
-          >
-            <Euro className="h-3.5 w-3.5 text-metro-red" />
+          <ActionButton icon={Euro} iconOnly={false} onClick={() => setIsPriceModalOpen(true)} size="sm" variant="secondary">
             Precio ticket
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={() => setIsRulesModalOpen(true)}
-            type="button"
-          >
-            <Settings className="h-3.5 w-3.5 text-metro-red" />
+          </ActionButton>
+          <ActionButton icon={Settings} iconOnly={false} onClick={() => setIsRulesModalOpen(true)} size="sm" variant="secondary">
             Reglas de cálculo
-          </button>
+          </ActionButton>
         </div>
       </div>
 
@@ -1647,51 +1639,33 @@ export function TicketRestaurantePage({
       )}
 
       {isManutencionMonthModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-            <div className="border-b border-metro-border p-4">
-              <h3 className="text-lg font-bold text-metro-text">¿A qué mes lo imputamos?</h3>
-              <p className="text-xs text-metro-muted">
-                Las notas de gasto marcadas como afectantes descontarán tickets en este mes.
-              </p>
-            </div>
-            <div className="flex items-center justify-center gap-3 p-5">
-              <button
-                className="rounded-lg border border-metro-border px-3 py-2 text-sm font-bold text-metro-text hover:border-metro-red"
-                onClick={() => moveManutencionImputationMonth(-1)}
-                type="button"
-              >
-                ←
-              </button>
-              <div className="min-w-44 rounded-xl border border-metro-border bg-metro-panel px-4 py-3 text-center text-base font-bold text-metro-text">
+        <ModalShell
+          labelledBy="manutencion-month-title"
+          maxWidthClassName="max-w-md"
+          onClose={() => setIsManutencionMonthModalOpen(false)}
+        >
+          <ModalHeader>
+            <ModalTitle
+              id="manutencion-month-title"
+              subtitle="Las notas de gasto marcadas como afectantes descontarán tickets en este mes."
+            >
+              ¿A qué mes lo imputamos?
+            </ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <div className="flex items-center justify-center gap-3 py-2">
+              <ActionButton iconOnly onClick={() => moveManutencionImputationMonth(-1)} variant="secondary">←</ActionButton>
+              <div className="min-w-44 rounded-xl bg-metro-panel px-4 py-3 text-center text-base font-bold text-metro-text">
                 {formatManutencionMonth(manutencionImputationYear, manutencionImputationMonth)}
               </div>
-              <button
-                className="rounded-lg border border-metro-border px-3 py-2 text-sm font-bold text-metro-text hover:border-metro-red"
-                onClick={() => moveManutencionImputationMonth(1)}
-                type="button"
-              >
-                →
-              </button>
+              <ActionButton iconOnly onClick={() => moveManutencionImputationMonth(1)} variant="secondary">→</ActionButton>
             </div>
-            <div className="flex justify-end gap-2 border-t border-metro-border p-4">
-              <button
-                className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-                onClick={() => setIsManutencionMonthModalOpen(false)}
-                type="button"
-              >
-                Cancelar
-              </button>
-              <button
-                className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-                onClick={confirmSaveManutencionPreview}
-                type="button"
-              >
-                Guardar
-              </button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton iconOnly={false} onClick={() => setIsManutencionMonthModalOpen(false)} variant="secondary">Cancelar</ActionButton>
+            <ActionButton iconOnly={false} onClick={confirmSaveManutencionPreview} variant="save">Guardar</ActionButton>
+          </ModalFooter>
+        </ModalShell>
       ) : null}
 
       {isPriceModalOpen ? (

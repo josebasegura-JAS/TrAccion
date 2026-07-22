@@ -1,5 +1,7 @@
 import { Calculator, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import {
   calculateMonthlyTicketOrder,
   getEffectiveTicketPrice,
@@ -11,6 +13,7 @@ import {
 import type { ExportTablePayload } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import {
   type TableViewPreferences,
   useTableViewPreferences,
@@ -382,26 +385,18 @@ export function CalculationAbsenceDetailModal({
     appliedDebtRows.length > 0 || pendingDebtRows.length > 0 || hojaGastoRows.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-        <div className="flex items-center justify-between border-b border-metro-border p-3">
-          <div>
-            <h3 className="text-lg font-bold text-metro-text">Detalle del cómputo</h3>
-            <p className="text-xs text-metro-muted">
-              {row.empleado} · {row.nombreApellidos} ·{' '}
-              {mode === 'monthly' ? 'Cómputo mensual' : 'Cómputo cotización'} · {year}-
-              {String(month).padStart(2, '0')}
-            </p>
-          </div>
-          <button
-            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onClose}
-            type="button"
-          >
-            Cerrar
-          </button>
-        </div>
-        <div className="max-h-[68vh] space-y-3 overflow-auto p-3">
+    <ModalShell labelledBy="ticket-calculation-detail-title" maxWidthClassName="max-w-5xl" onClose={onClose}>
+      <ModalHeader>
+        <ModalTitle
+          id="ticket-calculation-detail-title"
+          subtitle={`${row.empleado} · ${row.nombreApellidos} · ${
+            mode === 'monthly' ? 'Cómputo mensual' : 'Cómputo cotización'
+          } · ${year}-${String(month).padStart(2, '0')}`}
+        >
+          Detalle del cómputo
+        </ModalTitle>
+      </ModalHeader>
+      <ModalBody className="space-y-3">
           <div
             className={`grid gap-2 md:grid-cols-3 ${
               mode === 'monthly' ? 'xl:grid-cols-6' : 'xl:grid-cols-4'
@@ -462,9 +457,13 @@ export function CalculationAbsenceDetailModal({
               seleccionado.
             </div>
           )}
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter>
+        <ActionButton iconOnly={false} onClick={onClose} variant="secondary">
+          Cerrar
+        </ActionButton>
+      </ModalFooter>
+    </ModalShell>
   );
 }
 
@@ -479,7 +478,7 @@ function DetailFormulaItem({
 }) {
   return (
     <div className="rounded-lg border border-emerald-200 bg-white/70 p-2">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">{label}</p>
+      <p className="text-xs font-bold text-emerald-700">{label}</p>
       <p className={`mt-1 text-base font-bold ${strong ? 'text-emerald-700' : 'text-emerald-950'}`}>
         {value}
       </p>
@@ -490,7 +489,7 @@ function DetailFormulaItem({
 function DetailStat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-xl border border-metro-border bg-metro-panel p-2">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+      <p className="text-xs font-bold text-metro-muted">{label}</p>
       <p className="mt-1 text-sm font-bold text-metro-text">{value}</p>
     </div>
   );
@@ -509,16 +508,16 @@ function DetailSection({
     <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
       <h4 className="mb-2 text-sm font-bold text-metro-text">{title}</h4>
       {rows.length > 0 ? (
-        <table className="min-w-full text-left text-xs">
-          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+        <CompactTable>
+          <CompactTableHead>
             <tr>
               <th className="px-2 py-1">Fecha</th>
               <th className="px-2 py-1">Origen</th>
               <th className="px-2 py-1">Motivo</th>
               <th className="px-2 py-1 text-right">Días ticket</th>
             </tr>
-          </thead>
-          <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-surface/60">
+          </CompactTableHead>
+          <CompactTableBody>
             {rows.map((detail) => (
               <tr key={`${detail.id}-${detail.fecha}-${title}`}>
                 <td className="px-2 py-1 font-semibold">{formatDisplayDate(detail.fecha)}</td>
@@ -527,8 +526,8 @@ function DetailSection({
                 <td className="px-2 py-1 text-right font-semibold">1</td>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </CompactTableBody>
+        </CompactTable>
       ) : (
         <p className="rounded-lg border border-dashed border-metro-border bg-metro-surface p-3 text-xs font-semibold text-metro-muted">
           {emptyMessage}
@@ -543,22 +542,22 @@ function HojaGastoDetailSection({ rows }: { rows: TicketPersonCalculation['hojaG
     <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
       <h4 className="mb-2 text-sm font-bold text-metro-text">Hojas de gasto</h4>
       {rows.length > 0 ? (
-        <table className="min-w-full text-left text-xs">
-          <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+        <CompactTable>
+          <CompactTableHead>
             <tr>
               <th className="px-2 py-1">Fecha</th>
               <th className="px-2 py-1 text-right">Días ticket</th>
             </tr>
-          </thead>
-          <tbody className="text-metro-text [&>tr:nth-child(even)]:bg-metro-surface/60">
+          </CompactTableHead>
+          <CompactTableBody>
             {rows.map((detail) => (
               <tr key={detail.id}>
                 <td className="px-2 py-1 font-semibold">{formatDisplayDate(detail.fecha)}</td>
                 <td className="px-2 py-1 text-right font-semibold">1</td>
               </tr>
             ))}
-          </tbody>
-        </table>
+          </CompactTableBody>
+        </CompactTable>
       ) : (
         <p className="rounded-lg border border-dashed border-metro-border bg-metro-surface p-3 text-xs font-semibold text-metro-muted">
           No hay hojas de gasto aplicadas en este mes.

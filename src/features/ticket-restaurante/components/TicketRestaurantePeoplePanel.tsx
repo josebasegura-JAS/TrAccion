@@ -214,7 +214,7 @@ export function PeoplePanel({
         render: (person) => (
           <div className="flex justify-end gap-1.5">
             <button
-              className="rounded-md border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-text hover:border-metro-red"
+              className="rounded-md border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
               onClick={(event) => {
                 event.stopPropagation();
                 onEdit(person);

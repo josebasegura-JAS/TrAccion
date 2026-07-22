@@ -1,11 +1,14 @@
 import { FileDown, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { Input } from '../../../components/ui/Field';
+import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { type TicketRestaurantAbsence } from '../domain/ticketRestaurante';
 import type { TicketRestaurantAbsencePreviewRow } from '../domain/importAbsences';
 import type { ExportTablePayload } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import {
   type TableViewPreferences,
   useTableViewPreferences,
@@ -312,26 +315,18 @@ export function AbsencePreviewModal({
   rows: TicketRestaurantAbsencePreviewRow[];
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-        <div className="flex items-center justify-between border-b border-metro-border p-3">
-          <div>
-            <h3 className="text-lg font-bold text-metro-text">Revisar ausencias importadas</h3>
-            <p className="text-xs text-metro-muted">
-              Edita, añade o elimina filas antes de guardar.
-            </p>
-          </div>
-          <button
-            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onAdd}
-            type="button"
-          >
-            Añadir ausencia manual
-          </button>
-        </div>
-        <div className="max-h-[65vh] overflow-auto p-3">
-          <table className="min-w-full text-left text-xs">
-            <thead className="text-[11px] uppercase tracking-wide text-metro-muted">
+    <ModalShell labelledBy="absence-preview-title" maxWidthClassName="max-w-6xl" onClose={onCancel}>
+      <ModalHeader>
+        <ModalTitle id="absence-preview-title" subtitle="Edita, añade o elimina filas antes de guardar.">
+          Revisar ausencias importadas
+        </ModalTitle>
+        <ActionButton iconOnly={false} onClick={onAdd} size="sm" variant="add">
+          Añadir ausencia manual
+        </ActionButton>
+      </ModalHeader>
+      <ModalBody className="overflow-auto">
+          <CompactTable minWidthClassName="min-w-[1050px]">
+            <CompactTableHead>
               <tr>
                 <th className="px-1 py-1">Nº empleado</th>
                 <th className="px-1 py-1">Nombre y apellidos</th>
@@ -342,8 +337,8 @@ export function AbsencePreviewModal({
                 <th className="px-1 py-1">Afecta ticket</th>
                 <th className="px-1 py-1">Acciones</th>
               </tr>
-            </thead>
-            <tbody className="[&>tr:nth-child(even)]:bg-metro-panel/45 [&>tr:hover]:bg-metro-red/10">
+            </CompactTableHead>
+            <CompactTableBody className="[&>tr:hover]:bg-metro-red/10">
               {rows.map((row) => (
                 <tr className={row.errors.length > 0 ? 'bg-metro-red/10' : ''} key={row.id}>
                   <PreviewInput field="empleado" onChange={onChange} row={row} />
@@ -369,34 +364,25 @@ export function AbsencePreviewModal({
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                     {row.errors.length > 0 ? (
-                      <p className="mt-1 max-w-48 text-[11px] text-metro-red">
+                      <p className="mt-1 max-w-48 text-xs text-metro-red">
                         {row.errors.join(' ')}
                       </p>
                     ) : null}
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-metro-border p-3">
-          <button
-            className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onCancel}
-            type="button"
-          >
-            Cancelar
-          </button>
-          <button
-            className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-            onClick={onSave}
-            type="button"
-          >
-            Guardar ausencias
-          </button>
-        </div>
-      </div>
-    </div>
+            </CompactTableBody>
+          </CompactTable>
+      </ModalBody>
+      <ModalFooter>
+        <ActionButton iconOnly={false} onClick={onCancel} variant="secondary">
+          Cancelar
+        </ActionButton>
+        <ActionButton iconOnly={false} onClick={onSave} variant="save">
+          Guardar ausencias
+        </ActionButton>
+      </ModalFooter>
+    </ModalShell>
   );
 }
 
@@ -417,8 +403,8 @@ function PreviewInput({
 }) {
   return (
     <td className="px-1 py-1 align-top">
-      <input
-        className="w-full min-w-28 rounded-lg border border-metro-border bg-metro-surface px-2 py-1 text-xs text-metro-text outline-none focus:border-metro-red"
+      <Input
+        className="mt-0 h-8 min-w-28 px-2 text-xs"
         onChange={(event) => onChange(row.id, field, event.target.value)}
         type={type}
         value={String(row[field])}
