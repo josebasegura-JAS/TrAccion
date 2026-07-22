@@ -1,6 +1,7 @@
 import type { SessionImportPreview } from './sessionImport';
 import { ImportMetric } from './SessionManagementPageCards';
 import type { SessionModuleConfig } from './session';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../table/CompactTable';
 
 export function SessionImportPreviewModal({
   config,
@@ -33,16 +34,16 @@ export function SessionImportPreviewModal({
           <ImportMetric label="Líneas ignoradas" value={ignoredLineCount} />
         </div>
         <div className="mt-3 max-h-[380px] overflow-auto rounded-xl border border-metro-border">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+          <CompactTable>
+            <CompactTableHead>
               <tr>
                 <th className="w-[130px] px-3 py-2">Fecha</th>
                 <th className="w-[160px] px-3 py-2">Código</th>
                 <th className="px-3 py-2">Título</th>
                 <th className="w-[90px] px-3 py-2 text-right">Puntos</th>
               </tr>
-            </thead>
-            <tbody className="bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/45">
+            </CompactTableHead>
+            <CompactTableBody>
               {relevantImportSessions.map((session) => (
                 <tr key={session.externalKey}>
                   <td className="px-3 py-2 text-metro-muted">{session.draft.date || '—'}</td>
@@ -55,8 +56,8 @@ export function SessionImportPreviewModal({
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </CompactTableBody>
+          </CompactTable>
         </div>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button

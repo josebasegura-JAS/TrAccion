@@ -28,6 +28,7 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import { CompactTable, CompactTableBody, CompactTableEmpty, CompactTableHead } from '../../../shared/table/CompactTable';
 
 const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -420,8 +421,8 @@ export function CriteriosRrllPage() {
           <CountBadge>{filteredCriterios.length} registros</CountBadge>
         </div>
         <div className="max-h-[460px] overflow-auto">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+          <CompactTable>
+            <CompactTableHead>
               <tr>
                 {sortableColumns.map((column) => {
                   const isActive = sortState?.key === column.key;
@@ -440,10 +441,13 @@ export function CriteriosRrllPage() {
                   );
                 })}
                 <th className="w-[300px] px-3 py-2">Criterio</th>
-                <th className="w-[100px] px-3 py-2 text-right">Acciones</th>
+                <th className="w-[56px] px-3 py-2 text-right">Acciones</th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-metro-border bg-metro-surface">
+            </CompactTableHead>
+            <CompactTableBody>
+              {sortedCriterios.length === 0 && (
+                <CompactTableEmpty colSpan={7} message="No hay criterios para los filtros seleccionados." />
+              )}
               {sortedCriterios.map((criterio) => (
                 <tr
                   className="cursor-pointer hover:bg-metro-red/10"
@@ -479,9 +483,10 @@ export function CriteriosRrllPage() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right">
                     <ActionButton
+                      aria-label="Eliminar criterio"
                       size="sm"
                       variant="delete"
-                      iconOnly={false}
+                      iconOnly
                       onClick={(event) => {
                         event.stopPropagation();
                         void (async () => {
@@ -494,19 +499,12 @@ export function CriteriosRrllPage() {
                           }
                         })();
                       }}
-                    >
-                      Eliminar
-                    </ActionButton>
+                    />
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-          {sortedCriterios.length === 0 && (
-            <p className="border-t border-metro-border bg-metro-surface px-3 py-3 text-sm text-metro-muted">
-              No hay criterios para los filtros seleccionados.
-            </p>
-          )}
+            </CompactTableBody>
+          </CompactTable>
         </div>
       </div>
 
@@ -548,8 +546,8 @@ export function CriteriosRrllPage() {
               </div>
             </div>
             <div className="overflow-auto">
-              <table className="w-full table-fixed text-left text-xs">
-                <thead className="sticky top-0 z-10 bg-metro-panel text-[11px] uppercase tracking-wide text-metro-muted">
+              <CompactTable>
+                <CompactTableHead>
                   <tr>
                     <th className="w-[70px] px-3 py-2">Importar</th>
                     <th className="w-[70px] px-3 py-2">Fila</th>
@@ -559,8 +557,8 @@ export function CriteriosRrllPage() {
                     <th className="w-[120px] px-3 py-2">Sentido</th>
                     <th className="w-[420px] px-3 py-2">Criterio</th>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-metro-border bg-metro-surface">
+                </CompactTableHead>
+                <CompactTableBody>
                   {importPreview.rows.map((row) => (
                     <tr className="hover:bg-metro-red/10" key={row.id}>
                       <td className="px-3 py-2 text-center">
@@ -601,8 +599,8 @@ export function CriteriosRrllPage() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                </CompactTableBody>
+              </CompactTable>
               {importPreview.rows.length === 0 && (
                 <p className="px-4 py-5 text-sm text-metro-muted">
                   No se han encontrado registros importables. Revisa que la hoja tenga las columnas

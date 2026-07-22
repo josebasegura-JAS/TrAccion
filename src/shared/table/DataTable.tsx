@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Inbox } from 'lucide-react';
+import { Inbox, RotateCcw } from 'lucide-react';
 import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
@@ -329,21 +329,21 @@ export function DataTable<Row, ColumnId extends string>({
 
   return (
     <div className="space-y-2">
-      {onResetColumnWidths && (
-        <div className="flex justify-end">
+      <div
+        className={`relative ${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}
+        ref={scrollContainerRef}
+      >
+        {onResetColumnWidths && (
           <button
-            className="inline-flex items-center rounded-lg border border-metro-border px-2.5 py-1 text-[11px] font-semibold text-metro-muted transition-colors hover:border-metro-red hover:text-metro-text"
+            aria-label="Restablecer columnas"
+            className="absolute right-1 top-1 z-20 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-panel/95 text-metro-muted shadow-sm transition-colors hover:border-metro-red hover:text-metro-text"
+            data-tip="Restablecer columnas"
             onClick={onResetColumnWidths}
             type="button"
           >
-            Restablecer columnas
+            <RotateCcw aria-hidden="true" size={14} />
           </button>
-        </div>
-      )}
-      <div
-        className={`${maxHeightClassName} overflow-auto rounded-xl border border-metro-border`}
-        ref={scrollContainerRef}
-      >
+        )}
         <table
           aria-label={ariaLabel}
           className="w-full table-fixed text-left text-xs"
@@ -376,7 +376,7 @@ export function DataTable<Row, ColumnId extends string>({
                 return (
                   <th
                     aria-sort={canSort ? ariaSort : undefined}
-                    className={`relative px-3 py-2 ${column.headerClassName ?? ''} ${
+                    className={`relative px-3 py-2 ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.headerClassName ?? ''} ${
                       isDragging ? 'opacity-40' : ''
                     } ${isDragOver ? 'bg-metro-red/10' : ''}`}
                     draggable={isReorderable}
