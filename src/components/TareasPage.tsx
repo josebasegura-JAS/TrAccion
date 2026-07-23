@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Search, Settings, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronRight, Settings, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -26,7 +26,9 @@ import {
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
-import { SelectFilter } from '../shared/filters/SelectFilter';
+import { FilterSelect } from './ui/FilterSelect';
+import { SearchField } from './ui/SearchField';
+import { Toolbar } from './ui/Toolbar';
 import type { ExportColumn } from '../shared/export/types';
 import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
@@ -692,20 +694,77 @@ export function TareasPage({
     >
       <PageHeader
         actions={
-          <>
-            <ActionButton
-              icon={Settings}
-              iconOnly={false}
-              onClick={() => setIsOriginsModalOpen(true)}
-              size="sm"
-              variant="secondary"
-            >
-              Orígenes
-            </ActionButton>
-            <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
-              Nueva tarea
-            </ActionButton>
-          </>
+          <Toolbar
+            filters={
+              <>
+                <SearchField
+                  onChange={(event) => setFilter('search', event.target.value)}
+                  onClear={() => setFilter('search', '')}
+                  placeholder="Buscar..."
+                  value={filters.search}
+                  wrapperClassName="min-w-[220px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los tipos"
+                  aria-label="Filtrar tareas por tipo"
+                  onChange={(event) => setFilter('tipo', event.target.value as typeof filters.tipo)}
+                  options={TASK_TYPES}
+                  value={filters.tipo}
+                  wrapperClassName="w-[124px]"
+                />
+                <FilterSelect
+                  allLabel="Todas las fases"
+                  aria-label="Filtrar tareas por fase"
+                  onChange={(event) => setFilter('fase', event.target.value)}
+                  options={phaseFilterOptions}
+                  value={filters.fase}
+                  wrapperClassName="w-[132px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los estados"
+                  aria-label="Filtrar tareas por estado"
+                  onChange={(event) => setFilter('estado', event.target.value as typeof filters.estado)}
+                  options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
+                  value={filters.estado}
+                  wrapperClassName="w-[132px]"
+                />
+                <FilterSelect
+                  allLabel="Todas las prioridades"
+                  aria-label="Filtrar tareas por prioridad"
+                  onChange={(event) =>
+                    setFilter('prioridad', event.target.value as typeof filters.prioridad)
+                  }
+                  options={TASK_PRIORITIES}
+                  value={filters.prioridad}
+                  wrapperClassName="w-[144px]"
+                />
+                <FilterSelect
+                  allLabel="Todos los orígenes"
+                  aria-label="Filtrar tareas por origen"
+                  onChange={(event) => setFilter('origen', event.target.value)}
+                  options={originFilterOptions}
+                  value={filters.origen}
+                  wrapperClassName="w-[148px]"
+                />
+              </>
+            }
+            actions={
+              <>
+                <ActionButton
+                  icon={Settings}
+                  iconOnly={false}
+                  onClick={() => setIsOriginsModalOpen(true)}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Orígenes
+                </ActionButton>
+                <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
+                  Nueva tarea
+                </ActionButton>
+              </>
+            }
+          />
         }
         helpSections={TAREAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
@@ -714,67 +773,20 @@ export function TareasPage({
       />
 
       <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex flex-col gap-2 border-b border-metro-border bg-metro-surface px-3 py-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
+        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Tareas activas
             <CountBadge>{filteredTasks.length} registros</CountBadge>
-            <ExportPrintButtons
-              payload={{
-                title: 'Tareas activas',
-                filename: 'tareas-activas',
-                columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
-                rows: sortedTasks,
-                filterLabel: activeTasksFilterLabel,
-              }}
-            />
           </div>
-          <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1 xl:pb-0">
-            <label className="flex h-9 w-[170px] shrink-0 items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-2.5 text-sm text-metro-muted">
-              <Search size={15} className="shrink-0" />
-              <input
-                className="min-w-0 flex-1 bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
-                onChange={(event) => setFilter('search', event.target.value)}
-                placeholder="Buscar..."
-                type="search"
-                value={filters.search}
-              />
-            </label>
-            <SelectFilter
-              className="h-9 w-[104px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              label="Tipo"
-              onChange={(value) => setFilter('tipo', value as typeof filters.tipo)}
-              options={TASK_TYPES}
-              value={filters.tipo}
-            />
-            <SelectFilter
-              className="h-9 w-[112px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              label="Fase"
-              onChange={(value) => setFilter('fase', value)}
-              options={phaseFilterOptions}
-              value={filters.fase}
-            />
-            <SelectFilter
-              className="h-9 w-[112px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              label="Estado"
-              onChange={(value) => setFilter('estado', value as typeof filters.estado)}
-              options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
-              value={filters.estado}
-            />
-            <SelectFilter
-              className="h-9 w-[116px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              label="Prioridad"
-              onChange={(value) => setFilter('prioridad', value as typeof filters.prioridad)}
-              options={TASK_PRIORITIES}
-              value={filters.prioridad}
-            />
-            <SelectFilter
-              className="h-9 w-[132px] shrink-0 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
-              label="Origen"
-              onChange={(value) => setFilter('origen', value)}
-              options={originFilterOptions}
-              value={filters.origen}
-            />
-          </div>
+          <ExportPrintButtons
+            payload={{
+              title: 'Tareas activas',
+              filename: 'tareas-activas',
+              columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
+              rows: sortedTasks,
+              filterLabel: activeTasksFilterLabel,
+            }}
+          />
         </div>
         {activeFilterChips.length > 0 && (
           <div className="border-b border-metro-border bg-metro-panel px-3 py-2">
