@@ -12,7 +12,7 @@ export const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
       'Puesto organizativo: se usa para agrupar solicitudes y calcular la presencialidad. Si está mal, debe corregirse en Plantilla.',
       'Días solicitados: martes, miércoles y/o jueves. Son los días que entran en el cálculo de presencialidad.',
       'Tipo de solicitud (nueva/renovación), fecha de solicitud, fechas de entrega de ordenador y cascos.',
-      'Estado, validaciones (seguridad informática, prevención, jefatura), observaciones y revisado: sirven para seguimiento administrativo y control interno de RRLL.',
+      'Estado, validaciones (seguridad informática, prevención, jefatura, Dirección), observaciones y revisado: sirven para seguimiento administrativo y control interno de RRLL.',
     ],
   },
   {
