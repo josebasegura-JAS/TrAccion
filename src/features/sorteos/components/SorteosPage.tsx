@@ -279,7 +279,7 @@ export function SorteosPage() {
         className="mb-0"
       />
 
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)] xl:items-start">
+      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)]">
         <div className="min-w-0 rounded-xl bg-metro-panel p-3">
           <div className="mb-2 flex items-center gap-2">
             <Gift className="h-4 w-4 shrink-0 text-metro-red" />

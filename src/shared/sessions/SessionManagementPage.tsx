@@ -730,7 +730,7 @@ export function SessionManagementPage({
         </div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(310px,0.85fr)]">
+      <div className="grid gap-4">
         <SessionPanel
           count={filteredOpenSessions.length}
           isOpen={hasSessionSearch || openPanel === 'open'}

@@ -710,7 +710,7 @@ export function TareasPage({
                   onChange={(event) => setFilter('tipo', event.target.value as typeof filters.tipo)}
                   options={TASK_TYPES}
                   value={filters.tipo}
-                  wrapperClassName="w-[124px]"
+                  wrapperClassName="w-[96px]"
                 />
                 <FilterSelect
                   allLabel="Todas las fases"
@@ -718,7 +718,7 @@ export function TareasPage({
                   onChange={(event) => setFilter('fase', event.target.value)}
                   options={phaseFilterOptions}
                   value={filters.fase}
-                  wrapperClassName="w-[132px]"
+                  wrapperClassName="w-[104px]"
                 />
                 <FilterSelect
                   allLabel="Todos los estados"
@@ -726,7 +726,7 @@ export function TareasPage({
                   onChange={(event) => setFilter('estado', event.target.value as typeof filters.estado)}
                   options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
                   value={filters.estado}
-                  wrapperClassName="w-[132px]"
+                  wrapperClassName="w-[104px]"
                 />
                 <FilterSelect
                   allLabel="Todas las prioridades"
@@ -736,7 +736,7 @@ export function TareasPage({
                   }
                   options={TASK_PRIORITIES}
                   value={filters.prioridad}
-                  wrapperClassName="w-[144px]"
+                  wrapperClassName="w-[116px]"
                 />
                 <FilterSelect
                   allLabel="Todos los orígenes"
@@ -744,7 +744,7 @@ export function TareasPage({
                   onChange={(event) => setFilter('origen', event.target.value)}
                   options={originFilterOptions}
                   value={filters.origen}
-                  wrapperClassName="w-[148px]"
+                  wrapperClassName="w-[120px]"
                 />
               </>
             }
