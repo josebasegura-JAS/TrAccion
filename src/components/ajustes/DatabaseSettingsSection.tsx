@@ -21,6 +21,7 @@ interface DatabaseSettingsSectionProps {
   databaseActionStatus: string;
   currentDatabaseLock: TraccionDatabaseLockInfo | null;
   isCheckingDatabaseLock: boolean;
+  databaseLockCheckError: string;
   isForcingLockRelease: boolean;
   refreshCurrentDatabaseLock: () => Promise<void>;
   handleForceReleaseDatabaseLock: () => void | Promise<void>;
@@ -53,6 +54,9 @@ interface DatabaseSettingsSectionProps {
   handleSetDailyBackupDirectory: () => void | Promise<void>;
   handleClearDailyBackupDirectory: () => void | Promise<void>;
   vacuumStatus: TraccionVacuumStatus | null;
+  isLoadingVacuumStatus: boolean;
+  vacuumStatusError: string;
+  onRetryVacuumStatus: () => void | Promise<void>;
   isVacuuming: boolean;
   vacuumActionStatus: string;
   handleVacuumNow: () => void | Promise<void>;
@@ -65,6 +69,7 @@ export function DatabaseSettingsSection({
   databaseActionStatus,
   currentDatabaseLock,
   isCheckingDatabaseLock,
+  databaseLockCheckError,
   isForcingLockRelease,
   refreshCurrentDatabaseLock,
   handleForceReleaseDatabaseLock,
@@ -97,6 +102,9 @@ export function DatabaseSettingsSection({
   handleSetDailyBackupDirectory,
   handleClearDailyBackupDirectory,
   vacuumStatus,
+  isLoadingVacuumStatus,
+  vacuumStatusError,
+  onRetryVacuumStatus,
   isVacuuming,
   vacuumActionStatus,
   handleVacuumNow,
@@ -141,6 +149,22 @@ export function DatabaseSettingsSection({
           <p className="mt-1 text-xs text-metro-muted">{databaseBadge.detail}</p>
         </div>
       </div>
+
+      {databaseLockCheckError && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Notice className="flex-1" tone="warning">
+            {databaseLockCheckError}
+          </Notice>
+          <ActionButton
+            iconOnly={false}
+            onClick={() => void refreshCurrentDatabaseLock()}
+            size="sm"
+            variant="secondary"
+          >
+            Reintentar
+          </ActionButton>
+        </div>
+      )}
 
       {currentDatabaseLock && (
         <>
@@ -487,21 +511,41 @@ export function DatabaseSettingsSection({
           </ActionButton>
         </div>
 
+        {vacuumStatusError && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Notice className="flex-1" tone="warning">
+              {vacuumStatusError}
+            </Notice>
+            <ActionButton
+              iconOnly={false}
+              onClick={() => void onRetryVacuumStatus()}
+              size="sm"
+              variant="secondary"
+            >
+              Reintentar
+            </ActionButton>
+          </div>
+        )}
+
         <div className="mt-3 grid gap-2 text-xs text-metro-muted sm:grid-cols-2">
           <p>
             Tamaño actual:{' '}
             <span className="font-semibold text-metro-text">
-              {vacuumStatus?.currentSizeBytes != null
-                ? formatBytesAsMb(vacuumStatus.currentSizeBytes)
-                : '—'}
+              {isLoadingVacuumStatus
+                ? 'Consultando…'
+                : vacuumStatus?.currentSizeBytes != null
+                  ? formatBytesAsMb(vacuumStatus.currentSizeBytes)
+                  : '—'}
             </span>
           </p>
           <p>
             Última compactación:{' '}
             <span className="font-semibold text-metro-text">
-              {vacuumStatus?.lastVacuumAt
-                ? new Date(vacuumStatus.lastVacuumAt).toLocaleString('es-ES')
-                : 'Nunca'}
+              {isLoadingVacuumStatus
+                ? 'Consultando…'
+                : vacuumStatus?.lastVacuumAt
+                  ? new Date(vacuumStatus.lastVacuumAt).toLocaleString('es-ES')
+                  : 'Nunca'}
             </span>
           </p>
         </div>

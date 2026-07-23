@@ -58,6 +58,8 @@ export function AjustesPage() {
     useState<TraccionDailyLocalBackupSettings | null>(null);
   const [dailyBackupStatus, setDailyBackupStatus] = useState('');
   const [vacuumStatus, setVacuumStatus] = useState<TraccionVacuumStatus | null>(null);
+  const [isLoadingVacuumStatus, setIsLoadingVacuumStatus] = useState(false);
+  const [vacuumStatusError, setVacuumStatusError] = useState('');
   const [isVacuuming, setIsVacuuming] = useState(false);
   const [vacuumActionStatus, setVacuumActionStatus] = useState('');
   const [integrityReport, setIntegrityReport] = useState<TraccionDataIntegrityReport | null>(null);
@@ -67,6 +69,7 @@ export function AjustesPage() {
     null,
   );
   const [isCheckingDatabaseLock, setIsCheckingDatabaseLock] = useState(false);
+  const [databaseLockCheckError, setDatabaseLockCheckError] = useState('');
   const [isForcingLockRelease, setIsForcingLockRelease] = useState(false);
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const { confirm, dialogNode } = useAppDialog();
@@ -259,10 +262,17 @@ export function AjustesPage() {
     if (!window.traccion?.getVacuumStatus) {
       return;
     }
+    setIsLoadingVacuumStatus(true);
+    setVacuumStatusError('');
     try {
       setVacuumStatus(await window.traccion.getVacuumStatus());
     } catch (error) {
       console.warn('No se ha podido consultar el estado de compactado de la base de datos.', error);
+      setVacuumStatusError(
+        'No se ha podido consultar el tamaño de la base de datos (posible problema de red con la carpeta compartida). Puedes reintentarlo.',
+      );
+    } finally {
+      setIsLoadingVacuumStatus(false);
     }
   }, []);
 
@@ -276,10 +286,14 @@ export function AjustesPage() {
     }
 
     setIsCheckingDatabaseLock(true);
+    setDatabaseLockCheckError('');
     try {
       setCurrentDatabaseLock(await window.traccion.getCurrentDatabaseLock());
     } catch (error) {
       console.warn('No se ha podido comprobar el bloqueo actual de SQLite.', error);
+      setDatabaseLockCheckError(
+        'No se ha podido comprobar el bloqueo de la base de datos (posible problema de red con la carpeta compartida). Puedes reintentarlo.',
+      );
     } finally {
       setIsCheckingDatabaseLock(false);
     }
@@ -618,6 +632,7 @@ export function AjustesPage() {
           databaseActionStatus={databaseActionStatus}
           currentDatabaseLock={currentDatabaseLock}
           isCheckingDatabaseLock={isCheckingDatabaseLock}
+          databaseLockCheckError={databaseLockCheckError}
           isForcingLockRelease={isForcingLockRelease}
           refreshCurrentDatabaseLock={refreshCurrentDatabaseLock}
           handleForceReleaseDatabaseLock={handleForceReleaseDatabaseLock}
@@ -650,6 +665,9 @@ export function AjustesPage() {
           handleSetDailyBackupDirectory={handleSetDailyBackupDirectory}
           handleClearDailyBackupDirectory={handleClearDailyBackupDirectory}
           vacuumStatus={vacuumStatus}
+          isLoadingVacuumStatus={isLoadingVacuumStatus}
+          vacuumStatusError={vacuumStatusError}
+          onRetryVacuumStatus={refreshVacuumStatus}
           isVacuuming={isVacuuming}
           vacuumActionStatus={vacuumActionStatus}
           handleVacuumNow={handleVacuumNow}
