@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
 import type { Task } from '../../features/tareas/domain/task';
@@ -9,6 +9,8 @@ import { buildFilterLabel } from '../export/filterLabel';
 import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { SearchField } from '../../components/ui/SearchField';
+import { Toolbar } from '../../components/ui/Toolbar';
 import { InlineSaveFeedback } from '../../components/InlineSaveFeedback';
 import { TaskEditor } from '../../components/TaskEditor';
 import { type ModuleHelpSection } from '../../components/ModuleHelp';
@@ -589,71 +591,57 @@ export function SessionManagementPage({
     >
       <PageHeader
         actions={
-          <>
-            {showSearchInHeader && (
-              <div className="flex min-w-[280px] flex-1 items-center gap-2 sm:min-w-[360px]">
-                <label className="sr-only" htmlFor={`${config.moduleId}-session-search`}>
-                  Buscar en {config.shortTitle}
-                </label>
-                <div className="relative min-w-0 flex-1">
-                  <Search
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-metro-red"
-                    size={14}
-                  />
-                  <input
-                    className="w-full rounded-lg border border-metro-border bg-metro-surface py-1.5 pl-8 pr-8 text-xs text-metro-text outline-none focus:border-metro-red"
-                    id={`${config.moduleId}-session-search`}
+          <Toolbar
+            filters={
+              showSearchInHeader ? (
+                <>
+                  <SearchField
+                    aria-label={`Buscar en ${config.shortTitle}`}
                     onChange={(event) => setSessionSearch(event.target.value)}
+                    onClear={() => setSessionSearch('')}
                     placeholder="Buscar sesiones o puntos..."
-                    type="search"
                     value={sessionSearch}
+                    wrapperClassName="min-w-[240px]"
                   />
-                  {sessionSearch && (
-                    <button
-                      aria-label="Limpiar búsqueda"
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-metro-muted hover:bg-metro-panel hover:text-metro-text"
-                      onClick={() => setSessionSearch('')}
-                      type="button"
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-                <CountBadge>
-                  {filteredOpenSessions.length + closedSessionCount}/{sessions.length}
-                </CountBadge>
-              </div>
-            )}
-            <ExportPrintButtons
-              payload={{
-                title: config.exportTitle,
-                filename: config.exportFilename,
-                columns: sessionExportColumns,
-                rows: sessions,
-                filterLabel: sessionFilterLabel,
-              }}
-              size="sm"
-            />
-            <input
-              accept=".docx,.txt"
-              className="hidden"
-              onChange={(event) => handleImportFile(event.target.files?.[0])}
-              ref={fileInputRef}
-              type="file"
-            />
-            <ActionButton iconOnly={false} onClick={openImporter} variant="word" size="sm">
-              Importar Word
-            </ActionButton>
-            <ActionButton
-              iconOnly={false}
-              onClick={() => setIsCreateOpen((current) => !current)}
-              variant="add"
-              size="sm"
-            >
-              {config.createButtonLabel}
-            </ActionButton>
-          </>
+                  <CountBadge>
+                    {filteredOpenSessions.length + closedSessionCount}/{sessions.length}
+                  </CountBadge>
+                </>
+              ) : undefined
+            }
+            actions={
+              <>
+                <ExportPrintButtons
+                  payload={{
+                    title: config.exportTitle,
+                    filename: config.exportFilename,
+                    columns: sessionExportColumns,
+                    rows: sessions,
+                    filterLabel: sessionFilterLabel,
+                  }}
+                  size="sm"
+                />
+                <input
+                  accept=".docx,.txt"
+                  className="hidden"
+                  onChange={(event) => handleImportFile(event.target.files?.[0])}
+                  ref={fileInputRef}
+                  type="file"
+                />
+                <ActionButton iconOnly={false} onClick={openImporter} variant="word" size="sm">
+                  Importar Word
+                </ActionButton>
+                <ActionButton
+                  iconOnly={false}
+                  onClick={() => setIsCreateOpen((current) => !current)}
+                  variant="add"
+                  size="sm"
+                >
+                  {config.createButtonLabel}
+                </ActionButton>
+              </>
+            }
+          />
         }
         helpSections={helpSections}
         helpSubtitle={`Guía rápida de sesiones, puntos, cierre e histórico de ${config.title}.`}
