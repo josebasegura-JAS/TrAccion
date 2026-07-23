@@ -11,10 +11,34 @@ import { useDatabaseStatus } from '../services/databaseStatus';
 import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
 import { StatusBadge } from './ui/StatusBadge';
 
-const build = (() => {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-})();
+function useAppVersion(): string | null {
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checker = window.traccion?.checkForAppUpdate;
+    if (!checker) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await checker();
+        if (!cancelled) {
+          setVersion(result.currentVersion);
+        }
+      } catch (error) {
+        console.warn('No se ha podido leer la versión de TrAccion.', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return version;
+}
 
 function defaultFeedback(): PersistenceFeedback {
   const now = new Date();
@@ -70,6 +94,7 @@ export function Footer() {
   const [pendingCount, setPendingCount] = useState(0);
   const databaseStatus = useDatabaseStatus();
   const databaseBadge = useMemo(() => buildDatabaseStatusBadge(databaseStatus), [databaseStatus]);
+  const appVersion = useAppVersion();
 
   useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
     if (!isPersistenceFeedbackSilent(nextFeedback)) {
@@ -80,7 +105,7 @@ export function Footer() {
 
   return (
     <footer className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
-      <span className="shrink-0">TrAccion 1.0.{build}</span>
+      <span className="shrink-0">TrAccion {appVersion ? `V${appVersion}` : ''}</span>
       <div className="flex min-w-0 items-center gap-3">
         {pendingCount > 0 && (
           <StatusBadge
