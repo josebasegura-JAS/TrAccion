@@ -25,9 +25,15 @@ import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { ModalShell } from './ui/ModalShell';
 
+function todayIso(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+}
+
 function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   if (!solicitud) {
-    return { ...EMPTY_TELETRABAJO_DRAFT };
+    return { ...EMPTY_TELETRABAJO_DRAFT, fechaSolicitud: todayIso() };
   }
 
   return {
@@ -171,7 +177,10 @@ export function TeletrabajoEditor({
     (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
   const canCreate = hasRequiredManualData(draft) && draft.diasTeletrabajo.length > 0;
   const canEdit = Boolean(solicitud);
-  const canSubmit = (isCreate ? canCreate : canEdit) && !isFormReadOnly && !isSaving;
+  const hasDesistimientoReason =
+    draft.estado !== 'desistida' || Boolean(draft.observacionesRrll?.trim());
+  const canSubmit =
+    (isCreate ? canCreate : canEdit) && hasDesistimientoReason && !isFormReadOnly && !isSaving;
   const canGenerateWord = canCreate && !isFormReadOnly && !isSaving;
   const recoveryInitialValue = useMemo(() => toDraft(solicitud), [solicitud]);
   const recoveryStorageKey = buildRecoverableDraftKey('teletrabajo', solicitud?.id ?? 'new');

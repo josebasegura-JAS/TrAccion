@@ -209,6 +209,18 @@ export function buildTeletrabajoAssessment({
     };
   }
 
+  if (solicitud.estado === 'desistida') {
+    return {
+      status: 'rejected',
+      cellValue: NO,
+      rowFillColor: SOFT_RED,
+      textColor: SOFT_RED_TEXT,
+      apuntesRrll: solicitud.observacionesRrll?.trim()
+        ? `Desistida: ${solicitud.observacionesRrll.trim()}`
+        : 'Desistida',
+    };
+  }
+
   const employee = findEmployee(employeesById, solicitud.empleado);
   const antiguedad = evaluateTeletrabajoAntiguedad(solicitud, employee);
 

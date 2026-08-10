@@ -70,17 +70,19 @@ export function buildTeletrabajoTableColumns({
       header: 'Estado',
       accessor: (s) => s.estado,
       render: (s) => {
-        const estadoTones: Record<string, 'warning' | 'info' | 'success' | 'error'> = {
+        const estadoTones: Record<string, 'warning' | 'info' | 'success' | 'error' | 'muted'> = {
           pendiente: 'warning',
           analizada: 'info',
           aprobada: 'success',
           denegada: 'error',
+          desistida: 'muted',
         };
         const estadoLabels: Record<string, string> = {
           pendiente: 'Pendiente',
           analizada: 'Analizada',
           aprobada: 'Aprobada',
           denegada: 'Rechazada',
+          desistida: 'Desistida',
         };
         const tone = estadoTones[s.estado] ?? 'muted';
         const label = estadoLabels[s.estado] ?? s.estado;

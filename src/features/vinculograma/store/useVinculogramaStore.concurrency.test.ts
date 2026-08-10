@@ -12,6 +12,8 @@ function vinculo(overrides: Partial<Vinculograma> = {}): Vinculograma {
     linkedPerson: 'Carlos García',
     requestDate: '2026-06-01',
     expiryDate: '2026-12-01',
+    revokedAt: '',
+    revocationReason: '',
     createdAt: timestamp,
     updatedAt: timestamp,
     deletedAt: null,

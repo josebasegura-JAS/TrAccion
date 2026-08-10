@@ -18,6 +18,8 @@ function buildRecord(overrides: Partial<Vinculograma>): Vinculograma {
     linkedPerson: 'Persona vinculada',
     requestDate: '2026-01-01',
     expiryDate: '2029-01-01',
+    revokedAt: '',
+    revocationReason: '',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
@@ -63,6 +65,10 @@ describe('vinculograma domain', () => {
 
   it('marca vencido si expiryDate es anterior a hoy', () => {
     expect(getVinculogramaStatus('2026-06-05', '2026-06-06')).toBe('Vencido');
+  });
+
+  it('marca revocado con prioridad sobre la fecha de vigencia', () => {
+    expect(getVinculogramaStatus('2029-06-06', '2026-06-06', '2026-06-06')).toBe('Revocado');
   });
 
   it('ordena por nº empleado numérico ascendente', () => {

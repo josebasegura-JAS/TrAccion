@@ -48,6 +48,7 @@ export const teletrabajoExportColumns: ExportColumn<TeletrabajoSolicitud>[] = [
         analizada: 'Analizada',
         aprobada: 'Aprobada',
         denegada: 'Rechazada',
+        desistida: 'Desistida',
       };
       return labels[solicitud.estado] ?? solicitud.estado;
     },

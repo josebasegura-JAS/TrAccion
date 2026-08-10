@@ -114,7 +114,7 @@ export function buildSolicitudPeriodoPuestoKey(periodo: string, puestoKey: strin
 }
 
 /**
- * Cuenta las solicitudes activas (no eliminadas ni denegadas) por puesto,
+ * Cuenta las solicitudes activas (no eliminadas, denegadas ni desistidas) por puesto,
  * agrupadas también por periodo: cada solicitud solo compite por la
  * presencialidad mínima con las demás solicitudes de su mismo periodo.
  */
@@ -138,7 +138,7 @@ export function buildSolicitudesByPeriodoPuestoDiaCount(
   const counts = new Map<string, number>();
 
   solicitudes.forEach((solicitud) => {
-    if (solicitud.deletedAt || solicitud.estado === 'denegada') {
+    if (solicitud.deletedAt || (solicitud.estado === 'denegada' || solicitud.estado === 'desistida')) {
       return;
     }
 
@@ -173,7 +173,7 @@ export function buildSolicitudesByPeriodoPuestoCount(
   const counts = new Map<string, number>();
 
   solicitudes.forEach((solicitud) => {
-    if (solicitud.deletedAt || solicitud.estado === 'denegada') {
+    if (solicitud.deletedAt || (solicitud.estado === 'denegada' || solicitud.estado === 'desistida')) {
       return;
     }
 

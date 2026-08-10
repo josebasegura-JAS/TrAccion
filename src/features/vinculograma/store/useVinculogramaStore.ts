@@ -67,7 +67,11 @@ function parseRecords(stored: string | null): Vinculograma[] {
     return [];
   }
 
-  return parsed.filter(isVinculograma);
+  return parsed.filter(isVinculograma).map((record) => ({
+    ...record,
+    revokedAt: typeof record.revokedAt === 'string' ? record.revokedAt : '',
+    revocationReason: typeof record.revocationReason === 'string' ? record.revocationReason : '',
+  }));
 }
 
 function readRecords(): Vinculograma[] {

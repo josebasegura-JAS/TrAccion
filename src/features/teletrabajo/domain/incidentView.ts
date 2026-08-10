@@ -130,7 +130,7 @@ export function getTeletrabajoRowClassName(
   meta: TeletrabajoIncidentMeta,
   estado: TeletrabajoSolicitud['estado'],
 ): string {
-  if (estado === 'denegada') {
+  if (estado === 'denegada' || estado === 'desistida') {
     return 'border-l-4 border-slate-500/50 bg-slate-900/20 text-slate-200 hover:bg-slate-900/30';
   }
 

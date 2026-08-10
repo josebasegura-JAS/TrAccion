@@ -200,13 +200,18 @@ function TeletrabajoObservationsSection({
       </label>
 
       <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
-        Observaciones RRLL
+        Observaciones RRLL{draft.estado === 'desistida' ? ' · Motivo del desistimiento' : ''}
         <textarea
           className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
           onChange={(event) =>
             setDraft((current) => ({ ...current, observacionesRrll: event.target.value }))
           }
-          placeholder="Notas internas de RRLL para la exportación a Dirección"
+          placeholder={
+            draft.estado === 'desistida'
+              ? 'Obligatorio: indica el motivo del desistimiento'
+              : 'Notas internas de RRLL para la exportación a Dirección'
+          }
+          required={draft.estado === 'desistida'}
           value={draft.observacionesRrll ?? ''}
         />
       </label>
@@ -277,6 +282,7 @@ function TeletrabajoManagementSection({
                 analizada: 'Analizada',
                 aprobada: 'Aprobada',
                 denegada: 'Rechazada',
+                desistida: 'Desistida',
               };
               return (
                 <option key={estado} value={estado}>

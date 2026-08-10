@@ -7,16 +7,23 @@ export interface Vinculograma {
   linkedPerson: string;
   requestDate: string;
   expiryDate: string;
+  revokedAt: string;
+  revocationReason: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
 }
 
-export type VinculogramaStatus = 'Vigente' | 'Vencido';
+export type VinculogramaStatus = 'Vigente' | 'Vencido' | 'Revocado';
 
 export type VinculogramaDraft = Pick<
   Vinculograma,
-  'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'requestDate'
+  | 'employeeNumber'
+  | 'nombreCompleto'
+  | 'linkedPerson'
+  | 'requestDate'
+  | 'revokedAt'
+  | 'revocationReason'
 >;
 
 export interface EmployeeSuggestion {
@@ -29,6 +36,8 @@ export const EMPTY_VINCULOGRAMA_DRAFT: VinculogramaDraft = {
   nombreCompleto: '',
   linkedPerson: '',
   requestDate: '',
+  revokedAt: '',
+  revocationReason: '',
 };
 
 function isIsoDate(value: string): boolean {
@@ -66,15 +75,25 @@ export function buildVinculograma(
     linkedPerson: draft.linkedPerson.trim(),
     requestDate,
     expiryDate: calculateExpiryDate(requestDate),
+    revokedAt: draft.revokedAt.trim(),
+    revocationReason: draft.revocationReason.trim(),
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     deletedAt: previous?.deletedAt ?? null,
   };
 }
 
-export function getVinculogramaStatus(expiryDate: string, today: string): VinculogramaStatus {
+export function getVinculogramaStatus(
+  expiryDate: string,
+  today: string,
+  revokedAt = '',
+): VinculogramaStatus {
+  if (revokedAt.trim()) {
+    return 'Revocado';
+  }
   return expiryDate >= today ? 'Vigente' : 'Vencido';
 }
+
 
 function compareEmployeeNumber(first: string, second: string): number {
   const firstTrimmed = first.trim();
@@ -107,10 +126,10 @@ export function splitVinculogramasByStatus(
 
   return {
     vigentes: sortedRecords.filter(
-      (record) => getVinculogramaStatus(record.expiryDate, today) === 'Vigente',
+      (record) => getVinculogramaStatus(record.expiryDate, today, record.revokedAt) === 'Vigente',
     ),
     vencidos: sortedRecords.filter(
-      (record) => getVinculogramaStatus(record.expiryDate, today) === 'Vencido',
+      (record) => getVinculogramaStatus(record.expiryDate, today, record.revokedAt) !== 'Vigente',
     ),
   };
 }

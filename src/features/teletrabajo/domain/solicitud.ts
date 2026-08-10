@@ -1,5 +1,5 @@
 export const TELETRABAJO_TIPOS_SOLICITUD = ['nueva', 'renovacion'] as const;
-export const TELETRABAJO_ESTADOS = ['pendiente', 'analizada', 'aprobada', 'denegada'] as const;
+export const TELETRABAJO_ESTADOS = ['pendiente', 'analizada', 'aprobada', 'denegada', 'desistida'] as const;
 export const TELETRABAJO_DIAS = ['martes', 'miercoles', 'jueves'] as const;
 
 export type TeletrabajoTipoSolicitud = (typeof TELETRABAJO_TIPOS_SOLICITUD)[number];

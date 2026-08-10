@@ -48,6 +48,7 @@ const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'La fecha de vigencia se calcula automáticamente como 3 años exactos después de la fecha de solicitud; no se edita a mano.',
       'El vínculo se marca como "Vigente" mientras la fecha actual no supere esa fecha de vigencia, y pasa a "Vencido" en cuanto se supera, sin ninguna acción manual.',
+      'Si deja de ser válido antes de vencer, puede marcarse como "Revocado"; la fecha y el motivo quedan registrados de forma obligatoria.',
       'La búsqueda de la persona se apoya en Plantilla (por número de empleado o nombre), evitando duplicar datos que ya están dados de alta allí.',
     ],
   },
@@ -63,7 +64,7 @@ const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'Selecciona siempre la persona desde Plantilla cuando sea posible para evitar duplicidades o errores de nombre.',
       'Comprueba la fecha de solicitud antes de guardar, ya que de ella depende directamente la fecha de vigencia calculada.',
-      'Usa el filtro de vigentes/vencidos para separar relaciones activas de las que ya han caducado.',
+      'Usa las secciones de vigentes e histórico para separar relaciones activas de las vencidas o revocadas.',
       'Usa exportación o impresión para trasladar un listado filtrado de vínculos activos o históricos.',
     ],
   },
@@ -97,15 +98,23 @@ const vinculogramaExportColumns = (today: string): ExportColumn<Vinculograma>[] 
   { key: 'linkedPerson', header: 'Persona vinculada', value: (record) => record.linkedPerson },
   { key: 'requestDate', header: 'Fecha solicitud', value: (record) => record.requestDate },
   { key: 'expiryDate', header: 'Fecha vigencia', value: (record) => record.expiryDate },
+  { key: 'revokedAt', header: 'Fecha revocación', value: (record) => record.revokedAt || '' },
+  {
+    key: 'revocationReason',
+    header: 'Motivo revocación',
+    value: (record) => record.revocationReason || '',
+  },
   {
     key: 'estado',
     header: 'Estado',
-    value: (record) => getVinculogramaStatus(record.expiryDate, today),
+    value: (record) => getVinculogramaStatus(record.expiryDate, today, record.revokedAt),
   },
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+function todayIso(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
 }
 
 function readExpiredVisibility(): boolean {
@@ -122,6 +131,8 @@ function toDraft(record: Vinculograma): VinculogramaDraft {
     nombreCompleto: record.nombreCompleto,
     linkedPerson: record.linkedPerson,
     requestDate: record.requestDate,
+    revokedAt: record.revokedAt ?? '',
+    revocationReason: record.revocationReason ?? '',
   };
 }
 
@@ -163,6 +174,7 @@ function VinculogramaModal({
     () => suggestEmployees(employees, draft.nombreCompleto),
     [draft.nombreCompleto, employees],
   );
+  const isRevoked = Boolean(draft.revokedAt || draft.revocationReason);
 
   const selectSuggestion = (suggestion: EmployeeSuggestion) => {
     onChange({
@@ -265,6 +277,49 @@ function VinculogramaModal({
               Fecha vigencia
               <Input className="font-semibold" readOnly value={expiryDate} />
             </FieldLabel>
+            {mode === 'edit' && (
+              <>
+                <label className="flex items-center gap-2 text-sm font-semibold text-metro-muted md:col-span-2">
+                  <input
+                    checked={isRevoked}
+                    className="h-4 w-4 accent-metro-red"
+                    onChange={(event) =>
+                      onChange({
+                        ...draft,
+                        revokedAt: event.target.checked ? draft.revokedAt || todayIso() : '',
+                        revocationReason: event.target.checked ? draft.revocationReason : '',
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  Revocado antes de la fecha de vencimiento
+                </label>
+                {isRevoked && (
+                  <>
+                    <FieldLabel>
+                      Fecha revocación
+                      <Input
+                        onChange={(event) => onChange({ ...draft, revokedAt: event.target.value })}
+                        required
+                        type="date"
+                        value={draft.revokedAt}
+                      />
+                    </FieldLabel>
+                    <FieldLabel>
+                      Motivo revocación
+                      <Input
+                        onChange={(event) =>
+                          onChange({ ...draft, revocationReason: event.target.value })
+                        }
+                        placeholder="Obligatorio"
+                        required
+                        value={draft.revocationReason}
+                      />
+                    </FieldLabel>
+                  </>
+                )}
+              </>
+            )}
           </fieldset>
       </ModalBody>
 
@@ -548,15 +603,25 @@ function VinculogramaTable({
         id: 'status',
         header: 'Estado / Fecha vigencia',
         accessor: (record) =>
-          `${getVinculogramaStatus(record.expiryDate, today)} ${record.expiryDate}`,
+          `${getVinculogramaStatus(record.expiryDate, today, record.revokedAt)} ${record.expiryDate}`,
         render: (record) => {
-          const status = getVinculogramaStatus(record.expiryDate, today);
-          const tone = status === 'Vigente' ? 'success' : 'warning';
+          const status = getVinculogramaStatus(record.expiryDate, today, record.revokedAt);
+          const tone = status === 'Vigente' ? 'success' : status === 'Revocado' ? 'error' : 'warning';
 
           return (
-            <StatusBadge tone={tone}>
-              {status} · {record.expiryDate}
-            </StatusBadge>
+            <div className="space-y-1">
+              <StatusBadge tone={tone}>
+                {status} · {status === 'Revocado' ? record.revokedAt : record.expiryDate}
+              </StatusBadge>
+              {status === 'Revocado' && record.revocationReason && (
+                <p
+                  className="max-w-[240px] truncate text-[11px] font-medium text-metro-muted"
+                  title={record.revocationReason}
+                >
+                  {record.revocationReason}
+                </p>
+              )}
+            </div>
           );
         },
         width: 180,
@@ -668,7 +733,7 @@ export function VinculogramaPage() {
   });
 
   const openCreateModal = () => {
-    setDraft(EMPTY_VINCULOGRAMA_DRAFT);
+    setDraft({ ...EMPTY_VINCULOGRAMA_DRAFT, requestDate: todayIso() });
     setEditingId(null);
     setShowModal(true);
   };
@@ -682,7 +747,7 @@ export function VinculogramaPage() {
   const closeModal = () => {
     setShowModal(false);
     setEditingId(null);
-    setDraft(EMPTY_VINCULOGRAMA_DRAFT);
+    setDraft({ ...EMPTY_VINCULOGRAMA_DRAFT, requestDate: todayIso() });
   };
 
   const acquireMutationLock = useCallback(
@@ -706,6 +771,15 @@ export function VinculogramaPage() {
   const saveRecord = async (): Promise<{ ok: boolean; message: string }> => {
     if (!draft.employeeNumber.trim() || !draft.nombreCompleto.trim() || !draft.requestDate.trim()) {
       return { ok: false, message: 'Empleado, nombre y fecha de solicitud son obligatorios.' };
+    }
+
+    if (draft.revokedAt.trim() || draft.revocationReason.trim()) {
+      if (!draft.revokedAt.trim() || !draft.revocationReason.trim()) {
+        return {
+          ok: false,
+          message: 'Para revocar un vinculograma debes indicar la fecha y el motivo.',
+        };
+      }
     }
 
     if (editingId) {
@@ -824,20 +898,20 @@ export function VinculogramaPage() {
       <div className="rounded-xl border border-metro-border/80 bg-metro-surface p-3">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
-            <Search size={16} className="text-metro-red" /> Vinculogramas vencidos
+            <Search size={16} className="text-metro-red" /> Vinculogramas vencidos / revocados
             <span className="rounded-full bg-metro-warning/10 px-3 py-1 text-xs font-bold text-amber-200">
               {vencidos.length} registros
             </span>
             <ExportPrintButtons
               payload={{
-                title: 'Vinculogramas vencidos',
-                filename: 'vinculogramas-vencidos',
+                title: 'Vinculogramas vencidos / revocados',
+                filename: 'vinculogramas-historico',
                 columns: reorderExportColumns(
                   vinculogramaExportColumns(today),
                   tablePreferences.columnOrder,
                 ),
                 rows: vencidos,
-                filterLabel: 'Estado: vencido',
+                filterLabel: 'Estado: vencido o revocado',
               }}
             />
           </div>
@@ -848,7 +922,7 @@ export function VinculogramaPage() {
         {showExpired && (
           <div className="overflow-auto">
             <VinculogramaTable
-              emptyText="No hay vinculogramas vencidos."
+              emptyText="No hay vinculogramas vencidos ni revocados."
               onDelete={deleteTableRecord}
               onEdit={openEditModal}
               records={vencidos}
