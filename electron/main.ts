@@ -9,6 +9,7 @@ const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
+const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
 const splashMinimumVisibleMs = 800;
 const splashMaximumVisibleMs = 25_000;
 
@@ -69,6 +70,35 @@ function createSplashWindow(): BrowserWindow {
   splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
 
   return splashWindow;
+}
+
+
+function createShutdownWindow(): BrowserWindow {
+  const shutdownWindow = new BrowserWindow({
+    width: 460,
+    height: 360,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    frame: false,
+    show: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    title: 'Cerrando TrAccion',
+    backgroundColor: '#0F1F2A',
+    icon: appIconPath,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  shutdownWindow.center();
+  shutdownWindow.loadFile(shutdownHtmlPath).catch(() => undefined);
+  return shutdownWindow;
 }
 
 function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promise<void> {
@@ -315,6 +345,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   let isQuitAfterSqlitePersistenceClosed = false;
+  let isShutdownInProgress = false;
+  let shutdownWindow: BrowserWindow | null = null;
 
   app.on('before-quit', (event) => {
     if (isQuitAfterSqlitePersistenceClosed) {
@@ -322,6 +354,13 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     event.preventDefault();
+    if (isShutdownInProgress) {
+      return;
+    }
+
+    isShutdownInProgress = true;
+    shutdownWindow = createShutdownWindow();
+
     loadSqlitePersistenceModule()
       .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
       .catch((error: unknown) => {
@@ -329,6 +368,10 @@ if (!app.requestSingleInstanceLock()) {
       })
       .finally(() => {
         isQuitAfterSqlitePersistenceClosed = true;
+        if (shutdownWindow && !shutdownWindow.isDestroyed()) {
+          shutdownWindow.destroy();
+        }
+        shutdownWindow = null;
         app.quit();
       });
   });

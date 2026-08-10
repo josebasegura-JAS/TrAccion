@@ -426,7 +426,7 @@ export function DashboardCards({
   }, [actaTasks, criticalTasks, nextSession, openRecord, showTaskPopup, upcomingTasks]);
 
   return (
-    <div className="grid h-[calc(100vh-7rem)] min-h-0 grid-rows-[minmax(0,0.92fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_auto] gap-2.5 overflow-hidden">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,0.9fr)_minmax(0,1.18fr)_minmax(0,1fr)_auto] gap-2 overflow-hidden">
       <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:grid-cols-2">
         <DashboardPanel className="p-3.5">
           <div className="grid h-full min-h-0 grid-cols-[1fr_auto] gap-4">
@@ -632,10 +632,10 @@ export function DashboardCards({
                 </button>
               }
             />
-            <div className="mt-2 grid min-h-0 flex-1 content-start gap-1">
+            <div className="mt-1.5 grid min-h-0 flex-1 content-start gap-1">
               {priorityTasks.length > 0 ? priorityTasks.map((task) => (
                 <button
-                  className="grid grid-cols-[minmax(0,1fr)_5rem_5rem_auto] items-center gap-2 rounded-lg border border-metro-border bg-metro-panel/45 px-2.5 py-1.5 text-left hover:bg-white/5"
+                  className="grid grid-cols-[minmax(0,1fr)_5rem_5rem_auto] items-center gap-2 rounded-lg border border-metro-border bg-metro-panel/45 px-2.5 py-1 text-left hover:bg-white/5"
                   key={task.id}
                   onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
                   type="button"
@@ -655,10 +655,10 @@ export function DashboardCards({
         <DashboardPanel className="p-3.5">
           <div className="flex h-full min-h-0 flex-col">
             <PanelTitle icon={Target} title="Próximos hitos" />
-            <div className="mt-2 grid min-h-0 flex-1 content-start gap-1">
+            <div className="mt-1.5 grid min-h-0 flex-1 content-start gap-1">
               {upcomingEvents.slice(0, 4).map((event) => (
                 <button
-                  className="grid grid-cols-[0.65rem_minmax(0,1fr)_5.5rem_auto] items-center gap-2 rounded-lg border border-metro-border bg-metro-panel/45 px-2.5 py-1.5 text-left hover:bg-white/5"
+                  className="grid grid-cols-[0.65rem_minmax(0,1fr)_5.5rem_auto] items-center gap-2 rounded-lg border border-metro-border bg-metro-panel/45 px-2.5 py-1 text-left hover:bg-white/5"
                   key={event.id}
                   onClick={() => openRecord({ view: event.view, recordId: event.recordId })}
                   type="button"
@@ -681,7 +681,7 @@ export function DashboardCards({
       </div>
 
       <button
-        className="flex min-h-10 items-center justify-between rounded-[1.15rem] border border-metro-border bg-metro-surface/90 px-3.5 py-2 text-left shadow-glow transition hover:bg-white/5"
+        className="flex min-h-8 items-center justify-between rounded-[1rem] border border-metro-border bg-metro-surface/90 px-3 py-1.5 text-left shadow-glow transition hover:bg-white/5"
         onClick={() => openRecord({ view: 'actas' })}
         type="button"
       >

@@ -437,7 +437,13 @@ export function App() {
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-metro-app/95">
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
-        <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
+        <main
+          className={
+            activeView === 'dashboard'
+              ? 'min-h-0 min-w-0 flex-1 overflow-hidden p-3'
+              : 'min-w-0 flex-1 space-y-5 overflow-auto p-5'
+          }
+        >
           <SqliteReadOnlyBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <PersistenceErrorBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <GlobalBusyIndicator />
