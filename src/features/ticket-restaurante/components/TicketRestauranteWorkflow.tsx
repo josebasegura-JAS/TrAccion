@@ -184,6 +184,7 @@ export interface TicketRestauranteWorkflowProps {
   inactivePeople: number;
   absenceCount: number;
   manutencionCount: number;
+  manualDebtCount: number;
   effectiveTicketPrice: number;
   calculation: TicketMonthCalculation;
   onOpenCalendars: () => void;
@@ -194,6 +195,7 @@ export interface TicketRestauranteWorkflowProps {
   onOpenAbsences: () => void;
   onImportAbsences: () => void;
   onOpenManutenciones: () => void;
+  onOpenManualDebt: () => void;
   onImportManutenciones: () => void;
   onOpenMonthlyCalculation: () => void;
   onOpenContribution: () => void;
@@ -209,6 +211,7 @@ export function TicketRestauranteWorkflow({
   inactivePeople,
   absenceCount,
   manutencionCount,
+  manualDebtCount,
   effectiveTicketPrice,
   calculation,
   onOpenCalendars,
@@ -219,6 +222,7 @@ export function TicketRestauranteWorkflow({
   onOpenAbsences,
   onImportAbsences,
   onOpenManutenciones,
+  onOpenManualDebt,
   onImportManutenciones,
   onOpenMonthlyCalculation,
   onOpenContribution,
@@ -340,6 +344,25 @@ export function TicketRestauranteWorkflow({
               <div className="rounded-md border border-metro-border bg-metro-navy/25 px-2.5 py-1.5"><p className="text-[9px] text-metro-muted">Deuda pendiente</p><p className="text-xs font-bold text-amber-300">{formatInteger(calculation.totals.deudaPendiente)}</p></div>
               <div className="rounded-md border border-metro-border bg-metro-navy/25 px-2.5 py-1.5"><p className="text-[9px] text-metro-muted">Importe estimado</p><p className="text-xs font-bold text-emerald-300">{formatMoney(calculation.totals.importe)} €</p></div>
             </div>
+
+
+            <button
+              className="mt-2 flex w-full items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-500/[0.045] px-3 py-2 text-left transition hover:border-amber-400/40 hover:bg-amber-500/[0.07]"
+              onClick={onOpenManualDebt}
+              type="button"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-amber-500/10 text-amber-300"><ReceiptText className="h-3.5 w-3.5" /></span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-extrabold text-metro-text">Ajustes extraordinarios · Deuda manual</p>
+                  <p className="truncate text-[9px] text-metro-muted">Corrige tickets entregados de más y reparte el descuento en varios meses.</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {manualDebtCount > 0 ? <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold text-amber-300">{manualDebtCount} activas</span> : null}
+                <ArrowRight className="h-3.5 w-3.5 text-metro-muted" />
+              </div>
+            </button>
           </section>
 
           <section className="relative ml-4 rounded-lg border border-metro-border bg-metro-panel px-3 py-2.5 shadow-card">
@@ -373,6 +396,7 @@ export function TicketRestauranteWorkflow({
               <StatusLine label="Personas revisadas" state={activePeople > 0 ? 'done' : 'pending'} detail={`${activePeople} activas`} />
               <StatusLine label="Ausencias importadas" state={absenceCount > 0 ? 'done' : 'neutral'} detail={`${absenceCount} en ${monthLabel}`} />
               <StatusLine label="Manutenciones importadas" state={manutencionCount > 0 ? 'done' : 'pending'} detail={`${manutencionCount} imputadas`} />
+              <StatusLine label="Deuda manual" state={manualDebtCount > 0 ? 'pending' : 'neutral'} detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes activos'} />
               <StatusLine label="Cómputo mensual" state={readyForCalculation ? 'done' : 'pending'} detail={readyForCalculation ? 'Disponible' : 'Falta base anual'} />
               <StatusLine label="Cotización" state="neutral" detail="A mes vencido" />
             </div>
@@ -387,7 +411,7 @@ export function TicketRestauranteWorkflow({
       </div>
 
       <section className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-        <div className="grid gap-2 lg:grid-cols-[170px_repeat(4,minmax(0,1fr))] lg:items-center">
+        <div className="grid gap-2 lg:grid-cols-[170px_repeat(5,minmax(0,1fr))] lg:items-center">
           <div className="flex items-center gap-2">
             <span className="grid h-7 w-7 place-items-center rounded-md bg-metro-red/10 text-red-300"><UserPlus className="h-3.5 w-3.5" /></span>
             <div><p className="text-xs font-extrabold text-metro-text">Accesos rápidos</p><p className="text-[9px] text-metro-muted">Ir a una vista</p></div>
@@ -395,6 +419,7 @@ export function TicketRestauranteWorkflow({
           <WorkflowAction icon={Users} label="Personas" onClick={onOpenPeople} />
           <WorkflowAction icon={CalendarDays} label="Ausencias" onClick={onOpenAbsences} />
           <WorkflowAction icon={Utensils} label="Manutenciones" onClick={onOpenManutenciones} />
+          <WorkflowAction icon={ReceiptText} label="Deuda manual" onClick={onOpenManualDebt} />
           <WorkflowAction icon={Calculator} label="Cómputo cotización" onClick={onOpenContribution} />
         </div>
       </section>

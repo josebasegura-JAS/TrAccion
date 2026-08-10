@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TICKET_RESTAURANT_CONFIG,
+  buildTicketManualDebt,
   buildTicketRestaurantAbsence,
   buildTicketPerson,
   buildYearCalendar,
@@ -14,6 +15,7 @@ import {
   normalizeTicketEmployeeNumber,
   normalizeTicketIsoWeekdays,
   previousCalendarYear,
+  splitManualDebtInstallments,
   toggleDiaSinTicket,
   visibleTicketCalendars,
   type TicketCalendar,
@@ -1026,5 +1028,94 @@ describe('ticket restaurante absence importer domain', () => {
     expect(filterTicketRestaurantAbsencesByMonth(absences, 2026, 5)).toHaveLength(1);
     expect(filterTicketRestaurantAbsencesByMonth(absences, 2026, 6)).toHaveLength(1);
     expect(filterTicketRestaurantAbsencesByMonth(absences, 2026, 7)).toHaveLength(0);
+  });
+});
+
+
+describe('ticket restaurante — deuda manual', () => {
+  const person = buildTicketPerson(
+    {
+      empleado: '100',
+      nombre: 'Ana',
+      apellido1: 'Prueba',
+      apellido2: '',
+      dni: '',
+      nombreApellidos: 'Ana Prueba',
+      puesto: 'Técnica',
+      calendarId: 'calendar-manual-debt',
+      activo: true,
+    },
+    timestamp,
+  );
+  const calendar = buildCalendar({ id: 'calendar-manual-debt' });
+
+  it('reparte el resto en los primeros meses', () => {
+    expect(splitManualDebtInstallments(10, 3)).toEqual([4, 3, 3]);
+  });
+
+  it('descuenta la deuda manual solo en el pedido mensual y respeta el reparto', () => {
+    const debt = buildTicketManualDebt(
+      {
+        empleado: '100',
+        nombreApellidos: 'Ana Prueba',
+        totalTickets: 10,
+        originYear: 2026,
+        originMonth: 6,
+        startYear: 2026,
+        startMonth: 8,
+        months: 3,
+        reason: 'Tickets entregados de más en junio',
+        observations: '',
+      },
+      timestamp,
+      'manual-debt-1',
+    );
+    const config = { ...DEFAULT_TICKET_RESTAURANT_CONFIG, manualDebts: [debt] };
+
+    const august = calculateMonthlyTicketOrder([person], [calendar], [], config, 2026, 8);
+    const september = calculateMonthlyTicketOrder([person], [calendar], [], config, 2026, 9);
+    const october = calculateMonthlyTicketOrder([person], [calendar], [], config, 2026, 10);
+    const contribution = calculateTicketContribution([person], [calendar], [], config, 2026, 8);
+
+    expect(august.rows[0]?.deudaAplicadaDetalle.filter((row) => row.id.startsWith('manual-debt:'))).toHaveLength(4);
+    expect(september.rows[0]?.deudaAplicadaDetalle.filter((row) => row.id.startsWith('manual-debt:'))).toHaveLength(3);
+    expect(october.rows[0]?.deudaAplicadaDetalle.filter((row) => row.id.startsWith('manual-debt:'))).toHaveLength(3);
+    expect(contribution.rows[0]?.ausenciasAplicadas).toBe(0);
+  });
+
+  it('arrastra al mes siguiente una cuota manual que no cabe', () => {
+    const augustNoTicketDays = buildYearCalendar(calendar, 2026)
+      .find((item) => item.mes === 8)!
+      .dias
+      .filter((day) => !day.esFinDeSemana)
+      .slice(2)
+      .map((day) => day.fecha);
+    const constrainedCalendar = buildCalendar({
+      id: 'calendar-manual-debt',
+      diasSinTicket: augustNoTicketDays,
+    });
+    const debt = buildTicketManualDebt(
+      {
+        empleado: '100',
+        nombreApellidos: 'Ana Prueba',
+        totalTickets: 4,
+        originYear: 2026,
+        originMonth: 6,
+        startYear: 2026,
+        startMonth: 8,
+        months: 1,
+        reason: 'Ajuste',
+        observations: '',
+      },
+      timestamp,
+      'manual-debt-carry',
+    );
+    const config = { ...DEFAULT_TICKET_RESTAURANT_CONFIG, manualDebts: [debt] };
+
+    const august = calculateMonthlyTicketOrder([person], [constrainedCalendar], [], config, 2026, 8);
+    const september = calculateMonthlyTicketOrder([person], [constrainedCalendar], [], config, 2026, 9);
+
+    expect(august.rows[0]?.deudaPendiente).toBe(2);
+    expect(september.rows[0]?.deudaAplicadaDetalle.filter((row) => row.id.startsWith('manual-debt:'))).toHaveLength(2);
   });
 });

@@ -100,11 +100,43 @@ export interface TicketCalculationRules {
   nonDiscountableMotivesByCalendar: Record<string, string[]>;
 }
 
+export interface TicketManualDebt {
+  id: string;
+  empleado: string;
+  nombreApellidos: string;
+  totalTickets: number;
+  originYear: number;
+  originMonth: number;
+  startYear: number;
+  startMonth: number;
+  months: number;
+  reason: string;
+  observations: string;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt: string | null;
+  cancellationReason: string;
+}
+
+export interface TicketManualDebtDraft {
+  empleado: string;
+  nombreApellidos: string;
+  totalTickets: number;
+  originYear: number;
+  originMonth: number;
+  startYear: number;
+  startMonth: number;
+  months: number;
+  reason: string;
+  observations: string;
+}
+
 export interface TicketRestaurantConfig {
   importeTicket: number;
   pedidoMensual: number;
   priceHistory: TicketPriceHistoryEntry[];
   rules: TicketCalculationRules;
+  manualDebts?: TicketManualDebt[];
 }
 
 export interface TicketDebtDetailDay {
@@ -172,6 +204,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
     debtStartDate: '2026-03-01',
     nonDiscountableMotivesByCalendar: { Liberados: ['SIN'] },
   },
+  manualDebts: [],
 };
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
@@ -800,7 +833,8 @@ function calculatePersonMonthlyOrderWithDebt(
 }
 
 interface PendingMonthlyDiscount extends TicketDebtDetailDay {
-  kind: 'absence' | 'manutencion';
+  kind: 'absence' | 'manutencion' | 'manual';
+  manualDebtId?: string;
 }
 
 interface MonthlyOrderDebtStatus {
@@ -901,15 +935,47 @@ function calculatePersonMonthlyDiscountStatus(
       ),
     );
 
+    // Las deudas manuales se incorporan por cuotas en el mes programado.
+    // Si una cuota no cabe, permanece en la misma cola y se arrastra como el resto de deuda.
+    (config.manualDebts ?? [])
+      .filter((debt) => sameTicketEmployee(debt.empleado, person.empleado))
+      .forEach((debt) => {
+        const cursorMonthStart = toIsoDate(cursorYear, cursorMonth, 1);
+        const cancellationMonthStart = debt.cancelledAt ? `${debt.cancelledAt.slice(0, 7)}-01` : null;
+        if (cancellationMonthStart && cursorMonthStart >= cancellationMonthStart) {
+          for (let index = pendingDiscounts.length - 1; index >= 0; index -= 1) {
+            if (pendingDiscounts[index]?.manualDebtId === debt.id) pendingDiscounts.splice(index, 1);
+          }
+          return;
+        }
+        const installments = splitManualDebtInstallments(debt.totalTickets, debt.months);
+        installments.forEach((amount, installmentIndex) => {
+          const installmentMonth = addMonths(debt.startYear, debt.startMonth, installmentIndex);
+          if (installmentMonth.year !== cursorYear || installmentMonth.month !== cursorMonth) return;
+          for (let unit = 0; unit < amount; unit += 1) {
+            pendingDiscounts.push({
+              id: `manual-debt:${debt.id}:${cursorYear}-${String(cursorMonth).padStart(2, '0')}:${unit + 1}`,
+              fecha: toIsoDate(cursorYear, cursorMonth, 1),
+              motivo: `Deuda manual: ${debt.reason}`,
+              mesOrigen: `${debt.originYear}-${String(debt.originMonth).padStart(2, '0')}`,
+              kind: 'manual',
+              manualDebtId: debt.id,
+            });
+          }
+        });
+      });
+
     const availableTickets = buildMonthTicketDays(calendar, cursorYear, cursorMonth).length;
     const appliedCount = Math.min(availableTickets, pendingDiscounts.length);
     const appliedDiscounts = pendingDiscounts.splice(0, appliedCount);
 
     if (cursorYear === targetYear && cursorMonth === targetMonth) {
       const discountedDaysById = new Map<string, number>();
-      appliedDiscounts.forEach((detail) => {
-        discountedDaysById.set(detail.id, (discountedDaysById.get(detail.id) ?? 0) + 1);
-      });
+      appliedDiscounts
+        .filter((detail) => detail.kind === 'absence')
+        .forEach((detail) => {
+          discountedDaysById.set(detail.id, (discountedDaysById.get(detail.id) ?? 0) + 1);
+        });
       const appliedManutenciones = appliedDiscounts.filter(
         (detail) => detail.kind === 'manutencion',
       );
@@ -919,12 +985,14 @@ function calculatePersonMonthlyDiscountStatus(
         ausenciasAplicadas: appliedDiscounts.length,
         hojasGastoAplicadas: appliedManutenciones.length,
         deudaPendiente: pendingDiscounts.length,
-        ausenciaIds: Array.from(new Set(appliedDiscounts.map((detail) => detail.id))),
+        ausenciaIds: Array.from(
+          new Set(appliedDiscounts.filter((detail) => detail.kind === 'absence').map((detail) => detail.id)),
+        ),
         ausenciaDiasDescontados: Object.fromEntries(discountedDaysById),
-        // Solo días de ausencia: las hojas de gasto aplicadas ya se listan en
-        // hojaGastoDetalle y duplicarlas aquí inflaba el detalle del modal.
+        // Ausencias y deuda manual: las hojas de gasto aplicadas ya se listan en
+        // hojaGastoDetalle y duplicarlas aquí inflaría el detalle del modal.
         deudaAplicadaDetalle: appliedDiscounts
-          .filter((detail) => detail.kind === 'absence')
+          .filter((detail) => detail.kind !== 'manutencion')
           .map(stripPendingDiscountKind),
         deudaPendienteDetalle: pendingDiscounts.map(stripPendingDiscountKind),
         hojaGastoDetalle: appliedManutenciones.map((detail) => ({
@@ -1225,6 +1293,80 @@ function absenceIsNonDiscountableByCalendar(
   );
 }
 
+export function buildTicketManualDebt(
+  draft: TicketManualDebtDraft,
+  now: string,
+  id: string,
+): TicketManualDebt {
+  return {
+    id,
+    empleado: normalizeTicketEmployeeNumber(draft.empleado),
+    nombreApellidos: draft.nombreApellidos.trim(),
+    totalTickets: Math.max(1, Math.trunc(draft.totalTickets)),
+    originYear: Math.trunc(draft.originYear),
+    originMonth: Math.min(12, Math.max(1, Math.trunc(draft.originMonth))),
+    startYear: Math.trunc(draft.startYear),
+    startMonth: Math.min(12, Math.max(1, Math.trunc(draft.startMonth))),
+    months: Math.min(
+      Math.max(1, Math.trunc(draft.totalTickets)),
+      Math.max(1, Math.trunc(draft.months)),
+    ),
+    reason: draft.reason.trim(),
+    observations: draft.observations.trim(),
+    createdAt: now,
+    updatedAt: now,
+    cancelledAt: null,
+    cancellationReason: '',
+  };
+}
+
+export function splitManualDebtInstallments(totalTickets: number, months: number): number[] {
+  const total = Math.max(0, Math.trunc(totalTickets));
+  const count = Math.max(1, Math.min(total || 1, Math.trunc(months)));
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+function normalizeManualDebts(value: unknown): TicketManualDebt[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<TicketManualDebt>;
+    if (
+      typeof item.id !== 'string' ||
+      typeof item.empleado !== 'string' ||
+      typeof item.totalTickets !== 'number' ||
+      typeof item.originYear !== 'number' ||
+      typeof item.originMonth !== 'number' ||
+      typeof item.startYear !== 'number' ||
+      typeof item.startMonth !== 'number' ||
+      typeof item.months !== 'number' ||
+      typeof item.reason !== 'string'
+    ) return [];
+    return [{
+      id: item.id,
+      empleado: normalizeTicketEmployeeNumber(item.empleado),
+      nombreApellidos: typeof item.nombreApellidos === 'string' ? item.nombreApellidos.trim() : '',
+      totalTickets: Math.max(1, Math.trunc(item.totalTickets)),
+      originYear: Math.trunc(item.originYear),
+      originMonth: Math.min(12, Math.max(1, Math.trunc(item.originMonth))),
+      startYear: Math.trunc(item.startYear),
+      startMonth: Math.min(12, Math.max(1, Math.trunc(item.startMonth))),
+      months: Math.min(
+        Math.max(1, Math.trunc(item.totalTickets)),
+        Math.max(1, Math.trunc(item.months)),
+      ),
+      reason: item.reason.trim(),
+      observations: typeof item.observations === 'string' ? item.observations.trim() : '',
+      createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
+      updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
+      cancelledAt: typeof item.cancelledAt === 'string' ? item.cancelledAt : null,
+      cancellationReason: typeof item.cancellationReason === 'string' ? item.cancellationReason.trim() : '',
+    }];
+  });
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -1243,6 +1385,7 @@ export function normalizeTicketRestaurantConfig(
         : DEFAULT_TICKET_RESTAURANT_CONFIG.pedidoMensual,
     priceHistory,
     rules: normalizeTicketCalculationRules(config.rules),
+    manualDebts: normalizeManualDebts(config.manualDebts),
   };
 }
 

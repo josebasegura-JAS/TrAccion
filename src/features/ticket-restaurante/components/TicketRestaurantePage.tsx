@@ -2,6 +2,7 @@ import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
+  buildTicketManualDebt,
   buildYearCalendar,
   calculateMonthlyTicketOrder,
   calculateTicketAbsenceMonthImpact,
@@ -13,6 +14,7 @@ import {
   getEffectiveTicketPrice,
   visibleTicketCalendars,
   type TicketCalendar,
+  type TicketManualDebtDraft,
   type TicketCalendarDraft,
   type TicketPerson,
   type TicketPersonCalculation,
@@ -58,6 +60,7 @@ import { PeoplePanel } from './TicketRestaurantePeoplePanel';
 import { TicketPriceModal, TicketRulesModal } from './TicketRestauranteConfigModals';
 import { CalculationPanel } from './TicketRestauranteCalculationPanel';
 import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
+import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
 import {
   AbsencePreviewModal,
   AbsencesTable,
@@ -76,6 +79,7 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Configurar calendarios: qué días de la semana generan ticket y qué fechas concretas quedan excluidas (festivos, cierres...).',
       'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario.',
       'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
+      'Si hay que corregir tickets entregados de más, registrar una Deuda manual indicando persona, origen y reparto en meses.',
       'Revisar "Cómputo mensual" para hacer el pedido del mes.',
       'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes.',
       'Exportar o imprimir los resultados que necesite RRLL.',
@@ -127,6 +131,16 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Deuda manual',
+    items: [
+      'Sirve para corregir tickets entregados de más sin crear ausencias ficticias.',
+      'Se indica la persona, el total de tickets, el mes de origen, el primer mes de descuento y en cuántos meses repartir la deuda.',
+      'Si una cuota no puede descontarse completa por falta de tickets disponibles, el pendiente se arrastra automáticamente.',
+      'La deuda manual solo afecta al Cómputo mensual/pedido. No modifica el Cómputo cotización.',
+      'Una deuda puede anularse con motivo; las cuotas ya aplicadas en meses anteriores no se alteran.',
+    ],
+  },
+  {
     title: 'Cotización y exportación',
     items: [
       'La vista de cotización muestra, para el mes y calendario de cada persona, los tickets realmente generados y su importe.',
@@ -174,7 +188,8 @@ type TicketRestauranteSubview =
   | 'computoMensual'
   | 'computoCotizacion'
   | 'ausencias'
-  | 'manutenciones';
+  | 'manutenciones'
+  | 'deudaManual';
 
 function toPersonDraft(person: TicketPerson): TicketPersonDraft {
   return {
@@ -1392,6 +1407,30 @@ export function TicketRestaurantePage({
     processedNavigationNonceRef.current = navigationNonce;
   }, [absences, editAbsence, initialAbsenceId, navigationNonce]);
 
+  const createManualDebt = async (draft: TicketManualDebtDraft) => {
+    const now = new Date().toISOString();
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `ticket-manual-debt-${Date.now()}`;
+    const debt = buildTicketManualDebt(draft, now, id);
+    return updateConfig({
+      ...config,
+      manualDebts: [...(config.manualDebts ?? []), debt],
+    });
+  };
+
+  const cancelManualDebt = async (id: string, reason: string) => {
+    const now = new Date().toISOString();
+    return updateConfig({
+      ...config,
+      manualDebts: (config.manualDebts ?? []).map((debt) =>
+        debt.id === id
+          ? { ...debt, cancelledAt: now, cancellationReason: reason.trim(), updatedAt: now }
+          : debt,
+      ),
+    });
+  };
+
   return (
     <section
       className="space-y-3"
@@ -1464,6 +1503,11 @@ export function TicketRestaurantePage({
             label="Manutenciones"
             onClick={() => setActiveSubview('manutenciones')}
           />
+          <SubviewButton
+            active={activeSubview === 'deudaManual'}
+            label="Deuda manual"
+            onClick={() => setActiveSubview('deudaManual')}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <ActionButton icon={Euro} iconOnly={false} onClick={() => setIsPriceModalOpen(true)} size="sm" variant="secondary">
@@ -1485,6 +1529,7 @@ export function TicketRestaurantePage({
           effectiveTicketPrice={getEffectiveTicketPrice(config, calculationYear, calculationMonth)}
           inactivePeople={workflowInactivePeople}
           manutencionCount={workflowManutencionCount}
+          manualDebtCount={(config.manualDebts ?? []).filter((debt) => !debt.cancelledAt).length}
           month={calculationMonth}
           onImportAbsences={() => {
             setActiveSubview('ausencias');
@@ -1507,6 +1552,7 @@ export function TicketRestaurantePage({
           onOpenCalendars={() => setActiveSubview('calendarios')}
           onOpenContribution={() => setActiveSubview('computoCotizacion')}
           onOpenManutenciones={() => setActiveSubview('manutenciones')}
+          onOpenManualDebt={() => setActiveSubview('deudaManual')}
           onOpenMonthlyCalculation={() => setActiveSubview('computoMensual')}
           onOpenPeople={() => setActiveSubview('personas')}
           onOpenPrice={() => setIsPriceModalOpen(true)}
@@ -1698,6 +1744,16 @@ export function TicketRestaurantePage({
           onSavePreview={saveManutencionPreview}
           previewRows={manutencionPreviewRows}
           ticketPeople={visiblePeople}
+        />
+      ) : activeSubview === 'deudaManual' ? (
+        <TicketRestauranteManualDebtPanel
+          calculation={monthCalculation}
+          debts={config.manualDebts ?? []}
+          month={calculationMonth}
+          onCancel={cancelManualDebt}
+          onCreate={createManualDebt}
+          people={visiblePeople}
+          year={calculationYear}
         />
       ) : null}
 
