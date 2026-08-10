@@ -4,6 +4,7 @@ import { useTableViewPreferences } from '../shared/table/useTableViewPreferences
 import { TeletrabajoEditor } from './TeletrabajoEditor';
 import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/TeletrabajoFiltersBar';
 import { TeletrabajoPageHeader } from '../features/teletrabajo/components/TeletrabajoPageHeader';
+import { TeletrabajoWorkflow } from '../features/teletrabajo/components/TeletrabajoWorkflow';
 import { TeletrabajoStatusMessages } from '../features/teletrabajo/components/TeletrabajoStatusMessages';
 import { TeletrabajoPeriodoModal } from '../features/teletrabajo/components/TeletrabajoPeriodoModal';
 import {
@@ -177,6 +178,7 @@ export function TeletrabajoPage({
   const [openHistoricoPeriodos, setOpenHistoricoPeriodos] = useState<Record<string, boolean>>({});
   const processedNavigationNonceRef = useRef<number | null>(null);
   const [incidentFilter, setIncidentFilter] = useState<TeletrabajoIncidentFilter>('');
+  const [showWorkflow, setShowWorkflow] = useState(initialSolicitudId ? false : true);
   const [incidentTooltip, setIncidentTooltip] = useState<TeletrabajoIncidentTooltipState | null>(
     null,
   );
@@ -347,6 +349,42 @@ export function TeletrabajoPage({
     puestosByKey,
     solicitudesByPuestoCount,
   ]);
+  const workflowRows = useMemo(
+    () => visibleSolicitudes.filter((solicitud) => solicitud.periodo === mainPeriodo),
+    [mainPeriodo, visibleSolicitudes],
+  );
+  const workflowStats = useMemo(
+    () => ({
+      total: workflowRows.length,
+      nuevas: workflowRows.filter((solicitud) => solicitud.tipoSolicitud === 'nueva').length,
+      pendientes: workflowRows.filter((solicitud) => solicitud.estado === 'pendiente').length,
+      analizadas: workflowRows.filter((solicitud) => solicitud.estado === 'analizada').length,
+      aprobadas: workflowRows.filter((solicitud) => solicitud.estado === 'aprobada').length,
+      denegadas: workflowRows.filter((solicitud) => solicitud.estado === 'denegada').length,
+      desistidas: workflowRows.filter((solicitud) => solicitud.estado === 'desistida').length,
+    }),
+    [workflowRows],
+  );
+  const workflowIncidentStats = useMemo(
+    () =>
+      workflowRows.reduce(
+        (stats, solicitud) => {
+          const meta = getTeletrabajoIncidentMeta(
+            solicitud,
+            puestosByKey,
+            solicitudesByPuestoCount,
+            employeesByEmpleado,
+            gruposByIdMap,
+          );
+          if (meta.status !== 'ok') stats.conflicts += 1;
+          if (meta.status === 'blocked') stats.blocked += 1;
+          return stats;
+        },
+        { conflicts: 0, blocked: 0 },
+      ),
+    [employeesByEmpleado, gruposByIdMap, puestosByKey, solicitudesByPuestoCount, workflowRows],
+  );
+
   const historicoSolicitudes = useMemo(() => {
     const historicalRows = solicitudesWithPlantillaData.filter(
       (solicitud) => !solicitud.deletedAt && solicitud.periodo !== currentPeriodo,
@@ -582,6 +620,7 @@ export function TeletrabajoPage({
 
     selectSolicitud(targetSolicitud.id);
     setEditingSolicitudId(targetSolicitud.id);
+    setShowWorkflow(false);
     setEditorMode('edit');
     processedNavigationNonceRef.current = navigationNonce;
   }, [initialSolicitudId, navigationNonce, selectSolicitud, visibleSolicitudes]);
@@ -935,25 +974,84 @@ export function TeletrabajoPage({
     }
   };
 
+  const openOperationalView = useCallback(() => {
+    setShowWorkflow(false);
+  }, []);
+
+  const openOperationalFiltered = useCallback(
+    (options: { estado?: '' | 'pendiente' | 'analizada' | 'aprobada' | 'denegada' | 'desistida'; incident?: TeletrabajoIncidentFilter } = {}) => {
+      setFilter('search', '');
+      setFilter('tipoSolicitud', '');
+      setFilter('estado', options.estado ?? '');
+      setIncidentFilter(options.incident ?? '');
+      setShowWorkflow(false);
+    },
+    [setFilter],
+  );
+
   return (
     <section
       className="space-y-3"
       id="teletrabajo"
     >
-      <TeletrabajoPageHeader
-        encuestaFileInputRef={fileInputRef}
-        historicoFileInputRef={historicoFileInputRef}
-        onEncuestaFileSelected={(file) => void handleImportEncuesta(file)}
-        onHistoricoFileSelected={(file) => void handleImportHistorico(file)}
-        onGenerateSampleEncuestaExcel={() => void handleGenerateSampleEncuestaExcel()}
-        onGenerateSampleHistoricoExcel={() => void handleGenerateSampleHistoricoExcel()}
-        onOpenPuestosModal={() => setIsPuestosModalOpen(true)}
-        onOpenGruposCoberturaModal={() => setIsGruposCoberturaModalOpen(true)}
-        onOpenPeriodoModal={openPeriodoModal}
-        onCreateSolicitud={openCreateEditor}
-      />
+      {showWorkflow ? (
+        <TeletrabajoWorkflow
+          analizadas={workflowStats.analizadas}
+          aprobadas={workflowStats.aprobadas}
+          bloqueantes={workflowIncidentStats.blocked}
+          denegadas={workflowStats.denegadas}
+          desistidas={workflowStats.desistidas}
+          gruposCount={gruposCobertura.length}
+          incidencias={workflowIncidentStats.conflicts}
+          nuevas={workflowStats.nuevas}
+          onCreateSolicitud={openCreateEditor}
+          onExportDireccion={() => void handleExportDireccion()}
+          onOpenAprobadas={() => openOperationalFiltered({ estado: 'aprobada' })}
+          onOpenDenegadas={() => openOperationalFiltered({ estado: 'denegada' })}
+          onOpenGrupos={() => setIsGruposCoberturaModalOpen(true)}
+          onOpenHistorico={() => {
+            setFilter('periodo', '');
+            setIsHistoricoOpen(true);
+            setShowWorkflow(false);
+          }}
+          onOpenIncidencias={() => openOperationalFiltered({ incident: 'conflictos' })}
+          onOpenPendientes={() => openOperationalFiltered({ estado: 'pendiente' })}
+          onOpenPeriodos={openPeriodoModal}
+          onOpenPuestos={() => setIsPuestosModalOpen(true)}
+          onOpenSolicitudes={openOperationalView}
+          onOpenValidacion={() => openOperationalFiltered({ incident: 'sinRevisar' })}
+          onPeriodoChange={(periodo) => setFilter('periodo', periodo)}
+          pendientes={workflowStats.pendientes}
+          periodo={mainPeriodo}
+          periodos={periodos.length > 0 ? periodos : ['']}
+          puestosCount={puestosTeletrabajo.length}
+          total={workflowStats.total}
+        />
+      ) : (
+        <>
+          <div className="mb-1 flex items-center">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-secondary hover:border-metro-red hover:text-metro-text"
+              onClick={() => setShowWorkflow(true)}
+              type="button"
+            >
+              ← Inicio Teletrabajo
+            </button>
+          </div>
+          <TeletrabajoPageHeader
+            encuestaFileInputRef={fileInputRef}
+            historicoFileInputRef={historicoFileInputRef}
+            onEncuestaFileSelected={(file) => void handleImportEncuesta(file)}
+            onHistoricoFileSelected={(file) => void handleImportHistorico(file)}
+            onGenerateSampleEncuestaExcel={() => void handleGenerateSampleEncuestaExcel()}
+            onGenerateSampleHistoricoExcel={() => void handleGenerateSampleHistoricoExcel()}
+            onOpenPuestosModal={() => setIsPuestosModalOpen(true)}
+            onOpenGruposCoberturaModal={() => setIsGruposCoberturaModalOpen(true)}
+            onOpenPeriodoModal={openPeriodoModal}
+            onCreateSolicitud={openCreateEditor}
+          />
 
-      <TeletrabajoStatusMessages
+          <TeletrabajoStatusMessages
         isEmployeesLoading={isEmployeesLoading}
         importSummary={importSummary}
         wordStatus={wordStatus}
@@ -1067,6 +1165,9 @@ export function TeletrabajoPage({
           puestosByKey={puestosByKey}
           solicitudesByPuestoCount={solicitudesByPuestoCount}
         />
+      )}
+
+        </>
       )}
 
       {incidentTooltip && (
