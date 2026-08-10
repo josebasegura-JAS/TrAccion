@@ -17,7 +17,7 @@ function acta(overrides: Partial<Acta> = {}): Acta {
     tipo: 'ordinaria',
     fechaSesion: '2026-06-10',
     fechaCreacion: timestamp,
-    estado: 'Pendiente de redactar',
+    estado: 'Pendiente de realizar',
     fechaLimite: '2026-06-20',
     observaciones: '',
     alegaciones: [],

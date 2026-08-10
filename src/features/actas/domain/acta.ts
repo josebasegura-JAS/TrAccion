@@ -4,7 +4,8 @@ import type { ManagedSession } from '../../../shared/sessions/session';
 export const DEFAULT_ACTA_TYPES = ['Comité', 'Paritaria'] as const;
 export const ACTA_TYPES = DEFAULT_ACTA_TYPES;
 export const ACTA_STATES = [
-  'Pendiente de redactar',
+  'Pendiente de realizar',
+  'Borrador',
   'Enviada a Dirección',
   'Pendiente de alegaciones',
   'Pendiente de firma',
@@ -71,7 +72,7 @@ export const EMPTY_ACTA_DRAFT: ActaDraft = {
   titulo: '',
   tipo: 'Comité',
   fechaSesion: '',
-  estado: 'Pendiente de redactar',
+  estado: 'Pendiente de realizar',
   fechaLimite: '',
   observaciones: '',
   alegaciones: [],

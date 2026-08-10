@@ -1,4 +1,4 @@
-import { Mail, Settings2 } from 'lucide-react';
+import { ArrowLeft, Mail, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -25,6 +25,7 @@ import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { ActasOutlookTemplateModal } from './ActasOutlookTemplateModal';
 import { ActaTypeManagerModal } from './ActaTypeManagerModal';
 import { ActaEditorModal } from './ActaEditorModal';
+import { ActasWorkflow } from './ActasWorkflow';
 import {
   ACTAS_HELP_SECTIONS,
   type ActaColumnId,
@@ -87,6 +88,8 @@ export function ActasPage() {
   const [outlookTemplateStatusIsError, setOutlookTemplateStatusIsError] = useState(false);
   const [outlookDraftStatus, setOutlookDraftStatus] = useState('');
   const [outlookDraftStatusIsError, setOutlookDraftStatusIsError] = useState(false);
+  const [isWorkflowHome, setIsWorkflowHome] = useState(true);
+  const [selectedWorkflowActaId, setSelectedWorkflowActaId] = useState('');
   const { alert, confirm, dialogNode } = useAppDialog();
   const outlookTemplateBodyRef = useRef<HTMLDivElement | null>(null);
   const recordLock = useSharedRecordLock({
@@ -110,6 +113,19 @@ export function ActasPage() {
     load();
     loadConfiguracion();
   }, [load, loadConfiguracion]);
+
+  useEffect(() => {
+    const openActas = actas.filter((acta) => acta.estado !== 'Cerrada');
+    if (openActas.length === 0) {
+      if (selectedWorkflowActaId) {
+        setSelectedWorkflowActaId('');
+      }
+      return;
+    }
+    if (!openActas.some((acta) => acta.id === selectedWorkflowActaId)) {
+      setSelectedWorkflowActaId(openActas[0].id);
+    }
+  }, [actas, selectedWorkflowActaId]);
 
   useEffect(() => {
     if (hasLoadedHistoricalActas) {
@@ -698,6 +714,19 @@ export function ActasPage() {
     }
   };
 
+  const openOperationalView = useCallback(
+    (state?: ActaDraft['estado']) => {
+      setSearch('');
+      setYearFilter('');
+      setStateFilter(state ?? '');
+      setIsWorkflowHome(false);
+      if (state === 'Cerrada' && !hasLoadedHistoricalActas) {
+        void loadHistoricalActas();
+      }
+    },
+    [hasLoadedHistoricalActas, loadHistoricalActas],
+  );
+
   const editingActa = editingActaId ? actas.find((acta) => acta.id === editingActaId) : null;
   const displayedCreationDate = editingActa?.fechaCreacion ?? getTodayIsoDate();
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
@@ -708,6 +737,20 @@ export function ActasPage() {
       className="space-y-3"
       id="actas"
     >
+      {isWorkflowHome ? (
+        <ActasWorkflow
+          actas={actas}
+          selectedActaId={selectedWorkflowActaId}
+          onSelectedActaIdChange={setSelectedWorkflowActaId}
+          onNewActa={() => openEditor()}
+          onOpenActa={(acta) => {
+            setIsWorkflowHome(false);
+            openEditor(acta);
+          }}
+          onOpenOperational={openOperationalView}
+        />
+      ) : (
+        <>
       <PageHeader
         title="Actas"
         helpSections={ACTAS_HELP_SECTIONS}
@@ -743,6 +786,16 @@ export function ActasPage() {
             }
             actions={
               <>
+            <ActionButton
+              variant="secondary"
+              icon={ArrowLeft}
+              iconOnly={false}
+              onClick={() => setIsWorkflowHome(true)}
+              size="sm"
+              title="Volver al inicio de Actas"
+            >
+              Inicio Actas
+            </ActionButton>
             <ActionButton
               variant="secondary"
               icon={Settings2}
@@ -876,6 +929,9 @@ export function ActasPage() {
           );
         })}
       </div>
+
+        </>
+      )}
 
       {isOutlookTemplateOpen && (
         <ActasOutlookTemplateModal

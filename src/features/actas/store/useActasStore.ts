@@ -181,7 +181,13 @@ function isActa(value: unknown): value is Acta {
 function normalizeActa(acta: Acta): Acta {
   const createdAt = acta.createdAt ?? new Date().toISOString();
   const updatedAt = acta.updatedAt ?? createdAt;
-  const estado = isActaState(acta.estado) ? acta.estado : ACTA_STATES[0];
+  const rawEstado = (acta as unknown as { estado?: unknown }).estado;
+  const estado =
+    rawEstado === 'Pendiente de redactar'
+      ? ACTA_STATES[0]
+      : isActaState(rawEstado)
+        ? rawEstado
+        : ACTA_STATES[0];
   const alegaciones = Array.isArray(acta.alegaciones)
     ? acta.alegaciones.filter(isActaAlegacion)
     : [];

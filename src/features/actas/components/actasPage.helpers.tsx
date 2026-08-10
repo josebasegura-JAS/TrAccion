@@ -149,12 +149,12 @@ export function replaceActaTemplateMarkers(
 export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
-    body: 'Gestiona el ciclo completo de un acta: redacción, envío a Dirección, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
+    body: 'Gestiona el seguimiento completo de un acta: alta, borrador, envío a Dirección, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
   },
   {
     title: 'Estados y plazos automáticos',
     items: [
-      'Pendiente de redactar → Enviada a Dirección → Pendiente de alegaciones → Pendiente de firma → Cerrada.',
+      'Pendiente de realizar → Borrador → Enviada a Dirección → Pendiente de alegaciones → Pendiente de firma → Cerrada.',
       'Al pasar a "Enviada a Dirección" se propone automáticamente una fecha límite a 7 días.',
       'Al pasar a "Pendiente de alegaciones" se propone una fecha límite a 21 días.',
       'Al pasar a "Pendiente de firma" se propone una fecha límite a 14 días.',
@@ -182,6 +182,7 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ordered: true,
     items: [
       'Crear el acta desde la sesión de Comité/Paritaria correspondiente, o manualmente indicando tipo, título y fecha de sesión.',
+      'Pasarla a Borrador cuando el documento externo esté disponible.',
       'Avanzar el estado a medida que progresa el trámite; revisar la fecha límite propuesta en cada cambio.',
       'Registrar alegaciones por sindicato cuando proceda.',
       'Adjuntar la ruta del acta firmada al cerrar el ciclo.',
@@ -307,8 +308,11 @@ export function addDaysToIsoDate(value: string, days: number): string {
 }
 
 export function getActaStateBadgeClass(state: ActaDraft['estado']): string {
-  if (state === 'Pendiente de redactar') {
+  if (state === 'Pendiente de realizar') {
     return 'border-orange-400/40 bg-orange-500/15 text-orange-200';
+  }
+  if (state === 'Borrador') {
+    return 'border-blue-400/40 bg-blue-500/15 text-blue-200';
   }
   if (state === 'Enviada a Dirección') {
     return 'border-sky-400/40 bg-sky-500/15 text-sky-200';
@@ -402,7 +406,10 @@ export function formatDateTime(value: string): string {
 }
 
 export function getNextState(state: ActaDraft['estado']): ActaDraft['estado'] | null {
-  if (state === 'Pendiente de redactar') {
+  if (state === 'Pendiente de realizar') {
+    return 'Borrador';
+  }
+  if (state === 'Borrador') {
     return 'Enviada a Dirección';
   }
   if (state === 'Enviada a Dirección') {

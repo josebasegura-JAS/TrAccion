@@ -81,7 +81,7 @@ describe('useActasStore', () => {
       id,
       titulo: 'Acta con espacios',
       observaciones: 'Texto',
-      estado: 'Pendiente de redactar',
+      estado: 'Pendiente de realizar',
       closedAt: null,
     });
 

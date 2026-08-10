@@ -64,7 +64,8 @@ describe('acta domain', () => {
 
   it('mantiene el catálogo de estados esperado', () => {
     expect(ACTA_STATES).toEqual([
-      'Pendiente de redactar',
+      'Pendiente de realizar',
+      'Borrador',
       'Enviada a Dirección',
       'Pendiente de alegaciones',
       'Pendiente de firma',
