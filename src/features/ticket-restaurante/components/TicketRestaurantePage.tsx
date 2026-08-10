@@ -57,6 +57,7 @@ import {
 import { PeoplePanel } from './TicketRestaurantePeoplePanel';
 import { TicketPriceModal, TicketRulesModal } from './TicketRestauranteConfigModals';
 import { CalculationPanel } from './TicketRestauranteCalculationPanel';
+import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
 import {
   AbsencePreviewModal,
   AbsencesTable,
@@ -865,6 +866,27 @@ export function TicketRestaurantePage({
     [absenceMonth, absenceYear, absences, config, people, visibleCalendars],
   );
 
+
+  const workflowAbsenceCount = useMemo(
+    () => filterTicketRestaurantAbsencesByMonth(absences, calculationYear, calculationMonth).length,
+    [absences, calculationMonth, calculationYear],
+  );
+  const workflowManutencionCount = useMemo(
+    () =>
+      manutenciones.filter(
+        (row) =>
+          !row.deletedAt &&
+          row.imputacionYear === calculationYear &&
+          row.imputacionMonth === calculationMonth,
+      ).length,
+    [calculationMonth, calculationYear, manutenciones],
+  );
+  const workflowActivePeople = useMemo(
+    () => visiblePeople.filter((person) => person.activo).length,
+    [visiblePeople],
+  );
+  const workflowInactivePeople = visiblePeople.length - workflowActivePeople;
+
   useEffect(() => {
     if (
       selectedCalendarId &&
@@ -1404,8 +1426,14 @@ export function TicketRestaurantePage({
         type="file"
       />
 
+      {activeSubview ? (
       <div className="mb-3 flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
+          <SubviewButton
+            active={false}
+            label="← Inicio"
+            onClick={() => setActiveSubview(null)}
+          />
           <SubviewButton
             active={activeSubview === 'calendarios'}
             label="Calendarios"
@@ -1446,8 +1474,51 @@ export function TicketRestaurantePage({
           </ActionButton>
         </div>
       </div>
+      ) : null}
 
-      {activeSubview === 'calendarios' ? (
+      {activeSubview === null ? (
+        <TicketRestauranteWorkflow
+          activeCalendars={visibleCalendars.filter((calendar) => calendar.activo).length}
+          activePeople={workflowActivePeople}
+          absenceCount={workflowAbsenceCount}
+          calculation={monthCalculation}
+          effectiveTicketPrice={getEffectiveTicketPrice(config, calculationYear, calculationMonth)}
+          inactivePeople={workflowInactivePeople}
+          manutencionCount={workflowManutencionCount}
+          month={calculationMonth}
+          onImportAbsences={() => {
+            setActiveSubview('ausencias');
+            fileInputRef.current?.click();
+          }}
+          onImportManutenciones={() => {
+            setActiveSubview('manutenciones');
+            manutencionesFileInputRef.current?.click();
+          }}
+          onImportPeople={() => {
+            setActiveSubview('personas');
+            peopleFileInputRef.current?.click();
+          }}
+          onMonthChange={(nextMonth) => {
+            setCalculationMonth(nextMonth);
+            setAbsenceMonth(nextMonth);
+            setManutencionImputationMonth(nextMonth);
+          }}
+          onOpenAbsences={() => setActiveSubview('ausencias')}
+          onOpenCalendars={() => setActiveSubview('calendarios')}
+          onOpenContribution={() => setActiveSubview('computoCotizacion')}
+          onOpenManutenciones={() => setActiveSubview('manutenciones')}
+          onOpenMonthlyCalculation={() => setActiveSubview('computoMensual')}
+          onOpenPeople={() => setActiveSubview('personas')}
+          onOpenPrice={() => setIsPriceModalOpen(true)}
+          onOpenRules={() => setIsRulesModalOpen(true)}
+          onYearChange={(nextYear) => {
+            setCalculationYear(nextYear);
+            setAbsenceYear(nextYear);
+            setManutencionImputationYear(nextYear);
+          }}
+          year={calculationYear}
+        />
+      ) : activeSubview === 'calendarios' ? (
         <>
           <CalendarToolbar
             calendars={visibleCalendars}
@@ -1628,15 +1699,7 @@ export function TicketRestaurantePage({
           previewRows={manutencionPreviewRows}
           ticketPeople={visiblePeople}
         />
-      ) : (
-        <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-8 text-center">
-          <p className="text-base font-bold text-metro-text">Selecciona una sección</p>
-          <p className="mt-1 text-sm text-metro-muted">
-            El contenido de Ticket Restaurante se carga al pulsar en Calendarios, Personas,
-            Cómputos, Ausencias o Manutenciones.
-          </p>
-        </div>
-      )}
+      ) : null}
 
       {isManutencionMonthModalOpen ? (
         <ModalShell
