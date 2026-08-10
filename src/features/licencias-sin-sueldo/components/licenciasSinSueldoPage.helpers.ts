@@ -18,6 +18,7 @@ export type LicenciasTableColumnId =
   | 'fechaInicio'
   | 'fechaFin'
   | 'estado'
+  | 'ultimaActualizacion'
   | 'actions';
 
 export type BlockId =
@@ -34,6 +35,7 @@ export const tableColumnIds: readonly LicenciasTableColumnId[] = [
   'fechaInicio',
   'fechaFin',
   'estado',
+  'ultimaActualizacion',
   'actions',
 ];
 
@@ -51,8 +53,9 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Estados',
     items: [
-      'Pendiente de aprobar → Pendiente de firma → Vigente.',
+      'Pendiente de aprobar → Pendiente de firma → Vigente. También puede pasar a Denegada desde la tramitación.',
       'Una solicitud "Vigente" pasa a mostrarse como histórica automáticamente en cuanto su fecha de fin queda en el pasado, sin necesidad de cambiarla a mano.',
+      'Las solicitudes denegadas se conservan en el histórico y exigen registrar el motivo en Actualizaciones.',
     ],
   },
   {
@@ -77,6 +80,7 @@ const estadoLabels: Record<LicenciaSinSueldoEstado, string> = {
   pendiente_aprobacion: 'Pendiente aprobar',
   pendiente_firma: 'Pendiente firma',
   vigente: 'Vigente',
+  denegada: 'Denegada',
   historico: 'Histórico',
 };
 
@@ -88,11 +92,20 @@ export const exportColumns: ExportColumn<LicenciaSinSueldoRecord>[] = [
   { key: 'fechaInicio', header: 'Fecha inicio', value: (record) => record.fechaInicio },
   { key: 'fechaFin', header: 'Fecha fin', value: (record) => record.fechaFin },
   { key: 'estado', header: 'Estado', value: (record) => estadoLabels[record.estado] },
+  {
+    key: 'ultimaActualizacion',
+    header: 'Última actualización',
+    value: (record) => getLatestUpdateText(record),
+  },
   { key: 'observaciones', header: 'Observaciones', value: (record) => record.observaciones },
 ];
 
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function createUpdateId(): string {
@@ -109,6 +122,10 @@ export function formatDate(value: string): string {
 
 export function formatEstado(value: LicenciaSinSueldoEstado): string {
   return estadoLabels[value];
+}
+
+export function getLatestUpdateText(record: LicenciaSinSueldoRecord): string {
+  return record.actualizaciones[record.actualizaciones.length - 1]?.texto ?? '';
 }
 
 export function buildHaystack(
@@ -133,7 +150,12 @@ export function buildHaystack(
 }
 
 export function getHistoricalYear(record: LicenciaSinSueldoRecord): number {
-  const year = Number(record.fechaFin.slice(0, 4));
+  const sourceDate =
+    record.estado === 'denegada'
+      ? (record.actualizaciones[record.actualizaciones.length - 1]?.fecha.slice(0, 10) ??
+        record.fechaSolicitud)
+      : record.fechaFin;
+  const year = Number(sourceDate.slice(0, 4));
   return Number.isFinite(year) ? year : 0;
 }
 

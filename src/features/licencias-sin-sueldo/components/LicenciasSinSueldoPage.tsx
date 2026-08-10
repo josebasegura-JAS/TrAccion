@@ -83,7 +83,7 @@ export function LicenciasSinSueldoPage() {
       [
         ...new Set(
           effectiveRecords
-            .filter((record) => record.estado === 'historico')
+            .filter((record) => record.estado === 'historico' || record.estado === 'denegada')
             .map((record) => getHistoricalYear(record)),
         ),
       ].sort((first, second) => second - first),
@@ -122,7 +122,7 @@ export function LicenciasSinSueldoPage() {
     const groups = new Map<number, { count: number; records: LicenciaSinSueldoRecord[] }>();
 
     for (const record of filteredRecords) {
-      if (record.estado !== 'historico') {
+      if (record.estado !== 'historico' && record.estado !== 'denegada') {
         continue;
       }
 
@@ -142,7 +142,11 @@ export function LicenciasSinSueldoPage() {
 
   const historicalCount = useMemo(
     () =>
-      filteredRecords.reduce((count, record) => count + (record.estado === 'historico' ? 1 : 0), 0),
+      filteredRecords.reduce(
+        (count, record) =>
+          count + (record.estado === 'historico' || record.estado === 'denegada' ? 1 : 0),
+        0,
+      ),
     [filteredRecords],
   );
 

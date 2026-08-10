@@ -15,6 +15,7 @@ export const licenciaSinSueldoEstados = [
   'pendiente_aprobacion',
   'pendiente_firma',
   'vigente',
+  'denegada',
   'historico',
 ] as const;
 
@@ -172,6 +173,9 @@ export function validateLicenciaSinSueldoDraft(draft: LicenciaSinSueldoDraft): V
   if (!normalizedDraft.fechaSolicitud) errors.push('La fecha de solicitud es obligatoria.');
   if (!normalizedDraft.fechaInicio) errors.push('La fecha de inicio es obligatoria.');
   if (!normalizedDraft.fechaFin) errors.push('La fecha de fin es obligatoria.');
+  if (normalizedDraft.estado === 'denegada' && normalizedDraft.actualizaciones.length === 0) {
+    errors.push('Para denegar una solicitud es obligatorio registrar el motivo en Actualizaciones.');
+  }
 
   const inicio = parseIsoDate(normalizedDraft.fechaInicio);
   const fin = parseIsoDate(normalizedDraft.fechaFin);

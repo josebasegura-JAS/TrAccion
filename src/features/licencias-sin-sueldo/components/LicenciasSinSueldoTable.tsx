@@ -12,6 +12,7 @@ import {
   exportColumns,
   formatDate,
   formatEstado,
+  getLatestUpdateText,
   tableColumnIds,
   type BlockId,
   type LicenciasTableColumnId,
@@ -108,6 +109,15 @@ export function LicenciasTable({
         accessor: (record) => record.estado,
         render: (record) => formatEstado(record.estado),
         width: 125,
+        sortable: true,
+      },
+      {
+        id: 'ultimaActualizacion',
+        header: 'Última actualización',
+        accessor: (record) => getLatestUpdateText(record),
+        render: (record) => getLatestUpdateText(record),
+        width: 260,
+        minWidth: 180,
         sortable: true,
       },
       {

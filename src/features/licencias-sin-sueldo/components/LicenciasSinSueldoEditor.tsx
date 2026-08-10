@@ -127,7 +127,29 @@ export function LicenciasSinSueldoEditor({
 
   const handleSave = () => {
     if (isReadOnly || isSaving) return;
-    const normalizedDraft = normalizeDraftForTipo(draft);
+
+    let draftToSave = draft;
+    const isNewDenial = draft.estado === 'denegada' && record?.estado !== 'denegada';
+    const initialUpdateCount = record?.actualizaciones.length ?? 0;
+    const hasNewRegisteredUpdate = draft.actualizaciones.length > initialUpdateCount;
+    const pendingUpdateText = newUpdate.trim();
+
+    if (isNewDenial && !hasNewRegisteredUpdate && !pendingUpdateText) {
+      setErrors(['Para denegar una solicitud debes indicar el motivo en Actualizaciones.']);
+      return;
+    }
+
+    if (isNewDenial && pendingUpdateText) {
+      draftToSave = {
+        ...draftToSave,
+        actualizaciones: [
+          ...draftToSave.actualizaciones,
+          { id: createUpdateId(), fecha: new Date().toISOString(), texto: pendingUpdateText },
+        ],
+      };
+    }
+
+    const normalizedDraft = normalizeDraftForTipo(draftToSave);
     const result = validateLicenciaSinSueldoDraft(normalizedDraft);
     if (!result.ok) {
       setErrors(result.errors);
@@ -191,7 +213,7 @@ export function LicenciasSinSueldoEditor({
           )}
 
           <fieldset disabled={isReadOnly} className="space-y-4 disabled:opacity-70">
-            {mode === 'edit' && draft.estado !== 'historico' && (
+            {mode === 'edit' && draft.estado !== 'historico' && draft.estado !== 'denegada' && (
               <div className="flex flex-wrap gap-2 rounded-xl border border-metro-border bg-slate-950/10 p-3">
                 <span className="w-full text-xs font-semibold text-metro-muted">
                   Flujo
@@ -211,6 +233,16 @@ export function LicenciasSinSueldoEditor({
                   onClick={() => updateDraft('estado', 'vigente')}
                 >
                   Firma recibida / finalizar
+                </ActionButton>
+                <ActionButton
+                  variant="delete"
+                  iconOnly={false}
+                  disabled={
+                    draft.estado !== 'pendiente_aprobacion' && draft.estado !== 'pendiente_firma'
+                  }
+                  onClick={() => updateDraft('estado', 'denegada')}
+                >
+                  Denegar
                 </ActionButton>
               </div>
             )}
@@ -331,7 +363,11 @@ export function LicenciasSinSueldoEditor({
               <Textarea
                 className="min-h-16"
                 onChange={(event) => setNewUpdate(event.target.value)}
-                placeholder="Nueva observación o actualización"
+                placeholder={
+                  draft.estado === 'denegada'
+                    ? 'Motivo de la denegación (obligatorio)'
+                    : 'Nueva observación o actualización'
+                }
                 value={newUpdate}
               />
               <div className="mt-3 space-y-2">

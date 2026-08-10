@@ -36,6 +36,28 @@ describe('licencias sin sueldo', () => {
     expect(result.errors).toContain('La licencia sin sueldo no puede superar 9 meses.');
   });
 
+
+  it('exige un motivo en Actualizaciones cuando la solicitud está denegada', () => {
+    const result = validateLicenciaSinSueldoDraft({ ...baseDraft, estado: 'denegada' });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      'Para denegar una solicitud es obligatorio registrar el motivo en Actualizaciones.',
+    );
+  });
+
+  it('acepta una solicitud denegada cuando tiene el motivo registrado', () => {
+    const result = validateLicenciaSinSueldoDraft({
+      ...baseDraft,
+      estado: 'denegada',
+      actualizaciones: [
+        { id: 'motivo-1', fecha: '2026-01-10T10:00:00.000Z', texto: 'No cumple el requisito.' },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it('calcula la fecha fin del Año de Libre Disposición a 5 años', () => {
     expect(calculateFechaFinForTipo('Año de Libre Disposición', '2026-06-07')).toBe('2031-06-07');
   });
