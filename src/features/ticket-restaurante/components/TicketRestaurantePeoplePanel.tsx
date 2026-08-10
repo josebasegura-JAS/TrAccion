@@ -2,6 +2,7 @@ import { FileDown, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { CountBadge } from '../../../components/ui/CountBadge';
+import { Field, Input, Select } from '../../../components/ui/Field';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import {
   type TicketCalendar,
@@ -270,59 +271,48 @@ export function PeoplePanel({
         </button>
         {isPersonFormOpen ? (
           <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-            <label className="block text-xs font-semibold text-metro-text">
-              Nº empleado
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            <Field label="Nº empleado" required>
+              <Input
                 onChange={(event) => onChange({ ...draft, empleado: event.target.value })}
+                required
                 value={draft.empleado}
               />
-            </label>
-            <label className="block text-xs font-semibold text-metro-text">
-              Nombre
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="Nombre" required>
+              <Input
                 onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
+                required
                 value={draft.nombre}
               />
-            </label>
-            <label className="block text-xs font-semibold text-metro-text">
-              Apellido 1
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="Apellido 1">
+              <Input
                 onChange={(event) => onChange({ ...draft, apellido1: event.target.value })}
                 value={draft.apellido1}
               />
-            </label>
-            <label className="block text-xs font-semibold text-metro-text">
-              Apellido 2
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="Apellido 2">
+              <Input
                 onChange={(event) => onChange({ ...draft, apellido2: event.target.value })}
                 value={draft.apellido2}
               />
-            </label>
-            <label className="block text-xs font-semibold text-metro-text">
-              DNI
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="DNI">
+              <Input
                 onChange={(event) => onChange({ ...draft, dni: event.target.value })}
                 value={draft.dni}
               />
-            </label>
-            <label className="block text-xs font-semibold text-metro-text">
-              Puesto
-              <input
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="Puesto">
+              <Input
                 onChange={(event) => onChange({ ...draft, puesto: event.target.value })}
                 value={draft.puesto}
               />
-            </label>
-            <label className="block text-xs font-semibold text-metro-text">
-              Calendario
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="Calendario" required>
+              <Select
                 onChange={(event) => onChange({ ...draft, calendarId: event.target.value })}
+                required
                 value={draft.calendarId}
               >
                 <option value="">Seleccionar calendario</option>
@@ -331,8 +321,8 @@ export function PeoplePanel({
                     {calendar.nombre}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Field>
             <label className="flex items-center gap-2 text-xs font-semibold text-metro-text">
               <input
                 checked={draft.activo}

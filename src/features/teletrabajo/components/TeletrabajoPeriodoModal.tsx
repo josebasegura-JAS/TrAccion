@@ -1,3 +1,4 @@
+import { Field, Input, Select } from '../../../components/ui/Field';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalShell } from '../../../components/ui/ModalShell';
 
@@ -45,16 +46,16 @@ export function TeletrabajoPeriodoModal({
         <ModalCloseButton label="Cerrar creación de periodo" onClick={onClose} />
       </header>
       <div className="space-y-4 p-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
-          Nombre del nuevo periodo
-          <input
-            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+        <Field label="Nombre del nuevo periodo" required>
+          <Input
+            className="bg-metro-panel"
             onChange={(event) => setNewPeriodoName(event.target.value)}
             placeholder="2027-2028"
+            required
             type="text"
             value={newPeriodoName}
           />
-        </label>
+        </Field>
         <label className="flex items-start gap-2 rounded-xl border border-metro-border bg-metro-panel p-3 text-sm font-semibold text-metro-text">
           <input
             checked={copyFromPreviousPeriodo}
@@ -72,11 +73,11 @@ export function TeletrabajoPeriodoModal({
           </span>
         </label>
         {copyFromPreviousPeriodo && (
-          <label className="block text-xs font-semibold uppercase tracking-wide text-metro-muted">
-            Periodo origen
-            <select
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+          <Field label="Periodo origen" required>
+            <Select
+              className="bg-metro-panel"
               onChange={(event) => setSourcePeriodo(event.target.value)}
+              required
               value={sourcePeriodo}
             >
               <option value="">Selecciona periodo...</option>
@@ -85,8 +86,8 @@ export function TeletrabajoPeriodoModal({
                   {periodo}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Field>
         )}
         {periodoStatus && (
           <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text">

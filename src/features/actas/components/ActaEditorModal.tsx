@@ -3,6 +3,7 @@ import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { Field, Input, ReadonlyValue, Select, Textarea } from '../../../components/ui/Field';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { RecordLockNotice } from '../../../components/ui/RecordLockNotice';
@@ -107,10 +108,9 @@ export function ActaEditorModal({
             <RecordLockNotice lockedBy={recordLock.lockedBy} />
           )}
           <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
-            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
-              Tipo
-              <select
-                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+            <Field label="Tipo">
+              <Select
+                className="mt-1 bg-metro-panel"
                 onChange={(event) => updateDraft('tipo', event.target.value)}
                 value={draft.tipo}
               >
@@ -120,28 +120,24 @@ export function ActaEditorModal({
                     {type.disabled ? ' (deshabilitado)' : ''}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
-              Fecha sesión
-              <input
-                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+              </Select>
+            </Field>
+            <Field label="Fecha sesión" required>
+              <Input
+                className="bg-metro-panel"
                 onChange={(event) => updateDraft('fechaSesion', event.target.value)}
+                required
                 type="date"
                 value={draft.fechaSesion}
               />
-            </label>
-            <div className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
-              Fecha creación
-              <div className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text">
-                {formatDate(displayedCreationDate)}
-              </div>
-            </div>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
-              Fecha límite
+            </Field>
+            <Field label="Fecha creación">
+              <ReadonlyValue className="bg-metro-panel">{formatDate(displayedCreationDate)}</ReadonlyValue>
+            </Field>
+            <Field label="Fecha límite">
               <span className="relative block">
-                <input
-                  className="w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 pr-9 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+                <Input
+                  className="bg-metro-panel pr-9"
                   onChange={(event) => updateDraft('fechaLimite', event.target.value)}
                   title="Fecha límite"
                   type="date"
@@ -155,21 +151,21 @@ export function ActaEditorModal({
                   />
                 )}
               </span>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-semibold text-metro-muted">
-              Título
-              <input
-                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal normal-case tracking-normal text-metro-text outline-none focus:border-metro-red"
+            </Field>
+            <Field label="Título" required>
+              <Input
+                className="bg-metro-panel"
                 onChange={(event) => updateDraft('titulo', event.target.value)}
                 placeholder="Título"
+                required
                 value={draft.titulo}
               />
-            </label>
+            </Field>
           </div>
 
           <div className="grid gap-2 xl:grid-cols-[260px_minmax(220px,1fr)]">
-            <select
-              className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            <Select
+              className="mt-0 bg-metro-panel"
               onChange={(event) => applyStateChange(event.target.value as ActaDraft['estado'])}
               value={draft.estado}
             >
@@ -178,7 +174,7 @@ export function ActaEditorModal({
                   {state}
                 </option>
               ))}
-            </select>
+            </Select>
             <ActionButton
               disabled={!getNextState(draft.estado)}
               iconOnly={false}
@@ -189,8 +185,8 @@ export function ActaEditorModal({
             </ActionButton>
           </div>
 
-          <textarea
-            className="min-h-[120px] w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+          <Textarea
+            className="mt-0 min-h-[120px] bg-metro-panel"
             onChange={(event) => updateDraft('observaciones', event.target.value)}
             placeholder="Observaciones"
             value={draft.observaciones}
@@ -206,8 +202,8 @@ export function ActaEditorModal({
               </span>
             </div>
             <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_140px]">
-              <input
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              <Input
+                className="mt-0"
                 onChange={(event) => setNewUpdateText(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
@@ -265,8 +261,8 @@ export function ActaEditorModal({
                   className="grid gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 xl:grid-cols-[180px_110px_150px_minmax(220px,1fr)_80px]"
                   key={`${alegacion.sindicato}-${index}`}
                 >
-                  <input
-                    className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                  <Input
+                    className="mt-0 bg-metro-panel"
                     list="actas-sindicatos"
                     onChange={(event) => updateAlegacion(index, 'sindicato', event.target.value)}
                     placeholder="Sindicato"
@@ -282,14 +278,14 @@ export function ActaEditorModal({
                     />
                     Presentada
                   </label>
-                  <input
-                    className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                  <Input
+                    className="mt-0 bg-metro-panel"
                     onChange={(event) => updateAlegacion(index, 'fecha', event.target.value)}
                     type="date"
                     value={alegacion.fecha}
                   />
-                  <input
-                    className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                  <Input
+                    className="mt-0 bg-metro-panel"
                     onChange={(event) => updateAlegacion(index, 'observacion', event.target.value)}
                     placeholder="Observación"
                     value={alegacion.observacion}
@@ -332,8 +328,8 @@ export function ActaEditorModal({
               )}
             </div>
             <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(220px,1fr)_120px_120px]">
-              <input
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+              <Input
+                className="mt-0"
                 disabled={!canAttachFinalActa}
                 onChange={(event) => updateDraft('actaPath', event.target.value)}
                 placeholder="Ruta de red del acta firmada..."
