@@ -18,13 +18,9 @@ export type VinculogramaStatus = 'Vigente' | 'Vencido' | 'Revocado';
 
 export type VinculogramaDraft = Pick<
   Vinculograma,
-  | 'employeeNumber'
-  | 'nombreCompleto'
-  | 'linkedPerson'
-  | 'requestDate'
-  | 'revokedAt'
-  | 'revocationReason'
->;
+  'employeeNumber' | 'nombreCompleto' | 'linkedPerson' | 'requestDate'
+> &
+  Partial<Pick<Vinculograma, 'revokedAt' | 'revocationReason'>>;
 
 export interface EmployeeSuggestion {
   empleado: string;
@@ -75,8 +71,12 @@ export function buildVinculograma(
     linkedPerson: draft.linkedPerson.trim(),
     requestDate,
     expiryDate: calculateExpiryDate(requestDate),
-    revokedAt: draft.revokedAt.trim(),
-    revocationReason: draft.revocationReason.trim(),
+    revokedAt:
+      typeof draft.revokedAt === 'string' ? draft.revokedAt.trim() : previous?.revokedAt ?? '',
+    revocationReason:
+      typeof draft.revocationReason === 'string'
+        ? draft.revocationReason.trim()
+        : previous?.revocationReason ?? '',
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     deletedAt: previous?.deletedAt ?? null,
