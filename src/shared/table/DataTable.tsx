@@ -12,6 +12,16 @@ import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
 export type DataTableSortValue = string | number | Date | null | undefined;
+export type DataTableColumnTone = 'request' | 'start' | 'end' | 'attention' | 'financial' | 'identity';
+
+const columnToneClasses: Record<DataTableColumnTone, { header: string; cell: string }> = {
+  request: { header: 'bg-sky-400/[0.12]', cell: 'bg-sky-400/[0.045]' },
+  start: { header: 'bg-emerald-400/[0.12]', cell: 'bg-emerald-400/[0.045]' },
+  end: { header: 'bg-amber-400/[0.14]', cell: 'bg-amber-400/[0.05]' },
+  attention: { header: 'bg-amber-400/[0.14]', cell: 'bg-amber-400/[0.05]' },
+  financial: { header: 'bg-emerald-400/[0.12]', cell: 'bg-emerald-400/[0.045]' },
+  identity: { header: 'bg-sky-300/[0.08]', cell: 'bg-sky-300/[0.025]' },
+};
 
 export interface DataTableColumn<Row, ColumnId extends string> {
   id: ColumnId;
@@ -27,6 +37,8 @@ export interface DataTableColumn<Row, ColumnId extends string> {
   reorderable?: boolean;
   className?: string;
   headerClassName?: string;
+  /** Tinte semántico muy suave para facilitar la lectura vertical sin convertir la tabla en un mosaico. */
+  tone?: DataTableColumnTone;
   isActionColumn?: boolean;
 }
 
@@ -376,7 +388,7 @@ export function DataTable<Row, ColumnId extends string>({
                 return (
                   <th
                     aria-sort={canSort ? ariaSort : undefined}
-                    className={`relative px-3 py-2 ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.headerClassName ?? ''} ${
+                    className={`relative px-3 py-2 ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.tone ? columnToneClasses[column.tone].header : ''} ${column.headerClassName ?? ''} ${
                       isDragging ? 'opacity-40' : ''
                     } ${isDragOver ? 'bg-metro-red/10' : ''}`}
                     draggable={isReorderable}
@@ -473,8 +485,8 @@ export function DataTable<Row, ColumnId extends string>({
                     return (
                       <td
                         className={`truncate px-3 py-1.5 ${column.isActionColumn ? 'text-right' : ''} ${
-                          column.className ?? ''
-                        }`}
+                          column.tone ? columnToneClasses[column.tone].cell : ''
+                        } ${column.className ?? ''}`}
                         key={column.id}
                         title={typeof cellContent === 'string' ? cellContent : undefined}
                       >

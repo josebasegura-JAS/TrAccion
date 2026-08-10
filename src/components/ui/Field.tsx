@@ -13,7 +13,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 export const fieldLabelClass = 'block text-xs font-semibold text-metro-muted';
 
 export const fieldInputClass =
-  'mt-1 h-9 w-full rounded-lg border border-metro-border bg-metro-surface px-3 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60';
+  'mt-1 h-9 w-full rounded-lg border border-metro-border bg-metro-surface px-3 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red required:border-red-400/45 required:bg-red-400/[0.07] disabled:cursor-not-allowed disabled:opacity-60';
 
 interface FieldLabelProps extends LabelHTMLAttributes<HTMLLabelElement> {
   children: ReactNode;
@@ -61,7 +61,7 @@ export function Textarea({ className, ...props }: TextareaProps) {
   return (
     <textarea
       className={cx(
-        'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60',
+        'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red required:border-red-400/45 required:bg-red-400/[0.07] disabled:cursor-not-allowed disabled:opacity-60',
         className,
       )}
       {...props}

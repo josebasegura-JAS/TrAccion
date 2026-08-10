@@ -107,6 +107,7 @@ export function AbsencesTable({
       {
         id: 'empleado',
         header: 'Nº empleado',
+        tone: 'identity',
         accessor: (absence) => {
           const employeeNumber = Number(absence.empleado.trim());
           return Number.isFinite(employeeNumber) ? employeeNumber : absence.empleado;
@@ -132,6 +133,7 @@ export function AbsencesTable({
       {
         id: 'desde',
         header: 'Desde',
+        tone: 'start',
         accessor: (absence) => absence.desde,
         render: (absence) => absence.desde,
         width: 115,
@@ -143,6 +145,7 @@ export function AbsencesTable({
       {
         id: 'hasta',
         header: 'Hasta',
+        tone: 'end',
         accessor: (absence) => absence.hasta,
         render: (absence) => absence.hasta,
         width: 115,
@@ -198,6 +201,7 @@ export function AbsencesTable({
       {
         id: 'afectaTicket',
         header: 'Afecta ticket',
+        tone: 'attention',
         accessor: (absence) => (absence.afectaTicket ? 'Sí' : 'No'),
         render: (absence) => (absence.afectaTicket ? 'Sí' : 'No'),
         width: 105,

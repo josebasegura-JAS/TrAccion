@@ -222,16 +222,18 @@ function VinculogramaModal({
           )}
           <fieldset disabled={isReadOnly} className="grid gap-4 disabled:opacity-70 md:grid-cols-2">
             <FieldLabel>
-              Nº empleado
+              Nº empleado <span className="text-metro-red">*</span>
               <Input
+                required
                 onChange={(event) => updateEmployeeNumber(event.target.value)}
                 value={draft.employeeNumber}
               />
             </FieldLabel>
             <div className="relative">
               <FieldLabel>
-                Nombre
+                Nombre <span className="text-metro-red">*</span>
                 <Input
+                  required
                   onBlur={() => window.setTimeout(() => setShowSuggestions(false), 100)}
                   onChange={(event) => {
                     onChange({ ...draft, nombreCompleto: event.target.value });
@@ -266,8 +268,9 @@ function VinculogramaModal({
               />
             </FieldLabel>
             <FieldLabel>
-              Fecha solicitud
+              Fecha solicitud <span className="text-metro-red">*</span>
               <Input
+                required
                 dateTone="request"
                 onChange={(event) => onChange({ ...draft, requestDate: event.target.value })}
                 type="date"
@@ -298,7 +301,7 @@ function VinculogramaModal({
                 {isRevoked && (
                   <>
                     <FieldLabel>
-                      Fecha revocación
+                      Fecha revocación <span className="text-metro-red">*</span>
                       <Input
                         dateTone="end"
                         onChange={(event) => onChange({ ...draft, revokedAt: event.target.value })}
@@ -308,7 +311,7 @@ function VinculogramaModal({
                       />
                     </FieldLabel>
                     <FieldLabel>
-                      Motivo revocación
+                      Motivo revocación <span className="text-metro-red">*</span>
                       <Input
                         onChange={(event) =>
                           onChange({ ...draft, revocationReason: event.target.value })
@@ -571,6 +574,7 @@ function VinculogramaTable({
       {
         id: 'employeeNumber',
         header: 'Nº empleado',
+        tone: 'identity',
         accessor: (record) => Number(record.employeeNumber) || record.employeeNumber,
         render: (record) => record.employeeNumber,
         width: 120,
@@ -604,6 +608,7 @@ function VinculogramaTable({
       {
         id: 'status',
         header: 'Estado / Fecha vigencia',
+        tone: 'end',
         accessor: (record) =>
           `${getVinculogramaStatus(record.expiryDate, today, record.revokedAt)} ${record.expiryDate}`,
         render: (record) => {

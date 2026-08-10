@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { CountBadge } from '../../../components/ui/CountBadge';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { LicenciaSinSueldoRecord } from '../domain/licenciaSinSueldo';
 import {
   defaultTablePreferences,
@@ -57,6 +58,7 @@ export function LicenciasTable({
       {
         id: 'numeroEmpleado',
         header: 'Nº',
+        tone: 'identity',
         accessor: (record) => Number(record.numeroEmpleado) || record.numeroEmpleado,
         render: (record) => record.numeroEmpleado,
         width: 90,
@@ -82,6 +84,7 @@ export function LicenciasTable({
       {
         id: 'fechaSolicitud',
         header: 'Solicitud',
+        tone: 'request',
         accessor: (record) => record.fechaSolicitud,
         render: (record) => formatDate(record.fechaSolicitud),
         width: 110,
@@ -90,6 +93,7 @@ export function LicenciasTable({
       {
         id: 'fechaInicio',
         header: 'Inicio',
+        tone: 'start',
         accessor: (record) => record.fechaInicio,
         render: (record) => formatDate(record.fechaInicio),
         width: 105,
@@ -98,6 +102,7 @@ export function LicenciasTable({
       {
         id: 'fechaFin',
         header: 'Fin',
+        tone: 'end',
         accessor: (record) => record.fechaFin,
         render: (record) => formatDate(record.fechaFin),
         width: 105,
@@ -107,7 +112,17 @@ export function LicenciasTable({
         id: 'estado',
         header: 'Estado',
         accessor: (record) => record.estado,
-        render: (record) => formatEstado(record.estado),
+        render: (record) => {
+          const tone =
+            record.estado === 'vigente'
+              ? 'success'
+              : record.estado === 'denegada'
+                ? 'error'
+                : record.estado === 'historico'
+                  ? 'muted'
+                  : 'warning';
+          return <StatusBadge tone={tone}>{formatEstado(record.estado)}</StatusBadge>;
+        },
         width: 125,
         sortable: true,
       },

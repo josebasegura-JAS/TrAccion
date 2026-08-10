@@ -261,6 +261,7 @@ export function PlantillaPage() {
       {
         id: 'empleado',
         header: 'Empleado',
+        tone: 'identity',
         accessor: (employee) => {
           const employeeNumber = Number(employee.empleado.trim());
           return Number.isFinite(employeeNumber) ? employeeNumber : employee.empleado;

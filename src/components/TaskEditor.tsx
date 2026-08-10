@@ -24,6 +24,7 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
+import { Input, Select, Textarea } from './ui/Field';
 
 type TaskTextDraftField = Exclude<TaskDraftField, 'documentLinks'>;
 
@@ -602,8 +603,7 @@ export function TaskEditor({
           >
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Tipo
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -617,12 +617,11 @@ export function TaskEditor({
                     {tipo}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Fase
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, fase: event.target.value }))
                 }
@@ -633,13 +632,12 @@ export function TaskEditor({
                     {fase}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {taskTextFields.map(({ field, label, required, type, className }) => (
               <label className={`text-xs font-semibold text-metro-muted ${className}`} key={field}>
-                {label}
-                <input
-                  className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                {label}{required ? <span className="ml-1 text-metro-red">*</span> : null}
+                <Input
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, [field]: event.target.value }))
                   }
@@ -651,8 +649,7 @@ export function TaskEditor({
             ))}
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Origen
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, sindicato: event.target.value }))
                 }
@@ -664,12 +661,11 @@ export function TaskEditor({
                     {origin}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Estado
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -683,12 +679,11 @@ export function TaskEditor({
                     {estado}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="text-xs font-semibold text-metro-muted sm:col-span-2 lg:col-span-2">
               Prioridad
-              <select
-                className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Select
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
@@ -702,12 +697,12 @@ export function TaskEditor({
                     {prioridad}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="text-xs font-semibold text-metro-muted sm:col-span-6 lg:col-span-12">
               Descripción
-              <textarea
-                className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              <Textarea
+                className="min-h-20"
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, descripcion: event.target.value }))
                 }

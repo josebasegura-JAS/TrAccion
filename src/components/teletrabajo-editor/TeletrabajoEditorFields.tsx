@@ -7,7 +7,7 @@ import {
   type TeletrabajoDraft,
   type TeletrabajoTextField,
 } from '../../features/teletrabajo/domain/solicitud';
-import { Input } from '../ui/Field';
+import { Input, Select, Textarea } from '../ui/Field';
 
 const plantillaTextFields: Array<{
   field: TeletrabajoTextField;
@@ -62,9 +62,8 @@ export function TeletrabajoEditorFields({
   return (
     <fieldset className="grid gap-2 disabled:opacity-70 sm:grid-cols-2" disabled={isFormReadOnly}>
       <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
-        Periodo
-        <input
-          className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+        Periodo <span className="text-metro-red">*</span>
+        <Input
           onChange={(event) => setDraft((current) => ({ ...current, periodo: event.target.value }))}
           placeholder="2026-2027"
           required
@@ -193,17 +192,17 @@ function TeletrabajoObservationsSection({
     <>
       <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
         Observaciones
-        <textarea
-          className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+        <Textarea
+          className="min-h-20"
           onChange={(event) => setDraft((current) => ({ ...current, observaciones: event.target.value }))}
           value={draft.observaciones}
         />
       </label>
 
       <label className="text-xs font-semibold text-metro-muted sm:col-span-2">
-        Observaciones RRLL{draft.estado === 'desistida' ? ' · Motivo del desistimiento' : ''}
-        <textarea
-          className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+        Observaciones RRLL{draft.estado === 'desistida' ? <> · Motivo del desistimiento <span className="text-metro-red">*</span></> : ''}
+        <Textarea
+          className="min-h-20"
           onChange={(event) =>
             setDraft((current) => ({ ...current, observacionesRrll: event.target.value }))
           }
@@ -230,9 +229,8 @@ function TeletrabajoDeliverySection({
   return (
     <>
       <label className="text-xs font-semibold text-metro-muted">
-        Fecha entrega ordenador
-        <input
-          className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+        Fecha entrega ordenador <span className="text-metro-red">*</span>
+        <Input
           onChange={(event) => setDraft((current) => ({ ...current, fechaOrdenador: event.target.value }))}
           required
           type="date"
@@ -241,9 +239,8 @@ function TeletrabajoDeliverySection({
       </label>
 
       <label className="text-xs font-semibold text-metro-muted">
-        Fecha entrega cascos
-        <input
-          className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+        Fecha entrega cascos <span className="text-metro-red">*</span>
+        <Input
           onChange={(event) => setDraft((current) => ({ ...current, fechaCascos: event.target.value }))}
           required
           type="date"
@@ -267,8 +264,7 @@ function TeletrabajoManagementSection({
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="text-xs font-semibold text-metro-muted">
           Estado
-          <select
-            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+          <Select
             onChange={(event) =>
               setDraft((current) => ({
                 ...current,
@@ -291,13 +287,12 @@ function TeletrabajoManagementSection({
                 </option>
               );
             })}
-          </select>
+          </Select>
         </label>
 
         <label className="text-xs font-semibold text-metro-muted">
           Tipo solicitud
-          <select
-            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none disabled:bg-metro-surface disabled:text-metro-muted"
+          <Select
             disabled
             title="Tipo calculado automáticamente según exista teletrabajo aprobado o analizado en el periodo anterior."
             value={draft.tipoSolicitud}
@@ -307,15 +302,16 @@ function TeletrabajoManagementSection({
                 {tipoSolicitud}
               </option>
             ))}
-          </select>
+          </Select>
           <span className="mt-1 block text-[11px] font-medium text-metro-muted">
             Calculado automáticamente con el periodo anterior.
           </span>
         </label>
 
         <label className="text-xs font-semibold text-metro-muted">
-          Fecha solicitud
+          Fecha solicitud <span className="text-metro-red">*</span>
           <Input
+            required
             dateTone="request"
             onChange={(event) => setDraft((current) => ({ ...current, fechaSolicitud: event.target.value }))}
             type="date"
@@ -351,9 +347,8 @@ function TeletrabajoEmployeeDataSection({
       <div className="grid gap-2 sm:grid-cols-2">
         {plantillaTextFields.map(({ field, label, required, readOnlyWhenFound }) => (
           <label className="text-xs font-semibold text-metro-muted" key={field}>
-            {label}
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red disabled:bg-metro-surface disabled:text-metro-muted"
+            {label}{required ? <span className="ml-1 text-metro-red">*</span> : null}
+            <Input
               onChange={(event) => {
                 if (field === 'empleado') {
                   onEmpleadoChange(event.target.value);

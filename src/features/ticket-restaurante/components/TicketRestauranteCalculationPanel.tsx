@@ -133,6 +133,7 @@ export function CalculationPanel({
       {
         id: 'empleado',
         header: 'Nº empleado',
+        tone: 'identity',
         accessor: (row) => {
           const employeeNumber = Number(row.empleado.trim());
           return Number.isFinite(employeeNumber) ? employeeNumber : row.empleado;
@@ -208,6 +209,7 @@ export function CalculationPanel({
       baseColumns.push(
         {
           id: 'deudaEntrante',
+          tone: 'attention',
           header: 'Deuda entrante',
           accessor: (row) => row.deudaEntrante,
           render: (row) => row.deudaEntrante,
@@ -220,6 +222,7 @@ export function CalculationPanel({
         },
         {
           id: 'deudaPendiente',
+          tone: 'attention',
           header: 'Deuda pendiente',
           accessor: (row) => row.deudaPendiente,
           render: (row) => row.deudaPendiente,
@@ -236,6 +239,7 @@ export function CalculationPanel({
     baseColumns.push(
       {
         id: 'ticketsFinales',
+        tone: 'financial',
         header: mode === 'monthly' ? 'Tickets a pedir' : 'Tickets cotización',
         accessor: (row) => row.ticketsFinales,
         render: (row) => (
@@ -271,6 +275,7 @@ export function CalculationPanel({
       },
       {
         id: 'importeTicket',
+        tone: 'financial',
         header: 'Importe ticket',
         accessor: () => effectiveTicketPrice,
         render: () => formatCurrency(effectiveTicketPrice),
@@ -283,6 +288,7 @@ export function CalculationPanel({
       },
       {
         id: 'total',
+        tone: 'financial',
         header: 'Total',
         accessor: (row) => row.importe,
         render: (row) => formatCurrency(row.importe),

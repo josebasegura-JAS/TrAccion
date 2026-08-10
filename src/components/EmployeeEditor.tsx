@@ -11,6 +11,7 @@ import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { ActionButton } from './ui/ActionButton';
+import { Input } from './ui/Field';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
 import { RecordLockNotice } from './ui/RecordLockNotice';
@@ -162,11 +163,9 @@ export function EmployeeEditor({
 
               return (
                 <label className="text-xs font-semibold text-metro-muted" key={field}>
-                  {label}
-                  <input
-                    className={`mt-1 w-full rounded-lg border border-metro-border px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red ${
-                      isReadOnlyKey ? 'bg-metro-surface text-metro-muted' : 'bg-metro-surface'
-                    }`}
+                  {label}{required ? <span className="ml-1 text-metro-red">*</span> : null}
+                  <Input
+                    className={isReadOnlyKey ? 'text-metro-muted' : undefined}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, [field]: event.target.value }))
                     }

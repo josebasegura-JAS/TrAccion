@@ -292,8 +292,9 @@ export function SorteosPage() {
           </div>
           <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(180px,1fr)_minmax(140px,0.45fr)_minmax(96px,0.3fr)_auto] md:items-end">
             <label className="min-w-0 text-xs font-semibold text-metro-text">
-              Título
+              Título <span className="text-metro-red">*</span>
               <Input
+                required
                 className="mt-1 w-full min-w-0"
                 onChange={(event) => handleDraftChange('title', event.target.value)}
                 disabled={isActionDisabled}
@@ -301,8 +302,9 @@ export function SorteosPage() {
               />
             </label>
             <label className="min-w-0 text-xs font-semibold text-metro-text">
-              Fecha
+              Fecha <span className="text-metro-red">*</span>
               <Input
+                required
                 className="mt-1 w-full min-w-0"
                 onChange={(event) => handleDraftChange('date', event.target.value)}
                 type="date"
@@ -311,8 +313,9 @@ export function SorteosPage() {
               />
             </label>
             <label className="min-w-0 text-xs font-semibold text-metro-text">
-              Nº ganadores
+              Nº ganadores <span className="text-metro-red">*</span>
               <Input
+                required
                 className="mt-1 w-full min-w-0"
                 min="1"
                 onChange={(event) => handleDraftChange('winnersCount', Number(event.target.value))}

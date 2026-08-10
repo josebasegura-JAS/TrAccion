@@ -493,8 +493,9 @@ export function EspecialesPage() {
 
             <div className="grid gap-3 lg:grid-cols-3">
               <FieldLabel>
-                Evento
+                Evento <span className="text-metro-red">*</span>
                 <Input
+                  required
                   onChange={(event) => setField('evento', event.target.value)}
                   placeholder="Nombre del evento"
                   value={serviceDraft.evento}

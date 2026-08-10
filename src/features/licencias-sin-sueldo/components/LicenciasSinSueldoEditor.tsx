@@ -249,8 +249,9 @@ export function LicenciasSinSueldoEditor({
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <FieldLabel>
-                Nº empleado
+                Nº empleado <span className="text-metro-red">*</span>
                 <Input
+                  required
                   onBlur={handleEmployeeNumberBlur}
                   onChange={(event) => updateDraft('numeroEmpleado', event.target.value)}
                   value={draft.numeroEmpleado}
@@ -281,15 +282,17 @@ export function LicenciasSinSueldoEditor({
                 </div>
               </FieldLabel>
               <FieldLabel>
-                Nombre completo
+                Nombre completo <span className="text-metro-red">*</span>
                 <Input
+                  required
                   onChange={(event) => updateDraft('nombreCompleto', event.target.value)}
                   value={draft.nombreCompleto}
                 />
               </FieldLabel>
               <FieldLabel>
-                Tipo
+                Tipo <span className="text-metro-red">*</span>
                 <Select
+                  required
                   onChange={(event) =>
                     updateDraft('tipo', event.target.value as LicenciaSinSueldoTipo)
                   }
@@ -301,9 +304,10 @@ export function LicenciasSinSueldoEditor({
                 </Select>
               </FieldLabel>
               <FieldLabel>
-                Fecha solicitud
+                Fecha solicitud <span className="text-metro-red">*</span>
                 <Input
                   dateTone="request"
+                  required
                   onChange={(event) => updateDraft('fechaSolicitud', event.target.value)}
                   type="date"
                   value={draft.fechaSolicitud}
@@ -325,18 +329,20 @@ export function LicenciasSinSueldoEditor({
                 </Select>
               </FieldLabel>
               <FieldLabel>
-                Fecha inicio
+                Fecha inicio <span className="text-metro-red">*</span>
                 <Input
                   dateTone="start"
+                  required
                   onChange={(event) => updateDraft('fechaInicio', event.target.value)}
                   type="date"
                   value={draft.fechaInicio}
                 />
               </FieldLabel>
               <FieldLabel>
-                Fecha fin
+                Fecha fin <span className="text-metro-red">*</span>
                 <Input
                   dateTone="end"
+                  required
                   disabled={draft.tipo === 'Año de Libre Disposición'}
                   onChange={(event) => updateDraft('fechaFin', event.target.value)}
                   type="date"
@@ -365,6 +371,7 @@ export function LicenciasSinSueldoEditor({
               </div>
               <Textarea
                 className="min-h-16"
+                required={draft.estado === 'denegada'}
                 onChange={(event) => setNewUpdate(event.target.value)}
                 placeholder={
                   draft.estado === 'denegada'

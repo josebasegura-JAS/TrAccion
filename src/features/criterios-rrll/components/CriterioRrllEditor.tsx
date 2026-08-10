@@ -144,7 +144,7 @@ export function CriterioRrllEditor({
           <div className="grid min-h-0 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
             {criterioTextFields.map(({ field, label, required }) => (
               <FieldLabel className="text-xs font-semibold text-metro-muted" key={field}>
-                {label}
+                {label}{required ? <span className="ml-1 text-metro-red">*</span> : null}
                 <Input
                   dateTone={field === 'fecha' ? 'request' : undefined}
                   onChange={(event) =>
@@ -196,7 +196,7 @@ export function CriterioRrllEditor({
               </Select>
             </FieldLabel>
             <FieldLabel className="text-xs font-semibold text-metro-muted sm:col-span-2">
-              Criterio
+              Criterio <span className="text-metro-red">*</span>
               <Textarea
                 className="min-h-28"
                 onChange={(event) =>

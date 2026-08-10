@@ -101,6 +101,7 @@ export function buildTeletrabajoTableColumns({
     {
       id: 'empleado',
       header: 'Empleado',
+      tone: 'identity',
       accessor: (s) => Number(s.empleado) || s.empleado,
       render: (s) => s.empleado,
       width: 105,
@@ -134,6 +135,7 @@ export function buildTeletrabajoTableColumns({
     {
       id: 'teletrabajable',
       header: 'Incidencias',
+      tone: 'attention',
       accessor: (s) =>
         getTeletrabajoIncidentMeta(
           s,
