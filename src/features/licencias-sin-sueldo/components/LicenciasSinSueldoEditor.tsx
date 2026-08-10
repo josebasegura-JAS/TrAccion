@@ -303,6 +303,7 @@ export function LicenciasSinSueldoEditor({
               <FieldLabel>
                 Fecha solicitud
                 <Input
+                  dateTone="request"
                   onChange={(event) => updateDraft('fechaSolicitud', event.target.value)}
                   type="date"
                   value={draft.fechaSolicitud}
@@ -326,6 +327,7 @@ export function LicenciasSinSueldoEditor({
               <FieldLabel>
                 Fecha inicio
                 <Input
+                  dateTone="start"
                   onChange={(event) => updateDraft('fechaInicio', event.target.value)}
                   type="date"
                   value={draft.fechaInicio}
@@ -334,6 +336,7 @@ export function LicenciasSinSueldoEditor({
               <FieldLabel>
                 Fecha fin
                 <Input
+                  dateTone="end"
                   disabled={draft.tipo === 'Año de Libre Disposición'}
                   onChange={(event) => updateDraft('fechaFin', event.target.value)}
                   type="date"

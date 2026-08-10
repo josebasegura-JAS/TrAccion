@@ -268,6 +268,7 @@ function VinculogramaModal({
             <FieldLabel>
               Fecha solicitud
               <Input
+                dateTone="request"
                 onChange={(event) => onChange({ ...draft, requestDate: event.target.value })}
                 type="date"
                 value={draft.requestDate}
@@ -299,6 +300,7 @@ function VinculogramaModal({
                     <FieldLabel>
                       Fecha revocación
                       <Input
+                        dateTone="end"
                         onChange={(event) => onChange({ ...draft, revokedAt: event.target.value })}
                         required
                         type="date"

@@ -146,6 +146,7 @@ export function CriterioRrllEditor({
               <FieldLabel className="text-xs font-semibold text-metro-muted" key={field}>
                 {label}
                 <Input
+                  dateTone={field === 'fecha' ? 'request' : undefined}
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, [field]: event.target.value }))
                   }

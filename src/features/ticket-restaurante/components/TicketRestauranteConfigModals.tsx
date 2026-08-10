@@ -67,6 +67,7 @@ export function TicketPriceModal({
           </Field>
           <Field label="Vigente desde">
             <Input
+              dateTone="start"
               onChange={(event) => setEffectiveFrom(event.target.value)}
               type="date"
               value={effectiveFrom}
@@ -167,6 +168,7 @@ export function TicketRulesModal({
           label="Fecha inicio cómputo deuda"
         >
           <Input
+            dateTone="start"
             min={TICKET_RESTAURANT_MIN_ABSENCE_DATE}
             onChange={(event) => setDebtStartDate(event.target.value)}
             type="date"

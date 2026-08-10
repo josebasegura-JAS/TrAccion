@@ -28,11 +28,30 @@ export function FieldLabel({ children, className, ...props }: FieldLabelProps) {
   );
 }
 
-type InputProps = InputHTMLAttributes<HTMLInputElement>;
+export type DateInputTone = 'request' | 'start' | 'end';
+
+const dateInputToneClass: Record<DateInputTone, string> = {
+  request: '!border-sky-400/45 !bg-sky-400/10 focus:!border-sky-300',
+  start: '!border-emerald-400/45 !bg-emerald-400/10 focus:!border-emerald-300',
+  end: '!border-amber-400/45 !bg-amber-400/10 focus:!border-amber-300',
+};
+
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  /**
+   * Tinte semántico para fechas de formulario: solicitud/registro, inicio/desde y fin/hasta.
+   * Se usa únicamente cuando el significado de la fecha es inequívoco.
+   */
+  dateTone?: DateInputTone;
+}
 
 /** Campo de texto estándar de 36 px de altura. */
-export function Input({ className, ...props }: InputProps) {
-  return <input className={cx(fieldInputClass, className)} {...props} />;
+export function Input({ className, dateTone, ...props }: InputProps) {
+  return (
+    <input
+      className={cx(fieldInputClass, dateTone ? dateInputToneClass[dateTone] : undefined, className)}
+      {...props}
+    />
+  );
 }
 
 type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;

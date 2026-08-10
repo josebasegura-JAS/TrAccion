@@ -7,6 +7,7 @@ import {
   type TeletrabajoDraft,
   type TeletrabajoTextField,
 } from '../../features/teletrabajo/domain/solicitud';
+import { Input } from '../ui/Field';
 
 const plantillaTextFields: Array<{
   field: TeletrabajoTextField;
@@ -314,8 +315,8 @@ function TeletrabajoManagementSection({
 
         <label className="text-xs font-semibold text-metro-muted">
           Fecha solicitud
-          <input
-            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+          <Input
+            dateTone="request"
             onChange={(event) => setDraft((current) => ({ ...current, fechaSolicitud: event.target.value }))}
             type="date"
             value={draft.fechaSolicitud}
