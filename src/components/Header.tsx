@@ -10,8 +10,8 @@ import { readStorageItem, writeStorageItem } from '../services/persistence';
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: {
-    title: 'Inicio',
-    subtitle: 'Resumen operativo de RRLL, agenda y prioridades del día.',
+    title: 'Dashboard RRLL',
+    subtitle: 'Prioridades, agenda y próximos hitos.',
   },
   plantilla: {
     title: 'Plantilla',

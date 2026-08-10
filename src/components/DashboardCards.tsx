@@ -1,44 +1,30 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  CheckCircle2,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Laptop,
-  ListChecks,
-  Utensils,
+  Eye,
+  FileText,
+  Target,
   UsersRound,
 } from 'lucide-react';
-import { isTaskClosed, type Task } from '../features/tareas/domain/task';
+import { isTaskClosed, type Task, type TaskPriority } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
-import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
-import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/useTicketRestauranteStore';
-import { readStorageItem } from '../services/persistence';
-import {
-  CalendarLegend,
-  DashboardHeaderPill,
-  DashboardList,
-  DashboardListRow,
-  DashboardRecordsModal,
-  EmptyDashboardRow,
-  SummaryLine,
-  TodayAlert,
-} from './dashboard/DashboardUi';
+import { DashboardRecordsModal } from './dashboard/DashboardUi';
 import type {
   CalendarEvent,
   CalendarEventType,
   DashboardNavigationTarget,
   DashboardPopup,
   DashboardPopupItem,
-  KpiCard,
 } from './dashboard/dashboardTypes';
 import {
   eventTone,
   formatDisplayDate,
   fullDateFormatter,
-  getLatestTeletrabajoPeriodo,
   getMonthMatrix,
   miniDonutStyle,
   monthFormatter,
@@ -48,22 +34,96 @@ import {
   toIsoDate,
 } from './dashboard/dashboardUtils';
 
+const priorityWeight: Record<TaskPriority, number> = {
+  critica: 0,
+  alta: 1,
+  media: 2,
+  baja: 3,
+};
 
-function getStoredDashboardUserName(): string {
-  if (typeof window === 'undefined') {
-    return 'Usuario local';
-  }
+const priorityLabels: Record<TaskPriority, string> = {
+  critica: 'Crítica',
+  alta: 'Alta',
+  media: 'Media',
+  baja: 'Baja',
+};
 
-  return readStorageItem('traccion.header.username')?.trim() || 'Usuario local';
+const priorityTone: Record<TaskPriority, string> = {
+  critica: 'text-red-400',
+  alta: 'text-orange-400',
+  media: 'text-amber-300',
+  baja: 'text-blue-400',
+};
+
+function DashboardPanel({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={`min-h-0 overflow-hidden rounded-[1.35rem] border border-metro-border bg-metro-surface/90 shadow-glow ${className}`}
+    >
+      {children}
+    </section>
+  );
 }
 
-function getGreetingUserName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === 'Usuario local') {
-    return 'usuario';
-  }
+function PanelTitle({
+  icon: Icon,
+  title,
+  action,
+}: {
+  icon: typeof ClipboardList;
+  title: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-metro-red/10 text-red-400 ring-1 ring-metro-red/20">
+          <Icon size={17} />
+        </span>
+        <h2 className="truncate text-[15px] font-black text-metro-text">{title}</h2>
+      </div>
+      {action}
+    </div>
+  );
+}
 
-  return trimmed;
+function CompactRow({
+  title,
+  subtitle,
+  accent,
+  icon: Icon,
+  trailing,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  accent: string;
+  icon: typeof ClipboardList;
+  trailing?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`grid w-full grid-cols-[2.15rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl border border-metro-border bg-metro-panel/55 px-2.5 py-1.5 text-left transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/40 ${accent}`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="grid h-8 w-8 place-items-center rounded-lg bg-metro-raised text-metro-secondary">
+        <Icon size={16} />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[12px] font-black text-metro-text">{title}</span>
+        <span className="block truncate text-[10px] font-semibold text-metro-muted">{subtitle}</span>
+      </span>
+      {trailing ?? <ChevronRight className="text-metro-muted" size={15} />}
+    </button>
+  );
 }
 
 export function DashboardCards({
@@ -74,10 +134,9 @@ export function DashboardCards({
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dashboardPopup, setDashboardPopup] = useState<DashboardPopup | null>(null);
-  const [dashboardUserName, setDashboardUserName] = useState(getStoredDashboardUserName);
+
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
-  const todayLabel = fullDateFormatter.format(today);
 
   const tasks = useTaskStore((state) => state.tasks);
   const loadTasks = useTaskStore((state) => state.load);
@@ -85,46 +144,15 @@ export function DashboardCards({
   const loadSessions = useCommitteeSessionStore((state) => state.load);
   const paritariaSessions = useParitariaSessionStore((state) => state.sessions);
   const loadParitariaSessions = useParitariaSessionStore((state) => state.load);
-  const solicitudes = useTeletrabajoStore((state) => state.solicitudes);
-  const loadSolicitudes = useTeletrabajoStore((state) => state.load);
-  const [ticketSummary, setTicketSummary] = useState({ loaded: false, people: 0, absences: 0 });
 
   useEffect(() => {
     loadTasks();
     loadSessions();
-    loadSolicitudes();
     loadParitariaSessions();
-    setDashboardUserName(getStoredDashboardUserName());
-  }, [loadParitariaSessions, loadSessions, loadSolicitudes, loadTasks]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    window.traccion
-      ?.getWindowsUser?.()
-      .then((userName) => {
-        if (isMounted) {
-          setDashboardUserName(userName?.trim() || getStoredDashboardUserName());
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setDashboardUserName(getStoredDashboardUserName());
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [loadParitariaSessions, loadSessions, loadTasks]);
 
   const openRecord = (target: DashboardNavigationTarget) => {
     onOpenRecord?.(target);
-  };
-
-
-  const openPopup = (popup: DashboardPopup) => {
-    setDashboardPopup(popup);
   };
 
   const openPopupRecord = (item: DashboardPopupItem) => {
@@ -133,10 +161,7 @@ export function DashboardCards({
     setDashboardPopup(null);
   };
 
-  const nonDeletedTasks = useMemo(
-    () => tasks.filter((task) => !task.deletedAt),
-    [tasks],
-  );
+  const nonDeletedTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const activeTasks = useMemo(
     () => nonDeletedTasks.filter((task) => !isTaskClosed(task)),
     [nonDeletedTasks],
@@ -153,41 +178,22 @@ export function DashboardCards({
     () => paritariaSessions.filter((session) => session.status === 'open'),
     [paritariaSessions],
   );
-  const nonDeletedTelework = useMemo(
-    () => solicitudes.filter((solicitud) => !solicitud.deletedAt),
-    [solicitudes],
-  );
-  const activeTeleworkPeriodo = useMemo(
-    () => getLatestTeletrabajoPeriodo(nonDeletedTelework),
-    [nonDeletedTelework],
-  );
-  const activeTelework = useMemo(
+  const allOpenSessions = useMemo(
     () =>
-      activeTeleworkPeriodo
-        ? nonDeletedTelework.filter(
-            (solicitud) => solicitud.periodo.trim() === activeTeleworkPeriodo,
-          )
-        : nonDeletedTelework,
-    [activeTeleworkPeriodo, nonDeletedTelework],
+      [
+        ...openCommitteeSessions.map((session) => ({ ...session, module: 'comite' as const })),
+        ...openParitariaSessions.map((session) => ({ ...session, module: 'paritaria' as const })),
+      ].sort((first, second) => first.date.localeCompare(second.date)),
+    [openCommitteeSessions, openParitariaSessions],
   );
-  const pendingTelework = useMemo(
-    () => activeTelework.filter((solicitud) => solicitud.estado === 'pendiente'),
-    [activeTelework],
+  const pendingSessionPoints = useMemo(
+    () =>
+      allOpenSessions.reduce(
+        (sum, session) => sum + (session.untreatedTaskIds?.length ?? session.items.length),
+        0,
+      ),
+    [allOpenSessions],
   );
-  const getActiveTicketData = () => {
-    const ticketStore = useTicketRestauranteStore.getState();
-    ticketStore.load();
-
-    const currentTicketStore = useTicketRestauranteStore.getState();
-    const people = currentTicketStore.people.filter((person) => person.activo && !person.deletedAt);
-    const absences = currentTicketStore.absences.filter(
-      (absence) => !absence.deletedAt && absence.afectaTicket,
-    );
-
-    setTicketSummary({ loaded: true, people: people.length, absences: absences.length });
-
-    return { people, absences };
-  };
   const actaTasks = useMemo(
     () =>
       activeTasks.filter((task) =>
@@ -197,13 +203,6 @@ export function DashboardCards({
       ),
     [activeTasks],
   );
-
-
-  const committeeTasks = useMemo(
-    () => activeTasks.filter((task) => task.fase.trim().toLowerCase() === 'comite'),
-    [activeTasks],
-  );
-
 
   const taskPopupItems = (items: readonly Task[], type: CalendarEventType = 'task'): DashboardPopupItem[] =>
     items.map((task) => ({
@@ -216,76 +215,12 @@ export function DashboardCards({
       recordId: task.id,
     }));
 
-  const committeePopupItems = (): DashboardPopupItem[] => [
-    ...openCommitteeSessions.map((session) => ({
-      id: `committee-${session.id}`,
-      date: session.date,
-      type: 'committee' as const,
-      title: session.title,
-      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} · ${session.code || 'sin código'}`,
-      view: 'comite' as const,
-      recordId: session.id,
-    })),
-    ...openParitariaSessions.map((session) => ({
-      id: `paritaria-${session.id}`,
-      date: session.date,
-      type: 'paritaria' as const,
-      title: session.title,
-      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} · ${session.code || 'sin código'}`,
-      view: 'paritaria' as const,
-      recordId: session.id,
-    })),
-  ];
-
-  const teleworkPopupItems = (items = pendingTelework): DashboardPopupItem[] =>
-    items.map((solicitud) => ({
-      id: `telework-${solicitud.id}`,
-      date: solicitud.fechaSolicitud,
-      type: 'telework' as const,
-      title: solicitud.nombreApellidos || solicitud.empleado,
-      detail: `${solicitud.estado} · ${solicitud.tipoSolicitud} · ${solicitud.diasTeletrabajo.join(', ') || 'sin días'}`,
-      view: 'teletrabajo' as const,
-      recordId: solicitud.id,
-    }));
-
-  const buildTicketAbsencePopupItems = (absences: ReturnType<typeof getActiveTicketData>['absences']): DashboardPopupItem[] =>
-    absences.map((absence) => ({
-      id: `ticket-${absence.id}`,
-      date: absence.desde,
-      type: 'tickets' as const,
-      title: absence.nombreApellidos || absence.empleado,
-      detail: `${absence.motivo} · ${formatDisplayDate(absence.desde)}-${formatDisplayDate(absence.hasta)} · ${absence.totalDias} día${absence.totalDias === 1 ? '' : 's'}`,
-      view: 'ticket-restaurante' as const,
-      recordId: absence.id,
-    }));
-
-  const buildTicketPeoplePopupItems = (people: ReturnType<typeof getActiveTicketData>['people']): DashboardPopupItem[] =>
-    people.map((person) => ({
-      id: `ticket-person-${person.empleado}`,
-      type: 'tickets' as const,
-      title: person.nombreApellidos || person.empleado,
-      detail: `${person.empleado} · ${person.puesto || 'sin puesto'}`,
-      view: 'ticket-restaurante' as const,
-    }));
-
-  const showTicketPopup = (mode: 'all' | 'people' = 'all') => {
-    const { people, absences } = getActiveTicketData();
-    const items =
-      mode === 'people'
-        ? buildTicketPeoplePopupItems(people)
-        : [...buildTicketAbsencePopupItems(absences), ...buildTicketPeoplePopupItems(people)];
-
-    openPopup({
-      eyebrow: 'Dashboard',
-      title: mode === 'people' ? 'Personas activas en Ticket Restaurante' : 'Ticket Restaurante',
-      subtitle: `${people.length} persona${people.length === 1 ? '' : 's'} · ${absences.length} ausencia${absences.length === 1 ? '' : 's'} con descuento`,
-      emptyText: 'No hay registros de Ticket Restaurante.',
-      items,
-    });
-  };
-
-  const showTaskPopup = (title: string, items: readonly Task[], emptyText = 'No hay tareas que mostrar.') => {
-    openPopup({
+  const showTaskPopup = (
+    title: string,
+    items: readonly Task[],
+    emptyText = 'No hay tareas que mostrar.',
+  ) => {
+    setDashboardPopup({
       eyebrow: 'Dashboard',
       title,
       subtitle: `${items.length} registro${items.length === 1 ? '' : 's'}`,
@@ -293,6 +228,20 @@ export function DashboardCards({
       items: taskPopupItems(items),
     });
   };
+
+  const committeePopupItems = useMemo<DashboardPopupItem[]>(
+    () =>
+      allOpenSessions.map((session) => ({
+        id: `${session.module}-${session.id}`,
+        date: session.date,
+        type: session.module === 'comite' ? ('committee' as const) : ('paritaria' as const),
+        title: session.title,
+        detail: `${session.untreatedTaskIds?.length ?? session.items.length} punto${(session.untreatedTaskIds?.length ?? session.items.length) === 1 ? '' : 's'} pendiente${(session.untreatedTaskIds?.length ?? session.items.length) === 1 ? '' : 's'} · ${session.code || 'sin código'}`,
+        view: session.module,
+        recordId: session.id,
+      })),
+    [allOpenSessions],
+  );
 
   const calendarEvents = useMemo<CalendarEvent[]>(() => {
     const taskEvents = activeTasks
@@ -312,7 +261,7 @@ export function DashboardCards({
       date: session.date,
       type: 'committee' as const,
       title: session.title,
-      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} en orden del día`,
+      detail: `${session.untreatedTaskIds?.length ?? session.items.length} punto${(session.untreatedTaskIds?.length ?? session.items.length) === 1 ? '' : 's'} pendiente${(session.untreatedTaskIds?.length ?? session.items.length) === 1 ? '' : 's'}`,
       view: 'comite' as const,
       recordId: session.id,
     }));
@@ -322,22 +271,10 @@ export function DashboardCards({
       date: session.date,
       type: 'paritaria' as const,
       title: session.title,
-      detail: `${session.items.length} punto${session.items.length === 1 ? '' : 's'} en Comisión Paritaria`,
+      detail: `${session.untreatedTaskIds?.length ?? session.items.length} punto${(session.untreatedTaskIds?.length ?? session.items.length) === 1 ? '' : 's'} pendiente${(session.untreatedTaskIds?.length ?? session.items.length) === 1 ? '' : 's'}`,
       view: 'paritaria' as const,
       recordId: session.id,
     }));
-
-    const teleworkEvents = pendingTelework
-      .filter((solicitud) => solicitud.fechaSolicitud)
-      .map((solicitud) => ({
-        id: `telework-${solicitud.id}`,
-        date: solicitud.fechaSolicitud,
-        type: 'telework' as const,
-        title: solicitud.nombreApellidos,
-        detail: 'Solicitud de teletrabajo pendiente',
-        view: 'teletrabajo' as const,
-        recordId: solicitud.id,
-      }));
 
     const actaEvents = actaTasks
       .filter((task) => task.fechaLimite)
@@ -351,20 +288,8 @@ export function DashboardCards({
         recordId: task.id,
       }));
 
-    return [
-      ...taskEvents,
-      ...committeeEvents,
-      ...paritariaEvents,
-      ...teleworkEvents,
-      ...actaEvents,
-    ];
-  }, [
-    activeTasks,
-    actaTasks,
-    openCommitteeSessions,
-    openParitariaSessions,
-    pendingTelework,
-  ]);
+    return [...taskEvents, ...committeeEvents, ...paritariaEvents, ...actaEvents];
+  }, [activeTasks, actaTasks, openCommitteeSessions, openParitariaSessions]);
 
   const eventsByDay = useMemo(
     () =>
@@ -388,14 +313,41 @@ export function DashboardCards({
     () =>
       calendarEvents
         .filter((event) => event.date >= todayIso)
-        .sort((first, second) => first.date.localeCompare(second.date))
-        .slice(0, 5),
+        .sort((first, second) => first.date.localeCompare(second.date)),
     [calendarEvents, todayIso],
   );
-  const nextCommitteeOrParitariaEvent = useMemo(
-    () => upcomingEvents.find((event) => event.type === 'committee' || event.type === 'paritaria') ?? null,
-    [upcomingEvents],
+
+  const nextSession = useMemo(
+    () => allOpenSessions.find((session) => !session.date || session.date >= todayIso) ?? allOpenSessions[0] ?? null,
+    [allOpenSessions, todayIso],
   );
+
+  const upcomingTasks = useMemo(() => {
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() + 7);
+    const cutoffIso = toIsoDate(cutoff);
+    return activeTasks
+      .filter((task) => task.fechaLimite && task.fechaLimite >= todayIso && task.fechaLimite <= cutoffIso)
+      .sort((first, second) => first.fechaLimite.localeCompare(second.fechaLimite));
+  }, [activeTasks, today, todayIso]);
+
+  const priorityTasks = useMemo(
+    () =>
+      [...activeTasks]
+        .sort((first, second) => {
+          const priorityDifference = priorityWeight[first.prioridad] - priorityWeight[second.prioridad];
+          if (priorityDifference !== 0) return priorityDifference;
+          if (first.fechaLimite && second.fechaLimite) return first.fechaLimite.localeCompare(second.fechaLimite);
+          if (first.fechaLimite) return -1;
+          if (second.fechaLimite) return 1;
+          return second.updatedAt.localeCompare(first.updatedAt);
+        })
+        .slice(0, 4),
+    [activeTasks],
+  );
+
+  const taskSegments = useMemo(() => stateSegmentsFromTasks(nonDeletedTasks), [nonDeletedTasks]);
+  const donutStyle = useMemo(() => miniDonutStyle(taskSegments), [taskSegments]);
 
   const monthCells = useMemo(() => getMonthMatrix(visibleMonth), [visibleMonth]);
   const monthLabel = useMemo(() => {
@@ -403,448 +355,337 @@ export function DashboardCards({
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }, [visibleMonth]);
 
-  const kpis = useMemo<KpiCard[]>(() => {
-    const teleworkSegments = [
-      { label: 'Por validar', value: pendingTelework.length, className: 'bg-blue-500' },
-      {
-        label: 'Aprobadas',
-        value: activeTelework.filter((solicitud) => solicitud.estado === 'aprobada').length,
-        className: 'bg-emerald-500',
-      },
-      {
-        label: 'Denegadas',
-        value: activeTelework.filter((solicitud) => solicitud.estado === 'denegada').length,
-        className: 'bg-slate-400',
-      },
-    ];
-    const ticketSegments = [
-      { label: 'Personas activas', value: ticketSummary.loaded ? ticketSummary.people : 0, className: 'bg-emerald-500' },
-      {
-        label: 'Ausencias con descuento',
-        value: ticketSummary.loaded ? ticketSummary.absences : 0,
-        className: 'bg-orange-500',
-      },
-    ];
+  const attentionItems = useMemo(() => {
+    const items: Array<{
+      key: string;
+      title: string;
+      subtitle: string;
+      accent: string;
+      icon: typeof ClipboardList;
+      onClick: () => void;
+    }> = [];
 
-    return [
-      {
-        title: 'Tareas',
-        value: activeTasks.length,
-        subtitle: 'abiertas',
-        helper: `${criticalTasks.length} críticas`,
+    if (criticalTasks.length > 0) {
+      items.push({
+        key: 'critical',
+        title: `${criticalTasks.length} tarea${criticalTasks.length === 1 ? '' : 's'} crítica${criticalTasks.length === 1 ? '' : 's'}`,
+        subtitle: 'Requiere atención prioritaria',
+        accent: 'border-l-red-500',
         icon: ClipboardList,
-        tone: 'text-red-400 bg-red-500/10 ring-1 ring-red-500/20',
-        segments: stateSegmentsFromTasks(activeTasks),
-      },
-      {
-        title: 'Comité',
-        value: openCommitteeSessions.length,
-        subtitle: 'sesiones pendientes',
-        helper: `${committeeTasks.length} puntos por tratar`,
-        icon: UsersRound,
-        tone: 'text-orange-400 bg-orange-500/10 ring-1 ring-orange-500/20',
-        segments: [
-          {
-            label: 'Sesiones abiertas',
-            value: openCommitteeSessions.length,
-            className: 'bg-red-500',
-          },
-          { label: 'Puntos abiertos', value: committeeTasks.length, className: 'bg-orange-500' },
-        ],
-      },
-      {
-        title: 'Teletrabajo',
-        value: activeTelework.length,
-        subtitle: 'solicitudes',
-        helper: `${pendingTelework.length} por validar`,
-        icon: Laptop,
-        tone: 'text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/20',
-        segments: teleworkSegments,
-      },
-      {
-        title: 'Tickets',
-        value: ticketSummary.loaded ? ticketSummary.people : '—',
-        subtitle: ticketSummary.loaded ? 'personas activas' : 'carga bajo demanda',
-        helper: ticketSummary.loaded ? `${ticketSummary.absences} ausencias con descuento` : 'clic para consultar',
-        icon: Utensils,
-        tone: 'text-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-500/20',
-        segments: ticketSegments,
-      },
-    ];
-  }, [
-    activeTasks,
-    activeTelework,
-    committeeTasks.length,
-    criticalTasks.length,
-    openCommitteeSessions.length,
-    pendingTelework.length,
-    ticketSummary,
-  ]);
+        onClick: () => showTaskPopup('Tareas críticas', criticalTasks),
+      });
+    }
 
-  const totalTasks = activeTasks.length;
-  const taskSegments = stateSegmentsFromTasks(activeTasks);
-  const maxTaskSegment = Math.max(...taskSegments.map((segment) => segment.value), 1);
+    if (nextSession) {
+      const pending = nextSession.untreatedTaskIds?.length ?? nextSession.items.length;
+      items.push({
+        key: 'session',
+        title: `${nextSession.module === 'comite' ? 'Comité' : 'Paritaria'} ${formatDisplayDate(nextSession.date)}`,
+        subtitle: `${pending} punto${pending === 1 ? '' : 's'} pendiente${pending === 1 ? '' : 's'}`,
+        accent: 'border-l-orange-500',
+        icon: UsersRound,
+        onClick: () => openRecord({ view: nextSession.module, recordId: nextSession.id }),
+      });
+    }
+
+    if (actaTasks.length > 0) {
+      items.push({
+        key: 'actas',
+        title: `${actaTasks.length} acta${actaTasks.length === 1 ? '' : 's'} en seguimiento`,
+        subtitle: 'Requieren revisión o actuación pendiente',
+        accent: 'border-l-amber-400',
+        icon: FileText,
+        onClick: () => showTaskPopup('Actas en seguimiento', actaTasks, 'No hay actas en seguimiento.'),
+      });
+    }
+
+    if (upcomingTasks.length > 0) {
+      items.push({
+        key: 'due',
+        title: `${upcomingTasks.length} tarea${upcomingTasks.length === 1 ? '' : 's'} próxima${upcomingTasks.length === 1 ? '' : 's'} a vencer`,
+        subtitle: 'Vencimiento dentro de los próximos 7 días',
+        accent: 'border-l-red-400',
+        icon: Target,
+        onClick: () => showTaskPopup('Tareas próximas a vencer', upcomingTasks),
+      });
+    }
+
+    return items.slice(0, 4);
+  }, [actaTasks, criticalTasks, nextSession, upcomingTasks]);
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-[1.5rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-xl font-black tracking-tight text-metro-text">
-              Buenos días, {getGreetingUserName(dashboardUserName)}
-            </h2>
-            <p className="mt-0.5 text-xs font-semibold text-metro-muted">
-              Vista ejecutiva de Relaciones Laborales
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            <DashboardHeaderPill label="Tareas abiertas" value={activeTasks.length} onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
-            <DashboardHeaderPill
-              label="Críticas"
-              value={criticalTasks.length}
-              tone="text-red-400"
-              onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
-            />
-            <DashboardHeaderPill label="Comité" value={openCommitteeSessions.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Sesiones de Comité', subtitle: `${openCommitteeSessions.length} sesión${openCommitteeSessions.length === 1 ? '' : 'es'} abierta${openCommitteeSessions.length === 1 ? '' : 's'}`, emptyText: 'No hay sesiones de Comité abiertas.', items: committeePopupItems().filter((item) => item.type === 'committee') })} />
-            <DashboardHeaderPill label="Teletrabajo" value={pendingTelework.length} onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })} />
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <button
-            className="rounded-[1.25rem] border border-metro-border bg-metro-surface/90 p-3 text-left text-metro-text shadow-glow transition hover:border-metro-red hover:bg-metro-panel/60 focus:outline-none focus:ring-2 focus:ring-metro-red/40"
-            key={kpi.title}
-            onClick={() => {
-              if (kpi.title === 'Tareas') {
-                showTaskPopup('Tareas abiertas', activeTasks);
-              } else if (kpi.title === 'Comité') {
-                openPopup({ eyebrow: 'Dashboard', title: 'Comité y puntos abiertos', subtitle: `${openCommitteeSessions.length} sesiones · ${committeeTasks.length} puntos`, emptyText: 'No hay sesiones ni puntos abiertos.', items: [...committeePopupItems().filter((item) => item.type === 'committee'), ...taskPopupItems(committeeTasks)] });
-              } else if (kpi.title === 'Teletrabajo') {
-                openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes de teletrabajo', subtitle: `${activeTelework.length} solicitud${activeTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes de teletrabajo.', items: teleworkPopupItems(activeTelework) });
-              } else if (kpi.title === 'Tickets') {
-                showTicketPopup();
-              }
-            }}
-            type="button"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`rounded-xl p-1.5 ${kpi.tone}`}>
-                  <kpi.icon size={18} />
-                </span>
-                <h3 className="text-sm font-black">{kpi.title}</h3>
-              </div>
-              <ChevronRight className="text-metro-muted" size={18} />
-            </div>
-            <div className="grid grid-cols-[1fr_4.3rem] items-center gap-2">
-              <div>
-                <p className="text-3xl font-black tracking-tight">{kpi.value}</p>
-                <p className="text-sm font-medium text-metro-muted">{kpi.subtitle}</p>
-                <p className="mt-2 text-xs font-black text-red-400">{kpi.helper}</p>
-              </div>
-              <div
-                className="relative h-16 w-16 rounded-full p-1.5"
-                style={miniDonutStyle(kpi.segments)}
-              >
-                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-metro-surface text-center shadow-inner">
-                  <span className="text-sm font-black">
-                    {kpi.segments.reduce((sum, segment) => sum + segment.value, 0)}
-                  </span>
-                  <span className="text-xs font-semibold text-metro-muted">Total</span>
+    <div className="grid h-[calc(100vh-7rem)] min-h-0 grid-rows-[minmax(0,0.92fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_auto] gap-2.5 overflow-hidden">
+      <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:grid-cols-2">
+        <DashboardPanel className="p-3.5">
+          <div className="grid h-full min-h-0 grid-cols-[1fr_auto] gap-4">
+            <div className="flex min-h-0 flex-col">
+              <PanelTitle icon={ClipboardList} title="Tareas" />
+              <div className="mt-2 flex items-end gap-8">
+                <div>
+                  <p className="text-2xl font-black leading-none text-metro-text">{activeTasks.length}</p>
+                  <p className="mt-1 text-[11px] font-bold text-metro-muted">abiertas</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-black leading-none text-red-400">{criticalTasks.length}</p>
+                  <p className="mt-1 text-[11px] font-bold text-metro-muted">críticas</p>
                 </div>
               </div>
-            </div>
-            <div className="mt-3 space-y-1.5 text-xs font-semibold text-metro-secondary">
-              {kpi.segments.map((segment) => (
-                <div className="flex items-center justify-between gap-3" key={segment.label}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${segment.className}`} />
-                    <span className="truncate">{segment.label}</span>
-                  </span>
-                  <span className="font-black text-metro-text">{segment.value}</span>
-                </div>
-              ))}
-            </div>
-          </button>
-        ))}
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[0.72fr_1.05fr_0.9fr]">
-        <aside className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
-          <h3 className="text-base font-black">Hoy</h3>
-          <p className="mt-0.5 text-xs font-semibold capitalize text-metro-muted">{todayLabel}</p>
-          <div className="mt-2 space-y-2">
-            <TodayAlert
-              className="border-red-500"
-              title={`${criticalTasks.length} tareas críticas`}
-              onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
-            />
-            <TodayAlert
-              className="border-orange-500"
-              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Próximo Comité/Paritaria', subtitle: 'Sesiones abiertas con fecha', emptyText: 'No hay sesiones abiertas con fecha.', items: committeePopupItems() })}
-              title={
-                nextCommitteeOrParitariaEvent?.title ?? 'Sin comité/paritaria próximo'
-              }
-              subtitle={
-                nextCommitteeOrParitariaEvent
-                  ? `Próximo ${formatDisplayDate(nextCommitteeOrParitariaEvent.date)}`
-                  : 'No hay sesión abierta con fecha'
-              }
-            />
-            <TodayAlert
-              className="border-blue-500"
-              title={`${pendingTelework.length} teletrabajos`}
-              subtitle="Pendientes de validar"
-              onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Teletrabajo pendiente', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
-            />
-            <TodayAlert
-              className="border-emerald-500"
-              title="Cálculo tickets"
-              subtitle={ticketSummary.loaded ? `${ticketSummary.people} personas activas` : 'Pulsa para cargar'}
-              onClick={() => showTicketPopup('people')}
-            />
-            <TodayAlert
-              className="border-amber-400"
-              title={`${actaTasks.length} actas en seguimiento`}
-              subtitle="Requieren revisión si vencen"
-              onClick={() => showTaskPopup('Actas en seguimiento', actaTasks, 'No hay actas en seguimiento.')}
-            />
-          </div>
-        </aside>
-
-        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-base font-black">Calendario</h3>
-            <div className="flex items-center gap-3">
-              <button
-                className="rounded-full p-1.5 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
-                onClick={() =>
-                  setVisibleMonth(
-                    (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1),
-                  )
-                }
-                type="button"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="min-w-32 text-center text-sm font-black">{monthLabel}</span>
-              <button
-                className="rounded-full p-1.5 text-metro-secondary transition hover:bg-metro-panel hover:text-metro-text"
-                onClick={() =>
-                  setVisibleMonth(
-                    (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1),
-                  )
-                }
-                type="button"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black uppercase text-metro-muted">
-            {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-7 gap-1">
-            {monthCells.map((date, index) => {
-              const isoDate = date ? toIsoDate(date) : '';
-              const events = isoDate ? (eventsByDay[isoDate] ?? []) : [];
-              const isToday = isoDate === todayIso;
-
-              return (
-                <button
-                  className={`min-h-9 rounded-xl px-1 py-0.5 text-center text-xs font-bold transition ${
-                    date
-                      ? events.length > 0
-                        ? 'cursor-pointer text-metro-secondary hover:bg-metro-panel/70 hover:text-metro-text'
-                        : 'text-metro-secondary hover:bg-metro-panel/40'
-                      : 'cursor-default text-transparent'
-                  } ${isToday ? 'bg-metro-red text-white shadow-lg shadow-red-950/25 hover:bg-metro-dark' : ''}`}
-                  disabled={!date}
-                  key={`${isoDate}-${index}`}
-                  onClick={() => {
-                    if (date) {
-                      setSelectedDate(isoDate);
-                    }
-                  }}
-                  type="button"
-                >
-                  <span>{date?.getDate() ?? '·'}</span>
-                  <div className="mt-1 flex min-h-2 justify-center gap-0.5">
-                    {events.slice(0, 4).map((event) => (
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${eventTone[event.type]}`}
-                        key={event.id}
-                        title={event.title}
-                      />
-                    ))}
-                    {events.length > 4 && (
-                      <span className="text-[11px] leading-none text-metro-muted">
-                        +{events.length - 4}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-metro-secondary">
-            <CalendarLegend className="bg-red-500" label="Tareas" />
-            <CalendarLegend className="bg-orange-500" label="Comité" />
-            <CalendarLegend className="bg-violet-500" label="Paritaria" />
-            <CalendarLegend className="bg-blue-500" label="Teletrabajo" />
-            <CalendarLegend className="bg-amber-400" label="Actas" />
-          </div>
-        </article>
-
-        <article className="rounded-[1.75rem] border border-metro-border bg-metro-surface/90 p-3 text-metro-text shadow-glow">
-          <div className="mb-3 flex items-center justify-between border-b border-metro-border pb-2">
-            <h3 className="text-base font-black">Resumen operativo</h3>
-            <span className="rounded-full bg-metro-panel px-3 py-1 text-xs font-black text-metro-secondary">
-              Este mes
-            </span>
-          </div>
-          <div className="grid gap-3 md:grid-cols-[0.95fr_1.05fr]">
-            <div className="space-y-2">
-              <SummaryLine icon={ListChecks} label="Tareas abiertas" value={activeTasks.length} onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
-              <SummaryLine
-                icon={ClipboardList}
-                label="Tareas críticas"
-                value={criticalTasks.length}
-                onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
-              />
-              <SummaryLine
-                icon={UsersRound}
-                label="Sesiones CE/Paritaria"
-                value={openCommitteeSessions.length + openParitariaSessions.length}
-                onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Sesiones CE/Paritaria', subtitle: `${openCommitteeSessions.length + openParitariaSessions.length} sesión${openCommitteeSessions.length + openParitariaSessions.length === 1 ? '' : 'es'}`, emptyText: 'No hay sesiones abiertas.', items: committeePopupItems() })}
-              />
-              <SummaryLine
-                icon={Laptop}
-                label="Solicitudes teletrabajo"
-                value={pendingTelework.length}
-                onClick={() => openPopup({ eyebrow: 'Dashboard', title: 'Solicitudes teletrabajo pendientes', subtitle: `${pendingTelework.length} solicitud${pendingTelework.length === 1 ? '' : 'es'} · ${activeTeleworkPeriodo || 'periodo actual'}`, emptyText: 'No hay solicitudes pendientes.', items: teleworkPopupItems() })}
-              />
-              <SummaryLine
-                icon={CheckCircle2}
-                label="Actas en seguimiento"
-                value={actaTasks.length}
-                onClick={() => showTaskPopup('Actas en seguimiento', actaTasks, 'No hay actas en seguimiento.')}
-              />
-            </div>
-            <div className="min-w-0 overflow-hidden border-t border-metro-border pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
-              <p className="mb-2 text-xs font-bold text-metro-muted">
-                Tareas por estado
-              </p>
-              <div className="space-y-2">
+              <div className="mt-auto grid grid-cols-5 gap-2 border-t border-metro-border pt-2">
                 {taskSegments.map((segment) => (
                   <button
-                    className="grid min-w-0 grid-cols-[4.7rem_minmax(0,1fr)_1.5rem] items-center gap-2 rounded-lg text-left transition hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-metro-red/30"
+                    className="min-w-0 text-left"
                     key={segment.label}
-                    onClick={() => showTaskPopup(`Tareas ${segment.label.toLowerCase()}`, activeTasks.filter((task) => taskStateLabels[task.estado] === segment.label))}
+                    onClick={() =>
+                      showTaskPopup(
+                        `Tareas ${segment.label.toLowerCase()}`,
+                        nonDeletedTasks.filter((task) => taskStateLabels[task.estado] === segment.label),
+                      )
+                    }
                     type="button"
                   >
-                    <span className="truncate text-[11px] font-bold text-metro-secondary">
-                      {segment.label}
-                    </span>
-                    <div className="h-2.5 min-w-0 overflow-hidden rounded-full bg-metro-panel">
-                      <div
-                        className={`h-full rounded-full ${segment.className}`}
-                        style={{ width: `${Math.max(6, (segment.value / maxTaskSegment) * 100)}%` }}
-                      />
+                    <div className="flex items-center gap-1.5">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${segment.className}`} />
+                      <span className="truncate text-[9px] font-bold text-metro-muted">{segment.label}</span>
                     </div>
-                    <span className="text-right text-[11px] font-black text-metro-text">
-                      {segment.value}
-                    </span>
+                    <p className="mt-0.5 pl-3.5 text-[11px] font-black text-metro-secondary">{segment.value}</p>
                   </button>
                 ))}
               </div>
-              <div className="mt-3 flex items-center justify-between border-t border-metro-border pt-2 text-xs font-black">
-                <span>Total tareas</span>
-                <span>{totalTasks}</span>
+            </div>
+            <button
+              className="relative grid h-20 w-20 shrink-0 place-items-center self-center rounded-full p-2 focus:outline-none focus:ring-2 focus:ring-metro-red/40"
+              onClick={() => showTaskPopup('Tareas abiertas', activeTasks)}
+              style={donutStyle}
+              type="button"
+            >
+              <span className="grid h-full w-full place-items-center rounded-full bg-metro-surface text-center shadow-inner">
+                <span>
+                  <span className="block text-lg font-black leading-none text-metro-text">{nonDeletedTasks.length}</span>
+                  <span className="text-[10px] font-bold text-metro-muted">Total</span>
+                </span>
+              </span>
+            </button>
+          </div>
+        </DashboardPanel>
+
+        <DashboardPanel className="p-3.5">
+          <div className="flex h-full min-h-0 flex-col">
+            <PanelTitle icon={UsersRound} title="Comité / Paritaria" />
+            <div className="mt-2 grid grid-cols-2 gap-8">
+              <div>
+                <p className="text-2xl font-black leading-none text-metro-text">{allOpenSessions.length}</p>
+                <p className="mt-1 text-[11px] font-bold text-metro-muted">
+                  sesión{allOpenSessions.length === 1 ? '' : 'es'} abierta{allOpenSessions.length === 1 ? '' : 's'}
+                </p>
+              </div>
+              <div>
+                <p className="text-2xl font-black leading-none text-orange-400">{pendingSessionPoints}</p>
+                <p className="mt-1 text-[11px] font-bold text-metro-muted">puntos pendientes</p>
               </div>
             </div>
+            <button
+              className="mt-auto flex items-center justify-between gap-3 border-t border-metro-border pt-2 text-left text-[11px] font-semibold text-metro-secondary hover:text-metro-text"
+              onClick={() => {
+                if (nextSession) {
+                  openRecord({ view: nextSession.module, recordId: nextSession.id });
+                } else {
+                  setDashboardPopup({
+                    eyebrow: 'Dashboard',
+                    title: 'Sesiones CE/Paritaria',
+                    subtitle: 'No hay sesiones abiertas.',
+                    emptyText: 'No hay sesiones abiertas.',
+                    items: committeePopupItems,
+                  });
+                }
+              }}
+              type="button"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <CalendarDays className="shrink-0 text-orange-400" size={15} />
+                <span className="truncate">
+                  {nextSession ? `Próxima sesión: ${formatDisplayDate(nextSession.date)} · ${nextSession.title}` : 'Sin próxima sesión abierta'}
+                </span>
+              </span>
+              <ChevronRight className="shrink-0 text-metro-muted" size={15} />
+            </button>
           </div>
-        </article>
-      </section>
+        </DashboardPanel>
+      </div>
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_0.85fr_1fr]">
-        <DashboardList
-          title="Mis tareas críticas"
-          action="Ver todas mis tareas"
-          onActionClick={() => openRecord({ view: 'tareas' })}
-        >
-          {criticalTasks.slice(0, 5).map((task) => (
-            <DashboardListRow
-              badge={task.prioridad === 'critica' ? 'Crítica' : 'Alta'}
-              date={formatDisplayDate(task.fechaLimite)}
-              key={task.id}
-              label={task.titulo}
-              meta={task.fase || 'Tareas'}
-              tone="bg-red-500"
-              onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
+      <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:grid-cols-[0.72fr_1.28fr]">
+        <DashboardPanel className="p-3.5">
+          <div className="flex h-full min-h-0 flex-col">
+            <PanelTitle icon={Eye} title="Pendiente de atención" />
+            <div className="mt-2 grid min-h-0 flex-1 content-start gap-1.5 overflow-hidden">
+              {attentionItems.length > 0 ? (
+                attentionItems.map((item) => (
+                  <CompactRow
+                    accent={item.accent}
+                    icon={item.icon}
+                    key={item.key}
+                    onClick={item.onClick}
+                    subtitle={item.subtitle}
+                    title={item.title}
+                  />
+                ))
+              ) : (
+                <div className="grid h-full place-items-center rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-4 text-center">
+                  <div>
+                    <p className="text-sm font-black text-emerald-300">Sin incidencias prioritarias</p>
+                    <p className="mt-1 text-[11px] font-semibold text-metro-muted">No hay elementos que requieran atención inmediata.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </DashboardPanel>
+
+        <DashboardPanel className="p-3.5">
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_9rem] gap-4">
+            <div className="flex min-h-0 flex-col">
+              <div className="flex items-center justify-between gap-3">
+                <PanelTitle icon={CalendarDays} title="Calendario" />
+                <div className="flex items-center gap-2">
+                  <button
+                    aria-label="Mes anterior"
+                    className="rounded-lg p-1 text-metro-muted hover:bg-metro-panel hover:text-metro-text"
+                    onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+                    type="button"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="min-w-28 text-center text-[12px] font-black text-metro-secondary">{monthLabel}</span>
+                  <button
+                    aria-label="Mes siguiente"
+                    className="rounded-lg p-1 text-metro-muted hover:bg-metro-panel hover:text-metro-text"
+                    onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+                    type="button"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-1.5 grid grid-cols-7 gap-0.5 text-center text-[9px] font-black uppercase tracking-wide text-metro-muted">
+                {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => <span key={day}>{day}</span>)}
+              </div>
+              <div className="mt-0.5 grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-0.5">
+                {monthCells.slice(0, 42).map((date, index) => {
+                  const isoDate = date ? toIsoDate(date) : `empty-${index}`;
+                  const events = date ? (eventsByDay[isoDate] ?? []) : [];
+                  const isToday = isoDate === todayIso;
+                  return (
+                    <button
+                      className={`min-h-0 rounded-lg px-0.5 text-center text-[10px] font-bold transition ${
+                        date
+                          ? 'text-metro-secondary hover:bg-metro-panel/60 hover:text-metro-text'
+                          : 'cursor-default text-transparent'
+                      } ${isToday ? 'bg-metro-red text-white shadow-md shadow-red-950/25 hover:bg-metro-dark' : ''}`}
+                      disabled={!date}
+                      key={isoDate}
+                      onClick={() => date && setSelectedDate(isoDate)}
+                      type="button"
+                    >
+                      <span>{date?.getDate() ?? '·'}</span>
+                      <span className="mt-0.5 flex min-h-1.5 justify-center gap-0.5">
+                        {events.slice(0, 4).map((event) => (
+                          <span className={`h-1 w-1 rounded-full ${eventTone[event.type]}`} key={event.id} />
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-center gap-2 border-l border-metro-border pl-4 text-[10px] font-bold text-metro-secondary">
+              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-500" />Tareas</span>
+              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-500" />Comité</span>
+              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-violet-500" />Paritaria</span>
+              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-400" />Actas</span>
+            </div>
+          </div>
+        </DashboardPanel>
+      </div>
+
+      <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:grid-cols-2">
+        <DashboardPanel className="p-3.5">
+          <div className="flex h-full min-h-0 flex-col">
+            <PanelTitle
+              icon={ClipboardList}
+              title="Mis tareas prioritarias"
+              action={
+                <button className="text-[10px] font-bold text-metro-muted hover:text-metro-text" onClick={() => openRecord({ view: 'tareas' })} type="button">
+                  Ver todas
+                </button>
+              }
             />
-          ))}
-          {criticalTasks.length === 0 && (
-            <EmptyDashboardRow text="No hay tareas críticas abiertas." />
-          )}
-        </DashboardList>
+            <div className="mt-2 grid min-h-0 flex-1 content-start gap-1">
+              {priorityTasks.length > 0 ? priorityTasks.map((task) => (
+                <button
+                  className="grid grid-cols-[minmax(0,1fr)_5rem_5rem_auto] items-center gap-2 rounded-lg border border-metro-border bg-metro-panel/45 px-2.5 py-1.5 text-left hover:bg-white/5"
+                  key={task.id}
+                  onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
+                  type="button"
+                >
+                  <span className="truncate text-[11px] font-black text-metro-text">{task.titulo}</span>
+                  <span className={`truncate text-[9px] font-black ${priorityTone[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
+                  <span className="text-right text-[9px] font-bold text-metro-secondary">{formatDisplayDate(task.fechaLimite)}</span>
+                  <ChevronRight className="text-metro-muted" size={13} />
+                </button>
+              )) : (
+                <p className="rounded-xl bg-metro-panel/45 px-3 py-2 text-[11px] font-semibold text-metro-muted">No hay tareas abiertas.</p>
+              )}
+            </div>
+          </div>
+        </DashboardPanel>
 
-        <DashboardList
-          title="Próximos hitos"
-          action="Ver calendario completo"
-          onActionClick={() => setSelectedDate(todayIso)}
-        >
-          {upcomingEvents.slice(0, 5).map((event) => (
-            <DashboardListRow
-              badge={formatDisplayDate(event.date)}
-              date=""
-              key={event.id}
-              label={event.title}
-              meta={event.detail}
-              tone={eventTone[event.type]}
-              onClick={() => openRecord({ view: event.view, recordId: event.recordId })}
-            />
-          ))}
-          {upcomingEvents.length === 0 && (
-            <EmptyDashboardRow text="No hay hitos próximos con fecha." />
-          )}
-        </DashboardList>
+        <DashboardPanel className="p-3.5">
+          <div className="flex h-full min-h-0 flex-col">
+            <PanelTitle icon={Target} title="Próximos hitos" />
+            <div className="mt-2 grid min-h-0 flex-1 content-start gap-1">
+              {upcomingEvents.slice(0, 4).map((event) => (
+                <button
+                  className="grid grid-cols-[0.65rem_minmax(0,1fr)_5.5rem_auto] items-center gap-2 rounded-lg border border-metro-border bg-metro-panel/45 px-2.5 py-1.5 text-left hover:bg-white/5"
+                  key={event.id}
+                  onClick={() => openRecord({ view: event.view, recordId: event.recordId })}
+                  type="button"
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${eventTone[event.type]}`} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] font-black text-metro-text">{event.title}</span>
+                    <span className="block truncate text-[9px] font-semibold text-metro-muted">{event.detail}</span>
+                  </span>
+                  <span className="text-right text-[9px] font-black text-metro-secondary">{formatDisplayDate(event.date)}</span>
+                  <ChevronRight className="text-metro-muted" size={13} />
+                </button>
+              ))}
+              {upcomingEvents.length === 0 && (
+                <p className="rounded-xl bg-metro-panel/45 px-3 py-2 text-[11px] font-semibold text-metro-muted">No hay hitos próximos con fecha.</p>
+              )}
+            </div>
+          </div>
+        </DashboardPanel>
+      </div>
 
-        <DashboardList
-          title="Actividad reciente"
-          action="Ver toda la actividad"
-          onActionClick={() => openRecord({ view: 'tareas' })}
-        >
-          {tasks
-            .filter((task) => !task.deletedAt)
-            .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
-            .slice(0, 5)
-            .map((task) => (
-              <DashboardListRow
-                badge={formatDisplayDate(task.updatedAt.slice(0, 10))}
-                date=""
-                key={task.id}
-                label={`Tarea actualizada: ${task.titulo}`}
-                meta={taskStateLabels[task.estado]}
-                tone="bg-slate-400"
-                onClick={() => openRecord({ view: 'tareas', recordId: task.id })}
-              />
-            ))}
-          {nonDeletedTasks.length === 0 && (
-            <EmptyDashboardRow text="Aún no hay actividad registrada." />
-          )}
-        </DashboardList>
-      </section>
+      <button
+        className="flex min-h-10 items-center justify-between rounded-[1.15rem] border border-metro-border bg-metro-surface/90 px-3.5 py-2 text-left shadow-glow transition hover:bg-white/5"
+        onClick={() => openRecord({ view: 'actas' })}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20"><FileText size={15} /></span>
+          <span className="min-w-0">
+            <span className="block text-[12px] font-black text-metro-text">Actas en seguimiento</span>
+            <span className="block truncate text-[9px] font-semibold text-metro-muted">{actaTasks.length} acta{actaTasks.length === 1 ? '' : 's'} con acciones pendientes</span>
+          </span>
+        </span>
+        <span className="flex items-center gap-1 text-[9px] font-bold text-metro-muted">Ver todas <ChevronRight size={13} /></span>
+      </button>
 
       {selectedDate && (
         <DashboardRecordsModal
-          emptyText="Selecciona otro día con puntos de color para ver tareas, sesiones o registros."
+          emptyText="Selecciona otro día con puntos de color para ver tareas, sesiones o actas."
           eyebrow="Calendario"
           items={selectedDateEvents}
           onClose={() => setSelectedDate(null)}
@@ -872,4 +713,3 @@ export function DashboardCards({
     </div>
   );
 }
-
