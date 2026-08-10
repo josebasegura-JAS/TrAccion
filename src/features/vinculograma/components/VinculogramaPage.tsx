@@ -780,8 +780,11 @@ export function VinculogramaPage() {
       return { ok: false, message: 'Empleado, nombre y fecha de solicitud son obligatorios.' };
     }
 
-    if (draft.revokedAt.trim() || draft.revocationReason.trim()) {
-      if (!draft.revokedAt.trim() || !draft.revocationReason.trim()) {
+    const revokedAt = draft.revokedAt?.trim() ?? '';
+    const revocationReason = draft.revocationReason?.trim() ?? '';
+
+    if (revokedAt || revocationReason) {
+      if (!revokedAt || !revocationReason) {
         return {
           ok: false,
           message: 'Para revocar un vinculograma debes indicar la fecha y el motivo.',
