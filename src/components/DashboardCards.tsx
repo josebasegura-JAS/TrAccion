@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   CalendarDays,
   ChevronLeft,
@@ -151,15 +151,21 @@ export function DashboardCards({
     loadParitariaSessions();
   }, [loadParitariaSessions, loadSessions, loadTasks]);
 
-  const openRecord = (target: DashboardNavigationTarget) => {
-    onOpenRecord?.(target);
-  };
+  const openRecord = useCallback(
+    (target: DashboardNavigationTarget) => {
+      onOpenRecord?.(target);
+    },
+    [onOpenRecord],
+  );
 
-  const openPopupRecord = (item: DashboardPopupItem) => {
-    openRecord({ view: item.view, recordId: item.recordId });
-    setSelectedDate(null);
-    setDashboardPopup(null);
-  };
+  const openPopupRecord = useCallback(
+    (item: DashboardPopupItem) => {
+      openRecord({ view: item.view, recordId: item.recordId });
+      setSelectedDate(null);
+      setDashboardPopup(null);
+    },
+    [openRecord],
+  );
 
   const nonDeletedTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const activeTasks = useMemo(
@@ -204,30 +210,36 @@ export function DashboardCards({
     [activeTasks],
   );
 
-  const taskPopupItems = (items: readonly Task[], type: CalendarEventType = 'task'): DashboardPopupItem[] =>
-    items.map((task) => ({
-      id: `${type}-${task.id}`,
-      date: task.fechaLimite || task.updatedAt.slice(0, 10),
-      type,
-      title: task.titulo,
-      detail: `${task.fase || 'Tareas'} · ${taskStateLabels[task.estado]} · prioridad ${task.prioridad}`,
-      view: 'tareas' as const,
-      recordId: task.id,
-    }));
+  const taskPopupItems = useCallback(
+    (items: readonly Task[], type: CalendarEventType = 'task'): DashboardPopupItem[] =>
+      items.map((task) => ({
+        id: `${type}-${task.id}`,
+        date: task.fechaLimite || task.updatedAt.slice(0, 10),
+        type,
+        title: task.titulo,
+        detail: `${task.fase || 'Tareas'} · ${taskStateLabels[task.estado]} · prioridad ${task.prioridad}`,
+        view: 'tareas' as const,
+        recordId: task.id,
+      })),
+    [],
+  );
 
-  const showTaskPopup = (
-    title: string,
-    items: readonly Task[],
-    emptyText = 'No hay tareas que mostrar.',
-  ) => {
-    setDashboardPopup({
-      eyebrow: 'Dashboard',
-      title,
-      subtitle: `${items.length} registro${items.length === 1 ? '' : 's'}`,
-      emptyText,
-      items: taskPopupItems(items),
-    });
-  };
+  const showTaskPopup = useCallback(
+    (
+      title: string,
+      items: readonly Task[],
+      emptyText = 'No hay tareas que mostrar.',
+    ) => {
+      setDashboardPopup({
+        eyebrow: 'Dashboard',
+        title,
+        subtitle: `${items.length} registro${items.length === 1 ? '' : 's'}`,
+        emptyText,
+        items: taskPopupItems(items),
+      });
+    },
+    [taskPopupItems],
+  );
 
   const committeePopupItems = useMemo<DashboardPopupItem[]>(
     () =>
@@ -411,7 +423,7 @@ export function DashboardCards({
     }
 
     return items.slice(0, 4);
-  }, [actaTasks, criticalTasks, nextSession, upcomingTasks]);
+  }, [actaTasks, criticalTasks, nextSession, openRecord, showTaskPopup, upcomingTasks]);
 
   return (
     <div className="grid h-[calc(100vh-7rem)] min-h-0 grid-rows-[minmax(0,0.92fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_auto] gap-2.5 overflow-hidden">
