@@ -1,6 +1,6 @@
 {
   "name": "traccion-v1",
-  "version": "1.0.76",
+  "version": "1.0.77",
   "description": "TrAccion - RRLL Dashboard moderno con Electron, React y TypeScript",
   "author": "TrAccion",
   "private": true,
@@ -94,7 +94,7 @@
       "icon": "build/icon/traccion-icon-256.ico"
     },
     "portable": {
-      "artifactName": "TrAccion V1.0.76.exe"
+      "artifactName": "TrAccion V1.0.77.exe"
     },
     "npmRebuild": true,
     "icon": "build/icon/traccion-icon-256.ico"
