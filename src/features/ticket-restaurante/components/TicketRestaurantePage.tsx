@@ -39,7 +39,6 @@ import {
 } from '../domain/importManutenciones';
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
-import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -1433,13 +1432,12 @@ export function TicketRestaurantePage({
 
   return (
     <section
-      className="space-y-3"
+      className="space-y-2"
       id="ticket-restaurante"
     >
       <PageHeader
         helpSections={TICKET_RESTAURANTE_HELP_SECTIONS}
         helpSubtitle="Guía rápida de uso, reglas principales e importaciones del módulo."
-        status={<InlineSaveFeedback />}
         title="Ticket Restaurante"
       />
 
