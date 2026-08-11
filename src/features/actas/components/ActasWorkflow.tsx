@@ -19,6 +19,7 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { Acta, ActaState } from '../domain/acta';
 
 type WorkflowProps = {
@@ -76,7 +77,7 @@ function ActionCard({
   onClick,
   accent = 'red',
 }: {
-  icon: React.ComponentType<{ className?: string; size?: number }>;
+  icon: LucideIcon;
   label: string;
   onClick: () => void;
   accent?: 'red' | 'blue' | 'green' | 'purple' | 'amber';
@@ -103,7 +104,7 @@ function ActionCard({
   );
 }
 
-function MiniKpi({ label, value, tone, icon: Icon }: { label: string; value: number; tone: Tone; icon: React.ComponentType<{ size?: number }> }) {
+function MiniKpi({ label, value, tone, icon: Icon }: { label: string; value: number; tone: Tone; icon: LucideIcon }) {
   return (
     <div className={`flex min-h-[58px] items-center gap-3 rounded-xl border px-3 py-2.5 ${toneClasses[tone]}`}>
       <Icon size={22} />
