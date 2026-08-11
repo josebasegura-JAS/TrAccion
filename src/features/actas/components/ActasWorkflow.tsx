@@ -56,7 +56,7 @@ function getStateIndex(state: ActaState | undefined): number {
 
 function WorkflowNumber({ value }: { value: number }) {
   return (
-    <div className="absolute -left-[22px] top-4 z-10 grid h-10 w-10 place-items-center rounded-full border-4 border-metro-navy bg-metro-red text-lg font-black text-white shadow-lg">
+    <div className="absolute -left-[19px] top-3.5 z-10 grid h-9 w-9 place-items-center rounded-full border-[3px] border-metro-navy bg-metro-red text-sm font-black text-white shadow-lg">
       {value}
     </div>
   );
@@ -64,7 +64,7 @@ function WorkflowNumber({ value }: { value: number }) {
 
 function StatusPill({ children, tone }: { children: React.ReactNode; tone: Tone }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold ${toneClasses[tone]}`}>
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${toneClasses[tone]}`}>
       {children}
     </span>
   );
@@ -92,24 +92,24 @@ function ActionCard({
     <button
       type="button"
       onClick={onClick}
-      className="group flex min-h-[58px] items-center gap-3 rounded-xl border border-metro-border bg-metro-surface/75 px-4 py-3 text-left transition hover:border-metro-red/60 hover:bg-metro-raised"
+      className="group flex min-h-[50px] items-center gap-2.5 rounded-xl border border-metro-border bg-metro-surface/75 px-3 py-2.5 text-left transition hover:border-metro-red/60 hover:bg-metro-raised"
     >
-      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${iconClass}`}>
-        <Icon size={20} />
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${iconClass}`}>
+        <Icon size={16} />
       </span>
-      <span className="min-w-0 flex-1 text-sm font-bold text-metro-text">{label}</span>
-      <ChevronRight className="text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" size={18} />
+      <span className="min-w-0 flex-1 text-[13px] font-bold leading-4 text-metro-text">{label}</span>
+      <ChevronRight className="text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" size={16} />
     </button>
   );
 }
 
 function MiniKpi({ label, value, tone, icon: Icon }: { label: string; value: number; tone: Tone; icon: LucideIcon }) {
   return (
-    <div className={`flex min-h-[58px] items-center gap-3 rounded-xl border px-3 py-2.5 ${toneClasses[tone]}`}>
-      <Icon size={22} />
+    <div className={`flex min-h-[50px] items-center gap-2.5 rounded-xl border px-2.5 py-2 ${toneClasses[tone]}`}>
+      <Icon size={19} />
       <div>
-        <div className="text-xl font-black leading-none text-metro-text">{value}</div>
-        <div className="mt-1 text-[11px] font-semibold opacity-80">{label}</div>
+        <div className="text-sm font-black leading-none text-metro-text">{value}</div>
+        <div className="mt-0.5 text-[10px] font-semibold opacity-80">{label}</div>
       </div>
     </div>
   );
@@ -125,9 +125,9 @@ function FlowStatus({
   current: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 py-1.5">
+    <div className="flex items-center gap-2.5 py-1">
       <span
-        className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
+        className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border ${
           completed
             ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300'
             : current
@@ -137,7 +137,7 @@ function FlowStatus({
       >
         {completed ? <Check size={13} strokeWidth={3} /> : current ? <Clock3 size={11} /> : null}
       </span>
-      <span className={`text-sm font-semibold ${completed ? 'text-metro-secondary' : current ? 'text-amber-100' : 'text-metro-muted'}`}>
+      <span className={`text-[12px] font-semibold ${completed ? 'text-metro-secondary' : current ? 'text-amber-100' : 'text-metro-muted'}`}>
         {label}
       </span>
     </div>
@@ -181,18 +181,18 @@ export function ActasWorkflow({
   };
 
   return (
-    <section className="space-y-3 pb-1" aria-label="Flujo de seguimiento de Actas">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-metro-border bg-metro-topbar px-4 py-3 shadow-card">
+    <section className="space-y-2 pb-1" aria-label="Flujo de seguimiento de Actas">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-metro-border bg-metro-topbar px-4 py-2.5 shadow-card">
         <div>
-          <h1 className="text-2xl font-black text-metro-text">Actas</h1>
-          <p className="mt-0.5 text-sm text-metro-muted">Seguimiento del ciclo del acta</p>
+          <h1 className="text-xl font-black text-metro-text">Actas</h1>
+          <p className="mt-0.5 text-xs text-metro-muted">Seguimiento del ciclo del acta</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-secondary">
-            <CalendarDays size={17} className="text-blue-300" />
+          <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-[12px] font-semibold text-metro-secondary">
+            <CalendarDays size={15} className="text-blue-300" />
             <span className="hidden sm:inline">Acta activa:</span>
             <select
-              className="max-w-[290px] bg-transparent font-bold text-metro-text outline-none"
+              className="max-w-[250px] bg-transparent font-bold text-metro-text outline-none"
               value={selectedActa?.id ?? ''}
               onChange={(event) => onSelectedActaIdChange(event.target.value)}
             >
@@ -207,22 +207,22 @@ export function ActasWorkflow({
           <button
             type="button"
             onClick={openSelected}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-metro-red px-4 text-sm font-black text-white transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-2 rounded-xl bg-metro-red px-3.5 text-[13px] font-black text-white transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!selectedActa}
           >
-            <ClipboardList size={18} /> Abrir seguimiento
+            <ClipboardList size={16} /> Abrir seguimiento
           </button>
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_270px]">
-        <div className="relative ml-5 space-y-2.5 before:absolute before:bottom-8 before:left-[-2px] before:top-8 before:w-px before:bg-slate-500/55">
-          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-5 py-3.5 pl-9">
+      <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_230px]">
+        <div className="relative ml-4 space-y-2 before:absolute before:bottom-8 before:left-[-1px] before:top-8 before:w-px before:bg-slate-500/55">
+          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-4 py-3 pl-8">
             <WorkflowNumber value={1} />
-            <div className="grid items-center gap-3 xl:grid-cols-[250px_minmax(0,1fr)_175px]">
+            <div className="grid items-center gap-3 xl:grid-cols-[220px_minmax(0,1fr)_160px]">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-black text-metro-text">Nuevo acta</h2>
+                  <h2 className="text-sm font-black text-metro-text">Nuevo acta</h2>
                   <StatusPill tone="blue">Inicio</StatusPill>
                 </div>
                 <p className="mt-1 text-xs text-metro-muted">Alta inicial del acta y datos básicos de la sesión.</p>
@@ -240,12 +240,12 @@ export function ActasWorkflow({
             </div>
           </div>
 
-          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-5 py-3.5 pl-9">
+          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-4 py-3 pl-8">
             <WorkflowNumber value={2} />
-            <div className="grid items-center gap-3 xl:grid-cols-[250px_330px_minmax(0,1fr)]">
+            <div className="grid items-center gap-3 xl:grid-cols-[220px_285px_minmax(0,1fr)]">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-black text-metro-text">Pendiente de realizar</h2>
+                  <h2 className="text-sm font-black text-metro-text">Pendiente de realizar</h2>
                   <StatusPill tone="blue">Preparación</StatusPill>
                 </div>
                 <p className="mt-1 text-xs text-metro-muted">Actas creadas pendientes de pasarse a borrador.</p>
@@ -262,37 +262,37 @@ export function ActasWorkflow({
             </div>
           </div>
 
-          <div className="relative rounded-2xl border border-metro-red/80 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/15 px-5 py-4 pl-9 shadow-[0_0_0_1px_rgba(220,38,38,0.08)]">
+          <div className="relative rounded-2xl border border-metro-red/80 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/15 px-4 py-3.5 pl-8 shadow-[0_0_0_1px_rgba(220,38,38,0.08)]">
             <WorkflowNumber value={3} />
-            <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)_185px]">
+            <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)_165px]">
               <div>
-                <h2 className="text-lg font-black text-metro-text">Borrador / Dirección</h2>
-                <div className="mt-2"><StatusPill tone="amber"><Sparkles size={11} className="mr-1" /> Trabajo principal del momento</StatusPill></div>
-                <p className="mt-3 text-sm leading-5 text-metro-secondary">
+                <h2 className="text-sm font-black text-metro-text">Borrador / Dirección</h2>
+                <div className="mt-1.5"><StatusPill tone="amber"><Sparkles size={11} className="mr-1" /> Trabajo principal del momento</StatusPill></div>
+                <p className="mt-2.5 text-xs leading-[18px] text-metro-secondary">
                   Registrar el borrador y enviarlo a Dirección. Aquí puede haber actualizaciones.
                 </p>
               </div>
 
-              <div className="space-y-2.5">
-                <div className="grid items-start gap-2 md:grid-cols-[1fr_28px_1fr_28px_1fr]">
+              <div className="space-y-2">
+                <div className="grid items-start gap-1.5 md:grid-cols-[1fr_22px_1fr_22px_1fr]">
                   <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-metro-text"><FileText size={17} className="text-red-400" /> a) Registrar borrador</div>
-                    <div className="mt-2"><StatusPill tone="blue">{draftCount} en borrador</StatusPill></div>
+                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-metro-text"><FileText size={15} className="text-red-400" /> a) Registrar borrador</div>
+                    <div className="mt-1.5"><StatusPill tone="blue">{draftCount} en borrador</StatusPill></div>
                   </div>
-                  <ArrowRight className="mx-auto mt-1 text-metro-muted" size={18} />
+                  <ArrowRight className="mx-auto mt-1 text-metro-muted" size={16} />
                   <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-metro-text"><Send size={17} className="text-red-400" /> b) Enviar a Dirección</div>
-                    <div className="mt-2"><StatusPill tone="amber">{directionCount} enviadas</StatusPill></div>
+                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-metro-text"><Send size={15} className="text-red-400" /> b) Enviar a Dirección</div>
+                    <div className="mt-1.5"><StatusPill tone="amber">{directionCount} enviadas</StatusPill></div>
                   </div>
-                  <ArrowRight className="mx-auto mt-1 text-metro-muted" size={18} />
+                  <ArrowRight className="mx-auto mt-1 text-metro-muted" size={16} />
                   <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 text-xs font-bold text-metro-text"><RefreshCw size={17} className="text-purple-400" /> c) Actualizar</div>
-                    <div className="mt-2"><StatusPill tone="purple">{updatesCount} actualizaciones</StatusPill></div>
+                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-metro-text"><RefreshCw size={15} className="text-purple-400" /> c) Actualizar</div>
+                    <div className="mt-1.5"><StatusPill tone="purple">{updatesCount} actualizaciones</StatusPill></div>
                   </div>
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface/55">
-                  <div className="grid grid-cols-[1.15fr_.8fr_1.35fr_auto] gap-2 border-b border-metro-border px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
+                  <div className="grid grid-cols-[1.2fr_.75fr_1.3fr_auto] gap-2 border-b border-metro-border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-metro-muted">
                     <span>Actividad</span><span>Estado</span><span>Detalle</span><span>Acción</span>
                   </div>
                   {[
@@ -304,7 +304,7 @@ export function ActasWorkflow({
                       type="button"
                       key={activity}
                       onClick={openSelected}
-                      className="grid w-full grid-cols-[1.15fr_.8fr_1.35fr_auto] items-center gap-2 border-b border-metro-border/60 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-white/[0.025]"
+                      className="grid w-full grid-cols-[1.2fr_.75fr_1.3fr_auto] items-center gap-2 border-b border-metro-border/60 px-2.5 py-1.5 text-left text-[11px] last:border-b-0 hover:bg-white/[0.025]"
                     >
                       <span className="font-semibold text-metro-secondary">{activity}</span>
                       <span><StatusPill tone={tone as Tone}>{status}</StatusPill></span>
@@ -315,13 +315,13 @@ export function ActasWorkflow({
                 </div>
               </div>
 
-              <div className="flex flex-col items-center justify-center rounded-xl border border-metro-border bg-metro-surface/65 p-3 text-center">
-                <div className="relative grid h-20 w-20 place-items-center rounded-full bg-blue-500/10 text-blue-200">
-                  <ClipboardList size={42} />
-                  <span className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-metro-red text-white"><Check size={18} strokeWidth={3} /></span>
+              <div className="flex flex-col items-center justify-center rounded-xl border border-metro-border bg-metro-surface/65 p-2.5 text-center">
+                <div className="relative grid h-16 w-16 place-items-center rounded-full bg-blue-500/10 text-blue-200">
+                  <ClipboardList size={34} />
+                  <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-metro-red text-white"><Check size={18} strokeWidth={3} /></span>
                 </div>
-                <p className="mt-3 text-xs leading-4 text-metro-secondary">Gestiona el seguimiento del borrador, el envío a Dirección y las actualizaciones.</p>
-                <button type="button" onClick={openSelected} className="mt-3 w-full rounded-lg bg-metro-red px-3 py-2 text-xs font-black text-white hover:bg-metro-dark">
+                <p className="mt-2.5 text-[11px] leading-4 text-metro-secondary">Gestiona el seguimiento del borrador, el envío a Dirección y las actualizaciones.</p>
+                <button type="button" onClick={openSelected} className="mt-2.5 w-full rounded-lg bg-metro-red px-3 py-2 text-xs font-black text-white hover:bg-metro-dark">
                   Abrir panel del acta
                 </button>
               </div>
@@ -330,9 +330,9 @@ export function ActasWorkflow({
 
           <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-5 py-3 pl-9">
             <WorkflowNumber value={4} />
-            <div className="grid items-center gap-3 xl:grid-cols-[250px_minmax(0,1fr)_190px]">
+            <div className="grid items-center gap-3 xl:grid-cols-[220px_minmax(0,1fr)_160px]">
               <div>
-                <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-black text-metro-text">Alegaciones</h2><StatusPill tone="blue">Revisión</StatusPill></div>
+                <div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-black text-metro-text">Alegaciones</h2><StatusPill tone="blue">Revisión</StatusPill></div>
                 <p className="mt-1 text-xs text-metro-muted">Gestiona alegaciones y posibles actualizaciones posteriores.</p>
               </div>
               <div className="grid gap-2 md:grid-cols-3">
@@ -349,9 +349,9 @@ export function ActasWorkflow({
 
           <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-5 py-3 pl-9">
             <WorkflowNumber value={5} />
-            <div className="grid items-center gap-3 xl:grid-cols-[250px_minmax(0,1fr)_190px]">
+            <div className="grid items-center gap-3 xl:grid-cols-[220px_minmax(0,1fr)_160px]">
               <div>
-                <div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-black text-metro-text">Firma definitiva</h2><StatusPill tone="blue">Cierre</StatusPill></div>
+                <div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-black text-metro-text">Firma definitiva</h2><StatusPill tone="blue">Cierre</StatusPill></div>
                 <p className="mt-1 text-xs text-metro-muted">Enviar el acta definitiva para firma.</p>
               </div>
               <div className="grid gap-2 md:grid-cols-3">
@@ -364,10 +364,10 @@ export function ActasWorkflow({
           </div>
         </div>
 
-        <aside className="space-y-3">
-          <div className="rounded-2xl border border-metro-border bg-metro-panel/80 p-4">
-            <div className="flex items-center gap-2 text-base font-black text-metro-text"><ListChecks size={20} className="text-blue-300" /> Estado del flujo</div>
-            <div className="mt-3">
+        <aside className="space-y-2">
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/80 p-3">
+            <div className="flex items-center gap-2 text-sm font-black text-metro-text"><ListChecks size={20} className="text-blue-300" /> Estado del flujo</div>
+            <div className="mt-2">
               <FlowStatus label="Acta creada" completed={Boolean(selectedActa)} current={false} />
               <FlowStatus label="Pendiente de realizar" completed={selectedStateIndex >= 0} current={selectedStateIndex === 0} />
               <FlowStatus label="Borrador registrado" completed={selectedStateIndex >= 1} current={selectedStateIndex === 1} />
@@ -377,27 +377,27 @@ export function ActasWorkflow({
             </div>
           </div>
 
-          <div className={`rounded-2xl border p-4 ${toneClasses.blue}`}>
-            <div className="flex items-center gap-2 text-sm font-bold"><FileText size={22} /> Actas abiertas</div>
-            <div className="mt-2 text-3xl font-black text-metro-text">{openActas.length}</div>
+          <div className={`rounded-2xl border p-3 ${toneClasses.blue}`}>
+            <div className="flex items-center gap-2 text-[12px] font-bold"><FileText size={18} /> Actas abiertas</div>
+            <div className="mt-1.5 text-2xl font-black text-metro-text">{openActas.length}</div>
           </div>
-          <div className={`rounded-2xl border p-4 ${toneClasses.amber}`}>
-            <div className="flex items-center gap-2 text-sm font-bold"><Clock3 size={22} /> Pendientes de borrador</div>
-            <div className="mt-2 text-3xl font-black text-metro-text">{pendingCount}</div>
+          <div className={`rounded-2xl border p-3 ${toneClasses.amber}`}>
+            <div className="flex items-center gap-2 text-[12px] font-bold"><Clock3 size={18} /> Pendientes de borrador</div>
+            <div className="mt-1.5 text-2xl font-black text-metro-text">{pendingCount}</div>
           </div>
-          <div className={`rounded-2xl border p-4 ${toneClasses.purple}`}>
-            <div className="flex items-center gap-2 text-sm font-bold"><MessageCircle size={22} /> Alegaciones</div>
-            <div className="mt-2 text-3xl font-black text-metro-text">{allegationCount}</div>
+          <div className={`rounded-2xl border p-3 ${toneClasses.purple}`}>
+            <div className="flex items-center gap-2 text-[12px] font-bold"><MessageCircle size={18} /> Alegaciones</div>
+            <div className="mt-1.5 text-2xl font-black text-metro-text">{allegationCount}</div>
           </div>
-          <div className={`rounded-2xl border p-4 ${toneClasses.green}`}>
-            <div className="flex items-center gap-2 text-sm font-bold"><Signature size={22} /> Firmadas este año</div>
-            <div className="mt-2 text-3xl font-black text-metro-text">{signedThisYear}</div>
+          <div className={`rounded-2xl border p-3 ${toneClasses.green}`}>
+            <div className="flex items-center gap-2 text-[12px] font-bold"><Signature size={18} /> Firmadas este año</div>
+            <div className="mt-1.5 text-2xl font-black text-metro-text">{signedThisYear}</div>
           </div>
         </aside>
       </div>
 
-      <div className="grid gap-2 rounded-2xl border border-metro-border bg-metro-panel/75 p-3 md:grid-cols-[180px_repeat(5,minmax(0,1fr))]">
-        <div className="flex items-center gap-2 px-2 text-sm font-black text-metro-text"><Sparkles size={19} className="text-red-400" /> Accesos rápidos</div>
+      <div className="grid gap-2 rounded-2xl border border-metro-border bg-metro-panel/75 p-2.5 md:grid-cols-[150px_repeat(5,minmax(0,1fr))]">
+        <div className="flex items-center gap-2 px-2 text-[13px] font-black text-metro-text"><Sparkles size={19} className="text-red-400" /> Accesos rápidos</div>
         <ActionCard icon={CalendarDays} label="Actas" onClick={() => onOpenOperational()} />
         <ActionCard icon={FileText} label="Pendientes" accent="blue" onClick={() => onOpenOperational('Pendiente de realizar')} />
         <ActionCard icon={ClipboardList} label="Borrador" onClick={() => onOpenOperational('Borrador')} />
