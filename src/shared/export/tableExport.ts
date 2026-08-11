@@ -475,7 +475,7 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
         ? normalizeCellValue(payload.rowGroupValue(row)).trim() || 'Sin calendario'
         : '';
       const groupFill = group
-        ? toExcelColor(calendarColorByGroup.get(group) ?? '#FFFFFF')
+        ? toExcelColor(group === 'Manual' ? '#EADCF8' : calendarColorByGroup.get(group) ?? '#FFFFFF')
         : white;
 
       payload.columns.forEach((column, columnIndex) => {

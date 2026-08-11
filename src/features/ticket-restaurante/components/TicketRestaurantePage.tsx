@@ -1925,14 +1925,6 @@ export function TicketRestaurantePage({
         />
       ) : activeSubview === 'computoMensual' ? (
         <>
-          <TicketRestauranteManualPeoplePanel
-            config={config}
-            employees={employees}
-            month={calculationMonth}
-            onUpdateConfig={updateConfig}
-            regularPeople={visiblePeople}
-            year={calculationYear}
-          />
           <CalculationPanel
           absences={calculationAbsences}
           calendars={visibleCalendars}
@@ -1962,6 +1954,14 @@ export function TicketRestaurantePage({
           onPreviousMonth={() => moveCalculationMonth(-1)}
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
+          />
+          <TicketRestauranteManualPeoplePanel
+            config={config}
+            employees={employees}
+            month={calculationMonth}
+            onUpdateConfig={updateConfig}
+            regularPeople={visiblePeople}
+            year={calculationYear}
           />
         </>
       ) : activeSubview === 'computoCotizacion' ? (

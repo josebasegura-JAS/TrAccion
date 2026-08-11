@@ -1,10 +1,25 @@
-import { Pencil, Trash2, UserPlus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input } from '../../../components/ui/Field';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { TicketManualPerson, TicketPerson, TicketRestaurantConfig } from '../domain/ticketRestaurante';
 import { normalizeTicketEmployeeNumber } from '../domain/ticketRestaurante';
+
+const MONTH_LABELS = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+] as const;
 
 function monthKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
@@ -17,6 +32,11 @@ function normalizeSearch(value: string): string {
     .toLocaleLowerCase('es')
     .trim();
 }
+
+type TableDraft = {
+  tickets: string;
+  includeContribution: boolean;
+};
 
 export function TicketRestauranteManualPeoplePanel({
   config,
@@ -40,7 +60,10 @@ export function TicketRestauranteManualPeoplePanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [suggestionField, setSuggestionField] = useState<'empleado' | 'nombre' | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [tableDrafts, setTableDrafts] = useState<Record<string, TableDraft>>({});
   const key = monthKey(year, month);
+  const monthLabel = `${MONTH_LABELS[month - 1] ?? month} ${year}`;
 
   const allManualPeople = useMemo<TicketManualPerson[]>(() => config.manualPeople ?? [], [config.manualPeople]);
   const people = useMemo<TicketManualPerson[]>(
@@ -49,6 +72,17 @@ export function TicketRestauranteManualPeoplePanel({
       .sort((a, b) => a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' })),
     [allManualPeople, key],
   );
+
+  useEffect(() => {
+    const nextDrafts: Record<string, TableDraft> = {};
+    people.forEach((person) => {
+      nextDrafts[person.id] = {
+        tickets: String(person.monthlyTickets[key] ?? 0),
+        includeContribution: person.includeContribution,
+      };
+    });
+    setTableDrafts(nextDrafts);
+  }, [people, key]);
 
   const suggestions = useMemo(() => {
     const query = normalizeSearch(suggestionField === 'empleado' ? empleado : nombreApellidos);
@@ -85,6 +119,11 @@ export function TicketRestauranteManualPeoplePanel({
     setIncludeContribution(false);
     setEditingId(null);
     setSuggestionField(null);
+  };
+
+  const closeForm = () => {
+    reset();
+    setIsFormOpen(false);
   };
 
   const applySuggestion = (employee: Employee) => {
@@ -142,30 +181,41 @@ export function TicketRestauranteManualPeoplePanel({
       return;
     }
     setMessage(editingId ? 'Persona manual actualizada.' : 'Persona manual añadida.');
-    reset();
+    closeForm();
   };
 
-  const setTickets = async (person: TicketManualPerson, rawValue: string) => {
-    const tickets = Math.max(0, Math.trunc(Number(rawValue) || 0));
-    const now = new Date().toISOString();
-    await onUpdateConfig({
-      ...config,
-      manualPeople: allManualPeople.map((item) =>
-        item.id === person.id
-          ? { ...item, monthlyTickets: { ...item.monthlyTickets, [key]: tickets }, updatedAt: now }
-          : item,
-      ),
-    });
-  };
+  const hasPendingTableChanges = people.some((person) => {
+    const draft = tableDrafts[person.id];
+    if (!draft) return false;
+    const normalizedTickets = Math.max(0, Math.trunc(Number(draft.tickets) || 0));
+    return normalizedTickets !== (person.monthlyTickets[key] ?? 0) || draft.includeContribution !== person.includeContribution;
+  });
 
-  const toggleContribution = async (person: TicketManualPerson) => {
+  const saveMonthlyValues = async () => {
+    if (!hasPendingTableChanges) {
+      setMessage('No hay cambios pendientes en tickets manuales.');
+      return;
+    }
     const now = new Date().toISOString();
-    await onUpdateConfig({
-      ...config,
-      manualPeople: allManualPeople.map((item) =>
-        item.id === person.id ? { ...item, includeContribution: !item.includeContribution, updatedAt: now } : item,
-      ),
+    const nextPeople = allManualPeople.map((item) => {
+      const draft = tableDrafts[item.id];
+      if (!draft || !people.some((person) => person.id === item.id)) {
+        return item;
+      }
+      const tickets = Math.max(0, Math.trunc(Number(draft.tickets) || 0));
+      return {
+        ...item,
+        includeContribution: draft.includeContribution,
+        monthlyTickets: { ...item.monthlyTickets, [key]: tickets },
+        updatedAt: now,
+      };
     });
+    const result = await onUpdateConfig({ ...config, manualPeople: nextPeople });
+    if (!result.ok) {
+      setMessage(result.message ?? 'No se han podido guardar los tickets del mes.');
+      return;
+    }
+    setMessage(`Tickets manuales guardados para ${monthLabel}.`);
   };
 
   const removePerson = async (person: TicketManualPerson) => {
@@ -174,7 +224,7 @@ export function TicketRestauranteManualPeoplePanel({
     );
     if (!confirmed) return;
     const now = new Date().toISOString();
-    const hasPreviousHistory = Object.keys(person.monthlyTickets).some((month) => month < key);
+    const hasPreviousHistory = Object.keys(person.monthlyTickets).some((monthValue) => monthValue < key);
     const nextPeople = hasPreviousHistory
       ? allManualPeople.map((item) =>
           item.id === person.id ? { ...item, inactiveFromMonth: key, updatedAt: now } : item,
@@ -185,7 +235,7 @@ export function TicketRestauranteManualPeoplePanel({
       setMessage(result.message ?? 'No se ha podido eliminar la persona manual.');
       return;
     }
-    if (editingId === person.id) reset();
+    if (editingId === person.id) closeForm();
     setMessage('Persona retirada desde el mes seleccionado. El histórico anterior se conserva.');
   };
 
@@ -197,6 +247,7 @@ export function TicketRestauranteManualPeoplePanel({
     setIncludeContribution(person.includeContribution);
     setSuggestionField(null);
     setMessage('');
+    setIsFormOpen(true);
   };
 
   const suggestionDropdown = suggestions.length && suggestionField ? (
@@ -218,92 +269,217 @@ export function TicketRestauranteManualPeoplePanel({
 
   return (
     <div className="mb-3 rounded-xl border border-metro-border bg-metro-panel p-2.5">
-      <div className="mb-2 flex items-start justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-metro-text">Personas manuales</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-metro-text">Personas manuales</h3>
+            <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-2 py-0.5 text-[10px] font-semibold text-blue-300">
+              {monthLabel}
+            </span>
+          </div>
           <p className="text-[11px] text-metro-muted">
-            Sin calendario. Busca por nº de empleado, nombre o apellidos; indica después los tickets de cada mes.
+            Personas sin calendario fijo. Añádelas una vez y, cada mes, informa aquí sus tickets y si deben cotizar.
           </p>
         </div>
-        <span className="rounded-full border border-metro-border px-2 py-0.5 text-[10px] font-bold text-metro-muted">
-          {people.length}
-        </span>
-      </div>
-
-      <div className="mb-2 grid gap-2 md:grid-cols-2 xl:grid-cols-[110px_1fr_150px_180px_110px] xl:items-end">
-        <Field label="Nº empleado" required>
-          <div className="relative">
-            <Input
-              value={empleado}
-              onChange={(e) => { setEmpleado(e.target.value); setSuggestionField('empleado'); }}
-              onFocus={() => setSuggestionField('empleado')}
-              onBlur={() => setTimeout(() => setSuggestionField(null), 120)}
-              autoComplete="off"
-            />
-            {suggestionField === 'empleado' ? suggestionDropdown : null}
-          </div>
-        </Field>
-        <Field label="Nombre y apellidos" required>
-          <div className="relative">
-            <Input
-              value={nombreApellidos}
-              onChange={(e) => { setNombreApellidos(e.target.value); setSuggestionField('nombre'); }}
-              onFocus={() => setSuggestionField('nombre')}
-              onBlur={() => setTimeout(() => setSuggestionField(null), 120)}
-              autoComplete="off"
-            />
-            {suggestionField === 'nombre' ? suggestionDropdown : null}
-          </div>
-        </Field>
-        <Field label="DNI"><Input value={dni} onChange={(e) => setDni(e.target.value)} /></Field>
-        <label className="flex h-[34px] items-center gap-2 text-xs font-semibold text-metro-text">
-          <input className="h-3.5 w-3.5 accent-metro-red" type="checkbox" checked={includeContribution} onChange={(e) => setIncludeContribution(e.target.checked)} />
-          Incluir en cotización
-        </label>
-        <div className="flex gap-1.5">
-          <ActionButton iconOnly={false} size="sm" variant="add" onClick={() => void savePerson()} disabled={!empleado.trim() || !nombreApellidos.trim()}>
-            <UserPlus className="h-3.5 w-3.5" /> {editingId ? 'Guardar' : 'Añadir'}
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-metro-border px-2 py-0.5 text-[10px] font-bold text-metro-muted">
+            {people.length} personas
+          </span>
+          <ActionButton
+            iconOnly={false}
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setIsFormOpen((current) => {
+                const next = !current;
+                if (!next) reset();
+                else setMessage('');
+                return next;
+              });
+            }}
+          >
+            {isFormOpen ? 'Ocultar alta manual' : 'Añadir persona manual'}
+            {isFormOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </ActionButton>
-          {editingId ? <button type="button" className="rounded-lg border border-metro-border px-2 text-xs text-metro-text" onClick={reset}>Cancelar</button> : null}
         </div>
       </div>
+
+      {isFormOpen ? (
+        <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface/45 p-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-bold text-metro-text">{editingId ? 'Editar persona manual' : 'Nueva persona manual'}</p>
+              <p className="text-[11px] text-metro-muted">Busca por nº de empleado, nombre o apellidos y completa los datos si hace falta.</p>
+            </div>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[110px_1fr_150px_180px_190px] xl:items-end">
+            <Field label="Nº empleado" required>
+              <div className="relative">
+                <Input
+                  value={empleado}
+                  onChange={(e) => {
+                    setEmpleado(e.target.value);
+                    setSuggestionField('empleado');
+                  }}
+                  onFocus={() => setSuggestionField('empleado')}
+                  onBlur={() => setTimeout(() => setSuggestionField(null), 120)}
+                  autoComplete="off"
+                />
+                {suggestionField === 'empleado' ? suggestionDropdown : null}
+              </div>
+            </Field>
+            <Field label="Nombre y apellidos" required>
+              <div className="relative">
+                <Input
+                  value={nombreApellidos}
+                  onChange={(e) => {
+                    setNombreApellidos(e.target.value);
+                    setSuggestionField('nombre');
+                  }}
+                  onFocus={() => setSuggestionField('nombre')}
+                  onBlur={() => setTimeout(() => setSuggestionField(null), 120)}
+                  autoComplete="off"
+                />
+                {suggestionField === 'nombre' ? suggestionDropdown : null}
+              </div>
+            </Field>
+            <Field label="DNI">
+              <Input value={dni} onChange={(e) => setDni(e.target.value)} />
+            </Field>
+            <label className="flex h-[34px] items-center gap-2 text-xs font-semibold text-metro-text">
+              <input
+                className="h-3.5 w-3.5 accent-metro-red"
+                type="checkbox"
+                checked={includeContribution}
+                onChange={(e) => setIncludeContribution(e.target.checked)}
+              />
+              Incluir en cotización
+            </label>
+            <div className="flex gap-1.5">
+              <ActionButton
+                iconOnly={false}
+                size="sm"
+                variant="add"
+                onClick={() => void savePerson()}
+                disabled={!empleado.trim() || !nombreApellidos.trim()}
+              >
+                {editingId ? 'Guardar cambios' : 'Añadir'}
+              </ActionButton>
+              <button
+                type="button"
+                className="rounded-lg border border-metro-border px-2 text-xs text-metro-text"
+                onClick={closeForm}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {message ? <p className="mb-2 text-[11px] text-metro-muted">{message}</p> : null}
 
       {people.length ? (
         <div className="overflow-hidden rounded-lg border border-metro-border">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface/50 px-2.5 py-2">
+            <div>
+              <p className="text-xs font-bold text-metro-text">Tickets del mes</p>
+              <p className="text-[11px] text-metro-muted">Indica los tickets de {monthLabel} y guarda cuando termines.</p>
+            </div>
+            <ActionButton
+              iconOnly={false}
+              size="sm"
+              variant="save"
+              onClick={() => void saveMonthlyValues()}
+              disabled={!hasPendingTableChanges}
+            >
+              Guardar tickets del mes
+            </ActionButton>
+          </div>
           <table className="w-full text-xs">
             <thead className="bg-metro-surface text-metro-muted">
               <tr>
                 <th className="px-2 py-1.5 text-left">Nº empleado</th>
                 <th className="px-2 py-1.5 text-left">Persona</th>
-                <th className="w-32 px-2 py-1.5 text-right">Tickets mes</th>
+                <th className="w-36 px-2 py-1.5 text-right">Tickets {monthLabel}</th>
                 <th className="w-36 px-2 py-1.5 text-center">Cotización</th>
                 <th className="w-24 px-2 py-1.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {people.map((person) => (
-                <tr key={person.id} className="border-t border-metro-border">
-                  <td className="px-2 py-1.5 font-semibold text-metro-text">{person.empleado}</td>
-                  <td className="px-2 py-1.5 text-metro-text">{person.nombreApellidos}</td>
-                  <td className="px-2 py-1 text-right">
-                    <input className="w-20 rounded-md border border-metro-border bg-metro-surface px-2 py-1 text-right text-metro-text" min={0} type="number" key={`${person.id}-${key}`} defaultValue={person.monthlyTickets[key] ?? 0} onBlur={(e) => void setTickets(person, e.target.value)} />
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <input className="h-3.5 w-3.5 accent-metro-red" type="checkbox" checked={person.includeContribution} onChange={() => void toggleContribution(person)} />
-                  </td>
-                  <td className="px-2 py-1 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red" type="button" title="Editar persona" onClick={() => editPerson(person)}><Pencil className="h-3.5 w-3.5" /></button>
-                      <button className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red" type="button" title="Quitar desde este mes" onClick={() => void removePerson(person)}><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {people.map((person) => {
+                const draft = tableDrafts[person.id] ?? {
+                  tickets: String(person.monthlyTickets[key] ?? 0),
+                  includeContribution: person.includeContribution,
+                };
+                return (
+                  <tr key={person.id} className="border-t border-metro-border">
+                    <td className="px-2 py-1.5 font-semibold text-metro-text">{person.empleado}</td>
+                    <td className="px-2 py-1.5 text-metro-text">{person.nombreApellidos}</td>
+                    <td className="px-2 py-1 text-right">
+                      <input
+                        className="w-24 rounded-md border border-metro-border bg-metro-surface px-2 py-1 text-right text-metro-text"
+                        min={0}
+                        type="number"
+                        value={draft.tickets}
+                        onChange={(e) =>
+                          setTableDrafts((current) => ({
+                            ...current,
+                            [person.id]: {
+                              ...draft,
+                              tickets: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <input
+                        className="h-3.5 w-3.5 accent-metro-red"
+                        type="checkbox"
+                        checked={draft.includeContribution}
+                        onChange={(e) =>
+                          setTableDrafts((current) => ({
+                            ...current,
+                            [person.id]: {
+                              ...draft,
+                              includeContribution: e.target.checked,
+                            },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button
+                          className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+                          type="button"
+                          title="Editar persona"
+                          onClick={() => editPerson(person)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+                          type="button"
+                          title="Quitar desde este mes"
+                          onClick={() => void removePerson(person)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-lg border border-dashed border-metro-border bg-metro-surface/35 px-3 py-4 text-center text-xs text-metro-muted">
+          No hay personas manuales dadas de alta.
+        </div>
+      )}
     </div>
   );
 }
