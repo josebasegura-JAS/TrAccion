@@ -188,11 +188,176 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
   workbook.created = generatedAt;
   workbook.modified = generatedAt;
 
+  const isTicketRestaurantMonthlyPreset =
+    payload.formatPreset === 'ticket-restaurante-monthly';
   const worksheet = workbook.addWorksheet(buildWorksheetName(payload.filename), {
-    views: [{ state: 'frozen', ySplit: 4 }],
+    views: [{ state: 'frozen', ySplit: isTicketRestaurantMonthlyPreset ? 6 : 4 }],
   });
 
   const columnCount = Math.max(payload.columns.length, 1);
+
+  if (isTicketRestaurantMonthlyPreset) {
+    const orange = toExcelColor('#FF9900');
+    const grey = toExcelColor('#A6A6A6');
+    const lightGreen = toExcelColor('#E2F0D9');
+    const white = toExcelColor('#FFFFFF');
+    const black = toExcelColor('#000000');
+    const regularizationFill = toExcelColor('#FFF2CC');
+    const thinBlackBorder = { style: 'thin' as const, color: black };
+    const allThinBorders = {
+      top: thinBlackBorder,
+      bottom: thinBlackBorder,
+      left: thinBlackBorder,
+      right: thinBlackBorder,
+    };
+    const periodLabel = payload.filename
+      .replace(/^Computo_/i, '')
+      .replace(/_/g, ' ')
+      .trim();
+
+    worksheet.mergeCells('A2:I2');
+    const instructionCell = worksheet.getCell('A2');
+    instructionCell.value =
+      'Cómputo mensual para solicitar cargas y descargas de saldo de Tarjetas Cheque Gourmet';
+    instructionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: grey };
+    instructionCell.font = { color: white, bold: true, size: 10 };
+    instructionCell.alignment = { horizontal: 'left', vertical: 'middle' };
+    instructionCell.border = allThinBorders;
+
+    worksheet.mergeCells('J2:K2');
+    const periodCell = worksheet.getCell('J2');
+    periodCell.value = `Tickets ${periodLabel}`;
+    periodCell.fill = { type: 'pattern', pattern: 'solid', fgColor: orange };
+    periodCell.font = { color: black, bold: true, size: 10 };
+    periodCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    periodCell.border = allThinBorders;
+
+    worksheet.mergeCells('L2:M2');
+    const budgetCell = worksheet.getCell('L2');
+    budgetCell.value = 'Presupuesto';
+    budgetCell.fill = { type: 'pattern', pattern: 'solid', fgColor: orange };
+    budgetCell.font = { color: black, bold: true, size: 10 };
+    budgetCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    budgetCell.border = allThinBorders;
+
+    worksheet.mergeCells('L3:M3');
+    const actualCell = worksheet.getCell('L3');
+    actualCell.value = 'Real';
+    actualCell.fill = { type: 'pattern', pattern: 'solid', fgColor: orange };
+    actualCell.font = { color: black, bold: true, size: 10 };
+    actualCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    actualCell.border = allThinBorders;
+
+    const totalColumnIndex = payload.columns.findIndex((column) => column.key === 'total') + 1;
+    const summaryCell = worksheet.getCell('N3');
+    if (totalColumnIndex > 0 && payload.rows.length > 0) {
+      const totalLetter = worksheet.getColumn(totalColumnIndex).letter;
+      summaryCell.value = { formula: `SUM(${totalLetter}7:${totalLetter}${payload.rows.length + 6})` };
+      summaryCell.numFmt = '#,##0.00';
+    } else {
+      summaryCell.value = 0;
+    }
+    summaryCell.font = { color: black, bold: true, size: 10 };
+    summaryCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    summaryCell.border = allThinBorders;
+
+    worksheet.mergeCells('A5:B5');
+    const sectionCell = worksheet.getCell('A5');
+    sectionCell.value = 'Tarjeta Cheque Gourmet';
+    sectionCell.fill = { type: 'pattern', pattern: 'solid', fgColor: orange };
+    sectionCell.font = { color: black, bold: true, size: 11 };
+    sectionCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    sectionCell.border = allThinBorders;
+
+    const headerRow = worksheet.getRow(6);
+    payload.columns.forEach((column, index) => {
+      const cell = headerRow.getCell(index + 1);
+      cell.value = column.header;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: orange };
+      cell.font = { color: black, bold: true, size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = allThinBorders;
+    });
+    headerRow.height = 50;
+
+    const parseSpanishDate = (value: string): Date | null => {
+      const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+      if (!match) return null;
+      return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    };
+
+    payload.rows.forEach((row, rowIndex) => {
+      const excelRow = worksheet.getRow(rowIndex + 7);
+      payload.columns.forEach((column, columnIndex) => {
+        const cell = excelRow.getCell(columnIndex + 1);
+        const value = column.value(row);
+        const isIdentityColumn = columnIndex < 6;
+        const isRegularizationColumn = column.key === 'regularizacionDeuda';
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor:
+            isRegularizationColumn && normalizeCellValue(value).trim()
+              ? regularizationFill
+              : isIdentityColumn
+                ? lightGreen
+                : white,
+        };
+        cell.font = { color: black, size: 10 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: isRegularizationColumn };
+        cell.border = allThinBorders;
+
+        if (value === null || value === undefined || value === '') {
+          cell.value = null;
+          return;
+        }
+
+        if (typeof value === 'number') {
+          cell.value = value;
+          if (column.key === 'importe' || column.key === 'total') {
+            cell.numFmt = '#,##0.00';
+          }
+          return;
+        }
+
+        const textValue = String(value);
+        if (column.key === 'fecInicio' || column.key === 'fecCad') {
+          const parsedDate = parseSpanishDate(textValue);
+          if (parsedDate) {
+            cell.value = parsedDate;
+            cell.numFmt = 'dd/mm/yyyy';
+            return;
+          }
+        }
+        cell.value = textValue;
+      });
+      excelRow.height = 18;
+    });
+
+    const presetWidths = [17, 22, 22, 22, 22, 19.1, 13.4, 13.4, 23.4, 19.6, 18.9, 13.8, 20, 34];
+    payload.columns.forEach((_, columnIndex) => {
+      worksheet.getColumn(columnIndex + 1).width = presetWidths[columnIndex] ?? 18;
+    });
+
+    const lastDataRow = Math.max(payload.rows.length + 6, 6);
+    worksheet.autoFilter = {
+      from: { row: 6, column: 1 },
+      to: { row: lastDataRow, column: columnCount },
+    };
+    worksheet.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+    };
+    worksheet.getRow(2).height = 22;
+    worksheet.getRow(5).height = 22;
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt));
+    return;
+  }
   const lastColumnLetter = worksheet.getColumn(columnCount).letter;
 
   worksheet.mergeCells(`A1:${lastColumnLetter}1`);

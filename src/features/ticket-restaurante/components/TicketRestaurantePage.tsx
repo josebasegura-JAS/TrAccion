@@ -227,22 +227,6 @@ function sortByName(calendars: TicketCalendar[]): TicketCalendar[] {
   );
 }
 
-function sortMonthlyCalculationRows(
-  rows: readonly TicketPersonCalculation[],
-): TicketPersonCalculation[] {
-  return [...rows].sort((first, second) => {
-    const calendarComparison = first.calendario.localeCompare(second.calendario, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-    if (calendarComparison !== 0) return calendarComparison;
-    return first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  });
-}
-
 const PEOPLE_EXPORT_HEADERS = [
   'Nº empleado',
   'Nombre',
@@ -1858,7 +1842,7 @@ export function TicketRestaurantePage({
               calculationMonth,
               calculationAbsences,
             ),
-            rows: sortMonthlyCalculationRows(monthCalculation.rows),
+            rows: monthCalculation.rows,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
               ['Año', calculationYear],
