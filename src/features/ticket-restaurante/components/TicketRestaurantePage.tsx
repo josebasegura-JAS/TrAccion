@@ -227,6 +227,22 @@ function sortByName(calendars: TicketCalendar[]): TicketCalendar[] {
   );
 }
 
+function sortMonthlyCalculationRows(
+  rows: readonly TicketPersonCalculation[],
+): TicketPersonCalculation[] {
+  return [...rows].sort((first, second) => {
+    const calendarComparison = first.calendario.localeCompare(second.calendario, 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    if (calendarComparison !== 0) return calendarComparison;
+    return first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  });
+}
+
 const PEOPLE_EXPORT_HEADERS = [
   'Nº empleado',
   'Nombre',
@@ -292,9 +308,6 @@ const ticketPersonExportColumns = (
   { key: 'activo', header: 'Estado', value: (person) => (person.activo ? 'Activo' : 'Inactivo') },
 ];
 
-const formatTicketExcelNumber = (value: number): string =>
-  value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 const formatTicketExcelDate = (year: number, month: number, day = 1): string =>
   `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
 
@@ -323,29 +336,60 @@ const monthlyCalculationExportColumns = (
   year: number,
   month: number,
   absences: readonly TicketRestaurantAbsence[],
-): ExportColumn<TicketPersonCalculation>[] => [
-  { key: 'nombre', header: 'Nombre', value: (row) => row.nombre },
-  { key: 'apellido1', header: 'Apellido1', value: (row) => row.apellido1 },
-  { key: 'apellido2', header: 'Apellido2', value: (row) => row.apellido2 },
-  { key: 'dni', header: 'DNI', value: (row) => row.dni },
-  { key: 'pedido', header: 'Pedido', value: () => config.pedidoMensual },
-  { key: 'empleado', header: 'Nº Emp', value: (row) => row.empleado },
-  { key: 'numeroTickets', header: 'Numero Tickets', value: (row) => row.ticketsFinales },
-  {
-    key: 'importe',
-    header: 'Importe',
-    value: () => formatTicketExcelNumber(getEffectiveTicketPrice(config, year, month)),
-  },
-  { key: 'total', header: 'Total', value: (row) => formatTicketExcelNumber(row.importe) },
-  { key: 'fecInicio', header: 'Fec Inicio', value: () => formatTicketExcelDate(year, month) },
-  { key: 'fecCad', header: 'Fec Cad', value: () => '01/01/2010' },
-  { key: 'hojaGastos', header: 'Hoja Gastos', value: (row) => row.hojasGastoMes },
-  {
-    key: 'ausencias',
-    header: 'Ausencias',
-    value: (row) => formatAppliedAbsencesForExport(row, absences),
-  },
-];
+): ExportColumn<TicketPersonCalculation>[] => {
+  const regularizationByEmployee = new Map(
+    (config.debtRegularizations ?? [])
+      .filter((item) => item.year === year && item.month === month)
+      .sort((first, second) => first.updatedAt.localeCompare(second.updatedAt))
+      .map((item) => [normalizeTicketEmployeeNumber(item.empleado), item] as const),
+  );
+
+  return [
+    { key: 'nombre', header: 'Nombre', value: (row) => row.nombre },
+    { key: 'apellido1', header: 'Apellido 1', value: (row) => row.apellido1 },
+    { key: 'apellido2', header: 'Apellido 2', value: (row) => row.apellido2 },
+    { key: 'dni', header: 'Número de documento*', value: (row) => row.dni },
+    { key: 'pedido', header: 'Nº pedido', value: () => config.pedidoMensual },
+    { key: 'empleado', header: 'CECO', value: (row) => row.empleado },
+    { key: 'numeroTickets', header: 'Numero Tickets', value: (row) => row.ticketsFinales },
+    {
+      key: 'importe',
+      header: 'Importe1',
+      value: () => getEffectiveTicketPrice(config, year, month),
+    },
+    { key: 'total', header: 'Importe total*', value: (row) => row.importe },
+    {
+      key: 'fecInicio',
+      header: 'Fecha inicio carga (dd/mm/yyyy)*',
+      value: () => formatTicketExcelDate(year, month),
+    },
+    {
+      key: 'fecCad',
+      header: 'Fecha caducidad carga (dd/mm/yyyy)*',
+      value: () => '01/01/2100',
+    },
+    { key: 'hojaGastos', header: 'Hoja Gastos', value: (row) => row.hojasGastoMes },
+    {
+      key: 'ausencias',
+      header: 'Ausencias',
+      value: (row) => formatAppliedAbsencesForExport(row, absences),
+    },
+    {
+      key: 'regularizacionDeuda',
+      header: 'Regularización deuda',
+      value: (row) => {
+        const regularization = regularizationByEmployee.get(normalizeTicketEmployeeNumber(row.empleado));
+        if (!regularization) return '';
+        const adjustment = regularization.targetTickets - regularization.calculatedTickets;
+        const adjustmentLabel = adjustment > 0 ? `+${adjustment}` : String(adjustment);
+        const observations = regularization.observations.trim()
+          ? ` · ${regularization.observations.trim()}`
+          : '';
+        return `${regularization.calculatedTickets} → ${regularization.targetTickets} (${adjustmentLabel}) · ${regularization.reason}${observations}`;
+      },
+    },
+  ];
+};
 
 const contributionCalculationExportColumns = (
   importeTicket: number,
@@ -1814,11 +1858,12 @@ export function TicketRestaurantePage({
               calculationMonth,
               calculationAbsences,
             ),
-            rows: monthCalculation.rows,
+            rows: sortMonthlyCalculationRows(monthCalculation.rows),
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
               ['Año', calculationYear],
             ]),
+            formatPreset: 'ticket-restaurante-monthly',
           }}
           onMonthChange={handleCalculationMonthChange}
           onNextMonth={() => moveCalculationMonth(1)}
