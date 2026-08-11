@@ -4,7 +4,6 @@ import { AlertTriangle, LockKeyhole } from 'lucide-react';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { TooltipLayer } from './components/ui/TooltipLayer';
 import { Header } from './components/Header';
-import { Footer } from './components/Footer';
 import { Sidebar } from './components/Sidebar';
 import type { AppView } from './navigation/navigation';
 import {
@@ -512,7 +511,6 @@ export function App() {
             </OperationalModuleGuard>
           </ModuleErrorBoundary>
         </main>
-        <Footer />
       </div>
       </div>
     </AppShellErrorBoundary>

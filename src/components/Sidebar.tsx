@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
-import { readHydrationMetadata, readStorageItem, writeStorageItem } from '../services/persistence';
+import {
+  getPendingSqliteWriteCount,
+  isPersistenceFeedbackSilent,
+  readHydrationMetadata,
+  readStorageItem,
+  subscribeToPersistenceFeedback,
+  writeStorageItem,
+  type PersistenceFeedback,
+} from '../services/persistence';
+import { getPendingRecordWriteCount } from '../services/pendingRecordWrites';
 import { AlertTriangle, Database, Home, LockKeyhole, Pin, PinOff, Settings, X } from 'lucide-react';
 import { getGroupForView, navigationGroups, type AppView, type NavigationGroupId } from '../navigation/navigation';
 
@@ -31,6 +40,26 @@ const formatDatabaseTimestamp = (timestamp: string | null | undefined) => {
 
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
+};
+
+
+const formatSaveTime = (timestamp: string | null | undefined) => {
+  if (!timestamp) return null;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+};
+
+const getPersistenceStatusText = (feedback: PersistenceFeedback | null, pendingCount: number) => {
+  if (feedback?.kind === 'saving') return 'Guardando…';
+  if (feedback?.kind === 'error') return feedback.message || 'Error de guardado';
+  if (pendingCount > 0) return `${pendingCount} pendiente${pendingCount === 1 ? '' : 's'} de sincronizar`;
+  if (feedback?.kind === 'saved') {
+    const savedAt = formatSaveTime(feedback.updatedAt);
+    return savedAt ? `Último guardado: ${savedAt}` : 'Guardado';
+  }
+  return 'Sin cambios pendientes';
 };
 
 const buildDatabaseIndicatorViewModel = (
@@ -169,6 +198,10 @@ export function Sidebar({
   const [isPinned, setIsPinned] = useState(readStoredPinnedPreference);
   const [activeGroupId, setActiveGroupId] = useState(() => readStoredActiveGroup(activeView));
   const [isPanelOpen, setIsPanelOpen] = useState(() => readStoredPinnedPreference());
+  const [persistenceFeedback, setPersistenceFeedback] = useState<PersistenceFeedback | null>(null);
+  const [pendingWriteCount, setPendingWriteCount] = useState(
+    () => getPendingSqliteWriteCount() + getPendingRecordWriteCount(),
+  );
 
   const activeViewGroupId = getGroupForView(activeView);
   const activeGroup = useMemo(
@@ -182,7 +215,33 @@ export function Sidebar({
     externalDataSyncStatus.lastCheckedAt,
   )}. Últimos cambios aplicados: ${formatDatabaseTimestamp(externalDataSyncStatus.lastAppliedAt)}.`;
   const databaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus, syncStatusText);
-  const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}\nEstado: ${databaseIndicator.statusText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}\n${databaseIndicator.syncStatusText}`;
+  const persistenceStatusText = getPersistenceStatusText(persistenceFeedback, pendingWriteCount);
+  const savedAt = persistenceFeedback?.kind === 'saved'
+    ? formatSaveTime(persistenceFeedback.updatedAt)
+    : null;
+  const compactPersistenceLabel = persistenceFeedback?.kind === 'saving'
+    ? 'Guard.'
+    : persistenceFeedback?.kind === 'error'
+      ? 'Error'
+      : pendingWriteCount > 0
+        ? `${pendingWriteCount} pend.`
+        : savedAt ?? databaseIndicator.label;
+  const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}
+Estado: ${databaseIndicator.statusText}
+${persistenceStatusText}
+Última sincronización/hidratación: ${databaseIndicator.lastSyncText}
+${databaseIndicator.syncStatusText}`;
+
+  useEffect(
+    () =>
+      subscribeToPersistenceFeedback((nextFeedback) => {
+        if (!isPersistenceFeedbackSilent(nextFeedback)) {
+          setPersistenceFeedback(nextFeedback);
+        }
+        setPendingWriteCount(getPendingSqliteWriteCount() + getPendingRecordWriteCount());
+      }),
+    [],
+  );
 
   useEffect(() => {
     writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned));
@@ -364,11 +423,14 @@ export function Sidebar({
                   strokeWidth={2.6}
                 />
               )}
-              <span className="max-w-full truncate">{databaseIndicator.label}</span>
+              <span className="max-w-full truncate">{compactPersistenceLabel}</span>
               <span className={`pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>
                 <span className="block font-semibold">{databaseIndicator.statusText}</span>
                 <span className="mt-1 block break-all text-slate-300">
                   {databaseIndicator.routeText}
+                </span>
+                <span className={`mt-1 block ${persistenceFeedback?.kind === 'error' ? 'text-red-300' : pendingWriteCount > 0 || persistenceFeedback?.kind === 'saving' ? 'text-amber-300' : 'text-emerald-300'}`}>
+                  {persistenceStatusText}
                 </span>
                 <span className="mt-1 block text-slate-400">{databaseIndicator.lastSyncText}</span>
               </span>
@@ -506,6 +568,9 @@ export function Sidebar({
                 </span>
                 <span className="block truncate text-[11px] text-slate-400">
                   {databaseIndicator.statusText}
+                </span>
+                <span className={`block truncate text-[11px] ${persistenceFeedback?.kind === 'error' ? 'text-red-300' : pendingWriteCount > 0 || persistenceFeedback?.kind === 'saving' ? 'text-amber-300' : 'text-emerald-300'}`}>
+                  {persistenceStatusText}
                 </span>
                 <span className="block truncate text-[11px] text-slate-500">
                   {externalDataSyncStatus.message}
