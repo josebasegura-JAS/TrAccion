@@ -68,13 +68,13 @@ function KpiCard({
   }[tone];
 
   return (
-    <div className={`flex min-h-[74px] items-center gap-3 rounded-2xl border px-4 py-3 ${toneClasses}`}>
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/20">
-        <Icon size={21} />
+    <div className={`flex min-h-[62px] items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 ${toneClasses}`}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/20">
+        <Icon size={19} />
       </span>
       <div className="min-w-0">
-        <div className="text-xs font-semibold uppercase tracking-wide text-metro-muted">{label}</div>
-        <div className="mt-0.5 truncate text-2xl font-black text-metro-text">{value}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-metro-muted">{label}</div>
+        <div className="mt-0.5 whitespace-nowrap text-xl font-black leading-tight text-metro-text">{value}</div>
       </div>
     </div>
   );
@@ -299,11 +299,11 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
             </div>
 
             <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-              <div className="grid grid-cols-[minmax(180px,1fr)_140px_120px_310px] gap-3 bg-metro-slate/80 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
+              <div className="grid grid-cols-[minmax(360px,1fr)_120px_105px_250px] gap-3 bg-metro-slate/80 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
                 <span>Punto</span><span>Origen</span><span>Estado</span><span>Destino</span>
               </div>
               {inboxTasks.length ? inboxTasks.map((task) => (
-                <div className="grid grid-cols-[minmax(180px,1fr)_140px_120px_310px] items-center gap-3 border-t border-white/[0.06] px-3 py-2.5" key={task.id}>
+                <div className="grid grid-cols-[minmax(360px,1fr)_120px_105px_250px] items-center gap-3 border-t border-white/[0.06] px-3 py-2.5" key={task.id}>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-metro-secondary">{task.titulo}</div>
                     <div className="truncate text-[11px] text-metro-muted">{task.descripcion || 'Sin descripción'}</div>
@@ -312,7 +312,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                   <StatusPill state={task.estado} />
                   <div className="flex gap-2">
                     <button
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2 py-1.5 text-xs font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/10 px-1.5 py-1.5 text-[11px] font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
                       disabled={assigningTaskId === task.id}
                       onClick={() => void assignTask(task, 'comite')}
                       type="button"
@@ -320,7 +320,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                       <UsersRound size={14} /> Comité <ArrowRight size={13} />
                     </button>
                     <button
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2 py-1.5 text-xs font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-1.5 py-1.5 text-[11px] font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
                       disabled={assigningTaskId === task.id}
                       onClick={() => void assignTask(task, 'paritaria')}
                       type="button"
