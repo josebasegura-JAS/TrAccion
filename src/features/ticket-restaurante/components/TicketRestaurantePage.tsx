@@ -24,6 +24,7 @@ import {
   type TicketRestaurantAbsence,
   type TicketRestaurantConfig,
   normalizeTicketEmployeeNumber,
+  splitTicketPersonFullName,
 } from '../domain/ticketRestaurante';
 import {
   importTicketRestaurantAbsencesFromFile,
@@ -394,9 +395,21 @@ const monthlyCalculationExportColumns = (
   );
 
   return [
-    { key: 'nombre', header: 'Nombre', value: (row) => row.nombre },
-    { key: 'apellido1', header: 'Apellido 1', value: (row) => row.apellido1 },
-    { key: 'apellido2', header: 'Apellido 2', value: (row) => row.apellido2 },
+    {
+      key: 'nombre',
+      header: 'Nombre',
+      value: (row) => splitTicketPersonFullName(row.nombreApellidos).nombre,
+    },
+    {
+      key: 'apellido1',
+      header: 'Apellido 1',
+      value: (row) => splitTicketPersonFullName(row.nombreApellidos).apellido1,
+    },
+    {
+      key: 'apellido2',
+      header: 'Apellido 2',
+      value: (row) => splitTicketPersonFullName(row.nombreApellidos).apellido2,
+    },
     { key: 'dni', header: 'Número de documento*', value: (row) => row.dni },
     { key: 'pedido', header: 'Nº pedido', value: () => config.pedidoMensual },
     { key: 'empleado', header: 'CECO', value: (row) => row.empleado },

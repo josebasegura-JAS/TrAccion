@@ -17,6 +17,7 @@ import {
   normalizeTicketIsoWeekdays,
   previousCalendarYear,
   splitManualDebtInstallments,
+  splitTicketPersonFullName,
   toggleDiaSinTicket,
   visibleTicketCalendars,
   type TicketCalendar,
@@ -41,6 +42,25 @@ function buildCalendar(overrides: Partial<TicketCalendar> = {}): TicketCalendar 
     ...overrides,
   };
 }
+
+
+describe('ticket restaurante person names', () => {
+  it('separa el formato corporativo Apellido1 Apellido2, Nombre', () => {
+    expect(splitTicketPersonFullName('Aguirre Jauregui, Ianire')).toEqual({
+      nombre: 'Ianire',
+      apellido1: 'Aguirre',
+      apellido2: 'Jauregui',
+    });
+  });
+
+  it('conserva nombres compuestos en el formato con coma', () => {
+    expect(splitTicketPersonFullName('Fernández Vidal, José Antonio')).toEqual({
+      nombre: 'José Antonio',
+      apellido1: 'Fernández',
+      apellido2: 'Vidal',
+    });
+  });
+});
 
 describe('ticket restaurante calendar domain', () => {
   it('marca un día sin ticket', () => {

@@ -398,7 +398,28 @@ export function buildTicketPersonFullName(
 export function splitTicketPersonFullName(
   nombreApellidos: string,
 ): Pick<TicketPersonDraft, 'nombre' | 'apellido1' | 'apellido2'> {
-  const parts = cleanTicketPersonText(nombreApellidos).split(' ').filter(Boolean);
+  const cleaned = cleanTicketPersonText(nombreApellidos);
+  const commaIndex = cleaned.indexOf(',');
+
+  // La plantilla corporativa suele aportar el nombre como "Apellido1 Apellido2, Nombre".
+  // La coma es una señal inequívoca y, además, permite conservar nombres compuestos.
+  if (commaIndex >= 0) {
+    const surnames = cleanTicketPersonText(cleaned.slice(0, commaIndex));
+    const nombre = cleanTicketPersonText(cleaned.slice(commaIndex + 1));
+    const surnameParts = surnames.split(' ').filter(Boolean);
+
+    if (surnameParts.length <= 1) {
+      return { nombre, apellido1: surnameParts[0] ?? '', apellido2: '' };
+    }
+
+    return {
+      nombre,
+      apellido1: surnameParts.slice(0, -1).join(' '),
+      apellido2: surnameParts.at(-1) ?? '',
+    };
+  }
+
+  const parts = cleaned.split(' ').filter(Boolean);
   if (parts.length <= 1) {
     return { nombre: parts.join(' '), apellido1: '', apellido2: '' };
   }
