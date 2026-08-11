@@ -244,6 +244,22 @@ function sortMonthlyCalculationRows(
   });
 }
 
+function sortContributionCalculationRows(
+  rows: readonly TicketPersonCalculation[],
+): TicketPersonCalculation[] {
+  return [...rows].sort((first, second) => {
+    const calendarComparison = first.calendario.localeCompare(second.calendario, 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    if (calendarComparison !== 0) return calendarComparison;
+    return first.empleado.localeCompare(second.empleado, 'es', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  });
+}
+
 const PEOPLE_EXPORT_HEADERS = [
   'Nº empleado',
   'Nombre',
@@ -461,18 +477,16 @@ const monthlyCalculationExportColumns = (
 const contributionCalculationExportColumns = (
   importeTicket: number,
 ): ExportColumn<TicketPersonCalculation>[] => [
-  { key: 'empleado', header: 'Nº empleado', value: (row) => row.empleado },
-  { key: 'nombreApellidos', header: 'Nombre y apellidos', value: (row) => row.nombreApellidos },
-  { key: 'calendario', header: 'Calendario', value: (row) => row.calendario },
-  { key: 'diasTeoricos', header: 'Días teóricos', value: (row) => row.diasTeoricos },
+  { key: 'codigo', header: 'Codigo', value: (row) => row.empleado },
+  { key: 'apellidos', header: 'Apellidos', value: (row) => row.nombreApellidos },
+  { key: 'activo', header: 'Activo', value: () => '' },
+  { key: 'ticketsInicioMes', header: 'Tickets inicio mes', value: () => '' },
+  { key: 'valorFacial', header: 'Valor Facial 1', value: () => importeTicket },
   {
-    key: 'ausenciasAplicadas',
-    header: 'Ausencias aplicadas',
-    value: (row) => row.ausenciasAplicadas,
+    key: 'ticketsCotizacion',
+    header: 'Tickets BC y Retrib.',
+    value: (row) => row.ticketsFinales,
   },
-  { key: 'ticketsFinales', header: 'Tickets finales', value: (row) => row.ticketsFinales },
-  { key: 'importeTicket', header: 'Importe ticket', value: () => importeTicket.toFixed(2) },
-  { key: 'total', header: 'Total', value: (row) => row.importe.toFixed(2) },
 ];
 
 const absenceExportColumns: ExportColumn<TicketAbsenceDisplayRow>[] = [
@@ -1949,15 +1963,17 @@ export function TicketRestaurantePage({
           month={calculationMonth}
           exportPayload={{
             title: 'Cómputo cotización Ticket Restaurante',
-            filename: `ticket-restaurante-computo-cotizacion-${calculationYear}-${String(calculationMonth).padStart(2, '0')}`,
+            filename: `Computo_${MONTH_OPTIONS[calculationMonth - 1]?.label ?? calculationMonth}_Base_Cotizacion_y_Retribucion_${calculationYear}`,
             columns: contributionCalculationExportColumns(
               getEffectiveTicketPrice(config, calculationYear, calculationMonth),
             ),
-            rows: contributionCalculation.rows,
+            rows: sortContributionCalculationRows(contributionCalculation.rows),
+            rowGroupValue: (row) => row.calendario,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
               ['Año', calculationYear],
             ]),
+            formatPreset: 'ticket-restaurante-contribution',
           }}
           onMonthChange={handleCalculationMonthChange}
           onNextMonth={() => moveCalculationMonth(1)}

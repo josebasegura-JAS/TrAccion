@@ -190,12 +190,173 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
 
   const isTicketRestaurantMonthlyPreset =
     payload.formatPreset === 'ticket-restaurante-monthly';
+  const isTicketRestaurantContributionPreset =
+    payload.formatPreset === 'ticket-restaurante-contribution';
   const worksheet = workbook.addWorksheet(buildWorksheetName(payload.filename), {
-    views: [{ state: 'frozen', ySplit: isTicketRestaurantMonthlyPreset ? 6 : 4 }],
+    views: [{
+      state: 'frozen',
+      ySplit: isTicketRestaurantMonthlyPreset ? 6 : isTicketRestaurantContributionPreset ? 3 : 4,
+    }],
   });
 
   const columnCount = Math.max(payload.columns.length, 1);
 
+  if (isTicketRestaurantContributionPreset) {
+    const blueTitle = toExcelColor('#99CCFF');
+    const employeeFill = toExcelColor('#CCFFFF');
+    const financialFill = toExcelColor('#99CCFF');
+    const resultFill = toExcelColor('#F8CBAD');
+    const separatorFill = toExcelColor('#B4A7D6');
+    const white = toExcelColor('#FFFFFF');
+    const black = toExcelColor('#000000');
+    const darkBlue = toExcelColor('#000080');
+    const thinBlackBorder = { style: 'thin' as const, color: black };
+    const mediumBlackBorder = { style: 'medium' as const, color: black };
+    const allThinBorders = {
+      top: thinBlackBorder,
+      bottom: thinBlackBorder,
+      left: thinBlackBorder,
+      right: thinBlackBorder,
+    };
+    const monthLabelMatch = /Computo_(.+?)_Base_Cotizacion_y_Retribucion_(\d{4})/i.exec(
+      payload.filename,
+    );
+    const monthLabel = monthLabelMatch?.[1]?.replace(/_/g, ' ') ?? '';
+    const yearLabel = monthLabelMatch?.[2] ?? '';
+
+    worksheet.mergeCells('A1:F1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = `Tarjeta Restaurante\nBase Cotización - Retribución - ${monthLabel}${yearLabel ? ` ${yearLabel}` : ''}`;
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: blueTitle };
+    titleCell.font = { color: darkBlue, bold: true, size: 18, name: 'Century Gothic' };
+    titleCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    worksheet.getRow(1).height = 58;
+
+    worksheet.mergeCells('A2:C2');
+    const employeeCell = worksheet.getCell('A2');
+    employeeCell.value = 'Empleado';
+    employeeCell.fill = { type: 'pattern', pattern: 'solid', fgColor: employeeFill };
+    employeeCell.font = { color: black, bold: true, size: 12, name: 'Century Gothic' };
+    employeeCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    employeeCell.border = {
+      top: mediumBlackBorder,
+      bottom: mediumBlackBorder,
+      left: mediumBlackBorder,
+      right: mediumBlackBorder,
+    };
+
+    worksheet.mergeCells('D2:F2');
+    const resultHeaderCell = worksheet.getCell('D2');
+    resultHeaderCell.value = 0;
+    resultHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: resultFill };
+    resultHeaderCell.font = { color: black, bold: true, size: 12, name: 'Century Gothic' };
+    resultHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    resultHeaderCell.border = {
+      top: mediumBlackBorder,
+      bottom: mediumBlackBorder,
+      left: mediumBlackBorder,
+      right: mediumBlackBorder,
+    };
+
+    const headerRow = worksheet.getRow(3);
+    payload.columns.forEach((column, index) => {
+      const cell = headerRow.getCell(index + 1);
+      cell.value = column.header;
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: index === 5 ? resultFill : white,
+      };
+      cell.font = { color: black, bold: true, size: 10, name: 'Century Gothic' };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: index < 3 ? mediumBlackBorder : thinBlackBorder,
+        bottom: mediumBlackBorder,
+        left: index === 0 || index === 3 ? mediumBlackBorder : thinBlackBorder,
+        right: index === 2 || index === 5 ? mediumBlackBorder : thinBlackBorder,
+      };
+    });
+    headerRow.height = 45;
+
+    let excelRowNumber = 4;
+    let previousGroup: string | null = null;
+    payload.rows.forEach((row) => {
+      const group = payload.rowGroupValue
+        ? normalizeCellValue(payload.rowGroupValue(row)).trim() || 'Sin calendario'
+        : 'Sin calendario';
+
+      if (previousGroup !== null && group !== previousGroup) {
+        const separatorRow = worksheet.getRow(excelRowNumber);
+        for (let columnIndex = 1; columnIndex <= 6; columnIndex += 1) {
+          const separatorCell = separatorRow.getCell(columnIndex);
+          separatorCell.fill = { type: 'pattern', pattern: 'solid', fgColor: separatorFill };
+          separatorCell.border = allThinBorders;
+        }
+        separatorRow.height = 8;
+        excelRowNumber += 1;
+      }
+
+      const excelRow = worksheet.getRow(excelRowNumber);
+      payload.columns.forEach((column, columnIndex) => {
+        const cell = excelRow.getCell(columnIndex + 1);
+        const value = column.value(row);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor:
+            columnIndex <= 2 ? employeeFill : columnIndex <= 4 ? financialFill : resultFill,
+        };
+        cell.font = { color: black, size: 10, name: 'Century Gothic' };
+        cell.alignment = {
+          horizontal: columnIndex === 1 ? 'left' : columnIndex >= 3 ? 'right' : 'center',
+          vertical: 'middle',
+        };
+        cell.border = {
+          top: thinBlackBorder,
+          bottom: thinBlackBorder,
+          left: columnIndex === 0 || columnIndex === 3 ? mediumBlackBorder : thinBlackBorder,
+          right: columnIndex === 2 || columnIndex === 5 ? mediumBlackBorder : thinBlackBorder,
+        };
+
+        if (value === null || value === undefined || value === '') {
+          cell.value = null;
+        } else if (typeof value === 'number') {
+          cell.value = value;
+          if (column.key === 'valorFacial') cell.numFmt = '0.00';
+          else cell.numFmt = '0';
+        } else {
+          const text = String(value);
+          const numericEmployee = column.key === 'codigo' ? Number(text.trim()) : Number.NaN;
+          cell.value = Number.isFinite(numericEmployee) ? numericEmployee : text;
+        }
+      });
+      excelRow.height = 18;
+      previousGroup = group;
+      excelRowNumber += 1;
+    });
+
+    worksheet.getColumn(1).width = 12;
+    worksheet.getColumn(2).width = 43;
+    worksheet.getColumn(3).width = 10;
+    worksheet.getColumn(4).width = 16;
+    worksheet.getColumn(5).width = 13;
+    worksheet.getColumn(6).width = 15;
+    worksheet.autoFilter = {
+      from: { row: 3, column: 1 },
+      to: { row: Math.max(excelRowNumber - 1, 3), column: 6 },
+    };
+    worksheet.pageSetup = {
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    await openWorkbookInExcel(buffer, buildStableExportFilename(payload.filename, generatedAt));
+    return;
+  }
   if (isTicketRestaurantMonthlyPreset) {
     const orange = toExcelColor('#FF9900');
     const grey = toExcelColor('#A6A6A6');
