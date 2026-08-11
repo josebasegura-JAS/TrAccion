@@ -197,6 +197,7 @@ export interface TicketPersonCalculation {
   importe: number;
   ausenciaIds: string[];
   ausenciaDiasDescontados: Record<string, number>;
+  deudaEntranteDetalle: TicketDebtDetailDay[];
   deudaAplicadaDetalle: TicketDebtDetailDay[];
   deudaPendienteDetalle: TicketDebtDetailDay[];
   hojaGastoDetalle: TicketManutencionDetailDay[];
@@ -792,6 +793,7 @@ function calculatePersonMonthlyContribution(
         config.rules,
       ),
     },
+    deudaEntranteDetalle: [],
     deudaAplicadaDetalle: calendar
       ? buildPersonAbsenceTicketDayDetails(
           person,
@@ -853,6 +855,7 @@ function calculatePersonMonthlyOrderWithDebt(
     importe: roundCurrency(ticketsFinales * effectivePrice),
     ausenciaIds: debtStatus.ausenciaIds,
     ausenciaDiasDescontados: debtStatus.ausenciaDiasDescontados,
+    deudaEntranteDetalle: debtStatus.deudaEntranteDetalle,
     deudaAplicadaDetalle: debtStatus.deudaAplicadaDetalle,
     deudaPendienteDetalle: debtStatus.deudaPendienteDetalle,
     hojaGastoDetalle: debtStatus.hojaGastoDetalle,
@@ -871,6 +874,7 @@ interface MonthlyOrderDebtStatus {
   deudaPendiente: number;
   ausenciaIds: string[];
   ausenciaDiasDescontados: Record<string, number>;
+  deudaEntranteDetalle: TicketDebtDetailDay[];
   deudaAplicadaDetalle: TicketDebtDetailDay[];
   deudaPendienteDetalle: TicketDebtDetailDay[];
   hojaGastoDetalle: TicketManutencionDetailDay[];
@@ -960,6 +964,7 @@ function calculatePersonMonthlyDiscountStatus(
     );
 
     const deudaEntrante = pendingDiscounts.length;
+    const deudaEntranteDetalle = pendingDiscounts.map(stripPendingDiscountKind);
     pendingDiscounts.push(
       ...buildPersonManutencionDiscountDetails(
         person,
@@ -1017,6 +1022,7 @@ function calculatePersonMonthlyDiscountStatus(
 
       return {
         deudaEntrante,
+        deudaEntranteDetalle,
         ausenciasAplicadas: appliedDiscounts.length,
         hojasGastoAplicadas: appliedManutenciones.length,
         deudaPendiente: pendingDiscounts.length,
@@ -1110,6 +1116,7 @@ function stripPendingDiscountKind(detail: PendingMonthlyDiscount): TicketDebtDet
 function emptyMonthlyOrderDebtStatus(): MonthlyOrderDebtStatus {
   return {
     deudaEntrante: 0,
+    deudaEntranteDetalle: [],
     ausenciasAplicadas: 0,
     hojasGastoAplicadas: 0,
     deudaPendiente: 0,

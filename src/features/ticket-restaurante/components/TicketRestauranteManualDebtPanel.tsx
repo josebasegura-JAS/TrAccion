@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Pencil, Plus, ReceiptText, Save } from 'lucide-react';
+import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Eye, Pencil, Plus, ReceiptText, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
@@ -30,6 +30,37 @@ function monthKey(year: number, month: number): number {
 function addMonths(year: number, month: number, offset: number): { year: number; month: number } {
   const date = new Date(Date.UTC(year, month - 1 + offset, 1));
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}
+
+function formatIsoDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || '—';
+  const [year, month, day] = value.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function formatOriginMonth(value: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return value || '—';
+  return monthLabel(Number(match[1]), Number(match[2]));
+}
+
+function groupIncomingDebtDetails(rows: TicketMonthCalculation['rows'][number]['deudaEntranteDetalle']) {
+  const groups = new Map<string, { motivo: string; mesOrigen: string; fechas: string[]; tickets: number }>();
+  rows.forEach((row) => {
+    const key = `${row.motivo}::${row.mesOrigen}`;
+    const current = groups.get(key) ?? { motivo: row.motivo, mesOrigen: row.mesOrigen, fechas: [], tickets: 0 };
+    current.tickets += 1;
+    if (row.fecha) current.fechas.push(row.fecha);
+    groups.set(key, current);
+  });
+  return Array.from(groups.values()).map((group) => {
+    const fechas = [...new Set(group.fechas)].sort();
+    return {
+      ...group,
+      fechaDesde: fechas[0] ?? '',
+      fechaHasta: fechas.at(-1) ?? '',
+    };
+  });
 }
 
 function pendingManualTickets(calculation: TicketMonthCalculation, debtId: string): number {
@@ -127,6 +158,7 @@ export function TicketRestauranteManualDebtPanel({
   const [regularizingEmployee, setRegularizingEmployee] = useState<string | null>(null);
   const [regularizationDraft, setRegularizationDraft] = useState<TicketDebtRegularizationDraft | null>(null);
   const [regularizationMessage, setRegularizationMessage] = useState('');
+  const [detailEmployee, setDetailEmployee] = useState<string | null>(null);
 
   const activePeople = useMemo(
     () => people.filter((person) => person.activo && !person.deletedAt),
@@ -145,6 +177,11 @@ export function TicketRestauranteManualDebtPanel({
     (row) => row.deudaEntrante > 0 || latestRegularizationByEmployee.has(row.empleado),
   );
   const carriedDebtTotal = carriedDebtRows.reduce((sum, row) => sum + row.deudaEntrante, 0);
+
+  const detailRow = detailEmployee
+    ? calculation.rows.find((row) => row.empleado === detailEmployee) ?? null
+    : null;
+  const groupedIncomingDebt = detailRow ? groupIncomingDebtDetails(detailRow.deudaEntranteDetalle ?? []) : [];
 
   const updatePerson = (empleado: string) => {
     const person = activePeople.find((item) => item.empleado === empleado);
@@ -348,7 +385,12 @@ export function TicketRestauranteManualDebtPanel({
                     <td className="px-2 py-2 font-bold text-amber-300">{actual}</td>
                     <td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td>
                     <td className="max-w-[320px] px-2 py-2">{regularization ? <><p className="truncate text-metro-secondary" title={regularization.reason}>{regularization.reason}</p>{regularization.observations ? <p className="truncate text-[10px] text-metro-muted">{regularization.observations}</p> : null}</> : <span className="text-metro-muted">—</span>}</td>
-                    <td className="px-2 py-2"><button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openRegularization(row.empleado)} type="button"><Pencil className="h-3 w-3" /> {regularization ? 'Modificar' : 'Regularizar'}</button></td>
+                    <td className="px-2 py-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => setDetailEmployee(row.empleado)} type="button"><Eye className="h-3 w-3" /> Ver detalle</button>
+                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openRegularization(row.empleado)} type="button"><Pencil className="h-3 w-3" /> {regularization ? 'Modificar' : 'Regularizar'}</button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -500,6 +542,77 @@ export function TicketRestauranteManualDebtPanel({
           </CompactTable>
         </div>
       </section>
+
+      {detailRow ? (
+        <ModalShell labelledBy="debt-detail-title" maxWidthClassName="max-w-3xl" onClose={() => setDetailEmployee(null)}>
+          <ModalHeader>
+            <ModalTitle
+              id="debt-detail-title"
+              subtitle={`${detailRow.empleado} · ${detailRow.calendario} · deuda que entra en ${monthLabel(year, month)}`}
+            >
+              Origen de la deuda · {detailRow.nombreApellidos}
+            </ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <div className="mb-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+                <p className="text-[9px] font-semibold uppercase text-metro-muted">Deuda entrante</p>
+                <p className="mt-0.5 text-lg font-extrabold text-amber-300">{detailRow.deudaEntrante}</p>
+              </div>
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+                <p className="text-[9px] font-semibold uppercase text-metro-muted">Orígenes</p>
+                <p className="mt-0.5 text-lg font-extrabold text-metro-text">{groupedIncomingDebt.length}</p>
+              </div>
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
+                <p className="text-[9px] font-semibold uppercase text-metro-muted">Mes de aplicación</p>
+                <p className="mt-0.5 text-sm font-bold text-metro-text">{monthLabel(year, month)}</p>
+              </div>
+            </div>
+
+            {groupedIncomingDebt.length === 0 ? (
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-4 text-center text-sm text-metro-muted">
+                No hay detalle de origen disponible para esta deuda.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-metro-border">
+                <CompactTable>
+                  <CompactTableHead>
+                    <tr>
+                      <th className="px-2 py-2">Motivo / origen</th>
+                      <th className="px-2 py-2">Mes origen</th>
+                      <th className="px-2 py-2">Fecha origen</th>
+                      <th className="px-2 py-2 text-right">Tickets</th>
+                    </tr>
+                  </CompactTableHead>
+                  <CompactTableBody>
+                    {groupedIncomingDebt.map((group, index) => (
+                      <tr className="border-t border-metro-border" key={`${group.motivo}-${group.mesOrigen}-${index}`}>
+                        <td className="px-2 py-2 font-semibold text-metro-text">{group.motivo}</td>
+                        <td className="px-2 py-2 text-metro-secondary">{formatOriginMonth(group.mesOrigen)}</td>
+                        <td className="px-2 py-2 text-metro-secondary">
+                          {group.fechaDesde
+                            ? group.fechaDesde === group.fechaHasta
+                              ? formatIsoDate(group.fechaDesde)
+                              : `${formatIsoDate(group.fechaDesde)} – ${formatIsoDate(group.fechaHasta)}`
+                            : '—'}
+                        </td>
+                        <td className="px-2 py-2 text-right font-bold text-amber-300">{group.tickets}</td>
+                      </tr>
+                    ))}
+                  </CompactTableBody>
+                </CompactTable>
+              </div>
+            )}
+            <p className="mt-2 text-[10px] text-metro-muted">
+              La fecha mostrada es la fecha de origen del hecho que generó la deuda. En deudas manuales se muestra el mes de origen indicado al crearla.
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton iconOnly={false} onClick={() => setDetailEmployee(null)} size="sm" variant="secondary">Cerrar</ActionButton>
+            <ActionButton icon={Pencil} iconOnly={false} onClick={() => { const employee = detailRow.empleado; setDetailEmployee(null); openRegularization(employee); }} size="sm" variant="edit">Regularizar</ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
 
       {regularizingEmployee && regularizationDraft ? (
         <ModalShell labelledBy="regularize-ticket-debt-title" maxWidthClassName="max-w-2xl" onClose={() => { setRegularizingEmployee(null); setRegularizationDraft(null); setRegularizationMessage(''); }}>
