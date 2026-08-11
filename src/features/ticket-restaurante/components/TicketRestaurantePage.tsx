@@ -1927,6 +1927,7 @@ export function TicketRestaurantePage({
         <>
           <TicketRestauranteManualPeoplePanel
             config={config}
+            employees={employees}
             month={calculationMonth}
             onUpdateConfig={updateConfig}
             regularPeople={visiblePeople}

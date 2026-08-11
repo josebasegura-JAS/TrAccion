@@ -164,6 +164,7 @@ export interface TicketManualPerson {
   activo: boolean;
   includeContribution: boolean;
   monthlyTickets: Record<string, number>;
+  inactiveFromMonth?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -739,7 +740,11 @@ function calculateTicketMonthInternal(
 
   const monthKey = `${year}-${String(month).padStart(2, '0')}`;
   const manualRows = (effectiveConfig.manualPeople ?? [])
-    .filter((person) => person.activo && (mode === 'monthlyOrderWithDebt' || person.includeContribution))
+    .filter((person) =>
+      person.activo &&
+      (!person.inactiveFromMonth || monthKey < person.inactiveFromMonth) &&
+      (mode === 'monthlyOrderWithDebt' || person.includeContribution),
+    )
     .map((person): TicketPersonCalculation => {
       const tickets = Math.max(0, Math.trunc(person.monthlyTickets[monthKey] ?? 0));
       const effectivePrice = getEffectiveTicketPrice(effectiveConfig, year, month);
@@ -1589,6 +1594,10 @@ function normalizeManualPeople(value: unknown): TicketManualPerson[] {
       activo: item.activo !== false,
       includeContribution: item.includeContribution === true,
       monthlyTickets,
+      inactiveFromMonth:
+        typeof item.inactiveFromMonth === 'string' && /^\d{4}-\d{2}$/.test(item.inactiveFromMonth)
+          ? item.inactiveFromMonth
+          : undefined,
       createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
       updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
     }];
