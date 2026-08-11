@@ -53,6 +53,7 @@ import {
   EmptyCalendar,
   Legend,
   MonthCalendar,
+  MonthNavigator,
   SubviewButton,
 } from './TicketRestauranteCalendarPanels';
 import { PeoplePanel } from './TicketRestaurantePeoplePanel';
@@ -446,31 +447,43 @@ function ManutencionesPanel({
   manualEmployee,
   manualDate,
   manutenciones,
+  month,
   onAddManual,
   onExportModel,
   onImport,
+  onMonthChange,
+  onNextMonth,
+  onPreviousMonth,
   onManualDateChange,
   onManualEmployeeChange,
   onPreviewChange,
   onRemove,
   onSavePreview,
+  onYearChange,
   previewRows,
   ticketPeople,
+  year,
 }: {
   importMessage: string;
   manualEmployee: string;
   manualDate: string;
   manutenciones: TicketManutencion[];
+  month: number;
   onAddManual: () => void;
   onExportModel: () => void;
   onImport: () => void;
+  onMonthChange: (value: string) => void;
+  onNextMonth: () => void;
+  onPreviousMonth: () => void;
   onManualDateChange: (value: string) => void;
   onManualEmployeeChange: (value: string) => void;
   onPreviewChange: (rows: TicketManutencionPreviewRow[]) => void;
   onRemove: (id: string) => void;
   onSavePreview: () => void;
+  onYearChange: (value: string) => void;
   previewRows: TicketManutencionPreviewRow[];
   ticketPeople: TicketPerson[];
+  year: number;
 }) {
   const manualPerson = ticketPeople.find(
     (person) =>
@@ -617,6 +630,21 @@ function ManutencionesPanel({
         </div>
       ) : null}
 
+      <div className="mb-2 flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs font-semibold text-metro-muted">
+          Manutenciones del mes seleccionado: <span className="text-metro-red">{manutenciones.length}</span>
+        </div>
+        <MonthNavigator
+          ariaLabel="Selector mes manutenciones"
+          month={month}
+          onMonthChange={onMonthChange}
+          onNextMonth={onNextMonth}
+          onPreviousMonth={onPreviousMonth}
+          onYearChange={onYearChange}
+          year={year}
+        />
+      </div>
+
       <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-surface">
         <CompactTable>
           <CompactTableHead>
@@ -708,6 +736,8 @@ export function TicketRestaurantePage({
   const [calculationYear, setCalculationYear] = useState(currentYear());
   const [calculationMonth, setCalculationMonth] = useState(currentMonth());
   const [absenceMonth, setAbsenceMonth] = useState(currentMonth());
+  const [manutencionYear, setManutencionYear] = useState(currentYear());
+  const [manutencionMonth, setManutencionMonth] = useState(currentMonth());
   const [calendarDraft, setCalendarDraft] = useState<TicketCalendarDraft>(
     EMPTY_TICKET_CALENDAR_DRAFT,
   );
@@ -767,7 +797,12 @@ export function TicketRestaurantePage({
   const visibleManutenciones = useMemo(
     () =>
       [...manutenciones]
-        .filter((row) => !row.deletedAt)
+        .filter(
+          (row) =>
+            !row.deletedAt &&
+            row.imputacionYear === manutencionYear &&
+            row.imputacionMonth === manutencionMonth,
+        )
         .sort((first, second) =>
           first.fechaGasto === second.fechaGasto
             ? first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
@@ -776,7 +811,7 @@ export function TicketRestaurantePage({
               })
             : second.fechaGasto.localeCompare(first.fechaGasto),
         ),
-    [manutenciones],
+    [manutencionMonth, manutencionYear, manutenciones],
   );
 
   const activeTicketEmployeeNumbers = useMemo(
@@ -1074,6 +1109,26 @@ export function TicketRestaurantePage({
     setAbsenceMonth(next.month);
   };
 
+  const handleManutencionYearChange = (value: string) => {
+    const parsedYear = Number(value);
+    if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
+      setManutencionYear(parsedYear);
+    }
+  };
+
+  const handleManutencionMonthChange = (value: string) => {
+    const parsedMonth = Number(value);
+    if (Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12) {
+      setManutencionMonth(parsedMonth);
+    }
+  };
+
+  const moveManutencionListMonth = (offset: number) => {
+    const next = addYearMonth(manutencionYear, manutencionMonth, offset);
+    setManutencionYear(next.year);
+    setManutencionMonth(next.month);
+  };
+
   const handleImportFile = async (file: File | null) => {
     if (!file) {
       return;
@@ -1346,6 +1401,26 @@ export function TicketRestaurantePage({
         imputacionMonth: manutencionImputationMonth,
       }));
 
+    const existingKeys = new Set(
+      manutenciones
+        .filter((row) => !row.deletedAt)
+        .map(
+          (row) =>
+            `${normalizeTicketEmployeeNumber(row.empleado)}|${row.fechaGasto}|${row.imputacionYear}|${row.imputacionMonth}`,
+        ),
+    );
+    let duplicates = 0;
+    let saved = 0;
+    drafts.forEach((draft) => {
+      const key = `${normalizeTicketEmployeeNumber(draft.empleado)}|${draft.fechaGasto}|${draft.imputacionYear}|${draft.imputacionMonth}`;
+      if (existingKeys.has(key)) {
+        duplicates += 1;
+        return;
+      }
+      existingKeys.add(key);
+      saved += 1;
+    });
+
     void (async () => {
       const result = await saveManutenciones(drafts);
       if (!result.ok) {
@@ -1357,8 +1432,11 @@ export function TicketRestaurantePage({
       }
       setManutencionPreviewRows([]);
       setIsManutencionMonthModalOpen(false);
+      setManutencionYear(manutencionImputationYear);
+      setManutencionMonth(manutencionImputationMonth);
+      const duplicateText = duplicates > 0 ? ` Duplicadas omitidas: ${duplicates}.` : '';
       setManutencionImportMessage(
-        `Manutenciones guardadas: ${drafts.length}. Imputación: ${formatManutencionMonth(
+        `Manutenciones guardadas: ${saved}.${duplicateText} Imputación: ${formatManutencionMonth(
           manutencionImputationYear,
           manutencionImputationMonth,
         )}.`,
@@ -1545,6 +1623,7 @@ export function TicketRestaurantePage({
             setCalculationMonth(nextMonth);
             setAbsenceMonth(nextMonth);
             setManutencionImputationMonth(nextMonth);
+            setManutencionMonth(nextMonth);
           }}
           onOpenAbsences={() => setActiveSubview('ausencias')}
           onOpenCalendars={() => setActiveSubview('calendarios')}
@@ -1559,6 +1638,7 @@ export function TicketRestaurantePage({
             setCalculationYear(nextYear);
             setAbsenceYear(nextYear);
             setManutencionImputationYear(nextYear);
+            setManutencionYear(nextYear);
           }}
           year={calculationYear}
         />
@@ -1724,6 +1804,7 @@ export function TicketRestaurantePage({
           manualDate={manualManutencionDate}
           manualEmployee={manualManutencionEmployee}
           manutenciones={visibleManutenciones}
+          month={manutencionMonth}
           onAddManual={addManualManutencionPreviewRow}
           onExportModel={() =>
             exportCsv(
@@ -1733,6 +1814,9 @@ export function TicketRestaurantePage({
             )
           }
           onImport={() => manutencionesFileInputRef.current?.click()}
+          onMonthChange={handleManutencionMonthChange}
+          onNextMonth={() => moveManutencionListMonth(1)}
+          onPreviousMonth={() => moveManutencionListMonth(-1)}
           onManualDateChange={setManualManutencionDate}
           onManualEmployeeChange={setManualManutencionEmployee}
           onPreviewChange={(rows) =>
@@ -1740,8 +1824,10 @@ export function TicketRestaurantePage({
           }
           onRemove={handleRemoveManutencion}
           onSavePreview={saveManutencionPreview}
+          onYearChange={handleManutencionYearChange}
           previewRows={manutencionPreviewRows}
           ticketPeople={visiblePeople}
+          year={manutencionYear}
         />
       ) : activeSubview === 'deudaManual' ? (
         <TicketRestauranteManualDebtPanel
