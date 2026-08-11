@@ -112,7 +112,7 @@ describe('humo UI de módulos principales', () => {
     ['Ticket Restaurante', <TicketRestaurantePage />, /Ticket Restaurante/i],
     ['Sorteos', <SorteosPage />, /Sorteos/i],
     ['Licencias / Excedencias', <LicenciasSinSueldoPage />, /Licencias sin sueldo/i],
-    ['Comité de Empresa', <ComitePage />, /Comité de Empresa/i],
+    ['Comité / Paritaria', <ComitePage />, /Comité y Paritaria/i],
     ['Comisión Paritaria', <ParitariaPage />, /Comisión Paritaria/i],
     ['Ajustes', <AjustesPage />, /Configuración/i],
     ['Especiales', <EspecialesPage />, /Especiales/i],
