@@ -2,6 +2,7 @@ import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
+  buildTicketDebtRegularization,
   buildTicketManualDebt,
   buildYearCalendar,
   calculateMonthlyTicketOrder,
@@ -14,6 +15,7 @@ import {
   getEffectiveTicketPrice,
   visibleTicketCalendars,
   type TicketCalendar,
+  type TicketDebtRegularizationDraft,
   type TicketManualDebtDraft,
   type TicketCalendarDraft,
   type TicketPerson,
@@ -79,7 +81,7 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Configurar calendarios: qué días de la semana generan ticket y qué fechas concretas quedan excluidas (festivos, cierres...).',
       'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario.',
       'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
-      'Si hay que corregir tickets entregados de más, registrar una Deuda manual indicando persona, origen y reparto en meses.',
+      'Revisar Deudas y regularizaciones: ahí se ve la deuda arrastrada y se puede fijar un saldo real justificado si el cálculo automático no coincide con la situación real.',
       'Revisar "Cómputo mensual" para hacer el pedido del mes.',
       'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes.',
       'Exportar o imprimir los resultados que necesite RRLL.',
@@ -133,9 +135,12 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Deuda manual',
+    title: 'Deudas y regularizaciones',
     items: [
-      'Sirve para corregir tickets entregados de más sin crear ausencias ficticias.',
+      'Muestra la deuda automática que llega a cada mes antes de aplicar el pedido.',
+      'Si el saldo real no coincide con el calculado, puede regularizarse a cualquier valor (incluido 0) indicando obligatoriamente un motivo.',
+      'La regularización no borra ni modifica las ausencias originales: queda registrada como corrección trazable y afecta al pedido mensual desde ese mes.',
+      'La deuda manual sirve además para corregir tickets entregados de más sin crear ausencias ficticias.',
       'Se indica la persona, el total de tickets, el mes de origen, el primer mes de descuento y en cuántos meses repartir la deuda.',
       'Si una cuota no puede descontarse completa por falta de tickets disponibles, el pendiente se arrastra automáticamente.',
       'La deuda manual solo afecta al Cómputo mensual/pedido. No modifica el Cómputo cotización.',
@@ -1560,6 +1565,30 @@ export function TicketRestaurantePage({
     });
   };
 
+  const saveDebtRegularization = async (draft: TicketDebtRegularizationDraft) => {
+    const now = new Date().toISOString();
+    const existing = (config.debtRegularizations ?? []).find(
+      (item) =>
+        normalizeTicketEmployeeNumber(item.empleado) === normalizeTicketEmployeeNumber(draft.empleado) &&
+        item.year === draft.year &&
+        item.month === draft.month,
+    );
+    const id = existing?.id ?? (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `ticket-debt-regularization-${Date.now()}`);
+    const regularization = buildTicketDebtRegularization(draft, now, id);
+    return updateConfig({
+      ...config,
+      debtRegularizations: existing
+        ? (config.debtRegularizations ?? []).map((item) =>
+            item.id === existing.id
+              ? { ...regularization, createdAt: existing.createdAt }
+              : item,
+          )
+        : [...(config.debtRegularizations ?? []), regularization],
+    });
+  };
+
   return (
     <section
       className="space-y-2"
@@ -1633,7 +1662,7 @@ export function TicketRestaurantePage({
           />
           <SubviewButton
             active={activeSubview === 'deudaManual'}
-            label="Deuda manual"
+            label="Deudas"
             onClick={() => setActiveSubview('deudaManual')}
           />
         </div>
@@ -1885,10 +1914,16 @@ export function TicketRestaurantePage({
         <TicketRestauranteManualDebtPanel
           calculation={monthCalculation}
           debts={config.manualDebts ?? []}
+          regularizations={config.debtRegularizations ?? []}
           month={calculationMonth}
           onCancel={cancelManualDebt}
           onCreate={createManualDebt}
           onUpdate={updateManualDebt}
+          onSaveRegularization={saveDebtRegularization}
+          onMonthChange={handleCalculationMonthChange}
+          onYearChange={handleCalculationYearChange}
+          onPreviousMonth={() => moveCalculationMonth(-1)}
+          onNextMonth={() => moveCalculationMonth(1)}
           people={visiblePeople}
           year={calculationYear}
         />

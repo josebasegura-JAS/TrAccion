@@ -257,6 +257,7 @@ function readConfig(): TicketRestaurantConfig {
       : priceHistory,
     rules: candidate.rules ?? DEFAULT_TICKET_RESTAURANT_CONFIG.rules,
     manualDebts: candidate.manualDebts ?? [],
+    debtRegularizations: candidate.debtRegularizations ?? [],
   });
 }
 

@@ -354,8 +354,8 @@ export function TicketRestauranteWorkflow({
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-amber-500/10 text-amber-300"><ReceiptText className="h-3.5 w-3.5" /></span>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-extrabold text-metro-text">Ajustes extraordinarios · Deuda manual</p>
-                  <p className="truncate text-[9px] text-metro-muted">Corrige tickets entregados de más y reparte el descuento en varios meses.</p>
+                  <p className="text-[10px] font-extrabold text-metro-text">Deudas y regularizaciones</p>
+                  <p className="truncate text-[9px] text-metro-muted">Revisa deuda arrastrada, regulariza saldos y gestiona deudas manuales.</p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -396,7 +396,7 @@ export function TicketRestauranteWorkflow({
               <StatusLine label="Personas revisadas" state={activePeople > 0 ? 'done' : 'pending'} detail={`${activePeople} activas`} />
               <StatusLine label="Ausencias importadas" state={absenceCount > 0 ? 'done' : 'neutral'} detail={`${absenceCount} en ${monthLabel}`} />
               <StatusLine label="Manutenciones importadas" state={manutencionCount > 0 ? 'done' : 'pending'} detail={`${manutencionCount} imputadas`} />
-              <StatusLine label="Deuda manual" state={manualDebtCount > 0 ? 'pending' : 'neutral'} detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes activos'} />
+              <StatusLine label="Deudas manuales" state={manualDebtCount > 0 ? 'pending' : 'neutral'} detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes activos'} />
               <StatusLine label="Cómputo mensual" state={readyForCalculation ? 'done' : 'pending'} detail={readyForCalculation ? 'Disponible' : 'Falta base anual'} />
               <StatusLine label="Cotización" state="neutral" detail="A mes vencido" />
             </div>
@@ -419,7 +419,7 @@ export function TicketRestauranteWorkflow({
           <WorkflowAction icon={Users} label="Personas" onClick={onOpenPeople} />
           <WorkflowAction icon={CalendarDays} label="Ausencias" onClick={onOpenAbsences} />
           <WorkflowAction icon={Utensils} label="Manutenciones" onClick={onOpenManutenciones} />
-          <WorkflowAction icon={ReceiptText} label="Deuda manual" onClick={onOpenManualDebt} />
+          <WorkflowAction icon={ReceiptText} label="Deudas y ajustes" onClick={onOpenManualDebt} />
           <WorkflowAction icon={Calculator} label="Cómputo cotización" onClick={onOpenContribution} />
         </div>
       </section>

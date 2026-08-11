@@ -118,6 +118,31 @@ export interface TicketManualDebt {
   cancellationReason: string;
 }
 
+export interface TicketDebtRegularization {
+  id: string;
+  empleado: string;
+  nombreApellidos: string;
+  year: number;
+  month: number;
+  calculatedTickets: number;
+  targetTickets: number;
+  reason: string;
+  observations: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketDebtRegularizationDraft {
+  empleado: string;
+  nombreApellidos: string;
+  year: number;
+  month: number;
+  calculatedTickets: number;
+  targetTickets: number;
+  reason: string;
+  observations: string;
+}
+
 export interface TicketManualDebtDraft {
   empleado: string;
   nombreApellidos: string;
@@ -137,6 +162,7 @@ export interface TicketRestaurantConfig {
   priceHistory: TicketPriceHistoryEntry[];
   rules: TicketCalculationRules;
   manualDebts?: TicketManualDebt[];
+  debtRegularizations?: TicketDebtRegularization[];
 }
 
 export interface TicketDebtDetailDay {
@@ -205,6 +231,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
     nonDiscountableMotivesByCalendar: { Liberados: ['SIN'] },
   },
   manualDebts: [],
+  debtRegularizations: [],
 };
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
@@ -833,7 +860,7 @@ function calculatePersonMonthlyOrderWithDebt(
 }
 
 interface PendingMonthlyDiscount extends TicketDebtDetailDay {
-  kind: 'absence' | 'manutencion' | 'manual';
+  kind: 'absence' | 'manutencion' | 'manual' | 'regularization';
   manualDebtId?: string;
 }
 
@@ -924,6 +951,14 @@ function calculatePersonMonthlyDiscountStatus(
       ).map((detail): PendingMonthlyDiscount => ({ ...detail, kind: 'absence' })),
     );
 
+    applyDebtRegularizationForMonth(
+      pendingDiscounts,
+      person,
+      config.debtRegularizations ?? [],
+      cursorYear,
+      cursorMonth,
+    );
+
     const deudaEntrante = pendingDiscounts.length;
     pendingDiscounts.push(
       ...buildPersonManutencionDiscountDetails(
@@ -1008,6 +1043,42 @@ function calculatePersonMonthlyDiscountStatus(
   }
 
   return emptyMonthlyOrderDebtStatus();
+}
+
+function applyDebtRegularizationForMonth(
+  pendingDiscounts: PendingMonthlyDiscount[],
+  person: TicketPerson,
+  regularizations: readonly TicketDebtRegularization[],
+  year: number,
+  month: number,
+): void {
+  const regularization = regularizations
+    .filter(
+      (item) =>
+        sameTicketEmployee(item.empleado, person.empleado) &&
+        item.year === year &&
+        item.month === month,
+    )
+    .sort((first, second) => first.updatedAt.localeCompare(second.updatedAt))
+    .at(-1);
+  if (!regularization) return;
+
+  const target = Math.max(0, Math.trunc(regularization.targetTickets));
+  if (pendingDiscounts.length > target) {
+    pendingDiscounts.splice(target);
+    return;
+  }
+
+  const missing = target - pendingDiscounts.length;
+  for (let unit = 0; unit < missing; unit += 1) {
+    pendingDiscounts.push({
+      id: `debt-regularization:${regularization.id}:${unit + 1}`,
+      fecha: toIsoDate(year, month, 1),
+      motivo: `Regularización: ${regularization.reason}`,
+      mesOrigen: `${year}-${String(month).padStart(2, '0')}`,
+      kind: 'regularization',
+    });
+  }
 }
 
 function buildPersonManutencionDiscountDetails(
@@ -1320,6 +1391,26 @@ export function buildTicketManualDebt(
   };
 }
 
+export function buildTicketDebtRegularization(
+  draft: TicketDebtRegularizationDraft,
+  now: string,
+  id: string,
+): TicketDebtRegularization {
+  return {
+    id,
+    empleado: normalizeTicketEmployeeNumber(draft.empleado),
+    nombreApellidos: draft.nombreApellidos.trim(),
+    year: Math.trunc(draft.year),
+    month: Math.min(12, Math.max(1, Math.trunc(draft.month))),
+    calculatedTickets: Math.max(0, Math.trunc(draft.calculatedTickets)),
+    targetTickets: Math.max(0, Math.trunc(draft.targetTickets)),
+    reason: draft.reason.trim(),
+    observations: draft.observations.trim(),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export function splitManualDebtInstallments(totalTickets: number, months: number): number[] {
   const total = Math.max(0, Math.trunc(totalTickets));
   const count = Math.max(1, Math.min(total || 1, Math.trunc(months)));
@@ -1367,6 +1458,36 @@ function normalizeManualDebts(value: unknown): TicketManualDebt[] {
   });
 }
 
+function normalizeDebtRegularizations(value: unknown): TicketDebtRegularization[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<TicketDebtRegularization>;
+    if (
+      typeof item.id !== 'string' ||
+      typeof item.empleado !== 'string' ||
+      typeof item.year !== 'number' ||
+      typeof item.month !== 'number' ||
+      typeof item.calculatedTickets !== 'number' ||
+      typeof item.targetTickets !== 'number' ||
+      typeof item.reason !== 'string'
+    ) return [];
+    return [{
+      id: item.id,
+      empleado: normalizeTicketEmployeeNumber(item.empleado),
+      nombreApellidos: typeof item.nombreApellidos === 'string' ? item.nombreApellidos.trim() : '',
+      year: Math.trunc(item.year),
+      month: Math.min(12, Math.max(1, Math.trunc(item.month))),
+      calculatedTickets: Math.max(0, Math.trunc(item.calculatedTickets)),
+      targetTickets: Math.max(0, Math.trunc(item.targetTickets)),
+      reason: item.reason.trim(),
+      observations: typeof item.observations === 'string' ? item.observations.trim() : '',
+      createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
+      updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
+    }];
+  });
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -1386,6 +1507,7 @@ export function normalizeTicketRestaurantConfig(
     priceHistory,
     rules: normalizeTicketCalculationRules(config.rules),
     manualDebts: normalizeManualDebts(config.manualDebts),
+    debtRegularizations: normalizeDebtRegularizations(config.debtRegularizations),
   };
 }
 

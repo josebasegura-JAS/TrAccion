@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TICKET_RESTAURANT_CONFIG,
+  buildTicketDebtRegularization,
   buildTicketManualDebt,
   buildTicketRestaurantAbsence,
   buildTicketPerson,
@@ -1117,5 +1118,101 @@ describe('ticket restaurante — deuda manual', () => {
 
     expect(august.rows[0]?.deudaPendiente).toBe(2);
     expect(september.rows[0]?.deudaAplicadaDetalle.filter((row) => row.id.startsWith('manual-debt:'))).toHaveLength(2);
+  });
+});
+
+
+describe('ticket restaurante — regularización de deuda automática', () => {
+  const person = buildTicketPerson(
+    {
+      empleado: '200',
+      nombre: 'César',
+      apellido1: 'Prueba',
+      apellido2: '',
+      dni: '',
+      nombreApellidos: 'César Prueba',
+      puesto: 'Técnico',
+      calendarId: 'calendar-regularization',
+      activo: true,
+    },
+    timestamp,
+  );
+  const calendar = buildCalendar({ id: 'calendar-regularization' });
+  const absence = buildTicketRestaurantAbsence(
+    {
+      empleado: '200',
+      nombreApellidos: 'César Prueba',
+      desde: '2026-06-01',
+      hasta: '2026-06-12',
+      motivo: 'ENF',
+      totalDias: 12,
+      afectaTicket: true,
+    },
+    timestamp,
+    'absence-regularization',
+  );
+
+  it('permite fijar a cero una deuda arrastrada antes de descontar el pedido del mes', () => {
+    const withoutRegularization = calculateMonthlyTicketOrder(
+      [person],
+      [calendar],
+      [absence],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      7,
+    );
+    expect(withoutRegularization.rows[0]?.deudaEntrante).toBe(10);
+
+    const regularization = buildTicketDebtRegularization(
+      {
+        empleado: '200',
+        nombreApellidos: 'César Prueba',
+        year: 2026,
+        month: 7,
+        calculatedTickets: 10,
+        targetTickets: 0,
+        reason: 'Los tickets de la ausencia no fueron solicitados',
+        observations: '',
+      },
+      timestamp,
+      'regularization-zero',
+    );
+    const config = {
+      ...DEFAULT_TICKET_RESTAURANT_CONFIG,
+      debtRegularizations: [regularization],
+    };
+    const july = calculateMonthlyTicketOrder([person], [calendar], [absence], config, 2026, 7);
+    const august = calculateMonthlyTicketOrder([person], [calendar], [absence], config, 2026, 8);
+
+    expect(july.rows[0]?.deudaEntrante).toBe(0);
+    expect(july.rows[0]?.ausenciasAplicadas).toBe(0);
+    expect(july.rows[0]?.deudaPendiente).toBe(0);
+    expect(august.rows[0]?.deudaEntrante).toBe(0);
+  });
+
+  it('permite fijar la deuda a un valor distinto del calculado', () => {
+    const regularization = buildTicketDebtRegularization(
+      {
+        empleado: '200',
+        nombreApellidos: 'César Prueba',
+        year: 2026,
+        month: 7,
+        calculatedTickets: 10,
+        targetTickets: 3,
+        reason: 'Solo quedan tres tickets pendientes',
+        observations: '',
+      },
+      timestamp,
+      'regularization-three',
+    );
+    const config = {
+      ...DEFAULT_TICKET_RESTAURANT_CONFIG,
+      debtRegularizations: [regularization],
+    };
+    const july = calculateMonthlyTicketOrder([person], [calendar], [absence], config, 2026, 7);
+
+    expect(july.rows[0]?.deudaEntrante).toBe(3);
+    expect(july.rows[0]?.ausenciasAplicadas).toBe(3);
+    expect(july.rows[0]?.deudaPendiente).toBe(0);
   });
 });

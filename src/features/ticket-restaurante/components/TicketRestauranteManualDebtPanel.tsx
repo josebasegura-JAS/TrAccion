@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Pencil, Plus, ReceiptText, Save } from 'lucide-react';
+import { AlertTriangle, Ban, ChevronLeft, ChevronRight, Pencil, Plus, ReceiptText, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
@@ -6,6 +6,8 @@ import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import {
   splitManualDebtInstallments,
+  type TicketDebtRegularization,
+  type TicketDebtRegularizationDraft,
   type TicketManualDebt,
   type TicketManualDebtDraft,
   type TicketMonthCalculation,
@@ -87,21 +89,33 @@ function emptyDraft(year: number, month: number): TicketManualDebtDraft {
 export function TicketRestauranteManualDebtPanel({
   people,
   debts,
+  regularizations,
   calculation,
   year,
   month,
   onCreate,
   onUpdate,
   onCancel,
+  onSaveRegularization,
+  onMonthChange,
+  onYearChange,
+  onPreviousMonth,
+  onNextMonth,
 }: {
   people: TicketPerson[];
   debts: TicketManualDebt[];
+  regularizations: TicketDebtRegularization[];
   calculation: TicketMonthCalculation;
   year: number;
   month: number;
   onCreate: (draft: TicketManualDebtDraft) => Promise<{ ok: boolean; message?: string }>;
   onUpdate: (id: string, draft: TicketManualDebtDraft) => Promise<{ ok: boolean; message?: string }>;
   onCancel: (id: string, reason: string) => Promise<{ ok: boolean; message?: string }>;
+  onSaveRegularization: (draft: TicketDebtRegularizationDraft) => Promise<{ ok: boolean; message?: string }>;
+  onMonthChange: (value: string) => void;
+  onYearChange: (value: string) => void;
+  onPreviousMonth: () => void;
+  onNextMonth: () => void;
 }) {
   const [draft, setDraft] = useState<TicketManualDebtDraft>(() => emptyDraft(year, month));
   const [message, setMessage] = useState('');
@@ -110,6 +124,9 @@ export function TicketRestauranteManualDebtPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<TicketManualDebtDraft | null>(null);
   const [editMessage, setEditMessage] = useState('');
+  const [regularizingEmployee, setRegularizingEmployee] = useState<string | null>(null);
+  const [regularizationDraft, setRegularizationDraft] = useState<TicketDebtRegularizationDraft | null>(null);
+  const [regularizationMessage, setRegularizationMessage] = useState('');
 
   const activePeople = useMemo(
     () => people.filter((person) => person.activo && !person.deletedAt),
@@ -119,15 +136,15 @@ export function TicketRestauranteManualDebtPanel({
     () => splitManualDebtInstallments(draft.totalTickets, draft.months),
     [draft.months, draft.totalTickets],
   );
-  const activeDebtTickets = debts
-    .filter((debt) => !debt.cancelledAt)
-    .reduce((sum, debt) => sum + debt.totalTickets, 0);
-  const currentPending = debts
-    .filter((debt) => !debt.cancelledAt)
-    .reduce((sum, debt) => {
-      const status = debtStatus(debt, calculation, year, month);
-      return sum + (typeof status.pending === 'number' ? status.pending : 0);
-    }, 0);
+  const periodRegularizations = regularizations
+    .filter((item) => item.year === year && item.month === month)
+    .sort((first, second) => first.updatedAt.localeCompare(second.updatedAt));
+  const latestRegularizationByEmployee = new Map<string, TicketDebtRegularization>();
+  periodRegularizations.forEach((item) => latestRegularizationByEmployee.set(item.empleado, item));
+  const carriedDebtRows = calculation.rows.filter(
+    (row) => row.deudaEntrante > 0 || latestRegularizationByEmployee.has(row.empleado),
+  );
+  const carriedDebtTotal = carriedDebtRows.reduce((sum, row) => sum + row.deudaEntrante, 0);
 
   const updatePerson = (empleado: string) => {
     const person = activePeople.find((item) => item.empleado === empleado);
@@ -175,6 +192,42 @@ export function TicketRestauranteManualDebtPanel({
       empleado,
       nombreApellidos: person?.nombreApellidos ?? current.nombreApellidos,
     } : current);
+  };
+
+  const openRegularization = (empleado: string) => {
+    const row = calculation.rows.find((item) => item.empleado === empleado);
+    if (!row) return;
+    const existing = latestRegularizationByEmployee.get(empleado);
+    const calculatedTickets = existing?.calculatedTickets ?? row.deudaEntrante;
+    setRegularizingEmployee(empleado);
+    setRegularizationMessage('');
+    setRegularizationDraft({
+      empleado,
+      nombreApellidos: row.nombreApellidos,
+      year,
+      month,
+      calculatedTickets,
+      targetTickets: existing?.targetTickets ?? row.deudaEntrante,
+      reason: existing?.reason ?? '',
+      observations: existing?.observations ?? '',
+    });
+  };
+
+  const saveRegularization = async () => {
+    if (!regularizationDraft) return;
+    setRegularizationMessage('');
+    if (regularizationDraft.targetTickets < 0 || !regularizationDraft.reason.trim()) {
+      setRegularizationMessage('Indica la deuda pendiente real y un motivo de regularización.');
+      return;
+    }
+    const result = await onSaveRegularization(regularizationDraft);
+    if (!result.ok) {
+      setRegularizationMessage(result.message ?? 'No se ha podido guardar la regularización.');
+      return;
+    }
+    setRegularizingEmployee(null);
+    setRegularizationDraft(null);
+    setMessage('Regularización guardada. El cómputo mensual se ha recalculado con la deuda real indicada.');
   };
 
   const saveEdit = async () => {
@@ -230,27 +283,77 @@ export function TicketRestauranteManualDebtPanel({
           <div>
             <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
               <ReceiptText className="h-4 w-4 text-red-300" />
-              Deuda manual de tickets
+              Deudas y regularizaciones
             </h3>
             <p className="mt-0.5 max-w-3xl text-xs text-metro-muted">
-              Corrige tickets entregados de más. La deuda se descuenta únicamente del pedido mensual;
-              no modifica el cómputo de cotización. Si una cuota no cabe, se arrastra al mes siguiente.
+              Controla la deuda que arrastra el cálculo y permite regularizarla con motivo cuando el saldo real no coincide.
+              Las correcciones afectan únicamente al pedido mensual y quedan registradas sin alterar las ausencias originales.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase text-metro-muted">Registros</p>
-              <p className="text-lg font-extrabold text-metro-text">{debts.length}</p>
+              <p className="text-[9px] font-semibold uppercase text-metro-muted">Con deuda ahora</p>
+              <p className="text-lg font-extrabold text-metro-text">{carriedDebtRows.length}</p>
             </div>
             <div className="rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase text-amber-300">Tickets alta</p>
-              <p className="text-lg font-extrabold text-metro-text">{activeDebtTickets}</p>
+              <p className="text-[9px] font-semibold uppercase text-amber-300">Deuda entrante</p>
+              <p className="text-lg font-extrabold text-metro-text">{carriedDebtTotal}</p>
             </div>
             <div className="rounded-lg border border-red-400/20 bg-red-500/[0.06] px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase text-red-300">Pendiente ahora</p>
-              <p className="text-lg font-extrabold text-metro-text">{currentPending}</p>
+              <p className="text-[9px] font-semibold uppercase text-red-300">Regularizaciones</p>
+              <p className="text-lg font-extrabold text-metro-text">{regularizations.length}</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
+        <div className="flex flex-col gap-2 border-b border-metro-border px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-metro-text">Deuda pendiente · {monthLabel(year, month)}</h3>
+            <p className="text-[10px] text-metro-muted">Deuda que llega al mes antes de aplicar sus tickets. Puedes fijar el saldo real mediante una regularización justificada.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-xs font-bold text-amber-300">{carriedDebtTotal} ticket{carriedDebtTotal === 1 ? '' : 's'}</span>
+            <button aria-label="Mes anterior" className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-surface text-metro-secondary hover:text-metro-text" onClick={onPreviousMonth} type="button"><ChevronLeft className="h-4 w-4" /></button>
+            <Select className="!h-8 !w-36" value={month} onChange={(event) => onMonthChange(event.target.value)}>{MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</Select>
+            <Input className="!h-8 !w-24" min={2020} max={2200} type="number" value={year} onChange={(event) => onYearChange(event.target.value)} />
+            <button aria-label="Mes siguiente" className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-surface text-metro-secondary hover:text-metro-text" onClick={onNextMonth} type="button"><ChevronRight className="h-4 w-4" /></button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <CompactTable>
+            <CompactTableHead>
+              <tr>
+                <th className="px-2 py-2">Persona</th>
+                <th className="px-2 py-2">Deuda calculada</th>
+                <th className="px-2 py-2">Deuda real</th>
+                <th className="px-2 py-2">Ajuste</th>
+                <th className="px-2 py-2">Motivo</th>
+                <th className="px-2 py-2">Acción</th>
+              </tr>
+            </CompactTableHead>
+            <CompactTableBody>
+              {carriedDebtRows.length === 0 ? (
+                <tr><td className="px-3 py-7 text-center text-sm text-metro-muted" colSpan={6}>No hay deuda arrastrada en este mes.</td></tr>
+              ) : carriedDebtRows.map((row) => {
+                const regularization = latestRegularizationByEmployee.get(row.empleado);
+                const calculated = regularization?.calculatedTickets ?? row.deudaEntrante;
+                const actual = regularization?.targetTickets ?? row.deudaEntrante;
+                const adjustment = actual - calculated;
+                return (
+                  <tr className="border-t border-metro-border" key={row.empleado}>
+                    <td className="px-2 py-2"><p className="font-semibold text-metro-text">{row.nombreApellidos}</p><p className="text-[10px] text-metro-muted">{row.empleado} · {row.calendario}</p></td>
+                    <td className="px-2 py-2 font-bold text-metro-text">{calculated}</td>
+                    <td className="px-2 py-2 font-bold text-amber-300">{actual}</td>
+                    <td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td>
+                    <td className="max-w-[320px] px-2 py-2">{regularization ? <><p className="truncate text-metro-secondary" title={regularization.reason}>{regularization.reason}</p>{regularization.observations ? <p className="truncate text-[10px] text-metro-muted">{regularization.observations}</p> : null}</> : <span className="text-metro-muted">—</span>}</td>
+                    <td className="px-2 py-2"><button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openRegularization(row.empleado)} type="button"><Pencil className="h-3 w-3" /> {regularization ? 'Modificar' : 'Regularizar'}</button></td>
+                  </tr>
+                );
+              })}
+            </CompactTableBody>
+          </CompactTable>
         </div>
       </section>
 
@@ -321,9 +424,29 @@ export function TicketRestauranteManualDebtPanel({
         {message ? <p className="mt-2 text-xs font-semibold text-metro-secondary">{message}</p> : null}
       </section>
 
+      {regularizations.length > 0 ? (
+        <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
+          <div className="border-b border-metro-border px-3 py-2">
+            <h3 className="text-sm font-bold text-metro-text">Histórico de regularizaciones</h3>
+            <p className="text-[10px] text-metro-muted">Registro de correcciones aplicadas sobre la deuda automática.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <CompactTable>
+              <CompactTableHead><tr><th className="px-2 py-2">Mes</th><th className="px-2 py-2">Persona</th><th className="px-2 py-2">Calculada</th><th className="px-2 py-2">Real</th><th className="px-2 py-2">Ajuste</th><th className="px-2 py-2">Motivo</th></tr></CompactTableHead>
+              <CompactTableBody>
+                {[...regularizations].sort((a, b) => monthKey(b.year, b.month) - monthKey(a.year, a.month) || b.updatedAt.localeCompare(a.updatedAt)).map((item) => {
+                  const adjustment = item.targetTickets - item.calculatedTickets;
+                  return <tr className="border-t border-metro-border" key={item.id}><td className="px-2 py-2 text-metro-secondary">{monthLabel(item.year, item.month)}</td><td className="px-2 py-2"><p className="font-semibold text-metro-text">{item.nombreApellidos}</p><p className="text-[10px] text-metro-muted">{item.empleado}</p></td><td className="px-2 py-2 font-semibold text-metro-text">{item.calculatedTickets}</td><td className="px-2 py-2 font-semibold text-amber-300">{item.targetTickets}</td><td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td><td className="max-w-[360px] px-2 py-2"><p className="truncate text-metro-secondary" title={item.reason}>{item.reason}</p>{item.observations ? <p className="truncate text-[10px] text-metro-muted">{item.observations}</p> : null}</td></tr>;
+                })}
+              </CompactTableBody>
+            </CompactTable>
+          </div>
+        </section>
+      ) : null}
+
       <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
         <div className="border-b border-metro-border px-3 py-2">
-          <h3 className="text-sm font-bold text-metro-text">Histórico y seguimiento</h3>
+          <h3 className="text-sm font-bold text-metro-text">Deudas manuales</h3>
           <p className="text-[10px] text-metro-muted">Situación calculada para {monthLabel(year, month)}.</p>
         </div>
         <div className="overflow-x-auto">
@@ -377,6 +500,35 @@ export function TicketRestauranteManualDebtPanel({
           </CompactTable>
         </div>
       </section>
+
+      {regularizingEmployee && regularizationDraft ? (
+        <ModalShell labelledBy="regularize-ticket-debt-title" maxWidthClassName="max-w-2xl" onClose={() => { setRegularizingEmployee(null); setRegularizationDraft(null); setRegularizationMessage(''); }}>
+          <ModalHeader>
+            <ModalTitle id="regularize-ticket-debt-title" subtitle={`Regularización de la deuda que entra en ${monthLabel(year, month)}. La ausencia original no se modifica.`}>Regularizar deuda · {regularizationDraft.nombreApellidos}</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-3 text-center"><p className="text-[9px] font-semibold uppercase text-metro-muted">Deuda calculada</p><p className="mt-1 text-2xl font-extrabold text-metro-text">{regularizationDraft.calculatedTickets}</p></div>
+              <Field label="Deuda pendiente real" required>
+                <Input min={0} required type="number" value={regularizationDraft.targetTickets} onChange={(event) => setRegularizationDraft((current) => current ? ({ ...current, targetTickets: Math.max(0, Math.trunc(Number(event.target.value) || 0)) }) : current)} />
+              </Field>
+              <div className="rounded-lg border border-blue-400/20 bg-blue-500/[0.05] p-3 text-center"><p className="text-[9px] font-semibold uppercase text-blue-300">Ajuste</p><p className="mt-1 text-2xl font-extrabold text-metro-text">{regularizationDraft.targetTickets - regularizationDraft.calculatedTickets > 0 ? '+' : ''}{regularizationDraft.targetTickets - regularizationDraft.calculatedTickets}</p></div>
+            </div>
+            <Field className="mt-3" label="Motivo de la regularización" required>
+              <Input placeholder="Ej.: los tickets correspondientes a esta ausencia no fueron solicitados" required value={regularizationDraft.reason} onChange={(event) => setRegularizationDraft((current) => current ? ({ ...current, reason: event.target.value }) : current)} />
+            </Field>
+            <Field className="mt-3" label="Observaciones">
+              <Textarea rows={3} value={regularizationDraft.observations} onChange={(event) => setRegularizationDraft((current) => current ? ({ ...current, observations: event.target.value }) : current)} />
+            </Field>
+            <div className="mt-3 flex gap-2 rounded-lg border border-amber-400/20 bg-amber-500/[0.06] p-2 text-xs text-amber-200"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>El nuevo saldo se aplicará antes de descontar los tickets de este mes y se arrastrará a los siguientes si queda pendiente. El cómputo de cotización no cambia.</span></div>
+            {regularizationMessage ? <p className="mt-3 text-xs font-semibold text-red-300">{regularizationMessage}</p> : null}
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton iconOnly={false} onClick={() => { setRegularizingEmployee(null); setRegularizationDraft(null); setRegularizationMessage(''); }} size="sm" variant="secondary">Cancelar</ActionButton>
+            <ActionButton icon={Save} iconOnly={false} onClick={() => void saveRegularization()} size="sm" variant="save">Guardar regularización</ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
 
       {editingId && editDraft ? (
         <ModalShell labelledBy="edit-manual-debt-title" maxWidthClassName="max-w-4xl" onClose={() => { setEditingId(null); setEditDraft(null); setEditMessage(''); }}>
