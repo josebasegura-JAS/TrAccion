@@ -49,6 +49,7 @@ const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
   'traccion.v1.vinculograma.records': 'vinculograma',
   'traccion.v1.vinculograma.showExpired': 'vinculograma',
   'traccion.v1.configuracion': 'configuracion',
+  'traccion.v1.loteria.campaign': 'loteria',
   'rrll_especiales_destinatarios': 'especiales',
   // plantilla y tareas tienen tabla propia (collectChangedDirectStores las gestiona)
   // auditTrail no tiene store sincronizable registrado

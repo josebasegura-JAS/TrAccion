@@ -30,6 +30,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.criterios-rrll.criterios',
   'traccion.v1.vinculograma.records',
   'traccion.v1.configuracion',
+  'traccion.v1.loteria.campaign',
   'traccion.v1.vinculograma.showExpired',
 ] as const;
 

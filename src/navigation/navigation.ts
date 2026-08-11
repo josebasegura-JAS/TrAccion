@@ -2,6 +2,7 @@ import {
   CalendarDays,
   FileText,
   Landmark,
+  Clover,
   ClipboardList,
   Gift,
   Laptop,
@@ -26,6 +27,7 @@ export type AppView =
   | 'presupuestos'
   | 'licencias-sin-sueldo'
   | 'sorteos'
+  | 'loteria'
   | 'vinculograma'
   | 'especiales'
   | 'ajustes';
@@ -81,6 +83,7 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Presupuestos', icon: Landmark, view: 'presupuestos' },
       { label: 'Criterios RRLL', icon: ShieldCheck, view: 'criterios-rrll' },
       { label: 'Sorteos', icon: Gift, view: 'sorteos' },
+      { label: 'Lotería', icon: Clover, view: 'loteria' },
       { label: 'Especiales', icon: MailPlus, view: 'especiales' },
     ],
   },

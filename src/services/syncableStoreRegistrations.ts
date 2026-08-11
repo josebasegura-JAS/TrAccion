@@ -4,6 +4,7 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
 import { useEspecialesStore } from '../features/especiales/store/useEspecialesStore';
 import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/store/useLicenciasSinSueldoStore';
+import { useLoteriaStore } from '../features/loteria/store/useLoteriaStore';
 import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { usePresupuestosStore } from '../features/presupuestos/store/usePresupuestosStore';
@@ -69,4 +70,9 @@ registerSyncableStore({
 registerSyncableStore({
   id: 'presupuestos',
   reloadFromStorage: () => usePresupuestosStore.getState().reloadFromStorage(),
+});
+
+registerSyncableStore({
+  id: 'loteria',
+  reloadFromStorage: () => useLoteriaStore.getState().reloadFromStorage(),
 });
