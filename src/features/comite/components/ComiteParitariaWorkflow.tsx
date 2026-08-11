@@ -89,7 +89,7 @@ function StatusPill({ state }: { state: Task['estado'] }) {
         : state === 'bloqueada'
           ? 'border-violet-400/25 bg-violet-500/10 text-violet-300'
           : 'border-amber-400/25 bg-amber-500/10 text-amber-300';
-  return <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${classes}`}>{state}</span>;
+  return <span className={`inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-bold leading-none ${classes}`}>{state}</span>;
 }
 
 function OrganPanel({
@@ -271,7 +271,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
         </div>
       </section>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_230px]">
         <main className="min-w-0 space-y-3">
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <KpiCard icon={CalendarDays} label="Sesiones abiertas" tone="blue" value={activeCommittee.length + activeParitaria.length} />
@@ -299,33 +299,33 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
             </div>
 
             <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-              <div className="grid grid-cols-[minmax(360px,1fr)_120px_105px_250px] gap-3 bg-metro-slate/80 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
+              <div className="grid grid-cols-[minmax(0,1fr)_72px_82px_214px] gap-2 bg-metro-slate/80 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
                 <span>Punto</span><span>Origen</span><span>Estado</span><span>Destino</span>
               </div>
               {inboxTasks.length ? inboxTasks.map((task) => (
-                <div className="grid grid-cols-[minmax(360px,1fr)_120px_105px_250px] items-center gap-3 border-t border-white/[0.06] px-3 py-2.5" key={task.id}>
+                <div className="grid grid-cols-[minmax(0,1fr)_72px_82px_214px] items-center gap-2 border-t border-white/[0.06] px-3 py-2.5" key={task.id}>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-metro-secondary">{task.titulo}</div>
                     <div className="truncate text-[11px] text-metro-muted">{task.descripcion || 'Sin descripción'}</div>
                   </div>
                   <span className="truncate text-xs text-metro-muted">{task.origen || '—'}</span>
                   <StatusPill state={task.estado} />
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/10 px-1.5 py-1.5 text-[11px] font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
+                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-1 py-1.5 text-[10px] font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
                       disabled={assigningTaskId === task.id}
                       onClick={() => void assignTask(task, 'comite')}
                       type="button"
                     >
-                      <UsersRound size={14} /> Comité <ArrowRight size={13} />
+                      <UsersRound size={13} /> <span>Comité</span> <ArrowRight size={12} />
                     </button>
                     <button
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-1.5 py-1.5 text-[11px] font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-1 py-1.5 text-[10px] font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
                       disabled={assigningTaskId === task.id}
                       onClick={() => void assignTask(task, 'paritaria')}
                       type="button"
                     >
-                      <Handshake size={14} /> Paritaria <ArrowRight size={13} />
+                      <Handshake size={13} /> <span>Paritaria</span> <ArrowRight size={12} />
                     </button>
                   </div>
                 </div>
@@ -340,9 +340,9 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
           <section className="rounded-2xl border border-white/10 bg-metro-panel/80 p-4">
             <div className="mb-4 flex items-center gap-2">
               <ListChecks className="text-red-300" size={20} />
-              <h3 className="text-lg font-black text-metro-text">Estado del flujo</h3>
+              <h3 className="text-base font-black text-metro-text">Estado del flujo</h3>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {[
                 ['Sesiones configuradas', activeCommittee.length + activeParitaria.length > 0],
                 ['Puntos pendientes de asignación', inboxTasks.length === 0],
@@ -353,7 +353,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                   <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${ok ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300' : 'border-amber-400/30 bg-amber-500/10 text-amber-300'}`}>
                     {ok ? <CheckCircle2 size={13} /> : <Clock3 size={12} />}
                   </span>
-                  <span className="text-sm font-semibold text-metro-secondary">{label}</span>
+                  <span className="text-xs font-semibold leading-snug text-metro-secondary">{label}</span>
                 </div>
               ))}
             </div>
