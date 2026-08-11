@@ -17,7 +17,6 @@ import {
   Signature,
   Sparkles,
   Users,
-  XCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Acta, ActaState } from '../domain/acta';
