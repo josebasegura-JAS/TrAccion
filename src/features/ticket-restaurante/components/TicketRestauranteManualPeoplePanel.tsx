@@ -261,7 +261,7 @@ export function TicketRestauranteManualPeoplePanel({
           Incluir en cotización
         </label>
         <div className="flex gap-1.5">
-          <ActionButton iconOnly={false} size="sm" onClick={() => void savePerson()} disabled={!empleado.trim() || !nombreApellidos.trim()}>
+          <ActionButton iconOnly={false} size="sm" variant="add" onClick={() => void savePerson()} disabled={!empleado.trim() || !nombreApellidos.trim()}>
             <UserPlus className="h-3.5 w-3.5" /> {editingId ? 'Guardar' : 'Añadir'}
           </ActionButton>
           {editingId ? <button type="button" className="rounded-lg border border-metro-border px-2 text-xs text-metro-text" onClick={reset}>Cancelar</button> : null}

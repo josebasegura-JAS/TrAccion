@@ -10,6 +10,7 @@ import {
   FileSpreadsheet,
   ReceiptText,
   Settings,
+  Ticket,
   Upload,
   UserPlus,
   Users,
