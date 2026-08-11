@@ -55,9 +55,8 @@ export const navigationGroups: NavigationGroup[] = [
     icon: ClipboardList,
     items: [
       { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
-      { label: 'Comité de Empresa', icon: CalendarDays, view: 'comite' },
+      { label: 'Comité / Paritaria', icon: CalendarDays, view: 'comite' },
       { label: 'Actas', icon: FileText, view: 'actas' },
-      { label: 'Comisión Paritaria', icon: CalendarDays, view: 'paritaria' },
     ],
   },
   {
@@ -88,6 +87,10 @@ export const navigationGroups: NavigationGroup[] = [
 ];
 
 export const getGroupForView = (view: AppView): NavigationGroupId | null => {
+  if (view === 'paritaria') {
+    return 'operativa';
+  }
+
   if (view === 'dashboard' || view === 'ajustes') {
     return null;
   }
@@ -106,6 +109,10 @@ export const getNavigationBreadcrumb = (view: AppView): string => {
 
   if (view === 'ajustes') {
     return 'Sistema › Ajustes';
+  }
+
+  if (view === 'paritaria') {
+    return 'Operativa diaria › Comité / Paritaria';
   }
 
   const group = navigationGroups.find((navigationGroup) =>

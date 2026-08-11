@@ -22,8 +22,8 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     subtitle: 'Seguimiento por fase, estado, prioridad y vencimiento.',
   },
   comite: {
-    title: 'Comité de Empresa',
-    subtitle: 'Sesiones, puntos del orden del día y tareas tratadas.',
+    title: 'Comité / Paritaria',
+    subtitle: 'Gestión unificada de sesiones, puntos y clasificación por órgano.',
   },
   actas: {
     title: 'Actas',
