@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Plus, ReceiptText } from 'lucide-react';
+import { AlertTriangle, Ban, Pencil, Plus, ReceiptText, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Field, Input, Select, Textarea } from '../../../components/ui/Field';
@@ -91,6 +91,7 @@ export function TicketRestauranteManualDebtPanel({
   year,
   month,
   onCreate,
+  onUpdate,
   onCancel,
 }: {
   people: TicketPerson[];
@@ -99,12 +100,16 @@ export function TicketRestauranteManualDebtPanel({
   year: number;
   month: number;
   onCreate: (draft: TicketManualDebtDraft) => Promise<{ ok: boolean; message?: string }>;
+  onUpdate: (id: string, draft: TicketManualDebtDraft) => Promise<{ ok: boolean; message?: string }>;
   onCancel: (id: string, reason: string) => Promise<{ ok: boolean; message?: string }>;
 }) {
   const [draft, setDraft] = useState<TicketManualDebtDraft>(() => emptyDraft(year, month));
   const [message, setMessage] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancellationReason, setCancellationReason] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<TicketManualDebtDraft | null>(null);
+  const [editMessage, setEditMessage] = useState('');
 
   const activePeople = useMemo(
     () => people.filter((person) => person.activo && !person.deletedAt),
@@ -133,18 +138,68 @@ export function TicketRestauranteManualDebtPanel({
     }));
   };
 
+  const validateDraft = (candidate: TicketManualDebtDraft): string => {
+    if (!candidate.empleado || candidate.totalTickets < 1 || candidate.months < 1 || !candidate.reason.trim()) {
+      return 'Completa persona, tickets, meses y motivo.';
+    }
+    if (candidate.months > candidate.totalTickets) {
+      return 'El número de meses no puede ser mayor que los tickets de deuda.';
+    }
+    if (monthKey(candidate.startYear, candidate.startMonth) < monthKey(candidate.originYear, candidate.originMonth)) {
+      return 'El primer mes de descuento no puede ser anterior al mes de origen.';
+    }
+    return '';
+  };
+
+  const openEdit = (debt: TicketManualDebt) => {
+    setEditingId(debt.id);
+    setEditMessage('');
+    setEditDraft({
+      empleado: debt.empleado,
+      nombreApellidos: debt.nombreApellidos,
+      totalTickets: debt.totalTickets,
+      originYear: debt.originYear,
+      originMonth: debt.originMonth,
+      startYear: debt.startYear,
+      startMonth: debt.startMonth,
+      months: debt.months,
+      reason: debt.reason,
+      observations: debt.observations,
+    });
+  };
+
+  const updateEditPerson = (empleado: string) => {
+    const person = people.find((item) => item.empleado === empleado && !item.deletedAt);
+    setEditDraft((current) => current ? {
+      ...current,
+      empleado,
+      nombreApellidos: person?.nombreApellidos ?? current.nombreApellidos,
+    } : current);
+  };
+
+  const saveEdit = async () => {
+    if (!editingId || !editDraft) return;
+    setEditMessage('');
+    const validationMessage = validateDraft(editDraft);
+    if (validationMessage) {
+      setEditMessage(validationMessage);
+      return;
+    }
+    const result = await onUpdate(editingId, editDraft);
+    if (!result.ok) {
+      setEditMessage(result.message ?? 'No se ha podido actualizar la deuda manual.');
+      return;
+    }
+    setEditingId(null);
+    setEditDraft(null);
+    setMessage('Deuda manual actualizada.');
+  };
+
   const save = async () => {
     setMessage('');
-    if (!draft.empleado || draft.totalTickets < 1 || draft.months < 1 || !draft.reason.trim()) {
-      setMessage('Completa persona, tickets, meses y motivo.');
-      return;
-    }
-    if (draft.months > draft.totalTickets) {
-      setMessage('El número de meses no puede ser mayor que los tickets de deuda.');
-      return;
-    }
-    if (monthKey(draft.startYear, draft.startMonth) < monthKey(draft.originYear, draft.originMonth)) {
-      setMessage('El primer mes de descuento no puede ser anterior al mes de origen.');
+    const validationMessage = validateDraft(draft);
+    if (validationMessage) {
+      setMessage(validationMessage);
       return;
     }
     const result = await onCreate(draft);
@@ -302,11 +357,18 @@ export function TicketRestauranteManualDebtPanel({
                     <td className="px-2 py-2 font-semibold text-amber-300">{status.pending}</td>
                     <td className="px-2 py-2"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status.className}`}>{status.label}</span></td>
                     <td className="px-2 py-2">
-                      {!debt.cancelledAt && status.label !== 'Finalizada' ? (
-                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-metro-red hover:text-red-300" onClick={() => setCancellingId(debt.id)} type="button">
-                          <Ban className="h-3 w-3" /> Anular
-                        </button>
-                      ) : null}
+                      <div className="flex items-center gap-1">
+                        {!debt.cancelledAt ? (
+                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openEdit(debt)} type="button">
+                            <Pencil className="h-3 w-3" /> Editar
+                          </button>
+                        ) : null}
+                        {!debt.cancelledAt && status.label !== 'Finalizada' ? (
+                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-metro-red hover:text-red-300" onClick={() => setCancellingId(debt.id)} type="button">
+                            <Ban className="h-3 w-3" /> Anular
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -315,6 +377,72 @@ export function TicketRestauranteManualDebtPanel({
           </CompactTable>
         </div>
       </section>
+
+      {editingId && editDraft ? (
+        <ModalShell labelledBy="edit-manual-debt-title" maxWidthClassName="max-w-4xl" onClose={() => { setEditingId(null); setEditDraft(null); setEditMessage(''); }}>
+          <ModalHeader>
+            <ModalTitle id="edit-manual-debt-title" subtitle="Corrige los datos del registro seleccionado. Los cálculos se actualizarán con los nuevos valores.">Editar deuda manual</ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Field className="md:col-span-2" label="Persona" required>
+                <Select required value={editDraft.empleado} onChange={(event) => updateEditPerson(event.target.value)}>
+                  {!people.some((person) => person.empleado === editDraft.empleado && !person.deletedAt) ? (
+                    <option value={editDraft.empleado}>{editDraft.empleado} · {editDraft.nombreApellidos}</option>
+                  ) : null}
+                  {people.filter((person) => !person.deletedAt).map((person) => (
+                    <option key={person.empleado} value={person.empleado}>
+                      {person.empleado} · {person.nombreApellidos}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Tickets de deuda" required>
+                <Input min={1} required type="number" value={editDraft.totalTickets} onChange={(event) => setEditDraft((current) => current ? ({ ...current, totalTickets: Math.max(1, Number(event.target.value) || 1) }) : current)} />
+              </Field>
+              <Field label="Meses para descontar" required>
+                <Input min={1} max={Math.min(24, Math.max(1, editDraft.totalTickets))} required type="number" value={editDraft.months} onChange={(event) => setEditDraft((current) => current ? ({ ...current, months: Math.min(24, Math.max(1, Number(event.target.value) || 1)) }) : current)} />
+              </Field>
+              <Field label="Mes origen" required>
+                <Select required value={editDraft.originMonth} onChange={(event) => setEditDraft((current) => current ? ({ ...current, originMonth: Number(event.target.value) }) : current)}>
+                  {MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Año origen" required>
+                <Input min={2020} max={2200} required type="number" value={editDraft.originYear} onChange={(event) => setEditDraft((current) => current ? ({ ...current, originYear: Number(event.target.value) || year }) : current)} />
+              </Field>
+              <Field label="Primer mes descuento" required>
+                <Select required value={editDraft.startMonth} onChange={(event) => setEditDraft((current) => current ? ({ ...current, startMonth: Number(event.target.value) }) : current)}>
+                  {MONTHS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Año descuento" required>
+                <Input min={2020} max={2200} required type="number" value={editDraft.startYear} onChange={(event) => setEditDraft((current) => current ? ({ ...current, startYear: Number(event.target.value) || year }) : current)} />
+              </Field>
+              <Field className="md:col-span-2 xl:col-span-3" label="Motivo" required>
+                <Input required value={editDraft.reason} onChange={(event) => setEditDraft((current) => current ? ({ ...current, reason: event.target.value }) : current)} />
+              </Field>
+              <Field className="md:col-span-2 xl:col-span-4" label="Observaciones">
+                <Textarea rows={3} value={editDraft.observations} onChange={(event) => setEditDraft((current) => current ? ({ ...current, observations: event.target.value }) : current)} />
+              </Field>
+            </div>
+            <div className="mt-3 rounded-lg border border-blue-400/20 bg-blue-500/[0.05] px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-blue-300">Nuevo reparto</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {splitManualDebtInstallments(editDraft.totalTickets, editDraft.months).map((amount, index) => {
+                  const period = addMonths(editDraft.startYear, editDraft.startMonth, index);
+                  return <span key={`${period.year}-${period.month}`} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-200">{monthLabel(period.year, period.month)} · {amount} ticket{amount === 1 ? '' : 's'}</span>;
+                })}
+              </div>
+            </div>
+            {editMessage ? <p className="mt-3 text-xs font-semibold text-red-300">{editMessage}</p> : null}
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton iconOnly={false} onClick={() => { setEditingId(null); setEditDraft(null); setEditMessage(''); }} size="sm" variant="secondary">Cancelar</ActionButton>
+            <ActionButton icon={Save} iconOnly={false} onClick={() => void saveEdit()} size="sm" variant="save">Guardar cambios</ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
 
       {cancellingId ? (
         <ModalShell labelledBy="cancel-manual-debt-title" maxWidthClassName="max-w-lg" onClose={() => setCancellingId(null)}>

@@ -1496,6 +1496,28 @@ export function TicketRestaurantePage({
     });
   };
 
+  const updateManualDebt = async (id: string, draft: TicketManualDebtDraft) => {
+    const existing = (config.manualDebts ?? []).find((debt) => debt.id === id);
+    if (!existing) {
+      return { ok: false, message: 'No se ha encontrado la deuda manual que quieres modificar.' };
+    }
+    const now = new Date().toISOString();
+    const updated = buildTicketManualDebt(draft, now, existing.id);
+    return updateConfig({
+      ...config,
+      manualDebts: (config.manualDebts ?? []).map((debt) =>
+        debt.id === id
+          ? {
+              ...updated,
+              createdAt: existing.createdAt,
+              cancelledAt: existing.cancelledAt,
+              cancellationReason: existing.cancellationReason,
+            }
+          : debt,
+      ),
+    });
+  };
+
   const cancelManualDebt = async (id: string, reason: string) => {
     const now = new Date().toISOString();
     return updateConfig({
@@ -1836,6 +1858,7 @@ export function TicketRestaurantePage({
           month={calculationMonth}
           onCancel={cancelManualDebt}
           onCreate={createManualDebt}
+          onUpdate={updateManualDebt}
           people={visiblePeople}
           year={calculationYear}
         />
