@@ -37,6 +37,8 @@ function normalizeRequest(value: unknown): LotteryRequest | null {
     nombre: typeof candidate.nombre === 'string' ? candidate.nombre : '',
     email: typeof candidate.email === 'string' ? candidate.email : '',
     telefono: typeof candidate.telefono === 'string' ? candidate.telefono : '',
+    empleado: typeof candidate.empleado === 'string' && candidate.empleado.trim() ? candidate.empleado : null,
+    externa: typeof candidate.externa === 'boolean' ? candidate.externa : !candidate.empleado,
     decimosNumero1: Math.max(0, toSafeNumber(candidate.decimosNumero1, toSafeNumber(candidate.decimos, 0))),
     decimosNumero2: Math.max(0, toSafeNumber(candidate.decimosNumero2, 0)),
     pagado: Boolean(candidate.pagado),
@@ -60,6 +62,15 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
   const requests = Array.isArray(candidate.requests)
     ? candidate.requests.map(normalizeRequest).filter((request): request is LotteryRequest => request !== null)
     : [];
+  const storedLoteroBody = typeof candidate.loteroEmailBody === 'string'
+    ? candidate.loteroEmailBody
+    : (typeof candidate.emailBody === 'string' ? candidate.emailBody : '');
+  const hasLegacyLoteroTemplate = storedLoteroBody.trim().startsWith('Hola {{lotero}}')
+    || storedLoteroBody.includes('Te confirmamos el encargo de la campaña de Lotería de Navidad');
+  const storedLoteroSubject = typeof candidate.loteroEmailSubject === 'string'
+    ? candidate.loteroEmailSubject
+    : (typeof candidate.emailSubject === 'string' ? candidate.emailSubject : '');
+  const hasLegacyLoteroSubject = storedLoteroSubject.startsWith('Encargo Lotería de Navidad');
 
   return {
     ...fallback,
@@ -71,12 +82,12 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
     numero1: typeof candidate.numero1 === 'string' ? candidate.numero1 : fallback.numero1,
     numero2: typeof candidate.numero2 === 'string' ? candidate.numero2 : fallback.numero2,
     lotero: { ...fallback.lotero, ...(candidate.lotero ?? {}) },
-    loteroEmailSubject: typeof candidate.loteroEmailSubject === 'string'
-      ? candidate.loteroEmailSubject
-      : (typeof candidate.emailSubject === 'string' ? candidate.emailSubject : fallback.loteroEmailSubject),
-    loteroEmailBody: typeof candidate.loteroEmailBody === 'string'
-      ? candidate.loteroEmailBody
-      : (typeof candidate.emailBody === 'string' ? candidate.emailBody : fallback.loteroEmailBody),
+    loteroEmailSubject: hasLegacyLoteroSubject || !storedLoteroSubject
+      ? fallback.loteroEmailSubject
+      : storedLoteroSubject,
+    loteroEmailBody: hasLegacyLoteroTemplate || !storedLoteroBody
+      ? fallback.loteroEmailBody
+      : storedLoteroBody,
     participantesEmailSubject: typeof candidate.participantesEmailSubject === 'string'
       ? candidate.participantesEmailSubject
       : fallback.participantesEmailSubject,
@@ -120,6 +131,8 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
         nombre: person.nombre,
         email: person.email,
         telefono: person.telefono,
+        empleado: typeof person.empleado === 'string' && person.empleado.trim() ? person.empleado : null,
+        externa: Boolean(person.externa),
         decimosNumero1: 0,
         decimosNumero2: 0,
         pagado: false,

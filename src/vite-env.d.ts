@@ -18,6 +18,7 @@ interface EspecialOutlookDraftPayload {
   html: string;
   to: string[];
   cc: string[];
+  bcc?: string[];
   attachments?: Array<{ fileName: string; buffer: ArrayBuffer }>;
 }
 

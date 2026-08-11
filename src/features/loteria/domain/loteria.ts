@@ -20,6 +20,8 @@ export interface LotteryRequest {
   nombre: string;
   email: string;
   telefono: string;
+  empleado: string | null;
+  externa: boolean;
   decimosNumero1: number;
   decimosNumero2: number;
   pagado: boolean;
@@ -48,25 +50,22 @@ export interface LotteryCampaign {
 
 export const createDefaultLotteryCampaign = (year = new Date().getFullYear()): LotteryCampaign => ({
   year,
-  numero1: '',
-  numero2: '',
+  numero1: '57.565',
+  numero2: '57.977',
   precioDecimo: 20,
   decimosNumero1: 0,
   decimosNumero2: 0,
-  lotero: { nombre: '', email: '', telefono: '' },
-  loteroEmailSubject: `Encargo Lotería de Navidad ${year}`,
+  lotero: { nombre: 'Gustavo/Adelaida', email: '', telefono: '' },
+  loteroEmailSubject: `Lotería de Navidad ${year} - Venta al personal de Metro Bilbao`,
   loteroEmailBody: [
-    'Hola {{lotero}},',
-    '',
-    'Te confirmamos el encargo de la campaña de Lotería de Navidad {{year}}:',
-    '- Número {{numero1}}: {{decimos_numero1}} décimos',
-    '- Número {{numero2}}: {{decimos_numero2}} décimos',
-    '- Precio por décimo: {{precio}} €',
-    '',
-    'Quedamos pendientes de tu confirmación.',
-    '',
-    'Gracias.',
-  ].join('\n'),
+    'Kaixo Gustavo/Adelaida,',
+    'Tal como hemos hablado por teléfono, te envío el listado del personal de Metro Bilbao para la retirada de lotería. Los números que tenemos abonados son el {{numero1}} y el {{numero2}}.',
+    'Como otros años el procedimiento es el mismo, cada empleado podrá retirar únicamente un décimo de cada número como máximo. El plazo de venta que sea por favor desde el 16 de septiembre al 31 de octubre. Si necesitáis modificar las fechas decidme por favor.',
+    'El resto se pondrá a la venta a partir del día 2 de noviembre, los mismos importes que el año pasado.',
+    'Si tenéis dudas o alguna aclaración estamos a vuestra disposición en este correo: RELACIONES_LABORALES@metrobilbao.eus (detrás de relaciones hay un guion bajo) en el teléfono 944254020 y 944254000. Podéis preguntar por mí, Joseba Andoni Segura o Paco Domínguez.',
+    'No os olvidéis que antes de poner el resto a la venta (2 de noviembre) hay de reservar una parte (con los mismos importes del año pasado, aproximadamente) que la gestionaremos nosotros.',
+    'Un cordial saludo.',
+  ].join('\n\n'),
   participantesEmailSubject: `Lotería de Navidad ${year} - Reserva de décimos`,
   participantesEmailBody: [
     'Hola,',

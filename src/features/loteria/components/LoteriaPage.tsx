@@ -20,7 +20,9 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { importLotteryPeopleFromXlsx } from '../domain/importLotteryPeople';
+import { importLotteryPeopleFromXlsx, type ImportedLotteryPerson } from '../domain/importLotteryPeople';
+import { buildLotteryImportReview, type LotteryImportReview } from '../domain/matchLotteryPeople';
+import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   lotteryAvailableCount,
   lotteryAvailableCountByNumber,
@@ -59,6 +61,23 @@ function renderTemplate(template: string, replacements: Record<string, string>):
   );
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function plainTextToHtml(value: string): string {
+  return escapeHtml(value).replace(/\r?\n/g, '<br>');
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -82,6 +101,8 @@ async function exportCampaign(campaign: LotteryCampaign) {
     { header: 'Persona', key: 'nombre', width: 30 },
     { header: 'Email', key: 'email', width: 32 },
     { header: 'Teléfono', key: 'telefono', width: 18 },
+    { header: 'Nº empleado', key: 'empleado', width: 14 },
+    { header: 'Externa', key: 'externa', width: 12 },
     { header: `Décimos ${campaign.numero1 || 'Nº 1'}`, key: 'numero1', width: 16 },
     { header: `Décimos ${campaign.numero2 || 'Nº 2'}`, key: 'numero2', width: 16 },
     { header: 'Total décimos', key: 'totalDecimos', width: 14 },
@@ -96,6 +117,8 @@ async function exportCampaign(campaign: LotteryCampaign) {
     nombre: request.nombre,
     email: request.email,
     telefono: request.telefono,
+    empleado: request.empleado ?? '',
+    externa: request.externa ? 'Sí' : 'No',
     numero1: request.decimosNumero1,
     numero2: request.decimosNumero2,
     totalDecimos: lotteryRequestTotalCount(request),
@@ -109,7 +132,7 @@ async function exportCampaign(campaign: LotteryCampaign) {
   sheet.getColumn('importe').numFmt = '#,##0.00 [$€-es-ES]';
   sheet.getRow(1).font = { bold: true };
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
-  sheet.autoFilter = { from: 'A1', to: 'K1' };
+  sheet.autoFilter = { from: 'A1', to: 'M1' };
 
   const summary = workbook.addWorksheet('Resumen');
   summary.addRows([
@@ -279,15 +302,19 @@ export function LoteriaPage() {
   const load = useLoteriaStore((state) => state.load);
   const saveCampaign = useLoteriaStore((state) => state.saveCampaign);
   const importPeople = useLoteriaStore((state) => state.importPeople);
+  const employees = useEmployeeStore((state) => state.employees);
+  const loadEmployees = useEmployeeStore((state) => state.load);
 
   const [draft, setDraft] = useState(campaign);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>(getInitialSection(campaign));
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'todos' | 'pagados' | 'pendientes'>('todos');
   const [message, setMessage] = useState('');
+  const [importReview, setImportReview] = useState<LotteryImportReview[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadEmployees(); }, [loadEmployees]);
   useEffect(() => {
     setDraft(campaign);
     setActiveSection((current) => current || getInitialSection(campaign));
@@ -369,6 +396,8 @@ export function LoteriaPage() {
           nombre: '',
           email: '',
           telefono: '',
+          empleado: null,
+          externa: true,
           decimosNumero1: 0,
           decimosNumero2: 0,
           pagado: false,
@@ -409,20 +438,92 @@ export function LoteriaPage() {
   const handleImport = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const saved = await saveCampaign(draft);
-      if (!saved.ok) {
-        setMessage(saved.message);
-        return;
-      }
       const people = await importLotteryPeopleFromXlsx(file);
-      const result = await importPeople(people);
-      setMessage(result.message);
+      const review = buildLotteryImportReview(people, employees);
+      setImportReview(review);
+      setMessage(`Leídas ${review.length} personas. Revisa las coincidencias antes de incorporarlas.`);
       setActiveSection('octubre');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se ha podido importar el Excel.');
     } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  const updateImportReview = (id: string, patch: Partial<LotteryImportReview>) => {
+    setImportReview((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
+  };
+
+  const confirmImportReview = async () => {
+    const resolved: ImportedLotteryPerson[] = importReview.map((row) => {
+      if (row.externa || !row.selectedEmpleado) {
+        return { ...row.imported, empleado: null, externa: true };
+      }
+      const employee = employees.find((candidate) => candidate.empleado === row.selectedEmpleado);
+      return {
+        ...row.imported,
+        nombre: employee?.nombreApellidos || row.imported.nombre,
+        empleado: row.selectedEmpleado,
+        externa: false,
+      };
+    });
+    const saved = await saveCampaign(draft);
+    if (!saved.ok) {
+      setMessage(saved.message);
+      return;
+    }
+    const result = await importPeople(resolved);
+    setImportReview([]);
+    setMessage(result.message);
+  };
+
+
+  const generateLoteroOutlookDraft = async () => {
+    if (!isValidEmail(draft.lotero.email)) {
+      setMessage('Introduce un email válido del lotero antes de generar el correo.');
+      return;
+    }
+    const api = window.traccion?.createOutlookDraft;
+    if (!api) {
+      setMessage('La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+    const result = await api({
+      subject: draft.loteroEmailSubject,
+      html: plainTextToHtml(loteroMailPreview),
+      to: [draft.lotero.email.trim()],
+      cc: [],
+      bcc: [],
+      attachments: [],
+    });
+    setMessage(result.message);
+  };
+
+  const generateParticipantsOutlookDraft = async () => {
+    const missingEmails = draft.requests.filter((request) => !isValidEmail(request.email));
+    if (missingEmails.length > 0) {
+      setMessage(`Faltan o no son válidos ${missingEmails.length} emails. Complétalos antes de generar el correo.`);
+      return;
+    }
+    const api = window.traccion?.createOutlookDraft;
+    if (!api) {
+      setMessage('La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+    const bcc = Array.from(new Set(draft.requests.map((request) => request.email.trim().toLowerCase()).filter(Boolean)));
+    if (bcc.length === 0) {
+      setMessage('No hay destinatarios con email para generar el correo.');
+      return;
+    }
+    const result = await api({
+      subject: draft.participantesEmailSubject,
+      html: plainTextToHtml(participantesMailPreview),
+      to: [],
+      cc: [],
+      bcc,
+      attachments: [],
+    });
+    setMessage(result.message);
   };
 
   return (
@@ -548,6 +649,7 @@ export function LoteriaPage() {
                 <h4 className="text-xs font-extrabold text-metro-text">Plantilla de email al lotero</h4>
                 <div className="flex gap-2">
                   <ActionButton icon={Copy} iconOnly={false} onClick={() => void copyToClipboard(`${draft.loteroEmailSubject}\n\n${loteroMailPreview}`, 'Correo al lotero copiado al portapapeles.')} size="sm" variant="duplicate">Copiar</ActionButton>
+                  <ActionButton icon={Mail} iconOnly={false} onClick={() => void generateLoteroOutlookDraft()} size="sm" variant="outlook">Generar Outlook</ActionButton>
                   <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Plantilla del lotero guardada.')} size="sm" variant="save">Guardar</ActionButton>
                 </div>
               </div>
@@ -574,72 +676,185 @@ export function LoteriaPage() {
       {activeSection === 'octubre' ? (
         <SectionShell
           title="Octubre · Comunicación e importación"
-          subtitle="Desde aquí preparas el correo a personas habituales y gestionas el Excel base de solicitantes."
+          subtitle="Importa la relación habitual, revisa el cruce con Plantilla, completa los emails y genera el borrador con todos los destinatarios en CCO."
           actions={<ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Datos de octubre guardados.')} size="sm" variant="save">Guardar octubre</ActionButton>}
         >
-          <div className="grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-xs font-extrabold text-metro-text">Plantilla de email a participantes</h4>
-                <div className="flex items-center gap-2 text-[11px] text-metro-muted">
-                  <label className="inline-flex items-center gap-2">
+          <div className="space-y-3">
+            <div className="grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-xs font-extrabold text-metro-text">Plantilla de email a participantes</h4>
+                  <label className="inline-flex items-center gap-2 text-[11px] text-metro-muted">
                     <input checked={draft.workflow.avisoPersonasEnviado} onChange={(e) => setWorkflowFlag('avisoPersonasEnviado', e.target.checked)} type="checkbox" />
                     Aviso enviado
                   </label>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <label>
-                  <span className={labelClass}>Asunto</span>
-                  <input className={inputClass} value={draft.participantesEmailSubject} onChange={(e) => updateDraft((current) => ({ ...current, participantesEmailSubject: e.target.value }))} />
-                </label>
-                <label>
-                  <span className={labelClass}>Mensaje</span>
-                  <textarea className={textareaClass} value={draft.participantesEmailBody} onChange={(e) => updateDraft((current) => ({ ...current, participantesEmailBody: e.target.value }))} />
-                </label>
-                <div className="flex gap-2">
-                  <ActionButton icon={Copy} iconOnly={false} onClick={() => void copyToClipboard(`${draft.participantesEmailSubject}\n\n${participantesMailPreview}`, 'Correo a participantes copiado al portapapeles.')} size="sm" variant="duplicate">Copiar</ActionButton>
-                  <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Plantilla de participantes guardada.')} size="sm" variant="save">Guardar plantilla</ActionButton>
+                <div className="space-y-2">
+                  <label>
+                    <span className={labelClass}>Asunto</span>
+                    <input className={inputClass} value={draft.participantesEmailSubject} onChange={(e) => updateDraft((current) => ({ ...current, participantesEmailSubject: e.target.value }))} />
+                  </label>
+                  <label>
+                    <span className={labelClass}>Mensaje</span>
+                    <textarea className={textareaClass} value={draft.participantesEmailBody} onChange={(e) => updateDraft((current) => ({ ...current, participantesEmailBody: e.target.value }))} />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <ActionButton icon={Copy} iconOnly={false} onClick={() => void copyToClipboard(`${draft.participantesEmailSubject}\n\n${participantesMailPreview}`, 'Correo a participantes copiado al portapapeles.')} size="sm" variant="duplicate">Copiar</ActionButton>
+                    <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Plantilla de participantes guardada.')} size="sm" variant="save">Guardar plantilla</ActionButton>
+                    <ActionButton icon={Mail} iconOnly={false} onClick={() => void generateParticipantsOutlookDraft()} size="sm" variant="outlook">Generar correo Outlook</ActionButton>
+                  </div>
+                  <p className="text-[10px] leading-4 text-metro-muted">El borrador se crea sin destinatarios visibles en Para/CC: todas las personas de la lista se añaden en CCO.</p>
+                  <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-3">
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-metro-muted">Vista previa</p>
+                    <p className="text-[11px] font-bold text-metro-text">{draft.participantesEmailSubject}</p>
+                    <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-metro-secondary">{participantesMailPreview}</pre>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-3">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-metro-muted">Vista previa</p>
-                  <p className="text-[11px] font-bold text-metro-text">{draft.participantesEmailSubject}</p>
-                  <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-metro-secondary">{participantesMailPreview}</pre>
+              </div>
+
+              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-metro-text">Importar relación habitual</h4>
+                    <p className="mt-1 text-[11px] text-metro-muted">Preparado específicamente para “Contabilidad Lotería”: busca la columna Nombre aunque la cabecera no esté en la primera fila.</p>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-[11px] text-metro-muted">
+                    <input checked={draft.workflow.excelImportado} onChange={(e) => setWorkflowFlag('excelImportado', e.target.checked)} type="checkbox" />
+                    Excel incorporado
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input accept=".xlsx,.xls" className="hidden" onChange={(e) => void handleImport(e.target.files?.[0])} ref={fileRef} type="file" />
+                  <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => fileRef.current?.click()} size="sm" variant="import">Seleccionar Excel</ActionButton>
+                  <SummaryPill label="Plantilla activa" value={String(employees.filter((employee) => !employee.deletedAt).length)} />
+                  <SummaryPill label="Personas ya cargadas" value={String(draft.requests.length)} />
+                </div>
+                <div className="mt-3 rounded-lg border border-metro-border bg-metro-panel p-3 text-[11px] leading-5 text-metro-secondary">
+                  <strong className="text-metro-text">Criterio de cruce:</strong> coincidencia exacta cuando es posible; si el nombre no coincide, se prioriza el apellido para proponer candidatos. Una persona que no pertenezca a Plantilla puede mantenerse expresamente como externa.
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            {importReview.length > 0 ? (
+              <div className="rounded-xl border border-amber-500/35 bg-amber-500/[0.04] p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-xs font-extrabold text-metro-text">Importador Excel</h4>
-                  <label className="inline-flex items-center gap-2 text-[11px] text-metro-muted">
-                    <input checked={draft.workflow.excelImportado} onChange={(e) => setWorkflowFlag('excelImportado', e.target.checked)} type="checkbox" />
-                    Excel importado
-                  </label>
+                  <div>
+                    <h4 className="text-xs font-extrabold text-metro-text">Revisar coincidencias antes de importar</h4>
+                    <p className="mt-1 text-[11px] text-metro-muted">Comprueba especialmente las filas amarillas. Puedes elegir otra persona de Plantilla o marcarla como externa.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-metro-muted">{importReview.length} personas leídas</span>
+                    <ActionButton icon={Save} iconOnly={false} onClick={() => void confirmImportReview()} size="sm" variant="save">Incorporar lista revisada</ActionButton>
+                  </div>
                 </div>
-                <p className="text-xs leading-5 text-metro-muted">
-                  Importa aquí el Excel de personas habituales. El importador actual es flexible y quedará afinado cuando me pases el fichero definitivo.
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <input accept=".xlsx,.xls" className="hidden" onChange={(e) => void handleImport(e.target.files?.[0])} ref={fileRef} type="file" />
-                  <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => fileRef.current?.click()} size="sm" variant="import">Seleccionar Excel</ActionButton>
-                  <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Configuración guardada antes de importar.')} size="sm" variant="secondary">Guardar antes de importar</ActionButton>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <SummaryPill label="Personas cargadas" value={String(draft.requests.length)} />
-                  <SummaryPill label="Solicitudes con pago" value={String(draft.requests.filter((request) => request.pagado).length)} />
+                <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-surface">
+                  <table className="w-full min-w-[940px] border-collapse text-left text-[11px]">
+                    <thead className="bg-metro-raised text-[10px] uppercase tracking-wide text-metro-muted">
+                      <tr>
+                        <th className="px-2 py-2">Nombre en Excel</th>
+                        <th className="px-2 py-2">Resultado</th>
+                        <th className="px-2 py-2">Persona de Plantilla sugerida</th>
+                        <th className="px-2 py-2 text-center">Externa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importReview.map((row) => (
+                        <tr className="border-t border-metro-border" key={row.id}>
+                          <td className="px-2 py-2 font-semibold text-metro-text">{row.imported.nombre}</td>
+                          <td className="px-2 py-2">
+                            <span className={cx(
+                              'inline-flex rounded-full border px-2 py-1 text-[10px] font-bold',
+                              row.matchKind === 'exact'
+                                ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'
+                                : row.matchKind === 'suggested'
+                                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                                  : 'border-red-500/35 bg-red-500/10 text-red-200',
+                            )}>
+                              {row.matchKind === 'exact' ? 'Coincidencia' : row.matchKind === 'suggested' ? 'Revisar sugerencia' : 'No encontrada'}
+                            </span>
+                          </td>
+                          <td className="p-1.5">
+                            <select
+                              className={inputClass}
+                              disabled={row.externa}
+                              value={row.selectedEmpleado ?? ''}
+                              onChange={(e) => updateImportReview(row.id, { selectedEmpleado: e.target.value || null, externa: false })}
+                            >
+                              <option value="">Seleccionar persona...</option>
+                              {row.candidates.map((candidate) => (
+                                <option key={candidate.empleado} value={candidate.empleado}>
+                                  {candidate.nombreApellidos} · {candidate.empleado} · {candidate.score}%
+                                </option>
+                              ))}
+                              {row.selectedEmpleado && !row.candidates.some((candidate) => candidate.empleado === row.selectedEmpleado) ? (
+                                <option value={row.selectedEmpleado}>{employees.find((employee) => employee.empleado === row.selectedEmpleado)?.nombreApellidos || row.selectedEmpleado}</option>
+                              ) : null}
+                            </select>
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <label className="inline-flex items-center gap-2 text-[11px] text-metro-secondary">
+                              <input
+                                checked={row.externa}
+                                onChange={(e) => updateImportReview(row.id, { externa: e.target.checked, selectedEmpleado: e.target.checked ? null : row.selectedEmpleado })}
+                                type="checkbox"
+                              />
+                              Mantener tal cual
+                            </label>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
+            ) : null}
 
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-                <h4 className="mb-2 text-xs font-extrabold text-metro-text">Qué harías en este paso</h4>
-                <ol className="space-y-2 text-xs leading-5 text-metro-secondary">
-                  <li>1. Revisar la plantilla de correo a participantes.</li>
-                  <li>2. Guardarla con el botón correspondiente.</li>
-                  <li>3. Importar el Excel de personas habituales.</li>
-                  <li>4. Pasar al paso de seguimiento para asignar décimos y registrar pagos.</li>
-                </ol>
+            <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-extrabold text-metro-text">Lista de comunicación</h4>
+                  <p className="mt-1 text-[11px] text-metro-muted">El email se guarda en Lotería. No modifica la ficha de Plantilla.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <SummaryPill label="Emails completos" value={`${draft.requests.filter((request) => isValidEmail(request.email)).length} / ${draft.requests.length}`} tone={draft.requests.every((request) => isValidEmail(request.email)) && draft.requests.length > 0 ? 'good' : 'alert'} />
+                  <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Emails de la lista guardados.')} size="sm" variant="save">Guardar emails</ActionButton>
+                  <ActionButton icon={Mail} iconOnly={false} onClick={() => void generateParticipantsOutlookDraft()} size="sm" variant="outlook">Generar correo CCO</ActionButton>
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-panel">
+                <table className="w-full min-w-[980px] border-collapse text-left text-[11px]">
+                  <thead className="bg-metro-raised text-[10px] uppercase tracking-wide text-metro-muted">
+                    <tr>
+                      <th className="px-2 py-2">Persona</th>
+                      <th className="px-2 py-2">Vinculación</th>
+                      <th className="px-2 py-2">Email para lotería</th>
+                      <th className="px-2 py-2">Teléfono</th>
+                      <th className="w-9 px-2 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {draft.requests.map((request) => (
+                      <tr className="border-t border-metro-border" key={request.id}>
+                        <td className="p-1.5"><input className={inputClass} value={request.nombre} onChange={(e) => updateRequest(request.id, { nombre: e.target.value })} /></td>
+                        <td className="px-2 py-1.5">
+                          {request.externa ? (
+                            <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-200">Externa</span>
+                          ) : (
+                            <span className="inline-flex rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-200">Plantilla {request.empleado ? `· ${request.empleado}` : ''}</span>
+                          )}
+                        </td>
+                        <td className="p-1.5">
+                          <input className={cx(inputClass, request.email && !isValidEmail(request.email) && 'border-amber-500/60')} placeholder="nombre@dominio.es" type="email" value={request.email} onChange={(e) => updateRequest(request.id, { email: e.target.value })} />
+                        </td>
+                        <td className="p-1.5"><input className={inputClass} value={request.telefono} onChange={(e) => updateRequest(request.id, { telefono: e.target.value })} /></td>
+                        <td className="px-1 py-1.5"><button className="grid h-7 w-7 place-items-center rounded-md text-metro-muted hover:bg-red-500/10 hover:text-red-300" onClick={() => removePerson(request.id)} type="button"><Trash2 size={13} /></button></td>
+                      </tr>
+                    ))}
+                    {draft.requests.length === 0 ? (
+                      <tr><td className="px-3 py-7 text-center text-xs text-metro-muted" colSpan={5}>Importa el Excel para crear la lista habitual o añade personas manualmente desde Seguimiento.</td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

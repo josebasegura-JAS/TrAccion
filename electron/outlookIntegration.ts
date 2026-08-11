@@ -20,6 +20,7 @@ interface OutlookDraftPayload {
   html: string;
   to: string[];
   cc: string[];
+  bcc: string[];
   attachments: OutlookDraftAttachment[];
 }
 
@@ -107,6 +108,7 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
   const html = typeof htmlSource === 'string' ? htmlSource : '';
   const to = normalizeRecipientList(candidate.to);
   const cc = normalizeRecipientList(candidate.cc);
+  const bcc = normalizeRecipientList(candidate.bcc);
   const attachments = normalizeOutlookDraftAttachments((candidate as { attachments?: unknown }).attachments);
 
   if (
@@ -114,12 +116,13 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
     html.length > 100_000 ||
     to.length > 200 ||
     cc.length > 200 ||
+    bcc.length > 200 ||
     (!subject && !html && attachments.length === 0)
   ) {
     return null;
   }
 
-  return { subject, html, to, cc, attachments };
+  return { subject, html, to, cc, bcc, attachments };
 }
 
 function normalizeOutlookCalendarPayload(value: unknown): OutlookCalendarPayload | null {
@@ -166,6 +169,7 @@ function buildOutlookDraftPowerShellScript(payloadPath: string): string {
     '$mail.Subject = [string]$payload.subject',
     '$mail.To = [string]$payload.to',
     '$mail.CC = [string]$payload.cc',
+    '$mail.BCC = [string]$payload.bcc',
     '$mail.HTMLBody = [string]$payload.html',
     'foreach ($attachment in @($payload.attachments)) { if ([string]$attachment.path) { $mail.Attachments.Add([string]$attachment.path) | Out-Null } }',
     '$mail.Display() | Out-Null',
@@ -192,6 +196,7 @@ function buildOutlookDraftVbs(payloadPath: string): string {
     'Mail.Subject = Payload("subject")',
     'Mail.To = Payload("to")',
     'Mail.CC = Payload("cc")',
+    'Mail.BCC = Payload("bcc")',
     'Mail.HTMLBody = Payload("html")',
     'Dim Attachments, AttachmentIndex',
     'Set Attachments = Payload("attachments")',
@@ -245,6 +250,7 @@ async function withOutlookDraftTempFiles<T>(
     html: payload.html,
     to: payload.to.join(';'),
     cc: payload.cc.join(';'),
+    bcc: payload.bcc.join(';'),
     attachments: attachmentPayload,
   });
 
