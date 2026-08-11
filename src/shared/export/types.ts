@@ -15,4 +15,5 @@ export type ExportTablePayload<T> = {
   generatedAt?: Date;
   exportProfile?: string;
   formatPreset?: string;
+  rowGroupValue?: (row: T) => ExportCellValue;
 };

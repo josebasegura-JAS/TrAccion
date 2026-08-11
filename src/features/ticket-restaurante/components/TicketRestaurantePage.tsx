@@ -331,6 +331,55 @@ const formatIsoDateForExport = (value: string): string => {
   return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
 };
 
+const formatManualDebtForExport = (row: TicketPersonCalculation): string => {
+  const applied = row.deudaAplicadaDetalle.filter((detail) =>
+    detail.motivo.startsWith('Deuda manual:'),
+  );
+  const pending = row.deudaPendienteDetalle.filter((detail) =>
+    detail.motivo.startsWith('Deuda manual:'),
+  );
+
+  const groups = new Map<
+    string,
+    { motivo: string; mesOrigen: string; applied: number; pending: number }
+  >();
+
+  const addDetails = (
+    details: readonly typeof row.deudaAplicadaDetalle[number][],
+    field: 'applied' | 'pending',
+  ) => {
+    details.forEach((detail) => {
+      const key = `${detail.motivo}\u0000${detail.mesOrigen}`;
+      const current = groups.get(key) ?? {
+        motivo: detail.motivo.replace(/^Deuda manual:\s*/, '').trim(),
+        mesOrigen: detail.mesOrigen,
+        applied: 0,
+        pending: 0,
+      };
+      current[field] += 1;
+      groups.set(key, current);
+    });
+  };
+
+  addDetails(applied, 'applied');
+  addDetails(pending, 'pending');
+
+  return Array.from(groups.values())
+    .map((group) => {
+      const origin = /^\d{4}-\d{2}$/.test(group.mesOrigen)
+        ? `${group.mesOrigen.slice(5, 7)}/${group.mesOrigen.slice(0, 4)}`
+        : group.mesOrigen;
+      const counts = [
+        group.applied > 0 ? `${group.applied} aplicado${group.applied === 1 ? '' : 's'}` : '',
+        group.pending > 0 ? `${group.pending} pendiente${group.pending === 1 ? '' : 's'}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return `${group.motivo} · origen ${origin} · ${counts}`;
+    })
+    .join('; ');
+};
+
 const monthlyCalculationExportColumns = (
   config: TicketRestaurantConfig,
   year: number,
@@ -373,6 +422,11 @@ const monthlyCalculationExportColumns = (
       key: 'ausencias',
       header: 'Ausencias',
       value: (row) => formatAppliedAbsencesForExport(row, absences),
+    },
+    {
+      key: 'deudaManual',
+      header: 'Deuda manual',
+      value: (row) => formatManualDebtForExport(row),
     },
     {
       key: 'regularizacionDeuda',
@@ -1859,6 +1913,7 @@ export function TicketRestaurantePage({
               calculationAbsences,
             ),
             rows: sortMonthlyCalculationRows(monthCalculation.rows),
+            rowGroupValue: (row) => row.calendario,
             filterLabel: buildFilterLabel([
               ['Mes', calculationMonth],
               ['Año', calculationYear],

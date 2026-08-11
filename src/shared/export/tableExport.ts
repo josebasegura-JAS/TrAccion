@@ -199,10 +199,32 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
   if (isTicketRestaurantMonthlyPreset) {
     const orange = toExcelColor('#FF9900');
     const grey = toExcelColor('#A6A6A6');
-    const lightGreen = toExcelColor('#E2F0D9');
     const white = toExcelColor('#FFFFFF');
     const black = toExcelColor('#000000');
+    const manualDebtFill = toExcelColor('#DDEBF7');
     const regularizationFill = toExcelColor('#FFF2CC');
+    const calendarPalette = [
+      '#EAF2F8',
+      '#E8F5E9',
+      '#FDF2E9',
+      '#F4ECF7',
+      '#FFF8E1',
+      '#FCEEF2',
+      '#E8F6F3',
+      '#F2F3F4',
+    ];
+    const calendarColorByGroup = new Map<string, string>();
+    if (payload.rowGroupValue) {
+      payload.rows.forEach((row) => {
+        const group = normalizeCellValue(payload.rowGroupValue?.(row)).trim() || 'Sin calendario';
+        if (!calendarColorByGroup.has(group)) {
+          calendarColorByGroup.set(
+            group,
+            calendarPalette[calendarColorByGroup.size % calendarPalette.length] ?? '#FFFFFF',
+          );
+        }
+      });
+    }
     const thinBlackBorder = { style: 'thin' as const, color: black };
     const allThinBorders = {
       top: thinBlackBorder,
@@ -288,23 +310,31 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
 
     payload.rows.forEach((row, rowIndex) => {
       const excelRow = worksheet.getRow(rowIndex + 7);
+      const group = payload.rowGroupValue
+        ? normalizeCellValue(payload.rowGroupValue(row)).trim() || 'Sin calendario'
+        : '';
+      const groupFill = group
+        ? toExcelColor(calendarColorByGroup.get(group) ?? '#FFFFFF')
+        : white;
+
       payload.columns.forEach((column, columnIndex) => {
         const cell = excelRow.getCell(columnIndex + 1);
         const value = column.value(row);
-        const isIdentityColumn = columnIndex < 6;
+        const hasValue = Boolean(normalizeCellValue(value).trim());
+        const isManualDebtColumn = column.key === 'deudaManual';
         const isRegularizationColumn = column.key === 'regularizacionDeuda';
         cell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor:
-            isRegularizationColumn && normalizeCellValue(value).trim()
+            isRegularizationColumn && hasValue
               ? regularizationFill
-              : isIdentityColumn
-                ? lightGreen
-                : white,
+              : isManualDebtColumn && hasValue
+                ? manualDebtFill
+                : groupFill,
         };
         cell.font = { color: black, size: 10 };
-        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: isRegularizationColumn };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: isManualDebtColumn || isRegularizationColumn };
         cell.border = allThinBorders;
 
         if (value === null || value === undefined || value === '') {
@@ -334,7 +364,7 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
       excelRow.height = 18;
     });
 
-    const presetWidths = [17, 22, 22, 22, 22, 19.1, 13.4, 13.4, 23.4, 19.6, 18.9, 13.8, 20, 34];
+    const presetWidths = [17, 22, 22, 22, 22, 19.1, 13.4, 13.4, 23.4, 19.6, 18.9, 13.8, 20, 32, 34];
     payload.columns.forEach((_, columnIndex) => {
       worksheet.getColumn(columnIndex + 1).width = presetWidths[columnIndex] ?? 18;
     });
