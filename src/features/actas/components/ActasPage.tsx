@@ -743,10 +743,7 @@ export function ActasPage() {
           selectedActaId={selectedWorkflowActaId}
           onSelectedActaIdChange={setSelectedWorkflowActaId}
           onNewActa={() => openEditor()}
-          onOpenActa={(acta) => {
-            setIsWorkflowHome(false);
-            openEditor(acta);
-          }}
+          onOpenActa={(acta) => openEditor(acta)}
           onOpenOperational={openOperationalView}
         />
       ) : (
@@ -757,6 +754,7 @@ export function ActasPage() {
         helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
         actions={
           <Toolbar
+            className="gap-1.5"
             filters={
               <>
                 <SearchField
@@ -764,7 +762,7 @@ export function ActasPage() {
                   onClear={() => setSearch('')}
                   placeholder="Buscar por título, estado, actualización, alegación o ruta..."
                   value={search}
-                  wrapperClassName="min-w-[320px]"
+                  wrapperClassName="min-w-[240px] flex-1"
                 />
                 <FilterSelect
                   allLabel="Todos los estados"
@@ -772,7 +770,7 @@ export function ActasPage() {
                   onChange={(event) => setStateFilter(event.target.value)}
                   options={ACTA_STATES}
                   value={stateFilter}
-                  wrapperClassName="w-[210px]"
+                  wrapperClassName="w-[185px]"
                 />
                 <FilterSelect
                   allLabel="Todos los años"
@@ -780,7 +778,7 @@ export function ActasPage() {
                   onChange={(event) => setYearFilter(event.target.value)}
                   options={years.map((year) => ({ label: year, value: year }))}
                   value={yearFilter}
-                  wrapperClassName="w-[150px]"
+                  wrapperClassName="w-[120px]"
                 />
               </>
             }
@@ -867,6 +865,7 @@ export function ActasPage() {
           onSortChange={setSort}
           rows={openActas}
           sort={preferences.sort}
+          maxHeightClassName="max-h-none"
         />
       </div>
 
