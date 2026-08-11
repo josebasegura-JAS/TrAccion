@@ -10,7 +10,6 @@ import {
   FileSpreadsheet,
   ReceiptText,
   Settings,
-  Ticket,
   Upload,
   UserPlus,
   Users,
@@ -289,26 +288,22 @@ export function TicketRestauranteWorkflow({
 
           <section className="relative ml-4 rounded-lg border border-metro-border bg-metro-panel px-3 py-2.5 shadow-card">
             <StepNumber number={2} />
-            <div className="grid gap-2.5 md:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)] md:items-center">
-              <div className="pl-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-extrabold text-metro-text">Personas con derecho</h3>
-                  <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-blue-300">Base anual + ajustes</span>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-1.5">
-                  {[
-                    [activePeople, 'activas'],
-                    [inactivePeople, 'inactivas'],
-                    [activePeople + inactivePeople, 'total'],
-                  ].map(([value, label]) => (
-                    <div key={String(label)} className="rounded-md border border-metro-border bg-metro-surface/75 px-2 py-1.5 text-center">
-                      <p className="text-base font-extrabold leading-5 text-metro-text">{value}</p>
-                      <p className="text-[9px] font-semibold text-metro-muted">{label}</p>
-                    </div>
-                  ))}
-                </div>
+            <div className="pl-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-extrabold text-metro-text">Personas con derecho</h3>
+                <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-blue-300">Base anual + ajustes</span>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-5">
+                {[
+                  [activePeople, 'activas'],
+                  [inactivePeople, 'inactivas'],
+                  [activePeople + inactivePeople, 'total'],
+                ].map(([value, label]) => (
+                  <div key={String(label)} className="flex min-h-[48px] flex-col justify-center rounded-md border border-metro-border bg-metro-surface/75 px-2 py-1.5 text-center">
+                    <p className="text-base font-extrabold leading-5 text-metro-text">{value}</p>
+                    <p className="text-[9px] font-semibold text-metro-muted">{label}</p>
+                  </div>
+                ))}
                 <WorkflowAction icon={Upload} label="Importar personas" onClick={onImportPeople} />
                 <WorkflowAction icon={Users} label="Gestionar personas" onClick={onOpenPeople} />
               </div>
@@ -331,11 +326,10 @@ export function TicketRestauranteWorkflow({
               </div>
             </div>
 
-            <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
               <FlowStep icon={Upload} title="a) Importar ausencias" detail="Excel mensual" status={absenceCount > 0 ? `${absenceCount} cargadas` : 'Sin registros'} statusTone={absenceCount > 0 ? 'done' : 'info'} onClick={onImportAbsences} />
               <FlowStep icon={Utensils} title="b) Importar manutenciones" detail="Gastos del mes" status={manutencionCount > 0 ? `${manutencionCount} cargadas` : 'Pendiente'} statusTone={manutencionCount > 0 ? 'done' : 'pending'} onClick={onImportManutenciones} />
-              <FlowStep icon={Calculator} title="c) Calcular cómputo" detail="Pedido previsto" status={readyForCalculation ? 'Disponible' : 'Revisar base'} statusTone={readyForCalculation ? 'done' : 'pending'} onClick={onOpenMonthlyCalculation} />
-              <FlowStep icon={Ticket} title="d) Preparar pedido" detail="Revisar y exportar" status="Revisar / exportar" statusTone="info" onClick={onOpenMonthlyCalculation} highlighted />
+              <FlowStep icon={Calculator} title="c) Calcular y preparar pedido" detail="Revisar cómputo y exportar" status={readyForCalculation ? 'Revisar / exportar' : 'Revisar base'} statusTone={readyForCalculation ? 'info' : 'pending'} onClick={onOpenMonthlyCalculation} highlighted />
             </div>
 
             <div className="mt-2 grid gap-1.5 grid-cols-2 xl:grid-cols-4">
