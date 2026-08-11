@@ -42,7 +42,7 @@ export function TicketRestauranteManualPeoplePanel({
   const [suggestionField, setSuggestionField] = useState<'empleado' | 'nombre' | null>(null);
   const key = monthKey(year, month);
 
-  const allManualPeople = config.manualPeople ?? [];
+  const allManualPeople = useMemo<TicketManualPerson[]>(() => config.manualPeople ?? [], [config.manualPeople]);
   const people = useMemo<TicketManualPerson[]>(
     () => [...allManualPeople]
       .filter((person) => person.activo && (!person.inactiveFromMonth || key < person.inactiveFromMonth))
