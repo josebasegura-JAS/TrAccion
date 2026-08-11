@@ -57,6 +57,10 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Sorteos',
     subtitle: 'Creación de sorteos, exclusiones e histórico de resultados.',
   },
+  loteria: {
+    title: 'Lotería',
+    subtitle: 'Campaña anual, solicitudes de décimos, cobros y control de caja.',
+  },
   vinculograma: {
     title: 'Vinculograma',
     subtitle: 'Vinculaciones vigentes e histórico entre personas y áreas.',

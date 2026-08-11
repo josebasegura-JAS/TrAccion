@@ -231,9 +231,11 @@ export function LoteriaPage() {
   };
 
   const renderedTemplate = draft.emailBody
-    .replaceAll('{{numero1}}', draft.numero1 || '—')
-    .replaceAll('{{numero2}}', draft.numero2 || '—')
-    .replaceAll('{{precio}}', draft.precioDecimo.toLocaleString('es-ES', { minimumFractionDigits: 2 }));
+    .split('{{numero1}}').join(draft.numero1 || '—')
+    .split('{{numero2}}').join(draft.numero2 || '—')
+    .split('{{precio}}').join(
+      draft.precioDecimo.toLocaleString('es-ES', { minimumFractionDigits: 2 }),
+    );
 
   return (
     <div className="space-y-3">
