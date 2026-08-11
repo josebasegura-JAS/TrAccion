@@ -156,6 +156,18 @@ export interface TicketManualDebtDraft {
   observations: string;
 }
 
+export interface TicketManualPerson {
+  id: string;
+  empleado: string;
+  nombreApellidos: string;
+  dni: string;
+  activo: boolean;
+  includeContribution: boolean;
+  monthlyTickets: Record<string, number>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TicketRestaurantConfig {
   importeTicket: number;
   pedidoMensual: number;
@@ -163,6 +175,7 @@ export interface TicketRestaurantConfig {
   rules: TicketCalculationRules;
   manualDebts?: TicketManualDebt[];
   debtRegularizations?: TicketDebtRegularization[];
+  manualPeople?: TicketManualPerson[];
 }
 
 export interface TicketDebtDetailDay {
@@ -195,6 +208,7 @@ export interface TicketPersonCalculation {
   deudaPendiente: number;
   ticketsFinales: number;
   importe: number;
+  manualEntry?: boolean;
   ausenciaIds: string[];
   ausenciaDiasDescontados: Record<string, number>;
   deudaEntranteDetalle: TicketDebtDetailDay[];
@@ -233,6 +247,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   },
   manualDebts: [],
   debtRegularizations: [],
+  manualPeople: [],
 };
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
@@ -721,6 +736,43 @@ function calculateTicketMonthInternal(
           );
     })
     .sort(compareTicketCalculationRowsByEmployee);
+
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+  const manualRows = (effectiveConfig.manualPeople ?? [])
+    .filter((person) => person.activo && (mode === 'monthlyOrderWithDebt' || person.includeContribution))
+    .map((person): TicketPersonCalculation => {
+      const tickets = Math.max(0, Math.trunc(person.monthlyTickets[monthKey] ?? 0));
+      const effectivePrice = getEffectiveTicketPrice(effectiveConfig, year, month);
+      const name = splitTicketPersonFullName(person.nombreApellidos);
+      return {
+        empleado: person.empleado,
+        nombre: name.nombre,
+        apellido1: name.apellido1,
+        apellido2: name.apellido2,
+        dni: person.dni,
+        nombreApellidos: person.nombreApellidos,
+        puesto: '',
+        calendario: 'Manual',
+        diasTeoricos: 0,
+        diasSinTicket: 0,
+        ausenciasMes: 0,
+        hojasGastoMes: 0,
+        deudaEntrante: 0,
+        ausenciasAplicadas: 0,
+        deudaPendiente: 0,
+        ticketsFinales: tickets,
+        importe: roundCurrency(tickets * effectivePrice),
+        manualEntry: true,
+        ausenciaIds: [],
+        ausenciaDiasDescontados: {},
+        deudaEntranteDetalle: [],
+        deudaAplicadaDetalle: [],
+        deudaPendienteDetalle: [],
+        hojaGastoDetalle: [],
+      };
+    });
+  rows.push(...manualRows);
+  rows.sort(compareTicketCalculationRowsByEmployee);
 
   return {
     year,
@@ -1516,6 +1568,33 @@ function normalizeDebtRegularizations(value: unknown): TicketDebtRegularization[
   });
 }
 
+function normalizeManualPeople(value: unknown): TicketManualPerson[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<TicketManualPerson>;
+    if (typeof item.id !== 'string' || typeof item.empleado !== 'string' || typeof item.nombreApellidos !== 'string') return [];
+    const monthlyTickets = item.monthlyTickets && typeof item.monthlyTickets === 'object'
+      ? Object.fromEntries(Object.entries(item.monthlyTickets).flatMap(([key, value]) =>
+          /^\d{4}-\d{2}$/.test(key) && typeof value === 'number' && Number.isFinite(value)
+            ? [[key, Math.max(0, Math.trunc(value))]]
+            : [],
+        ))
+      : {};
+    return [{
+      id: item.id,
+      empleado: normalizeTicketEmployeeNumber(item.empleado),
+      nombreApellidos: item.nombreApellidos.trim(),
+      dni: typeof item.dni === 'string' ? item.dni.trim() : '',
+      activo: item.activo !== false,
+      includeContribution: item.includeContribution === true,
+      monthlyTickets,
+      createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
+      updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
+    }];
+  });
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -1536,6 +1615,7 @@ export function normalizeTicketRestaurantConfig(
     rules: normalizeTicketCalculationRules(config.rules),
     manualDebts: normalizeManualDebts(config.manualDebts),
     debtRegularizations: normalizeDebtRegularizations(config.debtRegularizations),
+    manualPeople: normalizeManualPeople(config.manualPeople),
   };
 }
 

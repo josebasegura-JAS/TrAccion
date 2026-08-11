@@ -1236,3 +1236,37 @@ describe('ticket restaurante — regularización de deuda automática', () => {
     expect(july.rows[0]?.deudaPendiente).toBe(0);
   });
 });
+
+
+describe('ticket restaurante — personas manuales', () => {
+  const manualConfig = {
+    ...DEFAULT_TICKET_RESTAURANT_CONFIG,
+    manualPeople: [{
+      id: 'manual-1',
+      empleado: '9001',
+      nombreApellidos: 'Manual Prueba, Ana',
+      dni: '00000000T',
+      activo: true,
+      includeContribution: true,
+      monthlyTickets: { '2026-09': 17 },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }],
+  };
+
+  it('mantiene una persona sin calendario en el cómputo mensual con los tickets indicados', () => {
+    const result = calculateMonthlyTicketOrder([], [], [], manualConfig, 2026, 9);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ empleado: '9001', calendario: 'Manual', ticketsFinales: 17, manualEntry: true });
+  });
+
+  it('solo la incluye en cotización cuando está marcada', () => {
+    const included = calculateTicketContribution([], [], [], manualConfig, 2026, 9);
+    expect(included.rows[0]?.ticketsFinales).toBe(17);
+    const excluded = calculateTicketContribution([], [], [], {
+      ...manualConfig,
+      manualPeople: manualConfig.manualPeople.map((person) => ({ ...person, includeContribution: false })),
+    }, 2026, 9);
+    expect(excluded.rows).toHaveLength(0);
+  });
+});

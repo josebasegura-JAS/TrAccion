@@ -64,6 +64,7 @@ import { TicketPriceModal, TicketRulesModal } from './TicketRestauranteConfigMod
 import { CalculationPanel } from './TicketRestauranteCalculationPanel';
 import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
 import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
+import { TicketRestauranteManualPeoplePanel } from './TicketRestauranteManualPeoplePanel';
 import {
   AbsencePreviewModal,
   AbsencesTable,
@@ -80,7 +81,7 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
     ordered: true,
     items: [
       'Configurar calendarios: qué días de la semana generan ticket y qué fechas concretas quedan excluidas (festivos, cierres...).',
-      'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario.',
+      'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario. Las excepciones sin calendario se gestionan como Personas manuales desde el Cómputo mensual.',
       'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
       'Revisar Deudas y regularizaciones: ahí se ve la deuda arrastrada y se puede fijar un saldo real justificado si el cálculo automático no coincide con la situación real.',
       'Revisar "Cómputo mensual" para hacer el pedido del mes.',
@@ -151,7 +152,7 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Cotización y exportación',
     items: [
-      'La vista de cotización muestra, para el mes y calendario de cada persona, los tickets realmente generados y su importe.',
+      'La vista de cotización muestra, para el mes y calendario de cada persona, los tickets realmente generados y su importe. Las Personas manuales solo aparecen aquí si tienen marcada la opción Incluir en cotización, usando el mismo número de tickets introducido para ese mes.',
       'Permite revisar caso a caso antes de dar por bueno el mes.',
       'Los resultados pueden exportarse/imprimirse para su uso fuera de la aplicación.',
     ],
@@ -1923,7 +1924,15 @@ export function TicketRestaurantePage({
           people={visiblePeople}
         />
       ) : activeSubview === 'computoMensual' ? (
-        <CalculationPanel
+        <>
+          <TicketRestauranteManualPeoplePanel
+            config={config}
+            month={calculationMonth}
+            onUpdateConfig={updateConfig}
+            regularPeople={visiblePeople}
+            year={calculationYear}
+          />
+          <CalculationPanel
           absences={calculationAbsences}
           calendars={visibleCalendars}
           calculation={monthCalculation}
@@ -1952,7 +1961,8 @@ export function TicketRestaurantePage({
           onPreviousMonth={() => moveCalculationMonth(-1)}
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
-        />
+          />
+        </>
       ) : activeSubview === 'computoCotizacion' ? (
         <CalculationPanel
           absences={calculationAbsences}

@@ -171,7 +171,7 @@ export function CalculationPanel({
         id: 'diasTeoricos',
         header: 'Días teóricos',
         accessor: (row) => row.diasTeoricos,
-        render: (row) => row.diasTeoricos,
+        render: (row) => (row.manualEntry ? '—' : row.diasTeoricos),
         width: 110,
         minWidth: 95,
         maxWidth: 155,
@@ -183,7 +183,7 @@ export function CalculationPanel({
         id: 'hojaGastos',
         header: 'Hoja gastos',
         accessor: (row) => row.hojasGastoMes,
-        render: (row) => row.hojasGastoMes,
+        render: (row) => (row.manualEntry ? '—' : row.hojasGastoMes),
         width: 115,
         minWidth: 100,
         maxWidth: 170,
@@ -195,7 +195,7 @@ export function CalculationPanel({
         id: 'ausencias',
         header: mode === 'monthly' ? 'Ausencias aplicadas' : 'Ausencias mes',
         accessor: (row) => (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
-        render: (row) => (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
+        render: (row) => row.manualEntry ? '—' : (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
         width: 130,
         minWidth: 105,
         maxWidth: 190,
@@ -212,7 +212,7 @@ export function CalculationPanel({
           tone: 'attention',
           header: 'Deuda entrante',
           accessor: (row) => row.deudaEntrante,
-          render: (row) => row.deudaEntrante,
+          render: (row) => (row.manualEntry ? '—' : row.deudaEntrante),
           width: 120,
           minWidth: 105,
           maxWidth: 175,
@@ -225,7 +225,7 @@ export function CalculationPanel({
           tone: 'attention',
           header: 'Deuda pendiente',
           accessor: (row) => row.deudaPendiente,
-          render: (row) => row.deudaPendiente,
+          render: (row) => (row.manualEntry ? '—' : row.deudaPendiente),
           width: 125,
           minWidth: 110,
           maxWidth: 180,
@@ -251,6 +251,9 @@ export function CalculationPanel({
             >
               {row.ticketsFinales}
             </span>
+            {row.manualEntry ? (
+              <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-[9px] font-bold text-metro-muted">Manual</span>
+            ) : (
             <button
               aria-label={`Ver cálculo de ${row.nombreApellidos}`}
               data-tip="Ver detalle del cálculo"
@@ -264,6 +267,7 @@ export function CalculationPanel({
             >
               <Search className="h-3.5 w-3.5" />
             </button>
+            )}
           </div>
         ),
         width: 135,
