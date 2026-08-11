@@ -904,24 +904,37 @@ export function TicketRestaurantePage({
 
   const visibleAbsences = useMemo<TicketAbsenceDisplayRow[]>(
     () =>
-      filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth).map((absence) => ({
-        ...absence,
-        ...calculateTicketAbsenceMonthImpact(
-          absence,
-          people,
-          visibleCalendars,
-          config,
-          absenceYear,
-          absenceMonth,
-        ),
-      })),
+      filterTicketRestaurantAbsencesByMonth(absences, absenceYear, absenceMonth)
+        .map((absence) => ({
+          ...absence,
+          ...calculateTicketAbsenceMonthImpact(
+            absence,
+            people,
+            visibleCalendars,
+            config,
+            absenceYear,
+            absenceMonth,
+          ),
+        }))
+        .filter((absence) => absence.diasTicketMes > 0),
     [absenceMonth, absenceYear, absences, config, people, visibleCalendars],
   );
 
 
   const workflowAbsenceCount = useMemo(
-    () => filterTicketRestaurantAbsencesByMonth(absences, calculationYear, calculationMonth).length,
-    [absences, calculationMonth, calculationYear],
+    () =>
+      filterTicketRestaurantAbsencesByMonth(absences, calculationYear, calculationMonth).filter(
+        (absence) =>
+          calculateTicketAbsenceMonthImpact(
+            absence,
+            people,
+            visibleCalendars,
+            config,
+            calculationYear,
+            calculationMonth,
+          ).diasTicketMes > 0,
+      ).length,
+    [absences, calculationMonth, calculationYear, config, people, visibleCalendars],
   );
   const workflowManutencionCount = useMemo(
     () =>
