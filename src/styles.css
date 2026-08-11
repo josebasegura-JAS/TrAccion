@@ -57,6 +57,20 @@ textarea {
   font: inherit;
 }
 
+/*
+ * Los menús nativos de <select> no siempre heredan correctamente la paleta
+ * oscura en Electron/Chromium. Fijamos colores explícitos para que las
+ * opciones sean legibles en todos los formularios que usan el Select común.
+ */
+select option {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+select option:disabled {
+  color: var(--text-muted);
+}
+
 input::placeholder,
 textarea::placeholder {
   color: rgba(148, 163, 184, 0.72);
