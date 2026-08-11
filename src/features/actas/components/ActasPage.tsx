@@ -748,6 +748,29 @@ export function ActasPage() {
         />
       ) : (
         <>
+      <div className="sticky top-0 z-20 -mx-1 flex items-center border-b border-metro-border/70 bg-metro-app/95 px-1 pb-2 pt-0.5 backdrop-blur">
+        <ActionButton
+          variant="secondary"
+          icon={ArrowLeft}
+          iconOnly={false}
+          onClick={() => {
+            setIsEditorOpen(false);
+            setEditingActaId(null);
+            setStateFilter('');
+            setSearch('');
+            setYearFilter('');
+            setIsWorkflowHome(true);
+          }}
+          size="sm"
+          title="Volver a la pantalla de seguimiento de Actas"
+        >
+          Inicio Actas
+        </ActionButton>
+        <span className="ml-2 text-xs font-semibold text-metro-muted">
+          Vista operativa
+          {stateFilter ? ` · ${stateFilter}` : ''}
+        </span>
+      </div>
       <PageHeader
         title="Actas"
         helpSections={ACTAS_HELP_SECTIONS}
@@ -784,16 +807,6 @@ export function ActasPage() {
             }
             actions={
               <>
-            <ActionButton
-              variant="secondary"
-              icon={ArrowLeft}
-              iconOnly={false}
-              onClick={() => setIsWorkflowHome(true)}
-              size="sm"
-              title="Volver al inicio de Actas"
-            >
-              Inicio Actas
-            </ActionButton>
             <ActionButton
               variant="secondary"
               icon={Settings2}
