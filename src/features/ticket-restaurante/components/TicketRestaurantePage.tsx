@@ -114,7 +114,9 @@ const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Importación de ausencias',
     items: [
+      'Para obtener el fichero en Zerkos: Supervisión → Justif. Ausencias de día → seleccionar las fechas del último mes → exportar a Excel.',
       'Se admiten dos formatos de fichero, detectados automáticamente: uno "limpio" con cabeceras propias, y el formato de exportación habitual de Zerkos.',
+      'Solo se cargan ausencias que tengan impacto real en Ticket Restaurante: deben pertenecer a una persona activa con derecho a ticket y coincidir al menos con un día que genere ticket según su calendario. El resto se ignora.',
       'Las filas exactamente iguales a una ausencia ya guardada se cuentan como duplicadas y se ignoran.',
       'Si una ausencia importada se solapa en fechas con otra ya existente del mismo empleado y mismo motivo, la sustituye en lugar de duplicarla.',
       'Si el fichero no indica si la ausencia afecta al ticket, se asume que sí siempre que la fecha "Desde" sea igual o posterior al 01/03/2026.',
@@ -757,6 +759,7 @@ export function TicketRestaurantePage({
   const [manutencionImputationYear, setManutencionImputationYear] = useState(currentYear());
   const [manutencionImputationMonth, setManutencionImputationMonth] = useState(currentMonth());
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isAbsenceImportHelpOpen, setIsAbsenceImportHelpOpen] = useState(false);
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
@@ -1152,12 +1155,15 @@ export function TicketRestaurantePage({
         return;
       }
 
-      const rowsWithTicketRight = applyCalendarTicketImpactToPreviewRows(
-        rows.filter((row) =>
-          activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumber(row.empleado)),
-        ),
+      const activePersonRows = rows.filter((row) =>
+        activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumber(row.empleado)),
       );
-      const ignoredWithoutTicketRight = rows.length - rowsWithTicketRight.length;
+      const rowsWithCalendarImpact = applyCalendarTicketImpactToPreviewRows(activePersonRows);
+      const rowsWithTicketRight = rowsWithCalendarImpact.filter(
+        (row) => row.errors.length > 0 || row.afectaTicket,
+      );
+      const ignoredWithoutActiveRight = rows.length - activePersonRows.length;
+      const ignoredWithoutTicketDay = rowsWithCalendarImpact.length - rowsWithTicketRight.length;
       const rowsWithErrors = rowsWithTicketRight.filter((row) => row.errors.length > 0).length;
 
       if (rowsWithTicketRight.length === 0) {
@@ -1165,9 +1171,17 @@ export function TicketRestaurantePage({
         setEditingAbsenceId(null);
         setIsPreviewOpen(false);
         setImportMessage(
-          ignoredWithoutTicketRight > 0
-            ? `No se ha importado ninguna ausencia. ${ignoredWithoutTicketRight} fila(s) pertenecen a personas sin derecho activo a Ticket Restaurante.`
-            : 'No se han detectado ausencias importables.',
+          [
+            'No se ha importado ninguna ausencia.',
+            ignoredWithoutActiveRight > 0
+              ? `${ignoredWithoutActiveRight} fila(s) pertenecen a personas sin derecho activo a Ticket Restaurante.`
+              : '',
+            ignoredWithoutTicketDay > 0
+              ? `${ignoredWithoutTicketDay} fila(s) no coinciden con ningún día que genere ticket según el calendario asignado.`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
         );
         return;
       }
@@ -1178,8 +1192,11 @@ export function TicketRestaurantePage({
         [
           `Ausencias detectadas: ${rows.length}.`,
           `A revisar: ${rowsWithTicketRight.length}.`,
-          ignoredWithoutTicketRight > 0
-            ? `Ignoradas por persona sin derecho activo: ${ignoredWithoutTicketRight}.`
+          ignoredWithoutActiveRight > 0
+            ? `Ignoradas por persona sin derecho activo: ${ignoredWithoutActiveRight}.`
+            : '',
+          ignoredWithoutTicketDay > 0
+            ? `Ignoradas sin día con derecho a ticket: ${ignoredWithoutTicketDay}.`
             : '',
           rowsWithErrors > 0 ? `Con errores pendientes de corregir: ${rowsWithErrors}.` : '',
         ]
@@ -1812,7 +1829,7 @@ export function TicketRestaurantePage({
           onExportModel={() =>
             exportCsv('modelo-ausencias-ticket-restaurante.csv', ABSENCE_MODEL_HEADERS, [])
           }
-          onImport={() => fileInputRef.current?.click()}
+          onImport={() => setIsAbsenceImportHelpOpen(true)}
           onMonthChange={handleAbsenceMonthChange}
           onNextMonth={() => moveAbsenceMonth(1)}
           onPreviousMonth={() => moveAbsenceMonth(-1)}
@@ -1862,6 +1879,62 @@ export function TicketRestaurantePage({
           people={visiblePeople}
           year={calculationYear}
         />
+      ) : null}
+
+      {isAbsenceImportHelpOpen ? (
+        <ModalShell
+          labelledBy="absence-import-help-title"
+          maxWidthClassName="max-w-lg"
+          onClose={() => setIsAbsenceImportHelpOpen(false)}
+        >
+          <ModalHeader>
+            <ModalTitle
+              id="absence-import-help-title"
+              subtitle="Obtén primero el Excel de ausencias y después selecciónalo para importarlo."
+            >
+              Importar ausencias
+            </ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-3 text-sm text-metro-text">
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-metro-muted">
+                  Cómo obtener el Excel en Zerkos
+                </p>
+                <ol className="list-decimal space-y-1 pl-5">
+                  <li>Entrar en <strong>Supervisión</strong>.</li>
+                  <li>Abrir <strong>Justif. Ausencias de día</strong>.</li>
+                  <li>Seleccionar las fechas del <strong>último mes</strong>.</li>
+                  <li>Exportar el resultado a <strong>Excel</strong>.</li>
+                </ol>
+              </div>
+              <p className="text-xs leading-relaxed text-metro-muted">
+                Al importar, solo se cargarán ausencias de personas activas con derecho a Ticket
+                Restaurante que coincidan al menos con un día que genere ticket según su calendario.
+                Fines de semana, festivos y otros días sin derecho a ticket se ignorarán.
+              </p>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton
+              iconOnly={false}
+              onClick={() => setIsAbsenceImportHelpOpen(false)}
+              variant="secondary"
+            >
+              Cancelar
+            </ActionButton>
+            <ActionButton
+              iconOnly={false}
+              onClick={() => {
+                setIsAbsenceImportHelpOpen(false);
+                fileInputRef.current?.click();
+              }}
+              variant="import"
+            >
+              Seleccionar Excel
+            </ActionButton>
+          </ModalFooter>
+        </ModalShell>
       ) : null}
 
       {isManutencionMonthModalOpen ? (
