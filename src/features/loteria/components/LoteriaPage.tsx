@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import ExcelJS from 'exceljs';
 import {
+  ArrowLeft,
   CalendarDays,
   Check,
   CircleDollarSign,
@@ -120,13 +121,6 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function getInitialSection(campaign: LotteryCampaign): WorkspaceSection {
-  if (!campaign.workflow.loteroAvisado || !campaign.workflow.encargoConfirmado) return 'septiembre';
-  if (!campaign.workflow.participantesPreparados || !campaign.workflow.avisoPersonasEnviado) return 'octubre';
-  if (!campaign.workflow.seguimientoIniciado) return 'seguimiento';
-  return 'cierre';
-}
-
 async function exportCampaign(campaign: LotteryCampaign) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(`Lotería ${campaign.year}`);
@@ -211,6 +205,24 @@ function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; la
   );
 }
 
+function HeaderMetric({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) {
+  return (
+    <div className={cx(
+      'flex h-9 min-w-[92px] items-center justify-between gap-2 rounded-lg border px-2.5',
+      warning ? 'border-amber-500/45 bg-amber-500/10' : 'border-metro-border bg-metro-surface',
+    )}>
+      <span className="text-[9px] font-bold uppercase tracking-wide text-metro-muted">{label}</span>
+      <span className={cx('text-xs font-extrabold', warning ? 'text-amber-200' : 'text-metro-text')}>{value}</span>
+    </div>
+  );
+}
+
+function stockTone(value: number): 'good' | 'warning' | 'alert' {
+  if (value < 0) return 'alert';
+  if (value < 30) return 'warning';
+  return 'good';
+}
+
 function StepCard({
   active,
   done,
@@ -288,15 +300,17 @@ function SaveState({ dirty, message }: { dirty: boolean; message: string }) {
   );
 }
 
-function SummaryPill({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'good' | 'alert' }) {
+function SummaryPill({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'good' | 'warning' | 'alert' }) {
   return (
     <div className={cx(
       'rounded-lg border px-2.5 py-2',
       tone === 'good'
         ? 'border-emerald-500/35 bg-emerald-500/[0.07]'
-        : tone === 'alert'
-          ? 'border-amber-500/35 bg-amber-500/[0.07]'
-          : 'border-metro-border bg-metro-surface',
+        : tone === 'warning'
+          ? 'border-amber-500/45 bg-amber-500/10'
+          : tone === 'alert'
+            ? 'border-red-500/45 bg-red-500/10'
+            : 'border-metro-border bg-metro-surface',
     )}>
       <p className="text-[10px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
       <p className="mt-0.5 text-sm font-extrabold text-metro-text">{value}</p>
@@ -312,7 +326,7 @@ export function LoteriaPage() {
   const loadEmployees = useEmployeeStore((state) => state.load);
 
   const [draft, setDraft] = useState(campaign);
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>(getInitialSection(campaign));
+  const [activeSection, setActiveSection] = useState<WorkspaceSection | null>(null);
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'todos' | 'pagados' | 'pendientes'>('todos');
   const [participantSearch, setParticipantSearch] = useState('');
@@ -544,37 +558,42 @@ export function LoteriaPage() {
         status={<SaveState dirty={dirty} message={message} />}
         actions={
           <>
+            <span className="inline-flex h-9 items-center rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
+            <HeaderMetric label={draft.numero1 || 'Nº 1'} value={`${availableNumero1} disp.`} warning={availableNumero1 < 30} />
+            <HeaderMetric label={draft.numero2 || 'Nº 2'} value={`${availableNumero2} disp.`} warning={availableNumero2 < 30} />
+            <HeaderMetric label="Décimos" value={`${requestedTotal}/${orderedTotal}`} warning={availableTotal < 30} />
+            <HeaderMetric label="Caja" value={money(cash)} />
             <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} variant="save">Guardar todo</ActionButton>
             <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
           </>
         }
       />
 
-      <section className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={Ticket} label="Número 1" value={draft.numero1 || 'Sin definir'} detail={`${requestedNumero1} solicitados · ${availableNumero1} disponibles`} />
-        <MetricCard icon={Ticket} label="Número 2" value={draft.numero2 || 'Sin definir'} detail={`${requestedNumero2} solicitados · ${availableNumero2} disponibles`} />
-        <MetricCard icon={ClipboardCheck} label="Décimos totales" value={`${requestedTotal} / ${orderedTotal}`} detail={`${availableTotal} disponibles en total`} />
-        <MetricCard icon={CircleDollarSign} label="Caja / cobros" value={money(cash)} detail={`${money(paid)} cobrados · ${money(bizum)} por Bizum`} />
-      </section>
-
-      <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 md:p-4">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-extrabold text-metro-text">Flujograma de trabajo</h3>
-            <p className="mt-1 text-xs text-metro-muted">Pulsa cada fase para abrir únicamente las tareas que corresponden.</p>
+      {activeSection === null ? (
+        <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 md:p-4">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-metro-text">Flujograma de trabajo · {draft.year}</h3>
+              <p className="mt-1 text-xs text-metro-muted">Pulsa una fase para abrir su espacio de trabajo. Al entrar, el flujograma se repliega para dejar más sitio.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SummaryPill label="Participantes" value={String(draft.requests.length)} />
+              <SummaryPill label="Pendiente de cobro" value={money(pendingAmount)} tone={pendingAmount > 0 ? 'warning' : 'good'} />
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <SummaryPill label="Participantes" value={String(draft.requests.length)} />
-            <SummaryPill label="Pendiente de cobro" value={money(pendingAmount)} tone={pendingAmount > 0 ? 'alert' : 'good'} />
+          <div className="grid gap-2 lg:grid-cols-4">
+            <StepCard active={false} done={septemberDone} icon={CalendarDays} month="Septiembre" title="Encargo al lotero" detail="Números, cantidades, datos del lotero y correo de septiembre." onClick={() => setActiveSection('septiembre')} />
+            <StepCard active={false} done={octoberDone} icon={UserRoundPlus} month="Octubre" title="Alta y aviso a participantes" detail="Da de alta personas, asigna sus décimos y genera el aviso CCO." onClick={() => setActiveSection('octubre')} />
+            <StepCard active={false} done={seguimientoDone} icon={Euro} month="Seguimiento" title="Décimos y pagos" detail="Ajusta cantidades si cambian y registra cómo ha pagado cada persona." onClick={() => setActiveSection('seguimiento')} />
+            <StepCard active={false} done={cierreDone} icon={ClipboardCheck} month="Cierre" title="Cuadre y exportación" detail="Comprueba sobrantes, cobros pendientes, caja y resultado final." onClick={() => setActiveSection('cierre')} />
           </div>
+        </section>
+      ) : (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
+          <button className="inline-flex h-8 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-xs font-bold text-metro-text transition hover:border-metro-red" onClick={() => setActiveSection(null)} type="button"><ArrowLeft size={14} /> Volver al flujograma</button>
+          <span className="text-[11px] font-semibold text-metro-muted">Campaña {draft.year} · {activeSection === 'septiembre' ? 'Septiembre' : activeSection === 'octubre' ? 'Octubre' : activeSection === 'seguimiento' ? 'Seguimiento' : 'Cierre'}</span>
         </div>
-        <div className="grid gap-2 lg:grid-cols-4">
-          <StepCard active={activeSection === 'septiembre'} done={septemberDone} icon={CalendarDays} month="Septiembre" title="Encargo al lotero" detail="Números, cantidades, datos del lotero y correo de septiembre." onClick={() => setActiveSection('septiembre')} />
-          <StepCard active={activeSection === 'octubre'} done={octoberDone} icon={UserRoundPlus} month="Octubre" title="Alta y aviso a participantes" detail="Da de alta personas desde Plantilla o como externas y genera el aviso CCO." onClick={() => setActiveSection('octubre')} />
-          <StepCard active={activeSection === 'seguimiento'} done={seguimientoDone} icon={Euro} month="Seguimiento" title="Décimos y pagos" detail="La lista viene de octubre: asigna décimos y registra cómo ha pagado cada persona." onClick={() => setActiveSection('seguimiento')} />
-          <StepCard active={activeSection === 'cierre'} done={cierreDone} icon={ClipboardCheck} month="Cierre" title="Cuadre y exportación" detail="Comprueba sobrantes, cobros pendientes, caja y resultado final." onClick={() => setActiveSection('cierre')} />
-        </div>
-      </section>
+      )}
 
       {activeSection === 'septiembre' ? (
         <SectionShell
@@ -592,9 +611,9 @@ export function LoteriaPage() {
                   <label><span className={labelClass}>Número 2</span><input className={inputClass} value={draft.numero2} onChange={(e) => updateDraft((current) => ({ ...current, numero2: e.target.value }))} /></label>
                   <label><span className={labelClass}>Décimos nº 2</span><input className={inputClass} min="0" step="1" type="number" value={draft.decimosNumero2} onChange={(e) => updateDraft((current) => ({ ...current, decimosNumero2: Math.max(0, Number(e.target.value)) }))} /></label>
                   <label><span className={labelClass}>Precio por décimo</span><input className={inputClass} min="0" step="0.01" type="number" value={draft.precioDecimo} onChange={(e) => updateDraft((current) => ({ ...current, precioDecimo: Math.max(0, Number(e.target.value)) }))} /></label>
-                  <label><span className={labelClass}>Año / campaña</span><input className={inputClass} min="2024" step="1" type="number" value={draft.year} onChange={(e) => updateDraft((current) => ({ ...current, year: Number(e.target.value) || current.year }))} /></label>
+                  <SummaryPill label="Campaña automática" value={String(draft.year)} />
                   <SummaryPill label="Encargados total" value={String(orderedTotal)} />
-                  <SummaryPill label="Disponibles" value={String(availableTotal)} tone={availableTotal < 0 ? 'alert' : 'good'} />
+                  <SummaryPill label="Disponibles" value={String(availableTotal)} tone={stockTone(availableTotal)} />
                 </div>
               </div>
 
@@ -718,10 +737,15 @@ export function LoteriaPage() {
                 <div className="flex items-center gap-2"><UserRound size={15} className="text-red-300" /><h4 className="text-xs font-extrabold text-metro-text">Personas de la campaña</h4></div>
                 <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Lista de participantes guardada.')} size="sm" variant="save">Guardar lista</ActionButton>
               </div>
+              <div className="mb-2 grid gap-2 sm:grid-cols-3">
+                <SummaryPill label={`Disponible ${draft.numero1 || 'Nº 1'}`} value={String(availableNumero1)} tone={stockTone(availableNumero1)} />
+                <SummaryPill label={`Disponible ${draft.numero2 || 'Nº 2'}`} value={String(availableNumero2)} tone={stockTone(availableNumero2)} />
+                <SummaryPill label="Disponible total" value={String(availableTotal)} tone={stockTone(availableTotal)} />
+              </div>
               <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-panel">
-                <table className="w-full min-w-[1050px] border-collapse text-left text-[11px]">
+                <table className="w-full min-w-[1240px] border-collapse text-left text-[11px]">
                   <thead className="bg-metro-raised text-[10px] uppercase tracking-wide text-metro-muted">
-                    <tr><th className="px-2 py-2">Nº empleado</th><th className="px-2 py-2">Nombre y apellidos</th><th className="px-2 py-2">Tipo</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Contacto / nota</th><th className="w-9 px-2 py-2" /></tr>
+                    <tr><th className="px-2 py-2">Nº empleado</th><th className="px-2 py-2">Nombre y apellidos</th><th className="px-2 py-2">Tipo</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Contacto / nota</th><th className="w-9 px-2 py-2" /></tr>
                   </thead>
                   <tbody>
                     {draft.requests.map((request) => (
@@ -729,12 +753,15 @@ export function LoteriaPage() {
                         <td className="px-2 py-1.5 font-semibold text-metro-secondary">{request.empleado ?? '—'}</td>
                         <td className="p-1.5"><input className={inputClass} disabled={!request.externa} value={request.nombre} onChange={(e) => updateRequest(request.id, { nombre: e.target.value })} /></td>
                         <td className="px-2 py-1.5">{request.externa ? <span className="rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-200">Externa</span> : <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-200">Plantilla</span>}</td>
+                        <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero1} onChange={(e) => updateRequest(request.id, { decimosNumero1: Math.max(0, Number(e.target.value)) })} /></td>
+                        <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero2} onChange={(e) => updateRequest(request.id, { decimosNumero2: Math.max(0, Number(e.target.value)) })} /></td>
+                        <td className="px-2 py-1.5 text-center font-bold text-metro-text">{lotteryRequestTotalCount(request)}</td>
                         <td className="p-1.5"><input className={cx(inputClass, request.email && !isValidEmail(request.email) && 'border-amber-500/60')} placeholder="nombre@dominio.es" type="email" value={request.email} onChange={(e) => updateRequest(request.id, { email: e.target.value })} /></td>
                         <td className="p-1.5"><input className={inputClass} placeholder="Teléfono, nota breve…" value={request.contactoObservaciones} onChange={(e) => updateRequest(request.id, { contactoObservaciones: e.target.value })} /></td>
                         <td className="px-1 py-1.5"><button className="grid h-7 w-7 place-items-center rounded-md text-metro-muted hover:bg-red-500/10 hover:text-red-300" onClick={() => removePerson(request.id)} type="button"><Trash2 size={13} /></button></td>
                       </tr>
                     ))}
-                    {draft.requests.length === 0 ? <tr><td className="px-3 py-8 text-center text-xs text-metro-muted" colSpan={6}>Todavía no hay participantes. Usa el buscador de Plantilla o el alta de persona externa.</td></tr> : null}
+                    {draft.requests.length === 0 ? <tr><td className="px-3 py-8 text-center text-xs text-metro-muted" colSpan={9}>Todavía no hay participantes. Usa el buscador de Plantilla o el alta de persona externa.</td></tr> : null}
                   </tbody>
                 </table>
               </div>
@@ -756,9 +783,9 @@ export function LoteriaPage() {
         >
           <div className="space-y-3">
             <div className="grid gap-2 lg:grid-cols-6">
-              <SummaryPill label={`Disponible ${draft.numero1 || 'Nº 1'}`} value={String(availableNumero1)} tone={availableNumero1 < 0 ? 'alert' : 'good'} />
-              <SummaryPill label={`Disponible ${draft.numero2 || 'Nº 2'}`} value={String(availableNumero2)} tone={availableNumero2 < 0 ? 'alert' : 'good'} />
-              <SummaryPill label="Disponible total" value={String(availableTotal)} tone={availableTotal < 0 ? 'alert' : 'good'} />
+              <SummaryPill label={`Disponible ${draft.numero1 || 'Nº 1'}`} value={String(availableNumero1)} tone={stockTone(availableNumero1)} />
+              <SummaryPill label={`Disponible ${draft.numero2 || 'Nº 2'}`} value={String(availableNumero2)} tone={stockTone(availableNumero2)} />
+              <SummaryPill label="Disponible total" value={String(availableTotal)} tone={stockTone(availableTotal)} />
               <SummaryPill label="Total cobrado" value={money(paid)} />
               <SummaryPill label="Caja" value={money(cash)} />
               <SummaryPill label="Bizum" value={money(bizum)} />
@@ -816,13 +843,13 @@ export function LoteriaPage() {
               <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
                 <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-[11px] text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => setWorkflowFlag('campanaCerrada', e.target.checked)} type="checkbox" />Campaña cerrada</label></div>
                 <div className="space-y-2">
-                  <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero1 || 'Número 1'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero1)} /><SummaryPill label="Solicitados" value={String(requestedNumero1)} /><SummaryPill label="Disponibles" value={String(availableNumero1)} tone={availableNumero1 < 0 ? 'alert' : 'good'} /></div></div>
-                  <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero2 || 'Número 2'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero2)} /><SummaryPill label="Solicitados" value={String(requestedNumero2)} /><SummaryPill label="Disponibles" value={String(availableNumero2)} tone={availableNumero2 < 0 ? 'alert' : 'good'} /></div></div>
+                  <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero1 || 'Número 1'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero1)} /><SummaryPill label="Solicitados" value={String(requestedNumero1)} /><SummaryPill label="Disponibles" value={String(availableNumero1)} tone={stockTone(availableNumero1)} /></div></div>
+                  <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero2 || 'Número 2'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero2)} /><SummaryPill label="Solicitados" value={String(requestedNumero2)} /><SummaryPill label="Disponibles" value={String(availableNumero2)} tone={stockTone(availableNumero2)} /></div></div>
                 </div>
               </div>
               <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
                 <h4 className="mb-3 text-xs font-extrabold text-metro-text">Estado final</h4>
-                <div className="grid gap-2 md:grid-cols-2"><SummaryPill label="Participantes" value={String(draft.requests.length)} /><SummaryPill label="Pendientes de pago" value={String(draft.requests.filter((request) => !request.pagado).length)} tone={pendingAmount > 0 ? 'alert' : 'good'} /><SummaryPill label="Importe pendiente" value={money(pendingAmount)} tone={pendingAmount > 0 ? 'alert' : 'good'} /><SummaryPill label="Disponible total" value={String(availableTotal)} tone={availableTotal < 0 ? 'alert' : 'good'} /></div>
+                <div className="grid gap-2 md:grid-cols-2"><SummaryPill label="Participantes" value={String(draft.requests.length)} /><SummaryPill label="Pendientes de pago" value={String(draft.requests.filter((request) => !request.pagado).length)} tone={pendingAmount > 0 ? 'alert' : 'good'} /><SummaryPill label="Importe pendiente" value={money(pendingAmount)} tone={pendingAmount > 0 ? 'alert' : 'good'} /><SummaryPill label="Disponible total" value={String(availableTotal)} tone={stockTone(availableTotal)} /></div>
               </div>
             </div>
           </div>

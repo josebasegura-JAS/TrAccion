@@ -15,6 +15,11 @@ interface LotteryState {
   saveCampaign: (campaign: LotteryCampaign) => Promise<{ ok: boolean; message: string }>;
 }
 
+interface LotteryCampaignArchive {
+  version: 2;
+  campaigns: Record<string, unknown>;
+}
+
 function createId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -62,8 +67,8 @@ function normalizeRequest(value: unknown): LotteryRequest | null {
 
 type LegacyLotteryWorkflow = Partial<LotteryCampaign['workflow']> & { excelImportado?: boolean };
 
-function normalizeCampaign(value: unknown): LotteryCampaign {
-  const fallback = createDefaultLotteryCampaign();
+function normalizeCampaign(value: unknown, fallbackYear = new Date().getFullYear()): LotteryCampaign {
+  const fallback = createDefaultLotteryCampaign(fallbackYear);
   if (!value || typeof value !== 'object') return fallback;
   const candidate = value as Omit<Partial<LotteryCampaign>, 'workflow'> & {
     decimosEncargados?: number;
@@ -119,14 +124,55 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
   };
 }
 
-function readCampaign(): LotteryCampaign {
+function isCampaignArchive(value: unknown): value is LotteryCampaignArchive {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<LotteryCampaignArchive>;
+  return candidate.version === 2 && Boolean(candidate.campaigns) && typeof candidate.campaigns === 'object';
+}
+
+function readStoredValue(): unknown {
   const stored = readStorageItem(LOTTERY_STORAGE_KEY);
-  if (!stored) return createDefaultLotteryCampaign();
+  if (!stored) return null;
   try {
-    return normalizeCampaign(JSON.parse(stored));
+    return JSON.parse(stored);
   } catch {
-    return createDefaultLotteryCampaign();
+    return null;
   }
+}
+
+function readCampaign(): LotteryCampaign {
+  const currentYear = new Date().getFullYear();
+  const stored = readStoredValue();
+  if (!stored) return createDefaultLotteryCampaign(currentYear);
+
+  if (isCampaignArchive(stored)) {
+    const currentCampaign = stored.campaigns[String(currentYear)];
+    return currentCampaign ? normalizeCampaign(currentCampaign, currentYear) : createDefaultLotteryCampaign(currentYear);
+  }
+
+  const legacyCampaign = normalizeCampaign(stored, currentYear);
+  return legacyCampaign.year === currentYear ? legacyCampaign : createDefaultLotteryCampaign(currentYear);
+}
+
+function buildArchiveWithCampaign(campaign: LotteryCampaign): LotteryCampaignArchive {
+  const stored = readStoredValue();
+  if (isCampaignArchive(stored)) {
+    return {
+      version: 2,
+      campaigns: {
+        ...stored.campaigns,
+        [String(campaign.year)]: campaign,
+      },
+    };
+  }
+
+  const campaigns: Record<string, unknown> = {};
+  if (stored && typeof stored === 'object') {
+    const legacyCampaign = normalizeCampaign(stored);
+    campaigns[String(legacyCampaign.year)] = legacyCampaign;
+  }
+  campaigns[String(campaign.year)] = campaign;
+  return { version: 2, campaigns };
 }
 
 export const useLoteriaStore = create<LotteryState>((set) => ({
@@ -134,7 +180,8 @@ export const useLoteriaStore = create<LotteryState>((set) => ({
   load: () => set({ campaign: readCampaign() }),
   reloadFromStorage: () => set({ campaign: readCampaign() }),
   saveCampaign: async (campaign) => {
-    const result = await writeStorageItem(LOTTERY_STORAGE_KEY, JSON.stringify(campaign));
+    const archive = buildArchiveWithCampaign(campaign);
+    const result = await writeStorageItem(LOTTERY_STORAGE_KEY, JSON.stringify(archive));
     if (result.ok) set({ campaign });
     return { ok: result.ok, message: result.message };
   },
