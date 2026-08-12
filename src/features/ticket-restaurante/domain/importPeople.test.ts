@@ -93,4 +93,52 @@ describe('ticket restaurante - Plantilla como fuente de personas', () => {
       calendarId: 'calendar-1',
     });
   });
+
+  it('localiza la cabecera aunque el Excel tenga título y fecha antes de la tabla', () => {
+    const result = rowsToTicketPeopleDrafts(
+      [
+        ['Personas Ticket Restaurante', '', '', '', '', '', '', ''],
+        ['Generado: 12/8/2026', '', '', '', '', '', '', ''],
+        ['', '', '', '', '', '', '', ''],
+        ['Nº empleado', 'Nombre', 'Apellido1', 'Apellido2', 'DNI', 'Puesto', 'Calendario', 'Estado'],
+        ['00123', 'Ana María', 'Martínez', 'Ruiz', '87654321X', 'Responsable', 'General', 'Activo'],
+      ],
+      [employee()],
+      [calendar],
+    );
+
+    expect(result.drafts).toHaveLength(1);
+    expect(result.drafts[0]).toMatchObject({
+      empleado: '123',
+      nombre: 'Ana María',
+      apellido1: 'Martínez',
+      apellido2: 'Ruiz',
+      dni: '87654321X',
+      puesto: 'Responsable',
+      calendarId: 'calendar-1',
+      activo: true,
+    });
+  });
+
+  it('prioriza los campos corregidos del Excel para actualizar una persona existente', () => {
+    const result = rowsToTicketPeopleDrafts(
+      [
+        ['Nº empleado', 'Nombre', 'Apellido1', 'Apellido2', 'DNI', 'Puesto', 'Calendario', 'Estado'],
+        ['123', 'María', 'García', 'López', '12345678Z', 'Técnica superior', 'General', 'Inactivo'],
+      ],
+      [employee({ nombreApellidos: 'Dato Antiguo Incorrecto' })],
+      [calendar],
+    );
+
+    expect(result.drafts[0]).toMatchObject({
+      empleado: '123',
+      nombre: 'María',
+      apellido1: 'García',
+      apellido2: 'López',
+      dni: '12345678Z',
+      puesto: 'Técnica superior',
+      activo: false,
+    });
+  });
+
 });

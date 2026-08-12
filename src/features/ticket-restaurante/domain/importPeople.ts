@@ -11,7 +11,15 @@ import { parseDelimitedText } from '../../../shared/import/delimitedText';
 
 type TabularRow = string[];
 
-type TicketPeopleImportField = 'empleado' | 'calendario';
+type TicketPeopleImportField =
+  | 'empleado'
+  | 'nombre'
+  | 'apellido1'
+  | 'apellido2'
+  | 'dni'
+  | 'puesto'
+  | 'calendario'
+  | 'estado';
 
 export interface TicketPeopleImportDraft extends TicketPersonDraft {
   calendarName: string;
@@ -31,8 +39,23 @@ const FIELD_BY_HEADER = new Map<string, TicketPeopleImportField>([
   ['num empleado', 'empleado'],
   ['cod empleado', 'empleado'],
   ['codigo empleado', 'empleado'],
+  ['nombre', 'nombre'],
+  ['apellido1', 'apellido1'],
+  ['apellido 1', 'apellido1'],
+  ['primer apellido', 'apellido1'],
+  ['apellido2', 'apellido2'],
+  ['apellido 2', 'apellido2'],
+  ['segundo apellido', 'apellido2'],
+  ['dni', 'dni'],
+  ['nif', 'dni'],
+  ['dni nif', 'dni'],
+  ['puesto', 'puesto'],
+  ['puesto nomina', 'puesto'],
+  ['puesto organizativo', 'puesto'],
   ['calendario', 'calendario'],
   ['calendar', 'calendario'],
+  ['estado', 'estado'],
+  ['activo', 'estado'],
 ]);
 
 export async function importTicketPeopleFromFile(
@@ -54,14 +77,26 @@ export function rowsToTicketPeopleDrafts(
   employees: readonly Employee[],
   calendars: readonly TicketCalendar[],
 ): TicketPeopleImportResult {
-  const [headers, ...dataRows] = rows;
-  if (!headers) {
-    return { drafts: [], ignored: 0, missingEmployees: [], duplicateRows: 0 };
+  const headerRowIndex = findHeaderRowIndex(rows);
+  if (headerRowIndex < 0) {
+    return {
+      drafts: [],
+      ignored: Math.max(0, rows.length - 1),
+      missingEmployees: [],
+      duplicateRows: 0,
+    };
   }
 
+  const headers = rows[headerRowIndex] ?? [];
+  const dataRows = rows.slice(headerRowIndex + 1);
   const fieldByColumn = headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null);
-  const empleadoColumn = fieldByColumn.indexOf('empleado');
-  const calendarioColumn = fieldByColumn.indexOf('calendario');
+  const columnByField = new Map<TicketPeopleImportField, number>();
+  fieldByColumn.forEach((field, index) => {
+    if (field && !columnByField.has(field)) columnByField.set(field, index);
+  });
+
+  const empleadoColumn = columnByField.get('empleado') ?? -1;
+  const calendarioColumn = columnByField.get('calendario') ?? -1;
 
   if (empleadoColumn < 0 || calendarioColumn < 0) {
     return { drafts: [], ignored: dataRows.length, missingEmployees: [], duplicateRows: 0 };
@@ -82,12 +117,17 @@ export function rowsToTicketPeopleDrafts(
   let ignored = 0;
   let duplicateRows = 0;
 
+  const readField = (row: TabularRow, field: TicketPeopleImportField): string => {
+    const column = columnByField.get(field);
+    return column === undefined ? '' : cleanText(row[column] ?? '');
+  };
+
   dataRows.forEach((row) => {
     const empleado = normalizeTicketEmployeeNumber(row[empleadoColumn] ?? '');
     const calendarName = cleanText(row[calendarioColumn] ?? '');
 
     if (!empleado || !calendarName) {
-      ignored += 1;
+      if (row.some((value) => cleanText(value))) ignored += 1;
       return;
     }
 
@@ -102,11 +142,36 @@ export function rowsToTicketPeopleDrafts(
       duplicateRows += 1;
     }
 
+    const plantillaDraft = ticketPersonDraftFromEmployee(
+      employee,
+      calendarIdByName.get(normalizeTicketCalendarName(calendarName)) ?? '',
+    );
+    const importedNombre = readField(row, 'nombre');
+    const importedApellido1 = readField(row, 'apellido1');
+    const importedApellido2 = readField(row, 'apellido2');
+    const importedDni = readField(row, 'dni');
+    const importedPuesto = readField(row, 'puesto');
+    const importedEstado = readField(row, 'estado');
+    const nombre = columnByField.has('nombre') ? importedNombre : plantillaDraft.nombre;
+    const apellido1 = columnByField.has('apellido1') ? importedApellido1 : plantillaDraft.apellido1;
+    const apellido2 = columnByField.has('apellido2') ? importedApellido2 : plantillaDraft.apellido2;
+
     draftsByEmpleado.set(empleado, {
-      ...ticketPersonDraftFromEmployee(
-        employee,
-        calendarIdByName.get(normalizeTicketCalendarName(calendarName)) ?? '',
-      ),
+      ...plantillaDraft,
+      nombre,
+      apellido1,
+      apellido2,
+      dni: columnByField.has('dni') ? importedDni : plantillaDraft.dni,
+      puesto: columnByField.has('puesto') ? importedPuesto : plantillaDraft.puesto,
+      nombreApellidos:
+        columnByField.has('nombre') ||
+        columnByField.has('apellido1') ||
+        columnByField.has('apellido2')
+          ? [nombre, apellido1, apellido2].filter(Boolean).join(' ')
+          : plantillaDraft.nombreApellidos,
+      activo: columnByField.has('estado')
+        ? parseActiveState(importedEstado)
+        : plantillaDraft.activo,
       calendarName,
     });
   });
@@ -119,6 +184,26 @@ export function rowsToTicketPeopleDrafts(
     ),
     duplicateRows,
   };
+}
+
+function findHeaderRowIndex(rows: TabularRow[]): number {
+  const searchLimit = Math.min(rows.length, 20);
+  for (let rowIndex = 0; rowIndex < searchLimit; rowIndex += 1) {
+    const fields = (rows[rowIndex] ?? []).map(
+      (header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null,
+    );
+    if (fields.includes('empleado') && fields.includes('calendario')) {
+      return rowIndex;
+    }
+  }
+  return -1;
+}
+
+function parseActiveState(value: string): boolean {
+  const normalized = normalizeHeader(value);
+  if (['inactivo', 'no', 'false', '0', 'baja'].includes(normalized)) return false;
+  if (['activo', 'si', 'true', '1', 'alta'].includes(normalized)) return true;
+  return true;
 }
 
 
