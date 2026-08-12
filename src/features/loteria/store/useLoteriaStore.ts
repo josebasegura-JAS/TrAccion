@@ -60,14 +60,16 @@ function normalizeRequest(value: unknown): LotteryRequest | null {
   };
 }
 
+type LegacyLotteryWorkflow = Partial<LotteryCampaign['workflow']> & { excelImportado?: boolean };
+
 function normalizeCampaign(value: unknown): LotteryCampaign {
   const fallback = createDefaultLotteryCampaign();
   if (!value || typeof value !== 'object') return fallback;
-  const candidate = value as Partial<LotteryCampaign> & {
+  const candidate = value as Omit<Partial<LotteryCampaign>, 'workflow'> & {
     decimosEncargados?: number;
     emailSubject?: string;
     emailBody?: string;
-    workflow?: Partial<LotteryCampaign['workflow']> & { excelImportado?: boolean };
+    workflow?: LegacyLotteryWorkflow;
   };
 
   const requests = Array.isArray(candidate.requests)
@@ -82,7 +84,7 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
     ? candidate.loteroEmailSubject
     : (typeof candidate.emailSubject === 'string' ? candidate.emailSubject : '');
   const hasLegacyLoteroSubject = storedLoteroSubject.startsWith('Encargo Lotería de Navidad');
-  const storedWorkflow = candidate.workflow ?? {};
+  const storedWorkflow: LegacyLotteryWorkflow = candidate.workflow ?? {};
 
   return {
     ...fallback,
