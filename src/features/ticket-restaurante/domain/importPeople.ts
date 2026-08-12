@@ -102,19 +102,12 @@ export function rowsToTicketPeopleDrafts(
       duplicateRows += 1;
     }
 
-    const splitName = splitTicketPersonFullName(employee.nombreApellidos);
-
     draftsByEmpleado.set(empleado, {
-      empleado: normalizeTicketEmployeeNumber(employee.empleado),
-      nombre: splitName.nombre,
-      apellido1: splitName.apellido1,
-      apellido2: splitName.apellido2,
-      dni: employee.dni || employee.nif || '',
-      nombreApellidos: employee.nombreApellidos,
-      puesto: employee.puestoNomina || employee.puestoOrganizativo,
-      calendarId: calendarIdByName.get(normalizeTicketCalendarName(calendarName)) ?? '',
+      ...ticketPersonDraftFromEmployee(
+        employee,
+        calendarIdByName.get(normalizeTicketCalendarName(calendarName)) ?? '',
+      ),
       calendarName,
-      activo: true,
     });
   });
 
@@ -125,6 +118,54 @@ export function rowsToTicketPeopleDrafts(
       first.localeCompare(second, 'es', { numeric: true }),
     ),
     duplicateRows,
+  };
+}
+
+
+export function splitPlantillaEmployeeName(
+  nombreApellidos: string,
+): Pick<TicketPersonDraft, 'nombre' | 'apellido1' | 'apellido2'> {
+  const cleaned = cleanText(nombreApellidos);
+  if (!cleaned) {
+    return { nombre: '', apellido1: '', apellido2: '' };
+  }
+
+  if (cleaned.includes(',')) {
+    return splitTicketPersonFullName(cleaned);
+  }
+
+  const parts = cleaned.split(' ').filter(Boolean);
+  if (parts.length === 1) {
+    return { nombre: parts[0] ?? '', apellido1: '', apellido2: '' };
+  }
+  if (parts.length === 2) {
+    return { nombre: parts[1] ?? '', apellido1: parts[0] ?? '', apellido2: '' };
+  }
+
+  // La fuente corporativa de Plantilla llega habitualmente como
+  // "Apellido1 Apellido2 Nombre" cuando no incluye coma.
+  return {
+    nombre: parts.slice(2).join(' '),
+    apellido1: parts[0] ?? '',
+    apellido2: parts[1] ?? '',
+  };
+}
+
+export function ticketPersonDraftFromEmployee(
+  employee: Employee,
+  calendarId = '',
+): TicketPersonDraft {
+  const splitName = splitPlantillaEmployeeName(employee.nombreApellidos);
+  return {
+    empleado: normalizeTicketEmployeeNumber(employee.empleado),
+    nombre: splitName.nombre,
+    apellido1: splitName.apellido1,
+    apellido2: splitName.apellido2,
+    dni: employee.dni || employee.nif || '',
+    nombreApellidos: employee.nombreApellidos,
+    puesto: employee.puestoNomina || employee.puestoOrganizativo,
+    calendarId,
+    activo: true,
   };
 }
 

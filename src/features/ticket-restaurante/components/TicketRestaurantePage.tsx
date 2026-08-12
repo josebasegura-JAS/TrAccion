@@ -1409,7 +1409,7 @@ export function TicketRestaurantePage({
       result.duplicateRows > 0 ? ` · Duplicados en Excel: ${result.duplicateRows}` : '';
 
     setPeopleImportMessage(
-      `Personas importadas/actualizadas: ${saveResult.imported} · Calendarios creados: ${saveResult.createdCalendars}${ignoredText}${duplicateText}${missingText}`,
+      `Procesadas: ${saveResult.imported} · Nuevas: ${saveResult.created} · Actualizadas: ${saveResult.updated} · Sin cambios: ${saveResult.unchanged} · Calendarios creados: ${saveResult.createdCalendars}${ignoredText}${duplicateText}${missingText}`,
     );
   };
 
@@ -1914,6 +1914,7 @@ export function TicketRestaurantePage({
       ) : activeSubview === 'personas' ? (
         <PeoplePanel
           calendars={visibleCalendars}
+          employees={employees.filter((employee) => !employee.deletedAt)}
           draft={personDraft}
           editingPersonId={editingPersonId}
           onCancel={resetPersonForm}

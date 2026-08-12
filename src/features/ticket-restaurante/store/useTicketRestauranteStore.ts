@@ -72,6 +72,9 @@ interface TicketRestauranteState {
   upsertPerson: (draft: TicketPersonDraft) => Promise<{ ok: boolean; message?: string }>;
   importPeople: (drafts: TicketPeopleImportDraft[]) => Promise<{
     imported: number;
+    created: number;
+    updated: number;
+    unchanged: number;
     createdCalendars: number;
     ok: boolean;
     message?: string;
@@ -1067,7 +1070,7 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
     return { ok: true };
   },
   importPeople: async (drafts) => {
-    let result = { imported: 0, createdCalendars: 0 };
+    let result = { imported: 0, created: 0, updated: 0, unchanged: 0, createdCalendars: 0 };
     const state = get();
     const now = nowIso();
     const calendars = [...state.calendars];
@@ -1077,10 +1080,25 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         .filter((calendar) => !calendar.deletedAt)
         .map((calendar) => [normalizeCalendarName(calendar.nombre), calendar.id]),
     );
-    const peopleByEmployee = new Map(state.people.map((person) => [person.empleado, person]));
+    const peopleByEmployee = new Map(
+      state.people.map((person) => [normalizeTicketEmployeeNumber(person.empleado), person]),
+    );
     const updatedPeople: TicketPerson[] = [];
 
+    const sameImportedPersonData = (first: TicketPerson, second: TicketPerson): boolean =>
+      first.empleado === second.empleado &&
+      first.nombre === second.nombre &&
+      first.apellido1 === second.apellido1 &&
+      first.apellido2 === second.apellido2 &&
+      first.dni === second.dni &&
+      first.nombreApellidos === second.nombreApellidos &&
+      first.puesto === second.puesto &&
+      first.calendarId === second.calendarId &&
+      first.activo === second.activo &&
+      first.deletedAt === second.deletedAt;
+
     drafts.forEach((draft) => {
+      const empleado = normalizeTicketEmployeeNumber(draft.empleado);
       const normalizedCalendarName = normalizeCalendarName(draft.calendarName);
       let calendarId = draft.calendarId || calendarIdByName.get(normalizedCalendarName) || '';
 
@@ -1097,11 +1115,20 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         result = { ...result, createdCalendars: result.createdCalendars + 1 };
       }
 
-      const previous = peopleByEmployee.get(draft.empleado);
-      const updatedPerson = buildTicketPerson({ ...draft, calendarId }, now, previous);
-      peopleByEmployee.set(draft.empleado, updatedPerson);
-      updatedPeople.push(updatedPerson);
+      const previous = peopleByEmployee.get(empleado);
+      const updatedPerson = buildTicketPerson({ ...draft, empleado, calendarId }, now, previous);
       result = { ...result, imported: result.imported + 1 };
+
+      if (previous && sameImportedPersonData(previous, updatedPerson)) {
+        result = { ...result, unchanged: result.unchanged + 1 };
+        return;
+      }
+
+      peopleByEmployee.set(empleado, updatedPerson);
+      updatedPeople.push(updatedPerson);
+      result = previous
+        ? { ...result, updated: result.updated + 1 }
+        : { ...result, created: result.created + 1 };
     });
 
     const people = Array.from(peopleByEmployee.values());
@@ -1129,19 +1156,22 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
         }
       }
 
-      const peopleSaveResult = await saveTicketRestaurantePeopleToSqlite(
-        updatedPeople.map((person) => ({
-          id: person.empleado,
-          serializedValue: JSON.stringify(person),
-          expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
-        })),
-      );
-      if (!peopleSaveResult?.ok) {
-        return {
-          ...result,
-          ok: false,
-          message: peopleSaveResult?.message ?? 'No se han podido importar las personas en SQLite.',
-        };
+      if (updatedPeople.length > 0) {
+        const peopleSaveResult = await saveTicketRestaurantePeopleToSqlite(
+          updatedPeople.map((person) => ({
+            id: person.empleado,
+            serializedValue: JSON.stringify(person),
+            expectedUpdatedAt: personSqliteUpdatedAt.get(person.empleado) ?? null,
+          })),
+        );
+        if (!peopleSaveResult?.ok) {
+          return {
+            ...result,
+            ok: false,
+            message:
+              peopleSaveResult?.message ?? 'No se han podido importar las personas en SQLite.',
+          };
+        }
       }
 
       updateCalendarSqliteUpdatedAtMap(calendars);

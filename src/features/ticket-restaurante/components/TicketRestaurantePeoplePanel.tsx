@@ -1,6 +1,7 @@
-import { FileDown, Trash2 } from 'lucide-react';
+import { FileDown, Search, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import type { Employee } from '../../plantilla/domain/employee';
 import { CountBadge } from '../../../components/ui/CountBadge';
 import { Field, Input, Select } from '../../../components/ui/Field';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -12,6 +13,7 @@ import {
 import type { ExportTablePayload } from '../../../shared/export/types';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { ticketPersonDraftFromEmployee } from '../domain/importPeople';
 import {
   type TableViewPreferences,
   useTableViewPreferences,
@@ -60,6 +62,7 @@ const ticketPeopleTableColumnIds: TicketPeopleTableColumnId[] = [
 
 export function PeoplePanel({
   calendars,
+  employees,
   draft,
   editingPersonId,
   importMessage,
@@ -74,6 +77,7 @@ export function PeoplePanel({
   people,
 }: {
   calendars: TicketCalendar[];
+  employees: Employee[];
   draft: TicketPersonDraft;
   editingPersonId: string | null;
   importMessage: string;
@@ -90,6 +94,7 @@ export function PeoplePanel({
   const canSave = draft.empleado.trim() && draft.nombre.trim() && draft.calendarId;
   const { confirm, dialogNode } = useAppDialog();
   const [isPersonFormOpen, setIsPersonFormOpen] = useState(Boolean(editingPersonId));
+  const [employeeSearch, setEmployeeSearch] = useState('');
 
   useEffect(() => {
     if (editingPersonId) {
@@ -97,13 +102,39 @@ export function PeoplePanel({
     }
   }, [editingPersonId]);
 
+  const employeeSuggestions = useMemo(() => {
+    const query = employeeSearch.trim().toLocaleLowerCase('es');
+    if (query.length < 2 || editingPersonId) return [];
+
+    return employees
+      .filter((employee) => !employee.deletedAt)
+      .filter((employee) => {
+        const haystack = `${employee.empleado} ${employee.nombreApellidos}`.toLocaleLowerCase('es');
+        return haystack.includes(query);
+      })
+      .sort((first, second) =>
+        first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+          sensitivity: 'base',
+          numeric: true,
+        }),
+      )
+      .slice(0, 8);
+  }, [editingPersonId, employeeSearch, employees]);
+
+  const selectEmployee = (employee: Employee) => {
+    onChange(ticketPersonDraftFromEmployee(employee, draft.calendarId));
+    setEmployeeSearch(`${employee.empleado} · ${employee.nombreApellidos}`);
+  };
+
   const handleSavePerson = () => {
     onSave();
+    setEmployeeSearch('');
     setIsPersonFormOpen(false);
   };
 
   const handleCancelPerson = () => {
     onCancel();
+    setEmployeeSearch('');
     setIsPersonFormOpen(false);
   };
 
@@ -270,42 +301,74 @@ export function PeoplePanel({
           </span>
         </button>
         {isPersonFormOpen ? (
-          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-2 space-y-2">
+            {!editingPersonId ? (
+              <div className="relative max-w-2xl">
+                <Field label="Buscar en Plantilla" hint="Los datos personales proceden de Plantilla; aquí solo asignas calendario y estado.">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-metro-muted" />
+                    <Input
+                      autoComplete="off"
+                      className="pl-8"
+                      onChange={(event) => setEmployeeSearch(event.target.value)}
+                      placeholder="Nº empleado o nombre y apellidos"
+                      value={employeeSearch}
+                    />
+                  </div>
+                </Field>
+                {employeeSuggestions.length > 0 ? (
+                  <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-metro-border bg-metro-panel shadow-xl">
+                    {employeeSuggestions.map((employee) => (
+                      <button
+                        className="flex w-full items-center justify-between gap-3 border-b border-metro-border/70 px-3 py-2 text-left text-xs last:border-b-0 hover:bg-metro-surface"
+                        key={employee.empleado}
+                        onClick={() => selectEmployee(employee)}
+                        type="button"
+                      >
+                        <span className="font-semibold text-metro-text">{employee.nombreApellidos}</span>
+                        <span className="shrink-0 text-metro-muted">#{employee.empleado}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
             <Field label="Nº empleado" required>
               <Input
-                onChange={(event) => onChange({ ...draft, empleado: event.target.value })}
                 required
+                readOnly
                 value={draft.empleado}
               />
             </Field>
             <Field label="Nombre" required>
               <Input
-                onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
                 required
+                readOnly
                 value={draft.nombre}
               />
             </Field>
             <Field label="Apellido 1">
               <Input
-                onChange={(event) => onChange({ ...draft, apellido1: event.target.value })}
+                readOnly
                 value={draft.apellido1}
               />
             </Field>
             <Field label="Apellido 2">
               <Input
-                onChange={(event) => onChange({ ...draft, apellido2: event.target.value })}
+                readOnly
                 value={draft.apellido2}
               />
             </Field>
             <Field label="DNI">
               <Input
-                onChange={(event) => onChange({ ...draft, dni: event.target.value })}
+                readOnly
                 value={draft.dni}
               />
             </Field>
             <Field label="Puesto">
               <Input
-                onChange={(event) => onChange({ ...draft, puesto: event.target.value })}
+                readOnly
                 value={draft.puesto}
               />
             </Field>
@@ -351,6 +414,7 @@ export function PeoplePanel({
                 </button>
               ) : null}
             </div>
+          </div>
           </div>
         ) : null}
       </div>
