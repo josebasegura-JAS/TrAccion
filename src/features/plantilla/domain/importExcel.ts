@@ -80,25 +80,52 @@ function buildFieldByHeader(): Map<string, EmployeeField> {
   );
 }
 
-export async function importEmployeesFromFile(file: File): Promise<EmployeeDraft[]> {
+export interface EmployeeImportData {
+  drafts: EmployeeDraft[];
+  importedFields: EmployeeField[];
+}
+
+export async function readEmployeeImportFromFile(file: File): Promise<EmployeeImportData> {
   const buffer = await file.arrayBuffer();
   const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
 
   if (extension === 'csv' || extension === 'tsv' || extension === 'txt') {
     const text = new TextDecoder().decode(buffer);
-    return rowsToEmployeeDrafts(parseDelimitedText(text));
+    return rowsToEmployeeImport(parseDelimitedText(text, extension));
   }
 
-  return rowsToEmployeeDrafts(await parseXlsxRows(buffer));
+  return rowsToEmployeeImport(await parseXlsxRows(buffer));
+}
+
+/**
+ * API histórica usada por tests y otros consumidores: devuelve solo las filas.
+ * El store usa readEmployeeImportFromFile para conocer además qué columnas
+ * estaban realmente presentes y así no vaciar datos por columnas ausentes.
+ */
+export async function importEmployeesFromFile(file: File): Promise<EmployeeDraft[]> {
+  return (await readEmployeeImportFromFile(file)).drafts;
 }
 
 export function rowsToEmployeeDrafts(rows: TabularRow[]): EmployeeDraft[] {
-  const [headers, ...dataRows] = rows;
-  if (!headers) {
-    return [];
+  return rowsToEmployeeImport(rows).drafts;
+}
+
+export function rowsToEmployeeImport(rows: TabularRow[]): EmployeeImportData {
+  const headerRowIndex = findHeaderRowIndex(rows);
+  if (headerRowIndex < 0) {
+    return { drafts: [], importedFields: [] };
   }
 
+  const headers = rows[headerRowIndex] ?? [];
+  const dataRows = rows.slice(headerRowIndex + 1);
   const fieldByColumn = headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null);
+  const importedFields = Array.from(
+    new Set(fieldByColumn.filter((field): field is EmployeeField => field !== null)),
+  );
+
+  if (!importedFields.includes('empleado')) {
+    return { drafts: [], importedFields };
+  }
 
   const draftsByEmpleado = new Map<string, EmployeeDraft>();
 
@@ -113,11 +140,31 @@ export function rowsToEmployeeDrafts(rows: TabularRow[]): EmployeeDraft[] {
 
     const empleado = draft.empleado.trim();
     if (empleado) {
+      draft.empleado = empleado;
       draftsByEmpleado.set(empleado, draft);
     }
   });
 
-  return Array.from(draftsByEmpleado.values());
+  return { drafts: Array.from(draftsByEmpleado.values()), importedFields };
+}
+
+/**
+ * Algunos Excel corporativos incluyen una o varias filas de título antes de la
+ * cabecera real. Buscamos la primera fila de las 15 iniciales que contenga
+ * "Empleado" y al menos otra columna reconocible.
+ */
+function findHeaderRowIndex(rows: TabularRow[]): number {
+  const limit = Math.min(rows.length, 15);
+  for (let index = 0; index < limit; index += 1) {
+    const recognized = (rows[index] ?? [])
+      .map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null)
+      .filter((field): field is EmployeeField => field !== null);
+    if (recognized.includes('empleado') && new Set(recognized).size >= 2) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function normalizeEmployeeCellValue(field: EmployeeField, value: string): string {

@@ -1,10 +1,8 @@
 import {
   Download,
   Languages,
-  RefreshCw,
   RotateCcw,
   SlidersHorizontal,
-  Upload,
 } from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
@@ -15,7 +13,6 @@ import { PageHeader } from './ui/PageHeader';
 import { Toolbar } from './ui/Toolbar';
 import { SearchField } from './ui/SearchField';
 import { FilterSelect } from './ui/FilterSelect';
-import { DropdownMenu } from './ui/DropdownMenu';
 import { CountBadge } from './ui/CountBadge';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
 import type { Employee } from '../features/plantilla/domain/employee';
@@ -46,7 +43,7 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Importación de personas',
     items: [
       'Admite Excel, CSV, TSV o TXT. Las columnas se reconocen por variantes habituales del nombre (con/sin acentos, "Nº Empleado", etc.), no hace falta que coincidan exactamente.',
-      'Si la persona ya existe (mismo número de empleado), se actualiza; si no existe, se crea. Si el Excel trae el Puesto EUS vacío para alguien que ya tenía uno guardado, se conserva el que ya había en vez de borrarlo.',
+      'Si la persona ya existe (mismo número de empleado), se actualiza; si no existe, se crea. Solo se actualizan las columnas que realmente vienen en el fichero: las columnas ausentes conservan el dato ya guardado.',
       'Modo especial "solo antigüedad": si el fichero importado únicamente tiene informadas las columnas Empleado y Antigüedad Puesto (todo lo demás vacío en todas las filas), la app entiende que es una actualización masiva de antigüedad y solo toca ese campo en las personas que ya existen; no crea personas nuevas ni modifica el resto de datos.',
       'El botón "Generar muestra" descarga un Excel de ejemplo con las columnas que reconoce el importador.',
     ],
@@ -55,14 +52,14 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Traducción de puestos (EUS)',
     items: [
       '"Traducir puestos" abre la tabla de equivalencias Puesto (castellano) / Lanpostua (euskera) que usan Plantilla y Teletrabajo.',
-      '"Actualizar puestos global" recorre toda la plantilla y rellena el Puesto EUS de quienes lo tengan vacío, usando esa tabla de traducciones; el botón muestra cuántos puestos EUS quedan pendientes.',
+      'Al importar Plantilla se aplica automáticamente la traducción EUS cuando ya existe una equivalencia. Desde "Traducciones EUS" puedes completar los puestos pendientes y actualizar la plantilla.',
       'Conviene mantener esta tabla actualizada antes de importar la encuesta de Teletrabajo, porque ese importador la usa para resolver el puesto de cada persona.',
     ],
   },
   {
     title: 'Uso recomendado',
     items: [
-      'Revisa primero que el número de empleado y el nombre completo estén correctamente informados.',
+      'Usa Plantilla como fuente principal de personas: número de empleado, nombre y datos laborales deben mantenerse aquí para que el resto de módulos los reutilicen.',
       'Usa las traducciones de puestos para completar automáticamente puestos EUS cuando falten.',
       'Exporta o imprime el listado filtrado cuando necesites una foto concreta de plantilla.',
     ],
@@ -150,6 +147,7 @@ export function PlantillaPage() {
   const [isTranslationsModalOpen, setTranslationsModalOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState('');
+  const [importMessageIsError, setImportMessageIsError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -388,19 +386,6 @@ export function PlantillaPage() {
     [employeeTableColumns, filteredEmployees, preferences.sort],
   );
 
-  const handleGlobalJobPositionUpdate = async () => {
-    try {
-      const { updated, missing } = await updateEmptyEmployeeJobPositionTranslations();
-      setImportMessage(
-        `Puestos EUS actualizados: ${updated}. Sin traducción encontrada: ${missing}.`,
-      );
-    } catch (error) {
-      setImportMessage(
-        error instanceof Error ? error.message : 'No se han podido actualizar los puestos EUS.',
-      );
-    }
-  };
-
   const handleGenerateSampleExcel = async () => {
     try {
       const { default: ExcelJS } = await import('exceljs');
@@ -561,12 +546,14 @@ export function PlantillaPage() {
 
                 try {
                   const result = await importExcel(file);
+                  setImportMessageIsError(false);
                   setImportMessage(
                     result.mode === 'antiguedadPuesto'
                       ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
                       : `Importación completada: ${file.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
                   );
                 } catch (error) {
+                  setImportMessageIsError(true);
                   setImportMessage(
                     error instanceof Error
                       ? error.message
@@ -579,43 +566,38 @@ export function PlantillaPage() {
               ref={fileInputRef}
               type="file"
             />
-            <DropdownMenu
-              icon={<Upload size={14} />}
+            <ActionButton
+              iconOnly={false}
+              onClick={() => fileInputRef.current?.click()}
               size="sm"
-              items={[
-                {
-                  key: 'traducir-puestos',
-                  label: 'Traducir puestos',
-                  icon: <Languages size={14} />,
-                  onClick: () => setTranslationsModalOpen(true),
-                },
-                {
-                  key: 'actualizar-puestos-global',
-                  label:
-                    emptyPuestoEusCount === 0
-                      ? 'Actualizar puestos global (sin pendientes)'
-                      : `Actualizar puestos global (${emptyPuestoEusCount} pendientes)`,
-                  icon: <RefreshCw size={14} />,
-                  disabled: emptyPuestoEusCount === 0,
-                  onClick: () => {
-                    void handleGlobalJobPositionUpdate();
-                  },
-                },
-                {
-                  key: 'importar',
-                  label: 'Importar Excel',
-                  icon: <Upload size={14} />,
-                  onClick: () => fileInputRef.current?.click(),
-                },
-                {
-                  key: 'generar-muestra',
-                  label: 'Generar Excel de muestra',
-                  icon: <Download size={14} />,
-                  onClick: () => void handleGenerateSampleExcel(),
-                },
-              ]}
-              label="Importar"
-            />
+              variant="import"
+            >
+              Importar Excel
+            </ActionButton>
+            <ActionButton
+              icon={Languages}
+              iconOnly={false}
+              onClick={() => setTranslationsModalOpen(true)}
+              size="sm"
+              title={
+                emptyPuestoEusCount === 0
+                  ? 'Traducciones de puestos EUS'
+                  : `${emptyPuestoEusCount} personas tienen el Puesto EUS pendiente`
+              }
+              variant="secondary"
+            >
+              Traducciones EUS{emptyPuestoEusCount > 0 ? ` (${emptyPuestoEusCount})` : ''}
+            </ActionButton>
+            <ActionButton
+              icon={Download}
+              iconOnly={false}
+              onClick={() => void handleGenerateSampleExcel()}
+              size="sm"
+              title="Generar un Excel de muestra compatible con Plantilla"
+              variant="secondary"
+            >
+              Muestra
+            </ActionButton>
             <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva persona
             </ActionButton>
@@ -629,7 +611,13 @@ export function PlantillaPage() {
       />
 
       {importMessage && (
-        <div className="mb-3 rounded-xl border border-metro-success/30 bg-metro-success/10 px-3 py-2 text-sm font-semibold text-emerald-200">
+        <div
+          className={
+            importMessageIsError
+              ? 'mb-3 rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-sm font-semibold text-red-200'
+              : 'mb-3 rounded-xl border border-metro-success/30 bg-metro-success/10 px-3 py-2 text-sm font-semibold text-emerald-200'
+          }
+        >
           {importMessage}
         </div>
       )}

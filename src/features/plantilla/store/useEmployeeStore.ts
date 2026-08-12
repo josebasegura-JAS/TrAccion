@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { hydrateEmployee } from '../domain/derived';
 import { EMPTY_EMPLOYEE_FILTERS, filterEmployees, type EmployeeFilters } from '../domain/filters';
-import { importEmployeesFromFile } from '../domain/importExcel';
+import { readEmployeeImportFromFile } from '../domain/importExcel';
 import { importJobPositionTranslationsFromFile } from '../domain/importJobPositionTranslations';
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft } from '../domain/employee';
@@ -276,7 +276,7 @@ function upsertJobPositionTranslations(
 
 
 function resolveEmployeeJobPositionTranslation(
-  employee: Employee,
+  employee: Pick<EmployeeDraft, 'puestoNomina' | 'puestoOrganizativo'>,
   translations: JobPositionTranslation[],
 ): string {
   const positionKeys = [employee.puestoNomina, employee.puestoOrganizativo]
@@ -307,9 +307,21 @@ function isAntiguedadPuestoOnlyDraft(draft: EmployeeDraft): boolean {
   );
 }
 
-function buildEmployeeImport(current: Employee[], drafts: EmployeeDraft[]): { employees: Employee[]; result: EmployeeImportResult } {
+function buildEmployeeImport(
+  current: Employee[],
+  drafts: EmployeeDraft[],
+  importedFields: ReadonlySet<keyof EmployeeDraft>,
+  translations: JobPositionTranslation[],
+): { employees: Employee[]; changedEmployees: Employee[]; result: EmployeeImportResult } {
   const employeesById = new Map(current.map((employee) => [employee.empleado, employee]));
-  const isAntiguedadOnlyImport = drafts.length > 0 && drafts.every(isAntiguedadPuestoOnlyDraft);
+  const importedFieldNames = Array.from(importedFields);
+  const isAntiguedadOnlyImport =
+    drafts.length > 0 &&
+    importedFields.has('empleado') &&
+    importedFields.has('antiguedadPuesto') &&
+    importedFieldNames.every((field) => field === 'empleado' || field === 'antiguedadPuesto') &&
+    drafts.every(isAntiguedadPuestoOnlyDraft);
+  const changedEmployees: Employee[] = [];
   let updated = 0;
   let created = 0;
   let ignored = 0;
@@ -323,19 +335,66 @@ function buildEmployeeImport(current: Employee[], drafts: EmployeeDraft[]): { em
         return;
       }
 
-      employeesById.set(draft.empleado, {
+      const nextEmployee = {
         ...previous,
         antiguedadPuesto: draft.antiguedadPuesto,
-      });
+      };
+      employeesById.set(draft.empleado, nextEmployee);
+      if (employeeSnapshot(nextEmployee) !== employeeSnapshot(previous)) {
+        changedEmployees.push(nextEmployee);
+      }
       updated += 1;
       return;
     }
 
-    const nextDraft = {
-      ...draft,
-      puestoEus: draft.puestoEus.trim() || previous?.puestoEus || '',
-    };
-    employeesById.set(draft.empleado, hydrateEmployee(nextDraft, previous?.deletedAt ?? null));
+    // La Excel es fuente de verdad únicamente para las columnas que realmente
+    // trae. Las columnas ausentes conservan el dato ya guardado en Plantilla.
+    // Esto evita que una importación parcial borre domicilio, NIF, nivel, etc.
+    const nextDraft: EmployeeDraft = previous
+      ? {
+          empleado: previous.empleado,
+          nombreApellidos: previous.nombreApellidos,
+          puestoNomina: previous.puestoNomina,
+          puestoOrganizativo: previous.puestoOrganizativo,
+          puestoEus: previous.puestoEus,
+          residencia: previous.residencia,
+          unidad: previous.unidad,
+          nivelRetributivo: previous.nivelRetributivo,
+          direccionOrganizativa: previous.direccionOrganizativa,
+          antiguedadPuesto: previous.antiguedadPuesto,
+          sexo: previous.sexo,
+          calle: previous.calle,
+          numero: previous.numero,
+          piso: previous.piso,
+          codigoPostal: previous.codigoPostal,
+          poblacion: previous.poblacion,
+          provincia: previous.provincia,
+          nif: previous.nif,
+        }
+      : { ...draft };
+
+    importedFieldNames.forEach((field) => {
+      nextDraft[field] = draft[field];
+    });
+
+    // Mantiene una traducción ya revisada si la columna Puesto EUS llega vacía.
+    if (!nextDraft.puestoEus.trim() && previous?.puestoEus.trim()) {
+      nextDraft.puestoEus = previous.puestoEus;
+    }
+
+    // Si ya existe equivalencia castellano/euskera, se aplica en la propia
+    // importación: no hace falta ejecutar después "Actualizar puestos global".
+    if (!nextDraft.puestoEus.trim()) {
+      nextDraft.puestoEus = resolveEmployeeJobPositionTranslation(nextDraft, translations);
+    }
+
+    // Si una persona previamente eliminada vuelve a aparecer en la fuente
+    // principal, se reactiva automáticamente.
+    const nextEmployee = hydrateEmployee(nextDraft, null);
+    employeesById.set(draft.empleado, nextEmployee);
+    if (!previous || employeeSnapshot(nextEmployee) !== employeeSnapshot(previous)) {
+      changedEmployees.push(nextEmployee);
+    }
 
     if (previous) {
       updated += 1;
@@ -346,6 +405,7 @@ function buildEmployeeImport(current: Employee[], drafts: EmployeeDraft[]): { em
 
   return {
     employees: Array.from(employeesById.values()),
+    changedEmployees,
     result: {
       totalRows: drafts.length,
       updated,
@@ -558,13 +618,25 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     }
   },
   importExcel: async (file) => {
-    const drafts = await importEmployeesFromFile(file);
+    const { drafts, importedFields } = await readEmployeeImportFromFile(file);
+    if (!importedFields.includes('empleado')) {
+      throw new Error('No se ha encontrado una columna de Empleado reconocible en el Excel.');
+    }
+    if (drafts.length === 0) {
+      throw new Error('No se han encontrado personas válidas para importar.');
+    }
+
     const currentEmployees = get().employees;
-    const { employees, result: importResult } = buildEmployeeImport(currentEmployees, drafts);
+    const { employees, changedEmployees, result: importResult } = buildEmployeeImport(
+      currentEmployees,
+      drafts,
+      new Set(importedFields),
+      get().jobPositionTranslations,
+    );
     if (hasEmployeeSqliteBatchRepository()) {
       const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
       const result = await saveEmployeesToSqlite(
-        employees.map((employee) => ({
+        changedEmployees.map((employee) => ({
           employee,
           expectedValue: previousById.get(employee.empleado) ?? null,
         })),
@@ -579,7 +651,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
 
     if (hasEmployeeSqliteRepository()) {
       const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));
-      for (const employee of employees) {
+      for (const employee of changedEmployees) {
         const expectedSnapshot = previousById.get(employee.empleado) ?? null;
         const result = await persistEmployeeDirectOrFallback(employee, expectedSnapshot);
         if (result && !result.ok) {
