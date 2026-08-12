@@ -210,6 +210,7 @@ export interface TicketPersonCalculation {
   ticketsFinales: number;
   importe: number;
   manualEntry?: boolean;
+  manualIncludeContribution?: boolean;
   ausenciaIds: string[];
   ausenciaDiasDescontados: Record<string, number>;
   deudaEntranteDetalle: TicketDebtDetailDay[];
@@ -768,6 +769,7 @@ function calculateTicketMonthInternal(
         ticketsFinales: tickets,
         importe: roundCurrency(tickets * effectivePrice),
         manualEntry: true,
+        manualIncludeContribution: person.includeContribution,
         ausenciaIds: [],
         ausenciaDiasDescontados: {},
         deudaEntranteDetalle: [],

@@ -69,7 +69,12 @@ export function TicketRestauranteManualPeoplePanel({
   const people = useMemo<TicketManualPerson[]>(
     () => [...allManualPeople]
       .filter((person) => person.activo && (!person.inactiveFromMonth || key < person.inactiveFromMonth))
-      .sort((a, b) => a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' })),
+      .sort((a, b) => {
+        if (a.includeContribution !== b.includeContribution) {
+          return a.includeContribution ? -1 : 1;
+        }
+        return a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' });
+      }),
     [allManualPeople, key],
   );
 
@@ -385,6 +390,10 @@ export function TicketRestauranteManualPeoplePanel({
             <div>
               <p className="text-xs font-bold text-metro-text">Tickets del mes</p>
               <p className="text-[11px] text-metro-muted">Indica los tickets de {monthLabel} y guarda cuando termines.</p>
+              <div className="mt-1 flex flex-wrap gap-2 text-[9px] font-semibold">
+                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/[0.08] px-2 py-0.5 text-emerald-300">Cotiza</span>
+                <span className="rounded-full border border-violet-400/20 bg-violet-500/[0.08] px-2 py-0.5 text-violet-300">No cotiza</span>
+              </div>
             </div>
             <ActionButton
               iconOnly={false}
@@ -413,7 +422,14 @@ export function TicketRestauranteManualPeoplePanel({
                   includeContribution: person.includeContribution,
                 };
                 return (
-                  <tr key={person.id} className="border-t border-metro-border">
+                  <tr
+                    key={person.id}
+                    className={
+                      draft.includeContribution
+                        ? 'border-t border-metro-border bg-emerald-500/[0.055]'
+                        : 'border-t border-metro-border bg-violet-500/[0.055]'
+                    }
+                  >
                     <td className="px-2 py-1.5 font-semibold text-metro-text">{person.empleado}</td>
                     <td className="px-2 py-1.5 text-metro-text">{person.nombreApellidos}</td>
                     <td className="px-2 py-1 text-right">

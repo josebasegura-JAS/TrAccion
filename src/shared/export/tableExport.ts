@@ -364,6 +364,8 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
     const black = toExcelColor('#000000');
     const manualDebtFill = toExcelColor('#DDEBF7');
     const regularizationFill = toExcelColor('#FFF2CC');
+    const manualContributionFill = toExcelColor('#DDEFE3');
+    const manualNoContributionFill = toExcelColor('#EADCF8');
     const calendarPalette = [
       '#EAF2F8',
       '#E8F5E9',
@@ -474,9 +476,14 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
       const group = payload.rowGroupValue
         ? normalizeCellValue(payload.rowGroupValue(row)).trim() || 'Sin calendario'
         : '';
-      const groupFill = group
-        ? toExcelColor(group === 'Manual' ? '#EADCF8' : calendarColorByGroup.get(group) ?? '#FFFFFF')
-        : white;
+      const manualRow = row as { manualEntry?: boolean; manualIncludeContribution?: boolean };
+      const groupFill = manualRow.manualEntry
+        ? manualRow.manualIncludeContribution
+          ? manualContributionFill
+          : manualNoContributionFill
+        : group
+          ? toExcelColor(calendarColorByGroup.get(group) ?? '#FFFFFF')
+          : white;
 
       payload.columns.forEach((column, columnIndex) => {
         const cell = excelRow.getCell(columnIndex + 1);

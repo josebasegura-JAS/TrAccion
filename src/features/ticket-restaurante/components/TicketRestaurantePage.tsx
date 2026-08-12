@@ -238,6 +238,17 @@ function sortMonthlyCalculationRows(
       sensitivity: 'base',
     });
     if (calendarComparison !== 0) return calendarComparison;
+
+    if (first.manualEntry && second.manualEntry) {
+      if (first.manualIncludeContribution !== second.manualIncludeContribution) {
+        return first.manualIncludeContribution ? -1 : 1;
+      }
+      return first.empleado.localeCompare(second.empleado, 'es', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    }
+
     return first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
       numeric: true,
       sensitivity: 'base',
