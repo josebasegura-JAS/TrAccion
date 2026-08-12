@@ -1,0 +1,124 @@
+name: Build Windows ZIP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-zip:
+    name: Build TrAccion Windows ZIP
+    runs-on: windows-latest
+
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
+      PYTHON: python
+      npm_config_python: python
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Cache npm download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-22.13.1-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22.13.1-npm-
+
+      - name: Setup Python for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Electron builder binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-builder-
+
+      - name: Configurar registro npm público
+        shell: pwsh
+        run: |
+          npm config set registry https://registry.npmjs.org/
+
+      - name: Install dependencies from lockfile
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules) {
+            Remove-Item node_modules -Recurse -Force
+          }
+          npm ci --include=dev --no-audit --no-fund
+          npm rebuild better-sqlite3
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build renderer and Electron main
+        run: npm run build
+
+      - name: Build unpacked Windows app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          $maxAttempts = 3
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "electron-builder dir attempt $attempt of $maxAttempts"
+            npx electron-builder --win --x64 --dir
+
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+
+            if ($attempt -lt $maxAttempts) {
+              Write-Host "electron-builder failed with exit code $LASTEXITCODE. Retrying after transient download failure..."
+              Start-Sleep -Seconds (20 * $attempt)
+            }
+          }
+
+          exit $LASTEXITCODE
+
+      - name: Create ZIP package
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $source = "release\win-unpacked"
+          $zip = "release\TrAccion V$version Windows.zip"
+
+          if (-not (Test-Path $source)) {
+            throw "No se ha encontrado la carpeta $source generada por electron-builder."
+          }
+
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+
+          Compress-Archive -Path "$source\*" -DestinationPath $zip -CompressionLevel Optimal
+          Write-Host "ZIP generado: $zip"
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrAccion-V1-windows-zip
+          path: release/TrAccion V*.zip
+          if-no-files-found: error
+          compression-level: 0
