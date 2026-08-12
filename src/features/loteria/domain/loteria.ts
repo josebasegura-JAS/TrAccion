@@ -9,8 +9,8 @@ export interface LotteryContact {
 export interface LotteryWorkflow {
   loteroAvisado: boolean;
   encargoConfirmado: boolean;
+  participantesPreparados: boolean;
   avisoPersonasEnviado: boolean;
-  excelImportado: boolean;
   seguimientoIniciado: boolean;
   campanaCerrada: boolean;
 }
@@ -19,15 +19,15 @@ export interface LotteryRequest {
   id: string;
   nombre: string;
   email: string;
-  telefono: string;
   empleado: string | null;
   externa: boolean;
+  contactoObservaciones: string;
   decimosNumero1: number;
   decimosNumero2: number;
   pagado: boolean;
   fechaPago: string | null;
   formaPago: LotteryPaymentMethod;
-  observaciones: string;
+  observacionesPago: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,8 +82,8 @@ export const createDefaultLotteryCampaign = (year = new Date().getFullYear()): L
   workflow: {
     loteroAvisado: false,
     encargoConfirmado: false,
+    participantesPreparados: false,
     avisoPersonasEnviado: false,
-    excelImportado: false,
     seguimientoIniciado: false,
     campanaCerrada: false,
   },

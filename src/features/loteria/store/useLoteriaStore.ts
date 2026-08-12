@@ -5,7 +5,6 @@ import {
   type LotteryCampaign,
   type LotteryRequest,
 } from '../domain/loteria';
-import type { ImportedLotteryPerson } from '../domain/importLotteryPeople';
 
 export const LOTTERY_STORAGE_KEY = 'traccion.v1.loteria.campaign';
 
@@ -14,7 +13,6 @@ interface LotteryState {
   load: () => void;
   reloadFromStorage: () => void;
   saveCampaign: (campaign: LotteryCampaign) => Promise<{ ok: boolean; message: string }>;
-  importPeople: (people: ImportedLotteryPerson[]) => Promise<{ ok: boolean; message: string }>;
 }
 
 function createId(): string {
@@ -30,21 +28,33 @@ function toSafeNumber(value: unknown, fallback = 0): number {
 
 function normalizeRequest(value: unknown): LotteryRequest | null {
   if (!value || typeof value !== 'object') return null;
-  const candidate = value as Partial<LotteryRequest> & { decimos?: number };
+  const candidate = value as Partial<LotteryRequest> & {
+    decimos?: number;
+    telefono?: string;
+    observaciones?: string;
+  };
   const now = new Date().toISOString();
+  const legacyContacto = typeof candidate.telefono === 'string' ? candidate.telefono.trim() : '';
+  const contactoObservaciones = typeof candidate.contactoObservaciones === 'string'
+    ? candidate.contactoObservaciones
+    : legacyContacto;
+  const observacionesPago = typeof candidate.observacionesPago === 'string'
+    ? candidate.observacionesPago
+    : (typeof candidate.observaciones === 'string' ? candidate.observaciones : '');
+
   return {
     id: typeof candidate.id === 'string' && candidate.id ? candidate.id : createId(),
     nombre: typeof candidate.nombre === 'string' ? candidate.nombre : '',
     email: typeof candidate.email === 'string' ? candidate.email : '',
-    telefono: typeof candidate.telefono === 'string' ? candidate.telefono : '',
     empleado: typeof candidate.empleado === 'string' && candidate.empleado.trim() ? candidate.empleado : null,
     externa: typeof candidate.externa === 'boolean' ? candidate.externa : !candidate.empleado,
+    contactoObservaciones,
     decimosNumero1: Math.max(0, toSafeNumber(candidate.decimosNumero1, toSafeNumber(candidate.decimos, 0))),
     decimosNumero2: Math.max(0, toSafeNumber(candidate.decimosNumero2, 0)),
     pagado: Boolean(candidate.pagado),
     fechaPago: typeof candidate.fechaPago === 'string' ? candidate.fechaPago : null,
     formaPago: candidate.formaPago === 'bizum' ? 'bizum' : 'efectivo',
-    observaciones: typeof candidate.observaciones === 'string' ? candidate.observaciones : '',
+    observacionesPago,
     createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : now,
     updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : now,
   };
@@ -57,6 +67,7 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
     decimosEncargados?: number;
     emailSubject?: string;
     emailBody?: string;
+    workflow?: Partial<LotteryCampaign['workflow']> & { excelImportado?: boolean };
   };
 
   const requests = Array.isArray(candidate.requests)
@@ -71,6 +82,7 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
     ? candidate.loteroEmailSubject
     : (typeof candidate.emailSubject === 'string' ? candidate.emailSubject : '');
   const hasLegacyLoteroSubject = storedLoteroSubject.startsWith('Encargo Lotería de Navidad');
+  const storedWorkflow = candidate.workflow ?? {};
 
   return {
     ...fallback,
@@ -94,7 +106,13 @@ function normalizeCampaign(value: unknown): LotteryCampaign {
     participantesEmailBody: typeof candidate.participantesEmailBody === 'string'
       ? candidate.participantesEmailBody
       : fallback.participantesEmailBody,
-    workflow: { ...fallback.workflow, ...(candidate.workflow ?? {}) },
+    workflow: {
+      ...fallback.workflow,
+      ...storedWorkflow,
+      participantesPreparados: typeof storedWorkflow.participantesPreparados === 'boolean'
+        ? storedWorkflow.participantesPreparados
+        : Boolean(storedWorkflow.excelImportado || requests.length > 0),
+    },
     requests,
   };
 }
@@ -109,7 +127,7 @@ function readCampaign(): LotteryCampaign {
   }
 }
 
-export const useLoteriaStore = create<LotteryState>((set, get) => ({
+export const useLoteriaStore = create<LotteryState>((set) => ({
   campaign: createDefaultLotteryCampaign(),
   load: () => set({ campaign: readCampaign() }),
   reloadFromStorage: () => set({ campaign: readCampaign() }),
@@ -117,40 +135,5 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
     const result = await writeStorageItem(LOTTERY_STORAGE_KEY, JSON.stringify(campaign));
     if (result.ok) set({ campaign });
     return { ok: result.ok, message: result.message };
-  },
-  importPeople: async (people) => {
-    const campaign = get().campaign;
-    const now = new Date().toISOString();
-    const existingKeys = new Set(campaign.requests.map((request) => `${request.email.trim().toLowerCase()}|${request.nombre.trim().toLowerCase()}`));
-    const additions: LotteryRequest[] = people.reduce<LotteryRequest[]>((records, person) => {
-      const key = `${person.email.trim().toLowerCase()}|${person.nombre.trim().toLowerCase()}`;
-      if (existingKeys.has(key)) return records;
-      existingKeys.add(key);
-      records.push({
-        id: createId(),
-        nombre: person.nombre,
-        email: person.email,
-        telefono: person.telefono,
-        empleado: typeof person.empleado === 'string' && person.empleado.trim() ? person.empleado : null,
-        externa: Boolean(person.externa),
-        decimosNumero1: 0,
-        decimosNumero2: 0,
-        pagado: false,
-        fechaPago: null,
-        formaPago: 'efectivo',
-        observaciones: '',
-        createdAt: now,
-        updatedAt: now,
-      });
-      return records;
-    }, []);
-    const next = {
-      ...campaign,
-      workflow: { ...campaign.workflow, excelImportado: additions.length > 0 || campaign.workflow.excelImportado },
-      requests: [...campaign.requests, ...additions],
-    };
-    const result = await writeStorageItem(LOTTERY_STORAGE_KEY, JSON.stringify(next));
-    if (result.ok) set({ campaign: next });
-    return { ok: result.ok, message: result.ok ? `Importadas ${additions.length} personas nuevas.` : result.message };
   },
 }));
