@@ -170,6 +170,12 @@ export interface TicketManualPerson {
   updatedAt: string;
 }
 
+export interface TicketMonthlyWorkflowReview {
+  absencesReviewed: boolean;
+  manutencionesReviewed: boolean;
+  manualDebtsReviewed: boolean;
+}
+
 export interface TicketRestaurantConfig {
   importeTicket: number;
   pedidoMensual: number;
@@ -178,6 +184,7 @@ export interface TicketRestaurantConfig {
   manualDebts?: TicketManualDebt[];
   debtRegularizations?: TicketDebtRegularization[];
   manualPeople?: TicketManualPerson[];
+  workflowReviews?: Record<string, TicketMonthlyWorkflowReview>;
 }
 
 export interface TicketDebtDetailDay {
@@ -251,6 +258,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   manualDebts: [],
   debtRegularizations: [],
   manualPeople: [],
+  workflowReviews: {},
 };
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
@@ -1603,6 +1611,39 @@ function normalizeManualPeople(value: unknown): TicketManualPerson[] {
   });
 }
 
+function normalizeWorkflowReviews(
+  reviews: TicketRestaurantConfig['workflowReviews'],
+): Record<string, TicketMonthlyWorkflowReview> {
+  if (!reviews || typeof reviews !== 'object') return {};
+
+  const normalized: Record<string, TicketMonthlyWorkflowReview> = {};
+  Object.entries(reviews).forEach(([key, value]) => {
+    if (!/^\d{4}-\d{2}$/.test(key) || !value || typeof value !== 'object') return;
+    normalized[key] = {
+      absencesReviewed: value.absencesReviewed === true,
+      manutencionesReviewed: value.manutencionesReviewed === true,
+      manualDebtsReviewed: value.manualDebtsReviewed === true,
+    };
+  });
+  return normalized;
+}
+
+export function ticketWorkflowMonthKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+export function getTicketMonthlyWorkflowReview(
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+): TicketMonthlyWorkflowReview {
+  return normalizeWorkflowReviews(config.workflowReviews)[ticketWorkflowMonthKey(year, month)] ?? {
+    absencesReviewed: false,
+    manutencionesReviewed: false,
+    manualDebtsReviewed: false,
+  };
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -1624,6 +1665,7 @@ export function normalizeTicketRestaurantConfig(
     manualDebts: normalizeManualDebts(config.manualDebts),
     debtRegularizations: normalizeDebtRegularizations(config.debtRegularizations),
     manualPeople: normalizeManualPeople(config.manualPeople),
+    workflowReviews: normalizeWorkflowReviews(config.workflowReviews),
   };
 }
 

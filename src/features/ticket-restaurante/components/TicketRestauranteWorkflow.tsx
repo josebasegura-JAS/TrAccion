@@ -101,10 +101,14 @@ function StatusLine({
   label,
   state,
   detail,
+  checked,
+  onCheckedChange,
 }: {
   label: string;
   state: 'done' | 'pending' | 'neutral';
   detail?: string;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
 }) {
   const Icon = state === 'done' ? CheckCircle2 : state === 'pending' ? Clock3 : Circle;
   const iconClass = state === 'done' ? 'text-emerald-400' : state === 'pending' ? 'text-amber-400' : 'text-metro-muted';
@@ -112,8 +116,21 @@ function StatusLine({
   return (
     <div className="flex items-start gap-2">
       <Icon className={cx('mt-px h-3.5 w-3.5 shrink-0', iconClass)} />
-      <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4 text-metro-secondary">{label}</p>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold leading-4 text-metro-secondary">{label}</p>
+          {onCheckedChange ? (
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[9px] font-semibold text-metro-muted">
+              <input
+                checked={checked === true}
+                className="h-3.5 w-3.5 accent-emerald-500"
+                onChange={(event) => onCheckedChange(event.target.checked)}
+                type="checkbox"
+              />
+              Revisado
+            </label>
+          ) : null}
+        </div>
         {detail ? <p className="text-[10px] leading-4 text-metro-muted">{detail}</p> : null}
       </div>
     </div>
@@ -185,6 +202,9 @@ export interface TicketRestauranteWorkflowProps {
   absenceCount: number;
   manutencionCount: number;
   manualDebtCount: number;
+  absencesReviewed: boolean;
+  manutencionesReviewed: boolean;
+  manualDebtsReviewed: boolean;
   effectiveTicketPrice: number;
   calculation: TicketMonthCalculation;
   onOpenCalendars: () => void;
@@ -199,6 +219,7 @@ export interface TicketRestauranteWorkflowProps {
   onImportManutenciones: () => void;
   onOpenMonthlyCalculation: () => void;
   onOpenContribution: () => void;
+  onReviewChange: (kind: 'absencesReviewed' | 'manutencionesReviewed' | 'manualDebtsReviewed', checked: boolean) => void;
 }
 
 export function TicketRestauranteWorkflow({
@@ -212,6 +233,9 @@ export function TicketRestauranteWorkflow({
   absenceCount,
   manutencionCount,
   manualDebtCount,
+  absencesReviewed,
+  manutencionesReviewed,
+  manualDebtsReviewed,
   effectiveTicketPrice,
   calculation,
   onOpenCalendars,
@@ -226,6 +250,7 @@ export function TicketRestauranteWorkflow({
   onImportManutenciones,
   onOpenMonthlyCalculation,
   onOpenContribution,
+  onReviewChange,
 }: TicketRestauranteWorkflowProps) {
   const readyForCalculation = activeCalendars > 0 && activePeople > 0;
   const monthLabel = `${MONTH_OPTIONS[month - 1] ?? month} ${year}`;
@@ -328,8 +353,8 @@ export function TicketRestauranteWorkflow({
             </div>
 
             <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
-              <FlowStep icon={Upload} title="a) Importar ausencias" detail="Excel mensual" status={absenceCount > 0 ? `${absenceCount} cargadas` : 'Sin registros'} statusTone={absenceCount > 0 ? 'done' : 'info'} onClick={onImportAbsences} />
-              <FlowStep icon={Utensils} title="b) Importar manutenciones" detail="Gastos del mes" status={manutencionCount > 0 ? `${manutencionCount} cargadas` : 'Pendiente'} statusTone={manutencionCount > 0 ? 'done' : 'pending'} onClick={onImportManutenciones} />
+              <FlowStep icon={Upload} title="a) Importar ausencias" detail="Excel mensual" status={absencesReviewed ? 'Revisado' : absenceCount > 0 ? `${absenceCount} cargadas` : 'Pendiente'} statusTone={absencesReviewed ? 'done' : 'pending'} onClick={onImportAbsences} />
+              <FlowStep icon={Utensils} title="b) Importar manutenciones" detail="Gastos del mes" status={manutencionesReviewed ? 'Revisado' : manutencionCount > 0 ? `${manutencionCount} cargadas` : 'Pendiente'} statusTone={manutencionesReviewed ? 'done' : 'pending'} onClick={onImportManutenciones} />
               <FlowStep icon={Calculator} title="c) Calcular y preparar pedido" detail="Revisar cómputo y exportar" status={readyForCalculation ? 'Revisar / exportar' : 'Revisar base'} statusTone={readyForCalculation ? 'info' : 'pending'} onClick={onOpenMonthlyCalculation} highlighted />
             </div>
 
@@ -389,9 +414,27 @@ export function TicketRestauranteWorkflow({
               <StatusLine label="Calendarios configurados" state={activeCalendars > 0 ? 'done' : 'pending'} detail={`${activeCalendars} activos`} />
               <StatusLine label="Precio del ticket" state={effectiveTicketPrice > 0 ? 'done' : 'pending'} detail={`${formatMoney(effectiveTicketPrice)} €`} />
               <StatusLine label="Personas revisadas" state={activePeople > 0 ? 'done' : 'pending'} detail={`${activePeople} activas`} />
-              <StatusLine label="Ausencias importadas" state={absenceCount > 0 ? 'done' : 'neutral'} detail={`${absenceCount} en ${monthLabel}`} />
-              <StatusLine label="Manutenciones importadas" state={manutencionCount > 0 ? 'done' : 'pending'} detail={`${manutencionCount} imputadas`} />
-              <StatusLine label="Deudas manuales" state={manualDebtCount > 0 ? 'pending' : 'neutral'} detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes activos'} />
+              <StatusLine
+                checked={absencesReviewed}
+                detail={absenceCount > 0 ? `${absenceCount} en ${monthLabel}` : `Sin registros en ${monthLabel}`}
+                label="Ausencias"
+                onCheckedChange={(checked) => onReviewChange('absencesReviewed', checked)}
+                state={absencesReviewed ? 'done' : 'pending'}
+              />
+              <StatusLine
+                checked={manutencionesReviewed}
+                detail={manutencionCount > 0 ? `${manutencionCount} imputadas` : 'Sin manutenciones'}
+                label="Manutenciones"
+                onCheckedChange={(checked) => onReviewChange('manutencionesReviewed', checked)}
+                state={manutencionesReviewed ? 'done' : 'pending'}
+              />
+              <StatusLine
+                checked={manualDebtsReviewed}
+                detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes activos'}
+                label="Deudas manuales"
+                onCheckedChange={(checked) => onReviewChange('manualDebtsReviewed', checked)}
+                state={manualDebtsReviewed ? 'done' : 'pending'}
+              />
               <StatusLine label="Cómputo mensual" state={readyForCalculation ? 'done' : 'pending'} detail={readyForCalculation ? 'Disponible' : 'Falta base anual'} />
               <StatusLine label="Cotización" state="neutral" detail="A mes vencido" />
             </div>

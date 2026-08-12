@@ -24,6 +24,8 @@ import {
   type TicketManutencionImpact,
   type TicketRestaurantAbsence,
   normalizeTicketCalculationRules,
+  normalizeTicketRestaurantConfig,
+  getTicketMonthlyWorkflowReview,
   TICKET_RESTAURANT_MIN_ABSENCE_DATE,
 } from './ticketRestaurante';
 
@@ -556,6 +558,30 @@ describe('ticket restaurante calculation domain', () => {
       ticketsFinales: 22,
       deudaEntrante: 0,
       deudaPendiente: 0,
+    });
+  });
+
+  it('conserva y recupera la revisión mensual del flujo', () => {
+    const normalized = normalizeTicketRestaurantConfig({
+      ...DEFAULT_TICKET_RESTAURANT_CONFIG,
+      workflowReviews: {
+        '2026-08': {
+          absencesReviewed: true,
+          manutencionesReviewed: true,
+          manualDebtsReviewed: false,
+        },
+      },
+    });
+
+    expect(getTicketMonthlyWorkflowReview(normalized, 2026, 8)).toEqual({
+      absencesReviewed: true,
+      manutencionesReviewed: true,
+      manualDebtsReviewed: false,
+    });
+    expect(getTicketMonthlyWorkflowReview(normalized, 2026, 9)).toEqual({
+      absencesReviewed: false,
+      manutencionesReviewed: false,
+      manualDebtsReviewed: false,
     });
   });
 

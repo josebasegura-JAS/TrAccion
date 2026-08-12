@@ -1,4 +1,4 @@
-import { CalendarDays, Euro, Settings } from 'lucide-react';
+import { CalendarDays, Euro } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
@@ -13,6 +13,8 @@ import {
   EMPTY_TICKET_PERSON_DRAFT,
   filterTicketRestaurantAbsencesByMonth,
   getEffectiveTicketPrice,
+  getTicketMonthlyWorkflowReview,
+  ticketWorkflowMonthKey,
   visibleTicketCalendars,
   type TicketCalendar,
   type TicketDebtRegularizationDraft,
@@ -21,6 +23,8 @@ import {
   type TicketPerson,
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
+  type TicketRestaurantConfig,
+  type TicketMonthlyWorkflowReview,
   normalizeTicketEmployeeNumber,
 } from '../domain/ticketRestaurante';
 import {
@@ -101,6 +105,24 @@ function addYearMonth(
 ): { year: number; month: number } {
   const date = new Date(Date.UTC(year, month - 1 + offset, 1));
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}
+
+function withWorkflowReview(
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+  kind: keyof TicketMonthlyWorkflowReview,
+  checked: boolean,
+): TicketRestaurantConfig {
+  const key = ticketWorkflowMonthKey(year, month);
+  const currentReview = getTicketMonthlyWorkflowReview(config, year, month);
+  return {
+    ...config,
+    workflowReviews: {
+      ...(config.workflowReviews ?? {}),
+      [key]: { ...currentReview, [kind]: checked },
+    },
+  };
 }
 
 type TicketRestauranteSubview =
@@ -363,6 +385,25 @@ export function TicketRestaurantePage({
     [visiblePeople],
   );
   const workflowInactivePeople = visiblePeople.length - workflowActivePeople;
+  const workflowReview = useMemo(
+    () => getTicketMonthlyWorkflowReview(config, calculationYear, calculationMonth),
+    [calculationMonth, calculationYear, config],
+  );
+
+  const handleWorkflowReviewChange = useCallback(
+    async (
+      kind: 'absencesReviewed' | 'manutencionesReviewed' | 'manualDebtsReviewed',
+      checked: boolean,
+    ) => {
+      const result = await updateConfig(
+        withWorkflowReview(config, calculationYear, calculationMonth, kind, checked),
+      );
+      if (!result.ok) {
+        await alert(result.message ?? 'No se ha podido guardar la revisión mensual.');
+      }
+    },
+    [alert, calculationMonth, calculationYear, config, updateConfig],
+  );
 
   useEffect(() => {
     if (
@@ -734,6 +775,9 @@ export function TicketRestaurantePage({
       );
       return;
     }
+    await updateConfig(
+      withWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
+    );
     setImportMessage(formatSaveSummary(result));
     setPreviewRows([]);
     setEditingAbsenceId(null);
@@ -752,7 +796,11 @@ export function TicketRestaurantePage({
       const result = await removeAbsence(absenceId);
       if (!result.ok) {
         await alert(result.message ?? 'No se ha podido eliminar la ausencia.');
+        return;
       }
+      await updateConfig(
+        withWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
+      );
     })();
   };
 
@@ -872,6 +920,15 @@ export function TicketRestaurantePage({
         );
         return;
       }
+      await updateConfig(
+        withWorkflowReview(
+          config,
+          manutencionImputationYear,
+          manutencionImputationMonth,
+          'manutencionesReviewed',
+          false,
+        ),
+      );
       setManutencionPreviewRows([]);
       setIsManutencionMonthModalOpen(false);
       setManutencionYear(manutencionImputationYear);
@@ -891,7 +948,11 @@ export function TicketRestaurantePage({
       const result = await removeManutencion(manutencionId);
       if (!result.ok) {
         setManutencionImportMessage(result.message ?? 'No se ha podido eliminar la manutención.');
+        return;
       }
+      await updateConfig(
+        withWorkflowReview(config, manutencionYear, manutencionMonth, 'manutencionesReviewed', false),
+      );
     })();
   };
 
@@ -932,10 +993,15 @@ export function TicketRestaurantePage({
       ? crypto.randomUUID()
       : `ticket-manual-debt-${Date.now()}`;
     const debt = buildTicketManualDebt(draft, now, id);
-    return updateConfig({
-      ...config,
-      manualDebts: [...(config.manualDebts ?? []), debt],
-    });
+    return updateConfig(
+      withWorkflowReview(
+        { ...config, manualDebts: [...(config.manualDebts ?? []), debt] },
+        calculationYear,
+        calculationMonth,
+        'manualDebtsReviewed',
+        false,
+      ),
+    );
   };
 
   const updateManualDebt = async (id: string, draft: TicketManualDebtDraft) => {
@@ -945,31 +1011,47 @@ export function TicketRestaurantePage({
     }
     const now = new Date().toISOString();
     const updated = buildTicketManualDebt(draft, now, existing.id);
-    return updateConfig({
-      ...config,
-      manualDebts: (config.manualDebts ?? []).map((debt) =>
-        debt.id === id
-          ? {
-              ...updated,
-              createdAt: existing.createdAt,
-              cancelledAt: existing.cancelledAt,
-              cancellationReason: existing.cancellationReason,
-            }
-          : debt,
+    return updateConfig(
+      withWorkflowReview(
+        {
+          ...config,
+          manualDebts: (config.manualDebts ?? []).map((debt) =>
+            debt.id === id
+              ? {
+                  ...updated,
+                  createdAt: existing.createdAt,
+                  cancelledAt: existing.cancelledAt,
+                  cancellationReason: existing.cancellationReason,
+                }
+              : debt,
+          ),
+        },
+        calculationYear,
+        calculationMonth,
+        'manualDebtsReviewed',
+        false,
       ),
-    });
+    );
   };
 
   const cancelManualDebt = async (id: string, reason: string) => {
     const now = new Date().toISOString();
-    return updateConfig({
-      ...config,
-      manualDebts: (config.manualDebts ?? []).map((debt) =>
-        debt.id === id
-          ? { ...debt, cancelledAt: now, cancellationReason: reason.trim(), updatedAt: now }
-          : debt,
+    return updateConfig(
+      withWorkflowReview(
+        {
+          ...config,
+          manualDebts: (config.manualDebts ?? []).map((debt) =>
+            debt.id === id
+              ? { ...debt, cancelledAt: now, cancellationReason: reason.trim(), updatedAt: now }
+              : debt,
+          ),
+        },
+        calculationYear,
+        calculationMonth,
+        'manualDebtsReviewed',
+        false,
       ),
-    });
+    );
   };
 
   const saveDebtRegularization = async (draft: TicketDebtRegularizationDraft) => {
@@ -984,16 +1066,24 @@ export function TicketRestaurantePage({
       ? crypto.randomUUID()
       : `ticket-debt-regularization-${Date.now()}`);
     const regularization = buildTicketDebtRegularization(draft, now, id);
-    return updateConfig({
-      ...config,
-      debtRegularizations: existing
-        ? (config.debtRegularizations ?? []).map((item) =>
-            item.id === existing.id
-              ? { ...regularization, createdAt: existing.createdAt }
-              : item,
-          )
-        : [...(config.debtRegularizations ?? []), regularization],
-    });
+    return updateConfig(
+      withWorkflowReview(
+        {
+          ...config,
+          debtRegularizations: existing
+            ? (config.debtRegularizations ?? []).map((item) =>
+                item.id === existing.id
+                  ? { ...regularization, createdAt: existing.createdAt }
+                  : item,
+              )
+            : [...(config.debtRegularizations ?? []), regularization],
+        },
+        draft.year,
+        draft.month,
+        'manualDebtsReviewed',
+        false,
+      ),
+    );
   };
 
   return (
@@ -1077,9 +1167,6 @@ export function TicketRestaurantePage({
           <ActionButton icon={Euro} iconOnly={false} onClick={() => setIsPriceModalOpen(true)} size="sm" variant="secondary">
             Precio ticket
           </ActionButton>
-          <ActionButton icon={Settings} iconOnly={false} onClick={() => setIsRulesModalOpen(true)} size="sm" variant="secondary">
-            Reglas de cálculo
-          </ActionButton>
         </div>
       </div>
       ) : null}
@@ -1089,11 +1176,14 @@ export function TicketRestaurantePage({
           activeCalendars={visibleCalendars.filter((calendar) => calendar.activo).length}
           activePeople={workflowActivePeople}
           absenceCount={workflowAbsenceCount}
+          absencesReviewed={workflowReview.absencesReviewed}
           calculation={monthCalculation}
           effectiveTicketPrice={getEffectiveTicketPrice(config, calculationYear, calculationMonth)}
           inactivePeople={workflowInactivePeople}
           manutencionCount={workflowManutencionCount}
+          manutencionesReviewed={workflowReview.manutencionesReviewed}
           manualDebtCount={(config.manualDebts ?? []).filter((debt) => !debt.cancelledAt).length}
+          manualDebtsReviewed={workflowReview.manualDebtsReviewed}
           month={calculationMonth}
           onImportAbsences={() => {
             setActiveSubview('ausencias');
@@ -1122,6 +1212,7 @@ export function TicketRestaurantePage({
           onOpenPeople={() => setActiveSubview('personas')}
           onOpenPrice={() => setIsPriceModalOpen(true)}
           onOpenRules={() => setIsRulesModalOpen(true)}
+          onReviewChange={(kind, checked) => void handleWorkflowReviewChange(kind, checked)}
           onYearChange={(nextYear) => {
             setCalculationYear(nextYear);
             setAbsenceYear(nextYear);

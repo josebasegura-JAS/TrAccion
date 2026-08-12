@@ -262,6 +262,7 @@ function readConfig(): TicketRestaurantConfig {
     manualDebts: candidate.manualDebts ?? [],
     debtRegularizations: candidate.debtRegularizations ?? [],
     manualPeople: candidate.manualPeople ?? [],
+    workflowReviews: candidate.workflowReviews ?? {},
   });
 }
 
