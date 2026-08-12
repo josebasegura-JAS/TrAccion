@@ -364,23 +364,29 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
     const black = toExcelColor('#000000');
     const manualDebtFill = toExcelColor('#DDEBF7');
     const regularizationFill = toExcelColor('#FFF2CC');
-    const manualContributionFill = toExcelColor('#DDEFE3');
-    const manualNoContributionFill = toExcelColor('#EADCF8');
+    // Los manuales reservan dos tonos exclusivos para que se identifiquen de un vistazo.
+    const manualContributionFill = toExcelColor('#D5F5E3');
+    const manualNoContributionFill = toExcelColor('#E8DAEF');
+    // Paleta exclusiva para calendarios: evita verdes/violetas reservados a personas manuales.
     const calendarPalette = [
       '#EAF2F8',
-      '#E8F5E9',
-      '#FDF2E9',
-      '#F4ECF7',
-      '#FFF8E1',
-      '#FCEEF2',
-      '#E8F6F3',
-      '#F2F3F4',
+      '#D6EAF8',
+      '#D4E6F1',
+      '#FDEBD0',
+      '#FCE4D6',
+      '#F5CBA7',
+      '#FCF3CF',
+      '#F9E79F',
+      '#FADBD8',
+      '#F5B7B1',
+      '#E5E7E9',
+      '#D5D8DC',
     ];
     const calendarColorByGroup = new Map<string, string>();
     if (payload.rowGroupValue) {
       payload.rows.forEach((row) => {
         const group = normalizeCellValue(payload.rowGroupValue?.(row)).trim() || 'Sin calendario';
-        if (!calendarColorByGroup.has(group)) {
+        if (group !== 'Manual' && !calendarColorByGroup.has(group)) {
           calendarColorByGroup.set(
             group,
             calendarPalette[calendarColorByGroup.size % calendarPalette.length] ?? '#FFFFFF',

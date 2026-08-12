@@ -249,7 +249,7 @@ function sortMonthlyCalculationRows(
       });
     }
 
-    return first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+    return first.empleado.localeCompare(second.empleado, 'es', {
       numeric: true,
       sensitivity: 'base',
     });
