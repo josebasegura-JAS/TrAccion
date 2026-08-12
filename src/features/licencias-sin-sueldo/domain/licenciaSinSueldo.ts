@@ -1,4 +1,5 @@
 import type { Employee } from '../../plantilla/domain/employee';
+import { findActiveEmployee, searchActiveEmployees } from '../../plantilla/domain/employeeMaster';
 
 export const LICENCIA_SIN_SUELDO_STORAGE_KEY = 'traccion.v1.licenciasSinSueldo.records';
 
@@ -237,36 +238,13 @@ export function findEmployeeByNumber(
   employees: Employee[],
   employeeNumber: string,
 ): EmployeeSuggestion | null {
-  const normalizedNumber = employeeNumber.trim();
-  const employee = employees.find(
-    (current) => !current.deletedAt && current.empleado.trim() === normalizedNumber,
-  );
+  const employee = findActiveEmployee(employees, employeeNumber);
   return employee ? { empleado: employee.empleado, nombreApellidos: employee.nombreApellidos } : null;
 }
 
-function normalizeSearch(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('es')
-    .trim();
-}
-
 export function suggestEmployees(employees: Employee[], search: string): EmployeeSuggestion[] {
-  const normalizedSearch = normalizeSearch(search);
-  if (!normalizedSearch) return [];
-
-  return employees
-    .filter((employee) => {
-      if (employee.deletedAt) return false;
-      return (
-        normalizeSearch(employee.nombreApellidos).includes(normalizedSearch) ||
-        normalizeSearch(employee.empleado).includes(normalizedSearch)
-      );
-    })
-    .sort((first, second) =>
-      first.empleado.localeCompare(second.empleado, 'es', { numeric: true, sensitivity: 'base' }),
-    )
-    .slice(0, 8)
-    .map((employee) => ({ empleado: employee.empleado, nombreApellidos: employee.nombreApellidos }));
+  return searchActiveEmployees(employees, search, 8).map((employee) => ({
+    empleado: employee.empleado,
+    nombreApellidos: employee.nombreApellidos,
+  }));
 }

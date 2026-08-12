@@ -6,6 +6,7 @@
 import type ExcelJS from 'exceljs';
 
 import type { Employee } from '../../plantilla/domain/employee';
+import { normalizeEmployeeNumber } from '../../plantilla/domain/employeeMaster';
 import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import { buildGruposCoberturaByIdMap, type GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
@@ -143,19 +144,6 @@ function pluralPersonas(count: number, singular: string, plural: string): string
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function normalizeEmployeeKey(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  const numeric = Number(trimmed.replace(/\D/g, ''));
-  if (Number.isFinite(numeric) && numeric > 0) {
-    return String(numeric);
-  }
-
-  return trimmed.toLocaleLowerCase('es-ES');
-}
 
 function buildEmployeeMap(employees: readonly Employee[]): Map<string, Employee> {
   const employeesById = new Map<string, Employee>();
@@ -164,7 +152,7 @@ function buildEmployeeMap(employees: readonly Employee[]): Map<string, Employee>
     .filter((employee) => !employee.deletedAt)
     .forEach((employee) => {
       const rawKey = employee.empleado.trim();
-      const normalizedKey = normalizeEmployeeKey(employee.empleado);
+      const normalizedKey = normalizeEmployeeNumber(employee.empleado);
 
       if (rawKey) {
         employeesById.set(rawKey, employee);
@@ -351,7 +339,7 @@ export function buildTeletrabajoAssessment({
 }
 
 function findEmployee(employeesById: Map<string, Employee>, empleado: string): Employee | undefined {
-  return employeesById.get(empleado.trim()) ?? employeesById.get(normalizeEmployeeKey(empleado));
+  return employeesById.get(empleado.trim()) ?? employeesById.get(normalizeEmployeeNumber(empleado));
 }
 
 function hasDia(solicitud: TeletrabajoSolicitud, dia: 'martes' | 'miercoles' | 'jueves'): string {

@@ -1,4 +1,5 @@
 import type { Employee } from '../../plantilla/domain/employee';
+import { findActiveEmployee, searchActiveEmployees } from '../../plantilla/domain/employeeMaster';
 
 export interface Vinculograma {
   id: string;
@@ -134,18 +135,11 @@ export function splitVinculogramasByStatus(
   };
 }
 
-function normalizeSearch(value: string): string {
-  return value.trim().toLocaleLowerCase('es');
-}
-
 export function findEmployeeByNumber(
   employees: Employee[],
   employeeNumber: string,
 ): EmployeeSuggestion | null {
-  const normalizedNumber = employeeNumber.trim();
-  const employee = employees.find(
-    (current) => !current.deletedAt && current.empleado.trim() === normalizedNumber,
-  );
+  const employee = findActiveEmployee(employees, employeeNumber);
 
   return employee
     ? { empleado: employee.empleado, nombreApellidos: employee.nombreApellidos }
@@ -153,27 +147,8 @@ export function findEmployeeByNumber(
 }
 
 export function suggestEmployees(employees: Employee[], search: string): EmployeeSuggestion[] {
-  const normalizedSearch = normalizeSearch(search);
-
-  if (!normalizedSearch) {
-    return [];
-  }
-
-  return employees
-    .filter((employee) => {
-      if (employee.deletedAt) {
-        return false;
-      }
-
-      return (
-        normalizeSearch(employee.nombreApellidos).includes(normalizedSearch) ||
-        normalizeSearch(employee.empleado).includes(normalizedSearch)
-      );
-    })
-    .sort((first, second) => compareEmployeeNumber(first.empleado, second.empleado))
-    .slice(0, 8)
-    .map((employee) => ({
-      empleado: employee.empleado,
-      nombreApellidos: employee.nombreApellidos,
-    }));
+  return searchActiveEmployees(employees, search, 8).map((employee) => ({
+    empleado: employee.empleado,
+    nombreApellidos: employee.nombreApellidos,
+  }));
 }

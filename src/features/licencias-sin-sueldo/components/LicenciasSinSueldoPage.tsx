@@ -17,6 +17,7 @@ import { useAppDialog } from '../../../hooks/useAppDialog';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
+import { findActiveEmployee } from '../../plantilla/domain/employeeMaster';
 import {
   getEffectiveLicenciaEstado,
   licenciaSinSueldoTipos,
@@ -250,11 +251,7 @@ export function LicenciasSinSueldoPage() {
         return;
       }
 
-      const plantillaEmployee =
-        employees.find(
-          (employee) =>
-            !employee.deletedAt && employee.empleado.trim() === record.numeroEmpleado.trim(),
-        ) ?? null;
+      const plantillaEmployee = findActiveEmployee(employees, record.numeroEmpleado);
 
       setGeneratingWordId(record.id);
       setWordStatus('');

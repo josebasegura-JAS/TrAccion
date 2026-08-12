@@ -1,3 +1,4 @@
+import { sameEmployeeNumber } from '../../plantilla/domain/employeeMaster';
 import type { TeletrabajoSolicitud, TeletrabajoTipoSolicitud } from './solicitud';
 
 /**
@@ -54,7 +55,7 @@ export function hasTeletrabajoEnPeriodo(
 
     return (
       !candidate.deletedAt &&
-      candidate.empleado.trim() === empleadoTrim &&
+      sameEmployeeNumber(candidate.empleado, empleadoTrim) &&
       candidate.periodo.trim() === periodoTrim &&
       candidate.diasTeletrabajo.length > 0 &&
       (candidate.estado === 'aprobada' || candidate.estado === 'analizada')

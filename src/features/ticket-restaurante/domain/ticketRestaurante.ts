@@ -1,3 +1,4 @@
+import { normalizeEmployeeNumber } from '../../plantilla/domain/employeeMaster';
 export interface TicketCalendar {
   id: string;
   nombre: string;
@@ -386,11 +387,7 @@ export function toggleDiaSinTicket(calendar: TicketCalendar, fecha: string): Tic
 }
 
 export function normalizeTicketEmployeeNumber(value: unknown): string {
-  const trimmed = String(value ?? '')
-    .trim()
-    .replace(/\.0$/, '');
-  if (!/^\d+$/.test(trimmed)) return trimmed;
-  return trimmed.replace(/^0+(?=\d)/, '');
+  return normalizeEmployeeNumber(value);
 }
 
 function sameTicketEmployee(first: string | undefined, second: string | undefined): boolean {

@@ -1,4 +1,9 @@
 import type { Employee } from '../../plantilla/domain/employee';
+import {
+  buildActiveEmployeeMap,
+  findActiveEmployee,
+  normalizeEmployeeNumber,
+} from '../../plantilla/domain/employeeMaster';
 import type { TeletrabajoDraft, TeletrabajoSolicitud } from './solicitud';
 
 export type TeletrabajoPlantillaFields = Pick<
@@ -16,16 +21,7 @@ export function findActiveEmployeeByEmpleado(
   employees: readonly Employee[],
   empleado: string,
 ): Employee | null {
-  const normalizedEmpleado = empleado.trim();
-  if (!normalizedEmpleado) {
-    return null;
-  }
-
-  return (
-    employees.find(
-      (employee) => !employee.deletedAt && employee.empleado.trim() === normalizedEmpleado,
-    ) ?? null
-  );
+  return findActiveEmployee(employees, empleado);
 }
 
 export function buildTeletrabajoPlantillaFields(employee: Employee): TeletrabajoPlantillaFields {
@@ -58,16 +54,12 @@ export function applyPlantillaDataToTeletrabajoSolicitudes(
   solicitudes: readonly TeletrabajoSolicitud[],
   employees: readonly Employee[],
 ): TeletrabajoSolicitud[] {
-  const employeesByEmpleado = new Map(
-    employees
-      .filter((employee) => !employee.deletedAt)
-      .map((employee): [string, Employee] => [employee.empleado.trim(), employee]),
-  );
+  const employeesByEmpleado = buildActiveEmployeeMap(employees);
 
   return solicitudes.map((solicitud) =>
     applyPlantillaDataToTeletrabajoSolicitud(
       solicitud,
-      employeesByEmpleado.get(solicitud.empleado.trim()) ?? null,
+      employeesByEmpleado.get(normalizeEmployeeNumber(solicitud.empleado)) ?? null,
     ),
   );
 }
