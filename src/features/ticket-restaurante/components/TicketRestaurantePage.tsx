@@ -1,4 +1,4 @@
-import { CalendarDays, Euro, Settings, Trash2 } from 'lucide-react';
+import { CalendarDays, Euro, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
@@ -19,44 +19,35 @@ import {
   type TicketManualDebtDraft,
   type TicketCalendarDraft,
   type TicketPerson,
-  type TicketPersonCalculation,
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
-  type TicketRestaurantConfig,
   normalizeTicketEmployeeNumber,
-  splitTicketPersonFullName,
 } from '../domain/ticketRestaurante';
 import {
   importTicketRestaurantAbsencesFromFile,
   saveTicketRestaurantAbsencePreviewRows,
   validateTicketRestaurantAbsencePreviewRows,
   type TicketRestaurantAbsencePreviewRow,
-  type TicketRestaurantAbsenceSaveResult,
 } from '../domain/importAbsences';
 import {
   importTicketManutencionesFromFile,
   validateTicketManutencionPreviewRows,
-  type TicketManutencion,
   type TicketManutencionDraft,
   type TicketManutencionPreviewRow,
 } from '../domain/importManutenciones';
 import { importTicketPeopleFromFile } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
-import { type ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
-import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
-import type { ExportColumn } from '../../../shared/export/types';
 import {
   CalendarToolbar,
   EmptyCalendar,
   Legend,
   MonthCalendar,
-  MonthNavigator,
   SubviewButton,
 } from './TicketRestauranteCalendarPanels';
 import { PeoplePanel } from './TicketRestaurantePeoplePanel';
@@ -65,114 +56,35 @@ import { CalculationPanel } from './TicketRestauranteCalculationPanel';
 import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
 import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
 import { TicketRestauranteManualPeoplePanel } from './TicketRestauranteManualPeoplePanel';
+import { TICKET_RESTAURANTE_HELP_SECTIONS, MONTH_OPTIONS } from './ticketRestaurantePageConfig';
+import {
+  formatManutencionMonth,
+  formatSaveSummary,
+  normalizeTicketEmployeeSearch,
+  sortByName,
+  sortContributionCalculationRows,
+  sortMonthlyCalculationRows,
+  toAbsencePreviewRow,
+  toCalendarDraft,
+  toManutencionDetailAbsences,
+  toPersonDraft,
+} from './ticketRestaurantePageHelpers';
+import {
+  ABSENCE_MODEL_HEADERS,
+  MANUTENCIONES_MODEL_HEADERS,
+  PEOPLE_EXPORT_HEADERS,
+  absenceExportColumns,
+  contributionCalculationExportColumns,
+  exportCsv,
+  monthlyCalculationExportColumns,
+  ticketPersonExportColumns,
+} from './ticketRestauranteExport';
+import { ManutencionesPanel } from './TicketRestauranteManutencionesPanel';
 import {
   AbsencePreviewModal,
   AbsencesTable,
   type TicketAbsenceDisplayRow,
 } from './TicketRestauranteAbsencesTable';
-
-const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
-  {
-    title: '¿Qué hace este módulo?',
-    body: 'Calcula cuántos Tickets Restaurante genera cada persona cada mes, a partir de su calendario, sus ausencias y sus notas de gasto (manutenciones), y permite cuadrar el pedido mensual con la cotización real.',
-  },
-  {
-    title: 'Flujo recomendado',
-    ordered: true,
-    items: [
-      'Configurar calendarios: qué días de la semana generan ticket y qué fechas concretas quedan excluidas (festivos, cierres...).',
-      'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario. Las excepciones sin calendario se gestionan como Personas manuales desde el Cómputo mensual.',
-      'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
-      'Revisar Deudas y regularizaciones: ahí se ve la deuda arrastrada y se puede fijar un saldo real justificado si el cálculo automático no coincide con la situación real.',
-      'Revisar "Cómputo mensual" para hacer el pedido del mes.',
-      'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes.',
-      'Exportar o imprimir los resultados que necesite RRLL.',
-    ],
-  },
-  {
-    title: 'Calendarios: qué días generan ticket',
-    items: [
-      'Cada calendario define qué días de la semana (p. ej. lunes a viernes) generan ticket en general.',
-      'Además admite marcar fechas concretas como "sin ticket" (festivos, cierres puntuales, etc.), que se restan aunque caigan en un día que normalmente sí genera ticket.',
-      'Cada persona con derecho a ticket tiene asignado un único calendario; el cálculo mensual usa siempre el calendario de la persona.',
-    ],
-  },
-  {
-    title: 'Diferencia entre Cómputo mensual y Cómputo cotización',
-    items: [
-      'Cómputo mensual (el pedido del mes): parte de los días de calendario del mes y resta la deuda de ausencias arrastrada desde meses anteriores más las notas de gasto marcadas como "afecta ticket" e imputadas a ese mes. No resta directamente las ausencias del propio mes: esas pasan a formar parte de la deuda que se descontará en un mes posterior con días de calendario disponibles.',
-      'Cómputo cotización (lo que realmente corresponde ese mes): días de calendario del mes menos las ausencias que caen dentro de ese mismo mes y descuentan ticket. No arrastra deuda de otros meses y no resta las notas de gasto (solo las muestra como referencia).',
-      'Por eso el mismo mes puede mostrar cifras distintas en cada vista: el "Cómputo mensual" refleja lo que se pide a proveedor, y la "Cómputo cotización" lo que realmente se ha consumido ese mes en concreto.',
-    ],
-  },
-  {
-    title: 'Reglas de cálculo',
-    items: [
-      'Solo se calculan personas activas con derecho a ticket y con calendario asignado.',
-      'Las ausencias con fecha "Desde" anterior al 01/03/2026 nunca se tienen en cuenta (límite fijo de la aplicación).',
-      'La "Fecha inicio cómputo deuda" (configurable en Reglas de cálculo) marca desde cuándo empiezan a arrastrarse ausencias como deuda en el Cómputo mensual; por defecto es esa misma fecha, pero puede adelantarse o retrasarse.',
-      'En "Motivos que no descuentan por calendario" se puede indicar, calendario por calendario, qué motivos de ausencia no restan ticket (p. ej. una liberación sindical).',
-      'El precio del ticket admite un histórico de importes con fecha de vigencia: cada mes se calcula con el precio vigente en ese momento, sin afectar a meses anteriores.',
-    ],
-  },
-  {
-    title: 'Importación de ausencias',
-    items: [
-      'Para obtener el fichero en Zerkos: Supervisión → Justif. Ausencias de día → seleccionar las fechas del último mes → exportar a Excel.',
-      'Se admiten dos formatos de fichero, detectados automáticamente: uno "limpio" con cabeceras propias, y el formato de exportación habitual de Zerkos.',
-      'Solo se cargan ausencias que tengan impacto real en Ticket Restaurante: deben pertenecer a una persona activa con derecho a ticket y coincidir al menos con un día que genere ticket según su calendario. El resto se ignora.',
-      'Las filas exactamente iguales a una ausencia ya guardada se cuentan como duplicadas y se ignoran.',
-      'Si una ausencia importada se solapa en fechas con otra ya existente del mismo empleado y mismo motivo, la sustituye en lugar de duplicarla.',
-      'Si el fichero no indica si la ausencia afecta al ticket, se asume que sí siempre que la fecha "Desde" sea igual o posterior al 01/03/2026.',
-      'El botón "Modelo" genera un fichero de ejemplo con las columnas que reconoce el importador.',
-    ],
-  },
-  {
-    title: 'Notas de gasto (Manutenciones)',
-    items: [
-      'Se pueden importar desde un fichero de gastos (identifica quién paga y con quién se reparte la comida) o añadir manualmente indicando empleado y fecha.',
-      'Antes de importar o añadir, hay que elegir el mes/año de imputación: todas las filas se guardan bajo ese mes, aunque la fecha del gasto sea otro día.',
-      'Solo se importan personas que ya están dadas de alta como personas con derecho a ticket; el resto se ignoran.',
-      'Una nota de gasto marcada como "afecta ticket" solo descuenta un ticket en el Cómputo mensual del mes de imputación, y únicamente si ese día generaría ticket según el calendario de la persona. No afecta al Cómputo cotización.',
-    ],
-  },
-  {
-    title: 'Deudas y regularizaciones',
-    items: [
-      'Muestra la deuda automática que llega a cada mes antes de aplicar el pedido.',
-      'Si el saldo real no coincide con el calculado, puede regularizarse a cualquier valor (incluido 0) indicando obligatoriamente un motivo.',
-      'La regularización no borra ni modifica las ausencias originales: queda registrada como corrección trazable y afecta al pedido mensual desde ese mes.',
-      'La deuda manual sirve además para corregir tickets entregados de más sin crear ausencias ficticias.',
-      'Se indica la persona, el total de tickets, el mes de origen, el primer mes de descuento y en cuántos meses repartir la deuda.',
-      'Si una cuota no puede descontarse completa por falta de tickets disponibles, el pendiente se arrastra automáticamente.',
-      'La deuda manual solo afecta al Cómputo mensual/pedido. No modifica el Cómputo cotización.',
-      'Una deuda puede anularse con motivo; las cuotas ya aplicadas en meses anteriores no se alteran.',
-    ],
-  },
-  {
-    title: 'Cotización y exportación',
-    items: [
-      'La vista de cotización muestra, para el mes y calendario de cada persona, los tickets realmente generados y su importe. Las Personas manuales solo aparecen aquí si tienen marcada la opción Incluir en cotización, usando el mismo número de tickets introducido para ese mes.',
-      'Permite revisar caso a caso antes de dar por bueno el mes.',
-      'Los resultados pueden exportarse/imprimirse para su uso fuera de la aplicación.',
-    ],
-  },
-];
-
-const MONTH_OPTIONS = [
-  { value: 1, label: 'Enero' },
-  { value: 2, label: 'Febrero' },
-  { value: 3, label: 'Marzo' },
-  { value: 4, label: 'Abril' },
-  { value: 5, label: 'Mayo' },
-  { value: 6, label: 'Junio' },
-  { value: 7, label: 'Julio' },
-  { value: 8, label: 'Agosto' },
-  { value: 9, label: 'Septiembre' },
-  { value: 10, label: 'Octubre' },
-  { value: 11, label: 'Noviembre' },
-  { value: 12, label: 'Diciembre' },
-];
 
 function currentYear(): number {
   return new Date().getFullYear();
@@ -199,648 +111,6 @@ type TicketRestauranteSubview =
   | 'ausencias'
   | 'manutenciones'
   | 'deudaManual';
-
-function toPersonDraft(person: TicketPerson): TicketPersonDraft {
-  return {
-    empleado: person.empleado,
-    nombre: person.nombre,
-    apellido1: person.apellido1,
-    apellido2: person.apellido2,
-    dni: person.dni,
-    nombreApellidos: person.nombreApellidos,
-    puesto: person.puesto,
-    calendarId: person.calendarId,
-    activo: person.activo,
-  };
-}
-
-function toCalendarDraft(calendar: TicketCalendar): TicketCalendarDraft {
-  return {
-    nombre: calendar.nombre,
-    activo: calendar.activo,
-    diasSinTicket: calendar.diasSinTicket,
-    ticketIsoWeekdays: calendar.ticketIsoWeekdays,
-  };
-}
-
-function sortByName(calendars: TicketCalendar[]): TicketCalendar[] {
-  return [...calendars].sort((first, second) =>
-    first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
-  );
-}
-
-function sortMonthlyCalculationRows(
-  rows: readonly TicketPersonCalculation[],
-): TicketPersonCalculation[] {
-  return [...rows].sort((first, second) => {
-    const calendarComparison = first.calendario.localeCompare(second.calendario, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-    if (calendarComparison !== 0) return calendarComparison;
-
-    if (first.manualEntry && second.manualEntry) {
-      if (first.manualIncludeContribution !== second.manualIncludeContribution) {
-        return first.manualIncludeContribution ? -1 : 1;
-      }
-      return first.empleado.localeCompare(second.empleado, 'es', {
-        numeric: true,
-        sensitivity: 'base',
-      });
-    }
-
-    return first.empleado.localeCompare(second.empleado, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  });
-}
-
-function sortContributionCalculationRows(
-  rows: readonly TicketPersonCalculation[],
-): TicketPersonCalculation[] {
-  return [...rows].sort((first, second) => {
-    const calendarComparison = first.calendario.localeCompare(second.calendario, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-    if (calendarComparison !== 0) return calendarComparison;
-    return first.empleado.localeCompare(second.empleado, 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  });
-}
-
-const PEOPLE_EXPORT_HEADERS = [
-  'Nº empleado',
-  'Nombre',
-  'Apellido1',
-  'Apellido2',
-  'DNI',
-  'Puesto',
-  'Calendario',
-];
-const MANUTENCIONES_MODEL_HEADERS = [
-  'Nº empleado',
-  'Nombre y apellidos',
-  'Fecha gasto',
-  'Origen',
-  'Afecta a ticket',
-];
-
-const ABSENCE_MODEL_HEADERS = [
-  'Nº empleado',
-  'Nombre y apellidos',
-  'Desde',
-  'Hasta',
-  'Motivo',
-  'Total días',
-];
-function exportCsv(
-  filename: string,
-  headers: readonly string[],
-  rows: readonly (readonly (string | number)[])[],
-): void {
-  const csv = [headers, ...rows].map((row) => row.map(formatCsvValue).join(';')).join('\n');
-  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function formatCsvValue(value: string | number): string {
-  const text = String(value);
-  return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-const ticketPersonExportColumns = (
-  calendars: readonly TicketCalendar[],
-): ExportColumn<TicketPerson>[] => [
-  { key: 'empleado', header: 'Nº empleado', value: (person) => person.empleado },
-  { key: 'nombre', header: 'Nombre', value: (person) => person.nombre },
-  { key: 'apellido1', header: 'Apellido1', value: (person) => person.apellido1 },
-  { key: 'apellido2', header: 'Apellido2', value: (person) => person.apellido2 },
-  { key: 'dni', header: 'DNI', value: (person) => person.dni },
-  { key: 'puesto', header: 'Puesto', value: (person) => person.puesto },
-  {
-    key: 'calendario',
-    header: 'Calendario',
-    value: (person) =>
-      calendars.find((calendar) => calendar.id === person.calendarId)?.nombre ?? null,
-  },
-  { key: 'activo', header: 'Estado', value: (person) => (person.activo ? 'Activo' : 'Inactivo') },
-];
-
-const formatTicketExcelDate = (year: number, month: number, day = 1): string =>
-  `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
-
-const formatAppliedAbsencesForExport = (
-  row: TicketPersonCalculation,
-  absences: readonly TicketRestaurantAbsence[],
-): string => {
-  const absenceById = new Map(absences.map((absence) => [absence.id, absence]));
-  return row.ausenciaIds
-    .map((id) => absenceById.get(id))
-    .filter((absence): absence is TicketRestaurantAbsence => Boolean(absence))
-    .map(
-      (absence) =>
-        `${absence.motivo} ${formatIsoDateForExport(absence.desde)}-${formatIsoDateForExport(absence.hasta)} (${row.ausenciaDiasDescontados[absence.id] ?? 0} días ticket)`,
-    )
-    .join('; ');
-};
-
-const formatIsoDateForExport = (value: string): string => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
-};
-
-const formatManualDebtForExport = (row: TicketPersonCalculation): string => {
-  const applied = row.deudaAplicadaDetalle.filter((detail) =>
-    detail.motivo.startsWith('Deuda manual:'),
-  );
-  const pending = row.deudaPendienteDetalle.filter((detail) =>
-    detail.motivo.startsWith('Deuda manual:'),
-  );
-
-  const groups = new Map<
-    string,
-    { motivo: string; mesOrigen: string; applied: number; pending: number }
-  >();
-
-  const addDetails = (
-    details: readonly typeof row.deudaAplicadaDetalle[number][],
-    field: 'applied' | 'pending',
-  ) => {
-    details.forEach((detail) => {
-      const key = `${detail.motivo}\u0000${detail.mesOrigen}`;
-      const current = groups.get(key) ?? {
-        motivo: detail.motivo.replace(/^Deuda manual:\s*/, '').trim(),
-        mesOrigen: detail.mesOrigen,
-        applied: 0,
-        pending: 0,
-      };
-      current[field] += 1;
-      groups.set(key, current);
-    });
-  };
-
-  addDetails(applied, 'applied');
-  addDetails(pending, 'pending');
-
-  return Array.from(groups.values())
-    .map((group) => {
-      const origin = /^\d{4}-\d{2}$/.test(group.mesOrigen)
-        ? `${group.mesOrigen.slice(5, 7)}/${group.mesOrigen.slice(0, 4)}`
-        : group.mesOrigen;
-      const counts = [
-        group.applied > 0 ? `${group.applied} aplicado${group.applied === 1 ? '' : 's'}` : '',
-        group.pending > 0 ? `${group.pending} pendiente${group.pending === 1 ? '' : 's'}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ');
-      return `${group.motivo} · origen ${origin} · ${counts}`;
-    })
-    .join('; ');
-};
-
-const monthlyCalculationExportColumns = (
-  config: TicketRestaurantConfig,
-  year: number,
-  month: number,
-  absences: readonly TicketRestaurantAbsence[],
-): ExportColumn<TicketPersonCalculation>[] => {
-  const regularizationByEmployee = new Map(
-    (config.debtRegularizations ?? [])
-      .filter((item) => item.year === year && item.month === month)
-      .sort((first, second) => first.updatedAt.localeCompare(second.updatedAt))
-      .map((item) => [normalizeTicketEmployeeNumber(item.empleado), item] as const),
-  );
-
-  return [
-    {
-      key: 'nombre',
-      header: 'Nombre',
-      value: (row) => splitTicketPersonFullName(row.nombreApellidos).nombre,
-    },
-    {
-      key: 'apellido1',
-      header: 'Apellido 1',
-      value: (row) => splitTicketPersonFullName(row.nombreApellidos).apellido1,
-    },
-    {
-      key: 'apellido2',
-      header: 'Apellido 2',
-      value: (row) => splitTicketPersonFullName(row.nombreApellidos).apellido2,
-    },
-    { key: 'dni', header: 'Número de documento*', value: (row) => row.dni },
-    { key: 'pedido', header: 'Nº pedido', value: () => config.pedidoMensual },
-    { key: 'empleado', header: 'CECO', value: (row) => row.empleado },
-    { key: 'numeroTickets', header: 'Numero Tickets', value: (row) => row.ticketsFinales },
-    {
-      key: 'importe',
-      header: 'Importe1',
-      value: () => getEffectiveTicketPrice(config, year, month),
-    },
-    { key: 'total', header: 'Importe total*', value: (row) => row.importe },
-    {
-      key: 'fecInicio',
-      header: 'Fecha inicio carga (dd/mm/yyyy)*',
-      value: () => formatTicketExcelDate(year, month),
-    },
-    {
-      key: 'fecCad',
-      header: 'Fecha caducidad carga (dd/mm/yyyy)*',
-      value: () => '01/01/2100',
-    },
-    { key: 'hojaGastos', header: 'Hoja Gastos', value: (row) => row.hojasGastoMes },
-    {
-      key: 'ausencias',
-      header: 'Ausencias',
-      value: (row) => formatAppliedAbsencesForExport(row, absences),
-    },
-    {
-      key: 'deudaManual',
-      header: 'Deuda manual',
-      value: (row) => formatManualDebtForExport(row),
-    },
-    {
-      key: 'regularizacionDeuda',
-      header: 'Regularización deuda',
-      value: (row) => {
-        const regularization = regularizationByEmployee.get(normalizeTicketEmployeeNumber(row.empleado));
-        if (!regularization) return '';
-        const adjustment = regularization.targetTickets - regularization.calculatedTickets;
-        const adjustmentLabel = adjustment > 0 ? `+${adjustment}` : String(adjustment);
-        const observations = regularization.observations.trim()
-          ? ` · ${regularization.observations.trim()}`
-          : '';
-        return `${regularization.calculatedTickets} → ${regularization.targetTickets} (${adjustmentLabel}) · ${regularization.reason}${observations}`;
-      },
-    },
-  ];
-};
-
-const contributionCalculationExportColumns = (
-  importeTicket: number,
-): ExportColumn<TicketPersonCalculation>[] => [
-  { key: 'codigo', header: 'Codigo', value: (row) => row.empleado },
-  { key: 'apellidos', header: 'Apellidos', value: (row) => row.nombreApellidos },
-  { key: 'activo', header: 'Activo', value: () => '' },
-  { key: 'ticketsInicioMes', header: 'Tickets inicio mes', value: () => '' },
-  { key: 'valorFacial', header: 'Valor Facial 1', value: () => importeTicket },
-  {
-    key: 'ticketsCotizacion',
-    header: 'Tickets BC y Retrib.',
-    value: (row) => row.ticketsFinales,
-  },
-];
-
-const absenceExportColumns: ExportColumn<TicketAbsenceDisplayRow>[] = [
-  { key: 'empleado', header: 'Nº empleado', value: (absence) => absence.empleado },
-  {
-    key: 'nombreApellidos',
-    header: 'Nombre y apellidos',
-    value: (absence) => absence.nombreApellidos,
-  },
-  { key: 'desde', header: 'Desde', value: (absence) => absence.desde },
-  { key: 'hasta', header: 'Hasta', value: (absence) => absence.hasta },
-  { key: 'motivo', header: 'Motivo', value: (absence) => absence.motivo },
-  { key: 'calendario', header: 'Calendario', value: (absence) => absence.calendario },
-  { key: 'totalDias', header: 'Días naturales', value: (absence) => absence.totalDias },
-  { key: 'diasTicketMes', header: 'Días ticket mes', value: (absence) => absence.diasTicketMes },
-  {
-    key: 'afectaTicket',
-    header: 'Afecta ticket',
-    value: (absence) => (absence.afectaTicket ? 'Sí' : 'No'),
-  },
-];
-
-function toAbsencePreviewRow(absence: TicketRestaurantAbsence): TicketRestaurantAbsencePreviewRow {
-  return {
-    id: `preview-edit-${absence.id}`,
-    empleado: absence.empleado,
-    nombreApellidos: absence.nombreApellidos,
-    desde: absence.desde,
-    hasta: absence.hasta,
-    motivo: absence.motivo,
-    totalDias: String(absence.totalDias),
-    afectaTicket: absence.afectaTicket,
-    errors: [],
-  };
-}
-
-function formatSaveSummary(result: TicketRestaurantAbsenceSaveResult): string {
-  const { nuevas, sustituidas, duplicadas, invalidas } = result.summary;
-  const parts = [
-    `${nuevas} nuevas`,
-    `${sustituidas} sustituidas`,
-    `${duplicadas} duplicadas omitidas`,
-  ];
-
-  if (invalidas > 0) {
-    parts.push(`${invalidas} inválidas`);
-  }
-
-  return `Ausencias guardadas: ${parts.join(', ')}.`;
-}
-
-function formatManutencionDate(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  return `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
-}
-
-function formatManutencionMonth(year: number, month: number): string {
-  return `${MONTH_OPTIONS.find((option) => option.value === month)?.label ?? month} ${year}`;
-}
-
-function toManutencionDetailAbsences(
-  manutenciones: readonly TicketManutencion[],
-): TicketRestaurantAbsence[] {
-  return manutenciones
-    .filter((row) => !row.deletedAt)
-    .map((row) => ({
-      id: row.id,
-      empleado: row.empleado,
-      nombreApellidos: row.nombreApellidos,
-      desde: row.fechaGasto,
-      hasta: row.fechaGasto,
-      motivo: 'Nota de gasto',
-      totalDias: 1,
-      afectaTicket: row.afectaTicket,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      deletedAt: row.deletedAt,
-    }));
-}
-
-function normalizeTicketEmployeeSearch(value: string): string {
-  return value
-    .trim()
-    .replace(/^0+(?=\d)/, '')
-    .replace(/\.0$/, '');
-}
-
-function ManutencionesPanel({
-  importMessage,
-  manualEmployee,
-  manualDate,
-  manutenciones,
-  month,
-  onAddManual,
-  onExportModel,
-  onImport,
-  onMonthChange,
-  onNextMonth,
-  onPreviousMonth,
-  onManualDateChange,
-  onManualEmployeeChange,
-  onPreviewChange,
-  onRemove,
-  onSavePreview,
-  onYearChange,
-  previewRows,
-  ticketPeople,
-  year,
-}: {
-  importMessage: string;
-  manualEmployee: string;
-  manualDate: string;
-  manutenciones: TicketManutencion[];
-  month: number;
-  onAddManual: () => void;
-  onExportModel: () => void;
-  onImport: () => void;
-  onMonthChange: (value: string) => void;
-  onNextMonth: () => void;
-  onPreviousMonth: () => void;
-  onManualDateChange: (value: string) => void;
-  onManualEmployeeChange: (value: string) => void;
-  onPreviewChange: (rows: TicketManutencionPreviewRow[]) => void;
-  onRemove: (id: string) => void;
-  onSavePreview: () => void;
-  onYearChange: (value: string) => void;
-  previewRows: TicketManutencionPreviewRow[];
-  ticketPeople: TicketPerson[];
-  year: number;
-}) {
-  const manualPerson = ticketPeople.find(
-    (person) =>
-      normalizeTicketEmployeeSearch(person.empleado) ===
-      normalizeTicketEmployeeSearch(manualEmployee),
-  );
-  const rowsToImport = previewRows.filter((row) => row.importar).length;
-
-  const updatePreviewRow = (
-    rowId: string,
-    patch: Partial<Pick<TicketManutencionPreviewRow, 'importar' | 'afectaTicket'>>,
-  ) => {
-    onPreviewChange(previewRows.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
-  };
-
-  return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
-      <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h3 className="text-base font-bold text-metro-text">Manutenciones</h3>
-          <p className="text-xs text-metro-muted">
-            Importa notas de gasto y deja preparada la revisión. Las notas marcadas como afectantes
-            descontarán tickets en el mes imputado.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onExportModel}
-            type="button"
-          >
-            Modelo
-          </button>
-          <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
-            Importar desde Excel
-          </ActionButton>
-        </div>
-      </div>
-
-      {importMessage ? (
-        <p className="mb-2 text-xs font-semibold text-metro-muted">{importMessage}</p>
-      ) : null}
-
-      <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
-        <p className="mb-2 text-xs font-bold text-metro-muted">
-          Alta manual
-        </p>
-        <div className="grid gap-2 lg:grid-cols-[140px_190px_1fr_auto] lg:items-center">
-          <input
-            className="h-8 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => onManualEmployeeChange(event.target.value)}
-            placeholder="Nº empleado"
-            value={manualEmployee}
-          />
-          <input
-            className="h-8 rounded-lg border border-metro-border bg-metro-surface px-2 text-sm text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => onManualDateChange(event.target.value)}
-            type="date"
-            value={manualDate}
-          />
-          <div className="text-xs font-semibold text-metro-muted">
-            {manualPerson
-              ? manualPerson.nombreApellidos
-              : 'Introduce una persona con derecho a ticket'}
-          </div>
-          <ActionButton
-            disabled={!manualPerson || !manualDate}
-            iconOnly={false}
-            onClick={onAddManual}
-            size="sm"
-            variant="add"
-          >
-            Añadir
-          </ActionButton>
-        </div>
-      </div>
-
-      {previewRows.length > 0 ? (
-        <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
-          <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-bold text-metro-muted">Preview</p>
-              <p className="text-xs text-metro-muted">
-                {rowsToImport} registros marcados para importar.
-              </p>
-            </div>
-            <button
-              className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={rowsToImport === 0 || previewRows.some((row) => row.errors.length > 0)}
-              onClick={onSavePreview}
-              type="button"
-            >
-              Guardar importación
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <CompactTable>
-              <CompactTableHead>
-                <tr>
-                  <th className="px-2 py-1">Importar</th>
-                  <th className="px-2 py-1">Afecta a ticket</th>
-                  <th className="px-2 py-1">Nº empleado</th>
-                  <th className="px-2 py-1">Nombre</th>
-                  <th className="px-2 py-1">Fecha gasto</th>
-                  <th className="px-2 py-1">Origen</th>
-                  <th className="px-2 py-1">Errores</th>
-                </tr>
-              </CompactTableHead>
-              <CompactTableBody>
-                {previewRows.map((row) => (
-                  <tr className="border-t border-metro-border" key={row.id}>
-                    <td className="px-2 py-1">
-                      <input
-                        checked={row.importar}
-                        className="h-4 w-4 accent-metro-red"
-                        onChange={(event) =>
-                          updatePreviewRow(row.id, { importar: event.target.checked })
-                        }
-                        type="checkbox"
-                      />
-                    </td>
-                    <td className="px-2 py-1">
-                      <input
-                        checked={row.afectaTicket}
-                        className="h-4 w-4 accent-metro-red"
-                        onChange={(event) =>
-                          updatePreviewRow(row.id, { afectaTicket: event.target.checked })
-                        }
-                        type="checkbox"
-                      />
-                    </td>
-                    <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
-                    <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
-                    <td className="px-2 py-1 text-metro-text">
-                      {formatManutencionDate(row.fechaGasto)}
-                    </td>
-                    <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
-                    <td className="px-2 py-1 text-metro-red">{row.errors.join(' ')}</td>
-                  </tr>
-                ))}
-              </CompactTableBody>
-            </CompactTable>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mb-2 flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-xs font-semibold text-metro-muted">
-          Manutenciones del mes seleccionado: <span className="text-metro-red">{manutenciones.length}</span>
-        </div>
-        <MonthNavigator
-          ariaLabel="Selector mes manutenciones"
-          month={month}
-          onMonthChange={onMonthChange}
-          onNextMonth={onNextMonth}
-          onPreviousMonth={onPreviousMonth}
-          onYearChange={onYearChange}
-          year={year}
-        />
-      </div>
-
-      <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-surface">
-        <CompactTable>
-          <CompactTableHead>
-            <tr>
-              <th className="px-2 py-2">Nº empleado</th>
-              <th className="px-2 py-2">Nombre</th>
-              <th className="px-2 py-2">Fecha gasto</th>
-              <th className="px-2 py-2">Mes imputado</th>
-              <th className="px-2 py-2">Origen</th>
-              <th className="px-2 py-2">Afecta a ticket</th>
-              <th className="px-2 py-2">Acciones</th>
-            </tr>
-          </CompactTableHead>
-          <CompactTableBody>
-            {manutenciones.length === 0 ? (
-              <tr>
-                <td className="px-2 py-6 text-center text-sm text-metro-muted" colSpan={7}>
-                  No hay manutenciones cargadas.
-                </td>
-              </tr>
-            ) : (
-              manutenciones.map((row) => (
-                <tr className="border-t border-metro-border" key={row.id}>
-                  <td className="px-2 py-1 font-semibold text-metro-text">{row.empleado}</td>
-                  <td className="px-2 py-1 text-metro-text">{row.nombreApellidos}</td>
-                  <td className="px-2 py-1 text-metro-text">
-                    {formatManutencionDate(row.fechaGasto)}
-                  </td>
-                  <td className="px-2 py-1 text-metro-muted">
-                    {formatManutencionMonth(row.imputacionYear, row.imputacionMonth)}
-                  </td>
-                  <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
-                  <td className="px-2 py-1 text-metro-text">{row.afectaTicket ? 'Sí' : 'No'}</td>
-                  <td className="px-2 py-1">
-                    <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
-                      onClick={() => onRemove(row.id)}
-                      type="button"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </CompactTableBody>
-        </CompactTable>
-      </div>
-    </div>
-  );
-}
 
 export function TicketRestaurantePage({
   initialAbsenceId = null,
