@@ -54,11 +54,13 @@ const SORTEOS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Define título, fecha y número de ganadores antes de ejecutar el sorteo.',
-      'Revisa las exclusiones activas antes de sortear para evitar resultados no deseados.',
-      'Exporta o imprime el resultado cuando necesites dejar constancia del sorteo realizado.',
+      'Definir título, fecha y número de ganadores del sorteo.',
+      'Revisar participantes y exclusiones activas antes de lanzar el bombo.',
+      'Ejecutar el sorteo y validar el resultado obtenido.',
+      'Exportar o imprimir el histórico cuando necesites dejar constancia formal.',
     ],
   },
 ];

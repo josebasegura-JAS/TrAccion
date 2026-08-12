@@ -60,12 +60,13 @@ const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Selecciona siempre la persona desde Plantilla cuando sea posible para evitar duplicidades o errores de nombre.',
-      'Comprueba la fecha de solicitud antes de guardar, ya que de ella depende directamente la fecha de vigencia calculada.',
-      'Usa las secciones de vigentes e histórico para separar relaciones activas de las vencidas o revocadas.',
-      'Usa exportación o impresión para trasladar un listado filtrado de vínculos activos o históricos.',
+      'Crear la declaración seleccionando a la persona desde Plantilla y completando el resto de datos del vínculo.',
+      'Revisar la fecha de solicitud porque determina automáticamente la vigencia calculada.',
+      'Guardar y seguir el registro en las vistas de vigentes o histórico según su situación.',
+      'Exportar o imprimir el listado filtrado cuando necesites compartir relaciones activas o vencidas.',
     ],
   },
 ];

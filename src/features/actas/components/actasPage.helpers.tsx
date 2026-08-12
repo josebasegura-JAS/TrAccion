@@ -178,7 +178,7 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
     ordered: true,
     items: [
       'Crear el acta desde la sesión de Comité/Paritaria correspondiente, o manualmente indicando tipo, título y fecha de sesión.',

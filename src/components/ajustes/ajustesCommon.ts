@@ -52,11 +52,13 @@ export const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Modifica rutas solo cuando cambie la ubicación real de la base de datos o de las plantillas.',
-      'Comprueba el estado de la base de datos antes de asumir que la app está trabajando contra la ruta compartida.',
-      'Evita cambiar configuración durante importaciones o escrituras críticas en otros módulos.',
+      'Comprobar primero que la aplicación está conectada a la base de datos correcta.',
+      'Revisar rutas de copias, actualizaciones y plantillas solo si ha cambiado la ubicación real.',
+      'Actualizar la configuración necesaria y guardar los cambios.',
+      'Evitar tocar Ajustes durante importaciones o escrituras críticas en otros módulos.',
     ],
   },
 ];

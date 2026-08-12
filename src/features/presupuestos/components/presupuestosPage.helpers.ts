@@ -51,11 +51,13 @@ export const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Crea un escenario por año y añade primero los grupos de Ticket Restaurante (suelen ser el bloque más previsible) y después los conceptos manuales.',
-      'Duplica escenarios cuando quieras probar una alternativa sin perder el cálculo original.',
-      'Revisa la comparativa antes de exportar para comprobar que meses, importes y grupos son coherentes.',
+      'Crear un escenario nuevo para el año que quieras analizar.',
+      'Añadir primero grupos de Ticket Restaurante y después conceptos manuales para completar el presupuesto.',
+      'Duplicar escenarios si necesitas probar variantes sin perder el cálculo base.',
+      'Revisar comparativas antes de exportar para validar importes, meses y grupos.',
     ],
   },
 ];

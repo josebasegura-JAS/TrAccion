@@ -79,11 +79,13 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Registra cada asunto con prioridad, origen, fase y vencimiento cuando aplique.',
-      'Usa búsqueda, filtros y ordenación para revisar primero lo crítico o lo próximo a vencer.',
-      'En edición multiusuario, respeta el aviso de bloqueo para evitar pisar cambios de otra persona.',
+      'Dar de alta cada asunto indicando tipo, fase, prioridad y responsable.',
+      'Añadir seguimiento, documentos y cambios de estado a medida que avance el caso.',
+      'Filtrar y ordenar la tabla para revisar primero lo urgente o lo próximo a vencer.',
+      'Cerrar la tarea cuando quede resuelta para que deje de aparecer como pendiente en los módulos que consumen esos puntos.',
     ],
   },
 ];

@@ -60,11 +60,13 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Usa Plantilla como fuente principal de personas: número de empleado, nombre y datos laborales deben mantenerse aquí para que el resto de módulos los reutilicen.',
-      'Usa las traducciones de puestos para completar automáticamente puestos EUS cuando falten.',
-      'Exporta o imprime el listado filtrado cuando necesites una foto concreta de plantilla.',
+      'Importar o actualizar la Plantilla desde el Excel maestro de personas.',
+      'Revisar las columnas reconocidas y resolver, si procede, las no reconocidas antes de confirmar la importación.',
+      'Comprobar traducciones EUS pendientes para completar puestos que falten.',
+      'Usar la tabla filtrada como referencia maestra y exportarla solo cuando necesites compartir una foto concreta de la plantilla.',
     ],
   },
 ];

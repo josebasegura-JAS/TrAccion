@@ -55,11 +55,13 @@ const ESPECIALES_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Completa primero datos del servicio y destinatarios antes de generar el borrador Outlook.',
-      'Revisa la previsualización HTML para detectar errores de formato o información incompleta.',
-      'Si importas un .msg, revisa los campos detectados antes de dar por buena la información.',
+      'Completar manualmente los datos del servicio o importar un .msg para rellenarlos automáticamente.',
+      'Revisar destinatarios, asunto y previsualización HTML antes de generar el correo.',
+      'Crear el borrador Outlook cuando la información esté validada.',
+      'Usar el borrador generado como base para el envío final.',
     ],
   },
 ];

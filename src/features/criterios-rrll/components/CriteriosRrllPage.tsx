@@ -58,11 +58,13 @@ const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
-    title: 'Uso recomendado',
+    title: 'Flujo recomendado',
+    ordered: true,
     items: [
-      'Redacta el criterio de forma clara y concreta, evitando textos demasiado largos.',
-      'Usa el campo sentido para distinguir de un vistazo criterios de aprobar, denegar u otros resultados.',
-      'Filtra por tema, estado o sentido antes de contestar nuevas consultas similares.',
+      'Dar de alta el criterio indicando tema, estado, sentido y responsable.',
+      'Redactar el criterio de forma clara para que pueda reutilizarse en casos futuros.',
+      'Usar filtros y búsqueda para localizar precedentes similares antes de responder nuevas consultas.',
+      'Actualizar el criterio si cambia la interpretación o se consolida una nueva práctica.',
     ],
   },
 ];

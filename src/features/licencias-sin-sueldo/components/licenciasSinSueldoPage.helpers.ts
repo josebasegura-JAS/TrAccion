@@ -74,6 +74,17 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
       'El documento rellena automáticamente marcadores de la plantilla («Puesto_CAST», «Puesto_EUS»...) con los datos de la persona: puesto en castellano y su traducción a euskera (tomada de Plantilla o, si falta, de la tabla de Traducción de puestos), fechas y demás datos de la solicitud.',
     ],
   },
+  {
+    title: 'Flujo recomendado',
+    ordered: true,
+    items: [
+      'Crear la solicitud indicando tipo, persona, fechas y datos básicos obligatorios.',
+      'Revisar que la duración cumpla las reglas del tipo elegido y completar observaciones si procede.',
+      'Actualizar el estado del expediente a medida que avance: aprobar, firma, vigencia o denegación.',
+      'Generar el documento Word de concesión cuando el caso esté aprobado y la plantilla esté disponible.',
+      'Consultar el histórico para expedientes finalizados o solicitudes ya denegadas.',
+    ],
+  },
 ];
 
 const estadoLabels: Record<LicenciaSinSueldoEstado, string> = {
