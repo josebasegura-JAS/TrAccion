@@ -15,7 +15,9 @@ import { SearchField } from './ui/SearchField';
 import { FilterSelect } from './ui/FilterSelect';
 import { CountBadge } from './ui/CountBadge';
 import { JobPositionTranslationsModal } from './JobPositionTranslationsModal';
-import type { Employee } from '../features/plantilla/domain/employee';
+import { EmployeeImportPreviewModal } from './EmployeeImportPreviewModal';
+import type { Employee, EmployeeField } from '../features/plantilla/domain/employee';
+import { analyzeEmployeeImportFile, type EmployeeImportPreview } from '../features/plantilla/domain/importExcel';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
 import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
@@ -45,6 +47,7 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
       'Admite Excel, CSV, TSV o TXT. Las columnas se reconocen por variantes habituales del nombre (con/sin acentos, "Nº Empleado", etc.), no hace falta que coincidan exactamente.',
       'Si la persona ya existe (mismo número de empleado), se actualiza; si no existe, se crea. Solo se actualizan las columnas que realmente vienen en el fichero: las columnas ausentes conservan el dato ya guardado.',
       'Modo especial "solo antigüedad": si el fichero importado únicamente tiene informadas las columnas Empleado y Antigüedad Puesto (todo lo demás vacío en todas las filas), la app entiende que es una actualización masiva de antigüedad y solo toca ese campo en las personas que ya existen; no crea personas nuevas ni modifica el resto de datos.',
+      'Antes de importar se muestra una revisión de columnas: las reconocidas se enlazan automáticamente y las no reconocidas pueden asignarse manualmente a un campo de Plantilla o ignorarse.',
       'El botón "Generar muestra" descarga un Excel de ejemplo con las columnas que reconoce el importador.',
     ],
   },
@@ -141,13 +144,14 @@ export function PlantillaPage() {
     removeWithConcurrencyCheck,
     selectEmployee,
     setFilter,
-    updateEmptyEmployeeJobPositionTranslations,
   } = useEmployeeStore();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [isTranslationsModalOpen, setTranslationsModalOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState('');
   const [importMessageIsError, setImportMessageIsError] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<EmployeeImportPreview | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -540,27 +544,24 @@ export function PlantillaPage() {
               className="hidden"
               onChange={async (event) => {
                 const file = event.target.files?.[0];
+                event.target.value = '';
                 if (!file) {
                   return;
                 }
 
                 try {
-                  const result = await importExcel(file);
+                  const preview = await analyzeEmployeeImportFile(file);
+                  setImportMessage('');
                   setImportMessageIsError(false);
-                  setImportMessage(
-                    result.mode === 'antiguedadPuesto'
-                      ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
-                      : `Importación completada: ${file.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
-                  );
+                  setPendingImportFile(file);
+                  setImportPreview(preview);
                 } catch (error) {
                   setImportMessageIsError(true);
                   setImportMessage(
                     error instanceof Error
                       ? error.message
-                      : 'No se ha podido importar la plantilla.',
+                      : 'No se ha podido analizar la plantilla.',
                   );
-                } finally {
-                  event.target.value = '';
                 }
               }}
               ref={fileInputRef}
@@ -677,6 +678,29 @@ export function PlantillaPage() {
 
       {isTranslationsModalOpen && (
         <JobPositionTranslationsModal onClose={() => setTranslationsModalOpen(false)} />
+      )}
+
+      {pendingImportFile && importPreview && (
+        <EmployeeImportPreviewModal
+          employees={employees}
+          fileName={pendingImportFile.name}
+          onClose={() => {
+            setPendingImportFile(null);
+            setImportPreview(null);
+          }}
+          onImport={async (mapping: Array<EmployeeField | null>) => {
+            const result = await importExcel(pendingImportFile, mapping);
+            setImportMessageIsError(false);
+            setImportMessage(
+              result.mode === 'antiguedadPuesto'
+                ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
+                : `Importación completada: ${pendingImportFile.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
+            );
+            setPendingImportFile(null);
+            setImportPreview(null);
+          }}
+          preview={importPreview}
+        />
       )}
     </section>
   );

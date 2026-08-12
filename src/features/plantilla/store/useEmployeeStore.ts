@@ -4,7 +4,7 @@ import { EMPTY_EMPLOYEE_FILTERS, filterEmployees, type EmployeeFilters } from '.
 import { readEmployeeImportFromFile } from '../domain/importExcel';
 import { importJobPositionTranslationsFromFile } from '../domain/importJobPositionTranslations';
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
-import type { Employee, EmployeeDraft } from '../domain/employee';
+import type { Employee, EmployeeDraft, EmployeeField } from '../domain/employee';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
@@ -39,7 +39,7 @@ interface EmployeeState {
   createWithConcurrencyCheck: (draft: EmployeeDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   updateWithConcurrencyCheck: (empleado: string, draft: EmployeeDraft, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
-  importExcel: (file: File) => Promise<EmployeeImportResult>;
+  importExcel: (file: File, columnMapping?: Array<EmployeeField | null>) => Promise<EmployeeImportResult>;
   importJobPositionTranslations: (file: File) => Promise<number>;
   createJobPositionTranslation: (translation: JobPositionTranslation) => Promise<{ ok: boolean; message: string }>;
   syncMissingJobPositionTranslationsFromEmployees: () => Promise<{ created: number; createdPuestos: string[] }>;
@@ -617,8 +617,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar la persona.' };
     }
   },
-  importExcel: async (file) => {
-    const { drafts, importedFields } = await readEmployeeImportFromFile(file);
+  importExcel: async (file, columnMapping) => {
+    const { drafts, importedFields } = await readEmployeeImportFromFile(file, columnMapping);
     if (!importedFields.includes('empleado')) {
       throw new Error('No se ha encontrado una columna de Empleado reconocible en el Excel.');
     }

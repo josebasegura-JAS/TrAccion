@@ -85,16 +85,40 @@ export interface EmployeeImportData {
   importedFields: EmployeeField[];
 }
 
-export async function readEmployeeImportFromFile(file: File): Promise<EmployeeImportData> {
-  const buffer = await file.arrayBuffer();
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+export interface EmployeeImportPreview {
+  headers: string[];
+  dataRows: TabularRow[];
+  defaultMapping: Array<EmployeeField | null>;
+  headerRowIndex: number;
+  sourceRowCount: number;
+}
 
-  if (extension === 'csv' || extension === 'tsv' || extension === 'txt') {
-    const text = new TextDecoder().decode(buffer);
-    return rowsToEmployeeImport(parseDelimitedText(text, extension));
+export async function analyzeEmployeeImportFile(file: File): Promise<EmployeeImportPreview> {
+  const rows = await readTabularRows(file);
+  const headerRowIndex = findHeaderRowIndex(rows);
+  if (headerRowIndex < 0) {
+    throw new Error(
+      'No se ha podido localizar una fila de cabeceras válida. Debe incluir una columna de Empleado y al menos otra columna reconocible.',
+    );
   }
 
-  return rowsToEmployeeImport(await parseXlsxRows(buffer));
+  const headers = rows[headerRowIndex] ?? [];
+  const dataRows = rows.slice(headerRowIndex + 1);
+  return {
+    headers,
+    dataRows,
+    defaultMapping: headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null),
+    headerRowIndex,
+    sourceRowCount: dataRows.filter((row) => row.some((cell) => cell.trim())).length,
+  };
+}
+
+export async function readEmployeeImportFromFile(
+  file: File,
+  columnMapping?: Array<EmployeeField | null>,
+): Promise<EmployeeImportData> {
+  const preview = await analyzeEmployeeImportFile(file);
+  return previewToEmployeeImport(preview, columnMapping ?? preview.defaultMapping);
 }
 
 /**
@@ -117,8 +141,21 @@ export function rowsToEmployeeImport(rows: TabularRow[]): EmployeeImportData {
   }
 
   const headers = rows[headerRowIndex] ?? [];
-  const dataRows = rows.slice(headerRowIndex + 1);
-  const fieldByColumn = headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null);
+  const preview: EmployeeImportPreview = {
+    headers,
+    dataRows: rows.slice(headerRowIndex + 1),
+    defaultMapping: headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null),
+    headerRowIndex,
+    sourceRowCount: rows.slice(headerRowIndex + 1).filter((row) => row.some((cell) => cell.trim())).length,
+  };
+  return previewToEmployeeImport(preview, preview.defaultMapping);
+}
+
+export function previewToEmployeeImport(
+  preview: EmployeeImportPreview,
+  columnMapping: Array<EmployeeField | null>,
+): EmployeeImportData {
+  const fieldByColumn = preview.headers.map((_, index) => columnMapping[index] ?? null);
   const importedFields = Array.from(
     new Set(fieldByColumn.filter((field): field is EmployeeField => field !== null)),
   );
@@ -129,7 +166,7 @@ export function rowsToEmployeeImport(rows: TabularRow[]): EmployeeImportData {
 
   const draftsByEmpleado = new Map<string, EmployeeDraft>();
 
-  dataRows.forEach((row) => {
+  preview.dataRows.forEach((row) => {
     const draft: EmployeeDraft = { ...EMPTY_EMPLOYEE_DRAFT };
 
     fieldByColumn.forEach((field, index) => {
@@ -146,6 +183,18 @@ export function rowsToEmployeeImport(rows: TabularRow[]): EmployeeImportData {
   });
 
   return { drafts: Array.from(draftsByEmpleado.values()), importedFields };
+}
+
+async function readTabularRows(file: File): Promise<TabularRow[]> {
+  const buffer = await file.arrayBuffer();
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+  if (extension === 'csv' || extension === 'tsv' || extension === 'txt') {
+    const text = new TextDecoder().decode(buffer);
+    return parseDelimitedText(text, extension);
+  }
+
+  return parseXlsxRows(buffer);
 }
 
 /**
