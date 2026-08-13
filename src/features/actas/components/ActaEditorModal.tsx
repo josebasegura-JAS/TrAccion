@@ -10,7 +10,6 @@ import { RecordLockNotice } from '../../../components/ui/RecordLockNotice';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import {
-  ACTA_STATES,
   type Acta,
   type ActaAlegacion,
   type ActaDraft,
@@ -164,19 +163,12 @@ export function ActaEditorModal({
           </div>
 
           <div className="grid gap-2 xl:grid-cols-[260px_minmax(220px,1fr)]">
-            <Select
-              className="mt-0 bg-metro-panel"
-              onChange={(event) => applyStateChange(event.target.value as ActaDraft['estado'])}
-              value={draft.estado}
-            >
-              {ACTA_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </Select>
+            <div className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-metro-muted">Estado actual</p>
+              <p className="mt-0.5 text-sm font-bold text-metro-text">{draft.estado}</p>
+            </div>
             <ActionButton
-              disabled={!getNextState(draft.estado)}
+              disabled={!getNextState(draft.estado) || isEditorReadOnly}
               iconOnly={false}
               onClick={advanceState}
               variant="secondary"

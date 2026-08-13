@@ -1,3 +1,4 @@
+import { addCalendarDays, toLocalIsoDate } from '../../../utils/dateOnly';
 import type { ExportColumn } from '../../../shared/export/types';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { relativeDate } from '../../../utils/relativeDate';
@@ -298,13 +299,11 @@ export function formatDate(value: string): string {
 }
 
 export function getTodayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalIsoDate();
 }
 
 export function addDaysToIsoDate(value: string, days: number): string {
-  const date = new Date(`${value}T00:00:00`);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addCalendarDays(value, days);
 }
 
 export function getActaStateBadgeClass(state: ActaDraft['estado']): string {

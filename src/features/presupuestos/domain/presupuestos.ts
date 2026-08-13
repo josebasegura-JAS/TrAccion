@@ -357,7 +357,7 @@ export function buildBudgetActualComparisonData(
     .map(normalizeBudgetActual)
     .filter((actual) => actual.year === year && actual.month <= monthLimit)
     .forEach((actual) => {
-      const block = actual.block === 'Ticket Restaurante' ? 'Ticket Restaurante' : actual.block;
+      const block = actual.block === 'Ticket Restaurante' ? 'Ticket Restaurante' : 'Partidas manuales';
       const row = rowsByBlock.get(block) ?? { block, budgetTotal: 0, actualTotal: 0, difference: 0, differenceRate: 0 };
       row.actualTotal = roundBudgetCurrency(row.actualTotal + actual.amount);
       rowsByBlock.set(block, row);

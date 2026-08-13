@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import ExcelJS from 'exceljs';
 import {
   ArrowLeft,
   CalendarDays,
@@ -159,6 +158,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 async function exportCampaign(campaign: LotteryCampaign) {
+  const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(`Lotería ${campaign.year}`);
   sheet.columns = [

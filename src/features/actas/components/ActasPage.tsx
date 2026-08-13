@@ -811,7 +811,12 @@ export function ActasPage() {
               variant="secondary"
               icon={Settings2}
               iconOnly={false}
-              onClick={() => setIsTypeManagerOpen(true)}
+              onClick={() => {
+                if (!hasLoadedHistoricalActas) {
+                  void loadHistoricalActas();
+                }
+                setIsTypeManagerOpen(true);
+              }}
               size="sm"
               title="Gestionar tipos de acta"
             >

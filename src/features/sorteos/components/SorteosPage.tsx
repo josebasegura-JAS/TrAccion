@@ -22,8 +22,8 @@ import { Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
+import { toLocalIsoDate } from '../../../utils/dateOnly';
 
-const today = new Date().toISOString().slice(0, 10);
 
 const SORTEOS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -157,7 +157,7 @@ export function SorteosPage() {
     viewDraw,
     visibleResult,
   } = useSorteosStore();
-  const [draft, setDraft] = useState<SorteosDraft>({ title: '', date: today, winnersCount: 1 });
+  const [draft, setDraft] = useState<SorteosDraft>(() => ({ title: '', date: toLocalIsoDate(), winnersCount: 1 }));
   const [errors, setErrors] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [exclusionsOpen, setExclusionsOpen] = useState(true);

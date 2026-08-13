@@ -21,9 +21,8 @@ test('permite navegar por los módulos principales desde el menú lateral', asyn
   try {
     const modules = [
       ['Operativa diaria', 'Tareas'],
-      ['Operativa diaria', 'Comité de Empresa'],
+      ['Operativa diaria', 'Comité / Paritaria'],
       ['Operativa diaria', 'Actas'],
-      ['Operativa diaria', 'Comisión Paritaria'],
       ['Personas', 'Plantilla'],
       ['Personas', 'Teletrabajo'],
       ['Personas', 'Licencias sin sueldo'],
@@ -32,6 +31,7 @@ test('permite navegar por los módulos principales desde el menú lateral', asyn
       ['Herramientas', 'Presupuestos'],
       ['Herramientas', 'Criterios RRLL'],
       ['Herramientas', 'Sorteos'],
+      ['Herramientas', 'Lotería'],
       ['Herramientas', 'Especiales'],
     ] as const;
 

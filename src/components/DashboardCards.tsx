@@ -13,6 +13,7 @@ import { isTaskClosed, type Task, type TaskPriority } from '../features/tareas/d
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useParitariaSessionStore } from '../features/paritaria/store/useParitariaSessionStore';
+import { useActasStore } from '../features/actas/store/useActasStore';
 import { DashboardRecordsModal } from './dashboard/DashboardUi';
 import type {
   CalendarEvent,
@@ -144,12 +145,15 @@ export function DashboardCards({
   const loadSessions = useCommitteeSessionStore((state) => state.load);
   const paritariaSessions = useParitariaSessionStore((state) => state.sessions);
   const loadParitariaSessions = useParitariaSessionStore((state) => state.load);
+  const actas = useActasStore((state) => state.actas);
+  const loadActas = useActasStore((state) => state.load);
 
   useEffect(() => {
     loadTasks();
     loadSessions();
     loadParitariaSessions();
-  }, [loadParitariaSessions, loadSessions, loadTasks]);
+    loadActas();
+  }, [loadActas, loadParitariaSessions, loadSessions, loadTasks]);
 
   const openRecord = useCallback(
     (target: DashboardNavigationTarget) => {
@@ -200,14 +204,9 @@ export function DashboardCards({
       ),
     [allOpenSessions],
   );
-  const actaTasks = useMemo(
-    () =>
-      activeTasks.filter((task) =>
-        [task.fase, task.titulo, task.descripcion].some((value) =>
-          value.toLowerCase().includes('acta'),
-        ),
-      ),
-    [activeTasks],
+  const openActas = useMemo(
+    () => actas.filter((acta) => acta.estado !== 'Cerrada'),
+    [actas],
   );
 
   const taskPopupItems = useCallback(
@@ -240,6 +239,29 @@ export function DashboardCards({
     },
     [taskPopupItems],
   );
+
+  const actaPopupItems = useMemo<DashboardPopupItem[]>(
+    () =>
+      openActas.map((acta) => ({
+        id: `acta-${acta.id}`,
+        date: acta.fechaLimite || acta.fechaSesion,
+        type: 'actas' as const,
+        title: acta.titulo,
+        detail: `${acta.estado}${acta.tipo ? ` · ${acta.tipo}` : ''}`,
+        view: 'actas' as const,
+      })),
+    [openActas],
+  );
+
+  const showActaPopup = useCallback(() => {
+    setDashboardPopup({
+      eyebrow: 'Dashboard',
+      title: 'Actas en seguimiento',
+      subtitle: `${openActas.length} registro${openActas.length === 1 ? '' : 's'}`,
+      emptyText: 'No hay actas en seguimiento.',
+      items: actaPopupItems,
+    });
+  }, [actaPopupItems, openActas.length]);
 
   const committeePopupItems = useMemo<DashboardPopupItem[]>(
     () =>
@@ -288,20 +310,19 @@ export function DashboardCards({
       recordId: session.id,
     }));
 
-    const actaEvents = actaTasks
-      .filter((task) => task.fechaLimite)
-      .map((task) => ({
-        id: `acta-${task.id}`,
-        date: task.fechaLimite,
+    const actaEvents = openActas
+      .filter((acta) => acta.fechaLimite)
+      .map((acta) => ({
+        id: `acta-${acta.id}`,
+        date: acta.fechaLimite,
         type: 'actas' as const,
-        title: task.titulo,
-        detail: 'Seguimiento de acta',
-        view: 'tareas' as const,
-        recordId: task.id,
+        title: acta.titulo,
+        detail: acta.estado,
+        view: 'actas' as const,
       }));
 
     return [...taskEvents, ...committeeEvents, ...paritariaEvents, ...actaEvents];
-  }, [activeTasks, actaTasks, openCommitteeSessions, openParitariaSessions]);
+  }, [activeTasks, openActas, openCommitteeSessions, openParitariaSessions]);
 
   const eventsByDay = useMemo(
     () =>
@@ -400,14 +421,14 @@ export function DashboardCards({
       });
     }
 
-    if (actaTasks.length > 0) {
+    if (openActas.length > 0) {
       items.push({
         key: 'actas',
-        title: `${actaTasks.length} acta${actaTasks.length === 1 ? '' : 's'} en seguimiento`,
+        title: `${openActas.length} acta${openActas.length === 1 ? '' : 's'} en seguimiento`,
         subtitle: 'Requieren revisión o actuación pendiente',
         accent: 'border-l-amber-400',
         icon: FileText,
-        onClick: () => showTaskPopup('Actas en seguimiento', actaTasks, 'No hay actas en seguimiento.'),
+        onClick: showActaPopup,
       });
     }
 
@@ -423,7 +444,7 @@ export function DashboardCards({
     }
 
     return items.slice(0, 4);
-  }, [actaTasks, criticalTasks, nextSession, openRecord, showTaskPopup, upcomingTasks]);
+  }, [criticalTasks, nextSession, openActas.length, openRecord, showActaPopup, showTaskPopup, upcomingTasks]);
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,0.9fr)_minmax(0,1.18fr)_minmax(0,1fr)_auto] gap-2 overflow-hidden">
@@ -689,7 +710,7 @@ export function DashboardCards({
           <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20"><FileText size={15} /></span>
           <span className="min-w-0">
             <span className="block text-[12px] font-black text-metro-text">Actas en seguimiento</span>
-            <span className="block truncate text-[9px] font-semibold text-metro-muted">{actaTasks.length} acta{actaTasks.length === 1 ? '' : 's'} con acciones pendientes</span>
+            <span className="block truncate text-[9px] font-semibold text-metro-muted">{openActas.length} acta{openActas.length === 1 ? '' : 's'} con acciones pendientes</span>
           </span>
         </span>
         <span className="flex items-center gap-1 text-[9px] font-bold text-metro-muted">Ver todas <ChevronRight size={13} /></span>
