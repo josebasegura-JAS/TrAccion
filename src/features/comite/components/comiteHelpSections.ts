@@ -13,7 +13,7 @@ export const COMITE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Crear o abrir la sesión e incorporar los puntos que se vayan a tratar.',
       'Ordenar y revisar los puntos mientras la sesión siga abierta.',
       'Al terminar la reunión, indicar qué puntos se han tratado y cerrar la sesión.',
-      'Los puntos tratados cierran su tarea; los no tratados quedan disponibles para otra sesión. Después puede generarse el registro correspondiente en Actas.',
+      'Al cerrar eliges si crear el registro en Actas. Sesión, tareas tratadas y acta se guardan como una única operación; si algo falla, no se aplica un cierre parcial. Los puntos no tratados quedan disponibles para otra sesión.',
     ],
   },
   {
@@ -40,7 +40,7 @@ export const PARITARIA_HELP_SECTIONS: ModuleHelpSection[] = [
       'Crear o abrir la sesión e incorporar los puntos que se vayan a tratar.',
       'Ordenar y revisar los puntos mientras la sesión siga abierta.',
       'Al terminar la reunión, indicar qué puntos se han tratado y cerrar la sesión.',
-      'Los puntos tratados cierran su tarea; los no tratados quedan disponibles para otra sesión. Después puede generarse el registro correspondiente en Actas.',
+      'Al cerrar eliges si crear el registro en Actas. Sesión, tareas tratadas y acta se guardan como una única operación; si algo falla, no se aplica un cierre parcial. Los puntos no tratados quedan disponibles para otra sesión.',
     ],
   },
   {

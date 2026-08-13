@@ -1,8 +1,4 @@
 import { SessionManagementPage } from '../../../shared/sessions/SessionManagementPage';
-import { useAppDialog } from '../../../hooks/useAppDialog';
-import type { ManagedSession } from '../../../shared/sessions/session';
-import type { Task } from '../../tareas/domain/task';
-import { useActasStore } from '../../actas/store/useActasStore';
 import { COMITE_SESSION_CONFIG } from '../domain/comite';
 import { useCommitteeSessionStore } from '../store/useCommitteeSessionStore';
 import { PARITARIA_SESSION_CONFIG } from '../../paritaria/domain/paritaria';
@@ -21,26 +17,11 @@ export function ComitePage({
   initialSessionId?: string | null;
   navigationNonce?: number;
 }) {
-  const createActaFromSession = useActasStore((state) => state.createFromSessionWithConcurrencyCheck);
-  const { alert, dialogNode } = useAppDialog();
   const [operationalOrgan, setOperationalOrgan] = useState<'comite' | 'paritaria' | null>(
     initialSessionId ? 'comite' : null,
   );
   const [operationalSessionId, setOperationalSessionId] = useState<string | null>(initialSessionId);
 
-  const handleClosedCommitteeSession = async (session: ManagedSession, treatedTasks: Task[]) => {
-    const result = await createActaFromSession({ tipo: 'Comité', session, treatedTasks });
-    if (!result.ok) {
-      await alert(result.message, { type: 'error' });
-    }
-  };
-
-  const handleClosedParitariaSession = async (session: ManagedSession, treatedTasks: Task[]) => {
-    const result = await createActaFromSession({ tipo: 'Paritaria', session, treatedTasks });
-    if (!result.ok) {
-      await alert(result.message, { type: 'error' });
-    }
-  };
 
   const openOrgan = (organ: 'comite' | 'paritaria', sessionId?: string | null) => {
     setOperationalOrgan(organ);
@@ -51,7 +32,6 @@ export function ComitePage({
     return (
       <>
         <ComiteParitariaWorkflow onOpenOrgan={openOrgan} />
-        {dialogNode}
       </>
     );
   }
@@ -80,7 +60,6 @@ export function ComitePage({
           helpSections={COMITE_HELP_SECTIONS}
           initialSessionId={operationalSessionId}
           navigationNonce={navigationNonce}
-          onClosedSession={handleClosedCommitteeSession}
           useSessionStore={useCommitteeSessionStore}
         />
       ) : (
@@ -89,11 +68,9 @@ export function ComitePage({
           helpSections={PARITARIA_HELP_SECTIONS}
           initialSessionId={operationalSessionId}
           navigationNonce={navigationNonce}
-          onClosedSession={handleClosedParitariaSession}
           useSessionStore={useParitariaSessionStore}
         />
       )}
-      {dialogNode}
     </>
   );
 }

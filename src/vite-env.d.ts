@@ -606,6 +606,12 @@ interface TraccionApi {
   saveTaskRecordIfUnchanged?: (
     record: TraccionConditionalTaskRecord,
   ) => Promise<TraccionConditionalTaskSaveResult>;
+  closeSessionWorkflowAtomically?: (payload: {
+    module: 'comite' | 'paritaria';
+    session: { id: string; value: string; expectedUpdatedAt: string | null };
+    tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+    acta?: { id: string; value: string; sourceSessionId: string } | null;
+  }) => Promise<{ ok: boolean; message: string }>;
   loadComiteSessionRecords?: () => Promise<TraccionComiteSessionRecordsSnapshot>;
   saveComiteSessionRecordIfUnchanged?: (
     record: TraccionConditionalComiteSessionRecord,

@@ -1,7 +1,9 @@
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
-import type { Task } from '../../features/tareas/domain/task';
+import { CLOSED_TASK_PHASE, isTaskClosed } from '../../features/tareas/domain/task';
+import { buildActaObservacionesFromSession } from '../../features/actas/domain/acta';
+import { useActasStore } from '../../features/actas/store/useActasStore';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
 import { withSharedModuleLocks } from '../../services/sharedModuleLock';
 import { useAppDialog } from '../../hooks/useAppDialog';
@@ -41,7 +43,6 @@ interface SessionManagementPageProps {
   useSessionStore: UseBoundStore<StoreApi<ManagedSessionStateStore>>;
   initialSessionId?: string | null;
   navigationNonce?: number;
-  onClosedSession?: (session: ManagedSession, treatedTasks: Task[]) => void | Promise<void>;
   helpSections?: ModuleHelpSection[];
 }
 
@@ -50,7 +51,6 @@ export function SessionManagementPage({
   initialSessionId = null,
   navigationNonce,
   useSessionStore,
-  onClosedSession,
   helpSections,
 }: SessionManagementPageProps) {
   const {
@@ -65,12 +65,10 @@ export function SessionManagementPage({
     addTaskWithConcurrencyCheck,
     removeTaskWithConcurrencyCheck,
     moveTaskWithConcurrencyCheck,
-    closeSessionWithConcurrencyCheck,
   } = useSessionStore();
   const {
     tasks,
     load: loadTasks,
-    closeTasksFromSessionWithConcurrencyCheck,
     createManyFromImport,
   } = useTaskStore();
   const [draft, setDraft] = useState<ManagedSessionDraft>(EMPTY_MANAGED_SESSION_DRAFT);
@@ -401,6 +399,17 @@ export function SessionManagementPage({
     }
 
     try {
+      const treatedIds = closingSession.items.filter((taskId) => treatedTaskIds[taskId]);
+      const treatedTasks = treatedIds.flatMap((taskId) => {
+        const task = tasksById.get(taskId);
+        return task ? [task] : [];
+      });
+      const shouldCreateActa = await confirm('¿Desea crear un registro en Actas?', {
+        confirmLabel: 'Crear acta',
+        cancelLabel: 'No crear',
+        title: 'Crear acta',
+      });
+
       await withSharedModuleLocks(
         [
           { module: config.moduleId, label: config.title },
@@ -408,38 +417,90 @@ export function SessionManagementPage({
           { module: 'actas', label: 'Actas' },
         ],
         async () => {
-          const treatedIds = closingSession.items.filter((taskId) => treatedTaskIds[taskId]);
-          const treatedTasks = treatedIds.flatMap((taskId) => {
-            const task = tasksById.get(taskId);
-            return task ? [task] : [];
+          const atomicClose = window.traccion?.closeSessionWorkflowAtomically;
+          if (!atomicClose) {
+            throw new Error(
+              'El cierre transaccional no está disponible en esta versión. Reinicia TrAccion antes de continuar.',
+            );
+          }
+
+          const now = new Date().toISOString();
+          const treatedSet = new Set(treatedIds);
+          const closedSession: ManagedSession = {
+            ...closingSession,
+            status: 'closed',
+            treatedTaskIds: closingSession.items.filter((taskId) => treatedSet.has(taskId)),
+            untreatedTaskIds: closingSession.items.filter((taskId) => !treatedSet.has(taskId)),
+            updatedAt: now,
+            closedAt: now,
+          };
+
+          const updatedTasks = treatedTasks
+            .filter((task) => !task.deletedAt && !isTaskClosed(task))
+            .map((task) => ({
+              ...task,
+              estado: 'cerrada' as const,
+              fase: CLOSED_TASK_PHASE,
+              seguimiento: [
+                {
+                  fechaHora: now,
+                  texto: `Tratada en ${config.closeTrackingLabel} (${managedSessionLabel(closedSession)}).`,
+                },
+                ...task.seguimiento,
+              ],
+              closedAt: task.closedAt ?? now,
+              updatedAt: now,
+            }));
+
+          const acta = shouldCreateActa
+            ? {
+                id: `acta-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+                titulo: closedSession.title.trim(),
+                tipo: config.moduleId === 'comite' ? 'Comité' : 'Paritaria',
+                fechaSesion: closedSession.date,
+                fechaCreacion: now.slice(0, 10),
+                estado: 'Pendiente de realizar' as const,
+                fechaLimite: '',
+                observaciones: buildActaObservacionesFromSession(closedSession, treatedTasks).trim(),
+                alegaciones: [],
+                actualizaciones: [],
+                actaPath: '',
+                closedAt: null,
+                createdAt: now,
+                updatedAt: now,
+                sourceSessionId: closedSession.id,
+              }
+            : null;
+
+          const result = await atomicClose({
+            module: config.moduleId === 'comite' ? 'comite' : 'paritaria',
+            session: {
+              id: closedSession.id,
+              value: JSON.stringify(closedSession),
+              expectedUpdatedAt: closingSession.updatedAt ?? null,
+            },
+            tasks: updatedTasks.map((task) => ({
+              id: task.id,
+              value: JSON.stringify(task),
+              expectedUpdatedAt: tasksById.get(task.id)?.updatedAt ?? null,
+            })),
+            acta: acta
+              ? {
+                  id: acta.id,
+                  value: JSON.stringify(acta),
+                  sourceSessionId: closedSession.id,
+                }
+              : null,
           });
 
-          const closeSessionResult = await closeSessionWithConcurrencyCheck(
-            closingSession.id,
-            treatedIds,
-            closingSession.updatedAt ?? null,
-          );
-          if (!closeSessionResult.ok || !closeSessionResult.session) {
-            throw new Error(closeSessionResult.message);
+          if (!result.ok) {
+            throw new Error(result.message);
           }
 
-          const closeTasksResult = await closeTasksFromSessionWithConcurrencyCheck(
-            treatedIds,
-            config.closeTrackingLabel,
-            managedSessionLabel(closeSessionResult.session),
-          );
-          if (!closeTasksResult.ok) {
-            throw new Error(closeTasksResult.message);
-          }
+          await load();
+          await loadTasks();
+          useActasStore.getState().load();
 
-          if (
-            await confirm('¿Desea crear un registro en Actas?', {
-              confirmLabel: 'Crear acta',
-              title: 'Crear acta',
-            })
-          ) {
-            await onClosedSession?.(closeSessionResult.session, treatedTasks);
-          }
           setClosingSessionId(null);
           setTreatedTaskIds({});
           setExpandedSessionId(null);
@@ -450,7 +511,7 @@ export function SessionManagementPage({
       await alert(
         error instanceof Error
           ? error.message
-          : 'No se ha podido cerrar la sesión de forma segura. Reintenta cuando finalicen otras ediciones.',
+          : 'No se ha podido cerrar la sesión de forma segura. No se ha aplicado ningún cambio.',
         { type: 'error' },
       );
     }

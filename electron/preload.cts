@@ -97,6 +97,12 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('tasks:save-record-if-unchanged', record),
+  closeSessionWorkflowAtomically: (payload: {
+    module: 'comite' | 'paritaria';
+    session: { id: string; value: string; expectedUpdatedAt: string | null };
+    tasks: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+    acta?: { id: string; value: string; sourceSessionId: string } | null;
+  }) => ipcRenderer.invoke('sessions:close-workflow-atomically', payload),
   loadComiteSessionRecords: () => ipcRenderer.invoke('comite:load-records'),
   saveComiteSessionRecordIfUnchanged: (record: {
     id: string;

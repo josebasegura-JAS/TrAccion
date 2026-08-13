@@ -14,9 +14,23 @@ import {
   saveComiteSessionRecordIfUnchanged,
   saveParitariaSessionRecordIfUnchanged,
   saveActaRecordIfUnchanged,
+  closeSessionWorkflowAtomically,
 } from '../sqlitePersistence.js';
 
 export function registerSesionesIpc(): void {
+
+  ipcMain.handle('sessions:close-workflow-atomically', (_event, payload: unknown) => {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        ok: false,
+        status: getSqliteStatus(),
+        message: 'Payload de cierre de sesión inválido.',
+      };
+    }
+    return enqueueSqliteIpc('sessions:close-workflow-atomically', () =>
+      closeSessionWorkflowAtomically(payload as Parameters<typeof closeSessionWorkflowAtomically>[0]),
+    );
+  });
   ipcMain.handle('comite:load-records', () =>
     enqueueSqliteIpc('comite:load-records', () => loadComiteSessionRecordsSnapshot()),
   );
