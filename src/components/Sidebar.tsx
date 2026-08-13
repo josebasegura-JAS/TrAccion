@@ -169,11 +169,11 @@ const buildDatabaseIndicatorViewModel = (
 
 const readStoredPinnedPreference = () => {
   if (typeof window === 'undefined') {
-    return true;
+    return false;
   }
 
   const storedPreference = readStorageItem(SIDEBAR_PINNED_KEY);
-  return storedPreference === null ? true : storedPreference === 'true';
+  return storedPreference === 'true';
 };
 
 const readStoredActiveGroup = (activeView: AppView) => {

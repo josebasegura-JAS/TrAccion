@@ -648,3 +648,104 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* -----------------------------------------------------------
+   v1.1 mockup-aligned visual system
+   La lógica de negocio no cambia: este bloque solo homogeneiza
+   jerarquía, superficies, densidad y estados visuales.
+   ----------------------------------------------------------- */
+
+.app-shell {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(220, 38, 38, 0.08), transparent 26rem),
+    linear-gradient(145deg, #070f1c 0%, #0c1628 46%, #111b2d 100%);
+}
+
+.app-shell__main {
+  background: linear-gradient(180deg, rgba(8, 17, 31, 0.8), rgba(17, 24, 39, 0.92));
+}
+
+.app-shell__content {
+  padding: 0 14px 14px;
+}
+
+.app-module-stage {
+  min-height: calc(100vh - 124px);
+  border-radius: 24px;
+  border-color: rgba(148, 163, 184, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.035), transparent 24rem),
+    linear-gradient(180deg, rgba(31, 41, 55, 0.96), rgba(24, 34, 49, 0.98));
+  box-shadow:
+    0 22px 54px rgba(2, 6, 23, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+/* Tarjetas internas: aspecto de panel de producto, no de formulario plano. */
+.app-module-stage :where(section, article)[class*='rounded-'][class*='border'],
+.app-module-stage > :where(div)[class*='rounded-'][class*='border'] {
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.12);
+}
+
+.app-module-stage table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.app-module-stage tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app-module-stage button:not(:disabled),
+.app-module-stage a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-module-stage button:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+/* Reduce el ruido visual de las barras horizontales y deja que los controles
+   salten de línea, como en el mockup, en vez de generar scroll lateral. */
+.app-module-stage .overflow-x-auto {
+  scrollbar-width: thin;
+}
+
+/* El borde rojo de foco queda visible pero fino. */
+.app-module-stage :where(button, input, select, textarea):focus-visible {
+  outline: 2px solid rgba(220, 38, 38, 0.52);
+  outline-offset: 2px;
+}
+
+/* Tablas compactas con cabecera elevada. */
+.app-module-stage thead th:first-child {
+  border-top-left-radius: 14px;
+}
+
+.app-module-stage thead th:last-child {
+  border-top-right-radius: 14px;
+}
+
+/* Scrollbar más discreto dentro del área de trabajo. */
+.app-module-stage ::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.app-module-stage ::-webkit-scrollbar-thumb {
+  border-width: 2px;
+  background: rgba(148, 163, 184, 0.26);
+}
+
+@media (max-width: 1180px) {
+  .app-shell__content {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .app-module-stage {
+    border-radius: 18px;
+    padding: 10px;
+  }
+}

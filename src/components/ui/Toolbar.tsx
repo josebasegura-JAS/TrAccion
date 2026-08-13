@@ -20,13 +20,13 @@ export function Toolbar({ actions, className, filters, ...props }: ToolbarProps)
   return (
     <div
       className={cx(
-        'flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto pb-0.5',
+        'flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-2xl border border-metro-border/80 bg-metro-panel/55 p-2 shadow-sm shadow-slate-950/15',
         className,
       )}
       {...props}
     >
-      {filters ? <div className="flex min-w-max flex-1 items-center gap-2">{filters}</div> : null}
-      {actions ? <div className="ml-auto flex min-w-max items-center gap-2">{actions}</div> : null}
+      {filters ? <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{filters}</div> : null}
+      {actions ? <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
     </div>
   );
 }

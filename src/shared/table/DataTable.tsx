@@ -342,7 +342,7 @@ export function DataTable<Row, ColumnId extends string>({
   return (
     <div className="space-y-2">
       <div
-        className={`relative ${maxHeightClassName} overflow-auto rounded-lg border border-metro-border/80`}
+        className={`relative ${maxHeightClassName} overflow-auto rounded-2xl border border-metro-border/80 bg-metro-surface/70 shadow-sm shadow-slate-950/15`}
         ref={scrollContainerRef}
       >
         {onResetColumnWidths && (
@@ -366,7 +366,7 @@ export function DataTable<Row, ColumnId extends string>({
               <col key={column.id} style={{ width: column.width }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-metro-panel text-xs font-semibold text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.14)]">
+          <thead className="sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.08em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur">
             <tr>
               {visibleColumns.map((column) => {
                 const isSorted = sort?.columnId === column.id;
@@ -456,7 +456,7 @@ export function DataTable<Row, ColumnId extends string>({
               })}
             </tr>
           </thead>
-          <tbody className="bg-metro-surface">
+          <tbody className="bg-metro-surface/75">
             {sortedRows.length === 0 ? (
               <tr>
                 <td
@@ -472,7 +472,7 @@ export function DataTable<Row, ColumnId extends string>({
             ) : (
               visibleRows.map((row, rowIndex) => (
                 <tr
-                  className={`${rowIndex % 2 === 0 ? 'bg-metro-surface' : 'bg-metro-panel/45'} transition-colors hover:bg-metro-red/10 ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                  className={`${rowIndex % 2 === 0 ? 'bg-transparent' : 'bg-metro-panel/28'} border-b border-metro-border/55 transition-colors hover:bg-metro-red/[0.07] ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                   key={getRowId(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
@@ -484,7 +484,7 @@ export function DataTable<Row, ColumnId extends string>({
 
                     return (
                       <td
-                        className={`truncate px-3 py-1.5 ${column.isActionColumn ? 'text-right' : ''} ${
+                        className={`truncate px-3 py-2 ${column.isActionColumn ? 'text-right' : ''} ${
                           column.tone ? columnToneClasses[column.tone].cell : ''
                         } ${column.className ?? ''}`}
                         key={column.id}
@@ -502,7 +502,7 @@ export function DataTable<Row, ColumnId extends string>({
         {hasHiddenRows && <div aria-hidden="true" ref={sentinelRef} style={{ height: 1 }} />}
       </div>
       {hasHiddenRows && (
-        <div className="flex items-center justify-between rounded-lg bg-metro-panel/45 px-3 py-2 text-xs text-metro-muted">
+        <div className="flex items-center justify-between rounded-xl border border-metro-border/70 bg-metro-panel/55 px-3 py-2 text-xs text-metro-muted">
           <span>
             Mostrando {visibleRows.length} de {sortedRows.length} registros.
           </span>

@@ -24,7 +24,7 @@ export function SearchField({
   return (
     <div
       className={cx(
-        'relative h-9 flex-1 rounded-lg border border-metro-border bg-metro-surface',
+        'relative h-10 min-w-[14rem] flex-1 rounded-xl border border-metro-border bg-metro-surface/80 shadow-inner shadow-slate-950/10',
         'focus-within:border-metro-red',
         wrapperClassName,
       )}
@@ -36,7 +36,7 @@ export function SearchField({
       />
       <input
         className={cx(
-          'h-full w-full rounded-lg bg-transparent pl-9 pr-3 text-sm text-metro-text outline-none placeholder:text-metro-muted',
+          'h-full w-full rounded-xl bg-transparent pl-9 pr-3 text-sm font-medium text-metro-text outline-none placeholder:text-metro-muted',
           onClear && hasValue && 'pr-9',
           className,
         )}

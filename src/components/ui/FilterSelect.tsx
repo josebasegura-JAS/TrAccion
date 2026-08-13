@@ -25,10 +25,10 @@ export function FilterSelect({
   ...props
 }: FilterSelectProps) {
   return (
-    <div className={cx('h-9 w-44 shrink-0', wrapperClassName)}>
+    <div className={cx('h-10 w-44 shrink-0', wrapperClassName)}>
       <select
         className={cx(
-          'h-full w-full rounded-lg border border-metro-border bg-metro-surface px-3 text-sm text-metro-text outline-none transition focus:border-metro-red',
+          'h-full w-full rounded-xl border border-metro-border bg-metro-surface/80 px-3 text-sm font-medium text-metro-text outline-none transition hover:border-slate-500 focus:border-metro-red',
           className,
         )}
         {...props}

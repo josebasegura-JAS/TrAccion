@@ -21,7 +21,7 @@ const toneClassName: Record<StatusBadgeTone, string> = {
 };
 
 const sizeClassName: Record<StatusBadgeSize, string> = {
-  sm: 'gap-2 px-3 py-1 text-xs',
+  sm: 'gap-2 px-3 py-1 text-[11px]',
   xs: 'gap-1.5 px-2 py-0.5 text-[11px]',
 };
 
@@ -41,7 +41,7 @@ export function StatusBadge({
   return (
     <span
       className={cx(
-        'inline-flex max-w-full shrink-0 items-center truncate rounded-full border font-bold',
+        'inline-flex max-w-full shrink-0 items-center truncate rounded-full border font-extrabold shadow-sm shadow-slate-950/10',
         sizeClassName[size],
         toneClassName[tone],
         className,

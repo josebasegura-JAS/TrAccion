@@ -447,7 +447,27 @@ export function DashboardCards({
   }, [criticalTasks, nextSession, openActas.length, openRecord, showActaPopup, showTaskPopup, upcomingTasks]);
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,0.9fr)_minmax(0,1.18fr)_minmax(0,1fr)_auto] gap-2 overflow-hidden">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.9fr)_minmax(0,1.18fr)_minmax(0,1fr)_auto] gap-2 overflow-hidden">
+      <div className="flex items-center gap-2 rounded-2xl border border-metro-border/80 bg-metro-panel/55 p-2 shadow-sm shadow-slate-950/15">
+        <span className="shrink-0 px-2 text-[10px] font-black uppercase tracking-[0.14em] text-metro-muted">Acciones rápidas</span>
+        {[
+          { label: 'Tareas', icon: ClipboardList, view: 'tareas' as const },
+          { label: 'Comité / Paritaria', icon: CalendarDays, view: 'comite' as const },
+          { label: 'Actas', icon: FileText, view: 'actas' as const },
+          { label: 'Plantilla', icon: UsersRound, view: 'plantilla' as const },
+        ].map((action) => (
+          <button
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-metro-border bg-metro-surface/80 px-3 text-[11px] font-bold text-metro-secondary transition hover:border-metro-red/45 hover:bg-metro-raised hover:text-metro-text"
+            key={action.label}
+            onClick={() => openRecord({ view: action.view })}
+            type="button"
+          >
+            <action.icon className="text-red-300" size={14} />
+            {action.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:grid-cols-2">
         <DashboardPanel className="p-3.5">
           <div className="grid h-full min-h-0 grid-cols-[1fr_auto] gap-4">
