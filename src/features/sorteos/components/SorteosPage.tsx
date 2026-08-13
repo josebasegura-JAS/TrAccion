@@ -200,7 +200,7 @@ export function SorteosPage() {
         );
         setErrors(result.errors);
         if (result.valid) {
-          setDraft({ title: '', date: today, winnersCount: 1 });
+          setDraft({ title: '', date: toLocalIsoDate(), winnersCount: 1 });
         }
       } catch (error) {
         setErrors([error instanceof Error ? error.message : 'No se ha podido realizar el sorteo.']);

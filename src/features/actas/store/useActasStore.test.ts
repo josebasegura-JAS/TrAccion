@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../tareas/domain/task';
 import type { ManagedSession } from '../../../shared/sessions/session';
-import { EMPTY_ACTA_DRAFT, type ActaDraft } from '../domain/acta';
+import { EMPTY_ACTA_DRAFT, type Acta, type ActaDraft, type ActaState } from '../domain/acta';
 import { ACTAS_STORAGE_KEY, useActasStore } from './useActasStore';
 
 const ACTA_TYPES_STORAGE_KEY = 'traccion.v1.actas.types';
@@ -62,6 +62,79 @@ function task(overrides: Partial<Task> = {}): Task {
   };
 }
 
+
+function installFakePersistedRecordsBackend(): void {
+  const store = new Map<string, { value: string; updatedAt: string }>();
+  const status = { ready: true, phase: 'active' as const };
+
+  Object.defineProperty(window, 'traccion', {
+    configurable: true,
+    value: {
+      getPersistedRecord: vi.fn(async (key: string) => {
+        const entry = store.get(key);
+        return {
+          status,
+          record: entry ? { key, value: entry.value, updatedAt: entry.updatedAt } : null,
+        };
+      }),
+      saveLocalStorageRecordIfUnchanged: vi.fn(
+        async ({
+          key,
+          value,
+          expectedUpdatedAt,
+        }: {
+          key: string;
+          value: string;
+          expectedUpdatedAt: string | null;
+        }) => {
+          const entry = store.get(key);
+          const currentUpdatedAt = entry?.updatedAt ?? null;
+          if (currentUpdatedAt !== expectedUpdatedAt) {
+            return { ok: false, status, currentUpdatedAt, message: 'Conflicto de concurrencia.' };
+          }
+          const updatedAt = new Date().toISOString();
+          store.set(key, { value, updatedAt });
+          return { ok: true, status, currentUpdatedAt: updatedAt, message: 'Guardado.' };
+        },
+      ),
+    },
+  });
+}
+
+async function createActaSafely(overrides: Partial<ActaDraft> = {}): Promise<string> {
+  const result = await useActasStore.getState().createWithConcurrencyCheck(draft(overrides));
+  expect(result.ok).toBe(true);
+  expect(result.recordId).toBeTruthy();
+  return result.recordId as string;
+}
+
+function draftFromActa(acta: Acta, overrides: Partial<ActaDraft> = {}): ActaDraft {
+  return {
+    titulo: acta.titulo,
+    tipo: acta.tipo,
+    fechaSesion: acta.fechaSesion,
+    estado: acta.estado,
+    fechaLimite: acta.fechaLimite,
+    observaciones: acta.observaciones,
+    alegaciones: acta.alegaciones,
+    actualizaciones: acta.actualizaciones,
+    actaPath: acta.actaPath,
+    ...overrides,
+  };
+}
+
+async function transitionActa(id: string, estado: ActaState, overrides: Partial<ActaDraft> = {}): Promise<void> {
+  const current = useActasStore.getState().actas.find((acta) => acta.id === id);
+  expect(current).toBeDefined();
+  if (!current) return;
+  const result = await useActasStore.getState().updateWithConcurrencyCheck(
+    id,
+    draftFromActa(current, { estado, ...overrides }),
+    current.updatedAt,
+  );
+  expect(result.ok).toBe(true);
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -72,10 +145,11 @@ describe('useActasStore', () => {
     vi.setSystemTime(new Date(timestamp));
     window.localStorage.clear();
     useActasStore.setState({ actas: [], actaTypes: [] });
+    installFakePersistedRecordsBackend();
   });
 
   it('crea, persiste y recarga un acta normalizando el borrador', async () => {
-    const id = await useActasStore.getState().create(draft({ titulo: '  Acta con espacios  ', observaciones: '  Texto  ' }));
+    const id = await createActaSafely({ titulo: '  Acta con espacios  ', observaciones: '  Texto  ' });
 
     expect(useActasStore.getState().actas[0]).toMatchObject({
       id,
@@ -86,43 +160,54 @@ describe('useActasStore', () => {
     });
 
     useActasStore.setState({ actas: [], actaTypes: [] });
+    installFakePersistedRecordsBackend();
     useActasStore.getState().load();
 
     expect(useActasStore.getState().actas[0].id).toBe(id);
     expect(JSON.parse(window.localStorage.getItem(ACTAS_STORAGE_KEY) ?? '[]')).toHaveLength(1);
   });
 
-  it('actualiza estado, alegaciones, ruta y cierre sin perder fechas de creación', async () => {
-    const id = await useActasStore.getState().create(draft());
+  it('actualiza por el ciclo válido, conserva datos y cierra sin perder la fecha de creación', async () => {
+    const id = await createActaSafely();
     const originalCreatedAt = useActasStore.getState().actas[0].createdAt;
 
-    await useActasStore.getState().update(
-      id,
-      draft({
-        estado: 'Pendiente de firma',
-        actaPath: '  C:/actas/ce.docx  ',
-        alegaciones: [{ sindicato: 'ELA', presentada: true, fecha: '2026-06-20', observacion: 'Alegación' }],
-      }),
-    );
+    await transitionActa(id, 'Borrador');
+    await transitionActa(id, 'Enviada a Dirección');
+    await transitionActa(id, 'Pendiente de alegaciones');
+    await transitionActa(id, 'Pendiente de firma', {
+      actaPath: '  C:/actas/ce.docx  ',
+      alegaciones: [{ sindicato: 'ELA', presentada: true, fecha: '2026-06-20', observacion: 'Alegación' }],
+    });
 
-    let acta = useActasStore.getState().actas[0];
+    let acta = useActasStore.getState().actas.find((item) => item.id === id);
     expect(acta).toMatchObject({ estado: 'Pendiente de firma', actaPath: 'C:/actas/ce.docx', closedAt: null });
-    expect(acta.createdAt).toBe(originalCreatedAt);
-    expect(acta.alegaciones).toHaveLength(1);
+    expect(acta?.createdAt).toBe(originalCreatedAt);
+    expect(acta?.alegaciones).toHaveLength(1);
 
-    await useActasStore.getState().closeActa(id);
-    acta = useActasStore.getState().actas[0];
-    expect(acta.estado).toBe('Cerrada');
-    expect(acta.closedAt).toBe(timestamp);
+    await transitionActa(id, 'Cerrada');
+    acta = useActasStore.getState().actas.find((item) => item.id === id);
+    expect(acta?.estado).toBe('Cerrada');
+    expect(acta?.closedAt).toBe(timestamp);
   });
 
-  it('añade actualizaciones no vacías al inicio y no persiste textos en blanco', async () => {
-    const id = await useActasStore.getState().create(draft());
+  it('persiste actualizaciones editadas mediante la API concurrente', async () => {
+    const id = await createActaSafely();
+    const current = useActasStore.getState().actas.find((acta) => acta.id === id);
+    expect(current).toBeDefined();
+    if (!current) return;
 
-    await useActasStore.getState().addUpdate(id, '   ');
-    await useActasStore.getState().addUpdate(id, 'Primera actualización');
-    await useActasStore.getState().addUpdate(id, 'Segunda actualización');
+    const result = await useActasStore.getState().updateWithConcurrencyCheck(
+      id,
+      draftFromActa(current, {
+        actualizaciones: [
+          { id: 'update-2', fecha: timestamp, texto: 'Segunda actualización' },
+          { id: 'update-1', fecha: timestamp, texto: 'Primera actualización' },
+        ],
+      }),
+      current.updatedAt,
+    );
 
+    expect(result.ok).toBe(true);
     expect(useActasStore.getState().actas[0].actualizaciones.map((entry) => entry.texto)).toEqual([
       'Segunda actualización',
       'Primera actualización',
@@ -132,10 +217,13 @@ describe('useActasStore', () => {
   it('crea un acta desde sesión una sola vez y conserva el vínculo de origen', async () => {
     const input = { tipo: 'Comité', session: session(), treatedTasks: [task()] };
 
-    const firstId = await useActasStore.getState().createFromSession(input);
-    const secondId = await useActasStore.getState().createFromSession(input);
-
-    expect(secondId).toBe(firstId);
+    const first = await useActasStore.getState().createFromSessionWithConcurrencyCheck(input);
+    const second = await useActasStore.getState().createFromSessionWithConcurrencyCheck(input);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    const firstId = first.recordId;
+    expect(firstId).toBeTruthy();
+    expect(second.recordId).toBe(firstId);
     expect(useActasStore.getState().actas).toHaveLength(1);
     expect(useActasStore.getState().actas[0]).toMatchObject({
       id: firstId,
@@ -165,7 +253,7 @@ describe('useActasStore', () => {
     expect((await useActasStore.getState().removeActaType(type.id)).ok).toBe(true);
     expect(window.localStorage.getItem(ACTA_TYPES_STORAGE_KEY)).toContain('Comité');
 
-    await useActasStore.getState().create(draft({ tipo: 'Comité' }));
+    await createActaSafely({ tipo: 'Comité' });
     const comiteType = useActasStore.getState().actaTypes.find((item) => item.nombre === 'Comité');
     expect(comiteType).toBeDefined();
     if (!comiteType) return;
