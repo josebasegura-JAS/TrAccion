@@ -116,3 +116,17 @@ export function isActaType(value: unknown): value is ActaType {
 export function isActaState(value: unknown): value is ActaState {
   return typeof value === 'string' && (ACTA_STATES as readonly string[]).includes(value);
 }
+
+export function canTransitionActaState(from: ActaState, to: ActaState): boolean {
+  if (from === to) {
+    return true;
+  }
+
+  // Reapertura explícita del histórico: una cerrada vuelve únicamente a firma.
+  if (from === 'Cerrada') {
+    return to === 'Pendiente de firma';
+  }
+
+  const currentIndex = ACTA_STATES.indexOf(from);
+  return currentIndex >= 0 && ACTA_STATES[currentIndex + 1] === to;
+}

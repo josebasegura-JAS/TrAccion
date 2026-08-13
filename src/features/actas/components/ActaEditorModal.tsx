@@ -37,6 +37,7 @@ export function ActaEditorModal({
   editingActa,
   editingActaId,
   isEditorReadOnly,
+  isClosedActa,
   newUpdateText,
   onClose,
   openActaPath,
@@ -44,6 +45,7 @@ export function ActaEditorModal({
   outlookDraftStatusIsError,
   pathStatus,
   pathStatusIsError,
+  reopenActa,
   recordLock,
   saveActa,
   saveError,
@@ -69,6 +71,7 @@ export function ActaEditorModal({
   editingActa: Acta | null | undefined;
   editingActaId: string | null;
   isEditorReadOnly: boolean;
+  isClosedActa: boolean;
   newUpdateText: string;
   onClose: () => void;
   openActaPath: () => Promise<void>;
@@ -76,6 +79,7 @@ export function ActaEditorModal({
   outlookDraftStatusIsError: boolean;
   pathStatus: string;
   pathStatusIsError: boolean;
+  reopenActa: () => Promise<void>;
   recordLock: ReturnType<typeof useSharedRecordLock>;
   saveActa: () => Promise<void>;
   saveError: string;
@@ -105,6 +109,11 @@ export function ActaEditorModal({
       <ModalBody className="space-y-4">
           {recordLock.status === 'locked' && recordLock.lockedBy && (
             <RecordLockNotice lockedBy={recordLock.lockedBy} />
+          )}
+          {isClosedActa && (
+            <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              Acta cerrada: se muestra en modo consulta para proteger el histórico. Reábrela si necesitas modificarla.
+            </div>
           )}
           <div className="grid gap-2 xl:grid-cols-[150px_150px_170px_190px_minmax(220px,1fr)]">
             <Field label="Tipo">
@@ -168,7 +177,7 @@ export function ActaEditorModal({
               <p className="mt-0.5 text-sm font-bold text-metro-text">{draft.estado}</p>
             </div>
             <ActionButton
-              disabled={!getNextState(draft.estado) || isEditorReadOnly}
+              disabled={!editingActaId || !getNextState(draft.estado) || isEditorReadOnly}
               iconOnly={false}
               onClick={advanceState}
               variant="secondary"
@@ -401,14 +410,25 @@ export function ActaEditorModal({
               Calendario
             </ActionButton>
           )}
-          <ActionButton
-            disabled={isEditorReadOnly}
-            iconOnly={false}
-            onClick={() => void saveActa()}
-            variant="save"
-          >
-            Guardar acta
-          </ActionButton>
+          {isClosedActa ? (
+            <ActionButton
+              disabled={recordLock.isReadOnly}
+              iconOnly={false}
+              onClick={() => void reopenActa()}
+              variant="secondary"
+            >
+              Reabrir acta
+            </ActionButton>
+          ) : (
+            <ActionButton
+              disabled={isEditorReadOnly}
+              iconOnly={false}
+              onClick={() => void saveActa()}
+              variant="save"
+            >
+              Guardar acta
+            </ActionButton>
+          )}
           {editingActa && (
             <AuditHistoryButton
               entityId={editingActa.id}

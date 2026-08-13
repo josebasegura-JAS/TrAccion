@@ -97,7 +97,9 @@ export function ActasPage() {
     recordId: editingActaId ?? '__new__',
     enabled: isEditorOpen,
   });
-  const isEditorReadOnly = recordLock.isReadOnly;
+  const editingActa = editingActaId ? actas.find((acta) => acta.id === editingActaId) : null;
+  const isClosedActa = editingActa?.estado === 'Cerrada';
+  const isEditorReadOnly = recordLock.isReadOnly || isClosedActa;
   const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
     useTableViewPreferences<ActaColumnId>({
       storageKey: 'traccion.tableView.actas.main',
@@ -662,6 +664,38 @@ export function ActasPage() {
     applyStateChange(nextState);
   };
 
+
+  const reopenActa = async () => {
+    if (!editingActa || editingActa.estado !== 'Cerrada' || recordLock.isReadOnly) {
+      return;
+    }
+
+    const confirmed = await confirm(
+      `¿Reabrir el acta «${editingActa.titulo}»? Volverá a “Pendiente de firma”.`,
+      { confirmLabel: 'Reabrir', title: 'Reabrir acta' },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const reopenedDraft: ActaDraft = {
+      ...draft,
+      estado: 'Pendiente de firma',
+    };
+    setSaveError('');
+    const result = await updateWithConcurrencyCheck(
+      editingActa.id,
+      reopenedDraft,
+      editingActa.updatedAt,
+    );
+    if (!result.ok) {
+      setSaveError(result.message);
+      return;
+    }
+
+    setDraft(reopenedDraft);
+  };
+
   const selectActaPath = async () => {
     const selector = window.traccion?.selectTaskDocument;
     if (!selector) {
@@ -727,7 +761,6 @@ export function ActasPage() {
     [hasLoadedHistoricalActas, loadHistoricalActas],
   );
 
-  const editingActa = editingActaId ? actas.find((acta) => acta.id === editingActaId) : null;
   const displayedCreationDate = editingActa?.fechaCreacion ?? getTodayIsoDate();
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
   const canCreateOutlookDraftFromEditor = draft.estado === 'Pendiente de alegaciones';
@@ -992,6 +1025,7 @@ export function ActasPage() {
           editingActa={editingActa}
           editingActaId={editingActaId}
           isEditorReadOnly={isEditorReadOnly}
+          isClosedActa={isClosedActa}
           newUpdateText={newUpdateText}
           onClose={() => setIsEditorOpen(false)}
           openActaPath={openActaPath}
@@ -999,6 +1033,7 @@ export function ActasPage() {
           outlookDraftStatusIsError={outlookDraftStatusIsError}
           pathStatus={pathStatus}
           pathStatusIsError={pathStatusIsError}
+          reopenActa={reopenActa}
           recordLock={recordLock}
           saveActa={saveActa}
           saveError={saveError}

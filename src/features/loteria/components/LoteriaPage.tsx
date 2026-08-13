@@ -60,7 +60,7 @@ const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
       'Septiembre: confirmar los dos números, los décimos encargados, el precio y los datos del lotero; preparar o generar el correo del encargo.',
       'Octubre: dar de alta participantes de Plantilla o personas externas, indicar cuántos décimos solicita cada una de cada número y preparar el aviso por CCO.',
       'Seguimiento: revisar las cantidades solicitadas, modificarlas si cambian y registrar los pagos por Bizum o efectivo con su fecha y observaciones.',
-      'Cierre: comprobar décimos sobrantes, pendientes de cobro, total cobrado, caja en efectivo y Bizum; marcar la campaña como cerrada cuando esté cuadrada.',
+      'Cierre: comprobar décimos sobrantes, pendientes de cobro, total cobrado, caja en efectivo y Bizum; la app impide marcar la campaña como cerrada si quedan cobros pendientes o si se han solicitado más décimos de los encargados.',
       'Guardar todo y exportar a Excel cuando necesites conservar o compartir el detalle y el resumen de la campaña.',
     ],
   },
@@ -445,6 +445,24 @@ export function LoteriaPage() {
 
   const setWorkflowFlag = (key: keyof LotteryCampaign['workflow'], value: boolean) => {
     updateDraft((current) => ({ ...current, workflow: { ...current.workflow, [key]: value } }));
+  };
+
+  const setCampaignClosed = (value: boolean) => {
+    if (value) {
+      const available1 = lotteryAvailableCountByNumber(draft, 1);
+      const available2 = lotteryAvailableCountByNumber(draft, 2);
+      if (available1 < 0 || available2 < 0) {
+        setMessage('No se puede cerrar la campaña: hay más décimos solicitados que encargados en alguno de los números.');
+        return;
+      }
+      if (lotteryPendingPaymentAmount(draft) > 0) {
+        setMessage('No se puede cerrar la campaña mientras existan importes pendientes de cobro.');
+        return;
+      }
+    }
+
+    setWorkflowFlag('campanaCerrada', value);
+    setMessage(value ? 'Campaña preparada para cerrar. Guarda el cierre para confirmarlo.' : 'Campaña reabierta en el borrador.');
   };
 
   const updateRequest = (id: string, patch: Partial<LotteryRequest>) => {
@@ -880,7 +898,7 @@ export function LoteriaPage() {
             </div>
             <div className="grid gap-3 xl:grid-cols-[0.85fr_1.15fr]">
               <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-                <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-[11px] text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => setWorkflowFlag('campanaCerrada', e.target.checked)} type="checkbox" />Campaña cerrada</label></div>
+                <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-[11px] text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => setCampaignClosed(e.target.checked)} type="checkbox" />Campaña cerrada</label></div>
                 <div className="space-y-2">
                   <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero1 || 'Número 1'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero1)} /><SummaryPill label="Solicitados" value={String(requestedNumero1)} /><SummaryPill label="Disponibles" value={String(availableNumero1)} tone={stockTone(availableNumero1)} /></div></div>
                   <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero2 || 'Número 2'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero2)} /><SummaryPill label="Solicitados" value={String(requestedNumero2)} /><SummaryPill label="Disponibles" value={String(availableNumero2)} tone={stockTone(availableNumero2)} /></div></div>

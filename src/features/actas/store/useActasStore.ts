@@ -24,6 +24,7 @@ import {
 import {
   ACTA_STATES,
   EMPTY_ACTA_DRAFT,
+  canTransitionActaState,
   buildActaObservacionesFromSession,
   createDefaultActaTypes,
   isActaState,
@@ -267,6 +268,10 @@ function parseSingleActa(storageValue: string): Acta | null {
 }
 
 function buildUpdatedActaFromDraft(acta: Acta, draft: ActaDraft, now: string): Acta {
+  if (!canTransitionActaState(acta.estado, draft.estado)) {
+    throw new Error(`Transición de acta no permitida: ${acta.estado} → ${draft.estado}. Avanza el ciclo paso a paso.`);
+  }
+
   return {
     ...acta,
     titulo: draft.titulo.trim(),

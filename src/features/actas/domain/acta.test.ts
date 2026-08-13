@@ -99,3 +99,18 @@ describe('acta domain', () => {
     expect(buildActaObservacionesFromSession(session({ notes: '' }), [])).toBe('Sin tareas tratadas.');
   });
 });
+
+describe('transiciones del ciclo de actas', () => {
+  it('solo permite avanzar un estado cada vez', async () => {
+    const { canTransitionActaState } = await import('./acta');
+    expect(canTransitionActaState('Pendiente de realizar', 'Borrador')).toBe(true);
+    expect(canTransitionActaState('Pendiente de realizar', 'Enviada a Dirección')).toBe(false);
+    expect(canTransitionActaState('Pendiente de alegaciones', 'Pendiente de firma')).toBe(true);
+  });
+
+  it('solo permite reabrir una cerrada hacia Pendiente de firma', async () => {
+    const { canTransitionActaState } = await import('./acta');
+    expect(canTransitionActaState('Cerrada', 'Pendiente de firma')).toBe(true);
+    expect(canTransitionActaState('Cerrada', 'Borrador')).toBe(false);
+  });
+});

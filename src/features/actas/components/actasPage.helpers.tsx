@@ -174,7 +174,7 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Cierre y archivo',
     items: [
       'En "Pendiente de firma" o "Cerrada" se puede adjuntar la ruta del documento del acta ya firmada.',
-      'Las actas cerradas quedan en el histórico y se pueden consultar filtrando por año.',
+      'Las actas cerradas quedan protegidas en modo consulta dentro del histórico; si hay que corregir una, se usa la acción explícita “Reabrir acta”, que la devuelve a Pendiente de firma.',
       'Los tipos de acta (por defecto Comité y Paritaria) se pueden ampliar o desactivar desde el botón "Nuevo tipo", sin perder las actas ya creadas con un tipo desactivado.',
     ],
   },
