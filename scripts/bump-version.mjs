@@ -23,6 +23,7 @@ import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
+const packageLockPath = path.join(__dirname, '..', 'package-lock.json');
 const buildCounterPath = path.join(__dirname, '..', '.build-version');
 
 const previousBuildNumber = existsSync(buildCounterPath)
@@ -66,6 +67,17 @@ pkg.build.portable.artifactName = `${exeBaseName}.exe`;
 
 // Conserva el formato del archivo (2 espacios de indentación + salto de línea final).
 writeFileSync(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+if (existsSync(packageLockPath)) {
+  const packageLock = JSON.parse(readFileSync(packageLockPath, 'utf8'));
+  packageLock.version = pkg.version;
+
+  if (packageLock.packages?.['']) {
+    packageLock.packages[''].version = pkg.version;
+  }
+
+  writeFileSync(packageLockPath, `${JSON.stringify(packageLock, null, 2)}\n`);
+}
 
 console.log(`Build nº ${displayBuildNumber}`);
 console.log(`Versión de la app (package.json.version): ${pkg.version}`);
