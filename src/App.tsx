@@ -429,7 +429,7 @@ export function App() {
     <AppShellErrorBoundary>
       <TooltipLayer />
       <AppUpdateChecker />
-      <div className="flex h-screen overflow-hidden bg-metro-app font-sans text-metro-text">
+      <div className="app-shell">
       <Sidebar
         activeView={activeView}
         onDashboardReset={resetToDashboard}
@@ -438,15 +438,12 @@ export function App() {
           changeActiveView(view);
         }}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-metro-app/95">
+      <div className="app-shell__main">
         <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
         <main
-          className={
-            activeView === 'dashboard'
-              ? 'min-h-0 min-w-0 flex-1 overflow-hidden p-3'
-              : 'min-w-0 flex-1 space-y-5 overflow-auto p-5'
-          }
+          className={`app-shell__content ${activeView === 'dashboard' ? 'app-shell__content--dashboard' : ''}`}
         >
+          <div className={`app-module-stage ${activeView === 'dashboard' ? 'app-module-stage--dashboard' : ''}`}>
           <SqliteReadOnlyBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <PersistenceErrorBanner onGoToAjustes={() => changeActiveView('ajustes')} />
           <GlobalBusyIndicator />
@@ -515,6 +512,7 @@ export function App() {
             </Suspense>
             </OperationalModuleGuard>
           </ModuleErrorBoundary>
+          </div>
         </main>
       </div>
       </div>

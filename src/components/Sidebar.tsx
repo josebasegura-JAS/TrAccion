@@ -169,10 +169,11 @@ const buildDatabaseIndicatorViewModel = (
 
 const readStoredPinnedPreference = () => {
   if (typeof window === 'undefined') {
-    return false;
+    return true;
   }
 
-  return readStorageItem(SIDEBAR_PINNED_KEY) === 'true';
+  const storedPreference = readStorageItem(SIDEBAR_PINNED_KEY);
+  return storedPreference === null ? true : storedPreference === 'true';
 };
 
 const readStoredActiveGroup = (activeView: AppView) => {
@@ -318,7 +319,7 @@ ${databaseIndicator.syncStatusText}`;
   return (
     <aside
       className={`relative z-30 h-screen shrink-0 transition-[width] duration-300 ease-out ${
-        shouldShowPanel && isPinned ? 'w-[4.5rem] lg:w-[19.5rem]' : 'w-[4.5rem]'
+        shouldShowPanel && isPinned ? 'w-[22rem]' : 'w-[4.5rem]'
       }`}
     >
       <div className="fixed inset-y-0 left-0 z-40 flex w-[4.5rem] flex-col border-r border-white/10 bg-gradient-to-b from-metro-navy via-metro-topbar to-[#08111F] text-white shadow-2xl shadow-slate-950/40">
@@ -465,11 +466,11 @@ ${databaseIndicator.syncStatusText}`;
       </div>
 
       {shouldShowPanel && (
-        <div className="fixed inset-y-0 left-[4.5rem] z-30 flex w-60 flex-col border-r border-slate-700/80 bg-[#0F172A]/98 text-white shadow-2xl shadow-slate-950/45 backdrop-blur-xl transition-transform duration-300 ease-out">
+        <div className="fixed inset-y-0 left-[4.5rem] z-30 flex w-[17.5rem] flex-col border-r border-slate-700/80 bg-gradient-to-b from-[#0f172a] via-[#101b30] to-[#0b1425] text-white shadow-2xl shadow-slate-950/45 backdrop-blur-xl transition-transform duration-300 ease-out">
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-metro-red">
-                Navegación
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-red">
+                TrAccion 1.1
               </p>
               <h2 className="truncate text-base font-semibold text-metro-text">
                 {activeGroup.label}
@@ -502,7 +503,7 @@ ${databaseIndicator.syncStatusText}`;
           </div>
 
           <div className="border-b border-white/10 px-4 py-4">
-            <p className="text-sm leading-5 text-metro-muted">{activeGroup.description}</p>
+            <p className="text-sm leading-5 text-slate-300">{activeGroup.description}</p>
           </div>
 
           <nav

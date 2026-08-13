@@ -118,24 +118,24 @@ const labelByVariant: Record<ActionButtonVariant, string> = {
 };
 
 const colorClassByVariant: Record<ActionButtonVariant, string> = {
-  add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
-  approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent',
-  delete: 'border-red-500 bg-transparent text-red-400 hover:bg-red-950/40',
-  duplicate: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
-  edit: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
+  add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
+  approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent shadow-sm shadow-emerald-950/25',
+  delete: 'border-red-500/45 bg-red-950/20 text-red-200 hover:bg-red-950/35',
+  duplicate: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
+  edit: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
   excel: 'bg-[#1a5c38] text-white hover:bg-[#217346] border-transparent',
-  history: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
-  import: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
+  history: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
+  import: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
   outlook: 'bg-[#0078d4] text-white hover:bg-[#106ebe] border-transparent',
-  print: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
-  reject: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
-  save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
-  secondary: 'bg-metro-surface text-metro-text hover:border-metro-red border-metro-border',
+  print: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
+  reject: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
+  save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
+  secondary: 'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised',
   word: 'bg-[#1e3f6f] text-white hover:bg-[#2b579a] border-transparent',
 };
 
 const sizeClassBySize: Record<ActionButtonSize, string> = {
-  md: 'h-9 rounded-lg px-3 text-sm',
+  md: 'h-10 rounded-xl px-3.5 text-sm',
   sm: 'h-8 rounded-lg px-2.5 text-xs',
 };
 
@@ -164,7 +164,7 @@ export function ActionButton({
   return (
     <button
       className={cx(
-        'inline-flex items-center justify-center gap-2 border font-semibold transition disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex items-center justify-center gap-2 border font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-50',
         sizeClassBySize[size],
         colorClassByVariant[variant],
         iconOnly && 'aspect-square px-0',
