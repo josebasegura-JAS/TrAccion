@@ -14,8 +14,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
       'Revisar Deudas y regularizaciones: ahí se ve la deuda arrastrada y se puede fijar un saldo real justificado si el cálculo automático no coincide con la situación real.',
       'Revisar "Cómputo mensual" para hacer el pedido del mes.',
-      'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes.',
-      'Exportar o imprimir los resultados que necesite RRLL.',
+      'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes y exportar o imprimir los resultados que necesite RRLL.',
     ],
   },
   {
