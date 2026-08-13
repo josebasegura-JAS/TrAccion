@@ -609,7 +609,7 @@ export const useActasStore = create<ActasStateStore>((set, get) => ({
       }
       set((state) => ({
         actas: sortActasForState(
-          selectVisibleActasForState(result.records, state.hasLoadedHistoricalActas),
+          selectVisibleActasForState(result.records, state.hasLoadedHistoricalActas, actaId),
         ),
         actaTypes: readActaTypes(result.records),
       }));
