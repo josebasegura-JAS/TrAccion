@@ -19,6 +19,8 @@ import { COMITE_TASK_PHASE } from '../domain/comite';
 import { useCommitteeSessionStore } from '../store/useCommitteeSessionStore';
 import { PARITARIA_TASK_PHASE } from '../../paritaria/domain/paritaria';
 import { useParitariaSessionStore } from '../../paritaria/store/useParitariaSessionStore';
+import { useModuleHelpRegistry } from '../../../services/moduleHelpRegistry';
+import { COMITE_PARITARIA_HELP_SECTIONS } from './comiteHelpSections';
 
 type Organ = 'comite' | 'paritaria';
 
@@ -188,6 +190,17 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
   const [filter, setFilter] = useState<'todos' | Organ>('todos');
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
   const [assignmentMessage, setAssignmentMessage] = useState('');
+  const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
+  const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
+
+  useEffect(() => {
+    setModuleHelp({
+      title: 'Comité / Paritaria',
+      subtitle: 'Guía rápida de la bandeja unificada, clasificación de puntos y acceso a las sesiones.',
+      sections: COMITE_PARITARIA_HELP_SECTIONS,
+    });
+    return () => clearModuleHelp();
+  }, [clearModuleHelp, setModuleHelp]);
 
   useEffect(() => {
     loadCommittee();

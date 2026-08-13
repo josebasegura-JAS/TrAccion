@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, HelpCircle, ListOrdered, Sparkles } from 'lucide-react';
+import { CheckCircle2, HelpCircle, ListOrdered, Sparkles } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 
@@ -46,37 +46,33 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto px-4 py-4 sm:px-5">
-        <div className="flex min-w-max items-stretch gap-3 pb-1">
+      <div className="px-4 py-4 sm:px-5">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {items.map((item, index) => {
             const isLast = index === items.length - 1;
             return (
-              <div className="flex items-stretch gap-3" key={`${section.title}-${item}`}>
-                <article className="flex w-64 shrink-0 flex-col rounded-2xl border border-emerald-400/20 bg-metro-surface/90 p-4 shadow-sm">
-                  <div className="mb-3 flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-extrabold text-white shadow-sm">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200/90">
-                        Paso {index + 1}
-                      </p>
-                      {isLast ? (
-                        <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-100">
-                          <CheckCircle2 size={12} strokeWidth={2.2} />
-                          Cierre del flujo
-                        </div>
-                      ) : null}
-                    </div>
+              <article
+                className="relative min-w-0 rounded-2xl border border-emerald-400/20 bg-metro-surface/90 p-3.5 shadow-sm"
+                key={`${section.title}-${item}`}
+              >
+                <div className="mb-2.5 flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-extrabold text-white shadow-sm">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/90">
+                      Paso {index + 1}
+                    </p>
+                    {isLast ? (
+                      <div className="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-100">
+                        <CheckCircle2 size={11} strokeWidth={2.2} />
+                        <span className="truncate">Cierre del flujo</span>
+                      </div>
+                    ) : null}
                   </div>
-                  <p className="text-sm leading-6 text-metro-text">{item}</p>
-                </article>
-                {!isLast ? (
-                  <div className="hidden items-center justify-center text-emerald-300 lg:flex">
-                    <ArrowRight size={22} strokeWidth={2.2} />
-                  </div>
-                ) : null}
-              </div>
+                </div>
+                <p className="break-words text-xs leading-5 text-metro-text sm:text-[13px]">{item}</p>
+              </article>
             );
           })}
         </div>
@@ -130,7 +126,7 @@ export function ModuleHelpButton({ title, subtitle, sections, ariaLabel }: Modul
 
       {isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3">
-          <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-metro-border/80 bg-metro-surface shadow-card">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-metro-border/80 bg-metro-surface shadow-card">
             <div className="flex items-start justify-between gap-4 border-b border-metro-border/70 bg-metro-panel px-4 py-3 sm:px-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-200">Ayuda visual</p>
@@ -140,7 +136,7 @@ export function ModuleHelpButton({ title, subtitle, sections, ariaLabel }: Modul
               <ModalCloseButton label="Cerrar ayuda" onClick={() => setIsOpen(false)} />
             </div>
 
-            <div className="max-h-[74vh] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+            <div className="max-h-[74vh] overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
               {flowSections.length > 0 ? (
                 <div className="space-y-4">
                   {flowSections.map((section) => (

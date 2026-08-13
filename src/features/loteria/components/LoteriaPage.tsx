@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import type { Employee } from '../../plantilla/domain/employee';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -47,6 +48,42 @@ const textareaClass = 'min-h-36 w-full resize-y rounded-lg border border-metro-b
 const money = (value: number) => value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 const dateText = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('es-ES') : '—';
 const nowIso = () => new Date().toISOString();
+
+const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    body: 'Gestiona la campaña anual de Lotería de Navidad: encargo al lotero, participantes, cantidades solicitadas, cobros, control de existencias y cierre.',
+  },
+  {
+    title: 'Flujo de la campaña',
+    ordered: true,
+    items: [
+      'Septiembre: confirmar los dos números, los décimos encargados, el precio y los datos del lotero; preparar o generar el correo del encargo.',
+      'Octubre: dar de alta participantes de Plantilla o personas externas, indicar cuántos décimos solicita cada una de cada número y preparar el aviso por CCO.',
+      'Seguimiento: revisar las cantidades solicitadas, modificarlas si cambian y registrar los pagos por Bizum o efectivo con su fecha y observaciones.',
+      'Cierre: comprobar décimos sobrantes, pendientes de cobro, total cobrado, caja en efectivo y Bizum; marcar la campaña como cerrada cuando esté cuadrada.',
+      'Guardar todo y exportar a Excel cuando necesites conservar o compartir el detalle y el resumen de la campaña.',
+    ],
+  },
+  {
+    title: 'Campaña y existencias',
+    items: [
+      'La campaña que se carga corresponde automáticamente al año actual. Los datos de años anteriores quedan archivados y al cambiar de año se inicia una campaña nueva.',
+      'Se controlan por separado los décimos encargados y disponibles de cada uno de los dos números.',
+      'Cuando la disponibilidad baja de 30 décimos, el indicador se muestra en tono de aviso para llamar la atención.',
+      'El importe de cada persona se calcula con el número total de décimos solicitados multiplicado por el precio por décimo de la campaña.',
+    ],
+  },
+  {
+    title: 'Participantes y pagos',
+    items: [
+      'En el alta pueden seleccionarse personas de Plantilla o crearse participantes externos/jubilados con sus datos de contacto u observaciones.',
+      'En Seguimiento no se añaden participantes nuevos: se trabaja sobre los ya dados de alta, aunque sí pueden ajustarse sus cantidades.',
+      'Al marcar un pago se registra su forma —Bizum o efectivo— y puede anotarse información adicional.',
+      'La exportación Excel incluye el detalle de participantes, cantidades, importes y pagos, además de una hoja de resumen de la campaña.',
+    ],
+  },
+];
 
 type WorkspaceSection = 'septiembre' | 'octubre' | 'seguimiento' | 'cierre';
 
@@ -555,6 +592,8 @@ export function LoteriaPage() {
     <div className="space-y-3">
       <PageHeader
         title="Lotería"
+        helpSections={LOTERIA_HELP_SECTIONS}
+        helpSubtitle="Guía rápida del encargo, participantes, seguimiento de pagos, existencias y cierre anual."
         status={<SaveState dirty={dirty} message={message} />}
         actions={
           <>
