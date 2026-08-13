@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../../shared/security/escapeHtml';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
@@ -97,14 +98,6 @@ function renderTemplate(template: string, replacements: Record<string, string>):
   );
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 function plainTextToHtml(value: string): string {
   return escapeHtml(value).replace(/\r?\n/g, '<br>');

@@ -1,3 +1,5 @@
+import { escapeHtml } from '../../../shared/security/escapeHtml';
+
 export type EspecialRecipientType = 'to' | 'cc';
 
 export interface EspecialServiceDraft {
@@ -845,11 +847,4 @@ function decodeBase64Bytes(content: string): Uint8Array {
   return bytes;
 }
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+export { escapeHtml };

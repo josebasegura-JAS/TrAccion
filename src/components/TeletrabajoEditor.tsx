@@ -1,3 +1,4 @@
+import { toLocalIsoDate as todayIso } from '../utils/dateOnly';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import {
@@ -24,12 +25,6 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { ModalShell } from './ui/ModalShell';
-
-function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
-}
 
 function toDraft(solicitud: TeletrabajoSolicitud | null): TeletrabajoDraft {
   if (!solicitud) {

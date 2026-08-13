@@ -1,3 +1,4 @@
+import { escapeHtml } from '../security/escapeHtml';
 import type { ExportCellValue, ExportTablePayload } from './types';
 
 const DANGEROUS_EXCEL_PREFIXES = ['=', '+', '-', '@'];
@@ -43,14 +44,7 @@ export function escapeExcelValue(value: ExportCellValue): string {
   return normalized;
 }
 
-export function escapeHtml(value: ExportCellValue): string {
-  return normalizeCellValue(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+export { escapeHtml };
 
 export function buildExcelTableHtml<T>(payload: ExportTablePayload<T>): string {
   const generatedAt = payload.generatedAt ?? new Date();

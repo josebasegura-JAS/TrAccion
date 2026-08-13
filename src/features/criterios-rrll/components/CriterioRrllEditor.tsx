@@ -1,3 +1,4 @@
+import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -29,12 +30,6 @@ const criterioTextFields: Array<{
   { field: 'responsable', label: 'Responsable' },
   { field: 'fecha', label: 'Fecha' },
 ];
-
-function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
-}
 
 function toDraft(criterio: CriterioRrll | null): CriterioRrllDraft {
   if (!criterio) {

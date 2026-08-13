@@ -1,3 +1,4 @@
+import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   normalizeJobPosition,
@@ -83,12 +84,6 @@ function parseDateOnly(value: string): { year: number; month: number; day: numbe
   }
 
   return null;
-}
-
-function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
 }
 
 function formatDateNumeric(value: string): string {

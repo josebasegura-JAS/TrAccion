@@ -111,13 +111,7 @@ export const exportColumns: ExportColumn<LicenciaSinSueldoRecord>[] = [
   { key: 'observaciones', header: 'Observaciones', value: (record) => record.observaciones },
 ];
 
-export function todayIso(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+export { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
 
 export function createUpdateId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto

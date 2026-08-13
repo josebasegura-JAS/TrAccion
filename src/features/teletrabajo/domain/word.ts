@@ -1,3 +1,4 @@
+import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   normalizeJobPosition,
@@ -209,12 +210,6 @@ function percentageFromDays(days: readonly TeletrabajoDia[]): string {
   if (days.length >= 2) return '40';
   if (days.length === 1) return '20';
   return '';
-}
-
-function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
 }
 
 function findTranslatedPosition(

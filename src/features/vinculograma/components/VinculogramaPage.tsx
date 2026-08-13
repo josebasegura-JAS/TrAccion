@@ -1,3 +1,4 @@
+import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
 import { Link2, RotateCcw, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
@@ -111,12 +112,6 @@ const vinculogramaExportColumns = (today: string): ExportColumn<Vinculograma>[] 
     value: (record) => getVinculogramaStatus(record.expiryDate, today, record.revokedAt),
   },
 ];
-
-function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-    now.getDate(),
-  ).padStart(2, '0')}`;
-}
 
 function readExpiredVisibility(): boolean {
   return readStorageItem(EXPIRED_VISIBILITY_KEY) === 'true';
