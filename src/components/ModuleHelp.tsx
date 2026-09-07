@@ -60,11 +60,11 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
     <section className="min-w-0 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.045] p-3 sm:p-4">
       <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200/85">Guía de proceso</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200/85">Guía de proceso</p>
           <h4 className="mt-0.5 text-sm font-bold text-metro-text sm:text-base">{section.title}</h4>
           {section.body ? <div className="mt-1 text-xs leading-5 text-metro-muted sm:text-sm">{section.body}</div> : null}
         </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-100">
           {activeIndex + 1} / {steps.length}
         </span>
       </div>
@@ -89,13 +89,13 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
             >
               <div className="mb-1 flex items-center gap-1.5">
                 <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                     active || completed ? 'bg-emerald-500 text-white' : 'bg-metro-panel text-metro-muted'
                   }`}
                 >
                   {completed ? <CheckCircle2 size={12} strokeWidth={2.4} /> : index + 1}
                 </span>
-                <span className="truncate text-[10px] font-semibold uppercase tracking-[0.08em]">Paso {index + 1}</span>
+                <span className="truncate text-[11px] font-semibold uppercase tracking-[0.08em]">Paso {index + 1}</span>
               </div>
               <p className="line-clamp-2 break-words text-[11px] font-semibold leading-4 sm:text-xs">
                 {step.title ?? `Paso ${index + 1}`}
@@ -108,11 +108,11 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
       <div className="mt-3 rounded-xl border border-metro-border/70 bg-metro-surface/85 p-3">
         <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/90">Paso {activeIndex + 1}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-200/90">Paso {activeIndex + 1}</p>
             <h5 className="truncate text-sm font-bold text-metro-text">{activeStep.title ?? `Paso ${activeIndex + 1}`}</h5>
           </div>
           {activeIndex === steps.length - 1 ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-100">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-100">
               <CheckCircle2 size={11} strokeWidth={2.2} /> Cierre
             </span>
           ) : null}
@@ -120,18 +120,18 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
 
         <div className={`grid min-w-0 gap-3 text-xs leading-5 sm:text-[13px] ${activeStep.check || activeStep.result ? 'md:grid-cols-3' : ''}`}>
           <div className="min-w-0">
-            <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-metro-muted">Qué haces</p>
+            <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-metro-muted">Qué haces</p>
             <p className="break-words text-metro-text">{activeStep.action}</p>
           </div>
           {activeStep.check ? (
             <div className="min-w-0">
-              <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-metro-muted">Qué controla TrAccion</p>
+              <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-metro-muted">Qué controla TrAccion</p>
               <p className="break-words text-metro-text">{activeStep.check}</p>
             </div>
           ) : null}
           {activeStep.result ? (
             <div className="min-w-0">
-              <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-metro-muted">Resultado</p>
+              <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-metro-muted">Resultado</p>
               <p className="break-words text-metro-text">{activeStep.result}</p>
             </div>
           ) : null}
@@ -146,7 +146,7 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
           >
             <ChevronLeft size={14} /> Anterior
           </button>
-          <p className="hidden text-[10px] text-metro-muted sm:block">Pulsa cualquier paso para consultarlo directamente.</p>
+          <p className="hidden text-[11px] text-metro-muted sm:block">Pulsa cualquier paso para consultarlo directamente.</p>
           <button
             className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-35"
             disabled={activeIndex === steps.length - 1}
@@ -227,7 +227,7 @@ export function ModuleHelpButton({ title, subtitle, sections, ariaLabel }: Modul
                 <div className={flowSections.length > 0 ? 'mt-4 min-w-0' : 'min-w-0'}>
                   <div className="mb-2 flex min-w-0 items-center gap-2">
                     <div className="h-px flex-1 bg-metro-border/70" />
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-metro-muted">Consulta rápida</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-metro-muted">Consulta rápida</p>
                     <div className="h-px flex-1 bg-metro-border/70" />
                   </div>
                   <div className="grid min-w-0 gap-3 xl:grid-cols-2">

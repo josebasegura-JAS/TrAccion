@@ -45,7 +45,7 @@ import {
 import { useLoteriaStore } from '../store/useLoteriaStore';
 
 const inputClass = 'h-8 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 text-xs text-metro-text outline-none transition focus:border-metro-red';
-const labelClass = 'mb-1 block text-[10px] font-bold uppercase tracking-wide text-metro-muted';
+const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wide text-metro-muted';
 const textareaClass = 'min-h-36 w-full resize-y rounded-lg border border-metro-border bg-metro-surface p-2.5 text-xs leading-5 text-metro-text outline-none transition focus:border-metro-red';
 const money = (value: number) => value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 const dateText = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('es-ES') : '—';
@@ -233,7 +233,7 @@ function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; la
         <span className="text-[11px] font-bold">{label}</span>
       </div>
       <p className="mt-1 text-xl font-extrabold tracking-tight text-metro-text">{value}</p>
-      {detail ? <p className="text-[10px] text-metro-muted">{detail}</p> : null}
+      {detail ? <p className="text-[11px] text-metro-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -244,7 +244,7 @@ function HeaderMetric({ label, value, warning = false }: { label: string; value:
       'flex h-9 min-w-[92px] items-center justify-between gap-2 rounded-lg border px-2.5',
       warning ? 'border-amber-500/45 bg-amber-500/10' : 'border-metro-border bg-metro-surface',
     )}>
-      <span className="text-[9px] font-bold uppercase tracking-wide text-metro-muted">{label}</span>
+      <span className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</span>
       <span className={cx('text-xs font-extrabold', warning ? 'text-amber-200' : 'text-metro-text')}>{value}</span>
     </div>
   );
@@ -342,7 +342,7 @@ function SummaryPill({ label, value, tone = 'default' }: { label: string; value:
             ? 'border-red-500/45 bg-red-500/10'
             : 'border-metro-border bg-metro-surface',
     )}>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
       <p className="mt-0.5 text-sm font-extrabold text-metro-text">{value}</p>
     </div>
   );
@@ -756,7 +756,7 @@ export function LoteriaPage() {
                 <label><span className={labelClass}>Asunto</span><input className={inputClass} value={draft.loteroEmailSubject} onChange={(e) => updateDraft((current) => ({ ...current, loteroEmailSubject: e.target.value }))} /></label>
                 <label><span className={labelClass}>Mensaje</span><textarea className={textareaClass} value={draft.loteroEmailBody} onChange={(e) => updateDraft((current) => ({ ...current, loteroEmailBody: e.target.value }))} /></label>
                 <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-3">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-metro-muted">Vista previa</p>
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">Vista previa</p>
                   <p className="text-[11px] font-bold text-metro-text">{draft.loteroEmailSubject}</p>
                   <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-metro-secondary">{loteroMailPreview}</pre>
                 </div>
@@ -794,7 +794,7 @@ export function LoteriaPage() {
                       <button className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-metro-raised" key={employee.empleado} onClick={() => addEmployeeParticipant(employee)} type="button">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold text-metro-text">{employee.nombreApellidos}</p>
-                          <p className="text-[10px] text-metro-muted">Empleado {employee.empleado}</p>
+                          <p className="text-[11px] text-metro-muted">Empleado {employee.empleado}</p>
                         </div>
                         <Plus className="shrink-0 text-red-300" size={15} />
                       </button>
@@ -855,7 +855,7 @@ export function LoteriaPage() {
               </div>
               <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-panel">
                 <table className="w-full min-w-[1240px] border-collapse text-left text-[11px]">
-                  <thead className="bg-metro-raised text-[10px] uppercase tracking-wide text-metro-muted">
+                  <thead className="bg-metro-raised text-[11px] uppercase tracking-wide text-metro-muted">
                     <tr><th className="px-2 py-2">Nº empleado</th><th className="px-2 py-2">Nombre y apellidos</th><th className="px-2 py-2">Tipo</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Contacto / nota</th><th className="w-9 px-2 py-2" /></tr>
                   </thead>
                   <tbody>
@@ -910,7 +910,7 @@ export function LoteriaPage() {
 
             <div className="overflow-x-auto rounded-xl border border-metro-border bg-metro-surface">
               <table className="w-full min-w-[1280px] border-collapse text-left text-[11px]">
-                <thead className="bg-metro-raised text-[10px] uppercase tracking-wide text-metro-muted">
+                <thead className="bg-metro-raised text-[11px] uppercase tracking-wide text-metro-muted">
                   <tr><th className="px-2 py-2">Nº empleado</th><th className="px-2 py-2">Persona</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-center">Pagado</th><th className="px-2 py-2">Fecha pago</th><th className="px-2 py-2">Forma pago</th><th className="px-2 py-2">Observaciones pago</th></tr>
                 </thead>
                 <tbody>

@@ -255,7 +255,7 @@ export function CalculationPanel({
               {row.ticketsFinales}
             </span>
             {row.manualEntry ? (
-              <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-[9px] font-bold text-metro-muted">Manual</span>
+              <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-[11px] font-bold text-metro-muted">Manual</span>
             ) : (
             <button
               aria-label={`Ver cálculo de ${row.nombreApellidos}`}

@@ -329,15 +329,15 @@ export function TicketRestauranteManualDebtPanel({
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase text-metro-muted">Con deuda ahora</p>
+              <p className="text-[11px] font-semibold uppercase text-metro-muted">Con deuda ahora</p>
               <p className="text-lg font-extrabold text-metro-text">{carriedDebtRows.length}</p>
             </div>
             <div className="rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase text-amber-300">Deuda entrante</p>
+              <p className="text-[11px] font-semibold uppercase text-amber-300">Deuda entrante</p>
               <p className="text-lg font-extrabold text-metro-text">{carriedDebtTotal}</p>
             </div>
             <div className="rounded-lg border border-red-400/20 bg-red-500/[0.06] px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase text-red-300">Regularizaciones</p>
+              <p className="text-[11px] font-semibold uppercase text-red-300">Regularizaciones</p>
               <p className="text-lg font-extrabold text-metro-text">{regularizations.length}</p>
             </div>
           </div>
@@ -348,7 +348,7 @@ export function TicketRestauranteManualDebtPanel({
         <div className="flex flex-col gap-2 border-b border-metro-border px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-sm font-bold text-metro-text">Deuda pendiente · {monthLabel(year, month)}</h3>
-            <p className="text-[10px] text-metro-muted">Deuda que llega al mes antes de aplicar sus tickets. Puedes fijar el saldo real mediante una regularización justificada.</p>
+            <p className="text-[11px] text-metro-muted">Deuda que llega al mes antes de aplicar sus tickets. Puedes fijar el saldo real mediante una regularización justificada.</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="mr-1 text-xs font-bold text-amber-300">{carriedDebtTotal} ticket{carriedDebtTotal === 1 ? '' : 's'}</span>
@@ -380,15 +380,15 @@ export function TicketRestauranteManualDebtPanel({
                 const adjustment = actual - calculated;
                 return (
                   <tr className="border-t border-metro-border" key={row.empleado}>
-                    <td className="px-2 py-2"><p className="font-semibold text-metro-text">{row.nombreApellidos}</p><p className="text-[10px] text-metro-muted">{row.empleado} · {row.calendario}</p></td>
+                    <td className="px-2 py-2"><p className="font-semibold text-metro-text">{row.nombreApellidos}</p><p className="text-[11px] text-metro-muted">{row.empleado} · {row.calendario}</p></td>
                     <td className="px-2 py-2 font-bold text-metro-text">{calculated}</td>
                     <td className="px-2 py-2 font-bold text-amber-300">{actual}</td>
                     <td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td>
-                    <td className="max-w-[320px] px-2 py-2">{regularization ? <><p className="truncate text-metro-secondary" title={regularization.reason}>{regularization.reason}</p>{regularization.observations ? <p className="truncate text-[10px] text-metro-muted">{regularization.observations}</p> : null}</> : <span className="text-metro-muted">—</span>}</td>
+                    <td className="max-w-[320px] px-2 py-2">{regularization ? <><p className="truncate text-metro-secondary" title={regularization.reason}>{regularization.reason}</p>{regularization.observations ? <p className="truncate text-[11px] text-metro-muted">{regularization.observations}</p> : null}</> : <span className="text-metro-muted">—</span>}</td>
                     <td className="px-2 py-2">
                       <div className="flex flex-wrap gap-1.5">
-                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => setDetailEmployee(row.empleado)} type="button"><Eye className="h-3 w-3" /> Ver detalle</button>
-                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openRegularization(row.empleado)} type="button"><Pencil className="h-3 w-3" /> {regularization ? 'Modificar' : 'Regularizar'}</button>
+                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => setDetailEmployee(row.empleado)} type="button"><Eye className="h-3 w-3" /> Ver detalle</button>
+                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openRegularization(row.empleado)} type="button"><Pencil className="h-3 w-3" /> {regularization ? 'Modificar' : 'Regularizar'}</button>
                       </div>
                     </td>
                   </tr>
@@ -447,12 +447,12 @@ export function TicketRestauranteManualDebtPanel({
 
         <div className="mt-3 flex flex-col gap-2 rounded-lg border border-blue-400/20 bg-blue-500/[0.05] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-blue-300">Vista previa del reparto</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-blue-300">Vista previa del reparto</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {installments.map((amount, index) => {
                 const period = addMonths(draft.startYear, draft.startMonth, index);
                 return (
-                  <span key={`${period.year}-${period.month}`} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-200">
+                  <span key={`${period.year}-${period.month}`} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[11px] font-semibold text-blue-200">
                     {monthLabel(period.year, period.month)} · {amount} ticket{amount === 1 ? '' : 's'}
                   </span>
                 );
@@ -470,7 +470,7 @@ export function TicketRestauranteManualDebtPanel({
         <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
           <div className="border-b border-metro-border px-3 py-2">
             <h3 className="text-sm font-bold text-metro-text">Histórico de regularizaciones</h3>
-            <p className="text-[10px] text-metro-muted">Registro de correcciones aplicadas sobre la deuda automática.</p>
+            <p className="text-[11px] text-metro-muted">Registro de correcciones aplicadas sobre la deuda automática.</p>
           </div>
           <div className="overflow-x-auto">
             <CompactTable>
@@ -478,7 +478,7 @@ export function TicketRestauranteManualDebtPanel({
               <CompactTableBody>
                 {[...regularizations].sort((a, b) => monthKey(b.year, b.month) - monthKey(a.year, a.month) || b.updatedAt.localeCompare(a.updatedAt)).map((item) => {
                   const adjustment = item.targetTickets - item.calculatedTickets;
-                  return <tr className="border-t border-metro-border" key={item.id}><td className="px-2 py-2 text-metro-secondary">{monthLabel(item.year, item.month)}</td><td className="px-2 py-2"><p className="font-semibold text-metro-text">{item.nombreApellidos}</p><p className="text-[10px] text-metro-muted">{item.empleado}</p></td><td className="px-2 py-2 font-semibold text-metro-text">{item.calculatedTickets}</td><td className="px-2 py-2 font-semibold text-amber-300">{item.targetTickets}</td><td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td><td className="max-w-[360px] px-2 py-2"><p className="truncate text-metro-secondary" title={item.reason}>{item.reason}</p>{item.observations ? <p className="truncate text-[10px] text-metro-muted">{item.observations}</p> : null}</td></tr>;
+                  return <tr className="border-t border-metro-border" key={item.id}><td className="px-2 py-2 text-metro-secondary">{monthLabel(item.year, item.month)}</td><td className="px-2 py-2"><p className="font-semibold text-metro-text">{item.nombreApellidos}</p><p className="text-[11px] text-metro-muted">{item.empleado}</p></td><td className="px-2 py-2 font-semibold text-metro-text">{item.calculatedTickets}</td><td className="px-2 py-2 font-semibold text-amber-300">{item.targetTickets}</td><td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td><td className="max-w-[360px] px-2 py-2"><p className="truncate text-metro-secondary" title={item.reason}>{item.reason}</p>{item.observations ? <p className="truncate text-[11px] text-metro-muted">{item.observations}</p> : null}</td></tr>;
                 })}
               </CompactTableBody>
             </CompactTable>
@@ -489,7 +489,7 @@ export function TicketRestauranteManualDebtPanel({
       <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
         <div className="border-b border-metro-border px-3 py-2">
           <h3 className="text-sm font-bold text-metro-text">Deudas manuales</h3>
-          <p className="text-[10px] text-metro-muted">Situación calculada para {monthLabel(year, month)}.</p>
+          <p className="text-[11px] text-metro-muted">Situación calculada para {monthLabel(year, month)}.</p>
         </div>
         <div className="overflow-x-auto">
           <CompactTable>
@@ -513,23 +513,23 @@ export function TicketRestauranteManualDebtPanel({
                 const status = debtStatus(debt, calculation, year, month);
                 return (
                   <tr className="border-t border-metro-border" key={debt.id}>
-                    <td className="px-2 py-2"><p className="font-semibold text-metro-text">{debt.nombreApellidos}</p><p className="text-[10px] text-metro-muted">{debt.empleado}</p></td>
+                    <td className="px-2 py-2"><p className="font-semibold text-metro-text">{debt.nombreApellidos}</p><p className="text-[11px] text-metro-muted">{debt.empleado}</p></td>
                     <td className="px-2 py-2 text-metro-secondary">{monthLabel(debt.originYear, debt.originMonth)}</td>
-                    <td className="max-w-[280px] px-2 py-2"><p className="truncate text-metro-text" title={debt.reason}>{debt.reason}</p>{debt.observations ? <p className="truncate text-[10px] text-metro-muted">{debt.observations}</p> : null}</td>
+                    <td className="max-w-[280px] px-2 py-2"><p className="truncate text-metro-text" title={debt.reason}>{debt.reason}</p>{debt.observations ? <p className="truncate text-[11px] text-metro-muted">{debt.observations}</p> : null}</td>
                     <td className="px-2 py-2 font-bold text-metro-text">{debt.totalTickets}</td>
                     <td className="px-2 py-2 text-metro-secondary">{debt.months} mes{debt.months === 1 ? '' : 'es'}</td>
                     <td className="px-2 py-2 font-semibold text-emerald-300">{status.applied}</td>
                     <td className="px-2 py-2 font-semibold text-amber-300">{status.pending}</td>
-                    <td className="px-2 py-2"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${status.className}`}>{status.label}</span></td>
+                    <td className="px-2 py-2"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span></td>
                     <td className="px-2 py-2">
                       <div className="flex items-center gap-1">
                         {!debt.cancelledAt ? (
-                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openEdit(debt)} type="button">
+                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openEdit(debt)} type="button">
                             <Pencil className="h-3 w-3" /> Editar
                           </button>
                         ) : null}
                         {!debt.cancelledAt && status.label !== 'Finalizada' ? (
-                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[10px] font-semibold text-metro-secondary hover:border-metro-red hover:text-red-300" onClick={() => setCancellingId(debt.id)} type="button">
+                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-metro-red hover:text-red-300" onClick={() => setCancellingId(debt.id)} type="button">
                             <Ban className="h-3 w-3" /> Anular
                           </button>
                         ) : null}
@@ -556,15 +556,15 @@ export function TicketRestauranteManualDebtPanel({
           <ModalBody>
             <div className="mb-3 grid gap-2 sm:grid-cols-3">
               <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-                <p className="text-[9px] font-semibold uppercase text-metro-muted">Deuda entrante</p>
+                <p className="text-[11px] font-semibold uppercase text-metro-muted">Deuda entrante</p>
                 <p className="mt-0.5 text-lg font-extrabold text-amber-300">{detailRow.deudaEntrante}</p>
               </div>
               <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-                <p className="text-[9px] font-semibold uppercase text-metro-muted">Orígenes</p>
+                <p className="text-[11px] font-semibold uppercase text-metro-muted">Orígenes</p>
                 <p className="mt-0.5 text-lg font-extrabold text-metro-text">{groupedIncomingDebt.length}</p>
               </div>
               <div className="rounded-lg border border-metro-border bg-metro-surface p-2">
-                <p className="text-[9px] font-semibold uppercase text-metro-muted">Mes de aplicación</p>
+                <p className="text-[11px] font-semibold uppercase text-metro-muted">Mes de aplicación</p>
                 <p className="mt-0.5 text-sm font-bold text-metro-text">{monthLabel(year, month)}</p>
               </div>
             </div>
@@ -603,7 +603,7 @@ export function TicketRestauranteManualDebtPanel({
                 </CompactTable>
               </div>
             )}
-            <p className="mt-2 text-[10px] text-metro-muted">
+            <p className="mt-2 text-[11px] text-metro-muted">
               La fecha mostrada es la fecha de origen del hecho que generó la deuda. En deudas manuales se muestra el mes de origen indicado al crearla.
             </p>
           </ModalBody>
@@ -621,11 +621,11 @@ export function TicketRestauranteManualDebtPanel({
           </ModalHeader>
           <ModalBody>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-metro-border bg-metro-surface p-3 text-center"><p className="text-[9px] font-semibold uppercase text-metro-muted">Deuda calculada</p><p className="mt-1 text-2xl font-extrabold text-metro-text">{regularizationDraft.calculatedTickets}</p></div>
+              <div className="rounded-lg border border-metro-border bg-metro-surface p-3 text-center"><p className="text-[11px] font-semibold uppercase text-metro-muted">Deuda calculada</p><p className="mt-1 text-2xl font-extrabold text-metro-text">{regularizationDraft.calculatedTickets}</p></div>
               <Field label="Deuda pendiente real" required>
                 <Input min={0} required type="number" value={regularizationDraft.targetTickets} onChange={(event) => setRegularizationDraft((current) => current ? ({ ...current, targetTickets: Math.max(0, Math.trunc(Number(event.target.value) || 0)) }) : current)} />
               </Field>
-              <div className="rounded-lg border border-blue-400/20 bg-blue-500/[0.05] p-3 text-center"><p className="text-[9px] font-semibold uppercase text-blue-300">Ajuste</p><p className="mt-1 text-2xl font-extrabold text-metro-text">{regularizationDraft.targetTickets - regularizationDraft.calculatedTickets > 0 ? '+' : ''}{regularizationDraft.targetTickets - regularizationDraft.calculatedTickets}</p></div>
+              <div className="rounded-lg border border-blue-400/20 bg-blue-500/[0.05] p-3 text-center"><p className="text-[11px] font-semibold uppercase text-blue-300">Ajuste</p><p className="mt-1 text-2xl font-extrabold text-metro-text">{regularizationDraft.targetTickets - regularizationDraft.calculatedTickets > 0 ? '+' : ''}{regularizationDraft.targetTickets - regularizationDraft.calculatedTickets}</p></div>
             </div>
             <Field className="mt-3" label="Motivo de la regularización" required>
               <Input placeholder="Ej.: los tickets correspondientes a esta ausencia no fueron solicitados" required value={regularizationDraft.reason} onChange={(event) => setRegularizationDraft((current) => current ? ({ ...current, reason: event.target.value }) : current)} />
@@ -692,11 +692,11 @@ export function TicketRestauranteManualDebtPanel({
               </Field>
             </div>
             <div className="mt-3 rounded-lg border border-blue-400/20 bg-blue-500/[0.05] px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-blue-300">Nuevo reparto</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-blue-300">Nuevo reparto</p>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {splitManualDebtInstallments(editDraft.totalTickets, editDraft.months).map((amount, index) => {
                   const period = addMonths(editDraft.startYear, editDraft.startMonth, index);
-                  return <span key={`${period.year}-${period.month}`} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-200">{monthLabel(period.year, period.month)} · {amount} ticket{amount === 1 ? '' : 's'}</span>;
+                  return <span key={`${period.year}-${period.month}`} className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[11px] font-semibold text-blue-200">{monthLabel(period.year, period.month)} · {amount} ticket{amount === 1 ? '' : 's'}</span>;
                 })}
               </div>
             </div>

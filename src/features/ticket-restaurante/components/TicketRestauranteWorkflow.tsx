@@ -104,7 +104,7 @@ function AdvancedAction({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-bold text-metro-text">{title}</span>
-        <span className="mt-0.5 block text-[10px] leading-4 text-metro-muted">{detail}</span>
+        <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">{detail}</span>
       </span>
       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" />
     </button>
@@ -132,7 +132,7 @@ function ReviewCheck({
       />
       <span className="min-w-0">
         <span className="block text-[12px] font-bold text-metro-text">{label}</span>
-        <span className="mt-0.5 block text-[10px] leading-4 text-metro-muted">{detail}</span>
+        <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">{detail}</span>
       </span>
     </label>
   );
@@ -376,7 +376,7 @@ export function TicketRestauranteWorkflow({
               <p className="text-sm font-extrabold text-metro-text">Controles del mes</p>
               <p className="mt-0.5 text-[11px] text-metro-muted">Marca cada bloque cuando hayas comprobado que sus datos son correctos.</p>
             </div>
-            <span className="rounded-full border border-metro-border bg-metro-surface px-2.5 py-1 text-[10px] font-bold text-metro-secondary">
+            <span className="rounded-full border border-metro-border bg-metro-surface px-2.5 py-1 text-[11px] font-bold text-metro-secondary">
               {[absencesReviewed, manutencionesReviewed, manualDebtsReviewed].filter(Boolean).length}/3 revisados
             </span>
           </div>
@@ -419,7 +419,7 @@ export function TicketRestauranteWorkflow({
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-metro-surface text-metro-secondary"><Settings className="h-4 w-4" /></span>
             <div>
               <p className="text-[13px] font-extrabold text-metro-text">Configuración y herramientas avanzadas</p>
-              <p className="mt-0.5 text-[10px] text-metro-muted">Calendarios, personas, precio, reglas y accesos de mantenimiento.</p>
+              <p className="mt-0.5 text-[11px] text-metro-muted">Calendarios, personas, precio, reglas y accesos de mantenimiento.</p>
             </div>
           </div>
           <ChevronDown className="h-4 w-4 shrink-0 text-metro-muted transition group-open:rotate-180" />

@@ -77,7 +77,7 @@ function KpiCard({
         <Icon size={19} />
       </span>
       <div className="min-w-0">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-metro-muted">{label}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">{label}</div>
         <div className="mt-0.5 whitespace-nowrap text-xl font-black leading-tight text-metro-text">{value}</div>
       </div>
     </div>
@@ -324,7 +324,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                   <StatusPill state={task.estado} />
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
-                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-1 py-1.5 text-[10px] font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
+                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-1 py-1.5 text-[11px] font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
                       disabled={assigningTaskId === task.id}
                       onClick={() => void assignTask(task, 'comite')}
                       type="button"
@@ -332,7 +332,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                       <UsersRound size={13} /> <span>Comité</span> <ArrowRight size={12} />
                     </button>
                     <button
-                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-1 py-1.5 text-[10px] font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-1 py-1.5 text-[11px] font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
                       disabled={assigningTaskId === task.id}
                       onClick={() => void assignTask(task, 'paritaria')}
                       type="button"

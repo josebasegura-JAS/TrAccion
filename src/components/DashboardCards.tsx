@@ -120,7 +120,7 @@ function CompactRow({
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[12px] font-black text-metro-text">{title}</span>
-        <span className="block truncate text-[10px] font-semibold text-metro-muted">{subtitle}</span>
+        <span className="block truncate text-[11px] font-semibold text-metro-muted">{subtitle}</span>
       </span>
       {trailing ?? <ChevronRight className="text-metro-muted" size={15} />}
     </button>
@@ -449,7 +449,7 @@ export function DashboardCards({
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,0.9fr)_minmax(0,1.18fr)_minmax(0,1fr)_auto] gap-2 overflow-hidden">
       <div className="flex items-center gap-2 rounded-2xl border border-metro-border/80 bg-metro-panel/55 p-2 shadow-sm shadow-slate-950/15">
-        <span className="shrink-0 px-2 text-[10px] font-black uppercase tracking-[0.14em] text-metro-muted">Acciones rápidas</span>
+        <span className="shrink-0 px-2 text-[11px] font-black uppercase tracking-[0.14em] text-metro-muted">Acciones rápidas</span>
         {[
           { label: 'Tareas', icon: ClipboardList, view: 'tareas' as const },
           { label: 'Comité / Paritaria', icon: CalendarDays, view: 'comite' as const },
@@ -498,7 +498,7 @@ export function DashboardCards({
                   >
                     <div className="flex items-center gap-1.5">
                       <span className={`h-2 w-2 shrink-0 rounded-full ${segment.className}`} />
-                      <span className="truncate text-[9px] font-bold text-metro-muted">{segment.label}</span>
+                      <span className="truncate text-[11px] font-bold text-metro-muted">{segment.label}</span>
                     </div>
                     <p className="mt-0.5 pl-3.5 text-[11px] font-black text-metro-secondary">{segment.value}</p>
                   </button>
@@ -514,7 +514,7 @@ export function DashboardCards({
               <span className="grid h-full w-full place-items-center rounded-full bg-metro-surface text-center shadow-inner">
                 <span>
                   <span className="block text-lg font-black leading-none text-metro-text">{nonDeletedTasks.length}</span>
-                  <span className="text-[10px] font-bold text-metro-muted">Total</span>
+                  <span className="text-[11px] font-bold text-metro-muted">Total</span>
                 </span>
               </span>
             </button>
@@ -619,7 +619,7 @@ export function DashboardCards({
                 </div>
               </div>
 
-              <div className="mt-1.5 grid grid-cols-7 gap-0.5 text-center text-[9px] font-black uppercase tracking-wide text-metro-muted">
+              <div className="mt-1.5 grid grid-cols-7 gap-0.5 text-center text-[11px] font-black uppercase tracking-wide text-metro-muted">
                 {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => <span key={day}>{day}</span>)}
               </div>
               <div className="mt-0.5 grid min-h-0 flex-1 grid-cols-7 grid-rows-6 gap-0.5">
@@ -629,7 +629,7 @@ export function DashboardCards({
                   const isToday = isoDate === todayIso;
                   return (
                     <button
-                      className={`min-h-0 rounded-lg px-0.5 text-center text-[10px] font-bold transition ${
+                      className={`min-h-0 rounded-lg px-0.5 text-center text-[11px] font-bold transition ${
                         date
                           ? 'text-metro-secondary hover:bg-metro-panel/60 hover:text-metro-text'
                           : 'cursor-default text-transparent'
@@ -651,7 +651,7 @@ export function DashboardCards({
               </div>
             </div>
 
-            <div className="flex flex-col justify-center gap-2 border-l border-metro-border pl-4 text-[10px] font-bold text-metro-secondary">
+            <div className="flex flex-col justify-center gap-2 border-l border-metro-border pl-4 text-[11px] font-bold text-metro-secondary">
               <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-500" />Tareas</span>
               <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-500" />Comité</span>
               <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-violet-500" />Paritaria</span>
@@ -668,7 +668,7 @@ export function DashboardCards({
               icon={ClipboardList}
               title="Mis tareas prioritarias"
               action={
-                <button className="text-[10px] font-bold text-metro-muted hover:text-metro-text" onClick={() => openRecord({ view: 'tareas' })} type="button">
+                <button className="text-[11px] font-bold text-metro-muted hover:text-metro-text" onClick={() => openRecord({ view: 'tareas' })} type="button">
                   Ver todas
                 </button>
               }
@@ -682,8 +682,8 @@ export function DashboardCards({
                   type="button"
                 >
                   <span className="truncate text-[11px] font-black text-metro-text">{task.titulo}</span>
-                  <span className={`truncate text-[9px] font-black ${priorityTone[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
-                  <span className="text-right text-[9px] font-bold text-metro-secondary">{formatDisplayDate(task.fechaLimite)}</span>
+                  <span className={`truncate text-[11px] font-black ${priorityTone[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
+                  <span className="text-right text-[11px] font-bold text-metro-secondary">{formatDisplayDate(task.fechaLimite)}</span>
                   <ChevronRight className="text-metro-muted" size={13} />
                 </button>
               )) : (
@@ -707,9 +707,9 @@ export function DashboardCards({
                   <span className={`h-2.5 w-2.5 rounded-full ${eventTone[event.type]}`} />
                   <span className="min-w-0">
                     <span className="block truncate text-[11px] font-black text-metro-text">{event.title}</span>
-                    <span className="block truncate text-[9px] font-semibold text-metro-muted">{event.detail}</span>
+                    <span className="block truncate text-[11px] font-semibold text-metro-muted">{event.detail}</span>
                   </span>
-                  <span className="text-right text-[9px] font-black text-metro-secondary">{formatDisplayDate(event.date)}</span>
+                  <span className="text-right text-[11px] font-black text-metro-secondary">{formatDisplayDate(event.date)}</span>
                   <ChevronRight className="text-metro-muted" size={13} />
                 </button>
               ))}
@@ -730,10 +730,10 @@ export function DashboardCards({
           <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20"><FileText size={15} /></span>
           <span className="min-w-0">
             <span className="block text-[12px] font-black text-metro-text">Actas en seguimiento</span>
-            <span className="block truncate text-[9px] font-semibold text-metro-muted">{openActas.length} acta{openActas.length === 1 ? '' : 's'} con acciones pendientes</span>
+            <span className="block truncate text-[11px] font-semibold text-metro-muted">{openActas.length} acta{openActas.length === 1 ? '' : 's'} con acciones pendientes</span>
           </span>
         </span>
-        <span className="flex items-center gap-1 text-[9px] font-bold text-metro-muted">Ver todas <ChevronRight size={13} /></span>
+        <span className="flex items-center gap-1 text-[11px] font-bold text-metro-muted">Ver todas <ChevronRight size={13} /></span>
       </button>
 
       {selectedDate && (

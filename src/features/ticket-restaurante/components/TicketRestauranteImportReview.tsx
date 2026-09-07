@@ -76,7 +76,7 @@ function Metric({
 }) {
   return (
     <div className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-metro-muted">{label}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-metro-muted">{label}</div>
       <div className={`mt-0.5 text-lg font-bold ${warning ? 'text-amber-300' : emphasis ? 'text-metro-red' : 'text-metro-text'}`}>
         {value}
       </div>

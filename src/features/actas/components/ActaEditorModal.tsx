@@ -173,7 +173,7 @@ export function ActaEditorModal({
 
           <div className="grid gap-2 xl:grid-cols-[260px_minmax(220px,1fr)]">
             <div className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-metro-muted">Estado actual</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">Estado actual</p>
               <p className="mt-0.5 text-sm font-bold text-metro-text">{draft.estado}</p>
             </div>
             <ActionButton

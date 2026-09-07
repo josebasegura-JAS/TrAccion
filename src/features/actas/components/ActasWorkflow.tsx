@@ -116,7 +116,7 @@ function MiniKpi({ label, value, tone, icon: Icon }: { label: string; value: num
       <Icon size={19} />
       <div>
         <div className="text-sm font-black leading-none text-metro-text">{value}</div>
-        <div className="mt-0.5 text-[10px] font-semibold opacity-80">{label}</div>
+        <div className="mt-0.5 text-[11px] font-semibold opacity-80">{label}</div>
       </div>
     </div>
   );
@@ -299,7 +299,7 @@ export function ActasWorkflow({
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface/55">
-                  <div className="grid grid-cols-[1.2fr_.75fr_1.3fr_auto] gap-2 border-b border-metro-border px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-metro-muted">
+                  <div className="grid grid-cols-[1.2fr_.75fr_1.3fr_auto] gap-2 border-b border-metro-border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
                     <span>Actividad</span><span>Estado</span><span>Detalle</span><span>Acción</span>
                   </div>
                   {[
