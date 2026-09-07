@@ -1,6 +1,7 @@
 import { Calculator, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import {
   calculateMonthlyTicketOrder,
@@ -20,6 +21,7 @@ import {
 } from '../../../shared/table/useTableViewPreferences';
 import { MonthNavigator } from './TicketRestauranteCalendarPanels';
 import { formatCurrency } from './ticketRestauranteFormat';
+import { exportTicketRestaurantLoadWorkbook } from './ticketRestauranteExport';
 
 type TicketCalculationTableColumnId =
   | 'empleado'
@@ -111,6 +113,7 @@ export function CalculationPanel({
   year: number;
 }) {
   const [selectedDetailRow, setSelectedDetailRow] = useState<TicketPersonCalculation | null>(null);
+  const { alert, dialogNode } = useAppDialog();
   const validColumnIds =
     mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
   const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
@@ -332,6 +335,27 @@ export function CalculationPanel({
             onYearChange={onYearChange}
             year={year}
           />
+          {mode === 'monthly' ? (
+            <ActionButton
+              disabled={calculation.rows.length === 0}
+              onClick={() =>
+                void exportTicketRestaurantLoadWorkbook({
+                  calculationRows: calculation.rows,
+                  config,
+                  year,
+                  month,
+                }).catch((error) =>
+                  alert(
+                    error instanceof Error ? error.message : 'No se ha podido generar el Excel “A cargar”.',
+                    { type: 'error' },
+                  ),
+                )
+              }
+              variant="excel"
+            >
+              A cargar
+            </ActionButton>
+          ) : null}
           <ExportPrintButtons payload={exportPayload} />
         </div>
       </div>
@@ -354,6 +378,7 @@ export function CalculationPanel({
         rows={calculation.rows}
         sort={preferences.sort}
       />
+      {dialogNode}
       {selectedDetailRow ? (
         <CalculationAbsenceDetailModal
           absences={absences}

@@ -288,6 +288,8 @@ contextBridge.exposeInMainWorld('traccion', {
     ipcRenderer.invoke('teletrabajo:open-word', { buffer, fileName }),
   openExcelWorkbook: (buffer: ArrayBuffer, fileName: string) =>
     ipcRenderer.invoke('excel:open-workbook', { buffer, fileName }),
+  openTicketRestaurantLoadWorkbook: (payload: { rows: Array<{ nombre: string; apellido1: string; apellido2: string; dni: string; pedido: string; ceco: string; importeTotal: number; fechaInicio: string; fechaCaducidad: string }>; fileName: string }) =>
+    ipcRenderer.invoke('ticket-restaurante:open-load-workbook', payload),
   createOutlookDraft,
   createOutlookCalendar,
   parseOutlookMsg,

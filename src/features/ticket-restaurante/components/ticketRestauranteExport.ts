@@ -251,3 +251,53 @@ export const absenceExportColumns: ExportColumn<TicketAbsenceDisplayRow>[] = [
   },
 ];
 
+
+export async function exportTicketRestaurantLoadWorkbook({
+  calculationRows,
+  config,
+  year,
+  month,
+}: {
+  calculationRows: readonly TicketPersonCalculation[];
+  config: TicketRestaurantConfig;
+  year: number;
+  month: number;
+}): Promise<void> {
+  const openLoadWorkbook = window.traccion?.openTicketRestaurantLoadWorkbook;
+  if (!openLoadWorkbook) {
+    throw new Error('La exportación “A cargar” no está disponible en este entorno.');
+  }
+
+  const monthLabel = String(month).padStart(2, '0');
+  const result = await openLoadWorkbook({
+    rows: sortMonthlyCalculationRowsForLoad(calculationRows).map((row) => ({
+      nombre: row.nombre,
+      apellido1: row.apellido1,
+      apellido2: row.apellido2,
+      dni: row.dni.trim(),
+      pedido: String(config.pedidoMensual),
+      ceco: row.empleado.trim(),
+      importeTotal: row.importe,
+      fechaInicio: formatTicketExcelDate(year, month),
+      fechaCaducidad: '01/01/2100',
+    })),
+    fileName: `A_cargar_${year}-${monthLabel}.xlsx`,
+  });
+
+  if (!result.ok) {
+    throw new Error(result.message || 'No se ha podido generar el Excel “A cargar”.');
+  }
+}
+
+function sortMonthlyCalculationRowsForLoad(
+  rows: readonly TicketPersonCalculation[],
+): TicketPersonCalculation[] {
+  return [...rows].sort((first, second) => {
+    const firstNumber = Number(first.empleado.trim());
+    const secondNumber = Number(second.empleado.trim());
+    if (Number.isFinite(firstNumber) && Number.isFinite(secondNumber)) {
+      return firstNumber - secondNumber;
+    }
+    return first.empleado.localeCompare(second.empleado, 'es', { numeric: true });
+  });
+}

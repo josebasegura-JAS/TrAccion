@@ -4,6 +4,8 @@
  * en un fichero por área funcional.
  */
 import { ipcMain } from 'electron';
+import { openExcelWorkbook } from '../documentOpener.js';
+import { buildTicketRestaurantLoadWorkbook, type TicketRestaurantLoadRow } from '../ticketRestaurantLoadWorkbook.js';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import {
   getSqliteStatus,
@@ -398,4 +400,61 @@ export function registerTicketRestauranteIpc(): void {
       }),
     );
   });
+  ipcMain.handle('ticket-restaurante:open-load-workbook', async (_event, payload: unknown) => {
+    try {
+      if (!payload || typeof payload !== 'object') {
+        throw new Error('Datos de carga de Ticket Restaurante no válidos.');
+      }
+
+      const candidate = payload as { rows?: unknown; fileName?: unknown };
+      if (!Array.isArray(candidate.rows) || typeof candidate.fileName !== 'string') {
+        throw new Error('Datos de carga de Ticket Restaurante no válidos.');
+      }
+
+      const rows: TicketRestaurantLoadRow[] = candidate.rows.map((item) => {
+        if (!item || typeof item !== 'object') {
+          throw new Error('Se ha recibido una fila de carga no válida.');
+        }
+        const row = item as Record<string, unknown>;
+        const stringFields = [
+          'nombre',
+          'apellido1',
+          'apellido2',
+          'dni',
+          'pedido',
+          'ceco',
+          'fechaInicio',
+          'fechaCaducidad',
+        ] as const;
+        for (const field of stringFields) {
+          if (typeof row[field] !== 'string') {
+            throw new Error(`El campo ${field} de la carga no es válido.`);
+          }
+        }
+        if (typeof row.importeTotal !== 'number') {
+          throw new Error('El importe total de la carga no es válido.');
+        }
+        return {
+          nombre: row.nombre as string,
+          apellido1: row.apellido1 as string,
+          apellido2: row.apellido2 as string,
+          dni: row.dni as string,
+          pedido: row.pedido as string,
+          ceco: row.ceco as string,
+          importeTotal: row.importeTotal,
+          fechaInicio: row.fechaInicio as string,
+          fechaCaducidad: row.fechaCaducidad as string,
+        };
+      });
+
+      const buffer = await buildTicketRestaurantLoadWorkbook(rows);
+      return openExcelWorkbook({ buffer, fileName: candidate.fileName });
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : 'No se ha podido generar la carga de Cheque Gourmet.',
+      };
+    }
+  });
+
 }

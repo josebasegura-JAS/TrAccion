@@ -722,6 +722,20 @@ interface TraccionApi {
     buffer: ArrayBuffer,
     fileName: string,
   ) => Promise<TraccionOpenExcelWorkbookResult>;
+  openTicketRestaurantLoadWorkbook?: (payload: {
+    rows: Array<{
+      nombre: string;
+      apellido1: string;
+      apellido2: string;
+      dni: string;
+      pedido: string;
+      ceco: string;
+      importeTotal: number;
+      fechaInicio: string;
+      fechaCaducidad: string;
+    }>;
+    fileName: string;
+  }) => Promise<TraccionOpenExcelWorkbookResult>;
   createOutlookDraft: (payload: EspecialOutlookDraftPayload) => Promise<EspecialOutlookDraftResult>;
   createOutlookCalendar?: (
     payload: EspecialOutlookCalendarPayload,

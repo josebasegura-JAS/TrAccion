@@ -80,6 +80,7 @@
       "dist-electron/**",
       "package.json",
       "assets/logo/**",
+      "assets/templates/**",
       "build/icon/**"
     ],
     "win": {
