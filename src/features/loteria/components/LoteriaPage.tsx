@@ -2,6 +2,7 @@ import { escapeHtml } from '../../../shared/security/escapeHtml';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarDays,
   Check,
   CircleDollarSign,
@@ -55,14 +56,15 @@ const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
     body: 'Gestiona la campaña anual de Lotería de Navidad: encargo al lotero, participantes, cantidades solicitadas, cobros, control de existencias y cierre.',
   },
   {
-    title: 'Flujo de la campaña',
+    title: 'Cómo trabajar con el flujo guiado',
     ordered: true,
     items: [
-      'Septiembre: confirmar los dos números, los décimos encargados, el precio y los datos del lotero; preparar o generar el correo del encargo.',
-      'Octubre: dar de alta participantes de Plantilla o personas externas, indicar cuántos décimos solicita cada una de cada número y preparar el aviso por CCO.',
-      'Seguimiento: revisar las cantidades solicitadas, modificarlas si cambian y registrar los pagos por Bizum o efectivo con su fecha y observaciones.',
-      'Cierre: comprobar décimos sobrantes, pendientes de cobro, total cobrado, caja en efectivo y Bizum; la app impide marcar la campaña como cerrada si quedan cobros pendientes o si se han solicitado más décimos de los encargados.',
-      'Guardar todo y exportar a Excel cuando necesites conservar o compartir el detalle y el resumen de la campaña.',
+      'La portada muestra el avance de la campaña y destaca una única “Siguiente acción recomendada”. Empieza siempre por ese bloque si no conoces el proceso.',
+      'Septiembre · Encargo: confirma los dos números, los décimos encargados, el precio y los datos del lotero; prepara o genera el correo del encargo.',
+      'Octubre · Participantes: da de alta personas de Plantilla o externas, indica cuántos décimos solicita cada una y prepara el aviso por CCO.',
+      'Seguimiento · Cobros: revisa las cantidades solicitadas y registra los pagos por Bizum o efectivo con fecha y observaciones.',
+      'Cierre · Cuadre: comprueba sobrantes, pendientes de cobro, caja y Bizum. La app no permite cerrar si existen cobros pendientes o se han solicitado más décimos de los encargados.',
+      'Si necesitas entrar directamente en otra fase, puedes hacerlo desde la barra de progreso. Guardar y exportar a Excel siguen disponibles en la cabecera.',
     ],
   },
   {
@@ -290,7 +292,7 @@ function StepCard({
             active ? 'border-metro-red/50 bg-metro-red/10 text-red-300' : 'border-metro-border bg-metro-surface text-metro-secondary',
           )}><Icon size={16} /></span>
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-wide text-red-300">{month}</p>
+            <p className="text-[11px] font-extrabold uppercase tracking-wide text-red-300">{month}</p>
             <p className="text-xs font-extrabold text-metro-text">{title}</p>
           </div>
         </div>
@@ -299,7 +301,7 @@ function StepCard({
           done ? 'border-emerald-400 bg-emerald-500 text-white' : 'border-metro-border text-transparent',
         )}><Check size={12} /></span>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-metro-muted">{detail}</p>
+      <p className="mt-2 text-xs leading-5 text-metro-muted">{detail}</p>
     </button>
   );
 }
@@ -389,6 +391,57 @@ export function LoteriaPage() {
   const octoberDone = draft.workflow.participantesPreparados && draft.workflow.avisoPersonasEnviado;
   const seguimientoDone = draft.workflow.seguimientoIniciado;
   const cierreDone = draft.workflow.campanaCerrada;
+
+  const recommendedStep = useMemo(() => {
+    if (!septemberDone) {
+      return {
+        section: 'septiembre' as WorkspaceSection,
+        eyebrow: 'Siguiente acción recomendada',
+        title: 'Preparar y confirmar el encargo',
+        detail: 'Completa números, cantidades y datos del lotero. Cuando el encargo esté confirmado, el flujo avanzará a participantes.',
+        action: 'Abrir encargo de septiembre',
+      };
+    }
+    if (!octoberDone) {
+      return {
+        section: 'octubre' as WorkspaceSection,
+        eyebrow: 'Siguiente acción recomendada',
+        title: 'Preparar participantes y enviar el aviso',
+        detail: `${draft.requests.length} participantes actualmente en campaña. Revisa cantidades y deja constancia del aviso por CCO.`,
+        action: 'Abrir participantes de octubre',
+      };
+    }
+    if (!seguimientoDone || pendingAmount > 0 || availableNumero1 < 0 || availableNumero2 < 0) {
+      const detail = availableNumero1 < 0 || availableNumero2 < 0
+        ? 'Hay más décimos solicitados que encargados en alguno de los números. Corrige las cantidades antes de cerrar.'
+        : pendingAmount > 0
+          ? `Quedan ${money(pendingAmount)} pendientes de cobro. Registra los pagos antes del cierre.`
+          : 'Inicia el seguimiento y registra los cobros por Bizum o efectivo.';
+      return {
+        section: 'seguimiento' as WorkspaceSection,
+        eyebrow: 'Siguiente acción recomendada',
+        title: 'Revisar décimos y cobros',
+        detail,
+        action: 'Abrir seguimiento',
+      };
+    }
+    if (!cierreDone) {
+      return {
+        section: 'cierre' as WorkspaceSection,
+        eyebrow: 'Siguiente acción recomendada',
+        title: 'Cuadrar y cerrar la campaña',
+        detail: 'No quedan cobros pendientes y las existencias cuadran. Revisa el resumen final antes de cerrar.',
+        action: 'Abrir cierre',
+      };
+    }
+    return {
+      section: 'cierre' as WorkspaceSection,
+      eyebrow: 'Campaña completada',
+      title: `Lotería ${draft.year} cerrada`,
+      detail: 'La campaña está cerrada. Puedes revisar el cuadre final o exportar el Excel cuando lo necesites.',
+      action: 'Ver cierre y resumen',
+    };
+  }, [availableNumero1, availableNumero2, cierreDone, draft.requests.length, draft.year, octoberDone, pendingAmount, septemberDone, seguimientoDone]);
 
   const loteroMailPreview = useMemo(() => renderTemplate(draft.loteroEmailBody, {
     lotero: draft.lotero.nombre || 'nombre del lotero',
@@ -609,10 +662,6 @@ export function LoteriaPage() {
         actions={
           <>
             <span className="inline-flex h-9 items-center rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
-            <HeaderMetric label={draft.numero1 || 'Nº 1'} value={`${availableNumero1} disp.`} warning={availableNumero1 < 30} />
-            <HeaderMetric label={draft.numero2 || 'Nº 2'} value={`${availableNumero2} disp.`} warning={availableNumero2 < 30} />
-            <HeaderMetric label="Décimos" value={`${requestedTotal}/${orderedTotal}`} warning={availableTotal < 30} />
-            <HeaderMetric label="Caja" value={money(cash)} />
             <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} variant="save">Guardar todo</ActionButton>
             <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
           </>
@@ -620,24 +669,38 @@ export function LoteriaPage() {
       />
 
       {activeSection === null ? (
-        <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 md:p-4">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-extrabold text-metro-text">Flujograma de trabajo · {draft.year}</h3>
-              <p className="mt-1 text-xs text-metro-muted">Pulsa una fase para abrir su espacio de trabajo. Al entrar, el flujograma se repliega para dejar más sitio.</p>
+        <div className="space-y-3">
+          <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 md:p-4">
+            <div className="mb-3">
+              <h3 className="text-sm font-extrabold text-metro-text">Campaña {draft.year}</h3>
+              <p className="mt-1 text-xs text-metro-muted">Sigue el recorrido de izquierda a derecha. Puedes entrar en cualquier fase, pero la app te indica cuál conviene completar ahora.</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <SummaryPill label="Participantes" value={String(draft.requests.length)} />
-              <SummaryPill label="Pendiente de cobro" value={money(pendingAmount)} tone={pendingAmount > 0 ? 'warning' : 'good'} />
+            <div className="grid gap-2 lg:grid-cols-4">
+              <StepCard active={recommendedStep.section === 'septiembre'} done={septemberDone} icon={CalendarDays} month="1 · Septiembre" title="Encargo" detail={septemberDone ? 'Encargo preparado y confirmado.' : 'Números, cantidades y lotero.'} onClick={() => setActiveSection('septiembre')} />
+              <StepCard active={recommendedStep.section === 'octubre'} done={octoberDone} icon={UserRoundPlus} month="2 · Octubre" title="Participantes" detail={octoberDone ? 'Participantes preparados y avisados.' : 'Altas, cantidades y aviso CCO.'} onClick={() => setActiveSection('octubre')} />
+              <StepCard active={recommendedStep.section === 'seguimiento'} done={seguimientoDone && pendingAmount === 0 && availableNumero1 >= 0 && availableNumero2 >= 0} icon={Euro} month="3 · Seguimiento" title="Cobros" detail={pendingAmount > 0 ? `${money(pendingAmount)} pendientes de cobro.` : 'Décimos y pagos revisados.'} onClick={() => setActiveSection('seguimiento')} />
+              <StepCard active={recommendedStep.section === 'cierre'} done={cierreDone} icon={ClipboardCheck} month="4 · Cierre" title="Cuadre" detail={cierreDone ? 'Campaña cerrada.' : 'Sobrantes, caja y cierre final.'} onClick={() => setActiveSection('cierre')} />
             </div>
-          </div>
-          <div className="grid gap-2 lg:grid-cols-4">
-            <StepCard active={false} done={septemberDone} icon={CalendarDays} month="Septiembre" title="Encargo al lotero" detail="Números, cantidades, datos del lotero y correo de septiembre." onClick={() => setActiveSection('septiembre')} />
-            <StepCard active={false} done={octoberDone} icon={UserRoundPlus} month="Octubre" title="Alta y aviso a participantes" detail="Da de alta personas, asigna sus décimos y genera el aviso CCO." onClick={() => setActiveSection('octubre')} />
-            <StepCard active={false} done={seguimientoDone} icon={Euro} month="Seguimiento" title="Décimos y pagos" detail="Ajusta cantidades si cambian y registra cómo ha pagado cada persona." onClick={() => setActiveSection('seguimiento')} />
-            <StepCard active={false} done={cierreDone} icon={ClipboardCheck} month="Cierre" title="Cuadre y exportación" detail="Comprueba sobrantes, cobros pendientes, caja y resultado final." onClick={() => setActiveSection('cierre')} />
-          </div>
-        </section>
+          </section>
+
+          <section className="rounded-2xl border border-metro-red/45 bg-metro-red/[0.07] p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-3xl">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-red-300">{recommendedStep.eyebrow}</p>
+                <h3 className="mt-1 text-lg font-extrabold text-metro-text">{recommendedStep.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-metro-secondary">{recommendedStep.detail}</p>
+              </div>
+              <ActionButton icon={ArrowRight} iconOnly={false} onClick={() => setActiveSection(recommendedStep.section)} variant="add">{recommendedStep.action}</ActionButton>
+            </div>
+          </section>
+
+          <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard icon={UserRound} label="Participantes" value={String(draft.requests.length)} detail={`${requestedTotal} décimos solicitados`} />
+            <MetricCard icon={Ticket} label="Disponibles" value={String(availableTotal)} detail={`${orderedTotal} encargados`} />
+            <MetricCard icon={CircleDollarSign} label="Pendiente de cobro" value={money(pendingAmount)} detail={pendingAmount > 0 ? 'Requiere seguimiento' : 'Cobros al día'} />
+            <MetricCard icon={Euro} label="Cobrado" value={money(paid)} detail={`${money(cash)} efectivo · ${money(bizum)} Bizum`} />
+          </section>
+        </div>
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
           <button className="inline-flex h-8 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-xs font-bold text-metro-text transition hover:border-metro-red" onClick={() => setActiveSection(null)} type="button"><ArrowLeft size={14} /> Volver al flujograma</button>
