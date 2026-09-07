@@ -2,6 +2,7 @@
 import { ModalDatabaseStatus } from '../ModalDatabaseStatus';
 import { ModalCloseButton } from '../ui/ModalCloseButton';
 import { ModalHeader, ModalTitle } from '../ui/ModalShell';
+import { StatusBadge } from '../ui/StatusBadge';
 
 type TeletrabajoEditorHeaderProps = {
   isCreate: boolean;
@@ -24,12 +25,13 @@ export function TeletrabajoEditorHeader({
     <div className="flex flex-wrap items-center gap-2">
       <span>{isCreate ? 'Alta manual compacta.' : `Editando solicitud ${solicitudId ?? '—'}`}</span>
       {isNuevaPeticion && empleado.trim().length > 0 && (
-        <span
-          className="rounded-full bg-amber-300 px-2 py-0.5 text-xs font-bold text-slate-950"
+        <StatusBadge
+          size="xs"
           title="No consta teletrabajo aprobado o analizado para esta persona en el periodo anterior."
+          tone="warning"
         >
           Nueva petición, enviar documentación
-        </span>
+        </StatusBadge>
       )}
     </div>
   );

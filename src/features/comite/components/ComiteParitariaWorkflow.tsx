@@ -21,6 +21,8 @@ import { PARITARIA_TASK_PHASE } from '../../paritaria/domain/paritaria';
 import { useParitariaSessionStore } from '../../paritaria/store/useParitariaSessionStore';
 import { useModuleHelpRegistry } from '../../../services/moduleHelpRegistry';
 import { COMITE_PARITARIA_HELP_SECTIONS } from './comiteHelpSections';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 
 type Organ = 'comite' | 'paritaria';
 
@@ -83,15 +85,16 @@ function KpiCard({
 }
 
 function StatusPill({ state }: { state: Task['estado'] }) {
-  const classes =
+  const tone =
     state === 'cerrada' || state === 'resuelta'
-      ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
+      ? 'success'
       : state === 'en curso'
-        ? 'border-blue-400/25 bg-blue-500/10 text-blue-300'
+        ? 'info'
         : state === 'bloqueada'
-          ? 'border-violet-400/25 bg-violet-500/10 text-violet-300'
-          : 'border-amber-400/25 bg-amber-500/10 text-amber-300';
-  return <span className={`inline-flex max-w-full items-center justify-center whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-bold leading-none ${classes}`}>{state}</span>;
+          ? 'accent'
+          : 'warning';
+
+  return <StatusBadge size="xs" tone={tone}>{state}</StatusBadge>;
 }
 
 function OrganPanel({
@@ -121,9 +124,9 @@ function OrganPanel({
           <Icon className={isComite ? 'text-blue-400' : 'text-violet-400'} size={22} />
           <h3 className="text-lg font-black text-metro-text">{title}</h3>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${isComite ? 'border-blue-400/25 bg-blue-500/10 text-blue-300' : 'border-violet-400/25 bg-violet-500/10 text-violet-300'}`}>
+        <StatusBadge size="xs" tone={activeSession ? (isComite ? 'info' : 'accent') : 'muted'}>
           {activeSession ? 'Sesión activa' : 'Sin sesión abierta'}
-        </span>
+        </StatusBadge>
       </div>
 
       <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-white/10 px-4 py-3">
@@ -273,13 +276,9 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                 </button>
               ))}
             </div>
-            <button
-              className="flex items-center gap-2 rounded-xl bg-metro-red px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-950/30 transition hover:bg-red-500"
-              onClick={() => onOpenOrgan('comite')}
-              type="button"
-            >
-              <Plus size={18} /> Nueva sesión
-            </button>
+            <ActionButton icon={Plus} iconOnly={false} onClick={() => onOpenOrgan('comite')} variant="primary">
+              Nueva sesión
+            </ActionButton>
           </div>
         </div>
       </section>
@@ -304,7 +303,7 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                 <div className="flex items-center gap-2">
                   <Inbox className="text-amber-300" size={20} />
                   <h3 className="text-lg font-black text-metro-text">Bandeja de entrada de puntos</h3>
-                  <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-300">{inboxTasks.length} por clasificar</span>
+                  <StatusBadge size="xs" tone="warning">{inboxTasks.length} por clasificar</StatusBadge>
                 </div>
                 <p className="mt-1 text-xs text-metro-muted">Tareas generales o peticiones abiertas que todavía no están asignadas a Comité ni Paritaria.</p>
               </div>

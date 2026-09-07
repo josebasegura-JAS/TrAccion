@@ -16,6 +16,7 @@ import {
 import type { ButtonHTMLAttributes, FC, ReactNode } from 'react';
 
 type ActionButtonVariant =
+  | 'primary'
   | 'save'
   | 'excel'
   | 'word'
@@ -101,6 +102,7 @@ const iconByVariant: Partial<Record<ActionButtonVariant, ActionButtonIcon>> = {
 };
 
 const labelByVariant: Record<ActionButtonVariant, string> = {
+  primary: 'Continuar',
   add: 'Añadir',
   approve: 'Aprobar',
   delete: 'Eliminar',
@@ -118,6 +120,7 @@ const labelByVariant: Record<ActionButtonVariant, string> = {
 };
 
 const colorClassByVariant: Record<ActionButtonVariant, string> = {
+  primary: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
   add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
   approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent shadow-sm shadow-emerald-950/25',
   delete: 'border-red-500/45 bg-red-950/20 text-red-200 hover:bg-red-950/35',

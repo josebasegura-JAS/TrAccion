@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { Field, Input } from '../../../components/ui/Field';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { TicketManualPerson, TicketPerson, TicketRestaurantConfig } from '../domain/ticketRestaurante';
@@ -278,18 +279,14 @@ export function TicketRestauranteManualPeoplePanel({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-bold text-metro-text">Personas manuales</h3>
-            <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-2 py-0.5 text-[10px] font-semibold text-blue-300">
-              {monthLabel}
-            </span>
+            <StatusBadge size="xs" tone="info">{monthLabel}</StatusBadge>
           </div>
           <p className="text-[11px] text-metro-muted">
             Personas sin calendario fijo. Añádelas una vez y, cada mes, informa aquí sus tickets y si deben cotizar.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-metro-border px-2 py-0.5 text-[10px] font-bold text-metro-muted">
-            {people.length} personas
-          </span>
+          <StatusBadge size="xs" tone="muted">{people.length} personas</StatusBadge>
           <ActionButton
             iconOnly={false}
             size="sm"
@@ -390,9 +387,9 @@ export function TicketRestauranteManualPeoplePanel({
             <div>
               <p className="text-xs font-bold text-metro-text">Tickets del mes</p>
               <p className="text-[11px] text-metro-muted">Indica los tickets de {monthLabel} y guarda cuando termines.</p>
-              <div className="mt-1 flex flex-wrap gap-2 text-[9px] font-semibold">
-                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/[0.08] px-2 py-0.5 text-emerald-300">Cotiza</span>
-                <span className="rounded-full border border-violet-400/20 bg-violet-500/[0.08] px-2 py-0.5 text-violet-300">No cotiza</span>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <StatusBadge size="xs" tone="success">Cotiza</StatusBadge>
+                <StatusBadge size="xs" tone="accent">No cotiza</StatusBadge>
               </div>
             </div>
             <ActionButton

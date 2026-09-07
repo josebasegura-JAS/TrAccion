@@ -19,6 +19,8 @@ import {
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { ActionButton } from '../../../components/ui/ActionButton';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { Acta, ActaState } from '../domain/acta';
 
 type WorkflowProps = {
@@ -63,11 +65,16 @@ function WorkflowNumber({ value }: { value: number }) {
 }
 
 function StatusPill({ children, tone }: { children: React.ReactNode; tone: Tone }) {
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${toneClasses[tone]}`}>
-      {children}
-    </span>
-  );
+  const badgeTone = {
+    amber: 'warning',
+    blue: 'info',
+    green: 'success',
+    neutral: 'muted',
+    purple: 'accent',
+    red: 'error',
+  }[tone] as 'warning' | 'info' | 'success' | 'muted' | 'accent' | 'error';
+
+  return <StatusBadge size="xs" tone={badgeTone}>{children}</StatusBadge>;
 }
 
 function ActionCard({

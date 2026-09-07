@@ -23,6 +23,7 @@ import {
 import { PageHeader } from '../../../components/ui/PageHeader';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { Employee } from '../../plantilla/domain/employee';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
@@ -323,12 +324,9 @@ function SectionShell({ title, subtitle, actions, children }: { title: string; s
 
 function SaveState({ dirty, message }: { dirty: boolean; message: string }) {
   return (
-    <div className={cx(
-      'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold',
-      dirty ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-emerald-500/35 bg-emerald-500/[0.08] text-emerald-200',
-    )}>
+    <StatusBadge tone={dirty ? 'warning' : 'success'}>
       {dirty ? 'Cambios sin guardar' : (message || 'Todo guardado')}
-    </div>
+    </StatusBadge>
   );
 }
 
@@ -690,7 +688,7 @@ export function LoteriaPage() {
                 <h3 className="mt-1 text-lg font-extrabold text-metro-text">{recommendedStep.title}</h3>
                 <p className="mt-1 text-sm leading-6 text-metro-secondary">{recommendedStep.detail}</p>
               </div>
-              <ActionButton icon={ArrowRight} iconOnly={false} onClick={() => setActiveSection(recommendedStep.section)} variant="add">{recommendedStep.action}</ActionButton>
+              <ActionButton icon={ArrowRight} iconOnly={false} onClick={() => setActiveSection(recommendedStep.section)} variant="primary">{recommendedStep.action}</ActionButton>
             </div>
           </section>
 
@@ -703,7 +701,7 @@ export function LoteriaPage() {
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
-          <button className="inline-flex h-8 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-2.5 text-xs font-bold text-metro-text transition hover:border-metro-red" onClick={() => setActiveSection(null)} type="button"><ArrowLeft size={14} /> Volver al flujograma</button>
+          <ActionButton icon={ArrowLeft} iconOnly={false} onClick={() => setActiveSection(null)} size="sm" variant="secondary">Volver al flujograma</ActionButton>
           <span className="text-[11px] font-semibold text-metro-muted">Campaña {draft.year} · {activeSection === 'septiembre' ? 'Septiembre' : activeSection === 'octubre' ? 'Octubre' : activeSection === 'seguimiento' ? 'Seguimiento' : 'Cierre'}</span>
         </div>
       )}
@@ -865,13 +863,13 @@ export function LoteriaPage() {
                       <tr className="border-t border-metro-border" key={request.id}>
                         <td className="px-2 py-1.5 font-semibold text-metro-secondary">{request.empleado ?? '—'}</td>
                         <td className="p-1.5"><input className={inputClass} disabled={!request.externa} value={request.nombre} onChange={(e) => updateRequest(request.id, { nombre: e.target.value })} /></td>
-                        <td className="px-2 py-1.5">{request.externa ? <span className="rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-200">Externa</span> : <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-200">Plantilla</span>}</td>
+                        <td className="px-2 py-1.5">{request.externa ? <StatusBadge size="xs" tone="warning">Externa</StatusBadge> : <StatusBadge size="xs" tone="success">Plantilla</StatusBadge>}</td>
                         <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero1} onChange={(e) => updateRequest(request.id, { decimosNumero1: Math.max(0, Number(e.target.value)) })} /></td>
                         <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero2} onChange={(e) => updateRequest(request.id, { decimosNumero2: Math.max(0, Number(e.target.value)) })} /></td>
                         <td className="px-2 py-1.5 text-center font-bold text-metro-text">{lotteryRequestTotalCount(request)}</td>
                         <td className="p-1.5"><input className={cx(inputClass, request.email && !isValidEmail(request.email) && 'border-amber-500/60')} placeholder="nombre@dominio.es" type="email" value={request.email} onChange={(e) => updateRequest(request.id, { email: e.target.value })} /></td>
                         <td className="p-1.5"><input className={inputClass} placeholder="Teléfono, nota breve…" value={request.contactoObservaciones} onChange={(e) => updateRequest(request.id, { contactoObservaciones: e.target.value })} /></td>
-                        <td className="px-1 py-1.5"><button className="grid h-7 w-7 place-items-center rounded-md text-metro-muted hover:bg-red-500/10 hover:text-red-300" onClick={() => removePerson(request.id)} type="button"><Trash2 size={13} /></button></td>
+                        <td className="px-1 py-1.5"><ActionButton onClick={() => removePerson(request.id)} size="sm" title="Eliminar participante" variant="delete" /></td>
                       </tr>
                     ))}
                     {draft.requests.length === 0 ? <tr><td className="px-3 py-8 text-center text-xs text-metro-muted" colSpan={9}>Todavía no hay participantes. Usa el buscador de Plantilla o el alta de persona externa.</td></tr> : null}
