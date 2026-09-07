@@ -2,6 +2,21 @@ import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 
 export const TELETRABAJO_HELP_SECTIONS: ModuleHelpSection[] = [
   {
+    title: 'Cómo trabajar con el flujo guiado',
+    ordered: true,
+    items: [
+      'Periodo: selecciona o crea la campaña con la que vas a trabajar. Si necesitas cambiar periodos, puestos teletrabajables o Grupos de Cobertura, abre "Configuración y herramientas avanzadas".',
+      'Solicitudes: registra o importa las solicitudes del periodo. El asistente te llevará aquí si todavía no hay solicitudes cargadas.',
+      'Validación: revisa las solicitudes pendientes o analizadas, comprueba sus datos y resuelve su situación administrativa.',
+      'Cobertura: revisa las incidencias de presencialidad y los posibles bloqueos por puesto o Grupo de Cobertura antes de cerrar el periodo.',
+      'Dirección: cuando las solicitudes estén resueltas y no queden incidencias bloqueantes, genera la exportación para Dirección.',
+    ],
+  },
+  {
+    title: 'Siguiente acción recomendada',
+    body: 'La portada de Teletrabajo analiza el estado del periodo y destaca una única acción principal: configurar el periodo, registrar solicitudes, validar pendientes, revisar cobertura o exportar a Dirección. Las demás funciones siguen disponibles, pero quedan en segundo plano para reducir errores y evitar tener que recordar el orden del proceso.',
+  },
+  {
     title: 'Finalidad del módulo',
     body: 'Registra, revisa y controla las solicitudes de teletrabajo de cada periodo. Cada fila corresponde a una persona solicitante. Un semáforo automático avisa de incidencias, pero la validación final corresponde a RRLL.',
   },
