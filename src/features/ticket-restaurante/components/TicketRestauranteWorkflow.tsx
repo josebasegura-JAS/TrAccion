@@ -2,17 +2,16 @@ import {
   ArrowRight,
   CalendarDays,
   Calculator,
+  Check,
   CheckCircle2,
-  Circle,
+  ChevronDown,
   Clock3,
-  Download,
   Euro,
   FileSpreadsheet,
   ReceiptText,
   Settings,
   Ticket,
   Upload,
-  UserPlus,
   Users,
   Utensils,
 } from 'lucide-react';
@@ -35,159 +34,107 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }
 
-function WorkflowAction({
-  icon: Icon,
-  label,
+type StepState = 'done' | 'current' | 'pending';
+
+function ProcessStep({
+  number,
+  title,
+  detail,
+  state,
   onClick,
-  emphasis = false,
 }: {
-  icon: typeof CalendarDays;
-  label: string;
+  number: number;
+  title: string;
+  detail: string;
+  state: StepState;
   onClick: () => void;
-  emphasis?: boolean;
 }) {
   return (
     <button
       className={cx(
-        'group flex min-h-[48px] items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition',
-        emphasis
-          ? 'border-metro-red bg-metro-red text-white shadow-[0_8px_20px_rgba(220,38,38,0.18)] hover:bg-metro-dark'
-          : 'border-metro-border bg-metro-surface/85 text-metro-text hover:border-metro-red/60 hover:bg-metro-raised',
+        'group relative flex min-h-[76px] min-w-0 flex-1 items-start gap-3 rounded-xl border px-3 py-3 text-left transition',
+        state === 'current'
+          ? 'border-metro-red bg-metro-red/[0.075] shadow-[0_10px_24px_rgba(220,38,38,0.12)]'
+          : state === 'done'
+            ? 'border-emerald-500/25 bg-emerald-500/[0.045] hover:border-emerald-400/45'
+            : 'border-metro-border bg-metro-surface/60 hover:border-metro-red/45 hover:bg-metro-raised',
       )}
       onClick={onClick}
       type="button"
     >
-      <span className={cx(
-        'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
-        emphasis ? 'bg-white/10 text-white' : 'bg-metro-red/10 text-red-300',
-      )}>
-        <Icon className="h-4 w-4" />
+      <span
+        className={cx(
+          'grid h-8 w-8 shrink-0 place-items-center rounded-full border text-xs font-extrabold',
+          state === 'done'
+            ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
+            : state === 'current'
+              ? 'border-metro-red bg-metro-red text-white'
+              : 'border-metro-border bg-metro-panel text-metro-muted',
+        )}
+      >
+        {state === 'done' ? <Check className="h-4 w-4" /> : number}
       </span>
-      <span className="min-w-0 flex-1 text-xs font-bold leading-4">{label}</span>
-      <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-55 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+      <span className="min-w-0 pt-0.5">
+        <span className="block text-[13px] font-extrabold leading-4 text-metro-text">{title}</span>
+        <span className="mt-1 block text-[11px] leading-4 text-metro-muted">{detail}</span>
+      </span>
     </button>
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  tone = 'blue',
-}: {
-  icon: typeof Users;
-  label: string;
-  value: string;
-  tone?: 'blue' | 'green' | 'purple';
-}) {
-  const toneClasses = {
-    blue: 'border-blue-400/20 bg-blue-500/[0.07] text-blue-300',
-    green: 'border-emerald-400/20 bg-emerald-500/[0.07] text-emerald-300',
-    purple: 'border-fuchsia-400/20 bg-fuchsia-500/[0.07] text-fuchsia-300',
-  };
-
-  return (
-    <div className={cx('rounded-lg border px-3 py-2.5', toneClasses[tone])}>
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 shrink-0" />
-        <span className="text-[10px] font-semibold opacity-90">{label}</span>
-      </div>
-      <div className="mt-1 text-xl font-extrabold tracking-tight text-metro-text">{value}</div>
-    </div>
-  );
-}
-
-function StatusLine({
-  label,
-  state,
-  detail,
-  checked,
-  onCheckedChange,
-}: {
-  label: string;
-  state: 'done' | 'pending' | 'neutral';
-  detail?: string;
-  checked?: boolean;
-  onCheckedChange?: (checked: boolean) => void;
-}) {
-  const Icon = state === 'done' ? CheckCircle2 : state === 'pending' ? Clock3 : Circle;
-  const iconClass = state === 'done' ? 'text-emerald-400' : state === 'pending' ? 'text-amber-400' : 'text-metro-muted';
-
-  return (
-    <div className="flex items-start gap-2">
-      <Icon className={cx('mt-px h-3.5 w-3.5 shrink-0', iconClass)} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-semibold leading-4 text-metro-secondary">{label}</p>
-          {onCheckedChange ? (
-            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[9px] font-semibold text-metro-muted">
-              <input
-                checked={checked === true}
-                className="h-3.5 w-3.5 accent-emerald-500"
-                onChange={(event) => onCheckedChange(event.target.checked)}
-                type="checkbox"
-              />
-              Revisado
-            </label>
-          ) : null}
-        </div>
-        {detail ? <p className="text-[10px] leading-4 text-metro-muted">{detail}</p> : null}
-      </div>
-    </div>
-  );
-}
-
-function StepNumber({ number }: { number: number }) {
-  return (
-    <div className="absolute -left-[30px] top-3 z-10 grid h-8 w-8 place-items-center rounded-full border-[3px] border-metro-navy bg-metro-red text-xs font-extrabold text-white shadow-lg">
-      {number}
-    </div>
-  );
-}
-
-function FlowStep({
+function AdvancedAction({
   icon: Icon,
   title,
   detail,
-  status,
-  statusTone,
   onClick,
-  highlighted = false,
 }: {
-  icon: typeof Upload;
+  icon: typeof CalendarDays;
   title: string;
   detail: string;
-  status: string;
-  statusTone: 'done' | 'pending' | 'info';
   onClick: () => void;
-  highlighted?: boolean;
 }) {
-  const statusClasses = {
-    done: 'bg-emerald-500/10 text-emerald-300',
-    pending: 'bg-amber-500/10 text-amber-300',
-    info: 'bg-blue-500/10 text-blue-300',
-  };
-
   return (
     <button
-      className={cx(
-        'group min-w-0 rounded-lg border p-2.5 text-left transition',
-        highlighted
-          ? 'border-metro-red/60 bg-metro-red/[0.055] hover:bg-metro-red/[0.09]'
-          : 'border-metro-border bg-metro-surface/80 hover:border-metro-red/55 hover:bg-metro-raised',
-      )}
+      className="group flex min-h-[62px] items-center gap-3 rounded-lg border border-metro-border bg-metro-surface/55 px-3 py-2.5 text-left transition hover:border-metro-red/50 hover:bg-metro-raised"
       onClick={onClick}
       type="button"
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-metro-red/10 text-red-300">
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className={cx('max-w-[70%] truncate rounded-full px-2 py-0.5 text-[9px] font-bold', statusClasses[statusTone])}>{status}</span>
-      </div>
-      <p className="mt-1.5 text-[11px] font-extrabold leading-4 text-metro-text">{title}</p>
-      <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-metro-muted">{detail}</p>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-metro-red/10 text-red-300">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-bold text-metro-text">{title}</span>
+        <span className="mt-0.5 block text-[10px] leading-4 text-metro-muted">{detail}</span>
+      </span>
+      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" />
     </button>
+  );
+}
+
+function ReviewCheck({
+  label,
+  detail,
+  checked,
+  onChange,
+}: {
+  label: string;
+  detail: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-metro-border bg-metro-surface/45 px-3 py-2.5 transition hover:bg-metro-raised">
+      <input
+        checked={checked}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      <span className="min-w-0">
+        <span className="block text-[12px] font-bold text-metro-text">{label}</span>
+        <span className="mt-0.5 block text-[10px] leading-4 text-metro-muted">{detail}</span>
+      </span>
+    </label>
   );
 }
 
@@ -252,215 +199,244 @@ export function TicketRestauranteWorkflow({
   onOpenContribution,
   onReviewChange,
 }: TicketRestauranteWorkflowProps) {
-  const readyForCalculation = activeCalendars > 0 && activePeople > 0;
+  const baseReady = activeCalendars > 0 && activePeople > 0 && effectiveTicketPrice > 0;
+  const monthlyInputsReviewed = absencesReviewed && manutencionesReviewed;
+  const adjustmentsReviewed = manualDebtsReviewed;
+  const readyForOrder = baseReady && monthlyInputsReviewed && adjustmentsReviewed;
   const monthLabel = `${MONTH_OPTIONS[month - 1] ?? month} ${year}`;
 
+  const nextAction = !baseReady
+    ? {
+        eyebrow: 'Antes de empezar el mes',
+        title: 'Completa la configuración base',
+        detail: 'Necesitas al menos un calendario activo, personas con derecho y un precio de ticket válido.',
+        button: 'Revisar configuración',
+        icon: Settings,
+        onClick: activeCalendars === 0 ? onOpenCalendars : activePeople === 0 ? onOpenPeople : onOpenPrice,
+      }
+    : !absencesReviewed
+      ? {
+          eyebrow: 'Siguiente paso recomendado',
+          title: 'Cargar y revisar ausencias',
+          detail: absenceCount > 0
+            ? `Ya hay ${absenceCount} registros en ${monthLabel}. Entra, compruébalos y marca la revisión como completada.`
+            : `Importa el fichero de ausencias correspondiente a ${monthLabel}.`,
+          button: absenceCount > 0 ? 'Revisar ausencias' : 'Cargar ausencias',
+          icon: Upload,
+          onClick: absenceCount > 0 ? onOpenAbsences : onImportAbsences,
+        }
+      : !manutencionesReviewed
+        ? {
+            eyebrow: 'Siguiente paso recomendado',
+            title: 'Cargar y revisar manutenciones',
+            detail: manutencionCount > 0
+              ? `Hay ${manutencionCount} manutenciones imputadas. Revisa el resultado antes de continuar.`
+              : `Importa las notas de gasto que afectan a ticket para ${monthLabel}. Si no hay ninguna, puedes marcar este paso como revisado.`,
+            button: manutencionCount > 0 ? 'Revisar manutenciones' : 'Cargar manutenciones',
+            icon: Utensils,
+            onClick: manutencionCount > 0 ? onOpenManutenciones : onImportManutenciones,
+          }
+        : !manualDebtsReviewed
+          ? {
+              eyebrow: 'Siguiente paso recomendado',
+              title: 'Revisar deudas y ajustes',
+              detail: manualDebtCount > 0
+                ? `Hay ${manualDebtCount} deuda(s) o ajuste(s) manuales activos. Comprueba que deban aplicarse antes de preparar el pedido.`
+                : 'No hay ajustes manuales activos. Confirma la revisión para cerrar este control.',
+              button: 'Revisar deudas y ajustes',
+              icon: ReceiptText,
+              onClick: onOpenManualDebt,
+            }
+          : {
+              eyebrow: 'Pedido preparado para revisión',
+              title: `Revisar el pedido de ${monthLabel}`,
+              detail: `${formatInteger(calculation.totals.ticketsFinales)} tickets · ${formatMoney(calculation.totals.importe)} €. Comprueba el detalle y genera el fichero “A cargar”.`,
+              button: 'Revisar y generar A cargar',
+              icon: Calculator,
+              onClick: onOpenMonthlyCalculation,
+            };
+
+  const NextIcon = nextAction.icon;
+
   return (
-    <div className="space-y-2.5">
-      <div className="flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-extrabold text-metro-text">Flujo de trabajo</p>
-          <p className="text-[11px] text-metro-muted">Base anual → operativa mensual → cierre de cotización</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="Mes de trabajo"
-            className="h-8 min-w-[130px] rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text outline-none focus:border-metro-red"
-            onChange={(event) => onMonthChange(Number(event.target.value))}
-            value={month}
-          >
-            {MONTH_OPTIONS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
-          </select>
-          <input
-            aria-label="Año de trabajo"
-            className="h-8 w-20 rounded-lg border border-metro-border bg-metro-surface px-2 text-center text-xs font-semibold text-metro-text outline-none focus:border-metro-red"
-            max="2200"
-            min="1900"
-            onChange={(event) => onYearChange(Number(event.target.value) || year)}
-            type="number"
-            value={year}
-          />
-          <button
-            className="inline-flex h-8 items-center gap-2 rounded-lg bg-metro-red px-3 text-xs font-bold text-white hover:bg-metro-dark"
-            onClick={onOpenMonthlyCalculation}
-            type="button"
-          >
-            <Calculator className="h-3.5 w-3.5" />
-            Ver cómputo
-          </button>
-        </div>
-      </div>
-
-      <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_250px]">
-        <div className="relative ml-7 space-y-2.5 before:absolute before:bottom-5 before:left-0 before:top-5 before:w-px before:bg-gradient-to-b before:from-metro-red/90 before:via-metro-red/35 before:to-metro-border">
-          <section className="relative ml-4 rounded-lg border border-metro-border bg-metro-panel px-3 py-2.5 shadow-card">
-            <StepNumber number={1} />
-            <div className="grid gap-2.5 md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)] md:items-center">
-              <div className="pl-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-extrabold text-metro-text">Configuración anual</h3>
-                  <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-blue-300">Una vez al año</span>
-                </div>
-                <p className="mt-0.5 text-[10px] text-metro-muted">Calendarios, precio y reglas base.</p>
-                <p className="mt-1 text-[10px] font-semibold text-metro-secondary">{activeCalendars} calendarios · {formatMoney(effectiveTicketPrice)} €/ticket</p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <WorkflowAction icon={CalendarDays} label="Calendarios" onClick={onOpenCalendars} />
-                <WorkflowAction icon={Euro} label="Precio del ticket" onClick={onOpenPrice} />
-                <WorkflowAction icon={Settings} label="Reglas de cálculo" onClick={onOpenRules} />
-              </div>
-            </div>
-          </section>
-
-          <section className="relative ml-4 rounded-lg border border-metro-border bg-metro-panel px-3 py-2.5 shadow-card">
-            <StepNumber number={2} />
-            <div className="pl-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-extrabold text-metro-text">Personas con derecho</h3>
-                <span className="rounded-full border border-blue-400/20 bg-blue-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-blue-300">Base anual + ajustes</span>
-              </div>
-              <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-5">
-                {[
-                  [activePeople, 'activas'],
-                  [inactivePeople, 'inactivas'],
-                  [activePeople + inactivePeople, 'total'],
-                ].map(([value, label]) => (
-                  <div key={String(label)} className="flex min-h-[48px] flex-col justify-center rounded-md border border-metro-border bg-metro-surface/75 px-2 py-1.5 text-center">
-                    <p className="text-base font-extrabold leading-5 text-metro-text">{value}</p>
-                    <p className="text-[9px] font-semibold text-metro-muted">{label}</p>
-                  </div>
-                ))}
-                <WorkflowAction icon={Upload} label="Importar personas" onClick={onImportPeople} />
-                <WorkflowAction icon={Users} label="Gestionar personas" onClick={onOpenPeople} />
-              </div>
-            </div>
-          </section>
-
-          <section className="relative ml-4 rounded-lg border border-metro-red/60 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/10 px-3 py-2.5 shadow-[0_14px_34px_rgba(2,6,23,0.24)]">
-            <StepNumber number={3} />
-            <div className="flex flex-wrap items-start justify-between gap-2 pl-1">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-extrabold text-metro-text">Operativa mensual</h3>
-                  <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-amber-300">Trabajo principal del mes</span>
-                </div>
-                <p className="mt-0.5 text-[10px] text-metro-muted">{monthLabel}</p>
-              </div>
-              <div className="rounded-md border border-metro-border bg-metro-surface/80 px-3 py-1.5 text-right">
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-metro-muted">Pedido estimado</p>
-                <p className="text-base font-extrabold leading-5 text-metro-text">{formatInteger(calculation.totals.ticketsFinales)} tickets</p>
-              </div>
-            </div>
-
-            <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
-              <FlowStep icon={Upload} title="a) Importar ausencias" detail="Excel mensual" status={absencesReviewed ? 'Revisado' : absenceCount > 0 ? `${absenceCount} cargadas` : 'Pendiente'} statusTone={absencesReviewed ? 'done' : 'pending'} onClick={onImportAbsences} />
-              <FlowStep icon={Utensils} title="b) Importar manutenciones" detail="Gastos del mes" status={manutencionesReviewed ? 'Revisado' : manutencionCount > 0 ? `${manutencionCount} cargadas` : 'Pendiente'} statusTone={manutencionesReviewed ? 'done' : 'pending'} onClick={onImportManutenciones} />
-              <FlowStep icon={Calculator} title="c) Calcular y preparar pedido" detail="Revisar cómputo y exportar" status={readyForCalculation ? 'Revisar / exportar' : 'Revisar base'} statusTone={readyForCalculation ? 'info' : 'pending'} onClick={onOpenMonthlyCalculation} highlighted />
-            </div>
-
-            <div className="mt-2 grid gap-1.5 grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-md border border-metro-border bg-metro-navy/25 px-2.5 py-1.5"><p className="text-[9px] text-metro-muted">Ausencias</p><p className="text-xs font-bold text-metro-text">{absenceCount} registros</p></div>
-              <div className="rounded-md border border-metro-border bg-metro-navy/25 px-2.5 py-1.5"><p className="text-[9px] text-metro-muted">Manutenciones</p><p className="text-xs font-bold text-metro-text">{manutencionCount} registros</p></div>
-              <div className="rounded-md border border-metro-border bg-metro-navy/25 px-2.5 py-1.5"><p className="text-[9px] text-metro-muted">Deuda pendiente</p><p className="text-xs font-bold text-amber-300">{formatInteger(calculation.totals.deudaPendiente)}</p></div>
-              <div className="rounded-md border border-metro-border bg-metro-navy/25 px-2.5 py-1.5"><p className="text-[9px] text-metro-muted">Importe estimado</p><p className="text-xs font-bold text-emerald-300">{formatMoney(calculation.totals.importe)} €</p></div>
-            </div>
-
-
-            <button
-              className="mt-2 flex w-full items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-500/[0.045] px-3 py-2 text-left transition hover:border-amber-400/40 hover:bg-amber-500/[0.07]"
-              onClick={onOpenManualDebt}
-              type="button"
+    <div className="space-y-3">
+      <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-base font-extrabold text-metro-text">Proceso mensual de Ticket Restaurante</p>
+            <p className="mt-1 text-xs text-metro-muted">Sigue los pasos en orden. La aplicación te indicará qué toca hacer a continuación.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Mes de trabajo"
+              className="h-9 min-w-[145px] rounded-lg border border-metro-border bg-metro-surface px-3 text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => onMonthChange(Number(event.target.value))}
+              value={month}
             >
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-amber-500/10 text-amber-300"><ReceiptText className="h-3.5 w-3.5" /></span>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-extrabold text-metro-text">Deudas y regularizaciones</p>
-                  <p className="truncate text-[9px] text-metro-muted">Revisa deuda arrastrada, regulariza saldos y gestiona deudas manuales.</p>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {manualDebtCount > 0 ? <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold text-amber-300">{manualDebtCount} activas</span> : null}
-                <ArrowRight className="h-3.5 w-3.5 text-metro-muted" />
-              </div>
-            </button>
-          </section>
-
-          <section className="relative ml-4 rounded-lg border border-metro-border bg-metro-panel px-3 py-2.5 shadow-card">
-            <StepNumber number={4} />
-            <div className="grid gap-2.5 md:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)] md:items-center">
-              <div className="pl-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-extrabold text-metro-text">Cierre y cotización</h3>
-                  <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.08] px-2 py-0.5 text-[9px] font-semibold text-amber-300">A mes vencido</span>
-                </div>
-                <p className="mt-0.5 text-[10px] text-metro-muted">Contrasta el mes real y prepara la cotización.</p>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <WorkflowAction icon={FileSpreadsheet} label="Revisar ausencias" onClick={onOpenAbsences} />
-                <WorkflowAction icon={Calculator} label="Calcular cotización" onClick={onOpenContribution} />
-                <WorkflowAction icon={Download} label="Exportar resultado" onClick={onOpenContribution} />
-              </div>
-            </div>
-          </section>
+              {MONTH_OPTIONS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
+            </select>
+            <input
+              aria-label="Año de trabajo"
+              className="h-9 w-24 rounded-lg border border-metro-border bg-metro-surface px-2 text-center text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
+              max="2200"
+              min="1900"
+              onChange={(event) => onYearChange(Number(event.target.value) || year)}
+              type="number"
+              value={year}
+            />
+          </div>
         </div>
 
-        <aside className="space-y-2.5 lg:sticky lg:top-2 lg:self-start">
-          <section className="rounded-lg border border-metro-border bg-metro-panel p-3 shadow-card">
-            <div className="flex items-center gap-2">
-              <ReceiptText className="h-4 w-4 text-red-300" />
-              <h3 className="text-xs font-extrabold text-metro-text">Estado del flujo</h3>
-            </div>
-            <div className="mt-2.5 space-y-2">
-              <StatusLine label="Calendarios configurados" state={activeCalendars > 0 ? 'done' : 'pending'} detail={`${activeCalendars} activos`} />
-              <StatusLine label="Precio del ticket" state={effectiveTicketPrice > 0 ? 'done' : 'pending'} detail={`${formatMoney(effectiveTicketPrice)} €`} />
-              <StatusLine label="Personas revisadas" state={activePeople > 0 ? 'done' : 'pending'} detail={`${activePeople} activas`} />
-              <StatusLine
-                checked={absencesReviewed}
-                detail={absenceCount > 0 ? `${absenceCount} en ${monthLabel}` : `Sin registros en ${monthLabel}`}
-                label="Ausencias"
-                onCheckedChange={(checked) => onReviewChange('absencesReviewed', checked)}
-                state={absencesReviewed ? 'done' : 'pending'}
-              />
-              <StatusLine
-                checked={manutencionesReviewed}
-                detail={manutencionCount > 0 ? `${manutencionCount} imputadas` : 'Sin manutenciones'}
-                label="Manutenciones"
-                onCheckedChange={(checked) => onReviewChange('manutencionesReviewed', checked)}
-                state={manutencionesReviewed ? 'done' : 'pending'}
-              />
-              <StatusLine
-                checked={manualDebtsReviewed}
-                detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes activos'}
-                label="Deudas manuales"
-                onCheckedChange={(checked) => onReviewChange('manualDebtsReviewed', checked)}
-                state={manualDebtsReviewed ? 'done' : 'pending'}
-              />
-              <StatusLine label="Cómputo mensual" state={readyForCalculation ? 'done' : 'pending'} detail={readyForCalculation ? 'Disponible' : 'Falta base anual'} />
-              <StatusLine label="Cotización" state="neutral" detail="A mes vencido" />
-            </div>
-          </section>
-
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-            <StatCard icon={Users} label="Personas con derecho" value={formatInteger(activePeople)} tone="blue" />
-            <StatCard icon={Ticket} label="Tickets previstos" value={formatInteger(calculation.totals.ticketsFinales)} tone="green" />
-            <StatCard icon={Euro} label="Importe estimado" value={`${formatMoney(calculation.totals.importe)} €`} tone="purple" />
-          </div>
-        </aside>
-      </div>
-
-      <section className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-        <div className="grid gap-2 lg:grid-cols-[170px_repeat(5,minmax(0,1fr))] lg:items-center">
-          <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-metro-red/10 text-red-300"><UserPlus className="h-3.5 w-3.5" /></span>
-            <div><p className="text-xs font-extrabold text-metro-text">Accesos rápidos</p><p className="text-[9px] text-metro-muted">Ir a una vista</p></div>
-          </div>
-          <WorkflowAction icon={Users} label="Personas" onClick={onOpenPeople} />
-          <WorkflowAction icon={CalendarDays} label="Ausencias" onClick={onOpenAbsences} />
-          <WorkflowAction icon={Utensils} label="Manutenciones" onClick={onOpenManutenciones} />
-          <WorkflowAction icon={ReceiptText} label="Deudas y ajustes" onClick={onOpenManualDebt} />
-          <WorkflowAction icon={Calculator} label="Cómputo cotización" onClick={onOpenContribution} />
+        <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <ProcessStep
+            detail={`${activeCalendars} calendarios · ${activePeople} personas`}
+            number={1}
+            onClick={onOpenPeople}
+            state={baseReady ? 'done' : 'current'}
+            title="Base preparada"
+          />
+          <ProcessStep
+            detail={absencesReviewed ? `${absenceCount} registros revisados` : absenceCount > 0 ? `${absenceCount} registros pendientes de revisión` : 'Pendiente de carga o revisión'}
+            number={2}
+            onClick={absenceCount > 0 ? onOpenAbsences : onImportAbsences}
+            state={absencesReviewed ? 'done' : baseReady ? 'current' : 'pending'}
+            title="Ausencias"
+          />
+          <ProcessStep
+            detail={manutencionesReviewed ? `${manutencionCount} registros revisados` : manutencionCount > 0 ? `${manutencionCount} registros pendientes de revisión` : 'Pendiente de carga o revisión'}
+            number={3}
+            onClick={manutencionCount > 0 ? onOpenManutenciones : onImportManutenciones}
+            state={manutencionesReviewed ? 'done' : absencesReviewed ? 'current' : 'pending'}
+            title="Manutenciones"
+          />
+          <ProcessStep
+            detail={manualDebtsReviewed ? 'Control revisado' : manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Pendiente de revisión'}
+            number={4}
+            onClick={onOpenManualDebt}
+            state={manualDebtsReviewed ? 'done' : monthlyInputsReviewed ? 'current' : 'pending'}
+            title="Deudas y ajustes"
+          />
+          <ProcessStep
+            detail={`${formatInteger(calculation.totals.ticketsFinales)} tickets · ${formatMoney(calculation.totals.importe)} €`}
+            number={5}
+            onClick={onOpenMonthlyCalculation}
+            state={readyForOrder ? 'current' : 'pending'}
+            title="Revisar pedido"
+          />
+          <ProcessStep
+            detail="A mes vencido"
+            number={6}
+            onClick={onOpenContribution}
+            state="pending"
+            title="Cotización"
+          />
         </div>
       </section>
+
+      <section className={cx(
+        'rounded-xl border p-4 shadow-card',
+        readyForOrder
+          ? 'border-emerald-400/30 bg-emerald-500/[0.055]'
+          : 'border-metro-red/45 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/10',
+      )}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className={cx(
+              'grid h-11 w-11 shrink-0 place-items-center rounded-xl',
+              readyForOrder ? 'bg-emerald-500/15 text-emerald-300' : 'bg-metro-red/12 text-red-300',
+            )}>
+              {readyForOrder ? <CheckCircle2 className="h-5 w-5" /> : <NextIcon className="h-5 w-5" />}
+            </span>
+            <div className="min-w-0">
+              <p className={cx('text-[11px] font-bold uppercase tracking-[0.08em]', readyForOrder ? 'text-emerald-300' : 'text-red-300')}>{nextAction.eyebrow}</p>
+              <h2 className="mt-1 text-lg font-extrabold leading-6 text-metro-text">{nextAction.title}</h2>
+              <p className="mt-1 max-w-3xl text-[12px] leading-5 text-metro-secondary">{nextAction.detail}</p>
+            </div>
+          </div>
+          <button
+            className={cx(
+              'inline-flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-extrabold transition',
+              readyForOrder
+                ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                : 'bg-metro-red text-white hover:bg-metro-dark',
+            )}
+            onClick={nextAction.onClick}
+            type="button"
+          >
+            {nextAction.button}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </section>
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
+        <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-extrabold text-metro-text">Controles del mes</p>
+              <p className="mt-0.5 text-[11px] text-metro-muted">Marca cada bloque cuando hayas comprobado que sus datos son correctos.</p>
+            </div>
+            <span className="rounded-full border border-metro-border bg-metro-surface px-2.5 py-1 text-[10px] font-bold text-metro-secondary">
+              {[absencesReviewed, manutencionesReviewed, manualDebtsReviewed].filter(Boolean).length}/3 revisados
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <ReviewCheck
+              checked={absencesReviewed}
+              detail={absenceCount > 0 ? `${absenceCount} registros en ${monthLabel}` : `Sin registros en ${monthLabel}`}
+              label="Ausencias"
+              onChange={(checked) => onReviewChange('absencesReviewed', checked)}
+            />
+            <ReviewCheck
+              checked={manutencionesReviewed}
+              detail={manutencionCount > 0 ? `${manutencionCount} manutenciones imputadas` : 'Sin manutenciones registradas'}
+              label="Manutenciones"
+              onChange={(checked) => onReviewChange('manutencionesReviewed', checked)}
+            />
+            <ReviewCheck
+              checked={manualDebtsReviewed}
+              detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes manuales activos'}
+              label="Deudas y ajustes"
+              onChange={(checked) => onReviewChange('manualDebtsReviewed', checked)}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+          <p className="text-sm font-extrabold text-metro-text">Resumen del pedido</p>
+          <div className="mt-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Users className="h-4 w-4" />Personas con derecho</span><strong className="text-sm text-metro-text">{formatInteger(activePeople)}</strong></div>
+            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Ticket className="h-4 w-4" />Tickets previstos</span><strong className="text-sm text-metro-text">{formatInteger(calculation.totals.ticketsFinales)}</strong></div>
+            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Euro className="h-4 w-4" />Importe estimado</span><strong className="text-sm text-emerald-300">{formatMoney(calculation.totals.importe)} €</strong></div>
+            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Clock3 className="h-4 w-4" />Deuda pendiente</span><strong className="text-sm text-amber-300">{formatInteger(calculation.totals.deudaPendiente)}</strong></div>
+          </div>
+        </section>
+      </div>
+
+      <details className="group rounded-xl border border-metro-border bg-metro-panel shadow-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-metro-surface text-metro-secondary"><Settings className="h-4 w-4" /></span>
+            <div>
+              <p className="text-[13px] font-extrabold text-metro-text">Configuración y herramientas avanzadas</p>
+              <p className="mt-0.5 text-[10px] text-metro-muted">Calendarios, personas, precio, reglas y accesos de mantenimiento.</p>
+            </div>
+          </div>
+          <ChevronDown className="h-4 w-4 shrink-0 text-metro-muted transition group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-metro-border px-4 py-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <AdvancedAction icon={CalendarDays} title="Calendarios" detail={`${activeCalendars} activos. Mantén aquí la base anual.`} onClick={onOpenCalendars} />
+            <AdvancedAction icon={Users} title="Personas" detail={`${activePeople} activas · ${inactivePeople} inactivas.`} onClick={onOpenPeople} />
+            <AdvancedAction icon={Upload} title="Importar personas" detail="Actualiza en bloque las personas con derecho." onClick={onImportPeople} />
+            <AdvancedAction icon={Euro} title="Precio del ticket" detail={`Precio aplicado: ${formatMoney(effectiveTicketPrice)} €.`} onClick={onOpenPrice} />
+            <AdvancedAction icon={Settings} title="Reglas de cálculo" detail="Fechas, deuda y reglas generales del módulo." onClick={onOpenRules} />
+            <AdvancedAction icon={FileSpreadsheet} title="Todas las ausencias" detail="Consulta, corrige o elimina registros importados." onClick={onOpenAbsences} />
+            <AdvancedAction icon={Utensils} title="Todas las manutenciones" detail="Consulta las notas de gasto que afectan a ticket." onClick={onOpenManutenciones} />
+            <AdvancedAction icon={ReceiptText} title="Deudas y regularizaciones" detail="Gestiona deuda manual y correcciones de saldo." onClick={onOpenManualDebt} />
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
