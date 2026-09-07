@@ -15,7 +15,6 @@ import {
   Save,
   Search,
   Ticket,
-  Trash2,
   UserRound,
   UserRoundPlus,
   type LucideIcon,
@@ -234,18 +233,6 @@ function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; la
       </div>
       <p className="mt-1 text-xl font-extrabold tracking-tight text-metro-text">{value}</p>
       {detail ? <p className="text-[11px] text-metro-muted">{detail}</p> : null}
-    </div>
-  );
-}
-
-function HeaderMetric({ label, value, warning = false }: { label: string; value: string; warning?: boolean }) {
-  return (
-    <div className={cx(
-      'flex h-9 min-w-[92px] items-center justify-between gap-2 rounded-lg border px-2.5',
-      warning ? 'border-amber-500/45 bg-amber-500/10' : 'border-metro-border bg-metro-surface',
-    )}>
-      <span className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</span>
-      <span className={cx('text-xs font-extrabold', warning ? 'text-amber-200' : 'text-metro-text')}>{value}</span>
     </div>
   );
 }
