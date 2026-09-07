@@ -5,8 +5,10 @@ import type { TicketPerson } from '../domain/ticketRestaurante';
 import type { TicketManutencion, TicketManutencionPreviewRow } from '../domain/importManutenciones';
 import { MonthNavigator } from './TicketRestauranteCalendarPanels';
 import { formatManutencionDate, formatManutencionMonth, normalizeTicketEmployeeSearch } from './ticketRestaurantePageHelpers';
+import { ImportReviewSummary } from './TicketRestauranteImportReview';
 
 export function ManutencionesPanel({
+  importFileName,
   importMessage,
   manualEmployee,
   manualDate,
@@ -28,6 +30,7 @@ export function ManutencionesPanel({
   ticketPeople,
   year,
 }: {
+  importFileName?: string;
   importMessage: string;
   manualEmployee: string;
   manualDate: string;
@@ -127,6 +130,16 @@ export function ManutencionesPanel({
 
       {previewRows.length > 0 ? (
         <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
+          <div className="mb-3">
+            <ImportReviewSummary
+              detail="Revisa qué registros deben importarse y cuáles afectan al ticket antes de confirmar."
+              errors={previewRows.filter((row) => row.errors.length > 0).length}
+              fileName={importFileName}
+              ignored={previewRows.filter((row) => !row.importar).length}
+              ready={rowsToImport}
+              total={previewRows.length}
+            />
+          </div>
           <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-bold text-metro-muted">Preview</p>

@@ -35,6 +35,16 @@ async function runGuarded<T extends { ok: boolean; message?: string }>(
 
 export type CreateCalendarResult = { ok: true; id: string } | { ok: false; message: string };
 
+export type ImportPeopleResult = {
+  imported: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  createdCalendars: number;
+  ok: boolean;
+  message?: string;
+};
+
 /**
  * Acciones de escritura de Ticket Restaurante, ya protegidas con el lock de
  * módulo compartido. `TicketRestaurantePage.tsx` no debe llamar a las
@@ -96,8 +106,8 @@ export function useTicketRestauranteWriteActions() {
       runGuarded(() => saveManutenciones(drafts), 'No se han podido guardar las manutenciones.'),
     removeManutencion: (id: string) =>
       runGuarded(() => removeManutencion(id), 'No se ha podido eliminar la manutención.'),
-    importPeople: (drafts: TicketPeopleImportDraft[]) =>
-      runGuarded(
+    importPeople: (drafts: TicketPeopleImportDraft[]): Promise<ImportPeopleResult> =>
+      runGuarded<ImportPeopleResult>(
         () => importPeople(drafts),
         'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
       ),

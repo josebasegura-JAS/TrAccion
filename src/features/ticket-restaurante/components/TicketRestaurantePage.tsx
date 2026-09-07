@@ -39,7 +39,7 @@ import {
   type TicketManutencionDraft,
   type TicketManutencionPreviewRow,
 } from '../domain/importManutenciones';
-import { importTicketPeopleFromFile } from '../domain/importPeople';
+import { importTicketPeopleFromFile, type TicketPeopleImportResult } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -58,6 +58,7 @@ import { PeoplePanel } from './TicketRestaurantePeoplePanel';
 import { TicketPriceModal, TicketRulesModal } from './TicketRestauranteConfigModals';
 import { CalculationPanel } from './TicketRestauranteCalculationPanel';
 import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
+import { TicketRestaurantePeopleImportModal } from './TicketRestaurantePeopleImportModal';
 import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
 import { TicketRestauranteManualPeoplePanel } from './TicketRestauranteManualPeoplePanel';
 import { TICKET_RESTAURANTE_HELP_SECTIONS, MONTH_OPTIONS } from './ticketRestaurantePageConfig';
@@ -183,6 +184,11 @@ export function TicketRestaurantePage({
   const [previewRows, setPreviewRows] = useState<TicketRestaurantAbsencePreviewRow[]>([]);
   const [importMessage, setImportMessage] = useState('');
   const [peopleImportMessage, setPeopleImportMessage] = useState('');
+  const [peopleImportPreview, setPeopleImportPreview] = useState<TicketPeopleImportResult | null>(null);
+  const [peopleImportFileName, setPeopleImportFileName] = useState('');
+  const [isPeopleImportSaving, setIsPeopleImportSaving] = useState(false);
+  const [absenceImportFileName, setAbsenceImportFileName] = useState('');
+  const [manutencionImportFileName, setManutencionImportFileName] = useState('');
   const [manutencionImportMessage, setManutencionImportMessage] = useState('');
   const [manutencionPreviewRows, setManutencionPreviewRows] = useState<
     TicketManutencionPreviewRow[]
@@ -603,6 +609,7 @@ export function TicketRestaurantePage({
       return;
     }
 
+    setAbsenceImportFileName(file.name);
     setImportMessage(`Procesando ${file.name}...`);
 
     try {
@@ -686,42 +693,44 @@ export function TicketRestaurantePage({
   };
 
   const handlePeopleImportFile = async (file: File | null) => {
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
-    const result = await importTicketPeopleFromFile(file, employees, calendars);
-    if (peopleFileInputRef.current) {
-      peopleFileInputRef.current.value = '';
-    }
-
-    if (result.drafts.length === 0) {
+    setPeopleImportMessage(`Analizando ${file.name}...`);
+    setPeopleImportFileName(file.name);
+    try {
+      const result = await importTicketPeopleFromFile(file, employees, calendars);
+      setPeopleImportPreview(result);
       setPeopleImportMessage(
-        'No se ha importado ninguna persona. Revisa Nº empleado y Calendario.',
+        result.drafts.length > 0
+          ? `Análisis completado: ${result.drafts.length} personas preparadas para revisar.`
+          : 'No se han detectado personas importables. Revisa Nº empleado y Calendario.',
       );
-      return;
+    } catch (error) {
+      setPeopleImportPreview(null);
+      setPeopleImportMessage(
+        error instanceof Error ? error.message : 'No se ha podido analizar el fichero de personas.',
+      );
+    } finally {
+      if (peopleFileInputRef.current) peopleFileInputRef.current.value = '';
     }
+  };
 
-    const saveResult = await importPeople(result.drafts);
+  const confirmPeopleImport = async () => {
+    if (!peopleImportPreview || peopleImportPreview.drafts.length === 0) return;
+    setIsPeopleImportSaving(true);
+    const saveResult = await importPeople(peopleImportPreview.drafts);
+    setIsPeopleImportSaving(false);
     if (!saveResult.ok) {
       setPeopleImportMessage(
-        saveResult.message ??
-          'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
+        saveResult.message ?? 'No se han podido importar las personas. Recarga e inténtalo de nuevo.',
       );
       return;
     }
-
-    const missingText =
-      result.missingEmployees.length > 0
-        ? ` · No encontrados en Plantilla: ${result.missingEmployees.join(', ')}`
-        : '';
-    const ignoredText = result.ignored > 0 ? ` · Filas ignoradas: ${result.ignored}` : '';
-    const duplicateText =
-      result.duplicateRows > 0 ? ` · Duplicados en Excel: ${result.duplicateRows}` : '';
-
     setPeopleImportMessage(
-      `Procesadas: ${saveResult.imported} · Nuevas: ${saveResult.created} · Actualizadas: ${saveResult.updated} · Sin cambios: ${saveResult.unchanged} · Calendarios creados: ${saveResult.createdCalendars}${ignoredText}${duplicateText}${missingText}`,
+      `Importación completada · Procesadas: ${saveResult.imported} · Nuevas: ${saveResult.created} · Actualizadas: ${saveResult.updated} · Sin cambios: ${saveResult.unchanged} · Calendarios creados: ${saveResult.createdCalendars}`,
     );
+    setPeopleImportPreview(null);
+    setPeopleImportFileName('');
   };
 
   const updatePreviewRow = (
@@ -809,6 +818,7 @@ export function TicketRestaurantePage({
       return;
     }
 
+    setManutencionImportFileName(file.name);
     setManutencionImportMessage(`Procesando ${file.name}...`);
 
     try {
@@ -1394,6 +1404,7 @@ export function TicketRestaurantePage({
         />
       ) : activeSubview === 'manutenciones' ? (
         <ManutencionesPanel
+          importFileName={manutencionImportFileName}
           importMessage={manutencionImportMessage}
           manualDate={manualManutencionDate}
           manualEmployee={manualManutencionEmployee}
@@ -1558,8 +1569,24 @@ export function TicketRestaurantePage({
         />
       ) : null}
 
+      {peopleImportPreview ? (
+        <TicketRestaurantePeopleImportModal
+          calendars={visibleCalendars}
+          currentPeople={visiblePeople}
+          fileName={peopleImportFileName}
+          onCancel={() => {
+            setPeopleImportPreview(null);
+            setPeopleImportFileName('');
+          }}
+          onConfirm={() => void confirmPeopleImport()}
+          result={peopleImportPreview}
+          saving={isPeopleImportSaving}
+        />
+      ) : null}
+
       {isPreviewOpen ? (
         <AbsencePreviewModal
+          fileName={absenceImportFileName}
           onAdd={addPreviewRow}
           onCancel={() => {
             setIsPreviewOpen(false);

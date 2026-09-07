@@ -14,6 +14,7 @@ import {
   useTableViewPreferences,
 } from '../../../shared/table/useTableViewPreferences';
 import { MonthNavigator } from './TicketRestauranteCalendarPanels';
+import { ImportReviewSummary } from './TicketRestauranteImportReview';
 
 type TicketAbsencesTableColumnId =
   | 'empleado'
@@ -300,6 +301,7 @@ export function AbsencesTable({
 }
 
 export function AbsencePreviewModal({
+  fileName,
   onAdd,
   onCancel,
   onChange,
@@ -307,6 +309,7 @@ export function AbsencePreviewModal({
   onSave,
   rows,
 }: {
+  fileName?: string;
   onAdd: () => void;
   onCancel: () => void;
   onChange: (
@@ -328,7 +331,15 @@ export function AbsencePreviewModal({
           Añadir ausencia manual
         </ActionButton>
       </ModalHeader>
-      <ModalBody className="overflow-auto">
+      <ModalBody className="space-y-3 overflow-auto">
+          <ImportReviewSummary
+            detail="Corrige las incidencias antes de confirmar. Puedes añadir o eliminar filas manualmente."
+            errors={rows.filter((row) => row.errors.length > 0).length}
+            fileName={fileName}
+            ignored={0}
+            ready={rows.filter((row) => row.errors.length === 0).length}
+            total={rows.length}
+          />
           <CompactTable minWidthClassName="min-w-[1050px]">
             <CompactTableHead>
               <tr>
