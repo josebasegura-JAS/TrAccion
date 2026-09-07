@@ -3,7 +3,7 @@ import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
-    body: 'Calcula cuántos Tickets Restaurante genera cada persona cada mes, a partir de su calendario, sus ausencias y sus notas de gasto (manutenciones), y permite cuadrar el pedido mensual con la cotización real.',
+    body: 'Calcula cuántos Tickets Restaurante genera cada persona cada mes, a partir de su calendario, sus ausencias y sus notas de gasto (manutenciones), y permite cuadrar el pedido mensual con la cotización real. La pantalla principal funciona como un proceso guiado: sigue el siguiente paso recomendado y marca cada control como revisado cuando hayas comprobado sus datos.',
   },
   {
     title: 'Flujo recomendado',
@@ -11,7 +11,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'Configurar calendarios: qué días de la semana generan ticket y qué fechas concretas quedan excluidas (festivos, cierres...).',
       'Dar de alta a las personas con derecho a ticket y asignar a cada una su calendario. Las excepciones sin calendario se gestionan como Personas manuales desde el Cómputo mensual.',
-      'Cada mes: importar o revisar ausencias y notas de gasto (manutenciones) del periodo.',
+      'Cada mes: cargar y revisar las ausencias. El fichero se obtiene en Zerkos → Supervisión → Justif. Ausencias de Día. Después, cargar o revisar las notas de gasto (manutenciones) del periodo.',
       'Revisar Deudas y regularizaciones: ahí se ve la deuda arrastrada y se puede fijar un saldo real justificado si el cálculo automático no coincide con la situación real.',
       'Revisar "Cómputo mensual" para hacer el pedido del mes.',
       'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes y exportar o imprimir los resultados que necesite RRLL.',
@@ -46,7 +46,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Importación de ausencias',
     items: [
-      'Para obtener el fichero en Zerkos: Supervisión → Justif. Ausencias de día → seleccionar las fechas del último mes → exportar a Excel.',
+      'Origen del fichero: Zerkos → Supervisión → Justif. Ausencias de Día. Selecciona el periodo que corresponda y exporta el resultado a Excel.',
       'Se admiten dos formatos de fichero, detectados automáticamente: uno "limpio" con cabeceras propias, y el formato de exportación habitual de Zerkos.',
       'Solo se cargan ausencias que tengan impacto real en Ticket Restaurante: deben pertenecer a una persona activa con derecho a ticket y coincidir al menos con un día que genere ticket según su calendario. El resto se ignora.',
       'Las filas exactamente iguales a una ausencia ya guardada se cuentan como duplicadas y se ignoran.',

@@ -219,8 +219,8 @@ export function TicketRestauranteWorkflow({
           eyebrow: 'Siguiente paso recomendado',
           title: 'Cargar y revisar ausencias',
           detail: absenceCount > 0
-            ? `Ya hay ${absenceCount} registros en ${monthLabel}. Entra, compruébalos y marca la revisión como completada.`
-            : `Importa el fichero de ausencias correspondiente a ${monthLabel}.`,
+            ? `Ya hay ${absenceCount} registros en ${monthLabel}. Entra, compruébalos y marca la revisión como completada. Origen del fichero: Zerkos → Supervisión → Justif. Ausencias de Día.`
+            : `Importa el fichero de ausencias correspondiente a ${monthLabel}. Origen: Zerkos → Supervisión → Justif. Ausencias de Día.`,
           button: absenceCount > 0 ? 'Revisar ausencias' : 'Cargar ausencias',
           icon: Upload,
           onClick: absenceCount > 0 ? onOpenAbsences : onImportAbsences,
@@ -296,7 +296,7 @@ export function TicketRestauranteWorkflow({
             title="Base preparada"
           />
           <ProcessStep
-            detail={absencesReviewed ? `${absenceCount} registros revisados` : absenceCount > 0 ? `${absenceCount} registros pendientes de revisión` : 'Pendiente de carga o revisión'}
+            detail={absencesReviewed ? `${absenceCount} registros revisados` : absenceCount > 0 ? `${absenceCount} registros pendientes de revisión` : 'Desde Zerkos · Justif. Ausencias de Día'}
             number={2}
             onClick={absenceCount > 0 ? onOpenAbsences : onImportAbsences}
             state={absencesReviewed ? 'done' : baseReady ? 'current' : 'pending'}
