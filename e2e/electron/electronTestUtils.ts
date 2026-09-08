@@ -46,8 +46,13 @@ async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
 
   while (Date.now() < deadline) {
     for (const candidate of app.windows()) {
-      const heading = candidate.getByRole('heading', { name: 'Inicio' });
-      if (await heading.isVisible().catch(() => false)) {
+      const isRendererWindow = candidate.url().startsWith('http://127.0.0.1:5173');
+      if (!isRendererWindow) {
+        continue;
+      }
+
+      const dashboardHeading = candidate.getByRole('heading', { name: 'Dashboard RRLL' });
+      if (await dashboardHeading.isVisible().catch(() => false)) {
         return candidate;
       }
     }
@@ -56,7 +61,16 @@ async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
     await app.waitForEvent('window', { timeout: remaining }).catch(() => undefined);
   }
 
-  throw new Error('No se ha encontrado la ventana principal de TrAccion durante el arranque E2E.');
+  const windowDiagnostics = await Promise.all(
+    app.windows().map(async (candidate) => ({
+      title: await candidate.title().catch(() => '<sin título>'),
+      url: candidate.url(),
+    })),
+  );
+
+  throw new Error(
+    `No se ha encontrado la ventana principal de TrAccion durante el arranque E2E. Ventanas detectadas: ${JSON.stringify(windowDiagnostics)}`,
+  );
 }
 
 export async function launchTraccionElectron(
