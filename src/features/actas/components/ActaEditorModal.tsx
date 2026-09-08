@@ -28,7 +28,9 @@ export function ActaEditorModal({
   advanceState,
   applyStateChange,
   canAttachFinalActa,
+  canCreateBorradorOutlookFromEditor,
   canCreateOutlookDraftFromEditor,
+  createActaBorradorOutlookDraft,
   createActaOutlookCalendar,
   createActaOutlookDraft,
   deadlineWasAutoUpdated,
@@ -60,7 +62,9 @@ export function ActaEditorModal({
   advanceState: () => void;
   applyStateChange: (nextState: ActaDraft['estado']) => void;
   canAttachFinalActa: boolean;
+  canCreateBorradorOutlookFromEditor: boolean;
   canCreateOutlookDraftFromEditor: boolean;
+  createActaBorradorOutlookDraft: (acta: Pick<Acta, 'titulo' | 'fechaSesion'>) => Promise<void>;
   createActaOutlookCalendar: (acta: Pick<Acta, 'titulo' | 'fechaLimite'>) => Promise<void>;
   createActaOutlookDraft: (
     acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>,
@@ -387,6 +391,16 @@ export function ActaEditorModal({
               variant="secondary"
             >
               Cerrar acta
+            </ActionButton>
+          )}
+          {canCreateBorradorOutlookFromEditor && (
+            <ActionButton
+              iconOnly={false}
+              onClick={() => void createActaBorradorOutlookDraft(draft)}
+              title="Generar correo Outlook del borrador del acta"
+              variant="outlook"
+            >
+              Generar Outlook
             </ActionButton>
           )}
           {canCreateOutlookDraftFromEditor && (

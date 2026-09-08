@@ -45,6 +45,81 @@ export function buildDefaultActaOutlookSubject(
   return `Acta ${acta.titulo}`.trim();
 }
 
+const BASQUE_MONTHS = [
+  'urtarrilaren',
+  'otsailaren',
+  'martxoaren',
+  'apirilaren',
+  'maiatzaren',
+  'ekainaren',
+  'uztailaren',
+  'abuztuaren',
+  'irailaren',
+  'urriaren',
+  'azaroaren',
+  'abenduaren',
+] as const;
+
+export function formatActaLongDateEs(value: string): string {
+  if (!value) return '—';
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (!year || !month || !day) return value;
+  const date = new Date(year, month - 1, day);
+  return new Intl.DateTimeFormat('es-ES', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+export function formatActaLongDateEu(value: string): string {
+  if (!value) return '—';
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (!year || month < 1 || month > 12 || !day) return value;
+  return `${year}ko ${BASQUE_MONTHS[month - 1]} ${day}a`;
+}
+
+export function buildBorradorActaOutlookSubject(acta: Pick<Acta, 'titulo'>): string {
+  return `Akta Zirriborroa/Borrador Acta - ${acta.titulo}`.trim();
+}
+
+export function buildBorradorActaOutlookHtml(
+  acta: Pick<Acta, 'titulo' | 'fechaSesion'>,
+  todayIso = getTodayIsoDate(),
+): string {
+  const deadlineIso = addDaysToIsoDate(todayIso, 21);
+  const title = escapeTemplateHtml(acta.titulo);
+  const sessionDateEu = escapeTemplateHtml(formatActaLongDateEu(acta.fechaSesion));
+  const sessionDateEs = escapeTemplateHtml(formatActaLongDateEs(acta.fechaSesion));
+  const deadlineEu = escapeTemplateHtml(formatActaLongDateEu(deadlineIso));
+  const deadlineEs = escapeTemplateHtml(formatActaLongDateEs(deadlineIso));
+  const email = 'RELACIONES_LABORALES@metrobilbao.eus';
+
+  return `
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.25;color:#000000;">
+  <tr>
+    <td valign="top" style="width:50%;padding:0 22px 0 0;">
+      <p style="margin:0 0 10px 0;">Kaixo,</p>
+      <p style="margin:0 0 10px 0;">Honekin batera, “${title}” bileraren aktaren <strong>ZIRRIBORROA</strong> bidaltzen da:</p>
+      <ul style="margin:0 0 12px 22px;padding:0;"><li>${sessionDateEu}</li></ul>
+      <p style="margin:0 0 12px 0;">Mesedez, bidali zuen <strong>ekarpenak</strong> <a href="mailto:${email}">${email}</a> helbidera, <strong>${deadlineEu} baino lehen</strong>, sinatu eta argitaratzeko.</p>
+      <p style="margin:0;">Ondo izan</p>
+    </td>
+    <td valign="top" style="width:50%;padding:0 0 0 22px;">
+      <p style="margin:0 0 10px 0;">Adjunto remito <strong>BORRADOR</strong> del acta de reunión de “${title}” que se celebró:</p>
+      <ul style="margin:0 0 12px 22px;padding:0;"><li>${sessionDateEs}</li></ul>
+      <p style="margin:0 0 12px 0;">Por favor, hacernos llegar vuestras <strong>aportaciones</strong> a <a href="mailto:${email}">${email}</a>, <strong>antes del ${deadlineEs}</strong>, con el objeto de firmarla y publicarla.</p>
+    </td>
+  </tr>
+</table>`.trim();
+}
+
 export function isActasOutlookTemplate(value: unknown): value is ActasOutlookTemplate {
   if (!value || typeof value !== 'object') {
     return false;
@@ -159,6 +234,16 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: '¿Qué hace este módulo?',
     body: 'Gestiona el seguimiento completo de un acta: alta, borrador, envío a Dirección, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
+  },
+  {
+    title: 'Correo del borrador',
+    items: [
+      'Cuando el acta está en estado “Borrador” aparece la acción “Generar Outlook”.',
+      'El asunto se genera como “Akta Zirriborroa/Borrador Acta - {nombre del acta}”.',
+      'El cuerpo se crea en dos columnas, euskera y castellano, con el nombre del acta y la fecha de sesión.',
+      'La fecha tope para recibir aportaciones se calcula en el momento de generar el correo como fecha del sistema + 21 días y se escribe en cada idioma.',
+      'El correo se abre como borrador de Outlook: no se envía automáticamente y los destinatarios quedan para completar manualmente.',
+    ],
   },
   {
     title: 'Estados y plazos automáticos',

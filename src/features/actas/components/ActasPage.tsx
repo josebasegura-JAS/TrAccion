@@ -32,6 +32,8 @@ import {
   type ActasOutlookTemplate,
   EMPTY_ACTAS_OUTLOOK_TEMPLATE,
   actaExportColumns,
+  buildBorradorActaOutlookHtml,
+  buildBorradorActaOutlookSubject,
   buildDefaultActaOutlookSubject,
   formatDate,
   getActaYear,
@@ -323,6 +325,40 @@ export function ActasPage() {
     }
   };
 
+  const createActaBorradorOutlookDraft = useCallback(
+    async (acta: Pick<Acta, 'titulo' | 'fechaSesion'>) => {
+      setOutlookDraftStatus('');
+      setOutlookDraftStatusIsError(false);
+
+      const api = window.traccion?.createOutlookDraft ?? window.rrllOutlook?.createDraft;
+      if (!api) {
+        setOutlookDraftStatus('Outlook no está disponible en este entorno.');
+        setOutlookDraftStatusIsError(true);
+        return;
+      }
+
+      try {
+        const result = await api({
+          subject: buildBorradorActaOutlookSubject(acta),
+          html: buildBorradorActaOutlookHtml(acta),
+          to: [],
+          cc: [],
+        });
+        setOutlookDraftStatus(
+          result.message ||
+            (result.ok ? 'Borrador Outlook del acta abierto.' : 'No se ha podido abrir Outlook.'),
+        );
+        setOutlookDraftStatusIsError(!result.ok);
+      } catch (error) {
+        setOutlookDraftStatus(
+          error instanceof Error ? error.message : 'No se ha podido abrir Outlook.',
+        );
+        setOutlookDraftStatusIsError(true);
+      }
+    },
+    [],
+  );
+
   const createActaOutlookDraft = useCallback(
     async (acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>) => {
       setOutlookDraftStatus('');
@@ -514,6 +550,14 @@ export function ActasPage() {
             className="flex flex-wrap items-center gap-2"
             onClick={(event) => event.stopPropagation()}
           >
+            {acta.estado === 'Borrador' && (
+              <ActionButton
+                onClick={() => void createActaBorradorOutlookDraft(acta)}
+                size="sm"
+                title="Generar Outlook del borrador del acta"
+                variant="outlook"
+              />
+            )}
             {acta.estado === 'Pendiente de alegaciones' && (
               <ActionButton
                 onClick={() => void createActaOutlookDraft(acta)}
@@ -535,7 +579,7 @@ export function ActasPage() {
         isActionColumn: true,
       },
     ],
-    [createActaOutlookDraft, deleteActa],
+    [createActaBorradorOutlookDraft, createActaOutlookDraft, deleteActa],
   );
 
   const openEditor = (acta?: Acta) => {
@@ -763,6 +807,7 @@ export function ActasPage() {
 
   const displayedCreationDate = editingActa?.fechaCreacion ?? getTodayIsoDate();
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
+  const canCreateBorradorOutlookFromEditor = draft.estado === 'Borrador';
   const canCreateOutlookDraftFromEditor = draft.estado === 'Pendiente de alegaciones';
 
   return (
@@ -1026,7 +1071,9 @@ export function ActasPage() {
           advanceState={advanceState}
           applyStateChange={applyStateChange}
           canAttachFinalActa={canAttachFinalActa}
+          canCreateBorradorOutlookFromEditor={canCreateBorradorOutlookFromEditor}
           canCreateOutlookDraftFromEditor={canCreateOutlookDraftFromEditor}
+          createActaBorradorOutlookDraft={createActaBorradorOutlookDraft}
           createActaOutlookCalendar={createActaOutlookCalendar}
           createActaOutlookDraft={createActaOutlookDraft}
           deadlineWasAutoUpdated={deadlineWasAutoUpdated}
