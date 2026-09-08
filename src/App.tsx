@@ -5,7 +5,7 @@ import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { TooltipLayer } from './components/ui/TooltipLayer';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import type { AppView } from './navigation/navigation';
+import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
 import {
   startExternalDataSyncPolling,
   stopExternalDataSyncPolling,
@@ -61,11 +61,6 @@ const PresupuestosPage = lazy(() =>
 );
 const PlantillaPage = lazy(() =>
   import('./components/PlantillaPage').then((module) => ({ default: module.PlantillaPage })),
-);
-const ParitariaPage = lazy(() =>
-  import('./features/paritaria/components/ParitariaPage').then((module) => ({
-    default: module.ParitariaPage,
-  })),
 );
 const TareasPage = lazy(() =>
   import('./components/TareasPage').then((module) => ({ default: module.TareasPage })),
@@ -391,7 +386,7 @@ export function App() {
   }, []);
 
   const changeActiveView = (view: AppView): void => {
-    setActiveView(view);
+    setActiveView(resolveActiveViewForNavigation(view));
   };
 
   const resetToDashboard = (): void => {
@@ -442,21 +437,22 @@ export function App() {
             )}
             {activeView === 'comite' && (
               <ComitePage
-                initialSessionId={navigationTarget?.view === 'comite' ? navigationTarget.recordId : null}
+                initialOrgan={
+                  navigationTarget ? resolveCommitteeOrganForNavigation(navigationTarget.view) : null
+                }
+                initialSessionId={
+                  navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view)
+                    ? navigationTarget.recordId
+                    : null
+                }
                 navigationNonce={
-                  navigationTarget?.view === 'comite' ? navigationTarget.nonce : undefined
+                  navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view)
+                    ? navigationTarget.nonce
+                    : undefined
                 }
               />
             )}
             {activeView === 'actas' && <ActasPage />}
-            {activeView === 'paritaria' && (
-              <ParitariaPage
-                initialSessionId={navigationTarget?.view === 'paritaria' ? navigationTarget.recordId : null}
-                navigationNonce={
-                  navigationTarget?.view === 'paritaria' ? navigationTarget.nonce : undefined
-                }
-              />
-            )}
             {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
             {activeView === 'teletrabajo' && (
               <TeletrabajoPage

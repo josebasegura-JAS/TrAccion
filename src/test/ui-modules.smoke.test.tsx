@@ -5,7 +5,6 @@ import { ComitePage } from '../features/comite/components/ComitePage';
 import { CriteriosRrllPage } from '../features/criterios-rrll/components/CriteriosRrllPage';
 import { EspecialesPage } from '../features/especiales/components/EspecialesPage';
 import { LicenciasSinSueldoPage } from '../features/licencias-sin-sueldo/components/LicenciasSinSueldoPage';
-import { ParitariaPage } from '../features/paritaria/components/ParitariaPage';
 import { PresupuestosPage } from '../features/presupuestos/components/PresupuestosPage';
 import { SorteosPage } from '../features/sorteos/components/SorteosPage';
 import { TicketRestaurantePage } from '../features/ticket-restaurante/components/TicketRestaurantePage';
@@ -113,7 +112,7 @@ describe('humo UI de módulos principales', () => {
     ['Sorteos', <SorteosPage />, /Sorteos/i],
     ['Licencias / Excedencias', <LicenciasSinSueldoPage />, /Licencias sin sueldo/i],
     ['Comité / Paritaria', <ComitePage />, /Comité y Paritaria/i],
-    ['Comisión Paritaria', <ParitariaPage />, /Comisión Paritaria/i],
+    ['Comisión Paritaria', <ComitePage initialOrgan="paritaria" />, /Comisión Paritaria/i],
     ['Ajustes', <AjustesPage />, /Configuración/i],
     ['Especiales', <EspecialesPage />, /Especiales/i],
     ['Criterios RRLL', <CriteriosRrllPage />, /Criterios RRLL/i],

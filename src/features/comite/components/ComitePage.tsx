@@ -3,7 +3,7 @@ import { COMITE_SESSION_CONFIG } from '../domain/comite';
 import { useCommitteeSessionStore } from '../store/useCommitteeSessionStore';
 import { PARITARIA_SESSION_CONFIG } from '../../paritaria/domain/paritaria';
 import { useParitariaSessionStore } from '../../paritaria/store/useParitariaSessionStore';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { ComiteParitariaWorkflow } from './ComiteParitariaWorkflow';
 import { COMITE_HELP_SECTIONS, PARITARIA_HELP_SECTIONS } from './comiteHelpSections';
@@ -11,17 +11,32 @@ import { COMITE_HELP_SECTIONS, PARITARIA_HELP_SECTIONS } from './comiteHelpSecti
 
 
 export function ComitePage({
+  initialOrgan = null,
   initialSessionId = null,
   navigationNonce,
 }: {
+  initialOrgan?: 'comite' | 'paritaria' | null;
   initialSessionId?: string | null;
   navigationNonce?: number;
 }) {
   const [operationalOrgan, setOperationalOrgan] = useState<'comite' | 'paritaria' | null>(
-    initialSessionId ? 'comite' : null,
+    initialOrgan ?? (initialSessionId ? 'comite' : null),
   );
   const [operationalSessionId, setOperationalSessionId] = useState<string | null>(initialSessionId);
+  const processedNavigationNonceRef = useRef<number | undefined>(undefined);
 
+  useEffect(() => {
+    if (navigationNonce === undefined || processedNavigationNonceRef.current === navigationNonce) {
+      return;
+    }
+
+    processedNavigationNonceRef.current = navigationNonce;
+    const targetOrgan = initialOrgan ?? (initialSessionId ? 'comite' : null);
+    if (targetOrgan) {
+      setOperationalOrgan(targetOrgan);
+      setOperationalSessionId(initialSessionId ?? null);
+    }
+  }, [initialOrgan, initialSessionId, navigationNonce]);
 
   const openOrgan = (organ: 'comite' | 'paritaria', sessionId?: string | null) => {
     setOperationalOrgan(organ);

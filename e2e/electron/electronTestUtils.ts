@@ -9,9 +9,14 @@ export type ElectronTestApp = {
   page: Page;
   userDataDir: string;
   close: () => Promise<void>;
+  cleanup: () => Promise<void>;
 };
 
 export type LaunchTraccionElectronOptions = {
+  /** Reutiliza una carpeta de perfil existente para probar reaperturas reales. */
+  userDataDir?: string;
+  /** Por defecto se elimina el perfil al cerrar. Puede desactivarse para relanzar la app. */
+  removeUserDataOnClose?: boolean;
   /**
    * Carpeta compartida donde debe vivir traccion.sqlite. Si se indica, se
    * preconfigura la instancia (vía sqlite-preferences.json, el mismo fichero
@@ -57,7 +62,8 @@ async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
 export async function launchTraccionElectron(
   options: LaunchTraccionElectronOptions = {},
 ): Promise<ElectronTestApp> {
-  const userDataDir = await mkdtemp(path.join(tmpdir(), 'traccion-e2e-'));
+  const userDataDir = options.userDataDir ?? await mkdtemp(path.join(tmpdir(), 'traccion-e2e-'));
+  const removeUserDataOnClose = options.removeUserDataOnClose ?? true;
 
   if (options.sharedDatabaseDirectory) {
     await mkdir(userDataDir, { recursive: true });
@@ -88,6 +94,11 @@ export async function launchTraccionElectron(
     userDataDir,
     close: async () => {
       await app.close().catch(() => undefined);
+      if (removeUserDataOnClose) {
+        await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    },
+    cleanup: async () => {
       await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
     },
   };

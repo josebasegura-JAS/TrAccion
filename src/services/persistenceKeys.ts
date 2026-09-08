@@ -1,3 +1,5 @@
+// Solo datos de negocio o claves de migración necesarias para recuperar instalaciones antiguas.
+// Preferencias puramente visuales/personales deben permanecer fuera de esta lista.
 export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.plantilla.employees',
   'traccion.v1.plantilla.jobPositionTranslations',

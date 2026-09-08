@@ -34,6 +34,24 @@ export type AppView =
 
 export type NavigationGroupId = 'personas' | 'herramientas' | 'operativa';
 
+export type CommitteeOrgan = 'comite' | 'paritaria';
+
+/**
+ * Paritaria forma parte del mismo módulo operativo que Comité. Puede seguir
+ * apareciendo como destino semántico en búsquedas/calendario para saber qué
+ * órgano abrir, pero nunca debe crear una segunda ruta/pantalla de aplicación.
+ */
+export function resolveActiveViewForNavigation(view: AppView): AppView {
+  return view === 'paritaria' ? 'comite' : view;
+}
+
+export function resolveCommitteeOrganForNavigation(view: AppView): CommitteeOrgan | null {
+  if (view === 'comite' || view === 'paritaria') {
+    return view;
+  }
+  return null;
+}
+
 type NavigationItem = {
   label: string;
   icon: LucideIcon;
