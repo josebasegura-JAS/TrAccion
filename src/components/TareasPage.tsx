@@ -4,15 +4,12 @@ import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
 import { PageHeader } from './ui/PageHeader';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
-import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrigins';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
-import { getTaskClosedYear } from '../features/tareas/domain/historico';
 import { StatusBadge } from './ui/StatusBadge';
 import { CountBadge } from './ui/CountBadge';
 import {
   sortTasksByDefault,
-  type SortDirection,
   type TaskSortKey,
 } from '../features/tareas/domain/sort';
 import {
@@ -21,7 +18,6 @@ import {
   TASK_STATES,
   TASK_TYPES,
   type Task,
-  type TaskPriority,
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
@@ -33,9 +29,7 @@ import type { ExportColumn } from '../shared/export/types';
 import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
 import { DataTable, type DataTableColumn } from '../shared/table/DataTable';
-import { CompactTable, CompactTableBody, CompactTableHead } from '../shared/table/CompactTable';
 import { relativeDate } from '../utils/relativeDate';
-import { DeleteConfirmDialog } from './ui/DeleteConfirmDialog';
 import { sortDataTableRows } from '../shared/table/tableSorting';
 import {
   type TableViewPreferences,
@@ -43,9 +37,14 @@ import {
 } from '../shared/table/useTableViewPreferences';
 import { TaskEditor } from './TaskEditor';
 import { useAppDialog } from '../hooks/useAppDialog';
-import { ModalCloseButton } from './ui/ModalCloseButton';
-import { Input, Select } from './ui/Field';
-import { ModalBody, ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
+import { TaskOriginsModal } from '../features/tareas/components/TaskOriginsModal';
+import {
+  DEFAULT_HISTORIC_PAGE_SIZE,
+  HistoricYearSection,
+  groupHistoricTasks,
+  type HistoricSortKey,
+  type HistoricSortState,
+} from '../features/tareas/components/TareasHistoricSection';
 
 type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 
@@ -90,27 +89,7 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
   },
 ];
 
-type HistoricSortKey = 'titulo' | 'closedAt' | 'responsable' | 'prioridad';
-
-interface HistoricSortState {
-  key: HistoricSortKey;
-  direction: SortDirection;
-}
-
-interface HistoricYearGroup {
-  year: string;
-  tasks: Task[];
-}
-
-const HISTORIC_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
-const DEFAULT_HISTORIC_PAGE_SIZE = 50;
-
-const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
-  { key: 'titulo', label: 'Título', className: 'w-[320px]' },
-  { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
-  { key: 'responsable', label: 'Responsable', className: 'w-[190px]' },
-  { key: 'prioridad', label: 'Prioridad', className: 'w-[120px]' },
-];
+const PRIORITY_ORDER = new Map(TASK_PRIORITIES.map((priority, index) => [priority, index]));
 
 const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active';
 
@@ -157,204 +136,6 @@ const taskExportColumns: ExportColumn<Task>[] = [
     value: (task) => task.sessionDocumentCode || null,
   },
 ];
-
-function formatDateTime(value: string | null): string {
-  if (!value) {
-    return '—';
-  }
-
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-const PRIORITY_ORDER = new Map<TaskPriority, number>(
-  TASK_PRIORITIES.map((priority, index) => [priority, index]),
-);
-
-function compareHistoricTasks(first: Task, second: Task, key: HistoricSortKey): number {
-  if (key === 'closedAt') {
-    return (first.closedAt ?? '').localeCompare(second.closedAt ?? '', 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  }
-
-  if (key === 'prioridad') {
-    return (
-      (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
-      (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length)
-    );
-  }
-
-  return first[key].localeCompare(second[key], 'es', { numeric: true, sensitivity: 'base' });
-}
-
-function sortHistoricTasks(tasks: Task[], sortState: HistoricSortState): Task[] {
-  return tasks
-    .map((task, index) => ({ task, index }))
-    .sort((first, second) => {
-      const comparison = compareHistoricTasks(first.task, second.task, sortState.key);
-      const orderedComparison = sortState.direction === 'asc' ? comparison : -comparison;
-      return orderedComparison || first.index - second.index;
-    })
-    .map(({ task }) => task);
-}
-
-function groupHistoricTasks(tasks: Task[]): HistoricYearGroup[] {
-  const groups = new Map<string, Task[]>();
-
-  tasks.forEach((task) => {
-    const year = getTaskClosedYear(task);
-    const yearTasks = groups.get(year);
-
-    if (yearTasks) {
-      yearTasks.push(task);
-      return;
-    }
-
-    groups.set(year, [task]);
-  });
-
-  return Array.from(groups.entries())
-    .sort(([firstYear], [secondYear]) =>
-      secondYear.localeCompare(firstYear, 'es', { numeric: true }),
-    )
-    .map(([year, groupTasks]) => ({ year, tasks: groupTasks }));
-}
-
-function HistoricYearSection({
-  group,
-  isOpen,
-  onOpenChange,
-  onOpenTask,
-  onPageChange,
-  onPageSizeChange,
-  onSortChange,
-  page,
-  pageSize,
-  sortState,
-}: {
-  group: HistoricYearGroup;
-  isOpen: boolean;
-  onOpenChange: (year: string) => void;
-  onOpenTask: (task: Task) => void;
-  onPageChange: (year: string, page: number) => void;
-  onPageSizeChange: (pageSize: number) => void;
-  onSortChange: (key: HistoricSortKey) => void;
-  page: number;
-  pageSize: number;
-  sortState: HistoricSortState;
-}) {
-  const sortedTasks = useMemo(() => {
-    if (!isOpen) {
-      return [];
-    }
-
-    return sortHistoricTasks(group.tasks, sortState);
-  }, [group.tasks, isOpen, sortState]);
-
-  const totalPages = Math.max(1, Math.ceil(group.tasks.length / pageSize));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-  const firstRow = (safePage - 1) * pageSize;
-  const visibleTasks = sortedTasks.slice(firstRow, firstRow + pageSize);
-  const firstVisible = group.tasks.length === 0 ? 0 : firstRow + 1;
-  const lastVisible = Math.min(firstRow + pageSize, group.tasks.length);
-
-  return (
-    <div className="border-b border-metro-border last:border-b-0">
-      <button
-        className="flex w-full items-center gap-2 bg-metro-panel px-3 py-2 text-left text-sm font-bold text-metro-text hover:bg-metro-red/10"
-        onClick={() => onOpenChange(group.year)}
-        type="button"
-      >
-        {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        {group.year} ({group.tasks.length})
-      </button>
-      {isOpen && (
-        <div className="border-t border-metro-border bg-metro-surface">
-          <div className="flex flex-col gap-2 border-b border-metro-border px-3 py-2 text-xs text-metro-muted md:flex-row md:items-center md:justify-between">
-            <span>
-              Mostrando {firstVisible}-{lastVisible} de {group.tasks.length}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2">
-                Mostrar
-                <select
-                  className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1 text-metro-text outline-none"
-                  onChange={(event) => onPageSizeChange(Number(event.target.value))}
-                  value={pageSize}
-                >
-                  {HISTORIC_PAGE_SIZE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={safePage <= 1}
-                onClick={() => onPageChange(group.year, safePage - 1)}
-                type="button"
-              >
-                ← Anterior
-              </button>
-              <span className="font-semibold text-metro-text">
-                Página {safePage} de {totalPages}
-              </span>
-              <button
-                className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={safePage >= totalPages}
-                onClick={() => onPageChange(group.year, safePage + 1)}
-                type="button"
-              >
-                Siguiente →
-              </button>
-            </div>
-          </div>
-          <div className="max-h-[320px] overflow-auto">
-            <CompactTable className="table-fixed">
-              <CompactTableHead>
-                <tr>
-                  {historicColumns.map((column) => {
-                    const isActive = sortState.key === column.key;
-                    return (
-                      <th className={`${column.className} px-3 py-2`} key={column.key}>
-                        <button
-                          className="flex w-full items-center gap-1 text-left font-semibold hover:text-metro-text"
-                          onClick={() => onSortChange(column.key)}
-                          type="button"
-                        >
-                          <span>{column.label}</span>
-                          {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
-                        </button>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </CompactTableHead>
-              <CompactTableBody>
-                {visibleTasks.map((task) => (
-                  <tr className="cursor-pointer hover:bg-metro-red/10" key={task.id} onClick={() => onOpenTask(task)}>
-                    <td className="truncate px-3 py-1.5 font-semibold text-metro-text" title={task.titulo}>{task.titulo}</td>
-                    <td className="truncate px-3 py-1.5 text-metro-muted" title={formatDateTime(task.closedAt)}>{formatDateTime(task.closedAt)}</td>
-                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.responsable}>{task.responsable || '—'}</td>
-                    <td className="truncate px-3 py-1.5 text-metro-muted" title={task.prioridad}>{task.prioridad}</td>
-                  </tr>
-                ))}
-              </CompactTableBody>
-            </CompactTable>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function TareasPage({
   initialTaskId = null,
@@ -857,178 +638,5 @@ export function TareasPage({
       {editorMode && <TaskEditor mode={editorMode} onDone={closeEditor} task={editorTask} />}
       {dialogNode}
     </section>
-  );
-}
-
-function TaskOriginsModal({ onClose }: { onClose: () => void }) {
-  const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
-  const addTaskOrigin = useConfiguracionStore((state) => state.addTaskOrigin);
-  const updateTaskOrigin = useConfiguracionStore((state) => state.updateTaskOrigin);
-  const toggleTaskOrigin = useConfiguracionStore((state) => state.toggleTaskOrigin);
-  const deleteTaskOrigin = useConfiguracionStore((state) => state.deleteTaskOrigin);
-  const [newOriginName, setNewOriginName] = useState('');
-  const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('sindicato');
-
-  const sortedOrigins = useMemo(
-    () => taskOrigins.filter((origin) => !origin.deletedAt).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
-    [taskOrigins],
-  );
-
-  const submitNewOrigin = () => {
-    if (!newOriginName.trim()) return;
-    addTaskOrigin(newOriginName, newOriginType);
-    setNewOriginName('');
-    setNewOriginType('sindicato');
-  };
-
-  return (
-    <ModalShell labelledBy="task-origins-title" maxWidthClassName="max-w-3xl" onClose={onClose}>
-      <ModalHeader>
-        <ModalTitle
-          id="task-origins-title"
-          subtitle="Alta, edición y activación de sindicatos, áreas internas u otros orígenes."
-        >
-          Orígenes de tareas
-        </ModalTitle>
-        <div className="flex items-center gap-2">
-          <InlineSaveFeedback />
-          <ModalCloseButton label="Cerrar mantenimiento de orígenes" onClick={onClose} />
-        </div>
-      </ModalHeader>
-      <ModalBody className="space-y-3">
-        <div className="grid gap-2 rounded-xl bg-metro-panel/45 p-3 md:grid-cols-[minmax(220px,1fr)_160px_110px]">
-          <Input
-            onChange={(event) => setNewOriginName(event.target.value)}
-            placeholder="Nuevo origen"
-            value={newOriginName}
-          />
-          <OriginTypeSelect onChange={setNewOriginType} value={newOriginType} />
-          <ActionButton disabled={!newOriginName.trim()} iconOnly={false} onClick={submitNewOrigin} variant="add">
-            Añadir
-          </ActionButton>
-        </div>
-        <div className="min-h-0 overflow-auto rounded-xl border border-metro-border">
-          <CompactTable className="table-fixed">
-            <CompactTableHead>
-              <tr>
-                <th className="w-[38%] px-3 py-2">Nombre</th>
-                <th className="w-[24%] px-3 py-2">Tipo</th>
-                <th className="w-[16%] px-3 py-2">Estado</th>
-                <th className="w-[26%] px-3 py-2 text-right">Acciones</th>
-              </tr>
-            </CompactTableHead>
-            <CompactTableBody>
-              {sortedOrigins.map((origin) => (
-                <TaskOriginRow
-                  key={origin.id}
-                  origin={origin}
-                  onDelete={deleteTaskOrigin}
-                  onToggle={toggleTaskOrigin}
-                  onUpdate={updateTaskOrigin}
-                />
-              ))}
-            </CompactTableBody>
-          </CompactTable>
-        </div>
-      </ModalBody>
-    </ModalShell>
-  );
-}
-
-function TaskOriginRow({
-  origin,
-  onDelete,
-  onToggle,
-  onUpdate,
-}: {
-  origin: TaskOriginConfig;
-  onDelete: (id: string) => void;
-  onToggle: (id: string) => void;
-  onUpdate: (id: string, nombre: string, tipo: TaskOriginConfig['tipo']) => void;
-}) {
-  const [name, setName] = useState(origin.nombre);
-  const [type, setType] = useState<TaskOriginConfig['tipo']>(origin.tipo);
-  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
-  const hasChanges = name.trim() !== origin.nombre || type !== origin.tipo;
-
-  const handleDelete = () => {
-    setIsDeleteConfirmVisible(true);
-  };
-
-  const confirmDelete = () => {
-    onDelete(origin.id);
-    setIsDeleteConfirmVisible(false);
-  };
-
-  useEffect(() => {
-    setName(origin.nombre);
-    setType(origin.tipo);
-  }, [origin.nombre, origin.tipo]);
-
-  return (
-    <>
-      {isDeleteConfirmVisible && (
-        <tr>
-          <td className="px-3 py-2" colSpan={4}>
-            <DeleteConfirmDialog
-              label={`el origen «${origin.nombre}»`}
-              onCancel={() => setIsDeleteConfirmVisible(false)}
-              onConfirm={confirmDelete}
-            />
-          </td>
-        </tr>
-      )}
-      <tr className="align-top">
-        <td className="px-3 py-2">
-          <Input onChange={(event) => setName(event.target.value)} value={name} />
-        </td>
-        <td className="px-3 py-2">
-          <OriginTypeSelect onChange={setType} value={type} />
-        </td>
-        <td className="px-3 py-2">
-          <StatusBadge tone={origin.active ? 'success' : 'muted'}>
-            {origin.active ? 'Activo' : 'Inactivo'}
-          </StatusBadge>
-        </td>
-        <td className="px-3 py-2">
-          <div className="flex flex-wrap justify-end gap-2">
-            <ActionButton
-              disabled={!hasChanges || !name.trim()}
-              iconOnly={false}
-              onClick={() => onUpdate(origin.id, name, type)}
-              size="sm"
-              variant="save"
-            >
-              Guardar
-            </ActionButton>
-            <ActionButton iconOnly={false} onClick={() => onToggle(origin.id)} size="sm" variant="secondary">
-              {origin.active ? 'Desactivar' : 'Activar'}
-            </ActionButton>
-            <ActionButton iconOnly={false} onClick={handleDelete} size="sm" variant="delete">
-              Eliminar
-            </ActionButton>
-          </div>
-        </td>
-      </tr>
-    </>
-  );
-}
-
-function OriginTypeSelect({
-  value,
-  onChange,
-}: {
-  value: TaskOriginConfig['tipo'];
-  onChange: (value: TaskOriginConfig['tipo']) => void;
-}) {
-  return (
-    <Select
-      onChange={(event) => onChange(event.target.value as TaskOriginConfig['tipo'])}
-      value={value}
-    >
-      <option value="sindicato">Sindicato</option>
-      <option value="empresa">Empresa</option>
-      <option value="otro">Otro</option>
-    </Select>
   );
 }
