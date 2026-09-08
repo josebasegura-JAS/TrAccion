@@ -1,25 +1,22 @@
 import {
   Archive,
-  ArrowRight,
   CalendarDays,
-  Check,
-  ChevronRight,
   ClipboardList,
-  Clock3,
   FilePlus2,
   FileText,
   History,
-  ListChecks,
+  Mail,
   MessageCircle,
   PenLine,
-  RefreshCw,
-  Send,
+  Settings2,
   Signature,
-  Sparkles,
-  Users,
+  type LucideIcon,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ModuleHelpButton } from '../../../components/ModuleHelp';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { ACTAS_HELP_SECTIONS, formatDate, renderActaStateBadge } from './actasPage.helpers';
 import type { Acta, ActaState } from '../domain/acta';
 
 type WorkflowProps = {
@@ -29,123 +26,219 @@ type WorkflowProps = {
   onNewActa: () => void;
   onOpenActa: (acta: Acta) => void;
   onOpenOperational: (state?: ActaState) => void;
+  onOpenTypeManager: () => void;
+  onOpenOutlookTemplate: () => void;
 };
 
-type Tone = 'blue' | 'amber' | 'green' | 'purple' | 'red' | 'neutral';
+type Tone = 'info' | 'warning' | 'accent' | 'success' | 'muted';
 
-const toneClasses: Record<Tone, string> = {
-  blue: 'border-blue-400/20 bg-blue-500/10 text-blue-200',
-  amber: 'border-amber-400/25 bg-amber-500/10 text-amber-200',
-  green: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
-  purple: 'border-purple-400/25 bg-purple-500/10 text-purple-200',
-  red: 'border-red-400/25 bg-red-500/10 text-red-200',
-  neutral: 'border-metro-border bg-metro-surface/80 text-metro-secondary',
+type StageConfig = {
+  title: string;
+  state: ActaState;
+  description: string;
+  actionLabel: string;
+  icon: LucideIcon;
+  tone: Tone;
 };
 
-const STATE_ORDER: ActaState[] = [
-  'Pendiente de realizar',
-  'Borrador',
-  'Enviada a Dirección',
-  'Pendiente de alegaciones',
-  'Pendiente de firma',
-  'Cerrada',
+const STAGE_CONFIGS: StageConfig[] = [
+  {
+    title: 'Pendientes de realizar',
+    state: 'Pendiente de realizar',
+    description: 'Actas creadas pero todavía sin documento de trabajo o sin empezar el seguimiento.',
+    actionLabel: 'Ver pendientes',
+    icon: FileText,
+    tone: 'warning',
+  },
+  {
+    title: 'Borradores',
+    state: 'Borrador',
+    description: 'Actas en elaboración o revisión interna antes del envío a Dirección.',
+    actionLabel: 'Ver borradores',
+    icon: ClipboardList,
+    tone: 'info',
+  },
+  {
+    title: 'Alegaciones',
+    state: 'Pendiente de alegaciones',
+    description: 'Actas que requieren seguimiento de alegaciones y posibles actualizaciones posteriores.',
+    actionLabel: 'Ver alegaciones',
+    icon: MessageCircle,
+    tone: 'accent',
+  },
+  {
+    title: 'Firma definitiva',
+    state: 'Pendiente de firma',
+    description: 'Actas listas para la firma o pendientes de adjuntar la versión final cerrada.',
+    actionLabel: 'Ver firmas',
+    icon: Signature,
+    tone: 'success',
+  },
 ];
 
-function getStateIndex(state: ActaState | undefined): number {
-  return state ? STATE_ORDER.indexOf(state) : -1;
+const FLOW_STEPS: Array<{ title: string; state?: ActaState }> = [
+  { title: 'Crear acta', state: 'Pendiente de realizar' },
+  { title: 'Preparar borrador', state: 'Borrador' },
+  { title: 'Enviar a Dirección', state: 'Enviada a Dirección' },
+  { title: 'Registrar alegaciones', state: 'Pendiente de alegaciones' },
+  { title: 'Firmar y cerrar', state: 'Pendiente de firma' },
+  { title: 'Archivar', state: 'Cerrada' },
+];
+
+function getStatusTone(state: ActaState): Tone {
+  if (state === 'Pendiente de realizar') return 'warning';
+  if (state === 'Borrador' || state === 'Enviada a Dirección') return 'info';
+  if (state === 'Pendiente de alegaciones') return 'accent';
+  if (state === 'Pendiente de firma') return 'success';
+  return 'muted';
 }
 
-function WorkflowNumber({ value }: { value: number }) {
+function formatShortNumber(value: number): string {
+  return new Intl.NumberFormat('es-ES').format(value);
+}
+
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  tone: Tone;
+}) {
+  const toneClassName = {
+    accent: 'border-violet-400/25 bg-violet-500/10 text-violet-100',
+    info: 'border-blue-400/25 bg-blue-500/10 text-blue-100',
+    muted: 'border-metro-border bg-metro-surface/75 text-metro-secondary',
+    success: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100',
+    warning: 'border-amber-400/25 bg-amber-400/10 text-amber-100',
+  }[tone];
+
   return (
-    <div className="absolute -left-[19px] top-3.5 z-10 grid h-9 w-9 place-items-center rounded-full border-[3px] border-metro-navy bg-metro-red text-sm font-black text-white shadow-lg">
-      {value}
+    <div className={`rounded-xl border px-3 py-2.5 ${toneClassName}`}>
+      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em]">
+        <Icon size={15} />
+        <span>{label}</span>
+      </div>
+      <div className="mt-2 text-2xl font-black leading-none text-metro-text">{formatShortNumber(value)}</div>
     </div>
   );
 }
 
-function StatusPill({ children, tone }: { children: React.ReactNode; tone: Tone }) {
-  const badgeTone = {
-    amber: 'warning',
-    blue: 'info',
-    green: 'success',
-    neutral: 'muted',
-    purple: 'accent',
-    red: 'error',
-  }[tone] as 'warning' | 'info' | 'success' | 'muted' | 'accent' | 'error';
-
-  return <StatusBadge size="xs" tone={badgeTone}>{children}</StatusBadge>;
-}
-
-function ActionCard({
+function QuickActionCard({
+  title,
+  description,
   icon: Icon,
-  label,
-  onClick,
-  accent = 'red',
+  action,
+  footer,
 }: {
+  title: string;
+  description: string;
   icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  accent?: 'red' | 'blue' | 'green' | 'purple' | 'amber';
+  action: ReactNode;
+  footer?: ReactNode;
 }) {
-  const iconClass = {
-    red: 'text-red-400 bg-red-500/10',
-    blue: 'text-blue-400 bg-blue-500/10',
-    green: 'text-emerald-400 bg-emerald-500/10',
-    purple: 'text-purple-400 bg-purple-500/10',
-    amber: 'text-amber-400 bg-amber-500/10',
-  }[accent];
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex min-h-[50px] items-center gap-2.5 rounded-xl border border-metro-border bg-metro-surface/75 px-3 py-2.5 text-left transition hover:border-metro-red/60 hover:bg-metro-raised"
-    >
-      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${iconClass}`}>
-        <Icon size={16} />
-      </span>
-      <span className="min-w-0 flex-1 text-[13px] font-bold leading-4 text-metro-text">{label}</span>
-      <ChevronRight className="text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" size={16} />
-    </button>
+    <div className="rounded-2xl border border-metro-border bg-metro-surface/75 p-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-metro-red/10 text-metro-red">
+          <Icon size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-black text-metro-text">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-metro-muted">{description}</p>
+        </div>
+      </div>
+      <div className="mt-3">{action}</div>
+      {footer ? <div className="mt-2 text-[11px] text-metro-muted">{footer}</div> : null}
+    </div>
   );
 }
 
-function MiniKpi({ label, value, tone, icon: Icon }: { label: string; value: number; tone: Tone; icon: LucideIcon }) {
+function StageCard({
+  config,
+  count,
+  onOpen,
+}: {
+  config: StageConfig;
+  count: number;
+  onOpen: () => void;
+}) {
+  const Icon = config.icon;
+  const toneClassName = {
+    accent: 'border-violet-400/25 bg-violet-500/[0.08]',
+    info: 'border-blue-400/25 bg-blue-500/[0.08]',
+    muted: 'border-metro-border bg-metro-surface/75',
+    success: 'border-emerald-400/25 bg-emerald-500/[0.08]',
+    warning: 'border-amber-400/25 bg-amber-400/[0.08]',
+  }[config.tone];
+
   return (
-    <div className={`flex min-h-[50px] items-center gap-2.5 rounded-xl border px-2.5 py-2 ${toneClasses[tone]}`}>
-      <Icon size={19} />
-      <div>
-        <div className="text-sm font-black leading-none text-metro-text">{value}</div>
-        <div className="mt-0.5 text-[11px] font-semibold opacity-80">{label}</div>
+    <div className={`rounded-2xl border p-3 ${toneClassName}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-metro-panel/65 text-metro-text">
+            <Icon size={18} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-black text-metro-text">{config.title}</h3>
+            <p className="mt-1 text-xs leading-5 text-metro-muted">{config.description}</p>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-2xl font-black leading-none text-metro-text">{formatShortNumber(count)}</div>
+          <div className="mt-1">
+            <StatusBadge size="xs" tone={config.tone}>Bandeja</StatusBadge>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3">
+        <ActionButton iconOnly={false} onClick={onOpen} size="sm" variant="secondary">
+          {config.actionLabel}
+        </ActionButton>
       </div>
     </div>
   );
 }
 
-function FlowStatus({
-  label,
+function FlowStep({
+  index,
+  title,
+  active,
   completed,
-  current,
 }: {
-  label: string;
+  index: number;
+  title: string;
+  active: boolean;
   completed: boolean;
-  current: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5 py-1">
-      <span
-        className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border ${
-          completed
-            ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300'
-            : current
-              ? 'border-amber-400/60 bg-amber-500/15 text-amber-300'
-              : 'border-slate-500/60 bg-transparent text-slate-500'
+    <div
+      className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 ${
+        active
+          ? 'border-metro-red/45 bg-metro-red/10'
+          : completed
+            ? 'border-emerald-400/25 bg-emerald-500/[0.07]'
+            : 'border-metro-border bg-metro-surface/75'
+      }`}
+    >
+      <div
+        className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black ${
+          active
+            ? 'bg-metro-red text-white'
+            : completed
+              ? 'bg-emerald-600 text-white'
+              : 'bg-metro-panel text-metro-muted'
         }`}
       >
-        {completed ? <Check size={13} strokeWidth={3} /> : current ? <Clock3 size={11} /> : null}
-      </span>
-      <span className={`text-[12px] font-semibold ${completed ? 'text-metro-secondary' : current ? 'text-amber-100' : 'text-metro-muted'}`}>
-        {label}
-      </span>
+        {index + 1}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-metro-muted">Paso {index + 1}</p>
+        <p className="text-xs font-bold leading-5 text-metro-text">{title}</p>
+      </div>
     </div>
   );
 }
@@ -157,258 +250,283 @@ export function ActasWorkflow({
   onNewActa,
   onOpenActa,
   onOpenOperational,
+  onOpenTypeManager,
+  onOpenOutlookTemplate,
 }: WorkflowProps) {
   const openActas = actas.filter((acta) => acta.estado !== 'Cerrada');
   const selectedActa = openActas.find((acta) => acta.id === selectedActaId) ?? openActas[0] ?? null;
-  const selectedStateIndex = getStateIndex(selectedActa?.estado);
+  const selectedStateIndex = selectedActa
+    ? FLOW_STEPS.findIndex((step) => step.state === selectedActa.estado)
+    : -1;
 
+  const currentYear = new Date().getFullYear().toString();
   const pendingCount = actas.filter((acta) => acta.estado === 'Pendiente de realizar').length;
   const draftCount = actas.filter((acta) => acta.estado === 'Borrador').length;
-  const directionCount = actas.filter((acta) => acta.estado === 'Enviada a Dirección').length;
-  const allegationsActas = actas.filter((acta) => acta.estado === 'Pendiente de alegaciones');
-  const allegationCount = allegationsActas.reduce(
-    (sum, acta) => sum + acta.alegaciones.filter((item) => item.presentada).length,
-    0,
-  );
+  const allegationCount = actas.filter((acta) => acta.estado === 'Pendiente de alegaciones').length;
   const signatureCount = actas.filter((acta) => acta.estado === 'Pendiente de firma').length;
-  const currentYear = new Date().getFullYear().toString();
-  const signedThisYear = actas.filter(
-    (acta) => acta.estado === 'Cerrada' && (acta.closedAt?.startsWith(currentYear) || acta.fechaSesion.startsWith(currentYear)),
+  const closedThisYear = actas.filter(
+    (acta) =>
+      acta.estado === 'Cerrada' &&
+      ((acta.closedAt && acta.closedAt.startsWith(currentYear)) || acta.fechaSesion.startsWith(currentYear)),
   ).length;
-  const updatesCount = selectedActa?.actualizaciones.length ?? 0;
   const selectedAllegations = selectedActa?.alegaciones.filter((item) => item.presentada).length ?? 0;
-
-  const openSelected = () => {
-    if (selectedActa) {
-      onOpenActa(selectedActa);
-    } else {
-      onOpenOperational();
-    }
-  };
+  const selectedUpdates = selectedActa?.actualizaciones.length ?? 0;
 
   return (
-    <section className="space-y-2 pb-1" aria-label="Flujo de seguimiento de Actas">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-metro-border bg-metro-topbar px-4 py-2.5 shadow-card">
-        <div>
-          <h1 className="text-xl font-black text-metro-text">Actas</h1>
-          <p className="mt-0.5 text-xs text-metro-muted">Seguimiento del ciclo del acta</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-[12px] font-semibold text-metro-secondary">
-            <CalendarDays size={15} className="text-blue-300" />
-            <span className="hidden sm:inline">Acta activa:</span>
-            <select
-              className="max-w-[250px] bg-transparent font-bold text-metro-text outline-none"
-              value={selectedActa?.id ?? ''}
-              onChange={(event) => onSelectedActaIdChange(event.target.value)}
+    <section aria-label="Centro de trabajo de Actas" className="space-y-3 pb-1">
+      <div className="rounded-2xl border border-metro-border bg-metro-topbar px-4 py-3 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-black text-metro-text">Actas</h1>
+              <StatusBadge size="xs" tone="info">Centro de trabajo</StatusBadge>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-metro-muted">
+              Pantalla simplificada para crear actas, continuar las abiertas y entrar rápido en cada bandeja de trabajo.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionButton iconOnly={false} onClick={onNewActa} size="sm" variant="add">
+              Nueva acta
+            </ActionButton>
+            <ActionButton
+              disabled={!selectedActa}
+              iconOnly={false}
+              onClick={() => selectedActa && onOpenActa(selectedActa)}
+              size="sm"
+              variant="secondary"
             >
-              {openActas.length === 0 && <option value="">Sin actas abiertas</option>}
-              {openActas.map((acta) => (
-                <option key={acta.id} value={acta.id} className="bg-metro-surface text-metro-text">
-                  {acta.titulo}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={openSelected}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-metro-red px-3.5 text-[13px] font-black text-white transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!selectedActa}
-          >
-            <ClipboardList size={16} /> Abrir seguimiento
-          </button>
+              Continuar acta activa
+            </ActionButton>
+            <ActionButton iconOnly={false} onClick={() => onOpenOperational()} size="sm" variant="secondary">
+              Ver seguimiento
+            </ActionButton>
+            <ModuleHelpButton
+              ariaLabel="Abrir ayuda del módulo Actas"
+              sections={ACTAS_HELP_SECTIONS}
+              subtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
+              title="Actas"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-metro-muted">Acta activa</p>
+                <p className="mt-0.5 text-xs text-metro-muted">Selecciona una acta abierta para continuar exactamente donde la dejaste.</p>
+              </div>
+              <div className="w-full sm:w-auto">
+                <label className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-[12px] font-semibold text-metro-secondary">
+                  <CalendarDays size={15} className="text-blue-300" />
+                  <select
+                    className="min-w-[220px] bg-transparent font-bold text-metro-text outline-none"
+                    onChange={(event) => onSelectedActaIdChange(event.target.value)}
+                    value={selectedActa?.id ?? ''}
+                  >
+                    {openActas.length === 0 && <option value="">Sin actas abiertas</option>}
+                    {openActas.map((acta) => (
+                      <option className="bg-metro-surface text-metro-text" key={acta.id} value={acta.id}>
+                        {acta.titulo}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            {selectedActa ? (
+              <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="rounded-xl border border-metro-border bg-metro-surface/80 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-black text-metro-text">{selectedActa.titulo}</p>
+                    <StatusBadge size="xs" tone={getStatusTone(selectedActa.estado)}>{selectedActa.tipo}</StatusBadge>
+                    {renderActaStateBadge(selectedActa.estado)}
+                  </div>
+                  <div className="mt-2 grid gap-2 text-xs text-metro-secondary sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <p className="font-semibold text-metro-muted">Fecha sesión</p>
+                      <p className="mt-0.5 font-bold text-metro-text">{formatDate(selectedActa.fechaSesion)}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-metro-muted">Fecha límite</p>
+                      <p className="mt-0.5 font-bold text-metro-text">{formatDate(selectedActa.fechaLimite)}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-metro-muted">Actualizaciones</p>
+                      <p className="mt-0.5 font-bold text-metro-text">{selectedUpdates}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-metro-muted">Alegaciones</p>
+                      <p className="mt-0.5 font-bold text-metro-text">{selectedAllegations}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-metro-border bg-metro-surface/80 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-metro-muted">Acciones rápidas</p>
+                  <div className="mt-2 grid gap-2">
+                    <ActionButton
+                      iconOnly={false}
+                      onClick={() => onOpenActa(selectedActa)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Abrir acta
+                    </ActionButton>
+                    <ActionButton
+                      iconOnly={false}
+                      onClick={() => onOpenOperational(selectedActa.estado)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Abrir su bandeja
+                    </ActionButton>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-dashed border-metro-border bg-metro-surface/60 px-3 py-5 text-sm text-metro-muted">
+                No hay actas abiertas. Puedes crear una nueva o consultar el histórico desde la vista operativa.
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <KpiCard icon={ClipboardList} label="Actas abiertas" tone="info" value={openActas.length} />
+            <KpiCard icon={FileText} label="Pendientes" tone="warning" value={pendingCount} />
+            <KpiCard icon={MessageCircle} label="Alegaciones" tone="accent" value={allegationCount} />
+            <KpiCard icon={Signature} label="Firmadas este año" tone="success" value={closedThisYear} />
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_230px]">
-        <div className="relative ml-4 space-y-2 before:absolute before:bottom-8 before:left-[-1px] before:top-8 before:w-px before:bg-slate-500/55">
-          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-4 py-3 pl-8">
-            <WorkflowNumber value={1} />
-            <div className="grid items-center gap-3 xl:grid-cols-[220px_minmax(0,1fr)_160px]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-black text-metro-text">Nuevo acta</h2>
-                  <StatusPill tone="blue">Inicio</StatusPill>
-                </div>
-                <p className="mt-1 text-xs text-metro-muted">Alta inicial del acta y datos básicos de la sesión.</p>
+                <h2 className="text-sm font-black text-metro-text">Qué quieres hacer</h2>
+                <p className="mt-1 text-xs text-metro-muted">Los accesos principales del módulo están agrupados aquí para evitar pasos innecesarios.</p>
               </div>
-              <div className="grid gap-2 md:grid-cols-3">
-                <ActionCard icon={FilePlus2} label="Nueva acta" onClick={onNewActa} />
-                <ActionCard icon={CalendarDays} label="Ver actas" accent="blue" onClick={() => onOpenOperational()} />
-                <ActionCard icon={Users} label="Asistentes / datos" onClick={openSelected} />
-              </div>
-              <div className="rounded-xl border border-metro-border bg-metro-surface/65 px-3 py-2.5 text-xs">
-                <div className="flex items-center gap-2 font-bold text-blue-200"><CalendarDays size={16} /> Acta seleccionada</div>
-                <div className="mt-1.5 truncate font-black text-metro-text">{selectedActa?.titulo ?? 'Sin selección'}</div>
-                <div className="mt-1 text-metro-muted">{selectedActa?.fechaSesion || '—'}</div>
-              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <QuickActionCard
+                action={
+                  <ActionButton iconOnly={false} onClick={onNewActa} size="sm" variant="add">
+                    Crear acta
+                  </ActionButton>
+                }
+                description="Alta manual de una nueva acta con sus datos básicos de sesión y seguimiento."
+                footer="También puedes generar actas desde el cierre de sesión en Comité o Paritaria."
+                icon={FilePlus2}
+                title="Nueva acta"
+              />
+              <QuickActionCard
+                action={
+                  <ActionButton
+                    disabled={!selectedActa}
+                    iconOnly={false}
+                    onClick={() => selectedActa && onOpenActa(selectedActa)}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Abrir acta activa
+                  </ActionButton>
+                }
+                description="Retoma la acta abierta que tengas seleccionada para editarla o avanzar su estado."
+                footer={selectedActa ? `Acta actual: ${selectedActa.titulo}` : 'No hay ninguna acta abierta seleccionada.'}
+                icon={ClipboardList}
+                title="Continuar trabajo"
+              />
+              <QuickActionCard
+                action={
+                  <ActionButton iconOnly={false} onClick={() => onOpenOperational()} size="sm" variant="secondary">
+                    Abrir vista operativa
+                  </ActionButton>
+                }
+                description="Entra en la tabla completa de abiertas e histórico, con búsqueda, filtros y exportación."
+                icon={Archive}
+                title="Consulta operativa"
+              />
+              <QuickActionCard
+                action={
+                  <div className="flex flex-wrap gap-2">
+                    <ActionButton iconOnly={false} onClick={onOpenTypeManager} size="sm" variant="secondary">
+                      Tipos de acta
+                    </ActionButton>
+                    <ActionButton iconOnly={false} onClick={onOpenOutlookTemplate} size="sm" variant="secondary">
+                      Plantilla Outlook
+                    </ActionButton>
+                  </div>
+                }
+                description="Configura el catálogo de tipos de acta y la plantilla de correo para la fase de alegaciones."
+                icon={Settings2}
+                title="Configuración rápida"
+              />
             </div>
           </div>
 
-          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-4 py-3 pl-8">
-            <WorkflowNumber value={2} />
-            <div className="grid items-center gap-3 xl:grid-cols-[220px_285px_minmax(0,1fr)]">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-black text-metro-text">Pendiente de realizar</h2>
-                  <StatusPill tone="blue">Preparación</StatusPill>
-                </div>
-                <p className="mt-1 text-xs text-metro-muted">Actas creadas pendientes de pasarse a borrador.</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <MiniKpi icon={FileText} label="abiertas" value={openActas.length} tone="blue" />
-                <MiniKpi icon={Clock3} label="pendientes" value={pendingCount} tone="amber" />
-                <MiniKpi icon={Check} label="en borrador" value={draftCount} tone="green" />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <ActionCard icon={ListChecks} label="Ver pendientes" accent="blue" onClick={() => onOpenOperational('Pendiente de realizar')} />
-                <ActionCard icon={Send} label="Cambiar a borrador" onClick={() => onOpenOperational('Pendiente de realizar')} />
-              </div>
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/70 p-3">
+            <div>
+              <h2 className="text-sm font-black text-metro-text">Bandejas de trabajo</h2>
+              <p className="mt-1 text-xs text-metro-muted">Entra directamente en el punto del proceso que quieres revisar.</p>
             </div>
-          </div>
-
-          <div className="relative rounded-2xl border border-metro-red/80 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/15 px-4 py-3.5 pl-8 shadow-[0_0_0_1px_rgba(220,38,38,0.08)]">
-            <WorkflowNumber value={3} />
-            <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)_165px]">
-              <div>
-                <h2 className="text-sm font-black text-metro-text">Borrador / Dirección</h2>
-                <div className="mt-1.5"><StatusPill tone="amber"><Sparkles size={11} className="mr-1" /> Trabajo principal del momento</StatusPill></div>
-                <p className="mt-2.5 text-xs leading-[18px] text-metro-secondary">
-                  Registrar el borrador y enviarlo a Dirección. Aquí puede haber actualizaciones.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="grid items-start gap-1.5 md:grid-cols-[1fr_22px_1fr_22px_1fr]">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-metro-text"><FileText size={15} className="text-red-400" /> a) Registrar borrador</div>
-                    <div className="mt-1.5"><StatusPill tone="blue">{draftCount} en borrador</StatusPill></div>
-                  </div>
-                  <ArrowRight className="mx-auto mt-1 text-metro-muted" size={16} />
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-metro-text"><Send size={15} className="text-red-400" /> b) Enviar a Dirección</div>
-                    <div className="mt-1.5"><StatusPill tone="amber">{directionCount} enviadas</StatusPill></div>
-                  </div>
-                  <ArrowRight className="mx-auto mt-1 text-metro-muted" size={16} />
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-metro-text"><RefreshCw size={15} className="text-purple-400" /> c) Actualizar</div>
-                    <div className="mt-1.5"><StatusPill tone="purple">{updatesCount} actualizaciones</StatusPill></div>
-                  </div>
-                </div>
-
-                <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface/55">
-                  <div className="grid grid-cols-[1.2fr_.75fr_1.3fr_auto] gap-2 border-b border-metro-border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide text-metro-muted">
-                    <span>Actividad</span><span>Estado</span><span>Detalle</span><span>Acción</span>
-                  </div>
-                  {[
-                    ['Borrador del acta', selectedActa?.estado === 'Borrador' ? 'En borrador' : draftCount ? `${draftCount} en borrador` : 'Pendiente', 'Documento base / seguimiento', 'blue'],
-                    ['Envío a Dirección', selectedActa?.estado === 'Enviada a Dirección' ? 'Enviada' : directionCount ? `${directionCount} enviadas` : 'Pendiente', 'Remisión a Dirección', 'amber'],
-                    ['Actualizaciones', `${updatesCount} registradas`, 'Cambios de seguimiento', 'purple'],
-                  ].map(([activity, status, detail, tone]) => (
-                    <button
-                      type="button"
-                      key={activity}
-                      onClick={openSelected}
-                      className="grid w-full grid-cols-[1.2fr_.75fr_1.3fr_auto] items-center gap-2 border-b border-metro-border/60 px-2.5 py-1.5 text-left text-[11px] last:border-b-0 hover:bg-white/[0.025]"
-                    >
-                      <span className="font-semibold text-metro-secondary">{activity}</span>
-                      <span><StatusPill tone={tone as Tone}>{status}</StatusPill></span>
-                      <span className="text-metro-muted">{detail}</span>
-                      <span className="font-bold text-blue-300">Ver detalle</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center justify-center rounded-xl border border-metro-border bg-metro-surface/65 p-2.5 text-center">
-                <div className="relative grid h-16 w-16 place-items-center rounded-full bg-blue-500/10 text-blue-200">
-                  <ClipboardList size={34} />
-                  <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-metro-red text-white"><Check size={18} strokeWidth={3} /></span>
-                </div>
-                <p className="mt-2.5 text-[11px] leading-4 text-metro-secondary">Gestiona el seguimiento del borrador, el envío a Dirección y las actualizaciones.</p>
-                <button type="button" onClick={openSelected} className="mt-2.5 w-full rounded-lg bg-metro-red px-3 py-2 text-xs font-black text-white hover:bg-metro-dark">
-                  Abrir panel del acta
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-5 py-3 pl-9">
-            <WorkflowNumber value={4} />
-            <div className="grid items-center gap-3 xl:grid-cols-[220px_minmax(0,1fr)_160px]">
-              <div>
-                <div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-black text-metro-text">Alegaciones</h2><StatusPill tone="blue">Revisión</StatusPill></div>
-                <p className="mt-1 text-xs text-metro-muted">Gestiona alegaciones y posibles actualizaciones posteriores.</p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-3">
-                <ActionCard icon={MessageCircle} label="Alegaciones" accent="purple" onClick={() => onOpenOperational('Pendiente de alegaciones')} />
-                <ActionCard icon={RefreshCw} label="Actualizar acta" accent="blue" onClick={openSelected} />
-                <ActionCard icon={History} label="Historial de cambios" onClick={openSelected} />
-              </div>
-              <div className="flex flex-wrap gap-2 xl:flex-col">
-                <StatusPill tone="purple">{selectedAllegations} alegaciones</StatusPill>
-                <StatusPill tone="purple">{updatesCount} actualizaciones</StatusPill>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative rounded-2xl border border-metro-border bg-metro-panel/75 px-5 py-3 pl-9">
-            <WorkflowNumber value={5} />
-            <div className="grid items-center gap-3 xl:grid-cols-[220px_minmax(0,1fr)_160px]">
-              <div>
-                <div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-black text-metro-text">Firma definitiva</h2><StatusPill tone="blue">Cierre</StatusPill></div>
-                <p className="mt-1 text-xs text-metro-muted">Enviar el acta definitiva para firma.</p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-3">
-                <ActionCard icon={PenLine} label="Pendientes de firma" accent="amber" onClick={() => onOpenOperational('Pendiente de firma')} />
-                <ActionCard icon={Send} label="Enviar a firmar" accent="green" onClick={() => onOpenOperational('Pendiente de firma')} />
-                <ActionCard icon={Archive} label="Histórico" onClick={() => onOpenOperational('Cerrada')} />
-              </div>
-              <div><StatusPill tone="green">{signatureCount} pendientes de firma</StatusPill></div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {STAGE_CONFIGS.map((config) => (
+                <StageCard
+                  config={config}
+                  count={actas.filter((acta) => acta.estado === config.state).length}
+                  key={config.state}
+                  onOpen={() => onOpenOperational(config.state)}
+                />
+              ))}
             </div>
           </div>
         </div>
 
-        <aside className="space-y-2">
-          <div className="rounded-2xl border border-metro-border bg-metro-panel/80 p-3">
-            <div className="flex items-center gap-2 text-sm font-black text-metro-text"><ListChecks size={20} className="text-blue-300" /> Estado del flujo</div>
-            <div className="mt-2">
-              <FlowStatus label="Acta creada" completed={Boolean(selectedActa)} current={false} />
-              <FlowStatus label="Pendiente de realizar" completed={selectedStateIndex >= 0} current={selectedStateIndex === 0} />
-              <FlowStatus label="Borrador registrado" completed={selectedStateIndex >= 1} current={selectedStateIndex === 1} />
-              <FlowStatus label="Envío a Dirección" completed={selectedStateIndex >= 2} current={selectedStateIndex === 2} />
-              <FlowStatus label="Alegaciones registradas" completed={selectedStateIndex >= 3} current={selectedStateIndex === 3} />
-              <FlowStatus label="Firma definitiva" completed={selectedStateIndex >= 5} current={selectedStateIndex === 4} />
+        <aside className="space-y-3">
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/70 p-3">
+            <h2 className="text-sm font-black text-metro-text">Pasos del módulo</h2>
+            <p className="mt-1 text-xs text-metro-muted">Resumen visual del ciclo. Si tienes una acta activa, se resalta su situación actual.</p>
+            <div className="mt-3 space-y-2">
+              {FLOW_STEPS.map((step, index) => (
+                <FlowStep
+                  active={selectedActa ? selectedActa.estado === step.state : index === 0}
+                  completed={selectedStateIndex > index}
+                  index={index}
+                  key={`${step.title}-${index}`}
+                  title={step.title}
+                />
+              ))}
             </div>
           </div>
 
-          <div className={`rounded-2xl border p-3 ${toneClasses.blue}`}>
-            <div className="flex items-center gap-2 text-[12px] font-bold"><FileText size={18} /> Actas abiertas</div>
-            <div className="mt-1.5 text-2xl font-black text-metro-text">{openActas.length}</div>
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/70 p-3">
+            <h2 className="text-sm font-black text-metro-text">Recordatorios útiles</h2>
+            <div className="mt-3 space-y-2 text-xs leading-5 text-metro-muted">
+              <p className="rounded-xl border border-metro-border bg-metro-surface/75 px-3 py-2.5">
+                <span className="font-bold text-metro-text">Tipos de acta:</span> si necesitas uno nuevo, entra en <span className="font-bold text-metro-text">Configuración rápida → Tipos de acta</span>.
+              </p>
+              <p className="rounded-xl border border-metro-border bg-metro-surface/75 px-3 py-2.5">
+                <span className="font-bold text-metro-text">Correo de alegaciones:</span> la plantilla de Outlook se ajusta desde <span className="font-bold text-metro-text">Configuración rápida → Plantilla Outlook</span>.
+              </p>
+              <p className="rounded-xl border border-metro-border bg-metro-surface/75 px-3 py-2.5">
+                <span className="font-bold text-metro-text">Histórico:</span> para ver actas cerradas, usa <span className="font-bold text-metro-text">Consulta operativa</span> y abre el ejercicio que necesites.
+              </p>
+            </div>
           </div>
-          <div className={`rounded-2xl border p-3 ${toneClasses.amber}`}>
-            <div className="flex items-center gap-2 text-[12px] font-bold"><Clock3 size={18} /> Pendientes de borrador</div>
-            <div className="mt-1.5 text-2xl font-black text-metro-text">{pendingCount}</div>
-          </div>
-          <div className={`rounded-2xl border p-3 ${toneClasses.purple}`}>
-            <div className="flex items-center gap-2 text-[12px] font-bold"><MessageCircle size={18} /> Alegaciones</div>
-            <div className="mt-1.5 text-2xl font-black text-metro-text">{allegationCount}</div>
-          </div>
-          <div className={`rounded-2xl border p-3 ${toneClasses.green}`}>
-            <div className="flex items-center gap-2 text-[12px] font-bold"><Signature size={18} /> Firmadas este año</div>
-            <div className="mt-1.5 text-2xl font-black text-metro-text">{signedThisYear}</div>
+
+          <div className="rounded-2xl border border-metro-border bg-metro-panel/70 p-3">
+            <h2 className="text-sm font-black text-metro-text">Indicadores rápidos</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+              <KpiCard icon={FileText} label="Borradores" tone="info" value={draftCount} />
+              <KpiCard icon={PenLine} label="Pendientes de firma" tone="success" value={signatureCount} />
+              <KpiCard icon={History} label="Histórico cerrado" tone="muted" value={actas.filter((acta) => acta.estado === 'Cerrada').length} />
+              <KpiCard icon={Mail} label="Enviadas a Dirección" tone="info" value={actas.filter((acta) => acta.estado === 'Enviada a Dirección').length} />
+            </div>
           </div>
         </aside>
-      </div>
-
-      <div className="grid gap-2 rounded-2xl border border-metro-border bg-metro-panel/75 p-2.5 md:grid-cols-[150px_repeat(5,minmax(0,1fr))]">
-        <div className="flex items-center gap-2 px-2 text-[13px] font-black text-metro-text"><Sparkles size={19} className="text-red-400" /> Accesos rápidos</div>
-        <ActionCard icon={CalendarDays} label="Actas" onClick={() => onOpenOperational()} />
-        <ActionCard icon={FileText} label="Pendientes" accent="blue" onClick={() => onOpenOperational('Pendiente de realizar')} />
-        <ActionCard icon={ClipboardList} label="Borrador" onClick={() => onOpenOperational('Borrador')} />
-        <ActionCard icon={MessageCircle} label="Alegaciones" accent="purple" onClick={() => onOpenOperational('Pendiente de alegaciones')} />
-        <ActionCard icon={Signature} label="Firmas" accent="green" onClick={() => onOpenOperational('Pendiente de firma')} />
       </div>
     </section>
   );

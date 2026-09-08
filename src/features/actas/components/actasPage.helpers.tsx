@@ -149,6 +149,14 @@ export function replaceActaTemplateMarkers(
 
 export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
+    title: 'Pantalla principal',
+    items: [
+      'La pantalla inicial se usa como centro de trabajo: desde ahí puedes crear una nueva acta, continuar una abierta, entrar en la vista operativa y abrir la ayuda del módulo.',
+      'El bloque “Configuración rápida” permite acceder directamente a “Tipos de acta” y a la plantilla de Outlook, que antes quedaban menos visibles.',
+      'Las bandejas de trabajo agrupan las actas por fase (pendientes, borradores, alegaciones y firma) para entrar con un clic al punto exacto del proceso.',
+    ],
+  },
+  {
     title: '¿Qué hace este módulo?',
     body: 'Gestiona el seguimiento completo de un acta: alta, borrador, envío a Dirección, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
   },

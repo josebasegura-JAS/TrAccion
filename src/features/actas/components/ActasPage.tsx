@@ -770,6 +770,11 @@ export function ActasPage() {
       className="space-y-3"
       id="actas"
     >
+      <PageHeader
+        title="Actas"
+        helpSections={ACTAS_HELP_SECTIONS}
+        helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
+      />
       {isWorkflowHome ? (
         <ActasWorkflow
           actas={actas}
@@ -778,6 +783,13 @@ export function ActasPage() {
           onNewActa={() => openEditor()}
           onOpenActa={(acta) => openEditor(acta)}
           onOpenOperational={openOperationalView}
+          onOpenOutlookTemplate={openOutlookTemplateManager}
+          onOpenTypeManager={() => {
+            if (!hasLoadedHistoricalActas) {
+              void loadHistoricalActas();
+            }
+            setIsTypeManagerOpen(true);
+          }}
         />
       ) : (
         <>
@@ -806,8 +818,6 @@ export function ActasPage() {
       </div>
       <PageHeader
         title="Actas"
-        helpSections={ACTAS_HELP_SECTIONS}
-        helpSubtitle="Guía rápida del ciclo de actas, estados, alegaciones e histórico."
         actions={
           <Toolbar
             className="gap-1.5"
