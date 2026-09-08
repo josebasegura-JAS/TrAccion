@@ -3,7 +3,6 @@ import { emitPersistenceFeedback } from './persistenceFeedback';
 
 const NON_JSON_PERSISTED_STORAGE_KEYS = new Set<string>([
   'traccion.v1.tareas.peticionesMigrated',
-  'traccion.v1.vinculograma.showExpired',
 ]);
 
 const reportedCorruptStorageKeys = new Set<string>();

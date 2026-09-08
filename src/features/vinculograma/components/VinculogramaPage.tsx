@@ -13,7 +13,6 @@ import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import type { Employee } from '../../plantilla/domain/employee';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { generateVinculogramaSolicitudWord } from '../domain/word';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import {
   calculateExpiryDate,
   EMPTY_VINCULOGRAMA_DRAFT,
@@ -114,11 +113,19 @@ const vinculogramaExportColumns = (today: string): ExportColumn<Vinculograma>[] 
 ];
 
 function readExpiredVisibility(): boolean {
-  return readStorageItem(EXPIRED_VISIBILITY_KEY) === 'true';
+  try {
+    return window.localStorage.getItem(EXPIRED_VISIBILITY_KEY) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 function persistExpiredVisibility(value: boolean): void {
-  writeStorageItem(EXPIRED_VISIBILITY_KEY, String(value));
+  try {
+    window.localStorage.setItem(EXPIRED_VISIBILITY_KEY, String(value));
+  } catch {
+    // Una preferencia visual local no debe impedir trabajar con el módulo.
+  }
 }
 
 function toDraft(record: Vinculograma): VinculogramaDraft {

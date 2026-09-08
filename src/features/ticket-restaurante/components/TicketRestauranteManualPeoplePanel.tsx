@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { Field, Input } from '../../../components/ui/Field';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { TicketManualPerson, TicketPerson, TicketRestaurantConfig } from '../domain/ticketRestaurante';
 import { normalizeTicketEmployeeNumber } from '../domain/ticketRestaurante';
@@ -63,6 +64,7 @@ export function TicketRestauranteManualPeoplePanel({
   const [suggestionField, setSuggestionField] = useState<'empleado' | 'nombre' | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [tableDrafts, setTableDrafts] = useState<Record<string, TableDraft>>({});
+  const { confirm, dialogNode } = useAppDialog();
   const key = monthKey(year, month);
   const monthLabel = `${MONTH_LABELS[month - 1] ?? month} ${year}`;
 
@@ -225,8 +227,9 @@ export function TicketRestauranteManualPeoplePanel({
   };
 
   const removePerson = async (person: TicketManualPerson) => {
-    const confirmed = window.confirm(
+    const confirmed = await confirm(
       `¿Quitar a ${person.nombreApellidos} de Personas manuales desde ${String(month).padStart(2, '0')}/${year}?\n\nLos meses anteriores se conservarán para no alterar el histórico.`,
+      { danger: true, confirmLabel: 'Quitar', title: 'Quitar persona manual' },
     );
     if (!confirmed) return;
     const now = new Date().toISOString();
@@ -493,6 +496,7 @@ export function TicketRestauranteManualPeoplePanel({
           No hay personas manuales dadas de alta.
         </div>
       )}
+      {dialogNode}
     </div>
   );
 }

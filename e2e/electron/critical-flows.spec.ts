@@ -25,13 +25,8 @@ test('flujo crítico: crear una tarea desde UI y verificar que queda visible', a
       await dialog.getByLabel('Responsable').fill('RRLL');
       await dialog.getByRole('button', { name: 'Guardar' }).click();
 
-      await page.waitForTimeout(1500);
-
-      if (await dialog.isVisible().catch(() => false)) {
-        const saveError = await dialog.locator('text=/No se puede|No se ha podido|SQLite|bloqueo/i').count();
-        expect(saveError).toBe(0);
-        await dialog.getByRole('button', { name: 'Cerrar editor' }).click();
-      }
+      await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(taskTitle, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
     });
   } finally {
     await close();

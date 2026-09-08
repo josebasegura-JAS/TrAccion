@@ -30,9 +30,19 @@ if (!existsSync(releaseDir)) {
   mkdirSync(releaseDir, { recursive: true });
 }
 
-// Una sola línea con la versión semver (ej. "1.0.34"). La app la compara
-// contra app.getVersion() con un orden numérico simple por partes, no como
-// texto, para que "1.0.9" se entienda como anterior a "1.0.10".
-writeFileSync(manifestPath, `${pkg.version}\n`, 'utf8');
+const artifactName = pkg.build?.portable?.artifactName;
+if (!artifactName || typeof artifactName !== 'string' || !artifactName.toLowerCase().endsWith('.exe')) {
+  throw new Error('package.json no contiene build.portable.artifactName válido.');
+}
 
-console.log(`Manifiesto de actualización escrito: ${manifestPath} (versión ${pkg.version})`);
+// Se escribe también el nombre exacto del ejecutable. La app mantiene
+// compatibilidad de lectura con los manifiestos antiguos de una sola línea.
+writeFileSync(
+  manifestPath,
+  `version=${pkg.version}\nfile=${artifactName}\n`,
+  'utf8',
+);
+
+console.log(
+  `Manifiesto de actualización escrito: ${manifestPath} (versión ${pkg.version}, fichero ${artifactName})`,
+);

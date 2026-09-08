@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkForAppUpdate, compareAppVersions } from './appUpdate.js';
+import { checkForAppUpdate, compareAppVersions, parseAppUpdateManifest } from './appUpdate.js';
 
 describe('compareAppVersions', () => {
   it('considera mayor una versión con un patch numérico más alto, incluso con distinto número de dígitos', () => {
@@ -20,6 +20,29 @@ describe('compareAppVersions', () => {
     expect(compareAppVersions('1.0', '1.0.0')).toBe(0);
     expect(compareAppVersions('1.0.x', '1.0.0')).toBe(0);
     expect(compareAppVersions('', '0.0.0')).toBe(0);
+  });
+});
+
+
+describe('parseAppUpdateManifest', () => {
+  it('lee el formato nuevo y conserva el ejecutable exacto', () => {
+    expect(parseAppUpdateManifest('version=1.1.8\nfile=TrAccion V1.1.08.exe\n')).toEqual({
+      version: '1.1.8',
+      fileName: 'TrAccion V1.1.08.exe',
+    });
+  });
+
+  it('mantiene compatibilidad con el manifiesto histórico de una sola línea', () => {
+    expect(parseAppUpdateManifest('1.1.8\n')).toEqual({
+      version: '1.1.8',
+      fileName: 'TrAccion V1.1.08.exe',
+    });
+  });
+
+  it('rechaza rutas en el campo file', () => {
+    expect(() =>
+      parseAppUpdateManifest('version=1.1.8\nfile=..\\TrAccion V1.1.08.exe\n'),
+    ).toThrow(/no es válido/i);
   });
 });
 

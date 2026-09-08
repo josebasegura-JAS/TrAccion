@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, Info, X, CircleHelp } from 'lucide-react';
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { ModalDatabaseStatus } from '../ModalDatabaseStatus';
 import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 
@@ -61,6 +61,8 @@ export function AppDialog({
   type = 'info',
 }: AppDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const messageId = useId();
   useModalFocusTrap(dialogRef, () => {
     if (mode === 'confirm') {
       onCancel?.();
@@ -80,6 +82,8 @@ export function AppDialog({
       data-block-editor-shortcuts="true">
       <div
         ref={dialogRef}
+        aria-describedby={messageId}
+        aria-labelledby={titleId}
         aria-modal="true"
         className={`flex max-h-[calc(100vh-2rem)] w-full max-w-md scale-100 flex-col overflow-hidden rounded-2xl border p-5 font-sans text-metro-text opacity-100 shadow-2xl transition duration-150 ${panelClassName}`}
         role="dialog"
@@ -94,8 +98,8 @@ export function AppDialog({
             {getDialogIcon({ danger, mode, type })}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold text-metro-text">{resolvedTitle}</h2>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-metro-muted">{message}</p>
+            <h2 className="text-base font-bold text-metro-text" id={titleId}>{resolvedTitle}</h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-metro-muted" id={messageId}>{message}</p>
           </div>
         </div>
 

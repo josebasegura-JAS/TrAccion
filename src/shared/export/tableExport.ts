@@ -668,10 +668,6 @@ export async function exportTableToExcel<T>(payload: ExportTablePayload<T>, onAl
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'No se ha podido abrir Excel.';
     console.error('Error al abrir Excel:', error);
-    if (onAlert) {
-      onAlert(message);
-    } else {
-      window.alert(message);
-    }
+    onAlert?.(message);
   }
 }

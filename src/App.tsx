@@ -151,18 +151,8 @@ class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErro
   }
 }
 
-const ACTIVE_VIEW_STORAGE_KEY = 'traccion.v1.ui.activeView';
-
 function readInitialActiveView(): AppView {
   return 'dashboard';
-}
-
-function writeActiveView(view: AppView): void {
-  try {
-    window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
-  } catch {
-    // La navegación no debe bloquear el render si localStorage no está disponible.
-  }
 }
 
 const moduleLoadingLabels: Partial<Record<AppView, string>> = {
@@ -343,11 +333,6 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
   }
 
   handleReset = (): void => {
-    try {
-      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
-    } catch {
-      // No bloquear recuperación si localStorage falla.
-    }
     window.location.reload();
   };
 
@@ -406,17 +391,10 @@ export function App() {
   }, []);
 
   const changeActiveView = (view: AppView): void => {
-    writeActiveView(view);
     setActiveView(view);
   };
 
   const resetToDashboard = (): void => {
-    try {
-      window.localStorage.removeItem(ACTIVE_VIEW_STORAGE_KEY);
-    } catch {
-      // No bloquear el reinicio si localStorage no está disponible.
-    }
-
     window.location.reload();
   };
 

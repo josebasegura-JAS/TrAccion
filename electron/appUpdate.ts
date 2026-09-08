@@ -57,9 +57,74 @@ function getPortableExecutablePath(): string | null {
   return process.env.PORTABLE_EXECUTABLE_FILE ?? null;
 }
 
-function findExeInDirectory(entries: string[]): string | null {
-  const exe = entries.find((entry) => entry.toLowerCase().endsWith('.exe'));
-  return exe ?? null;
+export interface AppUpdateManifest {
+  version: string;
+  fileName: string;
+}
+
+function buildPortableExeNameFromVersion(version: string): string | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) {
+    return null;
+  }
+
+  const [, major, minor, patch] = match;
+  return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.exe`;
+}
+
+export function parseAppUpdateManifest(raw: string): AppUpdateManifest {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error('El manifiesto de versión está vacío.');
+  }
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let version = '';
+  let fileName = '';
+
+  if (lines.some((line) => line.includes('='))) {
+    for (const line of lines) {
+      const separatorIndex = line.indexOf('=');
+      if (separatorIndex <= 0) continue;
+      const key = line.slice(0, separatorIndex).trim().toLowerCase();
+      const value = line.slice(separatorIndex + 1).trim();
+      if (key === 'version') version = value;
+      if (key === 'file') fileName = value;
+    }
+  } else {
+    // Compatibilidad con manifiestos históricos de una sola línea: "1.1.5".
+    version = lines[0] ?? '';
+  }
+
+  if (!version) {
+    throw new Error('El manifiesto no contiene una versión.');
+  }
+
+  const resolvedFileName = fileName || buildPortableExeNameFromVersion(version);
+  if (!resolvedFileName) {
+    throw new Error(`No se puede determinar el ejecutable para la versión ${version}.`);
+  }
+
+  if (
+    resolvedFileName.includes('/') ||
+    resolvedFileName.includes('\\') ||
+    path.basename(resolvedFileName) !== resolvedFileName ||
+    !resolvedFileName.toLowerCase().endsWith('.exe')
+  ) {
+    throw new Error('El nombre de ejecutable del manifiesto no es válido.');
+  }
+
+  return { version, fileName: resolvedFileName };
+}
+
+async function readUpdateManifest(updatesDirectoryPath: string): Promise<AppUpdateManifest> {
+  const manifestPath = path.join(updatesDirectoryPath, UPDATE_MANIFEST_FILE_NAME);
+  const raw = await readFile(manifestPath, 'utf8');
+  return parseAppUpdateManifest(raw);
 }
 
 export async function checkForAppUpdate(
@@ -84,15 +149,9 @@ export async function checkForAppUpdate(
     };
   }
 
-  const manifestPath = path.join(updatesDirectoryPath, UPDATE_MANIFEST_FILE_NAME);
-
-  let latestVersion: string;
+  let manifest: AppUpdateManifest;
   try {
-    const raw = await readFile(manifestPath, 'utf8');
-    latestVersion = raw.trim();
-    if (!latestVersion) {
-      throw new Error('El manifiesto de versión está vacío.');
-    }
+    manifest = await readUpdateManifest(updatesDirectoryPath);
   } catch (error) {
     return {
       updateAvailable: false,
@@ -104,12 +163,12 @@ export async function checkForAppUpdate(
     };
   }
 
-  const updateAvailable = compareAppVersions(latestVersion, currentVersion) > 0;
+  const updateAvailable = compareAppVersions(manifest.version, currentVersion) > 0;
 
   return {
     updateAvailable,
     currentVersion,
-    latestVersion,
+    latestVersion: manifest.version,
     message: null,
   };
 }
@@ -145,19 +204,22 @@ export async function applyAppUpdate(updatesDirectoryPath: string | null): Promi
 
   let newExeFileName: string;
   try {
+    const manifest = await readUpdateManifest(updatesDirectoryPath);
     const entries = await readdir(updatesDirectoryPath);
-    const found = findExeInDirectory(entries);
+    const found = entries.find(
+      (entry) => entry.toLocaleLowerCase('es') === manifest.fileName.toLocaleLowerCase('es'),
+    );
     if (!found) {
       return {
         ok: false,
-        message: `No se ha encontrado ningún .exe en la carpeta de actualizaciones (${updatesDirectoryPath}).`,
+        message: `No se ha encontrado el ejecutable exacto ${manifest.fileName} indicado por ${UPDATE_MANIFEST_FILE_NAME}.`,
       };
     }
     newExeFileName = found;
   } catch (error) {
     return {
       ok: false,
-      message: `No se ha podido leer la carpeta de actualizaciones: ${
+      message: `No se ha podido preparar la actualización: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };
