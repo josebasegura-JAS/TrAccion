@@ -311,6 +311,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 1 });
@@ -377,6 +378,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 1 });
@@ -392,6 +394,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
@@ -409,6 +412,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
@@ -426,6 +430,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes[0]).toMatchObject({
@@ -443,6 +448,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [employee],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes[0]).toMatchObject({
@@ -464,6 +470,7 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
+      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes[0]).toMatchObject({
