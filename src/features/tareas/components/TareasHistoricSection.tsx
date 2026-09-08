@@ -10,6 +10,25 @@ import {
   type HistoricYearGroup,
 } from './tareasHistoricUtils';
 
+const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
+  { key: 'titulo', label: 'Título', className: 'w-[320px]' },
+  { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
+  { key: 'responsable', label: 'Responsable', className: 'w-[190px]' },
+  { key: 'prioridad', label: 'Prioridad', className: 'w-[120px]' },
+];
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '—';
+
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
 
 export function HistoricYearSection({
   group,
