@@ -506,7 +506,21 @@ describe('importador de encuesta de teletrabajo', () => {
     });
   });
 
-  it('usa 2026-2027 como fallback cuando no detecta periodo', () => {
+  it('no inventa un periodo si el fichero y la campaña activa no lo indican', () => {
+    expect(() =>
+      importEncuestaRows(
+        [
+          ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
+          ['211', 'Persona Sin Periodo', 'Sí', 'preferiblemente martes'],
+        ],
+        [],
+        [],
+        { now: new Date('2030-01-01T00:00:00.000Z') },
+      ),
+    ).toThrow('No se ha podido determinar el periodo de teletrabajo');
+  });
+
+  it('usa el periodo activo indicado por la aplicación cuando el fichero no lo contiene', () => {
     const result = importEncuestaRows(
       [
         ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
@@ -514,11 +528,10 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { now: new Date('2030-01-01T00:00:00.000Z') },
+      { now: new Date('2030-01-01T00:00:00.000Z'), defaultPeriodo: '2030-2031' },
     );
 
-    expect(result.solicitudes[0].periodo).toBe('2026-2027');
-    expect(result.solicitudes[0].tipoSolicitud).toBe('renovacion');
+    expect(result.solicitudes[0].periodo).toBe('2030-2031');
   });
 });
 

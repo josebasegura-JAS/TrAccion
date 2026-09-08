@@ -5,7 +5,7 @@ import type { GrupoCobertura } from './gruposCobertura';
 import type { TeletrabajoPuesto } from './puestosTeletrabajo';
 import { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount, evaluateTeletrabajoPresencialidad } from './semaforo';
 import type { TeletrabajoSolicitud } from './solicitud';
-import { buildTeletrabajoAssessment } from './exportDireccion';
+import { buildPeriodoHeader, buildTeletrabajoAssessment } from './exportDireccion';
 
 const timestamp = '2026-01-01T00:00:00.000Z';
 
@@ -580,5 +580,14 @@ describe('celda J (assessment combinado) vs celda K (presencialidad aislada) —
     expect(assessment.cellValue).toBe('NO');
     expect(assessment.apuntesRrll).toBe('Rechazada por RRLL');
     expect(presencialidad.status).toBe('revisar');
+  });
+});
+
+
+describe('cabecera de periodo en exportación Dirección', () => {
+  it('usa el periodo real seleccionado y no un año fijo', () => {
+    expect(buildPeriodoHeader('2026-2027')).toBe('Periodo 2026-2027');
+    expect(buildPeriodoHeader('2027-2028')).toBe('Periodo 2027-2028');
+    expect(buildPeriodoHeader('')).toBe('Periodo');
   });
 });

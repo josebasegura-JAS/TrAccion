@@ -377,6 +377,12 @@ function buildTitle(rows: readonly TeletrabajoSolicitud[], selectedPeriodo?: str
  * comparten un único periodo. En cualquier otro caso, las columnas se
  * etiquetan sin años (no hay un periodo único del que partir).
  */
+
+export function buildPeriodoHeader(periodo: string | null | undefined): string {
+  const trimmed = periodo?.trim();
+  return trimmed ? `Periodo ${trimmed}` : 'Periodo';
+}
+
 function resolveReferencePeriodo(
   rows: readonly TeletrabajoSolicitud[],
   selectedPeriodo?: string,
@@ -556,17 +562,17 @@ export async function exportTeletrabajoDireccionToExcel({
   worksheet.mergeCells(4, 6, 4, 8);
   worksheet.mergeCells(4, COL_PETICION_MARTES, 4, COL_PETICION_JUEVES);
 
+  // Un periodo de referencia (el filtrado, o el único periodo presente en las
+  // filas) para poder etiquetar tanto la columna de periodo actual como cada
+  // columna de año anterior con su rango de años concreto.
+  const referencePeriodo = resolveReferencePeriodo(rows, periodo);
+
   worksheet.getCell(4, 2).value = 'Solicitante';
   worksheet.getCell(4, 4).value = 'Puesto de Trabajo';
   worksheet.getCell(4, 6).value = 'Petición original';
-  worksheet.getCell(4, COL_PERIODO).value = 'Periodo 2025-2026';
+  worksheet.getCell(4, COL_PERIODO).value = buildPeriodoHeader(referencePeriodo);
   worksheet.getCell(4, COL_PRESENCIALIDAD).value = 'Cumplimiento Presencialidad Mínima';
   worksheet.getCell(4, COL_INFORME).value = 'Informe Favorable';
-
-  // Un periodo de referencia (el filtrado, o el único periodo presente en las
-  // filas) para poder etiquetar cada columna de año anterior con su rango de
-  // años concreto, igual que en el Excel de Dirección de referencia.
-  const referencePeriodo = resolveReferencePeriodo(rows, periodo);
   for (let offset = 1; offset <= TELETRABAJO_EXPORT_ANOS_ANTERIORES; offset += 1) {
     const targetPeriodo = referencePeriodo
       ? getTeletrabajoPeriodoOffset(referencePeriodo, offset)

@@ -580,6 +580,7 @@ export function TeletrabajoPage({
       const result = await importEncuesta(file, employees, {
         jobPositionTranslations,
         puestoAliases: readStoredPuestoAliases(),
+        defaultPeriodo: mainPeriodo || undefined,
       });
 
       if (result.diagnostics.unresolvedPuestos.length > 0) {
@@ -683,6 +684,7 @@ export function TeletrabajoPage({
       const result = await importEncuesta(pendingEncuestaImport.file, employees, {
         jobPositionTranslations,
         puestoAliases: aliases,
+        defaultPeriodo: mainPeriodo || undefined,
       });
 
       if (result.diagnostics.unresolvedPuestos.length > 0) {
@@ -756,9 +758,9 @@ export function TeletrabajoPage({
         respuesta: 'Sí',
         tipoSolicitud: 'Nueva',
         diasTeletrabajo: 'Martes y jueves',
-        periodo: '2026-2027',
-        fechaOrdenador: '2026-09-01',
-        fechaCascos: '2026-09-01',
+        periodo: mainPeriodo || '20XX-20XX',
+        fechaOrdenador: '',
+        fechaCascos: '',
         observaciones: 'Fila de ejemplo: sustituir o borrar antes de importar.',
       });
 
@@ -818,7 +820,7 @@ export function TeletrabajoPage({
       });
 
       worksheet.mergeCells('A1:K1');
-      worksheet.getCell('A1').value = 'Teletrabajo 2026-2027';
+      worksheet.getCell('A1').value = `Teletrabajo ${mainPeriodo || '20XX-20XX'}`;
       worksheet.getCell('A1').font = { bold: true };
 
       const parentHeaderRow = worksheet.getRow(2);
@@ -849,7 +851,7 @@ export function TeletrabajoPage({
         'X',
         '',
         'X',
-        '2026-2027',
+        mainPeriodo || '20XX-20XX',
         'Sí',
         'Sí',
         'Fila de ejemplo: sustituir o borrar antes de importar.',
@@ -867,7 +869,7 @@ export function TeletrabajoPage({
       notesSheet.addRows([
         [
           'Título',
-          'Obligatorio. En algún texto del fichero debe aparecer el periodo, por ejemplo "2026-2027".',
+          'Obligatorio. En algún texto del fichero debe aparecer el periodo, por ejemplo "20XX-20XX".',
         ],
         ['Nº Empleado', 'Obligatorio. Debe coincidir con un empleado existente en Plantilla.'],
         [

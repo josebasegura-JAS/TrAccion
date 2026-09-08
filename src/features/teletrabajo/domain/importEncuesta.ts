@@ -167,7 +167,12 @@ export function importEncuestaRows(
   options: EncuestaParseOptions = {},
 ): ImportEncuestaResult {
   const now = options.now ?? new Date();
-  const defaultPeriodo = options.defaultPeriodo ?? detectPeriodo(rows) ?? '2026-2027';
+  const defaultPeriodo = options.defaultPeriodo?.trim() || detectPeriodo(rows);
+  if (!defaultPeriodo) {
+    throw new Error(
+      'No se ha podido determinar el periodo de teletrabajo. Selecciona o crea un periodo en TrAccion, o inclúyelo en el fichero antes de importar.',
+    );
+  }
   const drafts = rowsToTeletrabajoDrafts(rows, employees, defaultPeriodo, options);
   return upsertEncuestaSolicitudes(currentSolicitudes, drafts, now);
 }
@@ -441,7 +446,7 @@ function areHistoricoSolicitudesEquivalent(
 export function rowsToTeletrabajoDrafts(
   rows: readonly TabularRow[],
   employees: readonly Employee[],
-  defaultPeriodo = '2026-2027',
+  defaultPeriodo = '',
   options: Pick<EncuestaParseOptions, 'jobPositionTranslations' | 'puestoAliases'> = {},
 ): {
   drafts: TeletrabajoDraft[];

@@ -6,20 +6,6 @@ export type TeletrabajoTipoSolicitud = (typeof TELETRABAJO_TIPOS_SOLICITUD)[numb
 export type TeletrabajoEstado = (typeof TELETRABAJO_ESTADOS)[number];
 export type TeletrabajoDia = (typeof TELETRABAJO_DIAS)[number];
 
-export const TELETRABAJO_EQUIPMENT_BASE_DELIVERY_DATE = '2024-09-01';
-
-export function getDefaultEquipmentDeliveryDate(
-  periodo: string,
-  tipoSolicitud: TeletrabajoTipoSolicitud,
-): string {
-  if (tipoSolicitud === 'renovacion') {
-    return TELETRABAJO_EQUIPMENT_BASE_DELIVERY_DATE;
-  }
-
-  const match = /^(\d{4})(?:\D+\d{4})?$/.exec(periodo.trim());
-  return match ? `${match[1]}-09-01` : '';
-}
-
 export interface TeletrabajoSolicitud {
   id: string;
   empleado: string;

@@ -117,8 +117,8 @@ describe('useTeletrabajoStore persistence', () => {
       periodo: '2026/2027',
       observaciones: 'Observación inicial',
       diasTeletrabajo: ['martes', 'jueves'],
-      fechaOrdenador: '2024-09-01',
-      fechaCascos: '2024-09-01',
+      fechaOrdenador: '',
+      fechaCascos: '',
       revisado: false,
       deletedAt: null,
     });
