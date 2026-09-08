@@ -1,93 +1,15 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo } from 'react';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
-import { getTaskClosedYear } from '../domain/historico';
-import { TASK_PRIORITIES, type Task, type TaskPriority } from '../domain/task';
-import type { SortDirection } from '../domain/sort';
+import { type Task } from '../domain/task';
+import {
+  HISTORIC_PAGE_SIZE_OPTIONS,
+  sortHistoricTasks,
+  type HistoricSortKey,
+  type HistoricSortState,
+  type HistoricYearGroup,
+} from './tareasHistoricUtils';
 
-export type HistoricSortKey = 'titulo' | 'closedAt' | 'responsable' | 'prioridad';
-
-export interface HistoricSortState {
-  key: HistoricSortKey;
-  direction: SortDirection;
-}
-
-export interface HistoricYearGroup {
-  year: string;
-  tasks: Task[];
-}
-
-export const HISTORIC_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
-export const DEFAULT_HISTORIC_PAGE_SIZE = 50;
-
-const historicColumns: Array<{ key: HistoricSortKey; label: string; className: string }> = [
-  { key: 'titulo', label: 'Título', className: 'w-[320px]' },
-  { key: 'closedAt', label: 'Fecha cierre', className: 'w-[150px]' },
-  { key: 'responsable', label: 'Responsable', className: 'w-[190px]' },
-  { key: 'prioridad', label: 'Prioridad', className: 'w-[120px]' },
-];
-
-function formatDateTime(value: string | null): string {
-  if (!value) return '—';
-
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
-const PRIORITY_ORDER = new Map<TaskPriority, number>(
-  TASK_PRIORITIES.map((priority, index) => [priority, index]),
-);
-
-function compareHistoricTasks(first: Task, second: Task, key: HistoricSortKey): number {
-  if (key === 'closedAt') {
-    return (first.closedAt ?? '').localeCompare(second.closedAt ?? '', 'es', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  }
-
-  if (key === 'prioridad') {
-    return (
-      (PRIORITY_ORDER.get(first.prioridad) ?? TASK_PRIORITIES.length) -
-      (PRIORITY_ORDER.get(second.prioridad) ?? TASK_PRIORITIES.length)
-    );
-  }
-
-  return first[key].localeCompare(second[key], 'es', { numeric: true, sensitivity: 'base' });
-}
-
-export function sortHistoricTasks(tasks: Task[], sortState: HistoricSortState): Task[] {
-  return tasks
-    .map((task, index) => ({ task, index }))
-    .sort((first, second) => {
-      const comparison = compareHistoricTasks(first.task, second.task, sortState.key);
-      const orderedComparison = sortState.direction === 'asc' ? comparison : -comparison;
-      return orderedComparison || first.index - second.index;
-    })
-    .map(({ task }) => task);
-}
-
-export function groupHistoricTasks(tasks: Task[]): HistoricYearGroup[] {
-  const groups = new Map<string, Task[]>();
-
-  tasks.forEach((task) => {
-    const year = getTaskClosedYear(task);
-    const yearTasks = groups.get(year);
-    if (yearTasks) yearTasks.push(task);
-    else groups.set(year, [task]);
-  });
-
-  return Array.from(groups.entries())
-    .sort(([firstYear], [secondYear]) =>
-      secondYear.localeCompare(firstYear, 'es', { numeric: true }),
-    )
-    .map(([year, groupTasks]) => ({ year, tasks: groupTasks }));
-}
 
 export function HistoricYearSection({
   group,

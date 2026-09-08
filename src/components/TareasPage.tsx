@@ -6,7 +6,6 @@ import { PageHeader } from './ui/PageHeader';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { filterTasks } from '../features/tareas/domain/filters';
-import { StatusBadge } from './ui/StatusBadge';
 import { CountBadge } from './ui/CountBadge';
 import {
   sortTasksByDefault,
@@ -38,13 +37,13 @@ import {
 import { TaskEditor } from './TaskEditor';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { TaskOriginsModal } from '../features/tareas/components/TaskOriginsModal';
+import { HistoricYearSection } from '../features/tareas/components/TareasHistoricSection';
 import {
   DEFAULT_HISTORIC_PAGE_SIZE,
-  HistoricYearSection,
   groupHistoricTasks,
   type HistoricSortKey,
   type HistoricSortState,
-} from '../features/tareas/components/TareasHistoricSection';
+} from '../features/tareas/components/tareasHistoricUtils';
 
 type ActiveTaskTableColumnId = TaskSortKey | 'actions';
 
