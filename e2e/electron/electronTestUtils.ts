@@ -100,7 +100,7 @@ export async function launchTraccionElectron(
 
   const page = await waitForMainWindow(app);
   await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByRole('heading', { name: 'Inicio' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
 
   return {
     app,
