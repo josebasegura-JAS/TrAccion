@@ -73,3 +73,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Rebuild dependencias nativas Electron
+        run: npm run electron:rebuild
+
+      - name: Smoke Electron crítico
+        run: npx playwright test -c playwright.electron.config.ts e2e/electron/app-ui-smoke.spec.ts e2e/electron/critical-flows.spec.ts
