@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
 import {
   EMPTY_TELETRABAJO_DRAFT,
+  getDefaultEquipmentDeliveryDate,
   type TeletrabajoDraft,
   type TeletrabajoSolicitud,
 } from '../features/teletrabajo/domain/solicitud';
@@ -152,6 +153,36 @@ export function TeletrabajoEditor({
         : { ...current, tipoSolicitud: nextTipoSolicitud };
     });
   }, [draft.empleado, draft.periodo, solicitud?.id, solicitudes]);
+
+  const automaticEquipmentDateRef = useRef('');
+
+  useEffect(() => {
+    if (mode !== 'create') {
+      return;
+    }
+
+    const nextAutomaticDate = getDefaultEquipmentDeliveryDate(draft.periodo, resolvedTipoSolicitud);
+    const previousAutomaticDate = automaticEquipmentDateRef.current;
+
+    setDraft((current) => {
+      const shouldDefaultOrdenador =
+        !current.fechaOrdenador || current.fechaOrdenador === previousAutomaticDate;
+      const shouldDefaultCascos =
+        !current.fechaCascos || current.fechaCascos === previousAutomaticDate;
+
+      if (!shouldDefaultOrdenador && !shouldDefaultCascos) {
+        return current;
+      }
+
+      return {
+        ...current,
+        fechaOrdenador: shouldDefaultOrdenador ? nextAutomaticDate : current.fechaOrdenador,
+        fechaCascos: shouldDefaultCascos ? nextAutomaticDate : current.fechaCascos,
+      };
+    });
+
+    automaticEquipmentDateRef.current = nextAutomaticDate;
+  }, [draft.periodo, mode, resolvedTipoSolicitud]);
 
   const isNuevaPeticion = resolvedTipoSolicitud === 'nueva';
   const draftForSave = useMemo(
