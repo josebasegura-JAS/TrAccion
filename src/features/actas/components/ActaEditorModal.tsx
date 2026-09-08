@@ -29,8 +29,10 @@ export function ActaEditorModal({
   applyStateChange,
   canAttachFinalActa,
   canCreateBorradorOutlookFromEditor,
+  canCreateFirmaOutlookFromEditor,
   canCreateOutlookDraftFromEditor,
   createActaBorradorOutlookDraft,
+  createActaFirmaOutlookDraft,
   createActaOutlookCalendar,
   createActaOutlookDraft,
   deadlineWasAutoUpdated,
@@ -63,8 +65,10 @@ export function ActaEditorModal({
   applyStateChange: (nextState: ActaDraft['estado']) => void;
   canAttachFinalActa: boolean;
   canCreateBorradorOutlookFromEditor: boolean;
+  canCreateFirmaOutlookFromEditor: boolean;
   canCreateOutlookDraftFromEditor: boolean;
   createActaBorradorOutlookDraft: (acta: Pick<Acta, 'titulo' | 'fechaSesion'>) => Promise<void>;
+  createActaFirmaOutlookDraft: (acta: Pick<Acta, 'titulo'>) => Promise<void>;
   createActaOutlookCalendar: (acta: Pick<Acta, 'titulo' | 'fechaLimite'>) => Promise<void>;
   createActaOutlookDraft: (
     acta: Pick<Acta, 'titulo' | 'tipo' | 'fechaSesion' | 'fechaLimite'>,
@@ -401,6 +405,16 @@ export function ActaEditorModal({
               variant="outlook"
             >
               Generar Outlook
+            </ActionButton>
+          )}
+          {canCreateFirmaOutlookFromEditor && (
+            <ActionButton
+              iconOnly={false}
+              onClick={() => void createActaFirmaOutlookDraft(draft)}
+              title="Exportar Outlook del acta definitiva"
+              variant="outlook"
+            >
+              Exportar Outlook
             </ActionButton>
           )}
           {canCreateOutlookDraftFromEditor && (

@@ -120,6 +120,28 @@ export function buildBorradorActaOutlookHtml(
 </table>`.trim();
 }
 
+export function buildFirmaActaOutlookSubject(acta: Pick<Acta, 'titulo'>): string {
+  return `Behin betiko Akta/Acta Definitiva Acta - ${acta.titulo}`.trim();
+}
+
+export function buildFirmaActaOutlookHtml(): string {
+  return `
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.25;color:#000000;">
+  <tr>
+    <td valign="top" style="width:50%;padding:0 22px 0 0;">
+      <p style="margin:0 0 10px 0;">Kaixo,</p>
+      <p style="margin:0 0 12px 0;">Ekarpenak egiteko epea bete ondoren, honekin batera bidaltzen dizuegu behin betiko akta, ekarpenak koloreekin nabarmenduta.</p>
+      <p style="margin:0 0 12px 0;">Jarraian akta bidaliko zaizue firma digitala egiteko.</p>
+      <p style="margin:0;">Ondo izan</p>
+    </td>
+    <td valign="top" style="width:50%;padding:0 0 0 22px;">
+      <p style="margin:0 0 12px 0;">Una vez cumplido el plazo para las aportaciones, adjunto remito el acta definitiva con las aportaciones remarcadas en color.</p>
+      <p style="margin:0 0 12px 0;">A continuación se os enviará el acta para realizar la firma digital.</p>
+    </td>
+  </tr>
+</table>`.trim();
+}
+
 export function isActasOutlookTemplate(value: unknown): value is ActasOutlookTemplate {
   if (!value || typeof value !== 'object') {
     return false;
@@ -242,6 +264,15 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
       'El asunto se genera como “Akta Zirriborroa/Borrador Acta - {nombre del acta}”.',
       'El cuerpo se crea en dos columnas, euskera y castellano, con el nombre del acta y la fecha de sesión.',
       'La fecha tope para recibir aportaciones se calcula en el momento de generar el correo como fecha del sistema + 21 días y se escribe en cada idioma.',
+      'El correo se abre como borrador de Outlook: no se envía automáticamente y los destinatarios quedan para completar manualmente.',
+    ],
+  },
+  {
+    title: 'Correo del acta definitiva',
+    items: [
+      'Cuando el acta está en estado “Pendiente de firma” aparece la acción “Exportar Outlook”.',
+      'El asunto se genera como “Behin betiko Akta/Acta Definitiva Acta - {nombre del acta}”.',
+      'El cuerpo se crea en dos columnas, euskera y castellano, con el texto fijo de remisión del acta definitiva y aviso de firma digital posterior.',
       'El correo se abre como borrador de Outlook: no se envía automáticamente y los destinatarios quedan para completar manualmente.',
     ],
   },
