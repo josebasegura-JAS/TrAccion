@@ -250,14 +250,14 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Pantalla principal',
     items: [
-      'La pantalla inicial se usa como centro de trabajo: desde ahí puedes crear una nueva acta, continuar una abierta, entrar en la vista operativa y abrir la ayuda del módulo.',
-      'El bloque “Configuración rápida” permite acceder directamente a “Tipos de acta” y a la plantilla de Outlook, que antes quedaban menos visibles.',
-      'Las bandejas de trabajo agrupan las actas por fase (pendientes, borradores, alegaciones y firma) para entrar con un clic al punto exacto del proceso.',
+      'La pantalla inicial muestra las actas abiertas agrupadas por estado. Cada fila enseña el título y la fecha límite del estado actual.',
+      'Pulsa cualquier acta para abrirla, modificarla, guardarla y seguir trabajando sin cerrar la ventana.',
+      'Desde la cabecera puedes crear una nueva acta, gestionar tipos de acta, consultar el histórico y abrir esta ayuda.',
     ],
   },
   {
     title: '¿Qué hace este módulo?',
-    body: 'Gestiona el seguimiento completo de un acta: alta, borrador, envío a Dirección, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
+    body: 'Gestiona el seguimiento completo de un acta: alta, borrador, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
   },
   {
     title: 'Correo del borrador',
@@ -281,8 +281,7 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Estados y plazos automáticos',
     items: [
-      'Pendiente de realizar → Borrador → Enviada a Dirección → Pendiente de alegaciones → Pendiente de firma → Cerrada.',
-      'Al pasar a "Enviada a Dirección" se propone automáticamente una fecha límite a 7 días.',
+      'Pendiente de realizar → Borrador → Pendiente de alegaciones → Pendiente de firma → Cerrada.',
       'Al pasar a "Pendiente de alegaciones" se propone una fecha límite a 21 días.',
       'Al pasar a "Pendiente de firma" se propone una fecha límite a 14 días.',
       'La fecha propuesta se puede corregir a mano en cualquier momento; no se recalcula sola si luego se cambia manualmente.',
@@ -439,9 +438,6 @@ export function getActaStateBadgeClass(state: ActaDraft['estado']): string {
   if (state === 'Borrador') {
     return 'border-blue-400/40 bg-blue-500/15 text-blue-200';
   }
-  if (state === 'Enviada a Dirección') {
-    return 'border-sky-400/40 bg-sky-500/15 text-sky-200';
-  }
   if (state === 'Pendiente de alegaciones') {
     return 'border-yellow-400/40 bg-yellow-500/15 text-yellow-100';
   }
@@ -503,9 +499,6 @@ export function getAutomaticDeadlineForState(
   state: ActaDraft['estado'],
   changedAt = getTodayIsoDate(),
 ): string | null {
-  if (state === 'Enviada a Dirección') {
-    return addDaysToIsoDate(changedAt, 7);
-  }
   if (state === 'Pendiente de alegaciones') {
     return addDaysToIsoDate(changedAt, 21);
   }
@@ -535,9 +528,6 @@ export function getNextState(state: ActaDraft['estado']): ActaDraft['estado'] | 
     return 'Borrador';
   }
   if (state === 'Borrador') {
-    return 'Enviada a Dirección';
-  }
-  if (state === 'Enviada a Dirección') {
     return 'Pendiente de alegaciones';
   }
   if (state === 'Pendiente de alegaciones') {

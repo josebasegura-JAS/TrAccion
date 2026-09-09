@@ -93,7 +93,6 @@ export function ActasPage() {
   const [outlookDraftStatus, setOutlookDraftStatus] = useState('');
   const [outlookDraftStatusIsError, setOutlookDraftStatusIsError] = useState(false);
   const [isWorkflowHome, setIsWorkflowHome] = useState(true);
-  const [selectedWorkflowActaId, setSelectedWorkflowActaId] = useState('');
   const { alert, confirm, dialogNode } = useAppDialog();
   const outlookTemplateBodyRef = useRef<HTMLDivElement | null>(null);
   const recordLock = useSharedRecordLock({
@@ -119,19 +118,6 @@ export function ActasPage() {
     load();
     loadConfiguracion();
   }, [load, loadConfiguracion]);
-
-  useEffect(() => {
-    const openActas = actas.filter((acta) => acta.estado !== 'Cerrada');
-    if (openActas.length === 0) {
-      if (selectedWorkflowActaId) {
-        setSelectedWorkflowActaId('');
-      }
-      return;
-    }
-    if (!openActas.some((acta) => acta.id === selectedWorkflowActaId)) {
-      setSelectedWorkflowActaId(openActas[0].id);
-    }
-  }, [actas, selectedWorkflowActaId]);
 
   useEffect(() => {
     if (hasLoadedHistoricalActas) {
@@ -713,21 +699,20 @@ export function ActasPage() {
       ? (actas.find((acta) => acta.id === editingActaId)?.updatedAt ?? null)
       : null;
 
-    void (async () => {
-      setSaveError('');
-      const result = editingActaId
-        ? await updateWithConcurrencyCheck(editingActaId, draft, expectedUpdatedAt)
-        : await createWithConcurrencyCheck(draft);
+    setSaveError('');
+    const result = editingActaId
+      ? await updateWithConcurrencyCheck(editingActaId, draft, expectedUpdatedAt)
+      : await createWithConcurrencyCheck(draft);
 
-      if (!result.ok) {
-        setSaveError(result.message);
-        return;
-      }
+    if (!result.ok) {
+      setSaveError(result.message);
+      return;
+    }
 
-      setIsEditorOpen(false);
-      setEditingActaId(null);
-      setDraft(EMPTY_ACTA_DRAFT);
-    })();
+    // Guardar no cierra el editor: permite seguir trabajando con la misma acta.
+    if (!editingActaId && 'recordId' in result && result.recordId) {
+      setEditingActaId(result.recordId);
+    }
   };
 
   const applyStateChange = (nextState: ActaDraft['estado']) => {
@@ -868,12 +853,9 @@ export function ActasPage() {
       {isWorkflowHome ? (
         <ActasWorkflow
           actas={actas}
-          selectedActaId={selectedWorkflowActaId}
-          onSelectedActaIdChange={setSelectedWorkflowActaId}
           onNewActa={() => openEditor()}
           onOpenActa={(acta) => openEditor(acta)}
           onOpenOperational={openOperationalView}
-          onOpenOutlookTemplate={openOutlookTemplateManager}
           onOpenTypeManager={() => {
             if (!hasLoadedHistoricalActas) {
               void loadHistoricalActas();

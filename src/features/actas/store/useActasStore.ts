@@ -172,9 +172,11 @@ function normalizeActa(acta: Acta): Acta {
   const estado =
     rawEstado === 'Pendiente de redactar'
       ? ACTA_STATES[0]
-      : isActaState(rawEstado)
-        ? rawEstado
-        : ACTA_STATES[0];
+      : rawEstado === 'Enviada a Dirección'
+        ? 'Pendiente de alegaciones'
+        : isActaState(rawEstado)
+          ? rawEstado
+          : ACTA_STATES[0];
   const alegaciones = Array.isArray(acta.alegaciones)
     ? acta.alegaciones.filter(isActaAlegacion)
     : [];

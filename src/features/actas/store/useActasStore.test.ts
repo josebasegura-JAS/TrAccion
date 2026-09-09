@@ -172,7 +172,6 @@ describe('useActasStore', () => {
     const originalCreatedAt = useActasStore.getState().actas[0].createdAt;
 
     await transitionActa(id, 'Borrador');
-    await transitionActa(id, 'Enviada a Dirección');
     await transitionActa(id, 'Pendiente de alegaciones');
     await transitionActa(id, 'Pendiente de firma', {
       actaPath: '  C:/actas/ce.docx  ',

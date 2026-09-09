@@ -6,7 +6,6 @@ export const ACTA_TYPES = DEFAULT_ACTA_TYPES;
 export const ACTA_STATES = [
   'Pendiente de realizar',
   'Borrador',
-  'Enviada a Dirección',
   'Pendiente de alegaciones',
   'Pendiente de firma',
   'Cerrada',
