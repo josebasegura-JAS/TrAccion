@@ -700,17 +700,23 @@ export function ActasPage() {
       : null;
 
     setSaveError('');
-    const result = editingActaId
-      ? await updateWithConcurrencyCheck(editingActaId, draft, expectedUpdatedAt)
-      : await createWithConcurrencyCheck(draft);
 
+    if (editingActaId) {
+      const result = await updateWithConcurrencyCheck(editingActaId, draft, expectedUpdatedAt);
+      if (!result.ok) {
+        setSaveError(result.message);
+      }
+      return;
+    }
+
+    const result = await createWithConcurrencyCheck(draft);
     if (!result.ok) {
       setSaveError(result.message);
       return;
     }
 
-    // Guardar no cierra el editor: permite seguir trabajando con la misma acta.
-    if (!editingActaId && 'recordId' in result && result.recordId) {
+    // Guardar no cierra el editor: tras crearla, seguimos trabajando sobre el registro ya persistido.
+    if (result.recordId) {
       setEditingActaId(result.recordId);
     }
   };
