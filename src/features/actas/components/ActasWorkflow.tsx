@@ -67,9 +67,36 @@ function StateTable({
   rows: Acta[];
   onOpenActa: (acta: Acta) => void;
 }) {
+  const toneClasses = {
+    warning: {
+      panel: 'border-amber-400/25 bg-amber-400/[0.055]',
+      header: 'border-amber-400/20 bg-amber-400/[0.075]',
+      columns: 'border-amber-400/15 bg-amber-400/[0.035]',
+      rowHover: 'hover:bg-amber-400/[0.07]',
+    },
+    info: {
+      panel: 'border-blue-400/25 bg-blue-500/[0.05]',
+      header: 'border-blue-400/20 bg-blue-500/[0.075]',
+      columns: 'border-blue-400/15 bg-blue-500/[0.035]',
+      rowHover: 'hover:bg-blue-500/[0.07]',
+    },
+    accent: {
+      panel: 'border-violet-400/25 bg-violet-500/[0.05]',
+      header: 'border-violet-400/20 bg-violet-500/[0.075]',
+      columns: 'border-violet-400/15 bg-violet-500/[0.035]',
+      rowHover: 'hover:bg-violet-500/[0.07]',
+    },
+    success: {
+      panel: 'border-emerald-400/25 bg-emerald-500/[0.05]',
+      header: 'border-emerald-400/20 bg-emerald-500/[0.075]',
+      columns: 'border-emerald-400/15 bg-emerald-500/[0.035]',
+      rowHover: 'hover:bg-emerald-500/[0.07]',
+    },
+  }[section.tone];
+
   return (
-    <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel/70">
-      <div className="flex items-center justify-between gap-3 border-b border-metro-border bg-metro-surface/75 px-3 py-2.5">
+    <section className={`overflow-hidden rounded-xl border ${toneClasses.panel}`}>
+      <div className={`flex items-center justify-between gap-3 border-b px-3 py-2.5 ${toneClasses.header}`}>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-black text-metro-text">{section.title}</h2>
@@ -79,7 +106,7 @@ function StateTable({
         </div>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_150px_28px] border-b border-metro-border/70 bg-metro-panel/70 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-metro-muted">
+      <div className={`grid grid-cols-[minmax(0,1fr)_150px_28px] border-b px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-metro-muted ${toneClasses.columns}`}>
         <span>Título</span>
         <span>Fecha límite</span>
         <span className="sr-only">Abrir</span>
@@ -91,7 +118,7 @@ function StateTable({
         <div>
           {rows.map((acta) => (
             <button
-              className="grid w-full grid-cols-[minmax(0,1fr)_150px_28px] items-center gap-2 border-b border-metro-border/60 px-3 py-2 text-left transition last:border-b-0 hover:bg-metro-raised/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-metro-red/50"
+              className={`grid w-full grid-cols-[minmax(0,1fr)_150px_28px] items-center gap-2 border-b border-metro-border/50 px-3 py-2 text-left transition last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-metro-red/50 ${toneClasses.rowHover}`}
               key={acta.id}
               onClick={() => onOpenActa(acta)}
               type="button"
