@@ -102,16 +102,17 @@ export function buildBorradorActaOutlookHtml(
   const email = 'RELACIONES_LABORALES@metrobilbao.eus';
 
   return `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.25;color:#000000;">
+<table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px;table-layout:fixed;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.2;color:#000000;">
   <tr>
-    <td valign="top" style="width:50%;padding:0 22px 0 0;">
+    <td width="370" valign="top" style="width:370px;padding:0;">
       <p style="margin:0 0 10px 0;">Kaixo,</p>
       <p style="margin:0 0 10px 0;">Honekin batera, “${title}” bileraren aktaren <strong>ZIRRIBORROA</strong> bidaltzen da:</p>
       <ul style="margin:0 0 12px 22px;padding:0;"><li>${sessionDateEu}</li></ul>
       <p style="margin:0 0 12px 0;">Mesedez, bidali zuen <strong>ekarpenak</strong> <a href="mailto:${email}">${email}</a> helbidera, <strong>${deadlineEu} baino lehen</strong>, sinatu eta argitaratzeko.</p>
       <p style="margin:0;">Ondo izan</p>
     </td>
-    <td valign="top" style="width:50%;padding:0 0 0 22px;">
+    <td width="35" style="width:35px;font-size:1px;line-height:1px;">&nbsp;</td>
+    <td width="395" valign="top" style="width:395px;padding:0;">
       <p style="margin:0 0 10px 0;">Adjunto remito <strong>BORRADOR</strong> del acta de reunión de “${title}” que se celebró:</p>
       <ul style="margin:0 0 12px 22px;padding:0;"><li>${sessionDateEs}</li></ul>
       <p style="margin:0 0 12px 0;">Por favor, hacernos llegar vuestras <strong>aportaciones</strong> a <a href="mailto:${email}">${email}</a>, <strong>antes del ${deadlineEs}</strong>, con el objeto de firmarla y publicarla.</p>
@@ -126,15 +127,16 @@ export function buildFirmaActaOutlookSubject(acta: Pick<Acta, 'titulo'>): string
 
 export function buildFirmaActaOutlookHtml(): string {
   return `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.25;color:#000000;">
+<table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px;table-layout:fixed;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.2;color:#000000;">
   <tr>
-    <td valign="top" style="width:50%;padding:0 22px 0 0;">
+    <td width="370" valign="top" style="width:370px;padding:0;">
       <p style="margin:0 0 10px 0;">Kaixo,</p>
       <p style="margin:0 0 12px 0;">Ekarpenak egiteko epea bete ondoren, honekin batera bidaltzen dizuegu behin betiko akta, ekarpenak koloreekin nabarmenduta.</p>
       <p style="margin:0 0 12px 0;">Jarraian akta bidaliko zaizue firma digitala egiteko.</p>
       <p style="margin:0;">Ondo izan</p>
     </td>
-    <td valign="top" style="width:50%;padding:0 0 0 22px;">
+    <td width="35" style="width:35px;font-size:1px;line-height:1px;">&nbsp;</td>
+    <td width="395" valign="top" style="width:395px;padding:0;">
       <p style="margin:0 0 12px 0;">Una vez cumplido el plazo para las aportaciones, adjunto remito el acta definitiva con las aportaciones remarcadas en color.</p>
       <p style="margin:0 0 12px 0;">A continuación se os enviará el acta para realizar la firma digital.</p>
     </td>
