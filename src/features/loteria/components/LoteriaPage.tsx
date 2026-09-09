@@ -71,6 +71,7 @@ const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Campaña y existencias',
     items: [
       'La campaña que se carga corresponde automáticamente al año actual. Los datos de años anteriores quedan archivados y al cambiar de año se inicia una campaña nueva.',
+      'Al generar el Outlook del encargo al lotero, TrAccion adjunta automáticamente un Excel de Administración con todos los números consecutivos desde el 1 hasta el mayor nº de empleado activo de Plantilla, distribuido en tres bloques y con los dos números de lotería como cabeceras.',
       'Se controlan por separado los décimos encargados y disponibles de cada uno de los dos números.',
       'Cuando la disponibilidad baja de 30 décimos, el indicador se muestra en tono de aviso para llamar la atención.',
       'El importe de cada persona se calcula con el número total de décimos solicitados multiplicado por el precio por décimo de la campaña.',
@@ -151,6 +152,106 @@ function downloadBlob(blob: Blob, filename: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function getMaxActiveEmployeeNumber(employees: Employee[]): number {
+  return employees.reduce((maximum, employee) => {
+    if (employee.deletedAt) return maximum;
+    const raw = employee.empleado.trim();
+    if (!/^\d+$/.test(raw)) return maximum;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isSafeInteger(parsed) && parsed > maximum ? parsed : maximum;
+  }, 0);
+}
+
+function workbookBufferToArrayBuffer(value: unknown): ArrayBuffer {
+  if (value instanceof ArrayBuffer) return value;
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  }
+  throw new Error('No se ha podido preparar el Excel para adjuntarlo a Outlook.');
+}
+
+async function buildLotteryAdministrationWorkbook(
+  campaign: LotteryCampaign,
+  employees: Employee[],
+): Promise<{ fileName: string; buffer: ArrayBuffer; maxEmployeeNumber: number }> {
+  const maxEmployeeNumber = getMaxActiveEmployeeNumber(employees);
+  if (maxEmployeeNumber < 1) {
+    throw new Error('No hay números de empleado válidos en Plantilla para generar el Excel de Administración.');
+  }
+
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'TrAccion';
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet('empleados loteria', {
+    pageSetup: {
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.3, bottom: 0.3, header: 0.15, footer: 0.15 },
+    },
+  });
+
+  const number1 = campaign.numero1.trim() || 'Nº 1';
+  const number2 = campaign.numero2.trim() || 'Nº 2';
+  const blockSize = Math.ceil(maxEmployeeNumber / 3);
+  const blockStarts = [1, blockSize + 1, blockSize * 2 + 1];
+  const blockColumnStarts = [1, 4, 7];
+
+  for (let blockIndex = 0; blockIndex < 3; blockIndex += 1) {
+    const startColumn = blockColumnStarts[blockIndex];
+    const headerValues = ['Núm.', number1, number2];
+    headerValues.forEach((value, index) => {
+      const cell = sheet.getCell(1, startColumn + index);
+      cell.value = value;
+      cell.font = { bold: true, name: 'Arial', size: 10 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E6E6' } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF808080' } },
+        left: { style: 'thin', color: { argb: 'FF808080' } },
+        bottom: { style: 'thin', color: { argb: 'FF808080' } },
+        right: { style: 'thin', color: { argb: 'FF808080' } },
+      };
+    });
+
+    const blockStart = blockStarts[blockIndex];
+    for (let offset = 0; offset < blockSize; offset += 1) {
+      const employeeNumber = blockStart + offset;
+      if (employeeNumber > maxEmployeeNumber) break;
+      const rowNumber = offset + 2;
+      sheet.getCell(rowNumber, startColumn).value = employeeNumber;
+      for (let columnOffset = 0; columnOffset < 3; columnOffset += 1) {
+        const cell = sheet.getCell(rowNumber, startColumn + columnOffset);
+        cell.font = { name: 'Arial', size: 9 };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'hair', color: { argb: 'FFB7B7B7' } },
+          left: { style: 'hair', color: { argb: 'FFB7B7B7' } },
+          bottom: { style: 'hair', color: { argb: 'FFB7B7B7' } },
+          right: { style: 'hair', color: { argb: 'FFB7B7B7' } },
+        };
+      }
+    }
+  }
+
+  [1, 4, 7].forEach((column) => { sheet.getColumn(column).width = 8; });
+  [2, 3, 5, 6, 8, 9].forEach((column) => { sheet.getColumn(column).width = 11; });
+  sheet.getRow(1).height = 18;
+  for (let row = 2; row <= blockSize + 1; row += 1) sheet.getRow(row).height = 15;
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  sheet.pageSetup.printArea = `A1:I${blockSize + 1}`;
+
+  const rawBuffer = await workbook.xlsx.writeBuffer();
+  return {
+    fileName: `Listado empleados loteria - Administración Lotería ${campaign.year}.xlsx`,
+    buffer: workbookBufferToArrayBuffer(rawBuffer),
+    maxEmployeeNumber,
+  };
 }
 
 async function exportCampaign(campaign: LotteryCampaign) {
@@ -600,15 +701,28 @@ export function LoteriaPage() {
       setMessage('La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.');
       return;
     }
-    const result = await api({
-      subject: draft.loteroEmailSubject,
-      html: plainTextToHtml(loteroMailPreview),
-      to: [draft.lotero.email.trim()],
-      cc: [],
-      bcc: [],
-      attachments: [],
-    });
-    setMessage(result.message);
+
+    try {
+      const administrationWorkbook = await buildLotteryAdministrationWorkbook(draft, employees);
+      const result = await api({
+        subject: draft.loteroEmailSubject,
+        html: plainTextToHtml(loteroMailPreview),
+        to: [draft.lotero.email.trim()],
+        cc: [],
+        bcc: [],
+        attachments: [{
+          fileName: administrationWorkbook.fileName,
+          buffer: administrationWorkbook.buffer,
+        }],
+      });
+      setMessage(
+        result.ok
+          ? `${result.message} Excel adjunto generado del 1 al ${administrationWorkbook.maxEmployeeNumber}.`
+          : result.message,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se ha podido generar el Excel de Administración.');
+    }
   };
 
   const generateParticipantsOutlookDraft = async () => {
