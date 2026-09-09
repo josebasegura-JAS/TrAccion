@@ -250,69 +250,74 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Pantalla principal',
     items: [
-      'La pantalla inicial muestra las actas abiertas agrupadas por estado. Cada fila enseña el título y la fecha límite del estado actual.',
-      'Pulsa cualquier acta para abrirla, modificarla, guardarla y seguir trabajando sin cerrar la ventana.',
-      'Desde la cabecera puedes crear una nueva acta, gestionar tipos de acta, consultar el histórico y abrir esta ayuda.',
+      'La pantalla inicial muestra las actas abiertas agrupadas en tres bandejas: Pendientes de realizar, Pendientes de alegaciones y Pendientes de firma.',
+      'Cada fila muestra el título y la fecha límite del estado actual. Pulsa cualquier acta para abrirla y seguir trabajando.',
+      'Desde la cabecera puedes crear una nueva acta, gestionar tipos de acta y consultar el histórico.',
     ],
   },
   {
-    title: '¿Qué hace este módulo?',
-    body: 'Gestiona el seguimiento completo de un acta: alta, borrador, alegaciones, firma y archivo, con avisos de plazo automáticos. Las actas de Comité y Paritaria se pueden generar directamente al cerrar la sesión correspondiente en esos módulos.',
+    title: 'Flujo real de trabajo',
+    body: 'El ciclo se ha simplificado para ajustarse al trabajo real: alta del acta, envío del borrador con apertura del plazo de alegaciones, envío del acta definitiva para firma y cierre cuando queda firmada.',
+    flowSteps: [
+      {
+        title: 'Pendiente de realizar',
+        action: 'Da de alta el acta y trabaja en ella hasta tener preparado el borrador.',
+        result: 'El acta permanece en Pendiente de realizar hasta que generas el correo de borrador.',
+      },
+      {
+        title: 'Enviar borrador',
+        action: 'Pulsa “Generar Outlook”. Se abre el correo bilingüe de borrador para sindicatos y Dirección.',
+        check: 'TrAccion cambia automáticamente el estado a Pendiente de alegaciones y fija una fecha límite de 21 días desde la fecha de generación.',
+        result: 'Comienza el periodo de alegaciones sin tener que cambiar el estado manualmente.',
+      },
+      {
+        title: 'Alegaciones',
+        action: 'Registra las alegaciones recibidas y consulta la fecha límite. Puedes volver a generar el correo de alegaciones o la cita de fin de plazo si lo necesitas.',
+        result: 'Al terminar el plazo, pasa el acta a Pendiente de firma.',
+      },
+      {
+        title: 'Firma y cierre',
+        action: 'Prepara el acta definitiva y usa “Exportar Outlook” para remitirla para firma.',
+        result: 'Cuando el acta esté firmada, adjunta la ruta definitiva y cierra el acta.',
+      },
+    ],
   },
   {
     title: 'Correo del borrador',
     items: [
-      'Cuando el acta está en estado “Borrador” aparece la acción “Generar Outlook”.',
+      'La acción “Generar Outlook” está disponible mientras el acta está en “Pendiente de realizar” y ya ha sido guardada.',
       'El asunto se genera como “Akta Zirriborroa/Borrador Acta - {nombre del acta}”.',
       'El cuerpo se crea en dos columnas, euskera y castellano, con el nombre del acta y la fecha de sesión.',
-      'La fecha tope para recibir aportaciones se calcula en el momento de generar el correo como fecha del sistema + 21 días y se escribe en cada idioma.',
-      'El correo se abre como borrador de Outlook: no se envía automáticamente y los destinatarios quedan para completar manualmente.',
+      'La fecha tope para recibir aportaciones se calcula como fecha del sistema + 21 días.',
+      'Al abrir correctamente el borrador de Outlook, TrAccion guarda automáticamente el cambio a “Pendiente de alegaciones” con esa fecha límite.',
+      'Los destinatarios quedan para completar manualmente y Outlook no envía el mensaje de forma automática.',
+    ],
+  },
+  {
+    title: 'Pendiente de alegaciones',
+    items: [
+      'La fecha límite corresponde al plazo de alegaciones iniciado al generar el correo de borrador.',
+      'Cada acta puede registrar varias alegaciones por sindicato, con presentada/no presentada, fecha y observación.',
+      'Se mantiene disponible el borrador Outlook configurable para comunicaciones durante esta fase y la cita de calendario “FIN ALEGACIONES {título}”.',
+      'Al terminar el plazo, usa la transición a “Pendiente de firma”. Esta fase no genera un nuevo plazo automático.',
     ],
   },
   {
     title: 'Correo del acta definitiva',
     items: [
-      'Cuando el acta está en estado “Pendiente de firma” aparece la acción “Exportar Outlook”.',
+      'En “Pendiente de firma” aparece “Exportar Outlook” para generar el correo bilingüe del acta definitiva.',
       'El asunto se genera como “Behin betiko Akta/Acta Definitiva Acta - {nombre del acta}”.',
-      'El cuerpo se crea en dos columnas, euskera y castellano, con el texto fijo de remisión del acta definitiva y aviso de firma digital posterior.',
-      'El correo se abre como borrador de Outlook: no se envía automáticamente y los destinatarios quedan para completar manualmente.',
+      'La fase de firma no tiene una fecha límite automática: se mantiene abierta hasta que la firma esté completada.',
+      'Cuando el documento esté firmado, vincula su ruta y usa “Cerrar acta”.',
     ],
   },
   {
-    title: 'Estados y plazos automáticos',
+    title: 'Histórico y compatibilidad',
     items: [
-      'Pendiente de realizar → Borrador → Pendiente de alegaciones → Pendiente de firma → Cerrada.',
-      'Al pasar a "Pendiente de alegaciones" se propone una fecha límite a 21 días.',
-      'Al pasar a "Pendiente de firma" se propone una fecha límite a 14 días.',
-      'La fecha propuesta se puede corregir a mano en cualquier momento; no se recalcula sola si luego se cambia manualmente.',
-    ],
-  },
-  {
-    title: 'Alegaciones',
-    items: [
-      'Cada acta puede tener varias alegaciones, una por sindicato, marcando si ha sido presentada, su fecha y una observación.',
-      'En estado "Pendiente de alegaciones" se puede abrir un borrador de Outlook con una plantilla configurable (con marcadores que se sustituyen por los datos del acta) para reclamar alegaciones a los sindicatos.',
-      'También se puede crear directamente una cita de Outlook "FIN ALEGACIONES {título}" en la fecha límite, para no perder de vista el plazo.',
-    ],
-  },
-  {
-    title: 'Cierre y archivo',
-    items: [
-      'En "Pendiente de firma" o "Cerrada" se puede adjuntar la ruta del documento del acta ya firmada.',
-      'Las actas cerradas quedan protegidas en modo consulta dentro del histórico; si hay que corregir una, se usa la acción explícita “Reabrir acta”, que la devuelve a Pendiente de firma.',
-      'Los tipos de acta (por defecto Comité y Paritaria) se pueden ampliar o desactivar desde el botón "Nuevo tipo", sin perder las actas ya creadas con un tipo desactivado.',
-    ],
-  },
-  {
-    title: 'Flujo recomendado',
-    ordered: true,
-    items: [
-      'Crear el acta desde la sesión de Comité/Paritaria correspondiente, o manualmente indicando tipo, título y fecha de sesión.',
-      'Pasarla a Borrador cuando el documento externo esté disponible.',
-      'Avanzar el estado a medida que progresa el trámite; revisar la fecha límite propuesta en cada cambio.',
-      'Registrar alegaciones por sindicato cuando proceda.',
-      'Adjuntar la ruta del acta firmada al cerrar el ciclo.',
-      'Consultar el histórico por año cuando el acta ya no esté abierta.',
+      'Las actas cerradas quedan protegidas en modo consulta dentro del histórico.',
+      'Si necesitas corregir una cerrada, “Reabrir acta” la devuelve a Pendiente de firma.',
+      'Las actas antiguas almacenadas como “Borrador” o “Enviada a Dirección” se normalizan automáticamente a “Pendiente de alegaciones”.',
+      'Los tipos de acta se pueden ampliar, desactivar o reactivar sin perder las actas ya existentes.',
     ],
   },
 ];
@@ -435,9 +440,6 @@ export function getActaStateBadgeClass(state: ActaDraft['estado']): string {
   if (state === 'Pendiente de realizar') {
     return 'border-orange-400/40 bg-orange-500/15 text-orange-200';
   }
-  if (state === 'Borrador') {
-    return 'border-blue-400/40 bg-blue-500/15 text-blue-200';
-  }
   if (state === 'Pendiente de alegaciones') {
     return 'border-yellow-400/40 bg-yellow-500/15 text-yellow-100';
   }
@@ -502,9 +504,6 @@ export function getAutomaticDeadlineForState(
   if (state === 'Pendiente de alegaciones') {
     return addDaysToIsoDate(changedAt, 21);
   }
-  if (state === 'Pendiente de firma') {
-    return addDaysToIsoDate(changedAt, 14);
-  }
   return null;
 }
 
@@ -525,9 +524,6 @@ export function formatDateTime(value: string): string {
 
 export function getNextState(state: ActaDraft['estado']): ActaDraft['estado'] | null {
   if (state === 'Pendiente de realizar') {
-    return 'Borrador';
-  }
-  if (state === 'Borrador') {
     return 'Pendiente de alegaciones';
   }
   if (state === 'Pendiente de alegaciones') {

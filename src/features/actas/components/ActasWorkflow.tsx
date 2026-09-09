@@ -23,19 +23,13 @@ const STATE_SECTIONS: StateSection[] = [
   {
     state: 'Pendiente de realizar',
     title: 'Pendientes de realizar',
-    description: 'Actas creadas que todavía no han pasado a borrador.',
+    description: 'Actas dadas de alta que todavía están pendientes de preparar y enviar como borrador.',
     tone: 'warning',
-  },
-  {
-    state: 'Borrador',
-    title: 'Borradores',
-    description: 'Actas en elaboración y listas para seguir trabajando.',
-    tone: 'info',
   },
   {
     state: 'Pendiente de alegaciones',
     title: 'Pendientes de alegaciones',
-    description: 'Actas enviadas para recibir y registrar aportaciones.',
+    description: 'Borradores enviados a sindicatos y Dirección con el plazo de alegaciones abierto.',
     tone: 'accent',
   },
   {
@@ -165,7 +159,13 @@ export function ActasWorkflow({
         </div>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-metro-border bg-metro-panel/45 text-center text-[11px] font-bold text-metro-muted">
+        <div className="border-r border-metro-border px-3 py-2"><span className="text-amber-200">1.</span> Preparar borrador</div>
+        <div className="border-r border-metro-border px-3 py-2"><span className="text-violet-200">2.</span> Recibir alegaciones</div>
+        <div className="px-3 py-2"><span className="text-emerald-200">3.</span> Firma y cierre</div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-3">
         {STATE_SECTIONS.map((section) => (
           <StateTable
             key={section.state}

@@ -65,7 +65,6 @@ describe('acta domain', () => {
   it('mantiene el catálogo de estados esperado', () => {
     expect(ACTA_STATES).toEqual([
       'Pendiente de realizar',
-      'Borrador',
       'Pendiente de alegaciones',
       'Pendiente de firma',
       'Cerrada',
@@ -102,14 +101,14 @@ describe('acta domain', () => {
 describe('transiciones del ciclo de actas', () => {
   it('solo permite avanzar un estado cada vez', async () => {
     const { canTransitionActaState } = await import('./acta');
-    expect(canTransitionActaState('Pendiente de realizar', 'Borrador')).toBe(true);
-    expect(canTransitionActaState('Pendiente de realizar', 'Pendiente de alegaciones')).toBe(false);
+    expect(canTransitionActaState('Pendiente de realizar', 'Pendiente de alegaciones')).toBe(true);
+    expect(canTransitionActaState('Pendiente de realizar', 'Pendiente de firma')).toBe(false);
     expect(canTransitionActaState('Pendiente de alegaciones', 'Pendiente de firma')).toBe(true);
   });
 
   it('solo permite reabrir una cerrada hacia Pendiente de firma', async () => {
     const { canTransitionActaState } = await import('./acta');
     expect(canTransitionActaState('Cerrada', 'Pendiente de firma')).toBe(true);
-    expect(canTransitionActaState('Cerrada', 'Borrador')).toBe(false);
+    expect(canTransitionActaState('Cerrada', 'Pendiente de alegaciones')).toBe(false);
   });
 });

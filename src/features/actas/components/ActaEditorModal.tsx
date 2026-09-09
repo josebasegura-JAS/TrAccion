@@ -67,7 +67,7 @@ export function ActaEditorModal({
   canCreateBorradorOutlookFromEditor: boolean;
   canCreateFirmaOutlookFromEditor: boolean;
   canCreateOutlookDraftFromEditor: boolean;
-  createActaBorradorOutlookDraft: (acta: Pick<Acta, 'titulo' | 'fechaSesion'>) => Promise<void>;
+  createActaBorradorOutlookDraft: (acta: ActaDraft) => Promise<void>;
   createActaFirmaOutlookDraft: (acta: Pick<Acta, 'titulo'>) => Promise<void>;
   createActaOutlookCalendar: (acta: Pick<Acta, 'titulo' | 'fechaLimite'>) => Promise<void>;
   createActaOutlookDraft: (
@@ -184,14 +184,20 @@ export function ActaEditorModal({
               <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">Estado actual</p>
               <p className="mt-0.5 text-sm font-bold text-metro-text">{draft.estado}</p>
             </div>
-            <ActionButton
-              disabled={!editingActaId || !getNextState(draft.estado) || isEditorReadOnly}
-              iconOnly={false}
-              onClick={advanceState}
-              variant="secondary"
-            >
-              {getNextStateLabel(draft.estado)}
-            </ActionButton>
+            {draft.estado === 'Pendiente de realizar' ? (
+              <div className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2 text-xs leading-5 text-amber-100">
+                Genera el correo de Outlook del borrador para iniciar automáticamente el plazo de alegaciones.
+              </div>
+            ) : (
+              <ActionButton
+                disabled={!editingActaId || !getNextState(draft.estado) || isEditorReadOnly}
+                iconOnly={false}
+                onClick={advanceState}
+                variant="secondary"
+              >
+                {getNextStateLabel(draft.estado)}
+              </ActionButton>
+            )}
           </div>
 
           <Textarea
@@ -401,7 +407,7 @@ export function ActaEditorModal({
             <ActionButton
               iconOnly={false}
               onClick={() => void createActaBorradorOutlookDraft(draft)}
-              title="Generar correo Outlook del borrador del acta"
+              title="Generar correo Outlook e iniciar plazo de alegaciones"
               variant="outlook"
             >
               Generar Outlook

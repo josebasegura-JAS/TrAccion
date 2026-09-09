@@ -314,7 +314,7 @@ export function ActasPage() {
   };
 
   const createActaBorradorOutlookDraft = useCallback(
-    async (acta: Pick<Acta, 'titulo' | 'fechaSesion'>) => {
+    async (acta: ActaDraft, actaId: string) => {
       setOutlookDraftStatus('');
       setOutlookDraftStatusIsError(false);
 
@@ -332,11 +332,42 @@ export function ActasPage() {
           to: [],
           cc: [],
         });
-        setOutlookDraftStatus(
-          result.message ||
-            (result.ok ? 'Borrador Outlook del acta abierto.' : 'No se ha podido abrir Outlook.'),
+
+        if (!result.ok) {
+          setOutlookDraftStatus(result.message || 'No se ha podido abrir Outlook.');
+          setOutlookDraftStatusIsError(true);
+          return;
+        }
+
+        const fechaLimite = getAutomaticDeadlineForState('Pendiente de alegaciones') ?? '';
+        const nextDraft: ActaDraft = {
+          ...acta,
+          estado: 'Pendiente de alegaciones',
+          fechaLimite,
+        };
+        const currentActa = actas.find((candidate) => candidate.id === actaId);
+        const updateResult = await updateWithConcurrencyCheck(
+          actaId,
+          nextDraft,
+          currentActa?.updatedAt ?? null,
         );
-        setOutlookDraftStatusIsError(!result.ok);
+
+        if (!updateResult.ok) {
+          setOutlookDraftStatus(
+            `Outlook abierto, pero no se ha podido actualizar el estado del acta: ${updateResult.message}`,
+          );
+          setOutlookDraftStatusIsError(true);
+          return;
+        }
+
+        if (editingActaId === actaId) {
+          setDraft(nextDraft);
+          setDeadlineWasAutoUpdated(true);
+        }
+        setOutlookDraftStatus(
+          result.message || 'Borrador Outlook abierto. El acta ha pasado a Pendiente de alegaciones.',
+        );
+        setOutlookDraftStatusIsError(false);
       } catch (error) {
         setOutlookDraftStatus(
           error instanceof Error ? error.message : 'No se ha podido abrir Outlook.',
@@ -344,7 +375,7 @@ export function ActasPage() {
         setOutlookDraftStatusIsError(true);
       }
     },
-    [],
+    [actas, editingActaId, updateWithConcurrencyCheck],
   );
 
   const createActaFirmaOutlookDraft = useCallback(
@@ -572,9 +603,9 @@ export function ActasPage() {
             className="flex flex-wrap items-center gap-2"
             onClick={(event) => event.stopPropagation()}
           >
-            {acta.estado === 'Borrador' && (
+            {acta.estado === 'Pendiente de realizar' && (
               <ActionButton
-                onClick={() => void createActaBorradorOutlookDraft(acta)}
+                onClick={() => void createActaBorradorOutlookDraft(acta, acta.id)}
                 size="sm"
                 title="Generar Outlook del borrador del acta"
                 variant="outlook"
@@ -726,10 +757,11 @@ export function ActasPage() {
       return;
     }
     const automaticDeadline = getAutomaticDeadlineForState(nextState);
+    const shouldClearDeadline = nextState === 'Pendiente de firma' || nextState === 'Cerrada';
     setDraft((current) => ({
       ...current,
       estado: nextState,
-      fechaLimite: automaticDeadline ?? current.fechaLimite,
+      fechaLimite: automaticDeadline ?? (shouldClearDeadline ? '' : current.fechaLimite),
     }));
     setDeadlineWasAutoUpdated(Boolean(automaticDeadline));
   };
@@ -842,7 +874,8 @@ export function ActasPage() {
 
   const displayedCreationDate = editingActa?.fechaCreacion ?? getTodayIsoDate();
   const canAttachFinalActa = draft.estado === 'Pendiente de firma' || draft.estado === 'Cerrada';
-  const canCreateBorradorOutlookFromEditor = draft.estado === 'Borrador';
+  const canCreateBorradorOutlookFromEditor =
+    draft.estado === 'Pendiente de realizar' && Boolean(editingActaId);
   const canCreateFirmaOutlookFromEditor = draft.estado === 'Pendiente de firma';
   const canCreateOutlookDraftFromEditor = draft.estado === 'Pendiente de alegaciones';
 
@@ -1107,7 +1140,11 @@ export function ActasPage() {
           canCreateBorradorOutlookFromEditor={canCreateBorradorOutlookFromEditor}
           canCreateFirmaOutlookFromEditor={canCreateFirmaOutlookFromEditor}
           canCreateOutlookDraftFromEditor={canCreateOutlookDraftFromEditor}
-          createActaBorradorOutlookDraft={createActaBorradorOutlookDraft}
+          createActaBorradorOutlookDraft={(acta) =>
+            editingActaId
+              ? createActaBorradorOutlookDraft(acta, editingActaId)
+              : Promise.resolve()
+          }
           createActaFirmaOutlookDraft={createActaFirmaOutlookDraft}
           createActaOutlookCalendar={createActaOutlookCalendar}
           createActaOutlookDraft={createActaOutlookDraft}
