@@ -28,6 +28,7 @@ import {
 } from '../domain/licenciaSinSueldo';
 import { useLicenciasSinSueldoStore } from '../store/useLicenciasSinSueldoStore';
 import { generateLicenciaSinSueldoWord } from '../domain/word';
+import { generateExcedenciaWord } from '../domain/excedenciaWord';
 import { LicenciasSinSueldoEditor } from './LicenciasSinSueldoEditor';
 import { LicenciasBlock, LicenciasTable } from './LicenciasSinSueldoTable';
 import {
@@ -172,6 +173,54 @@ export function LicenciasSinSueldoPage() {
     });
   }, []);
 
+  const generateWord = useCallback(
+    async (record: LicenciaSinSueldoRecord) => {
+      if (
+        record.estado !== 'pendiente_firma' ||
+        (record.tipo !== 'Licencia sin sueldo' && record.tipo !== 'Excedencia') ||
+        generatingWordId
+      ) {
+        return;
+      }
+
+      const plantillaEmployee = findActiveEmployee(employees, record.numeroEmpleado);
+
+      setGeneratingWordId(record.id);
+      setWordStatus('');
+      try {
+        if (record.tipo === 'Excedencia') {
+          const result = await generateExcedenciaWord(record, plantillaEmployee);
+          await saveDocxWithDialog(result.blob, result.fileName);
+          setWordStatus(
+            `Word de excedencia generado: ${result.replacedFields.length} campos sustituidos.`,
+          );
+        } else {
+          const result = await generateLicenciaSinSueldoWord(
+            record,
+            plantillaEmployee,
+            rutaPlantillaLicenciaSinSueldo,
+            jobPositionTranslations,
+          );
+          await saveDocxWithDialog(result.blob, result.fileName);
+          setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
+        setWordStatus(message);
+        await alert(message, { type: 'error' });
+      } finally {
+        setGeneratingWordId(null);
+      }
+    },
+    [
+      alert,
+      employees,
+      generatingWordId,
+      jobPositionTranslations,
+      rutaPlantillaLicenciaSinSueldo,
+    ],
+  );
+
   const saveDraft = async (
     draft: LicenciaSinSueldoDraft,
   ): Promise<{ ok: boolean; message: string }> => {
@@ -186,6 +235,10 @@ export function LicenciasSinSueldoPage() {
       return result;
     }
     if (editor.record) {
+      const wasApprovedExcedencia =
+        editor.record.tipo === 'Excedencia' &&
+        editor.record.estado === 'pendiente_aprobacion' &&
+        draft.estado === 'pendiente_firma';
       const result = await updateWithConcurrencyCheck(
         editor.record.id,
         draft,
@@ -193,6 +246,9 @@ export function LicenciasSinSueldoPage() {
       );
       if (result.ok) {
         setEditor(null);
+        if (wasApprovedExcedencia) {
+          await generateWord({ ...editor.record, ...draft, estado: 'pendiente_firma' });
+        }
       }
       return result;
     }
@@ -237,42 +293,16 @@ export function LicenciasSinSueldoPage() {
     );
     if (!result.ok) {
       await alert(result.message, { type: 'error' });
+      await releaseMutationLock(record);
+      return;
     }
     await releaseMutationLock(record);
+    if (record.estado === 'pendiente_aprobacion' && record.tipo === 'Excedencia') {
+      await generateWord({ ...record, estado: 'pendiente_firma' });
+    }
   };
 
-  const generateWord = useCallback(
-    async (record: LicenciaSinSueldoRecord) => {
-      if (
-        record.estado !== 'pendiente_firma' ||
-        record.tipo !== 'Licencia sin sueldo' ||
-        generatingWordId
-      ) {
-        return;
-      }
 
-      const plantillaEmployee = findActiveEmployee(employees, record.numeroEmpleado);
-
-      setGeneratingWordId(record.id);
-      setWordStatus('');
-      try {
-        const result = await generateLicenciaSinSueldoWord(
-          record,
-          plantillaEmployee,
-          rutaPlantillaLicenciaSinSueldo,
-          jobPositionTranslations,
-        );
-        await saveDocxWithDialog(result.blob, result.fileName);
-        setWordStatus(`Word generado: ${result.detectedMarkers.length} marcadores sustituidos.`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'No se ha podido generar el Word.';
-        setWordStatus(message);
-      } finally {
-        setGeneratingWordId(null);
-      }
-    },
-    [employees, generatingWordId, jobPositionTranslations, rutaPlantillaLicenciaSinSueldo],
-  );
 
   const toggleYear = (year: number) => {
     setOpenHistoryYears((current) => {

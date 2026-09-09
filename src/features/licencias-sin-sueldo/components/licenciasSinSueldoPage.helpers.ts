@@ -70,8 +70,10 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Generación documental',
     items: [
-      'En los registros aprobados puede generarse el documento Word de concesión a partir de una plantilla externa configurada en Ajustes.',
-      'El documento rellena automáticamente marcadores de la plantilla («Puesto_CAST», «Puesto_EUS»...) con los datos de la persona: puesto en castellano y su traducción a euskera (tomada de Plantilla o, si falta, de la tabla de Traducción de puestos), fechas y demás datos de la solicitud.',
+      'Licencia sin sueldo: en los registros aprobados puede generarse el documento Word de concesión a partir de la plantilla externa configurada en Ajustes.',
+      'Excedencia: al aprobar la solicitud se genera automáticamente el Word de concesión con la plantilla corporativa integrada en TrAccion. También queda disponible el botón Word mientras esté Pendiente de firma para poder regenerarlo.',
+      'Para la excedencia, nombre y apellidos, calle + número + piso, código postal, población y provincia se obtienen de Plantilla por número de empleado. Si falta alguno de esos datos, TrAccion avisa y no genera un documento incompleto.',
+      'Las fechas del período salen de la solicitud de excedencia y la fecha de la carta es la fecha del sistema en el momento de generar el documento.',
     ],
   },
   {
@@ -81,7 +83,7 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
       'Crear la solicitud indicando tipo, persona, fechas y datos básicos obligatorios.',
       'Revisar que la duración cumpla las reglas del tipo elegido y completar observaciones si procede.',
       'Actualizar el estado del expediente a medida que avance: aprobar, firma, vigencia o denegación.',
-      'Generar el documento Word de concesión cuando el caso esté aprobado y la plantilla esté disponible.',
+      'Al aprobar una Excedencia, revisar y guardar el Word que TrAccion genera automáticamente; si es necesario, se puede regenerar desde Pendiente de firma.',
       'Consultar el histórico para expedientes finalizados o solicitudes ya denegadas.',
     ],
   },
