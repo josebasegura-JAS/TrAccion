@@ -10,6 +10,7 @@ type WorkflowProps = {
   onOpenActa: (acta: Acta) => void;
   onOpenOperational: (state?: ActaState) => void;
   onOpenTypeManager: () => void;
+  onDeleteActa: (actaId: string) => void;
 };
 
 type StateSection = {
@@ -56,10 +57,12 @@ function StateTable({
   section,
   rows,
   onOpenActa,
+  onDeleteActa,
 }: {
   section: StateSection;
   rows: Acta[];
   onOpenActa: (acta: Acta) => void;
+  onDeleteActa: (actaId: string) => void;
 }) {
   const toneClasses = {
     warning: {
@@ -100,10 +103,10 @@ function StateTable({
         </div>
       </div>
 
-      <div className={`grid grid-cols-[minmax(0,1fr)_150px_28px] border-b px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-metro-muted ${toneClasses.columns}`}>
+      <div className={`grid grid-cols-[minmax(0,1fr)_150px_64px] border-b px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-metro-muted ${toneClasses.columns}`}>
         <span>Título</span>
         <span>Fecha límite</span>
-        <span className="sr-only">Abrir</span>
+        <span className="sr-only">Acciones</span>
       </div>
 
       {rows.length === 0 ? (
@@ -111,16 +114,43 @@ function StateTable({
       ) : (
         <div>
           {rows.map((acta) => (
-            <button
-              className={`grid w-full grid-cols-[minmax(0,1fr)_150px_28px] items-center gap-2 border-b border-metro-border/50 px-3 py-2 text-left transition last:border-b-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-metro-red/50 ${toneClasses.rowHover}`}
+            <div
+              className={`grid grid-cols-[minmax(0,1fr)_150px_64px] items-center gap-2 border-b border-metro-border/50 px-3 py-2 transition last:border-b-0 ${toneClasses.rowHover}`}
               key={acta.id}
-              onClick={() => onOpenActa(acta)}
-              type="button"
             >
-              <p className="truncate text-xs font-bold text-metro-text" title={acta.titulo}>{acta.titulo}</p>
-              <span className="text-xs font-semibold text-metro-secondary">{formatDate(acta.fechaLimite)}</span>
-              <span aria-hidden="true" className="text-lg font-bold text-metro-muted">›</span>
-            </button>
+              <button
+                className="min-w-0 text-left focus:outline-none focus:ring-2 focus:ring-metro-red/50"
+                onClick={() => onOpenActa(acta)}
+                type="button"
+              >
+                <p className="truncate text-xs font-bold text-metro-text" title={acta.titulo}>{acta.titulo}</p>
+              </button>
+              <button
+                className="text-left text-xs font-semibold text-metro-secondary focus:outline-none focus:ring-2 focus:ring-metro-red/50"
+                onClick={() => onOpenActa(acta)}
+                type="button"
+              >
+                {formatDate(acta.fechaLimite)}
+              </button>
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  aria-label={`Abrir ${acta.titulo}`}
+                  className="grid h-7 w-7 place-items-center rounded-md text-lg font-bold text-metro-muted transition hover:bg-white/[0.05] hover:text-metro-text"
+                  onClick={() => onOpenActa(acta)}
+                  title="Abrir acta"
+                  type="button"
+                >
+                  ›
+                </button>
+                <ActionButton
+                  iconOnly
+                  onClick={() => onDeleteActa(acta.id)}
+                  size="sm"
+                  title={`Eliminar ${acta.titulo}`}
+                  variant="delete"
+                />
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -134,6 +164,7 @@ export function ActasWorkflow({
   onOpenActa,
   onOpenOperational,
   onOpenTypeManager,
+  onDeleteActa,
 }: WorkflowProps) {
   const openActas = actas.filter((acta) => acta.estado !== 'Cerrada');
 
@@ -169,6 +200,7 @@ export function ActasWorkflow({
         {STATE_SECTIONS.map((section) => (
           <StateTable
             key={section.state}
+            onDeleteActa={onDeleteActa}
             onOpenActa={onOpenActa}
             rows={sortByDeadline(openActas.filter((acta) => acta.estado === section.state))}
             section={section}

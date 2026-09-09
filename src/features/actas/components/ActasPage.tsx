@@ -893,6 +893,7 @@ export function ActasPage() {
         <ActasWorkflow
           actas={actas}
           onNewActa={() => openEditor()}
+          onDeleteActa={(actaId) => void deleteActa(actaId)}
           onOpenActa={(acta) => openEditor(acta)}
           onOpenOperational={openOperationalView}
           onOpenTypeManager={() => {
