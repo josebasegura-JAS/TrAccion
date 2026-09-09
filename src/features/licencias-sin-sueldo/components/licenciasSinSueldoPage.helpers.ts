@@ -162,7 +162,7 @@ export function getHistoricalYear(record: LicenciaSinSueldoRecord): number {
     record.estado === 'denegada'
       ? (record.actualizaciones[record.actualizaciones.length - 1]?.fecha.slice(0, 10) ??
         record.fechaSolicitud)
-      : record.fechaFin;
+      : (record.prorroga?.fechaFin ?? record.fechaFin);
   const year = Number(sourceDate.slice(0, 4));
   return Number.isFinite(year) ? year : 0;
 }
@@ -178,5 +178,6 @@ export function toDraft(record: LicenciaSinSueldoRecord): LicenciaSinSueldoDraft
     estado: record.estado,
     observaciones: record.observaciones,
     actualizaciones: record.actualizaciones,
+    prorroga: record.prorroga ?? null,
   };
 }

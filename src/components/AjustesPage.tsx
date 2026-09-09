@@ -21,6 +21,9 @@ export function AjustesPage() {
   const rutaPlantillaExcedencia = useConfiguracionStore(
     (state) => state.rutaPlantillaExcedencia,
   );
+  const rutaPlantillaProrrogaExcedencia = useConfiguracionStore(
+    (state) => state.rutaPlantillaProrrogaExcedencia,
+  );
   const rutaPlantillaVinculograma = useConfiguracionStore(
     (state) => state.rutaPlantillaVinculograma,
   );
@@ -38,12 +41,16 @@ export function AjustesPage() {
   const setRutaPlantillaExcedencia = useConfiguracionStore(
     (state) => state.setRutaPlantillaExcedencia,
   );
+  const setRutaPlantillaProrrogaExcedencia = useConfiguracionStore(
+    (state) => state.setRutaPlantillaProrrogaExcedencia,
+  );
   const setRutaPlantillaVinculograma = useConfiguracionStore(
     (state) => state.setRutaPlantillaVinculograma,
   );
   const [status, setStatus] = useState('');
   const [licenciaTemplateStatus, setLicenciaTemplateStatus] = useState('');
   const [excedenciaTemplateStatus, setExcedenciaTemplateStatus] = useState('');
+  const [prorrogaExcedenciaTemplateStatus, setProrrogaExcedenciaTemplateStatus] = useState('');
   const [vinculogramaTemplateStatus, setVinculogramaTemplateStatus] = useState('');
   const databaseStatus = useDatabaseStatus();
   const databaseBadge = buildDatabaseStatusBadge(databaseStatus);
@@ -652,6 +659,28 @@ export function AjustesPage() {
     );
   };
 
+  const handleSelectProrrogaExcedenciaTemplate = async () => {
+    setProrrogaExcedenciaTemplateStatus('');
+    const api = window.traccion;
+    if (!api || (!api.selectExcedenciaTemplate && !api.selectLicenciaSinSueldoTemplate && !api.selectTeletrabajoTemplate)) {
+      setProrrogaExcedenciaTemplateStatus('El selector de plantillas solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+    const selectedPath = api.selectExcedenciaTemplate
+      ? await api.selectExcedenciaTemplate()
+      : api.selectLicenciaSinSueldoTemplate
+        ? await api.selectLicenciaSinSueldoTemplate()
+        : await api.selectTeletrabajoTemplate();
+    if (!selectedPath) return;
+    if (!isDocxPath(selectedPath)) {
+      setProrrogaExcedenciaTemplateStatus('La ruta seleccionada debe apuntar a un archivo DOCX.');
+      return;
+    }
+    setProrrogaExcedenciaTemplateStatus('Guardando ruta de plantilla de prórroga...');
+    const result = await setRutaPlantillaProrrogaExcedencia(selectedPath);
+    setProrrogaExcedenciaTemplateStatus(result.ok ? 'Ruta de plantilla de prórroga guardada.' : result.message);
+  };
+
   return (
     <>
       <section className="rounded-3xl border border-metro-border bg-metro-surface p-5">
@@ -822,6 +851,29 @@ export function AjustesPage() {
             {excedenciaTemplateStatus && (
               <Notice tone={noticeTone(excedenciaTemplateStatus)}>{excedenciaTemplateStatus}</Notice>
             )}
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
+          <div className="mb-4">
+            <h3 className="text-base font-bold text-metro-text">Plantilla Prórroga Excedencia</h3>
+            <p className="mt-1 text-sm text-metro-muted">DOCX externo usado para generar la única prórroga posible de una excedencia.</p>
+          </div>
+          <label className="block text-xs font-semibold text-metro-muted">
+            Ruta plantilla DOCX
+            <input
+              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+              onChange={(event) => { void setRutaPlantillaProrrogaExcedencia(event.target.value); }}
+              placeholder="C:\\RRLL\\Plantillas\\Plantilla Prórroga Excedencia.docx"
+              type="text"
+              value={rutaPlantillaProrrogaExcedencia}
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" onClick={handleSelectProrrogaExcedenciaTemplate} type="button">
+              <FolderOpen size={16} /> Seleccionar plantilla
+            </button>
+            {prorrogaExcedenciaTemplateStatus && <Notice tone={noticeTone(prorrogaExcedenciaTemplateStatus)}>{prorrogaExcedenciaTemplateStatus}</Notice>}
           </div>
         </div>
 

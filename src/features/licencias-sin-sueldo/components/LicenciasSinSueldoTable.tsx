@@ -28,6 +28,8 @@ export function LicenciasTable({
   onDelete,
   onEdit,
   onGenerateWord,
+  onExtendExcedencia,
+  onGenerateProrrogaWord,
   generatingWordId,
 }: {
   blockId: BlockId;
@@ -38,6 +40,8 @@ export function LicenciasTable({
   onDelete: (record: LicenciaSinSueldoRecord) => void;
   onEdit: (record: LicenciaSinSueldoRecord) => void;
   onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
+  onExtendExcedencia?: (record: LicenciaSinSueldoRecord) => void;
+  onGenerateProrrogaWord?: (record: LicenciaSinSueldoRecord) => void;
   generatingWordId: string | null;
 }) {
   const {
@@ -172,6 +176,35 @@ export function LicenciasTable({
                 {generatingWordId === record.id ? 'Generando…' : 'Word'}
               </ActionButton>
             )}
+            {record.estado === 'vigente' && record.tipo === 'Excedencia' && !record.prorroga && onExtendExcedencia && (
+              <ActionButton
+                iconOnly={false}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onExtendExcedencia(record);
+                }}
+                size="sm"
+                title="Ampliar excedencia"
+                variant="secondary"
+              >
+                Ampliar excedencia
+              </ActionButton>
+            )}
+            {record.estado === 'vigente' && record.tipo === 'Excedencia' && record.prorroga && onGenerateProrrogaWord && (
+              <ActionButton
+                iconOnly={false}
+                disabled={generatingWordId !== null}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onGenerateProrrogaWord(record);
+                }}
+                size="sm"
+                title="Generar Word de prórroga de excedencia"
+                variant="word"
+              >
+                {generatingWordId === record.id ? 'Generando…' : 'Word prórroga'}
+              </ActionButton>
+            )}
             {record.estado === 'pendiente_firma' && (
               <button
                 className="text-xs font-semibold text-metro-red hover:text-metro-text"
@@ -198,7 +231,7 @@ export function LicenciasTable({
         ),
       },
     ],
-    [generatingWordId, onAdvance, onDelete, onGenerateWord],
+    [generatingWordId, onAdvance, onDelete, onExtendExcedencia, onGenerateProrrogaWord, onGenerateWord],
   );
 
   return (

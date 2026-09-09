@@ -22,6 +22,7 @@ interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
   rutaPlantillaLicenciaSinSueldo: string;
   rutaPlantillaExcedencia: string;
+  rutaPlantillaProrrogaExcedencia: string;
   rutaPlantillaVinculograma: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
@@ -33,6 +34,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaPlantillaTeletrabajo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaLicenciaSinSueldo: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaPlantillaProrrogaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
@@ -49,6 +51,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaPlantillaTeletrabajo: state.rutaPlantillaTeletrabajo,
     rutaPlantillaLicenciaSinSueldo: state.rutaPlantillaLicenciaSinSueldo,
     rutaPlantillaExcedencia: state.rutaPlantillaExcedencia,
+    rutaPlantillaProrrogaExcedencia: state.rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
     taskPhases: state.taskPhases,
     taskOrigins: state.taskOrigins,
@@ -135,6 +138,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaPlantillaTeletrabajo: '',
     rutaPlantillaLicenciaSinSueldo: '',
     rutaPlantillaExcedencia: '',
+    rutaPlantillaProrrogaExcedencia: '',
     rutaPlantillaVinculograma: '',
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
@@ -161,6 +165,11 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaPlantillaExcedencia: normalizeTemplatePath(
       typeof (parsed as { rutaPlantillaExcedencia?: unknown }).rutaPlantillaExcedencia === 'string'
         ? (parsed as { rutaPlantillaExcedencia: string }).rutaPlantillaExcedencia
+        : '',
+    ),
+    rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(
+      typeof (parsed as { rutaPlantillaProrrogaExcedencia?: unknown }).rutaPlantillaProrrogaExcedencia === 'string'
+        ? (parsed as { rutaPlantillaProrrogaExcedencia: string }).rutaPlantillaProrrogaExcedencia
         : '',
     ),
     rutaPlantillaVinculograma: normalizeTemplatePath(
@@ -243,6 +252,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaTeletrabajo: initialConfiguracion.rutaPlantillaTeletrabajo,
   rutaPlantillaLicenciaSinSueldo: initialConfiguracion.rutaPlantillaLicenciaSinSueldo,
   rutaPlantillaExcedencia: initialConfiguracion.rutaPlantillaExcedencia,
+  rutaPlantillaProrrogaExcedencia: initialConfiguracion.rutaPlantillaProrrogaExcedencia,
   rutaPlantillaVinculograma: initialConfiguracion.rutaPlantillaVinculograma,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
@@ -265,6 +275,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaPlantillaTeletrabajo,
         rutaPlantillaLicenciaSinSueldo,
         rutaPlantillaExcedencia,
+        rutaPlantillaProrrogaExcedencia,
         rutaPlantillaVinculograma,
         taskPhases,
         taskOrigins,
@@ -273,6 +284,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaPlantillaTeletrabajo,
         rutaPlantillaLicenciaSinSueldo,
         rutaPlantillaExcedencia,
+        rutaPlantillaProrrogaExcedencia,
         rutaPlantillaVinculograma,
         taskPhases,
         taskOrigins,
@@ -317,6 +329,13 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     const configuracion: ConfiguracionState = {
       ...selectConfiguracionState(get()),
       rutaPlantillaExcedencia: normalizeTemplatePath(ruta),
+    };
+    return commitConfiguracion(set, configuracion);
+  },
+  setRutaPlantillaProrrogaExcedencia: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
+      rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(ruta),
     };
     return commitConfiguracion(set, configuracion);
   },

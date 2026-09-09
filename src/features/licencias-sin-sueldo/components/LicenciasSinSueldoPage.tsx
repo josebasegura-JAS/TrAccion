@@ -19,6 +19,7 @@ import { useConfiguracionStore } from '../../configuracion/store/useConfiguracio
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { findActiveEmployee } from '../../plantilla/domain/employeeMaster';
 import {
+  canProrrogarExcedencia,
   getEffectiveLicenciaEstado,
   licenciaSinSueldoTipos,
   visibleLicenciasSinSueldo,
@@ -29,7 +30,9 @@ import {
 import { useLicenciasSinSueldoStore } from '../store/useLicenciasSinSueldoStore';
 import { generateLicenciaSinSueldoWord } from '../domain/word';
 import { generateExcedenciaWord } from '../domain/excedenciaWord';
+import { generateProrrogaExcedenciaWord } from '../domain/prorrogaExcedenciaWord';
 import { LicenciasSinSueldoEditor } from './LicenciasSinSueldoEditor';
+import { ProrrogaExcedenciaModal } from './ProrrogaExcedenciaModal';
 import { LicenciasBlock, LicenciasTable } from './LicenciasSinSueldoTable';
 import {
   LICENCIAS_HELP_SECTIONS,
@@ -49,6 +52,9 @@ export function LicenciasSinSueldoPage() {
   const rutaPlantillaExcedencia = useConfiguracionStore(
     (state) => state.rutaPlantillaExcedencia,
   );
+  const rutaPlantillaProrrogaExcedencia = useConfiguracionStore(
+    (state) => state.rutaPlantillaProrrogaExcedencia,
+  );
   const {
     records,
     load,
@@ -60,6 +66,7 @@ export function LicenciasSinSueldoPage() {
     mode: EditorMode;
     record: LicenciaSinSueldoRecord | null;
   } | null>(null);
+  const [prorrogaRecord, setProrrogaRecord] = useState<LicenciaSinSueldoRecord | null>(null);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'todos' | LicenciaSinSueldoTipo>('todos');
   const [yearFilter, setYearFilter] = useState<'todos' | string>('todos');
@@ -310,6 +317,52 @@ export function LicenciasSinSueldoPage() {
     ],
   );
 
+  const saveProrroga = useCallback(
+    async (record: LicenciaSinSueldoRecord, fechaInicio: string, fechaFin: string) => {
+      const latest = records.find((item) => item.id === record.id);
+      if (!latest) return { ok: false, message: 'La excedencia ya no existe. Recarga antes de continuar.' };
+      if (!canProrrogarExcedencia(latest, today)) {
+        return { ok: false, message: 'Esta excedencia ya no puede ampliarse o ya tiene una prórroga.' };
+      }
+      const result = await updateWithConcurrencyCheck(
+        latest.id,
+        {
+          ...toDraft(latest),
+          prorroga: { fechaInicio, fechaFin, createdAt: new Date().toISOString() },
+        },
+        latest.updatedAt,
+      );
+      if (result.ok) setProrrogaRecord(null);
+      return result;
+    },
+    [records, today, updateWithConcurrencyCheck],
+  );
+
+  const generateProrrogaWord = useCallback(
+    async (record: LicenciaSinSueldoRecord) => {
+      if (!record.prorroga || generatingWordId) return;
+      const plantillaEmployee = findActiveEmployee(employees, record.numeroEmpleado);
+      setGeneratingWordId(record.id);
+      setWordStatus('');
+      try {
+        const result = await generateProrrogaExcedenciaWord(
+          record,
+          plantillaEmployee,
+          rutaPlantillaProrrogaExcedencia,
+        );
+        await saveDocxWithDialog(result.blob, result.fileName);
+        setWordStatus(`Word de prórroga generado: ${result.replacedFields.length} marcadores sustituidos.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se ha podido generar el Word de prórroga.';
+        setWordStatus(message);
+        await alert(message, { type: 'error' });
+      } finally {
+        setGeneratingWordId(null);
+      }
+    },
+    [alert, employees, generatingWordId, rutaPlantillaProrrogaExcedencia],
+  );
+
   const toggleYear = (year: number) => {
     setOpenHistoryYears((current) => {
       const next = new Set(current);
@@ -403,6 +456,10 @@ export function LicenciasSinSueldoPage() {
               onGenerateWord={(record) => {
                 void generateWord(record);
               }}
+              onExtendExcedencia={(record) => {
+                if (canProrrogarExcedencia(record, today)) setProrrogaRecord(record);
+              }}
+              onGenerateProrrogaWord={(record) => { void generateProrrogaWord(record); }}
               records={blocks.pendienteAprobacion}
               title="Licencias sin sueldo - Pendientes de aprobar"
             />
@@ -447,6 +504,10 @@ export function LicenciasSinSueldoPage() {
           onGenerateWord={(record) => {
             void generateWord(record);
           }}
+          onExtendExcedencia={(record) => {
+            if (canProrrogarExcedencia(record, today)) setProrrogaRecord(record);
+          }}
+          onGenerateProrrogaWord={(record) => { void generateProrrogaWord(record); }}
           records={blocks.vigente}
           title="Licencias sin sueldo - Vigentes"
         />
@@ -492,6 +553,10 @@ export function LicenciasSinSueldoPage() {
                     onGenerateWord={(record) => {
                       void generateWord(record);
                     }}
+                    onExtendExcedencia={(record) => {
+                      if (canProrrogarExcedencia(record, today)) setProrrogaRecord(record);
+                    }}
+                    onGenerateProrrogaWord={(record) => { void generateProrrogaWord(record); }}
                     records={visibleYearRecords}
                     title={`Licencias sin sueldo - Histórico ${year || 'sin año'}`}
                   />
@@ -512,6 +577,13 @@ export function LicenciasSinSueldoPage() {
           }}
           onSave={saveDraft}
           record={editor.record}
+        />
+      )}
+      {prorrogaRecord && (
+        <ProrrogaExcedenciaModal
+          record={prorrogaRecord}
+          onClose={() => setProrrogaRecord(null)}
+          onSave={(fechaInicio, fechaFin) => saveProrroga(prorrogaRecord, fechaInicio, fechaFin)}
         />
       )}
       {dialogNode}

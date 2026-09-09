@@ -22,6 +22,12 @@ export const licenciaSinSueldoEstados = [
 
 export type LicenciaSinSueldoEstado = (typeof licenciaSinSueldoEstados)[number];
 
+export interface LicenciaSinSueldoProrroga {
+  fechaInicio: string;
+  fechaFin: string;
+  createdAt: string;
+}
+
 export interface LicenciaSinSueldoActualizacion {
   id: string;
   fecha: string;
@@ -39,6 +45,7 @@ export interface LicenciaSinSueldoRecord {
   estado: LicenciaSinSueldoEstado;
   observaciones: string;
   actualizaciones: LicenciaSinSueldoActualizacion[];
+  prorroga?: LicenciaSinSueldoProrroga | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -55,6 +62,7 @@ export type LicenciaSinSueldoDraft = Pick<
   | 'estado'
   | 'observaciones'
   | 'actualizaciones'
+  | 'prorroga'
 >;
 
 export interface EmployeeSuggestion {
@@ -77,6 +85,7 @@ export const EMPTY_LICENCIA_SIN_SUELDO_DRAFT: LicenciaSinSueldoDraft = {
   estado: 'pendiente_aprobacion',
   observaciones: '',
   actualizaciones: [],
+  prorroga: null,
 };
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -154,6 +163,7 @@ export function normalizeDraftForTipo(draft: LicenciaSinSueldoDraft): LicenciaSi
         ? calculateFechaFinForTipo(draft.tipo, fechaInicio)
         : draft.fechaFin.trim(),
     observaciones: draft.observaciones.trim(),
+    prorroga: draft.prorroga ?? null,
     actualizaciones: draft.actualizaciones
       .map((actualizacion) => ({
         ...actualizacion,
@@ -214,6 +224,7 @@ export function buildLicenciaSinSueldoRecord(
   return {
     id,
     ...normalizedDraft,
+    prorroga: normalizedDraft.prorroga ?? previous?.prorroga ?? null,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     deletedAt: previous?.deletedAt ?? null,
@@ -224,10 +235,48 @@ export function getEffectiveLicenciaEstado(
   record: LicenciaSinSueldoRecord,
   today: string,
 ): LicenciaSinSueldoEstado {
-  if (record.estado === 'vigente' && record.fechaFin < today) {
+  const effectiveEndDate = record.prorroga?.fechaFin || record.fechaFin;
+  if (record.estado === 'vigente' && effectiveEndDate < today) {
     return 'historico';
   }
   return record.estado;
+}
+
+export function canProrrogarExcedencia(record: LicenciaSinSueldoRecord, today: string): boolean {
+  return (
+    record.tipo === 'Excedencia' &&
+    record.estado === 'vigente' &&
+    !record.prorroga &&
+    record.fechaFin >= today
+  );
+}
+
+export function addOneDayIso(value: string): string {
+  const date = parseIsoDate(value);
+  if (!date) return '';
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+export function validateProrrogaExcedencia(
+  record: LicenciaSinSueldoRecord,
+  fechaInicio: string,
+  fechaFin: string,
+): ValidationResult {
+  const errors: string[] = [];
+  if (record.tipo !== 'Excedencia') errors.push('Solo se pueden prorrogar excedencias.');
+  if (record.prorroga) errors.push('Esta excedencia ya tiene una prórroga registrada.');
+  const inicio = parseIsoDate(fechaInicio);
+  const fin = parseIsoDate(fechaFin);
+  if (!inicio) errors.push('La fecha de inicio de la prórroga no es válida.');
+  if (!fin) errors.push('La fecha de fin de la prórroga no es válida.');
+  if (inicio && fechaInicio <= record.fechaFin) {
+    errors.push('La prórroga debe comenzar después de la fecha fin de la excedencia original.');
+  }
+  if (inicio && fin && fin.getTime() < inicio.getTime()) {
+    errors.push('La fecha fin de la prórroga no puede ser anterior a su fecha de inicio.');
+  }
+  return { ok: errors.length === 0, errors };
 }
 
 export function visibleLicenciasSinSueldo(records: LicenciaSinSueldoRecord[]): LicenciaSinSueldoRecord[] {
