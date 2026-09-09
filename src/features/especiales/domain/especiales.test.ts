@@ -42,7 +42,7 @@ describe('especiales domain', () => {
       msgSubject: 'BEC Alejandro Sanz',
     });
 
-    expect(html).toContain('font-family: Verdana, Arial, sans-serif; font-size: 11pt;');
+    expect(html).toContain('font-family: Verdana, Arial, sans-serif; font-size: 10pt;');
     expect(html).toContain('<p>Kaixo,</p>');
     expect(html).toContain(
       'Adjunto acceso a los turnos de conducción de Servicio Especial donde ya están disponibles en la intranet los turnos de conducción de:',

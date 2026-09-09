@@ -102,7 +102,7 @@ export function buildBorradorActaOutlookHtml(
   const email = 'RELACIONES_LABORALES@metrobilbao.eus';
 
   return `
-<table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px;table-layout:fixed;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.2;color:#000000;">
+<table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px;table-layout:fixed;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Verdana,Arial,sans-serif;font-size:10pt;line-height:1.2;color:#000000;">
   <tr>
     <td width="370" valign="top" style="width:370px;padding:0;">
       <p style="margin:0 0 10px 0;">Kaixo,</p>
@@ -127,7 +127,7 @@ export function buildFirmaActaOutlookSubject(acta: Pick<Acta, 'titulo'>): string
 
 export function buildFirmaActaOutlookHtml(): string {
   return `
-<table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px;table-layout:fixed;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.2;color:#000000;">
+<table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px;table-layout:fixed;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;font-family:Verdana,Arial,sans-serif;font-size:10pt;line-height:1.2;color:#000000;">
   <tr>
     <td width="370" valign="top" style="width:370px;padding:0;">
       <p style="margin:0 0 10px 0;">Kaixo,</p>

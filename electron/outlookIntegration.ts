@@ -122,7 +122,7 @@ function normalizeMailDraftPayload(value: unknown): OutlookDraftPayload | null {
     return null;
   }
 
-  return { subject, html, to, cc, bcc, attachments };
+  return { subject, html: forceOutlookVerdana10(html), to, cc, bcc, attachments };
 }
 
 function normalizeOutlookCalendarPayload(value: unknown): OutlookCalendarPayload | null {
@@ -157,6 +157,16 @@ function powerShellStringLiteral(value: string): string {
 
 function vbsStringLiteral(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+const OUTLOOK_MAIL_FONT_CSS =
+  'html,body,div,p,span,table,tbody,thead,tfoot,tr,td,th,a,ul,ol,li,strong,b,em,i{' +
+  'font-family:Verdana,Arial,sans-serif !important;font-size:10pt !important;}';
+
+function forceOutlookVerdana10(html: string): string {
+  const content = html.trim() ? html : '<br>';
+  return `<style type="text/css">${OUTLOOK_MAIL_FONT_CSS}</style>` +
+    `<div style="font-family:Verdana,Arial,sans-serif;font-size:10pt;">${content}</div>`;
 }
 
 function buildOutlookDraftPowerShellScript(payloadPath: string): string {

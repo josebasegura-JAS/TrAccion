@@ -102,7 +102,8 @@ function renderTemplate(template: string, replacements: Record<string, string>):
 
 
 function plainTextToHtml(value: string): string {
-  return escapeHtml(value).replace(/\r?\n/g, '<br>');
+  const content = escapeHtml(value).replace(/\r?\n/g, '<br>');
+  return `<div style="font-family:Verdana,Arial,sans-serif;font-size:10pt;">${content}</div>`;
 }
 
 function isValidEmail(value: string): boolean {

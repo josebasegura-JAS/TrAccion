@@ -218,7 +218,7 @@ export function buildEspecialesHtmlBody(payload: Partial<EspecialServiceDraft>):
   const intranetLine = buildIntranetParagraphHtml(intranetRaw);
 
   return [
-    '<div style="font-family: Verdana, Arial, sans-serif; font-size: 11pt;">',
+    '<div style="font-family: Verdana, Arial, sans-serif; font-size: 10pt;">',
     '<p>Kaixo,</p>',
     '<p>Adjunto acceso a los turnos de conducción de Servicio Especial donde ya están disponibles en la intranet los turnos de conducción de:</p>',
     `<p><strong>• ${escapeHtml(buildEspecialesBullet(payload))}</strong></p>`,
