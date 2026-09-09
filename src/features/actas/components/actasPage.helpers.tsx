@@ -112,7 +112,7 @@ export function buildBorradorActaOutlookHtml(
       <p style="margin:0;">Ondo izan</p>
     </td>
     <td width="35" style="width:35px;font-size:1px;line-height:1px;">&nbsp;</td>
-    <td width="395" valign="top" style="width:395px;padding:0;">
+    <td width="395" valign="top" style="width:395px;padding:12px 0 0 0;">
       <p style="margin:0 0 10px 0;">Adjunto remito <strong>BORRADOR</strong> del acta de reunión de “${title}” que se celebró:</p>
       <ul style="margin:0 0 12px 22px;padding:0;"><li>${sessionDateEs}</li></ul>
       <p style="margin:0 0 12px 0;">Por favor, hacernos llegar vuestras <strong>aportaciones</strong> a <a href="mailto:${email}">${email}</a>, <strong>antes del ${deadlineEs}</strong>, con el objeto de firmarla y publicarla.</p>
@@ -136,7 +136,7 @@ export function buildFirmaActaOutlookHtml(): string {
       <p style="margin:0;">Ondo izan</p>
     </td>
     <td width="35" style="width:35px;font-size:1px;line-height:1px;">&nbsp;</td>
-    <td width="395" valign="top" style="width:395px;padding:0;">
+    <td width="395" valign="top" style="width:395px;padding:12px 0 0 0;">
       <p style="margin:0 0 12px 0;">Una vez cumplido el plazo para las aportaciones, adjunto remito el acta definitiva con las aportaciones remarcadas en color.</p>
       <p style="margin:0 0 12px 0;">A continuación se os enviará el acta para realizar la firma digital.</p>
     </td>
