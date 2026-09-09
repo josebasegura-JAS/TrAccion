@@ -70,10 +70,11 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Generación documental',
     items: [
-      'Licencia sin sueldo: en los registros aprobados puede generarse el documento Word de concesión a partir de la plantilla externa configurada en Ajustes.',
-      'Excedencia: al aprobar la solicitud se genera automáticamente el Word de concesión con la plantilla corporativa integrada en TrAccion. También queda disponible el botón Word mientras esté Pendiente de firma para poder regenerarlo.',
-      'Para la excedencia, nombre y apellidos, calle + número + piso, código postal, población y provincia se obtienen de Plantilla por número de empleado. Si falta alguno de esos datos, TrAccion avisa y no genera un documento incompleto.',
-      'Las fechas del período salen de la solicitud de excedencia y la fecha de la carta es la fecha del sistema en el momento de generar el documento.',
+      'En los registros aprobados puede generarse el documento Word de concesión a partir de una plantilla externa configurada en Ajustes.',
+      'Para Excedencia se usa una plantilla DOCX externa independiente. Al aprobar una excedencia se genera automáticamente el Word y, mientras siga Pendiente de firma, puede regenerarse desde el botón Word.',
+      'La plantilla de Excedencia debe conservar los marcadores {{NOMBRE_COMPLETO}}, {{DIRECCION}}, {{CODIGO_POSTAL}}, {{POBLACION}}, {{PROVINCIA}}, {{FECHA_CARTA_EU}}, {{FECHA_CARTA_ES}}, {{NOMBRE}}, {{FECHA_INICIO_EU}}, {{FECHA_FIN_EU}}, {{FECHA_INICIO_ES}} y {{FECHA_FIN_ES}}.',
+      'Los datos personales de Excedencia se obtienen de Plantilla por número de empleado; DIRECCION se forma con calle + número + piso. Si falta un dato obligatorio o un marcador, TrAccion avisa y no genera un documento incompleto.',
+      'Para Licencia sin sueldo se mantiene su plantilla externa y el relleno automático de puesto, fechas y demás datos configurados.',
     ],
   },
   {
@@ -83,7 +84,7 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
       'Crear la solicitud indicando tipo, persona, fechas y datos básicos obligatorios.',
       'Revisar que la duración cumpla las reglas del tipo elegido y completar observaciones si procede.',
       'Actualizar el estado del expediente a medida que avance: aprobar, firma, vigencia o denegación.',
-      'Al aprobar una Excedencia, revisar y guardar el Word que TrAccion genera automáticamente; si es necesario, se puede regenerar desde Pendiente de firma.',
+      'Generar el documento Word de concesión cuando el caso esté aprobado y la plantilla esté disponible.',
       'Consultar el histórico para expedientes finalizados o solicitudes ya denegadas.',
     ],
   },

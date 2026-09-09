@@ -8,6 +8,8 @@ export const LICENCIA_SIN_SUELDO_TEMPLATE_NOT_CONFIGURED_MESSAGE =
   'No existe una plantilla de Licencia sin sueldo configurada.';
 export const LICENCIA_SIN_SUELDO_TEMPLATE_UNAVAILABLE_MESSAGE =
   'La plantilla de Licencia sin sueldo configurada no se encuentra disponible.';
+export const EXCEDENCIA_TEMPLATE_NOT_CONFIGURED_MESSAGE =
+  'No existe una plantilla de Excedencia configurada.';
 export const VINCULOGRAMA_TEMPLATE_NOT_CONFIGURED_MESSAGE =
   'No existe una plantilla de Vinculograma configurada.';
 export const VINCULOGRAMA_TEMPLATE_UNAVAILABLE_MESSAGE =
@@ -40,6 +42,20 @@ export function validateConfiguredLicenciaSinSueldoTemplatePath(path: string): s
 
   if (!normalizedPath) {
     throw new Error(LICENCIA_SIN_SUELDO_TEMPLATE_NOT_CONFIGURED_MESSAGE);
+  }
+
+  if (!isDocxPath(normalizedPath)) {
+    throw new Error(TELETRABAJO_TEMPLATE_INVALID_TYPE_MESSAGE);
+  }
+
+  return normalizedPath;
+}
+
+export function validateConfiguredExcedenciaTemplatePath(path: string): string {
+  const normalizedPath = normalizeTemplatePath(path);
+
+  if (!normalizedPath) {
+    throw new Error(EXCEDENCIA_TEMPLATE_NOT_CONFIGURED_MESSAGE);
   }
 
   if (!isDocxPath(normalizedPath)) {

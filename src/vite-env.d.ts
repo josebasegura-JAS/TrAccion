@@ -714,6 +714,8 @@ interface TraccionApi {
   readVinculogramaTemplate?: (path: string) => Promise<ArrayBuffer>;
   selectLicenciaSinSueldoTemplate?: () => Promise<string | null>;
   readLicenciaSinSueldoTemplate?: (path: string) => Promise<ArrayBuffer>;
+  selectExcedenciaTemplate?: () => Promise<string | null>;
+  readExcedenciaTemplate?: (path: string) => Promise<ArrayBuffer>;
   openTeletrabajoWord?: (
     buffer: ArrayBuffer,
     fileName: string,

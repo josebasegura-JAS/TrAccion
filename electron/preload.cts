@@ -284,6 +284,8 @@ contextBridge.exposeInMainWorld('traccion', {
   selectLicenciaSinSueldoTemplate: () => ipcRenderer.invoke('licencias-sin-sueldo:select-template'),
   readLicenciaSinSueldoTemplate: (path: string) =>
     ipcRenderer.invoke('licencias-sin-sueldo:read-template', path),
+  selectExcedenciaTemplate: () => ipcRenderer.invoke('excedencia:select-template'),
+  readExcedenciaTemplate: (path: string) => ipcRenderer.invoke('excedencia:read-template', path),
   openTeletrabajoWord: (buffer: ArrayBuffer, fileName: string) =>
     ipcRenderer.invoke('teletrabajo:open-word', { buffer, fileName }),
   openExcelWorkbook: (buffer: ArrayBuffer, fileName: string) =>

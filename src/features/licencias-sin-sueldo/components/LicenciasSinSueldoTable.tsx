@@ -159,22 +159,14 @@ export function LicenciasTable({
             {record.estado === 'pendiente_firma' &&
               (record.tipo === 'Licencia sin sueldo' || record.tipo === 'Excedencia') && (
               <ActionButton
-                aria-label={
-                  record.tipo === 'Excedencia'
-                    ? 'Generar Word excedencia'
-                    : 'Generar Word concesión'
-                }
+                aria-label={record.tipo === 'Excedencia' ? 'Generar Word excedencia' : 'Generar Word concesión'}
                 disabled={generatingWordId !== null}
                 onClick={(event) => {
                   event.stopPropagation();
                   onGenerateWord(record);
                 }}
                 size="sm"
-                title={
-                  record.tipo === 'Excedencia'
-                    ? 'Generar Word de concesión de excedencia'
-                    : 'Generar Word concesión'
-                }
+                title={record.tipo === 'Excedencia' ? 'Generar Word de concesión de excedencia' : 'Generar Word concesión'}
                 variant="word"
               >
                 {generatingWordId === record.id ? 'Generando…' : 'Word'}

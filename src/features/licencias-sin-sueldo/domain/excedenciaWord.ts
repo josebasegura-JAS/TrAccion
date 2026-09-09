@@ -1,7 +1,7 @@
 import type { Employee } from '../../plantilla/domain/employee';
 import { unzipDocx, zipDocx, type ZipEntry } from '../../teletrabajo/domain/zip';
+import { validateConfiguredExcedenciaTemplatePath } from '../../configuracion/domain/teletrabajoTemplate';
 import type { LicenciaSinSueldoRecord } from './licenciaSinSueldo';
-import { EXCEDENCIA_WORD_TEMPLATE_BASE64 } from './excedenciaWordTemplate';
 
 const WORD_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const textEncoder = new TextEncoder();
@@ -43,14 +43,20 @@ const SPANISH_MONTHS = [
   'diciembre',
 ] as const;
 
-function decodeBase64(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes.buffer;
-}
+const REQUIRED_MARKERS = [
+  '{{NOMBRE_COMPLETO}}',
+  '{{DIRECCION}}',
+  '{{CODIGO_POSTAL}}',
+  '{{POBLACION}}',
+  '{{PROVINCIA}}',
+  '{{FECHA_CARTA_EU}}',
+  '{{FECHA_CARTA_ES}}',
+  '{{NOMBRE}}',
+  '{{FECHA_INICIO_EU}}',
+  '{{FECHA_FIN_EU}}',
+  '{{FECHA_INICIO_ES}}',
+  '{{FECHA_FIN_ES}}',
+] as const;
 
 function escapeXml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -87,10 +93,10 @@ function formatBasqueApprovalDate(value: string): string {
   return `${parts.year}ko ${BASQUE_MONTHS[parts.month - 1]} ${parts.day}an`;
 }
 
-function formatBasquePeriodDate(value: string, suffix: 'tik' | 'ra'): string {
+function formatBasquePeriodDate(value: string, ending: 'tik' | 'ra arte'): string {
   const parts = parseIsoDate(value);
   if (!parts) return value;
-  return `${parts.year}ko ${BASQUE_MONTHS[parts.month - 1]} ${parts.day}${suffix}`;
+  return `${parts.year}ko ${BASQUE_MONTHS[parts.month - 1]} ${parts.day}${ending}`;
 }
 
 function buildAddress(employee: Employee): string {
@@ -142,6 +148,24 @@ function sanitizeFileName(value: string, fallback: string): string {
   );
 }
 
+async function readTemplateFromConfiguredPath(path: string): Promise<ArrayBuffer> {
+  const templatePath = validateConfiguredExcedenciaTemplatePath(path);
+  const api = window.traccion;
+
+  if (!api || (!api.readExcedenciaTemplate && !api.readLicenciaSinSueldoTemplate && !api.readTeletrabajoTemplate)) {
+    throw new Error('La plantilla de Excedencia configurada no se encuentra disponible.');
+  }
+
+  try {
+    if (api.readExcedenciaTemplate) return await api.readExcedenciaTemplate(templatePath);
+    return api.readLicenciaSinSueldoTemplate
+      ? await api.readLicenciaSinSueldoTemplate(templatePath)
+      : await api.readTeletrabajoTemplate(templatePath);
+  } catch {
+    throw new Error('La plantilla de Excedencia configurada no se encuentra disponible.');
+  }
+}
+
 function replaceTextAcrossWordNodes(
   xml: string,
   replacements: ReadonlyMap<string, string>,
@@ -178,22 +202,8 @@ function replaceTextAcrossWordNodes(
     }
   });
 
-  const occupied = new Array(fullText.length).fill(false);
-  const selected: typeof occurrences = [];
   occurrences
-    .sort((left, right) => left.index - right.index || right.marker.length - left.marker.length)
-    .forEach((occurrence) => {
-      for (let position = occurrence.index; position < occurrence.end; position += 1) {
-        if (occupied[position]) return;
-      }
-      for (let position = occurrence.index; position < occurrence.end; position += 1) {
-        occupied[position] = true;
-      }
-      selected.push(occurrence);
-    });
-
-  selected
-    .sort((left, right) => right.index - left.index)
+    .sort((left, right) => right.index - left.index || right.marker.length - left.marker.length)
     .forEach((occurrence) => {
       const start = charMap[occurrence.index];
       const end = charMap[occurrence.end - 1];
@@ -228,6 +238,7 @@ function replaceTextAcrossWordNodes(
 export async function generateExcedenciaWord(
   record: LicenciaSinSueldoRecord,
   plantillaEmployee: Employee | null,
+  templatePath: string,
   now = new Date(),
 ): Promise<ExcedenciaWordResult> {
   if (record.tipo !== 'Excedencia') {
@@ -248,30 +259,24 @@ export async function generateExcedenciaWord(
     String(now.getDate()).padStart(2, '0'),
   ].join('-');
   const fullName = plantillaEmployee.nombreApellidos.trim();
-  const shortName = extractShortName(fullName);
-  const address = buildAddress(plantillaEmployee);
 
   const replacements = new Map<string, string>([
-    ['“”Nombre y apellidos del solicitante”', fullName],
-    ['“Nombre y apellidos del solicitante”', fullName],
-    ['“CALLE”', address],
-    ['“CODIGO POSTAL”', plantillaEmployee.codigoPostal.trim()],
-    ['“POBLACION”', plantillaEmployee.poblacion.trim()],
-    ['“Provincia”', plantillaEmployee.provincia.trim()],
-    ['“Nombre”', shortName],
-    ['Bilbon, 2026ko iraialaren 7an', `Bilbon, ${formatBasqueApprovalDate(currentIso)}`],
-    ['Bilbao, 7 de septiembre de 2026', `Bilbao, ${formatSpanishLongDate(currentIso)}`],
-    [
-      '2026ko abenduaren 31tik 2029ko abenduaren 31ra arte',
-      `${formatBasquePeriodDate(record.fechaInicio, 'tik')} ${formatBasquePeriodDate(record.fechaFin, 'ra')} arte`,
-    ],
-    [
-      '31 de diciembre de 2026 y el 31 de diciembre de 2029',
-      `${formatSpanishLongDate(record.fechaInicio)} y el ${formatSpanishLongDate(record.fechaFin)}`,
-    ],
+    ['{{NOMBRE_COMPLETO}}', fullName],
+    ['{{DIRECCION}}', buildAddress(plantillaEmployee)],
+    ['{{CODIGO_POSTAL}}', plantillaEmployee.codigoPostal.trim()],
+    ['{{POBLACION}}', plantillaEmployee.poblacion.trim()],
+    ['{{PROVINCIA}}', plantillaEmployee.provincia.trim()],
+    ['{{FECHA_CARTA_EU}}', formatBasqueApprovalDate(currentIso)],
+    ['{{FECHA_CARTA_ES}}', formatSpanishLongDate(currentIso)],
+    ['{{NOMBRE}}', extractShortName(fullName)],
+    ['{{FECHA_INICIO_EU}}', formatBasquePeriodDate(record.fechaInicio, 'tik')],
+    ['{{FECHA_FIN_EU}}', formatBasquePeriodDate(record.fechaFin, 'ra arte')],
+    ['{{FECHA_INICIO_ES}}', formatSpanishLongDate(record.fechaInicio)],
+    ['{{FECHA_FIN_ES}}', formatSpanishLongDate(record.fechaFin)],
   ]);
 
-  const entries = await unzipDocx(decodeBase64(EXCEDENCIA_WORD_TEMPLATE_BASE64));
+  const templateBuffer = await readTemplateFromConfiguredPath(templatePath);
+  const entries = await unzipDocx(templateBuffer);
   const replaced = new Set<string>();
   const outputEntries: ZipEntry[] = entries.map((entry) => {
     if (!/^word\/.*\.xml$/i.test(entry.name)) return entry;
@@ -280,24 +285,10 @@ export async function generateExcedenciaWord(
     return updated === xml ? entry : { ...entry, data: textEncoder.encode(updated) };
   });
 
-  const requiredMarkers = [
-    '“CALLE”',
-    '“CODIGO POSTAL”',
-    '“POBLACION”',
-    '“Provincia”',
-    '“Nombre”',
-    'Bilbao, 7 de septiembre de 2026',
-    '31 de diciembre de 2026 y el 31 de diciembre de 2029',
-  ];
-  const missingTemplateMarkers = requiredMarkers.filter((marker) => !replaced.has(marker));
-  const hasFullName =
-    replaced.has('“”Nombre y apellidos del solicitante”') ||
-    replaced.has('“Nombre y apellidos del solicitante”');
-  if (!hasFullName) missingTemplateMarkers.unshift('Nombre y apellidos');
-
+  const missingTemplateMarkers = REQUIRED_MARKERS.filter((marker) => !replaced.has(marker));
   if (missingTemplateMarkers.length > 0) {
     throw new Error(
-      `La plantilla de excedencia no contiene todos los campos esperados: ${missingTemplateMarkers.join(', ')}.`,
+      `La plantilla de Excedencia no contiene todos los marcadores obligatorios: ${missingTemplateMarkers.join(', ')}.`,
     );
   }
 
