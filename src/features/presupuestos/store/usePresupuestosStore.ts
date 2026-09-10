@@ -369,13 +369,31 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
   removeScenario: (scenarioId) => {
     const state = get();
     const timestamp = nowIso();
+    const target = state.scenarios.find((scenario) => scenario.id === scenarioId && !scenario.deletedAt);
+    if (!target) return;
+
     const scenarios = state.scenarios.map((scenario) =>
       scenario.id === scenarioId ? { ...scenario, deletedAt: timestamp, updatedAt: timestamp } : scenario,
     );
+    const manualItems = state.manualItems.map((item) =>
+      item.scenarioId === scenarioId && !item.deletedAt
+        ? { ...item, deletedAt: timestamp, updatedAt: timestamp }
+        : item,
+    );
+    const ticketGroups = state.ticketGroups.map((group) =>
+      group.scenarioId === scenarioId && !group.deletedAt
+        ? { ...group, deletedAt: timestamp, updatedAt: timestamp }
+        : group,
+    );
+    const nextActiveScenarioId =
+      state.activeScenarioId === scenarioId
+        ? scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null
+        : state.activeScenarioId;
+
     commitPresupuestosState(
       set,
-      { ...state, scenarios },
-      { scenarios, activeScenarioId: scenarios.find((scenario) => !scenario.deletedAt)?.id ?? null },
+      { ...state, scenarios, manualItems, ticketGroups },
+      { scenarios, manualItems, ticketGroups, activeScenarioId: nextActiveScenarioId },
       state.sqliteUpdatedAt,
     );
   },

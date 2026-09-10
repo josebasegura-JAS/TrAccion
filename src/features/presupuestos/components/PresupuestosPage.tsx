@@ -359,6 +359,31 @@ export function PresupuestosPage() {
     setMessage(`${scenario.name} seleccionado como escenario a ejecutar para ${scenario.year}.`);
   };
 
+  const confirmAndRemoveScenario = (scenario: BudgetScenario) => {
+    const isFinalized = Boolean(scenario.finalizedAt);
+    const firstMessage = isFinalized
+      ? `Vas a eliminar el presupuesto definitivo "${scenario.name}" de ${scenario.year}. También se eliminarán su escenario y sus partidas asociadas. ¿Quieres continuar?`
+      : `¿Eliminar el escenario "${scenario.name}" de ${scenario.year}? También se eliminarán sus partidas asociadas.`;
+
+    if (!window.confirm(firstMessage)) return;
+
+    if (isFinalized) {
+      const secondConfirmed = window.confirm(
+        `SEGUNDA CONFIRMACIÓN: el presupuesto "${scenario.name}" está cerrado como definitivo. Esta acción lo eliminará del flujo presupuestario. ¿Confirmas definitivamente?`,
+      );
+      if (!secondConfirmed) return;
+    }
+
+    removeScenario(scenario.id);
+    setMessage(
+      isFinalized
+        ? `Presupuesto definitivo "${scenario.name}" eliminado.`
+        : `Escenario "${scenario.name}" eliminado.`,
+    );
+
+    if (activeScenarioId === scenario.id) setStage('scenario');
+  };
+
   const finalizeBudget = () => {
     if (!selectedScenario) return;
     finalizeScenarioBudget(selectedScenario.id, finalAmounts);
@@ -445,7 +470,7 @@ export function PresupuestosPage() {
                         </div>
                         <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setActiveScenario(scenario.id); setStage('simulate'); }}>Abrir</ActionButton>
                         <ActionButton size="sm" variant="duplicate" onClick={() => duplicateScenario(scenario.id)} title="Duplicar escenario" />
-                        <ActionButton size="sm" variant="delete" onClick={() => removeScenario(scenario.id)} title="Eliminar escenario" />
+                        <ActionButton size="sm" variant="delete" onClick={() => confirmAndRemoveScenario(scenario)} title={scenario.finalizedAt ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario'} />
                       </div>
                     );
                   })
@@ -582,9 +607,10 @@ export function PresupuestosPage() {
                     <p className="mt-3 text-2xl font-extrabold text-metro-text">{euro(total.total)}</p>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-metro-muted"><span>Ticket: <strong className="text-metro-text">{euro(total.ticketTotal)}</strong></span><span>Partidas: <strong className="text-metro-text">{euro(total.manualTotal)}</strong></span></div>
                     {ticketPlan ? <p className="mt-2 text-[10px] text-metro-muted">Sensibilidad con absentismo B: {euro(ticketPlan.annualAmountB + total.manualTotal)}</p> : null}
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <ActionButton size="sm" iconOnly={false} variant={scenario.selectedForExecution ? 'approve' : 'primary'} onClick={() => chooseScenario(scenario)}>{scenario.selectedForExecution ? 'Seleccionado' : 'Seleccionar'}</ActionButton>
                       <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setActiveScenario(scenario.id); setStage('simulate'); }}>Editar</ActionButton>
+                      <ActionButton size="sm" iconOnly={false} variant="delete" onClick={() => confirmAndRemoveScenario(scenario)}>{scenario.finalizedAt ? 'Eliminar presupuesto' : 'Eliminar escenario'}</ActionButton>
                     </div>
                   </div>
                 );
@@ -620,7 +646,12 @@ export function PresupuestosPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="mt-3 flex justify-end"><ActionButton iconOnly={false} variant="save" onClick={finalizeBudget}>Guardar como definitivo</ActionButton></div>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <ActionButton iconOnly={false} variant="delete" onClick={() => confirmAndRemoveScenario(selectedScenario)}>
+                  {selectedScenario.finalizedAt ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario'}
+                </ActionButton>
+                <ActionButton iconOnly={false} variant="save" onClick={finalizeBudget}>Guardar como definitivo</ActionButton>
+              </div>
             </Panel>
 
             <div className="grid gap-4 xl:grid-cols-[0.9fr_1.4fr]">
