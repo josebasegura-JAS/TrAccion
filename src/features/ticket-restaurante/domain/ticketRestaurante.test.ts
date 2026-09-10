@@ -1286,6 +1286,14 @@ describe('ticket restaurante — personas manuales', () => {
     expect(result.rows[0]).toMatchObject({ empleado: '9001', calendario: 'Manual', ticketsFinales: 17, manualEntry: true });
   });
 
+  it('imputa los tickets manuales solo al mes en el que se guardaron', () => {
+    const september = calculateMonthlyTicketOrder([], [], [], manualConfig, 2026, 9);
+    const october = calculateMonthlyTicketOrder([], [], [], manualConfig, 2026, 10);
+
+    expect(september.rows[0]?.ticketsFinales).toBe(17);
+    expect(october.rows[0]?.ticketsFinales).toBe(0);
+  });
+
   it('solo la incluye en cotización cuando está marcada', () => {
     const included = calculateTicketContribution([], [], [], manualConfig, 2026, 9);
     expect(included.rows[0]?.ticketsFinales).toBe(17);

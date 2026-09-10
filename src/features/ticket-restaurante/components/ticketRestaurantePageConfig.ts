@@ -15,6 +15,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Revisar Deudas y regularizaciones: ahí se ve la deuda arrastrada y se puede fijar un saldo real justificado si el cálculo automático no coincide con la situación real.',
       'Revisar "Cómputo mensual" para hacer el pedido del mes.',
       'Revisar "Cómputo cotización" para comprobar lo que realmente corresponde facturar ese mes y exportar o imprimir los resultados que necesite RRLL.',
+      'Consultar "Balance anual" para ver el acumulado de tickets e importes por persona, mes y área, con exportación completa a Excel.',
     ],
   },
   {
@@ -75,6 +76,18 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'Si una cuota no puede descontarse completa por falta de tickets disponibles, el pendiente se arrastra automáticamente.',
       'La deuda manual solo afecta al Cómputo mensual/pedido. No modifica el Cómputo cotización.',
       'Una deuda puede anularse con motivo; las cuotas ya aplicadas en meses anteriores no se alteran.',
+    ],
+  },
+  {
+    title: 'Balance anual',
+    items: [
+      'Resume el Cómputo mensual del año: tickets e importe total, personas con tickets y áreas representadas.',
+      'En el año en curso solo se acumulan los meses transcurridos hasta el mes actual; los meses futuros quedan a cero y no se presentan como previsión.',
+      'La tabla Personas muestra el desglose de enero a diciembre, total anual, importe y número de meses con tickets. Las Personas manuales se incluyen únicamente en los meses para los que se hayan guardado tickets.',
+      'La vista Áreas agrupa por Dirección organizativa de Plantilla. Las Personas manuales pueden guardar su área propia; si proceden de Plantilla, el área se rellena automáticamente.',
+      'El botón Consolidar cerrados guarda una fotografía de cada mes vencido. A partir de ese momento, cambios posteriores de plantilla o calendario no alteran ese histórico.',
+      'El Excel anual genera cuatro hojas: Resumen anual, Por persona, Por área y Detalle mensual.',
+      'Cada mes usa el precio del ticket vigente en ese periodo, por lo que un cambio de precio durante el año no altera los importes de meses anteriores.',
     ],
   },
   {

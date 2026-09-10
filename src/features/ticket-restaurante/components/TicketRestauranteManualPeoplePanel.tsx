@@ -58,6 +58,7 @@ export function TicketRestauranteManualPeoplePanel({
   const [empleado, setEmpleado] = useState('');
   const [nombreApellidos, setNombreApellidos] = useState('');
   const [dni, setDni] = useState('');
+  const [area, setArea] = useState('');
   const [includeContribution, setIncludeContribution] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -124,6 +125,7 @@ export function TicketRestauranteManualPeoplePanel({
     setEmpleado('');
     setNombreApellidos('');
     setDni('');
+    setArea('');
     setIncludeContribution(false);
     setEditingId(null);
     setSuggestionField(null);
@@ -138,6 +140,7 @@ export function TicketRestauranteManualPeoplePanel({
     setEmpleado(normalizeTicketEmployeeNumber(employee.empleado));
     setNombreApellidos(employee.nombreApellidos.trim());
     setDni((employee.dni || employee.nif || '').trim());
+    setArea(employee.direccionOrganizativa.trim() || employee.unidad.trim());
     setSuggestionField(null);
     setMessage('');
   };
@@ -166,6 +169,7 @@ export function TicketRestauranteManualPeoplePanel({
           empleado: normalizedEmployee,
           nombreApellidos: nombreApellidos.trim(),
           dni: dni.trim(),
+          area: area.trim(),
           includeContribution,
           updatedAt: now,
         }
@@ -176,6 +180,7 @@ export function TicketRestauranteManualPeoplePanel({
           dni: dni.trim(),
           activo: true,
           includeContribution,
+          area: area.trim(),
           monthlyTickets: {},
           createdAt: now,
           updatedAt: now,
@@ -253,6 +258,7 @@ export function TicketRestauranteManualPeoplePanel({
     setEmpleado(person.empleado);
     setNombreApellidos(person.nombreApellidos);
     setDni(person.dni);
+    setArea(person.area ?? '');
     setIncludeContribution(person.includeContribution);
     setSuggestionField(null);
     setMessage('');
@@ -350,6 +356,13 @@ export function TicketRestauranteManualPeoplePanel({
             </Field>
             <Field label="DNI">
               <Input value={dni} onChange={(e) => setDni(e.target.value)} />
+            </Field>
+            <Field label="Área">
+              <Input
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+                placeholder="Área / dirección organizativa"
+              />
             </Field>
             <label className="flex h-[34px] items-center gap-2 text-xs font-semibold text-metro-text">
               <input

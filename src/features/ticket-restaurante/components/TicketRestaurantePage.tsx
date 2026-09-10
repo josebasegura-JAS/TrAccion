@@ -60,6 +60,7 @@ import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
 import { TicketRestaurantePeopleImportModal } from './TicketRestaurantePeopleImportModal';
 import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
 import { TicketRestauranteManualPeoplePanel } from './TicketRestauranteManualPeoplePanel';
+import { TicketRestauranteAnnualBalance } from './TicketRestauranteAnnualBalance';
 import {
   TicketRestauranteAbsenceImportHelpModal,
   TicketRestauranteManutencionMonthModal,
@@ -136,7 +137,8 @@ type TicketRestauranteSubview =
   | 'computoCotizacion'
   | 'ausencias'
   | 'manutenciones'
-  | 'deudaManual';
+  | 'deudaManual'
+  | 'balanceAnual';
 
 export function TicketRestaurantePage({
   initialAbsenceId = null,
@@ -1175,6 +1177,11 @@ export function TicketRestaurantePage({
             label="Deudas"
             onClick={() => setActiveSubview('deudaManual')}
           />
+          <SubviewButton
+            active={activeSubview === 'balanceAnual'}
+            label="Balance anual"
+            onClick={() => setActiveSubview('balanceAnual')}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <ActionButton icon={Euro} iconOnly={false} onClick={() => setIsPriceModalOpen(true)} size="sm" variant="secondary">
@@ -1453,6 +1460,16 @@ export function TicketRestaurantePage({
           onNextMonth={() => moveCalculationMonth(1)}
           people={visiblePeople}
           year={calculationYear}
+        />
+      ) : activeSubview === 'balanceAnual' ? (
+        <TicketRestauranteAnnualBalance
+          absences={absences}
+          calendars={visibleCalendars}
+          config={config}
+          employees={employees}
+          manutenciones={manutenciones}
+          people={people}
+          onUpdateConfig={updateConfig}
         />
       ) : null}
 

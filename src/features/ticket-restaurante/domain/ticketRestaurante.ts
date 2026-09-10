@@ -164,10 +164,27 @@ export interface TicketManualPerson {
   dni: string;
   activo: boolean;
   includeContribution: boolean;
+  area?: string;
   monthlyTickets: Record<string, number>;
   inactiveFromMonth?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TicketMonthlySnapshotRow {
+  empleado: string;
+  nombreApellidos: string;
+  area: string;
+  tickets: number;
+  importe: number;
+  manual: boolean;
+}
+
+export interface TicketMonthlySnapshot {
+  year: number;
+  month: number;
+  closedAt: string;
+  rows: TicketMonthlySnapshotRow[];
 }
 
 export interface TicketMonthlyWorkflowReview {
@@ -185,6 +202,7 @@ export interface TicketRestaurantConfig {
   debtRegularizations?: TicketDebtRegularization[];
   manualPeople?: TicketManualPerson[];
   workflowReviews?: Record<string, TicketMonthlyWorkflowReview>;
+  monthlySnapshots?: Record<string, TicketMonthlySnapshot>;
 }
 
 export interface TicketDebtDetailDay {
@@ -259,6 +277,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   debtRegularizations: [],
   manualPeople: [],
   workflowReviews: {},
+  monthlySnapshots: {},
 };
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
@@ -1600,6 +1619,7 @@ function normalizeManualPeople(value: unknown): TicketManualPerson[] {
       dni: typeof item.dni === 'string' ? item.dni.trim() : '',
       activo: item.activo !== false,
       includeContribution: item.includeContribution === true,
+      area: typeof item.area === 'string' ? item.area.trim() : '',
       monthlyTickets,
       inactiveFromMonth:
         typeof item.inactiveFromMonth === 'string' && /^\d{4}-\d{2}$/.test(item.inactiveFromMonth)
@@ -1609,6 +1629,39 @@ function normalizeManualPeople(value: unknown): TicketManualPerson[] {
       updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
     }];
   });
+}
+
+function normalizeMonthlySnapshots(
+  snapshots: TicketRestaurantConfig['monthlySnapshots'],
+): Record<string, TicketMonthlySnapshot> {
+  if (!snapshots || typeof snapshots !== 'object') return {};
+  const normalized: Record<string, TicketMonthlySnapshot> = {};
+  Object.entries(snapshots).forEach(([key, raw]) => {
+    if (!/^\d{4}-\d{2}$/.test(key) || !raw || typeof raw !== 'object') return;
+    const year = Number(key.slice(0, 4));
+    const month = Number(key.slice(5, 7));
+    if (!Number.isInteger(year) || month < 1 || month > 12 || !Array.isArray(raw.rows)) return;
+    const rows = raw.rows.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const row = item as Partial<TicketMonthlySnapshotRow>;
+      if (typeof row.empleado !== 'string' || typeof row.nombreApellidos !== 'string') return [];
+      return [{
+        empleado: normalizeTicketEmployeeNumber(row.empleado),
+        nombreApellidos: row.nombreApellidos.trim(),
+        area: typeof row.area === 'string' && row.area.trim() ? row.area.trim() : 'Sin área',
+        tickets: typeof row.tickets === 'number' && Number.isFinite(row.tickets) ? Math.max(0, Math.trunc(row.tickets)) : 0,
+        importe: typeof row.importe === 'number' && Number.isFinite(row.importe) ? roundCurrency(Math.max(0, row.importe)) : 0,
+        manual: row.manual === true,
+      }];
+    });
+    normalized[key] = {
+      year,
+      month,
+      closedAt: typeof raw.closedAt === 'string' ? raw.closedAt : '',
+      rows,
+    };
+  });
+  return normalized;
 }
 
 function normalizeWorkflowReviews(
@@ -1666,6 +1719,7 @@ export function normalizeTicketRestaurantConfig(
     debtRegularizations: normalizeDebtRegularizations(config.debtRegularizations),
     manualPeople: normalizeManualPeople(config.manualPeople),
     workflowReviews: normalizeWorkflowReviews(config.workflowReviews),
+    monthlySnapshots: normalizeMonthlySnapshots(config.monthlySnapshots),
   };
 }
 
