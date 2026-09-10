@@ -85,13 +85,55 @@ export interface EmployeeImportData {
   importedFields: EmployeeField[];
 }
 
+export type EmployeeImportSourceProfile = 'generic' | 'zerkos';
+
 export interface EmployeeImportPreview {
   headers: string[];
   dataRows: TabularRow[];
   defaultMapping: Array<EmployeeField | null>;
   headerRowIndex: number;
   sourceRowCount: number;
+  sourceProfile: EmployeeImportSourceProfile;
+  criticalIssues: string[];
 }
+
+const ZERKOS_REQUIRED_HEADERS = [
+  'empleado',
+  'nombre y apellidos',
+  'puesto nomina',
+  'puesto organizativo',
+  'residencia',
+  'unidad',
+  'direccion',
+  'nivel retributivo',
+  'sexo',
+  'calle',
+  'n',
+  'piso',
+  'cod postal',
+  'poblacion',
+  'provincia',
+  'nif',
+] as const;
+
+const ZERKOS_FIELD_BY_HEADER = new Map<string, EmployeeField>([
+  ['empleado', 'empleado'],
+  ['nombre y apellidos', 'nombreApellidos'],
+  ['puesto nomina', 'puestoNomina'],
+  ['puesto organizativo', 'puestoOrganizativo'],
+  ['residencia', 'residencia'],
+  ['unidad', 'unidad'],
+  ['direccion', 'direccionOrganizativa'],
+  ['nivel retributivo', 'nivelRetributivo'],
+  ['sexo', 'sexo'],
+  ['calle', 'calle'],
+  ['n', 'numero'],
+  ['piso', 'piso'],
+  ['cod postal', 'codigoPostal'],
+  ['poblacion', 'poblacion'],
+  ['provincia', 'provincia'],
+  ['nif', 'nif'],
+]);
 
 export async function analyzeEmployeeImportFile(file: File): Promise<EmployeeImportPreview> {
   const rows = await readTabularRows(file);
@@ -104,12 +146,24 @@ export async function analyzeEmployeeImportFile(file: File): Promise<EmployeeImp
 
   const headers = rows[headerRowIndex] ?? [];
   const dataRows = rows.slice(headerRowIndex + 1);
+  const normalizedHeaders = headers.map(normalizeHeader);
+  const sourceProfile: EmployeeImportSourceProfile = isZerkosHeaderSet(normalizedHeaders)
+    ? 'zerkos'
+    : 'generic';
+  const defaultMapping = headers.map((header) =>
+    sourceProfile === 'zerkos'
+      ? (ZERKOS_FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null)
+      : (FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null),
+  );
+
   return {
     headers,
     dataRows,
-    defaultMapping: headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null),
+    defaultMapping,
     headerRowIndex,
     sourceRowCount: dataRows.filter((row) => row.some((cell) => cell.trim())).length,
+    sourceProfile,
+    criticalIssues: sourceProfile === 'zerkos' ? findZerkosCriticalIssues(headers, dataRows) : [],
   };
 }
 
@@ -141,12 +195,23 @@ export function rowsToEmployeeImport(rows: TabularRow[]): EmployeeImportData {
   }
 
   const headers = rows[headerRowIndex] ?? [];
+  const dataRows = rows.slice(headerRowIndex + 1);
+  const normalizedHeaders = headers.map(normalizeHeader);
+  const sourceProfile: EmployeeImportSourceProfile = isZerkosHeaderSet(normalizedHeaders)
+    ? 'zerkos'
+    : 'generic';
   const preview: EmployeeImportPreview = {
     headers,
-    dataRows: rows.slice(headerRowIndex + 1),
-    defaultMapping: headers.map((header) => FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null),
+    dataRows,
+    defaultMapping: headers.map((header) =>
+      sourceProfile === 'zerkos'
+        ? (ZERKOS_FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null)
+        : (FIELD_BY_HEADER.get(normalizeHeader(header)) ?? null),
+    ),
     headerRowIndex,
-    sourceRowCount: rows.slice(headerRowIndex + 1).filter((row) => row.some((cell) => cell.trim())).length,
+    sourceRowCount: dataRows.filter((row) => row.some((cell) => cell.trim())).length,
+    sourceProfile,
+    criticalIssues: sourceProfile === 'zerkos' ? findZerkosCriticalIssues(headers, dataRows) : [],
   };
   return previewToEmployeeImport(preview, preview.defaultMapping);
 }
@@ -214,6 +279,50 @@ function findHeaderRowIndex(rows: TabularRow[]): number {
   }
 
   return -1;
+}
+
+
+function isZerkosHeaderSet(normalizedHeaders: string[]): boolean {
+  const headerSet = new Set(normalizedHeaders);
+  return ZERKOS_REQUIRED_HEADERS.every((header) => headerSet.has(header));
+}
+
+function findZerkosCriticalIssues(headers: string[], dataRows: TabularRow[]): string[] {
+  const employeeColumnIndex = headers.findIndex((header) => normalizeHeader(header) === 'empleado');
+  if (employeeColumnIndex < 0) {
+    return ['El fichero Zerkos no contiene la columna Empleado.'];
+  }
+
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  let rowsWithoutEmployee = 0;
+
+  dataRows.forEach((row) => {
+    if (!row.some((cell) => cell.trim())) {
+      return;
+    }
+
+    const employeeId = row[employeeColumnIndex]?.trim() ?? '';
+    if (!employeeId) {
+      rowsWithoutEmployee += 1;
+      return;
+    }
+
+    if (seen.has(employeeId)) {
+      duplicates.add(employeeId);
+    }
+    seen.add(employeeId);
+  });
+
+  const issues: string[] = [];
+  if (rowsWithoutEmployee > 0) {
+    issues.push(`${rowsWithoutEmployee} fila(s) contienen datos pero no tienen número de empleado.`);
+  }
+  if (duplicates.size > 0) {
+    const sample = Array.from(duplicates).slice(0, 5).join(', ');
+    issues.push(`Hay ${duplicates.size} número(s) de empleado duplicados${sample ? `: ${sample}${duplicates.size > 5 ? '…' : ''}` : '.'}`);
+  }
+  return issues;
 }
 
 function normalizeEmployeeCellValue(field: EmployeeField, value: string): string {

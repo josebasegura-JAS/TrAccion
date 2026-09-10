@@ -388,7 +388,7 @@ function buildEmployeeImport(
       }
 
       const conflictKey = `${draft.empleado}::${field}`;
-      const hasConflict = Boolean(previous) && previous[field].trim() !== draft[field].trim();
+      const hasConflict = previous !== undefined && previous[field].trim() !== draft[field].trim();
       if (deactivateMissing && hasConflict && conflictResolution[conflictKey] !== 'source') {
         // En sincronización Zerkos, cualquier diferencia con un dato ya existente
         // se conserva por defecto salvo elección expresa de «Usar Zerkos».
