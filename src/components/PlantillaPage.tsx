@@ -44,10 +44,11 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Importación de personas',
     items: [
-      'El Excel de Zerkos se reconoce automáticamente y puede importarse tal cual sale del sistema, sin preparar ni mapear columnas.',
-      'En una importación Zerkos, TrAccion compara la fuente con la Plantilla actual y muestra antes de confirmar las altas, cambios, reactivaciones y bajas detectadas. Cada dato diferente permite elegir entre mantener el valor actual o usar el de Zerkos; por defecto se conserva el dato actual.',
-      'Las personas que ya no aparezcan en Zerkos se dan de baja lógicamente al confirmar, conservando sus históricos. Si reaparecen en una importación posterior, se reactivan.',
-      'Solo se toman de Zerkos los campos de Plantilla acordados; el resto de columnas se ignora y los datos propios de TrAccion, como Puesto EUS o Antigüedad Puesto, se conservan.',
+      'El fichero de Datos personales se importa directamente tal como se obtiene del sistema, sin preparar ni mapear columnas.',
+      'Para obtenerlo sigue esta ruta: Lanzador → Expediente Personal → Consultas Generales → Datos personales.',
+      'TrAccion compara el fichero con la Plantilla actual y muestra antes de confirmar las altas, cambios, reactivaciones y bajas detectadas. Cada dato diferente permite elegir entre mantener el valor actual o usar el del fichero; por defecto se conserva el dato actual.',
+      'Las personas que ya no aparezcan en el fichero se dan de baja lógicamente al confirmar, conservando sus históricos. Si reaparecen en una importación posterior, se reactivan.',
+      'Solo se toman del fichero los campos de Plantilla acordados; el resto de columnas se ignora y los datos propios de TrAccion, como Puesto EUS o Antigüedad Puesto, se conservan.',
       'Otros Excel, CSV, TSV o TXT siguen admitiendo el mapeo flexible de columnas por variantes habituales del nombre.',
       'Si la persona ya existe (mismo número de empleado), se actualiza; si no existe, se crea. Solo se actualizan las columnas que realmente vienen en el fichero: las columnas ausentes conservan el dato ya guardado.',
       'Modo especial "solo antigüedad": si el fichero importado únicamente tiene informadas las columnas Empleado y Antigüedad Puesto (todo lo demás vacío en todas las filas), la app entiende que es una actualización masiva de antigüedad y solo toca ese campo en las personas que ya existen; no crea personas nuevas ni modifica el resto de datos.',
@@ -68,7 +69,7 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
     ordered: true,
     items: [
       'Importar o actualizar la Plantilla desde el Excel maestro de personas.',
-      'Si es un fichero Zerkos, revisar el resumen de altas, cambios y bajas; si es genérico, revisar el mapeo de columnas antes de confirmar.',
+      'Si es el fichero de Datos personales, revisar el resumen de altas, cambios, reactivaciones y bajas; si es un fichero genérico, revisar el mapeo de columnas antes de confirmar.',
       'Comprobar traducciones EUS pendientes para completar puestos que falten.',
       'Usar la tabla filtrada como referencia maestra y exportarla solo cuando necesites compartir una foto concreta de la plantilla.',
     ],
@@ -617,6 +618,15 @@ export function PlantillaPage() {
         title="Plantilla"
       />
 
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="font-semibold text-slate-700">Dónde obtener el Excel:</span>
+          <span className="font-medium text-slate-600">
+            Lanzador → Expediente Personal → Consultas Generales → Datos personales
+          </span>
+        </div>
+      </div>
+
       {importMessage && (
         <div
           className={
@@ -701,7 +711,7 @@ export function PlantillaPage() {
               result.mode === 'antiguedadPuesto'
                 ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
                 : importPreview.sourceProfile === 'zerkos'
-                  ? `Sincronización Zerkos completada. Actualizadas: ${result.updated}. Creadas: ${result.created}. Reactivadas: ${result.reactivated}. Bajas: ${result.deactivated}.`
+                  ? `Importación de Datos personales completada. Actualizadas: ${result.updated}. Creadas: ${result.created}. Reactivadas: ${result.reactivated}. Bajas: ${result.deactivated}.`
                   : `Importación completada: ${pendingImportFile.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
             );
             setPendingImportFile(null);
