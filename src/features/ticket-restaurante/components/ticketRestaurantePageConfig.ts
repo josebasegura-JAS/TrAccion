@@ -47,7 +47,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       {
         title: 'Analizar el año',
         action: 'Abre Balance anual desde la portada o desde la barra de navegación del módulo.',
-        check: 'Agrupa tickets e importes por mes, persona y área; los meses consolidados permanecen congelados aunque después cambie la plantilla o el calendario.',
+        check: 'Agrupa tickets e importes por mes, persona y área. Mientras el ejercicio está abierto, cualquier regularización a mes vencido actualiza el balance; al cerrar el año, el histórico queda fijado.',
         result: 'Tienes el acumulado anual, gráficos y un Excel de control con cuatro hojas.',
       },
     ],
@@ -95,7 +95,9 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       'En el año actual acumula únicamente hasta el mes presente; los meses futuros quedan a cero y no se presentan como previsión.',
       'La vista Personas muestra Enero-Diciembre, total de tickets, importe anual y meses con tickets. La vista Áreas agrupa personas, tickets, importe, peso sobre el total y media por persona.',
       'El área procede preferentemente de Dirección organizativa de Plantilla y, si no existe, de Unidad. Las personas manuales pueden guardar su propio área.',
-      'Consolidar cerrados guarda una fotografía de cada mes vencido. Después, cambios posteriores de plantilla, calendario o estado de una persona no modifican ese histórico.',
+      'Mientras el ejercicio está abierto, todos los meses siguen recalculándose y puedes incorporar tickets o regularizaciones a mes vencido.',
+      'Cerrar ejercicio está disponible cuando el año ha terminado y guarda una fotografía definitiva de los 12 meses. Desde ese momento el histórico queda fijo.',
+      'Si aparece una regularización posterior, puedes Reabrir ejercicio, modificar los datos necesarios y volver a cerrarlo después.',
       'Cada mes conserva el precio del ticket que le corresponde según su fecha de vigencia.',
       'Exportar Excel genera Resumen anual, Por persona, Por área y Detalle mensual.',
     ],
@@ -104,8 +106,8 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Precio e histórico',
     items: [
       'El precio del ticket admite varias vigencias. Al calcular un mes se aplica el precio que estuviera vigente en ese periodo.',
-      'Cambiar el precio para meses futuros no debe modificar los importes históricos ya consolidados.',
-      'Antes de consolidar un mes conviene comprobar que el pedido y sus ajustes están definitivamente revisados.',
+      'Cambiar el precio para meses futuros no modifica los importes de los meses que tengan otra vigencia de precio.',
+      'Antes de cerrar un ejercicio conviene comprobar que los pedidos, tickets manuales y regularizaciones del año están revisados.',
     ],
   },
 ];

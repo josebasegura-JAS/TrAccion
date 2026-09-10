@@ -264,6 +264,7 @@ function readConfig(): TicketRestaurantConfig {
     manualPeople: candidate.manualPeople ?? [],
     workflowReviews: candidate.workflowReviews ?? {},
     monthlySnapshots: candidate.monthlySnapshots ?? {},
+    annualClosures: candidate.annualClosures ?? {},
   });
 }
 

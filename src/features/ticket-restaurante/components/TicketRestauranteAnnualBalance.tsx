@@ -4,6 +4,8 @@ import {
   CalendarCheck2,
   Euro,
   FileSpreadsheet,
+  LockKeyhole,
+  LockOpen,
   Search,
   Ticket,
   Users,
@@ -210,16 +212,18 @@ export function TicketRestauranteAnnualBalance({
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
   const [exporting, setExporting] = useState(false);
-  const [consolidating, setConsolidating] = useState(false);
+  const [closingYear, setClosingYear] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const areaByEmployee = useMemo(() => buildEmployeeAreaMap(employees), [employees]);
+  const yearClosure = config.annualClosures?.[String(year)];
+  const isYearClosed = Boolean(yearClosure);
 
   const peopleRows = useMemo<AnnualPersonRow[]>(() => {
     const byEmployee = new Map<string, AnnualPersonRow>();
-    const maxMonth = lastMonthToInclude(year);
+    const maxMonth = isYearClosed ? 12 : lastMonthToInclude(year);
     for (let month = 1; month <= maxMonth; month += 1) {
       const key = `${year}-${String(month).padStart(2, '0')}`;
-      const snapshot = config.monthlySnapshots?.[key];
+      const snapshot = isYearClosed ? config.monthlySnapshots?.[key] : undefined;
       const sourceRows = snapshot
         ? snapshot.rows.map((row) => ({
             empleado: row.empleado,
@@ -264,7 +268,7 @@ export function TicketRestauranteAnnualBalance({
       });
     }
     return [...byEmployee.values()].sort((a, b) => a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' }));
-  }, [absences, areaByEmployee, calendars, config, manutenciones, people, year]);
+  }, [absences, areaByEmployee, calendars, config, isYearClosed, manutenciones, people, year]);
 
   const areaRows = useMemo<AnnualAreaRow[]>(() => {
     const totalAmount = peopleRows.reduce((sum, row) => sum + row.totalAmount, 0);
@@ -307,29 +311,22 @@ export function TicketRestauranteAnnualBalance({
   const maxMonthly = Math.max(...monthlyTotals, 1);
   const maxAreaTickets = Math.max(...areaRows.map((row) => row.tickets), 1);
 
-  const closedMonthLimit = (() => {
-    const now = new Date();
-    if (year < now.getFullYear()) return 12;
-    if (year > now.getFullYear()) return 0;
-    return Math.max(0, now.getMonth());
-  })();
-  const consolidatedMonths = Array.from({ length: closedMonthLimit }, (_, index) => index + 1).filter((month) =>
-    Boolean(config.monthlySnapshots?.[`${year}-${String(month).padStart(2, '0')}`]),
-  ).length;
+  const canCloseYear = year < new Date().getFullYear();
 
-  const handleConsolidate = async () => {
-    if (closedMonthLimit <= 0) {
-      setStatusMessage('No hay meses vencidos para consolidar en este año.');
+  const handleCloseYear = async () => {
+    if (!canCloseYear) {
+      setStatusMessage('El ejercicio solo puede cerrarse cuando el año ha finalizado.');
       return;
     }
-    setConsolidating(true);
+    if (!window.confirm(`Cerrar el ejercicio ${year}? Se guardará una fotografía definitiva de los 12 meses. Podrás reabrirlo después si necesitas hacer una regularización.`)) return;
+
+    setClosingYear(true);
     setStatusMessage('');
     try {
-      const snapshots: Record<string, TicketMonthlySnapshot> = { ...(config.monthlySnapshots ?? {}) };
       const closedAt = new Date().toISOString();
-      for (let month = 1; month <= closedMonthLimit; month += 1) {
+      const snapshots: Record<string, TicketMonthlySnapshot> = { ...(config.monthlySnapshots ?? {}) };
+      for (let month = 1; month <= 12; month += 1) {
         const key = `${year}-${String(month).padStart(2, '0')}`;
-        if (snapshots[key]) continue;
         const calculation = calculateMonthlyTicketOrder(people, calendars, absences, config, year, month, manutenciones);
         snapshots[key] = {
           year,
@@ -349,10 +346,33 @@ export function TicketRestauranteAnnualBalance({
           }),
         };
       }
-      const result = await onUpdateConfig({ ...config, monthlySnapshots: snapshots });
-      setStatusMessage(result.ok ? `Histórico consolidado: ${closedMonthLimit} mes(es) cerrados.` : result.message ?? 'No se ha podido consolidar el histórico.');
+      const annualClosures = {
+        ...(config.annualClosures ?? {}),
+        [String(year)]: { year, closedAt },
+      };
+      const result = await onUpdateConfig({ ...config, monthlySnapshots: snapshots, annualClosures });
+      setStatusMessage(result.ok ? `Ejercicio ${year} cerrado correctamente.` : result.message ?? 'No se ha podido cerrar el ejercicio.');
     } finally {
-      setConsolidating(false);
+      setClosingYear(false);
+    }
+  };
+
+  const handleReopenYear = async () => {
+    if (!window.confirm(`Reabrir el ejercicio ${year}? El balance volverá a calcularse con los datos actuales y podrás incorporar regularizaciones retroactivas.`)) return;
+
+    setClosingYear(true);
+    setStatusMessage('');
+    try {
+      const snapshots = { ...(config.monthlySnapshots ?? {}) };
+      Object.keys(snapshots).forEach((key) => {
+        if (key.startsWith(`${year}-`)) delete snapshots[key];
+      });
+      const annualClosures = { ...(config.annualClosures ?? {}) };
+      delete annualClosures[String(year)];
+      const result = await onUpdateConfig({ ...config, monthlySnapshots: snapshots, annualClosures });
+      setStatusMessage(result.ok ? `Ejercicio ${year} reabierto. El balance vuelve a estar en curso.` : result.message ?? 'No se ha podido reabrir el ejercicio.');
+    } finally {
+      setClosingYear(false);
     }
   };
 
@@ -383,9 +403,15 @@ export function TicketRestauranteAnnualBalance({
                 {Array.from({ length: 7 }, (_, index) => new Date().getFullYear() + 1 - index).map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
-            <ActionButton icon={CalendarCheck2} iconOnly={false} loading={consolidating} onClick={() => void handleConsolidate()} size="sm" variant="secondary">
-              Consolidar cerrados
-            </ActionButton>
+            {isYearClosed ? (
+              <ActionButton icon={LockOpen} iconOnly={false} loading={closingYear} onClick={() => void handleReopenYear()} size="sm" variant="secondary">
+                Reabrir ejercicio
+              </ActionButton>
+            ) : (
+              <ActionButton disabled={!canCloseYear} icon={LockKeyhole} iconOnly={false} loading={closingYear} onClick={() => void handleCloseYear()} size="sm" title={!canCloseYear ? 'Podrás cerrar el ejercicio cuando el año haya finalizado.' : undefined} variant="secondary">
+                Cerrar ejercicio
+              </ActionButton>
+            )}
             <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => void handleExport()} size="sm" variant="secondary">
               {exporting ? 'Generando…' : 'Exportar Excel'}
             </ActionButton>
@@ -393,7 +419,15 @@ export function TicketRestauranteAnnualBalance({
         </div>
       </section>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[10px] text-metro-muted">
-        <span>{consolidatedMonths}/{closedMonthLimit} mes(es) vencidos consolidados. Los meses consolidados no cambian aunque después cambie la plantilla o el calendario.</span>
+        <span>
+          {isYearClosed
+            ? `Ejercicio cerrado${yearClosure?.closedAt ? ` el ${new Date(yearClosure.closedAt).toLocaleDateString('es-ES')}` : ''}. El histórico permanece fijo hasta que lo reabras.`
+            : year === new Date().getFullYear()
+              ? 'Ejercicio en curso: cualquier ticket añadido a un mes vencido actualiza automáticamente el balance anual.'
+              : canCloseYear
+                ? 'Ejercicio abierto: puedes incorporar regularizaciones retroactivas y cerrarlo cuando la información sea definitiva.'
+                : 'Ejercicio futuro: todavía no hay datos que cerrar.'}
+        </span>
         {statusMessage ? <span className="font-semibold text-metro-text">{statusMessage}</span> : null}
       </div>
 
@@ -508,7 +542,7 @@ export function TicketRestauranteAnnualBalance({
 
       <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[11px] text-metro-muted">
-          <strong className="text-metro-text">Criterio:</strong> se suman los tickets del Cómputo mensual, incluidas las personas manuales del mes correspondiente. Los importes usan el precio vigente en cada mes. Las áreas proceden de Plantilla y, en personas manuales, del área guardada en su ficha cuando exista.
+          <strong className="text-metro-text">Criterio:</strong> mientras el ejercicio está abierto, el balance se recalcula con los datos actuales y admite tickets o regularizaciones a mes vencido. Al cerrar el ejercicio se guarda una fotografía definitiva de los 12 meses. Los importes usan el precio vigente en cada mes.
         </div>
         <div className="flex items-center rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-[11px] text-metro-muted">
           <Users className="mr-2 h-4 w-4 text-blue-500" /> {peopleRows.filter((row) => row.area === 'Sin área').length} persona(s) sin área asignada

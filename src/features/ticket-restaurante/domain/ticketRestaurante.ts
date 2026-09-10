@@ -187,6 +187,11 @@ export interface TicketMonthlySnapshot {
   rows: TicketMonthlySnapshotRow[];
 }
 
+export interface TicketAnnualClosure {
+  year: number;
+  closedAt: string;
+}
+
 export interface TicketMonthlyWorkflowReview {
   absencesReviewed: boolean;
   manutencionesReviewed: boolean;
@@ -203,6 +208,7 @@ export interface TicketRestaurantConfig {
   manualPeople?: TicketManualPerson[];
   workflowReviews?: Record<string, TicketMonthlyWorkflowReview>;
   monthlySnapshots?: Record<string, TicketMonthlySnapshot>;
+  annualClosures?: Record<string, TicketAnnualClosure>;
 }
 
 export interface TicketDebtDetailDay {
@@ -278,6 +284,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   manualPeople: [],
   workflowReviews: {},
   monthlySnapshots: {},
+  annualClosures: {},
 };
 
 export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
@@ -1664,6 +1671,24 @@ function normalizeMonthlySnapshots(
   return normalized;
 }
 
+function normalizeAnnualClosures(
+  closures: TicketRestaurantConfig['annualClosures'],
+): Record<string, TicketAnnualClosure> {
+  if (!closures || typeof closures !== 'object') return {};
+  const normalized: Record<string, TicketAnnualClosure> = {};
+  Object.entries(closures).forEach(([key, raw]) => {
+    if (!/^\d{4}$/.test(key) || !raw || typeof raw !== 'object') return;
+    const year = Number(key);
+    const candidate = raw as Partial<TicketAnnualClosure>;
+    if (!Number.isInteger(year)) return;
+    normalized[key] = {
+      year,
+      closedAt: typeof candidate.closedAt === 'string' ? candidate.closedAt : '',
+    };
+  });
+  return normalized;
+}
+
 function normalizeWorkflowReviews(
   reviews: TicketRestaurantConfig['workflowReviews'],
 ): Record<string, TicketMonthlyWorkflowReview> {
@@ -1720,6 +1745,7 @@ export function normalizeTicketRestaurantConfig(
     manualPeople: normalizeManualPeople(config.manualPeople),
     workflowReviews: normalizeWorkflowReviews(config.workflowReviews),
     monthlySnapshots: normalizeMonthlySnapshots(config.monthlySnapshots),
+    annualClosures: normalizeAnnualClosures(config.annualClosures),
   };
 }
 
