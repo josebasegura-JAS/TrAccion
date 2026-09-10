@@ -228,7 +228,7 @@ export function TeletrabajoWorkflow({
           </div>
           <select
             aria-label="Periodo activo"
-            className="h-9 min-w-[190px] rounded-lg border border-metro-border bg-metro-surface px-3 text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
+            className="h-10 min-w-[190px] rounded-xl border border-metro-border bg-metro-surface px-3 text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
             onChange={(event) => onPeriodoChange(event.target.value)}
             value={periodo}
           >
@@ -301,7 +301,7 @@ export function TeletrabajoWorkflow({
           </div>
           <button
             className={cx(
-              'inline-flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-extrabold transition',
+              'inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-extrabold transition',
               nextAction.ready ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-metro-red text-white hover:bg-metro-dark',
             )}
             onClick={nextAction.onClick}

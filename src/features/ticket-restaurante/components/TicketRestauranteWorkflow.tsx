@@ -272,7 +272,7 @@ export function TicketRestauranteWorkflow({
           <div className="flex flex-wrap items-center gap-2">
             <select
               aria-label="Mes de trabajo"
-              className="h-9 min-w-[145px] rounded-lg border border-metro-border bg-metro-surface px-3 text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
+              className="h-10 min-w-[145px] rounded-xl border border-metro-border bg-metro-surface px-3 text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
               onChange={(event) => onMonthChange(Number(event.target.value))}
               value={month}
             >
@@ -280,7 +280,7 @@ export function TicketRestauranteWorkflow({
             </select>
             <input
               aria-label="Año de trabajo"
-              className="h-9 w-24 rounded-lg border border-metro-border bg-metro-surface px-2 text-center text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
+              className="h-10 w-24 rounded-xl border border-metro-border bg-metro-surface px-2 text-center text-[13px] font-semibold text-metro-text outline-none focus:border-metro-red"
               max="2200"
               min="1900"
               onChange={(event) => onYearChange(Number(event.target.value) || year)}
@@ -358,7 +358,7 @@ export function TicketRestauranteWorkflow({
           </div>
           <button
             className={cx(
-              'inline-flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-extrabold transition',
+              'inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-extrabold transition',
               readyForOrder
                 ? 'bg-emerald-600 text-white hover:bg-emerald-500'
                 : 'bg-metro-red text-white hover:bg-metro-dark',

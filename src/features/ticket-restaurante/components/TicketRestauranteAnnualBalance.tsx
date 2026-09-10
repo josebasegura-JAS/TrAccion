@@ -399,7 +399,7 @@ export function TicketRestauranteAnnualBalance({
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">
               Año
-              <select className="ml-2 h-9 rounded-lg border border-metro-border bg-metro-surface px-3 text-sm font-semibold text-metro-text" value={year} onChange={(event) => setYear(Number(event.target.value))}>
+              <select className="ml-2 h-8 rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" value={year} onChange={(event) => setYear(Number(event.target.value))}>
                 {Array.from({ length: 7 }, (_, index) => new Date().getFullYear() + 1 - index).map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
@@ -481,15 +481,15 @@ export function TicketRestauranteAnnualBalance({
       <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
         <div className="flex flex-col gap-2 border-b border-metro-border p-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
-            <button className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === 'people' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('people')} type="button">Personas</button>
-            <button className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === 'areas' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('areas')} type="button">Áreas</button>
+            <button className={`h-8 rounded-lg px-3 text-xs font-bold ${mode === 'people' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('people')} type="button">Personas</button>
+            <button className={`h-8 rounded-lg px-3 text-xs font-bold ${mode === 'areas' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('areas')} type="button">Áreas</button>
           </div>
           <div className="flex flex-1 flex-wrap gap-2 lg:justify-end">
             <label className="relative min-w-[220px] max-w-sm flex-1 lg:flex-none">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-metro-muted" />
-              <input className="h-9 w-full rounded-lg border border-metro-border bg-metro-surface pl-8 pr-3 text-xs text-metro-text outline-none focus:border-blue-500" onChange={(event) => setSearch(event.target.value)} placeholder={mode === 'people' ? 'Buscar persona, nº o área…' : 'Buscar área…'} value={search} />
+              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-metro-muted" />
+              <input className="h-8 w-full rounded-lg border border-metro-border bg-metro-surface pl-8 pr-3 text-xs text-metro-text outline-none focus:border-blue-500" onChange={(event) => setSearch(event.target.value)} placeholder={mode === 'people' ? 'Buscar persona, nº o área…' : 'Buscar área…'} value={search} />
             </label>
-            <select className="h-9 min-w-[190px] rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" onChange={(event) => setAreaFilter(event.target.value)} value={areaFilter}>
+            <select className="h-8 min-w-[190px] rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" onChange={(event) => setAreaFilter(event.target.value)} value={areaFilter}>
               <option value="">Todas las áreas</option>
               {areas.map((area) => <option key={area} value={area}>{area}</option>)}
             </select>

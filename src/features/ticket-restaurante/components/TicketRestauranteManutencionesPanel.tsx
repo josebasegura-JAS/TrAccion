@@ -1,4 +1,3 @@
-import { Trash2 } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import type { TicketPerson } from '../domain/ticketRestaurante';
@@ -77,13 +76,9 @@ export function ManutencionesPanel({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onExportModel}
-            type="button"
-          >
+          <ActionButton iconOnly={false} onClick={onExportModel} size="sm" variant="secondary">
             Modelo
-          </button>
+          </ActionButton>
           <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
             Importar desde Excel
           </ActionButton>
@@ -147,14 +142,15 @@ export function ManutencionesPanel({
                 {rowsToImport} registros marcados para importar.
               </p>
             </div>
-            <button
-              className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+            <ActionButton
               disabled={rowsToImport === 0 || previewRows.some((row) => row.errors.length > 0)}
+              iconOnly={false}
               onClick={onSavePreview}
-              type="button"
+              size="sm"
+              variant="save"
             >
               Guardar importación
-            </button>
+            </ActionButton>
           </div>
           <div className="overflow-x-auto">
             <CompactTable>
@@ -256,14 +252,14 @@ export function ManutencionesPanel({
                   <td className="px-2 py-1 text-metro-muted">{row.origen}</td>
                   <td className="px-2 py-1 text-metro-text">{row.afectaTicket ? 'Sí' : 'No'}</td>
                   <td className="px-2 py-1">
-                    <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                    <ActionButton
+                      iconOnly={false}
                       onClick={() => onRemove(row.id)}
-                      type="button"
+                      size="sm"
+                      variant="delete"
                     >
-                      <Trash2 className="h-3 w-3" />
                       Eliminar
-                    </button>
+                    </ActionButton>
                   </td>
                 </tr>
               ))
