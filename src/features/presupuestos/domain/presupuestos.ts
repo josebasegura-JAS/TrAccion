@@ -2,6 +2,7 @@ import {
   countTicketCalendarDays,
   normalizeTicketCalendarName,
   type TicketCalendar,
+  type TicketPerson,
 } from '../../ticket-restaurante/domain/ticketRestaurante';
 
 export const BUDGET_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
@@ -28,6 +29,10 @@ export interface BudgetScenario {
   name: string;
   year: number;
   ticketAmount: number;
+  ticketPlanningMode?: 'automatic' | 'groups';
+  ticketAbsenceRateA?: number;
+  ticketAbsenceRateB?: number;
+  ticketExtraPeopleByCalendar?: Record<string, number>;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +83,34 @@ export interface BudgetActual {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+}
+
+
+export interface BudgetAutomaticTicketCalendarRow {
+  calendarId: string;
+  calendarName: string;
+  basePeople: number;
+  additionalPeople: number;
+  totalPeople: number;
+  annualDays: number;
+  annualTicketsA: number;
+  annualTicketsB: number;
+  annualAmountA: number;
+  annualAmountB: number;
+}
+
+export interface BudgetAutomaticTicketPlan {
+  year: number;
+  rateA: number;
+  rateB: number;
+  basePeople: number;
+  additionalPeople: number;
+  totalPeople: number;
+  annualTicketsA: number;
+  annualTicketsB: number;
+  annualAmountA: number;
+  annualAmountB: number;
+  rows: BudgetAutomaticTicketCalendarRow[];
 }
 
 export interface BudgetValidationResult {
@@ -231,6 +264,84 @@ function visible<T extends { deletedAt?: string | null }>(items: readonly T[]): 
   return items.filter((item) => !item.deletedAt);
 }
 
+function scenarioRate(scenario: BudgetScenario, key: 'A' | 'B'): number {
+  return normalizeBudgetRate(key === 'A' ? (scenario.ticketAbsenceRateA ?? 0.03) : (scenario.ticketAbsenceRateB ?? 0.06));
+}
+
+export function buildAutomaticTicketPlan(
+  scenario: BudgetScenario,
+  year: number,
+  calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
+): BudgetAutomaticTicketPlan {
+  const rateA = scenarioRate(scenario, 'A');
+  const rateB = scenarioRate(scenario, 'B');
+  const ticketAmount = Math.max(0, normalizeBudgetNumber(scenario.ticketAmount));
+  const extras = scenario.ticketExtraPeopleByCalendar ?? {};
+  const activePeople = people.filter((person) => !person.deletedAt && person.activo);
+  const rows = calendars
+    .filter((calendar) => !calendar.deletedAt && calendar.activo)
+    .map((calendar) => {
+      const basePeople = activePeople.filter((person) => person.calendarId === calendar.id).length;
+      const additionalPeople = Math.max(0, Math.trunc(normalizeBudgetNumber(extras[calendar.id] ?? 0)));
+      const totalPeople = basePeople + additionalPeople;
+      const annualDays = BUDGET_MONTHS.reduce((total, month) => total + countTicketCalendarDays(calendar, year, month), 0);
+      const theoreticalTickets = annualDays * totalPeople;
+      const annualTicketsA = Math.round(theoreticalTickets * (1 - rateA));
+      const annualTicketsB = Math.round(theoreticalTickets * (1 - rateB));
+      return {
+        calendarId: calendar.id,
+        calendarName: calendar.nombre,
+        basePeople,
+        additionalPeople,
+        totalPeople,
+        annualDays,
+        annualTicketsA,
+        annualTicketsB,
+        annualAmountA: roundBudgetCurrency(annualTicketsA * ticketAmount),
+        annualAmountB: roundBudgetCurrency(annualTicketsB * ticketAmount),
+      };
+    })
+    .filter((row) => row.basePeople > 0 || row.additionalPeople > 0);
+  return {
+    year,
+    rateA,
+    rateB,
+    basePeople: rows.reduce((total, row) => total + row.basePeople, 0),
+    additionalPeople: rows.reduce((total, row) => total + row.additionalPeople, 0),
+    totalPeople: rows.reduce((total, row) => total + row.totalPeople, 0),
+    annualTicketsA: rows.reduce((total, row) => total + row.annualTicketsA, 0),
+    annualTicketsB: rows.reduce((total, row) => total + row.annualTicketsB, 0),
+    annualAmountA: roundBudgetCurrency(rows.reduce((total, row) => total + row.annualAmountA, 0)),
+    annualAmountB: roundBudgetCurrency(rows.reduce((total, row) => total + row.annualAmountB, 0)),
+    rows,
+  };
+}
+
+function calculateAutomaticTicketMonth(
+  scenario: BudgetScenario,
+  year: number,
+  month: number,
+  calendars: readonly TicketCalendar[],
+  people: readonly TicketPerson[],
+  rateKey: 'A' | 'B' = 'A',
+): number {
+  const rate = scenarioRate(scenario, rateKey);
+  const ticketAmount = Math.max(0, normalizeBudgetNumber(scenario.ticketAmount));
+  const extras = scenario.ticketExtraPeopleByCalendar ?? {};
+  const activePeople = people.filter((person) => !person.deletedAt && person.activo);
+  return roundBudgetCurrency(
+    calendars
+      .filter((calendar) => !calendar.deletedAt && calendar.activo)
+      .reduce((total, calendar) => {
+        const basePeople = activePeople.filter((person) => person.calendarId === calendar.id).length;
+        const additionalPeople = Math.max(0, Math.trunc(normalizeBudgetNumber(extras[calendar.id] ?? 0)));
+        const ticketDays = countTicketCalendarDays(calendar, year, month);
+        return total + ticketDays * (basePeople + additionalPeople) * (1 - rate) * ticketAmount;
+      }, 0),
+  );
+}
+
 export function calculateBudgetScenarioMonth(
   scenario: BudgetScenario,
   manualItems: readonly BudgetManualItem[],
@@ -238,18 +349,21 @@ export function calculateBudgetScenarioMonth(
   year: number,
   month: number,
   calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
 ): BudgetScenarioMonthlyTotal {
   const scenarioManualItems = visible(manualItems).filter((item) => item.scenarioId === scenario.id);
   const scenarioTicketGroups = visible(ticketGroups).filter((group) => group.scenarioId === scenario.id);
   const manualTotal = roundBudgetCurrency(
     scenarioManualItems.reduce((total, item) => total + calculateBudgetManualItemMonth(item), 0),
   );
-  const ticketTotal = roundBudgetCurrency(
-    scenarioTicketGroups.reduce(
-      (total, group) => total + calculateBudgetTicketGroupMonth(group, year, month, scenario.ticketAmount, calendars),
-      0,
-    ),
-  );
+  const ticketTotal = scenario.ticketPlanningMode === 'automatic'
+    ? calculateAutomaticTicketMonth(scenario, year, month, calendars, people, 'A')
+    : roundBudgetCurrency(
+        scenarioTicketGroups.reduce(
+          (total, group) => total + calculateBudgetTicketGroupMonth(group, year, month, scenario.ticketAmount, calendars),
+          0,
+        ),
+      );
   return { month, manualTotal, ticketTotal, total: roundBudgetCurrency(manualTotal + ticketTotal) };
 }
 
@@ -259,8 +373,9 @@ export function calculateBudgetScenarioYear(
   ticketGroups: readonly BudgetTicketGroup[],
   year = scenario.year,
   calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
 ): BudgetScenarioYearTotal {
-  const months = BUDGET_MONTHS.map((month) => calculateBudgetScenarioMonth(scenario, manualItems, ticketGroups, year, month, calendars));
+  const months = BUDGET_MONTHS.map((month) => calculateBudgetScenarioMonth(scenario, manualItems, ticketGroups, year, month, calendars, people));
   return {
     year,
     months,
@@ -276,6 +391,7 @@ export function buildBudgetScenarioExportData(
   ticketGroups: readonly BudgetTicketGroup[],
   year = scenario.year,
   calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
 ): BudgetScenarioExportRow[] {
   const manualRows = visible(manualItems)
     .filter((item) => item.scenarioId === scenario.id)
@@ -286,15 +402,23 @@ export function buildBudgetScenarioExportData(
       annualTotal: calculateBudgetManualItemYear(item),
       notes: item.notes,
     }));
-  const ticketRows = visible(ticketGroups)
-    .filter((group) => group.scenarioId === scenario.id)
-    .map((group) => ({
-      block: 'Ticket Restaurante',
-      concept: group.name,
-      category: group.calculationType,
-      annualTotal: calculateBudgetTicketGroupYear(group, year, scenario.ticketAmount, calendars),
-      notes: group.notes,
-    }));
+  const ticketRows = scenario.ticketPlanningMode === 'automatic'
+    ? buildAutomaticTicketPlan(scenario, year, calendars, people).rows.map((row) => ({
+        block: 'Ticket Restaurante',
+        concept: row.calendarName,
+        category: 'Base automática · escenario A',
+        annualTotal: row.annualAmountA,
+        notes: `${row.basePeople} fijas + ${row.additionalPeople} adicionales · absentismo ${Math.round(scenarioRate(scenario, 'A') * 10000) / 100}%`,
+      }))
+    : visible(ticketGroups)
+        .filter((group) => group.scenarioId === scenario.id)
+        .map((group) => ({
+          block: 'Ticket Restaurante',
+          concept: group.name,
+          category: group.calculationType,
+          annualTotal: calculateBudgetTicketGroupYear(group, year, scenario.ticketAmount, calendars),
+          notes: group.notes,
+        }));
   return [...manualRows, ...ticketRows];
 }
 
@@ -305,9 +429,10 @@ export function buildBudgetComparisonData(
   ticketGroups: readonly BudgetTicketGroup[],
   year: number,
   calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
 ): BudgetComparisonRow[] {
-  const totalA = calculateBudgetScenarioYear(scenarioA, manualItems, ticketGroups, year, calendars);
-  const totalB = calculateBudgetScenarioYear(scenarioB, manualItems, ticketGroups, year, calendars);
+  const totalA = calculateBudgetScenarioYear(scenarioA, manualItems, ticketGroups, year, calendars, people);
+  const totalB = calculateBudgetScenarioYear(scenarioB, manualItems, ticketGroups, year, calendars, people);
   return BUDGET_MONTHS.map((month, index) => {
     const scenarioATotal = totalA.months[index]?.total ?? 0;
     const scenarioBTotal = totalB.months[index]?.total ?? 0;
@@ -343,9 +468,10 @@ export function buildBudgetActualComparisonData(
   year: number,
   cutoffMonth: number,
   calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
 ): BudgetActualComparisonRow[] {
   const monthLimit = Math.min(Math.max(Math.trunc(cutoffMonth), 1), 12);
-  const scenarioTotal = calculateBudgetScenarioYear(scenario, manualItems, ticketGroups, year, calendars);
+  const scenarioTotal = calculateBudgetScenarioYear(scenario, manualItems, ticketGroups, year, calendars, people);
   const manualBudget = roundBudgetCurrency(scenarioTotal.months.slice(0, monthLimit).reduce((total, month) => total + month.manualTotal, 0));
   const ticketBudget = roundBudgetCurrency(scenarioTotal.months.slice(0, monthLimit).reduce((total, month) => total + month.ticketTotal, 0));
   const rowsByBlock = new Map<string, BudgetActualComparisonRow>();
@@ -377,8 +503,9 @@ export function buildBudgetActualDashboardData(
   year: number,
   cutoffMonth: number,
   calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
 ): BudgetActualDashboardData {
-  const rows = buildBudgetActualComparisonData(scenario, manualItems, ticketGroups, actuals, year, cutoffMonth, calendars);
+  const rows = buildBudgetActualComparisonData(scenario, manualItems, ticketGroups, actuals, year, cutoffMonth, calendars, people);
   const budgetTotal = roundBudgetCurrency(rows.reduce((total, row) => total + row.budgetTotal, 0));
   const actualTotal = roundBudgetCurrency(rows.reduce((total, row) => total + row.actualTotal, 0));
   const difference = roundBudgetCurrency(budgetTotal - actualTotal);
@@ -393,11 +520,16 @@ export function buildBudgetActualDashboardData(
   };
 }
 
-export function validateBudgetScenario(scenario: Pick<BudgetScenario, 'name' | 'year' | 'ticketAmount'>): BudgetValidationResult {
+export function validateBudgetScenario(
+  scenario: Pick<BudgetScenario, 'name' | 'year' | 'ticketAmount' | 'ticketAbsenceRateA' | 'ticketAbsenceRateB'>,
+): BudgetValidationResult {
   const errors: string[] = [];
   if (!scenario.name.trim()) errors.push('El nombre de escenario es obligatorio.');
   if (!Number.isInteger(Number(scenario.year))) errors.push('El año debe ser numérico entero.');
   if (normalizeBudgetNumber(scenario.ticketAmount) < 0) errors.push('El importe ticket no puede ser negativo.');
+  const rateA = normalizeBudgetRate(scenario.ticketAbsenceRateA ?? 0.03);
+  const rateB = normalizeBudgetRate(scenario.ticketAbsenceRateB ?? 0.06);
+  if (rateA < 0 || rateA > 1 || rateB < 0 || rateB > 1) errors.push('Los absentismos deben estar entre 0 % y 100 %.');
   return { valid: errors.length === 0, errors };
 }
 

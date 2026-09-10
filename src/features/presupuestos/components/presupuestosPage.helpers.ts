@@ -28,7 +28,11 @@ export const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Grupos de Ticket Restaurante: 4 formas de calcular',
     items: [
-      'Personas por calendario: días con derecho a ticket del calendario asignado × nº de personas × (1 − % de ausentismo) × precio del ticket. Es el cálculo más ajustado a la realidad, siempre que el calendario y el nº de personas estén bien informados.',
+      'Modo automático recomendado: toma directamente las personas activas con Ticket Restaurante, las agrupa por su calendario y usa los días de ticket del ejercicio presupuestado.',
+      'Puedes añadir personas previstas manualmente en cada calendario. Se suman a la base detectada y el presupuesto se recalcula al momento.',
+      'Se calculan dos escenarios de absentismo simultáneos (por defecto 3 % y 6 %), ambos editables. El escenario A alimenta el total principal del presupuesto y el B se muestra como alternativa.',
+      'El precio del ticket sigue siendo editable por escenario y puede ser distinto al precio vigente.',
+      'El cálculo automático es: días con ticket del calendario × (personas fijas + adicionales) × (1 − absentismo) × precio del ticket.',
       'Tickets mensuales: un nº de tickets manual cada mes × precio del ticket.',
       'Tickets anuales: un nº de tickets manual para todo el año × precio del ticket; para la vista mensual se reparte entre 12.',
       'Importe manual: un importe fijo cada mes (× 12 para el anual), sin ningún cálculo de días o personas.',
@@ -113,6 +117,10 @@ export const emptyScenarioDraft = (year = new Date().getFullYear()): BudgetScena
   name: '',
   year,
   ticketAmount: 0,
+  ticketPlanningMode: 'automatic',
+  ticketAbsenceRateA: 0.03,
+  ticketAbsenceRateB: 0.06,
+  ticketExtraPeopleByCalendar: {},
   notes: '',
 });
 export const emptyManualDraft = (scenarioId: string): BudgetManualItemDraft => ({

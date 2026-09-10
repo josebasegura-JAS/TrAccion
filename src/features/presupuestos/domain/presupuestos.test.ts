@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAutomaticTicketPlan,
   buildBudgetActualDashboardData,
   buildBudgetComparisonData,
   calculateBudgetManualItemYear,
@@ -10,7 +11,7 @@ import {
   type BudgetScenario,
   type BudgetTicketGroup,
 } from './presupuestos';
-import type { TicketCalendar } from '../../ticket-restaurante/domain/ticketRestaurante';
+import type { TicketCalendar, TicketPerson } from '../../ticket-restaurante/domain/ticketRestaurante';
 
 const now = '2026-01-01T00:00:00.000Z';
 const scenarioA: BudgetScenario = { id: 'a', name: 'A', year: 2026, ticketAmount: 10, notes: '', createdAt: now, updatedAt: now, deletedAt: null };
@@ -51,6 +52,32 @@ describe('presupuestos domain', () => {
   it('calcula Ticket por calendario/personas/días/absentismo', () => {
     // Enero 2026 tiene 22 días laborables lunes-viernes; quitando 2026-01-01 quedan 21.
     expect(calculateBudgetTicketGroupMonth(ticket({ calculationType: 'calendar_people', peopleCount: 2, absenceRate: 0.1 }), 2026, 1, 10, [calendar])).toBe(378);
+  });
+
+
+  it('construye el presupuesto base automático por calendario con dos absentismos', () => {
+    const automaticScenario: BudgetScenario = {
+      ...scenarioA,
+      ticketPlanningMode: 'automatic',
+      ticketAbsenceRateA: 0.03,
+      ticketAbsenceRateB: 0.06,
+      ticketExtraPeopleByCalendar: { 'cal-1': 1 },
+    };
+    const people: TicketPerson[] = [
+      {
+        empleado: '1', nombre: 'A', apellido1: '', apellido2: '', dni: '', nombreApellidos: 'A',
+        puesto: 'Puesto', calendarId: 'cal-1', activo: true, createdAt: now, updatedAt: now, deletedAt: null,
+      },
+      {
+        empleado: '2', nombre: 'B', apellido1: '', apellido2: '', dni: '', nombreApellidos: 'B',
+        puesto: 'Puesto', calendarId: 'cal-1', activo: true, createdAt: now, updatedAt: now, deletedAt: null,
+      },
+    ];
+    const plan = buildAutomaticTicketPlan(automaticScenario, 2026, [calendar], people);
+    expect(plan.basePeople).toBe(2);
+    expect(plan.additionalPeople).toBe(1);
+    expect(plan.totalPeople).toBe(3);
+    expect(plan.annualAmountA).toBeGreaterThan(plan.annualAmountB);
   });
 
   it('compara escenarios por diferencia en euros y porcentaje', () => {

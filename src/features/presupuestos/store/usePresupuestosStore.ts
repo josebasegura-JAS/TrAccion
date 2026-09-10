@@ -26,7 +26,7 @@ export const BUDGET_MANUAL_ITEMS_STORAGE_KEY = 'traccion.v1.presupuestos.manualI
 export const BUDGET_TICKET_GROUPS_STORAGE_KEY = 'traccion.v1.presupuestos.ticketGroups';
 export const BUDGET_ACTUALS_STORAGE_KEY = 'traccion.v1.presupuestos.actuals';
 
-export type BudgetScenarioDraft = Pick<BudgetScenario, 'name' | 'year' | 'ticketAmount' | 'notes'>;
+export type BudgetScenarioDraft = Pick<BudgetScenario, 'name' | 'year' | 'ticketAmount' | 'ticketPlanningMode' | 'ticketAbsenceRateA' | 'ticketAbsenceRateB' | 'ticketExtraPeopleByCalendar' | 'notes'>;
 export type BudgetManualItemDraft = Pick<BudgetManualItem, 'scenarioId' | 'concept' | 'category' | 'monthlyAmount' | 'annualAmount' | 'notes'>;
 export type BudgetTicketGroupDraft = Pick<BudgetTicketGroup, 'scenarioId' | 'name' | 'peopleCount' | 'ticketCalendar' | 'absenceRate' | 'ticketAmount' | 'calculationType' | 'manualTickets' | 'annualTickets' | 'manualMonthlyAmount' | 'notes'>;
 export type BudgetActualDraft = Pick<BudgetActual, 'year' | 'month' | 'block' | 'concept' | 'amount' | 'notes'>;
@@ -145,6 +145,15 @@ function normalizeScenarioDraft(draft: BudgetScenarioDraft): BudgetScenarioDraft
     name: draft.name.trim(),
     year: Math.trunc(normalizeBudgetNumber(draft.year)),
     ticketAmount: normalizeBudgetNumber(draft.ticketAmount),
+    ticketPlanningMode: draft.ticketPlanningMode ?? 'automatic',
+    ticketAbsenceRateA: normalizeBudgetRate(draft.ticketAbsenceRateA ?? 0.03),
+    ticketAbsenceRateB: normalizeBudgetRate(draft.ticketAbsenceRateB ?? 0.06),
+    ticketExtraPeopleByCalendar: Object.fromEntries(
+      Object.entries(draft.ticketExtraPeopleByCalendar ?? {}).map(([calendarId, count]) => [
+        calendarId,
+        Math.max(0, Math.trunc(normalizeBudgetNumber(count))),
+      ]),
+    ),
     notes: draft.notes.trim(),
   };
 }

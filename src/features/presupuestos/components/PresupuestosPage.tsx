@@ -10,6 +10,7 @@ import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTic
 import {
   BUDGET_ACTUAL_BLOCKS,
   BUDGET_MONTHS,
+  buildAutomaticTicketPlan,
   buildBudgetActualDashboardData,
   buildBudgetComparisonData,
   buildBudgetScenarioExportData,
@@ -57,7 +58,7 @@ import {
 } from './presupuestosPage.helpers';
 
 export function PresupuestosPage() {
-  const { calendars, load: loadTicketData } = useTicketRestauranteStore();
+  const { calendars, people, load: loadTicketData } = useTicketRestauranteStore();
   const {
     activeScenarioId,
     actuals,
@@ -93,6 +94,9 @@ export function PresupuestosPage() {
   const [actualYear, setActualYear] = useState(new Date().getFullYear());
   const [cutoffMonth, setCutoffMonth] = useState(12);
   const [message, setMessage] = useState('');
+  const [ticketPlanAbsenceA, setTicketPlanAbsenceA] = useState(3);
+  const [ticketPlanAbsenceB, setTicketPlanAbsenceB] = useState(6);
+  const [ticketPlanExtras, setTicketPlanExtras] = useState<Record<string, number>>({});
 
   useEffect(() => {
     load();
@@ -118,6 +122,9 @@ export function PresupuestosPage() {
       setActualYear(activeScenario.year);
       setActualScenarioId(activeScenario.id);
       setComparisonAId((current) => current || activeScenario.id);
+      setTicketPlanAbsenceA((activeScenario.ticketAbsenceRateA ?? 0.03) * 100);
+      setTicketPlanAbsenceB((activeScenario.ticketAbsenceRateB ?? 0.06) * 100);
+      setTicketPlanExtras(activeScenario.ticketExtraPeopleByCalendar ?? {});
     }
   }, [activeScenario]);
 
@@ -130,9 +137,10 @@ export function PresupuestosPage() {
             ticketGroups,
             simulationYear,
             calendars,
+            people,
           )
         : null,
-    [activeScenario, calendars, manualItems, simulationYear, ticketGroups],
+    [activeScenario, calendars, manualItems, people, simulationYear, ticketGroups],
   );
   const activeManualItems = useMemo(
     () =>
@@ -157,9 +165,10 @@ export function PresupuestosPage() {
             ticketGroups,
             simulationYear,
             calendars,
+            people,
           )
         : [],
-    [activeScenario, calendars, manualItems, simulationYear, ticketGroups],
+    [activeScenario, calendars, manualItems, people, simulationYear, ticketGroups],
   );
   const comparisonRows = useMemo(() => {
     const scenarioA = visibleScenarios.find((scenario) => scenario.id === comparisonAId);
@@ -172,6 +181,7 @@ export function PresupuestosPage() {
           ticketGroups,
           comparisonYear,
           calendars,
+          people,
         )
       : [];
   }, [
@@ -180,6 +190,7 @@ export function PresupuestosPage() {
     comparisonBId,
     comparisonYear,
     manualItems,
+    people,
     ticketGroups,
     visibleScenarios,
   ]);
@@ -195,6 +206,7 @@ export function PresupuestosPage() {
           actualYear,
           cutoffMonth,
           calendars,
+          people,
         )
       : null;
   }, [
@@ -205,9 +217,67 @@ export function PresupuestosPage() {
     calendars,
     cutoffMonth,
     manualItems,
+    people,
     ticketGroups,
     visibleScenarios,
   ]);
+
+  const ticketPlanningScenario = useMemo(
+    () =>
+      activeScenario
+        ? {
+            ...activeScenario,
+            ticketPlanningMode: 'automatic' as const,
+            ticketAbsenceRateA: Math.max(0, Math.min(ticketPlanAbsenceA, 100)) / 100,
+            ticketAbsenceRateB: Math.max(0, Math.min(ticketPlanAbsenceB, 100)) / 100,
+            ticketExtraPeopleByCalendar: ticketPlanExtras,
+          }
+        : null,
+    [activeScenario, ticketPlanAbsenceA, ticketPlanAbsenceB, ticketPlanExtras],
+  );
+  const automaticTicketPlan = useMemo(
+    () =>
+      ticketPlanningScenario
+        ? buildAutomaticTicketPlan(ticketPlanningScenario, simulationYear, calendars, people)
+        : null,
+    [calendars, people, simulationYear, ticketPlanningScenario],
+  );
+
+  const saveAutomaticTicketPlan = () => {
+    if (!activeScenario || !ticketPlanningScenario) return;
+    const result = upsertScenario(
+      {
+        name: activeScenario.name,
+        year: activeScenario.year,
+        ticketAmount: activeScenario.ticketAmount,
+        ticketPlanningMode: 'automatic',
+        ticketAbsenceRateA: ticketPlanningScenario.ticketAbsenceRateA,
+        ticketAbsenceRateB: ticketPlanningScenario.ticketAbsenceRateB,
+        ticketExtraPeopleByCalendar: ticketPlanExtras,
+        notes: activeScenario.notes,
+      },
+      activeScenario.id,
+    );
+    setMessage(result.valid ? 'Base automática de Ticket Restaurante guardada.' : result.errors.join(' '));
+  };
+
+  const switchToManualTicketGroups = () => {
+    if (!activeScenario) return;
+    const result = upsertScenario(
+      {
+        name: activeScenario.name,
+        year: activeScenario.year,
+        ticketAmount: activeScenario.ticketAmount,
+        ticketPlanningMode: 'groups',
+        ticketAbsenceRateA: activeScenario.ticketAbsenceRateA ?? 0.03,
+        ticketAbsenceRateB: activeScenario.ticketAbsenceRateB ?? 0.06,
+        ticketExtraPeopleByCalendar: activeScenario.ticketExtraPeopleByCalendar ?? {},
+        notes: activeScenario.notes,
+      },
+      activeScenario.id,
+    );
+    setMessage(result.valid ? 'Cálculo manual por grupos activado.' : result.errors.join(' '));
+  };
 
   const scenarioColumns = useMemo<Array<DataTableColumn<BudgetScenario, ScenarioColumnId>>>(
     () => [
@@ -224,11 +294,11 @@ export function PresupuestosPage() {
         id: 'manual',
         header: 'Partidas manuales',
         accessor: (row) =>
-          calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars)
+          calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars, people)
             .manualTotal,
         render: (row) =>
           euro(
-            calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars)
+            calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars, people)
               .manualTotal,
           ),
         width: 140,
@@ -237,11 +307,11 @@ export function PresupuestosPage() {
         id: 'ticketTotal',
         header: 'Ticket Restaurante',
         accessor: (row) =>
-          calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars)
+          calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars, people)
             .ticketTotal,
         render: (row) =>
           euro(
-            calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars)
+            calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars, people)
               .ticketTotal,
           ),
         width: 140,
@@ -250,10 +320,10 @@ export function PresupuestosPage() {
         id: 'total',
         header: 'Total global',
         accessor: (row) =>
-          calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).total,
+          calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars, people).total,
         render: (row) =>
           euro(
-            calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars).total,
+            calculateBudgetScenarioYear(row, manualItems, ticketGroups, row.year, calendars, people).total,
           ),
         width: 120,
       },
@@ -284,6 +354,10 @@ export function PresupuestosPage() {
                   name: row.name,
                   year: row.year,
                   ticketAmount: row.ticketAmount,
+                  ticketPlanningMode: row.ticketPlanningMode ?? 'groups',
+                  ticketAbsenceRateA: row.ticketAbsenceRateA ?? 0.03,
+                  ticketAbsenceRateB: row.ticketAbsenceRateB ?? 0.06,
+                  ticketExtraPeopleByCalendar: row.ticketExtraPeopleByCalendar ?? {},
                   notes: row.notes,
                 });
                 setEditingScenarioId(row.id);
@@ -317,7 +391,7 @@ export function PresupuestosPage() {
         ),
       },
     ],
-    [calendars, duplicateScenario, manualItems, removeScenario, setActiveScenario, ticketGroups],
+    [calendars, duplicateScenario, manualItems, people, removeScenario, setActiveScenario, ticketGroups],
   );
 
   const manualColumns: Array<DataTableColumn<BudgetManualItem, ManualColumnId>> = [
@@ -394,13 +468,13 @@ export function PresupuestosPage() {
       header: 'Total anual',
       accessor: (row) =>
         activeScenario
-          ? calculateBudgetScenarioYear(activeScenario, [], [row], simulationYear, calendars)
+          ? calculateBudgetScenarioYear({ ...activeScenario, ticketPlanningMode: 'groups' }, [], [row], simulationYear, calendars, people)
               .ticketTotal
           : 0,
       render: (row) =>
         activeScenario
           ? euro(
-              calculateBudgetScenarioYear(activeScenario, [], [row], simulationYear, calendars)
+              calculateBudgetScenarioYear({ ...activeScenario, ticketPlanningMode: 'groups' }, [], [row], simulationYear, calendars, people)
                 .ticketTotal,
             )
           : '—',
@@ -823,105 +897,171 @@ export function PresupuestosPage() {
               />
             </Section>
 
-            <Section title="5B. Ticket Restaurante">
-              <div className="grid gap-2 md:grid-cols-3">
-                <TextField
-                  label="Grupo"
-                  onChange={(value) => setTicketDraft({ ...ticketDraft, name: value })}
-                  value={ticketDraft.name}
-                />
-                <FieldLabel className="space-y-1">
-                  Tipo
-                  <Select
-                    className="mt-1"
-                    onChange={(event) =>
-                      setTicketDraft({
-                        ...ticketDraft,
-                        calculationType: event.target.value as BudgetTicketCalculationType,
-                      })
-                    }
-                    value={ticketDraft.calculationType}
-                  >
-                    {Object.entries(calculationTypeLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </FieldLabel>
-                <NumberField
-                  label="Importe ticket"
-                  onChange={(value) => setTicketDraft({ ...ticketDraft, ticketAmount: value })}
-                  value={ticketDraft.ticketAmount}
-                />
-                {ticketDraft.calculationType === 'calendar_people' && (
-                  <>
-                    <NumberField
-                      label="Personas"
-                      onChange={(value) => setTicketDraft({ ...ticketDraft, peopleCount: value })}
-                      value={ticketDraft.peopleCount}
-                    />
-                    <TextField
-                      label="Calendario"
-                      onChange={(value) =>
-                        setTicketDraft({ ...ticketDraft, ticketCalendar: value })
-                      }
-                      placeholder="SSCC"
-                      value={ticketDraft.ticketCalendar}
-                    />
-                    <NumberField
-                      label="Absentismo (0-1)"
-                      onChange={(value) => setTicketDraft({ ...ticketDraft, absenceRate: value })}
-                      step="0.01"
-                      value={ticketDraft.absenceRate}
-                    />
-                  </>
-                )}
-                {ticketDraft.calculationType === 'manual_tickets' && (
-                  <NumberField
-                    label="Tickets mensuales"
-                    onChange={(value) => setTicketDraft({ ...ticketDraft, manualTickets: value })}
-                    value={ticketDraft.manualTickets}
-                  />
-                )}
-                {ticketDraft.calculationType === 'annual_tickets' && (
-                  <NumberField
-                    label="Tickets anuales"
-                    onChange={(value) => setTicketDraft({ ...ticketDraft, annualTickets: value })}
-                    value={ticketDraft.annualTickets}
-                  />
-                )}
-                {ticketDraft.calculationType === 'manual_amount' && (
-                  <NumberField
-                    label="Importe mensual"
-                    onChange={(value) =>
-                      setTicketDraft({ ...ticketDraft, manualMonthlyAmount: value })
-                    }
-                    value={ticketDraft.manualMonthlyAmount}
-                  />
-                )}
-                <ActionButton iconOnly={false} onClick={saveTicket} variant="save">
-                  Guardar grupo
-                </ActionButton>
-              </div>
-              <p className="mb-2 text-xs text-metro-muted">
-                Calendarios disponibles:{' '}
-                {calendars
-                  .filter((calendar) => !calendar.deletedAt)
-                  .map((calendar) => calendar.nombre)
-                  .join(', ') || 'sin calendarios'}
-              </p>
-              <DataTable
-                ariaLabel="Grupos Ticket Restaurante"
-                columnWidths={{}}
-                columns={ticketColumns}
-                emptyMessage="Sin grupos Ticket."
-                getRowId={(row) => row.id}
-                onColumnWidthChange={() => undefined}
-                onSortChange={() => undefined}
-                rows={activeTicketGroups}
-                sort={null}
-              />
+            <Section title="5B. Ticket Restaurante · base del presupuesto">
+              {automaticTicketPlan && (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-metro-text">Base automática desde Ticket Restaurante</p>
+                        <p className="text-xs text-metro-muted">
+                          Usa las personas activas con ticket fijo y el calendario {simulationYear} configurado en Ticket Restaurante.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <ActionButton iconOnly={false} onClick={saveAutomaticTicketPlan} variant="save">
+                          Guardar base automática
+                        </ActionButton>
+                        {activeScenario.ticketPlanningMode === 'automatic' && (
+                          <ActionButton iconOnly={false} onClick={switchToManualTicketGroups} variant="secondary">
+                            Usar grupos manuales
+                          </ActionButton>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-5">
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <p className="text-xs font-semibold text-metro-muted">Personas fijas detectadas</p>
+                      <p className="text-xl font-bold text-metro-text">{automaticTicketPlan.basePeople}</p>
+                    </div>
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <p className="text-xs font-semibold text-metro-muted">Personas adicionales</p>
+                      <p className="text-xl font-bold text-metro-text">+{automaticTicketPlan.additionalPeople}</p>
+                    </div>
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <p className="text-xs font-semibold text-metro-muted">Total presupuestado</p>
+                      <p className="text-xl font-bold text-metro-text">{automaticTicketPlan.totalPeople}</p>
+                    </div>
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <p className="text-xs font-semibold text-metro-muted">Precio presupuestado</p>
+                      <p className="text-xl font-bold text-metro-text">{euro(activeScenario.ticketAmount)}</p>
+                    </div>
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <p className="text-xs font-semibold text-metro-muted">Ejercicio calendario</p>
+                      <p className="text-xl font-bold text-metro-text">{simulationYear}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <div className="flex items-end justify-between gap-3">
+                        <NumberField
+                          label="Absentismo escenario A (%)"
+                          onChange={setTicketPlanAbsenceA}
+                          step="0.1"
+                          value={ticketPlanAbsenceA}
+                        />
+                        <div className="text-right">
+                          <p className="text-xs text-metro-muted">Tickets previstos</p>
+                          <p className="text-lg font-bold text-metro-text">{automaticTicketPlan.annualTicketsA.toLocaleString('es-ES')}</p>
+                          <p className="text-sm font-semibold text-metro-text">{euro(automaticTicketPlan.annualAmountA)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                      <div className="flex items-end justify-between gap-3">
+                        <NumberField
+                          label="Absentismo escenario B (%)"
+                          onChange={setTicketPlanAbsenceB}
+                          step="0.1"
+                          value={ticketPlanAbsenceB}
+                        />
+                        <div className="text-right">
+                          <p className="text-xs text-metro-muted">Tickets previstos</p>
+                          <p className="text-lg font-bold text-metro-text">{automaticTicketPlan.annualTicketsB.toLocaleString('es-ES')}</p>
+                          <p className="text-sm font-semibold text-metro-text">{euro(automaticTicketPlan.annualAmountB)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-metro-border">
+                    <table className="w-full min-w-[760px] text-sm">
+                      <thead className="bg-metro-surface text-xs text-metro-muted">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Calendario</th>
+                          <th className="px-3 py-2 text-right">Fijas</th>
+                          <th className="px-3 py-2 text-left">Adicionales</th>
+                          <th className="px-3 py-2 text-right">Total</th>
+                          <th className="px-3 py-2 text-right">Días {simulationYear}</th>
+                          <th className="px-3 py-2 text-right">Esc. A</th>
+                          <th className="px-3 py-2 text-right">Esc. B</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {calendars
+                          .filter((calendar) => !calendar.deletedAt && calendar.activo)
+                          .map((calendar) => {
+                            const row = automaticTicketPlan.rows.find((item) => item.calendarId === calendar.id);
+                            const basePeople = people.filter((person) => !person.deletedAt && person.activo && person.calendarId === calendar.id).length;
+                            return (
+                              <tr className="border-t border-metro-border" key={calendar.id}>
+                                <td className="px-3 py-2 font-semibold text-metro-text">{calendar.nombre}</td>
+                                <td className="px-3 py-2 text-right">{basePeople}</td>
+                                <td className="w-36 px-3 py-2">
+                                  <NumberField
+                                    label=""
+                                    onChange={(value) =>
+                                      setTicketPlanExtras((current) => ({ ...current, [calendar.id]: Math.max(0, Math.trunc(value)) }))
+                                    }
+                                    step="1"
+                                    value={ticketPlanExtras[calendar.id] ?? 0}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold">{row?.totalPeople ?? basePeople}</td>
+                                <td className="px-3 py-2 text-right">{row?.annualDays ?? 0}</td>
+                                <td className="px-3 py-2 text-right">{row ? euro(row.annualAmountA) : '—'}</td>
+                                <td className="px-3 py-2 text-right">{row ? euro(row.annualAmountB) : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {calendars.filter((calendar) => !calendar.deletedAt && calendar.activo).length === 0 && (
+                    <Notice tone="warning">No hay calendarios activos en Ticket Restaurante. Crea el calendario del ejercicio antes de presupuestar.</Notice>
+                  )}
+                  {automaticTicketPlan.rows.some((row) => row.annualDays === 0 && row.totalPeople > 0) && (
+                    <Notice tone="warning">Hay personas asignadas a un calendario sin días computables en {simulationYear}. Revisa el calendario de Ticket Restaurante de ese ejercicio.</Notice>
+                  )}
+                  <p className="text-xs text-metro-muted">
+                    El escenario A es el que alimenta el total principal del presupuesto cuando guardas la base automática. El escenario B queda como alternativa de absentismo para comparar impacto.
+                  </p>
+                </div>
+              )}
+
+              {activeScenario.ticketPlanningMode !== 'automatic' && (
+                <div className="mt-4 border-t border-metro-border pt-3">
+                  <p className="mb-2 text-xs font-semibold text-metro-muted">Modo heredado/manual por grupos</p>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <TextField label="Grupo" onChange={(value) => setTicketDraft({ ...ticketDraft, name: value })} value={ticketDraft.name} />
+                    <FieldLabel className="space-y-1">
+                      Tipo
+                      <Select className="mt-1" onChange={(event) => setTicketDraft({ ...ticketDraft, calculationType: event.target.value as BudgetTicketCalculationType })} value={ticketDraft.calculationType}>
+                        {Object.entries(calculationTypeLabels).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </Select>
+                    </FieldLabel>
+                    <NumberField label="Importe ticket" onChange={(value) => setTicketDraft({ ...ticketDraft, ticketAmount: value })} value={ticketDraft.ticketAmount} />
+                    {ticketDraft.calculationType === 'calendar_people' && (
+                      <>
+                        <NumberField label="Personas" onChange={(value) => setTicketDraft({ ...ticketDraft, peopleCount: value })} value={ticketDraft.peopleCount} />
+                        <TextField label="Calendario" onChange={(value) => setTicketDraft({ ...ticketDraft, ticketCalendar: value })} placeholder="SSCC" value={ticketDraft.ticketCalendar} />
+                        <NumberField label="Absentismo (0-1)" onChange={(value) => setTicketDraft({ ...ticketDraft, absenceRate: value })} step="0.01" value={ticketDraft.absenceRate} />
+                      </>
+                    )}
+                    {ticketDraft.calculationType === 'manual_tickets' && <NumberField label="Tickets mensuales" onChange={(value) => setTicketDraft({ ...ticketDraft, manualTickets: value })} value={ticketDraft.manualTickets} />}
+                    {ticketDraft.calculationType === 'annual_tickets' && <NumberField label="Tickets anuales" onChange={(value) => setTicketDraft({ ...ticketDraft, annualTickets: value })} value={ticketDraft.annualTickets} />}
+                    {ticketDraft.calculationType === 'manual_amount' && <NumberField label="Importe mensual" onChange={(value) => setTicketDraft({ ...ticketDraft, manualMonthlyAmount: value })} value={ticketDraft.manualMonthlyAmount} />}
+                    <ActionButton iconOnly={false} onClick={saveTicket} variant="save">Guardar grupo</ActionButton>
+                  </div>
+                  <DataTable ariaLabel="Grupos Ticket Restaurante" columnWidths={{}} columns={ticketColumns} emptyMessage="Sin grupos Ticket." getRowId={(row) => row.id} onColumnWidthChange={() => undefined} onSortChange={() => undefined} rows={activeTicketGroups} sort={null} />
+                </div>
+              )}
             </Section>
           </div>
 
