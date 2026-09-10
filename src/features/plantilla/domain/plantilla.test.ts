@@ -182,6 +182,8 @@ describe('plantilla import', () => {
       updated: 1,
       created: 0,
       ignored: 1,
+      deactivated: 0,
+      reactivated: 0,
       mode: 'antiguedadPuesto',
     });
     expect(useEmployeeStore.getState().employees).toEqual([
