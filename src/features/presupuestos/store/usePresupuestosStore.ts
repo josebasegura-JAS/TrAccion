@@ -50,7 +50,10 @@ interface PresupuestosStoreState {
   removeTicketGroup: (groupId: string) => void;
   upsertActual: (draft: BudgetActualDraft, actualId?: string) => BudgetValidationResult & { id?: string };
   removeActual: (actualId: string) => void;
+  selectScenarioForExecution: (scenarioId: string) => void;
+  finalizeScenarioBudget: (scenarioId: string, amounts: Record<string, number>) => void;
 }
+
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -298,6 +301,10 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       ...normalized,
       createdAt: previous?.createdAt ?? timestamp,
       updatedAt: timestamp,
+      selectedForExecution: previous?.selectedForExecution ?? false,
+      selectedAt: previous?.selectedAt ?? null,
+      finalBudgetAmounts: previous?.finalBudgetAmounts ?? {},
+      finalizedAt: previous?.finalizedAt ?? null,
       deletedAt: previous?.deletedAt ?? null,
     };
     const scenarios = previous
@@ -316,6 +323,10 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       ...scenario,
       id,
       name: `${scenario.name} (copia)`,
+      selectedForExecution: false,
+      selectedAt: null,
+      finalBudgetAmounts: {},
+      finalizedAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
       deletedAt: null,
@@ -459,5 +470,35 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       actual.id === actualId ? { ...actual, deletedAt: timestamp, updatedAt: timestamp } : actual,
     );
     commitPresupuestosState(set, { ...state, actuals }, { actuals }, state.sqliteUpdatedAt);
+  },
+  selectScenarioForExecution: (scenarioId) => {
+    const state = get();
+    const selected = state.scenarios.find((scenario) => scenario.id === scenarioId && !scenario.deletedAt);
+    if (!selected) return;
+    const timestamp = nowIso();
+    const scenarios = state.scenarios.map((scenario) =>
+      scenario.year === selected.year && !scenario.deletedAt
+        ? {
+            ...scenario,
+            selectedForExecution: scenario.id === scenarioId,
+            selectedAt: scenario.id === scenarioId ? timestamp : null,
+            updatedAt: timestamp,
+          }
+        : scenario,
+    );
+    commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: scenarioId }, state.sqliteUpdatedAt);
+  },
+  finalizeScenarioBudget: (scenarioId, amounts) => {
+    const state = get();
+    const timestamp = nowIso();
+    const normalizedAmounts = Object.fromEntries(
+      Object.entries(amounts).map(([key, value]) => [key, Math.max(0, normalizeBudgetNumber(value))]),
+    );
+    const scenarios = state.scenarios.map((scenario) =>
+      scenario.id === scenarioId
+        ? { ...scenario, finalBudgetAmounts: normalizedAmounts, finalizedAt: timestamp, updatedAt: timestamp }
+        : scenario,
+    );
+    commitPresupuestosState(set, { ...state, scenarios }, { scenarios }, state.sqliteUpdatedAt);
   },
 }));

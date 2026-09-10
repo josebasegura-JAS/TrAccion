@@ -15,53 +15,40 @@ import type {
 
 export const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
-    title: 'Para qué sirve',
-    body: 'Permite crear escenarios presupuestarios anuales de RRLL, combinando conceptos manuales con grupos de Ticket Restaurante, y compararlos entre sí o frente al gasto real ejecutado.',
-  },
-  {
-    title: 'Conceptos manuales',
-    items: [
-      'Cada concepto puede definirse con un importe mensual o con un importe anual directo.',
-      'Si se informa el importe anual, este tiene prioridad: el mensual se calcula dividiéndolo entre 12. Si no hay importe anual, el anual se calcula multiplicando el mensual por 12.',
-    ],
-  },
-  {
-    title: 'Grupos de Ticket Restaurante: 4 formas de calcular',
-    items: [
-      'Modo automático recomendado: toma directamente las personas activas con Ticket Restaurante, las agrupa por su calendario y usa los días de ticket del ejercicio presupuestado.',
-      'Puedes añadir personas previstas manualmente en cada calendario. Se suman a la base detectada y el presupuesto se recalcula al momento.',
-      'Se calculan dos escenarios de absentismo simultáneos (por defecto 3 % y 6 %), ambos editables. El escenario A alimenta el total principal del presupuesto y el B se muestra como alternativa.',
-      'El precio del ticket sigue siendo editable por escenario y puede ser distinto al precio vigente.',
-      'El cálculo automático es: días con ticket del calendario × (personas fijas + adicionales) × (1 − absentismo) × precio del ticket.',
-      'Tickets mensuales: un nº de tickets manual cada mes × precio del ticket.',
-      'Tickets anuales: un nº de tickets manual para todo el año × precio del ticket; para la vista mensual se reparte entre 12.',
-      'Importe manual: un importe fijo cada mes (× 12 para el anual), sin ningún cálculo de días o personas.',
-      'Cada grupo puede tener su propio precio de ticket o heredar el precio general definido en el escenario.',
-    ],
-  },
-  {
-    title: 'Comparativa entre escenarios',
-    items: [
-      'Permite comparar dos escenarios del mismo año mes a mes, mostrando la diferencia en importe y en porcentaje.',
-      'Es la forma recomendada de valorar una alternativa (por ejemplo, subir el precio del ticket o cambiar una plantilla) sin tocar el escenario original: duplica el escenario y compáralo con el de partida.',
-    ],
-  },
-  {
-    title: 'Comparativa con lo real ejecutado',
-    items: [
-      'Se pueden registrar importes reales ejecutados por año, mes, bloque (Ticket Restaurante, Formación, Vestuario, Consultoría, Reconocimientos médicos, Gastos sindicales, Otros) y concepto.',
-      'La comparativa acumula el presupuesto hasta un mes de corte elegido y lo enfrenta a lo realmente gastado en ese periodo, separando "Ticket Restaurante" del resto de partidas manuales.',
-      'Muestra la diferencia total y por bloque, en importe y en porcentaje, para detectar desviaciones cuanto antes.',
-    ],
-  },
-  {
-    title: 'Flujo recomendado',
+    title: 'Flujo de trabajo',
     ordered: true,
     items: [
-      'Crear un escenario nuevo para el año que quieras analizar.',
-      'Añadir primero grupos de Ticket Restaurante y después conceptos manuales para completar el presupuesto.',
-      'Duplicar escenarios si necesitas probar variantes sin perder el cálculo base.',
-      'Revisar comparativas antes de exportar para validar importes, meses y grupos.',
+      'Crear uno o varios escenarios para un mismo ejercicio.',
+      'Simular cada escenario en una única pantalla: Ticket Restaurante y partidas manuales se recalculan mientras modificas los datos.',
+      'Comparar los escenarios del año y seleccionar el que se va a llevar a cabo.',
+      'Ajustar, si Dirección modifica alguna partida, los importes del escenario elegido y guardarlo como presupuesto definitivo.',
+      'Registrar el gasto ejecutado durante el año y controlar presupuesto, ejecutado, disponible y desviación.',
+    ],
+  },
+  {
+    title: 'Simulación de Ticket Restaurante',
+    items: [
+      'La plantilla base se toma de las personas activas con ticket fijo y de sus calendarios configurados en Ticket Restaurante.',
+      'Puedes añadir personas previstas por calendario; el número se suma a la base detectada.',
+      'Se mantienen dos hipótesis de absentismo editables, por defecto 3 % y 6 %. La hipótesis A alimenta el total principal y la B se muestra como sensibilidad.',
+      'Los cambios de absentismo y personas adicionales actualizan los importes de la simulación sin pulsar un botón de cálculo.',
+    ],
+  },
+  {
+    title: 'Partidas y presupuesto definitivo',
+    items: [
+      'Las partidas manuales se editan por concepto, categoría e importe anual dentro de la propia simulación.',
+      'Solo puede existir un escenario seleccionado para ejecución por ejercicio.',
+      'Tras seleccionarlo, cada partida —incluido Ticket Restaurante— puede recibir un importe definitivo distinto del simulado.',
+      'Cuando se guarda como definitivo, el seguimiento contra gasto real utiliza esos importes definitivos.',
+    ],
+  },
+  {
+    title: 'Seguimiento de ejecución',
+    items: [
+      'El gasto real se registra por mes, bloque y concepto.',
+      'El panel de seguimiento permite elegir el mes de corte y muestra presupuesto acumulado, ejecutado, disponible y desviación.',
+      'Mientras el escenario no esté cerrado como definitivo, el seguimiento utiliza la simulación seleccionada.',
     ],
   },
 ];

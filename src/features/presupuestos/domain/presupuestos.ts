@@ -34,6 +34,10 @@ export interface BudgetScenario {
   ticketAbsenceRateB?: number;
   ticketExtraPeopleByCalendar?: Record<string, number>;
   notes: string;
+  selectedForExecution?: boolean;
+  selectedAt?: string | null;
+  finalBudgetAmounts?: Record<string, number>;
+  finalizedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -460,6 +464,33 @@ export function normalizeBudgetActual(actual: BudgetActual): BudgetActual {
   };
 }
 
+export function getBudgetScenarioFinalAnnualTotals(
+  scenario: BudgetScenario,
+  manualItems: readonly BudgetManualItem[],
+  ticketGroups: readonly BudgetTicketGroup[],
+  year: number,
+  calendars: readonly TicketCalendar[] = [],
+  people: readonly TicketPerson[] = [],
+): { manualTotal: number; ticketTotal: number; total: number } {
+  const calculated = calculateBudgetScenarioYear(scenario, manualItems, ticketGroups, year, calendars, people);
+  if (!scenario.finalizedAt || !scenario.finalBudgetAmounts) {
+    return { manualTotal: calculated.manualTotal, ticketTotal: calculated.ticketTotal, total: calculated.total };
+  }
+
+  const scenarioManualItems = visible(manualItems).filter((item) => item.scenarioId === scenario.id);
+  const manualTotal = roundBudgetCurrency(
+    scenarioManualItems.reduce((total, item) => {
+      const override = scenario.finalBudgetAmounts?.[`manual:${item.id}`];
+      return total + (typeof override === 'number' ? Math.max(0, override) : calculateBudgetManualItemYear(item));
+    }, 0),
+  );
+  const ticketOverride = scenario.finalBudgetAmounts.ticket;
+  const ticketTotal = roundBudgetCurrency(
+    typeof ticketOverride === 'number' ? Math.max(0, ticketOverride) : calculated.ticketTotal,
+  );
+  return { manualTotal, ticketTotal, total: roundBudgetCurrency(manualTotal + ticketTotal) };
+}
+
 export function buildBudgetActualComparisonData(
   scenario: BudgetScenario,
   manualItems: readonly BudgetManualItem[],
@@ -472,8 +503,14 @@ export function buildBudgetActualComparisonData(
 ): BudgetActualComparisonRow[] {
   const monthLimit = Math.min(Math.max(Math.trunc(cutoffMonth), 1), 12);
   const scenarioTotal = calculateBudgetScenarioYear(scenario, manualItems, ticketGroups, year, calendars, people);
-  const manualBudget = roundBudgetCurrency(scenarioTotal.months.slice(0, monthLimit).reduce((total, month) => total + month.manualTotal, 0));
-  const ticketBudget = roundBudgetCurrency(scenarioTotal.months.slice(0, monthLimit).reduce((total, month) => total + month.ticketTotal, 0));
+  const finalTotals = getBudgetScenarioFinalAnnualTotals(scenario, manualItems, ticketGroups, year, calendars, people);
+  const finalIsActive = Boolean(scenario.finalizedAt && scenario.finalBudgetAmounts);
+  const manualBudget = finalIsActive
+    ? roundBudgetCurrency((finalTotals.manualTotal / 12) * monthLimit)
+    : roundBudgetCurrency(scenarioTotal.months.slice(0, monthLimit).reduce((total, month) => total + month.manualTotal, 0));
+  const ticketBudget = finalIsActive
+    ? roundBudgetCurrency((finalTotals.ticketTotal / 12) * monthLimit)
+    : roundBudgetCurrency(scenarioTotal.months.slice(0, monthLimit).reduce((total, month) => total + month.ticketTotal, 0));
   const rowsByBlock = new Map<string, BudgetActualComparisonRow>();
   const seed = (block: string, budgetTotal: number) => rowsByBlock.set(block, { block, budgetTotal, actualTotal: 0, difference: 0, differenceRate: 0 });
   seed('Partidas manuales', manualBudget);
