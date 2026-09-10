@@ -386,9 +386,9 @@ export function TicketRestauranteManualDebtPanel({
                     <td className={`px-2 py-2 font-semibold ${adjustment < 0 ? 'text-emerald-300' : adjustment > 0 ? 'text-red-300' : 'text-metro-muted'}`}>{adjustment > 0 ? '+' : ''}{adjustment}</td>
                     <td className="max-w-[320px] px-2 py-2">{regularization ? <><p className="truncate text-metro-secondary" title={regularization.reason}>{regularization.reason}</p>{regularization.observations ? <p className="truncate text-[11px] text-metro-muted">{regularization.observations}</p> : null}</> : <span className="text-metro-muted">—</span>}</td>
                     <td className="px-2 py-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => setDetailEmployee(row.empleado)} type="button"><Eye className="h-3 w-3" /> Ver detalle</button>
-                        <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openRegularization(row.empleado)} type="button"><Pencil className="h-3 w-3" /> {regularization ? 'Modificar' : 'Regularizar'}</button>
+                      <div className="flex flex-nowrap items-center gap-1">
+                        <ActionButton icon={Eye} iconOnly={false} onClick={() => setDetailEmployee(row.empleado)} size="sm" variant="secondary">Ver detalle</ActionButton>
+                        <ActionButton icon={Pencil} iconOnly={false} onClick={() => openRegularization(row.empleado)} size="sm" variant="edit">{regularization ? 'Modificar' : 'Regularizar'}</ActionButton>
                       </div>
                     </td>
                   </tr>
@@ -524,14 +524,10 @@ export function TicketRestauranteManualDebtPanel({
                     <td className="px-2 py-2">
                       <div className="flex items-center gap-1">
                         {!debt.cancelledAt ? (
-                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-blue-400/50 hover:text-blue-300" onClick={() => openEdit(debt)} type="button">
-                            <Pencil className="h-3 w-3" /> Editar
-                          </button>
+                          <ActionButton icon={Pencil} iconOnly={false} onClick={() => openEdit(debt)} size="sm" variant="edit">Editar</ActionButton>
                         ) : null}
                         {!debt.cancelledAt && status.label !== 'Finalizada' ? (
-                          <button className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1 text-[11px] font-semibold text-metro-secondary hover:border-metro-red hover:text-red-300" onClick={() => setCancellingId(debt.id)} type="button">
-                            <Ban className="h-3 w-3" /> Anular
-                          </button>
+                          <ActionButton icon={Ban} iconOnly={false} onClick={() => setCancellingId(debt.id)} size="sm" variant="delete">Anular</ActionButton>
                         ) : null}
                       </div>
                     </td>

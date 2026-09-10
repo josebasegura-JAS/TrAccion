@@ -1,5 +1,6 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Save, Trash2 } from 'lucide-react';
 import { CountBadge } from '../../../components/ui/CountBadge';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import {
   nextCalendarYear,
   previousCalendarYear,
@@ -149,32 +150,9 @@ export function CalendarToolbar({
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!selectedCalendar}
-              onClick={() => selectedCalendar && onEdit(selectedCalendar)}
-              type="button"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Editar
-            </button>
-            <button
-              className="rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!selectedCalendar}
-              onClick={() => selectedCalendar && onToggleActive(selectedCalendar.id)}
-              type="button"
-            >
-              {selectedCalendar?.activo ? 'Desactivar' : 'Activar'}
-            </button>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!selectedCalendar}
-              onClick={() => selectedCalendar && onRemove(selectedCalendar.id)}
-              type="button"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Eliminar
-            </button>
+            <ActionButton disabled={!selectedCalendar} icon={Pencil} iconOnly={false} onClick={() => selectedCalendar && onEdit(selectedCalendar)} size="sm" variant="edit">Editar</ActionButton>
+            <ActionButton disabled={!selectedCalendar} iconOnly={false} onClick={() => selectedCalendar && onToggleActive(selectedCalendar.id)} size="sm" variant="secondary">{selectedCalendar?.activo ? 'Desactivar' : 'Activar'}</ActionButton>
+            <ActionButton disabled={!selectedCalendar} icon={Trash2} iconOnly={false} onClick={() => selectedCalendar && onRemove(selectedCalendar.id)} size="sm" variant="delete">Eliminar</ActionButton>
           </div>
         </div>
 

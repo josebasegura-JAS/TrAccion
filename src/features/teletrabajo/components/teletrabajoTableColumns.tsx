@@ -1,7 +1,8 @@
-import { AlertTriangle, CheckCircle2, FileText, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { DataTableColumn } from '../../../shared/table/DataTable';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import type { Employee } from '../../plantilla/domain/employee';
 import type { buildGruposCoberturaByIdMap } from '../domain/gruposCobertura';
 import type {
@@ -243,23 +244,20 @@ export function buildTeletrabajoTableColumns({
       render: (solicitud) => (
         <div className="inline-flex items-center justify-end gap-1">
           {solicitud.estado === 'aprobada' && (
-            <button
-              aria-label="Generar acuerdo Word"
-              data-tip="Generar acuerdo Word"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-metro-border bg-metro-surface text-xs font-black text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            <ActionButton
               disabled={generatingWordId !== null}
+              loading={generatingWordId === solicitud.id}
               onClick={(event) => {
                 event.stopPropagation();
                 void handleGenerateWord(solicitud);
               }}
+              size="sm"
               title="Generar acuerdo Word"
-              type="button"
-            >
-              {generatingWordId === solicitud.id ? <FileText size={13} /> : 'W'}
-            </button>
+              variant="word"
+            />
           )}
-          <button
-            className="rounded-lg bg-metro-red px-2.5 py-1 text-xs font-semibold text-white hover:bg-metro-dark"
+          <ActionButton
+            iconOnly={false}
             onClick={(event) => {
               event.stopPropagation();
               void (async () => {
@@ -269,10 +267,9 @@ export function buildTeletrabajoTableColumns({
                 }
               })();
             }}
-            type="button"
-          >
-            Eliminar
-          </button>
+            size="sm"
+            variant="delete"
+          >Eliminar</ActionButton>
         </div>
       ),
       width: 100,

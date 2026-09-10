@@ -761,7 +761,7 @@ export function LoteriaPage() {
         status={<SaveState dirty={dirty} message={message} />}
         actions={
           <>
-            <span className="inline-flex h-9 items-center rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
+            <span className="inline-flex h-10 items-center rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 text-xs font-extrabold text-red-200">Lotería {draft.year}</span>
             <ActionButton icon={Save} iconOnly={false} onClick={() => void persist()} variant="save">Guardar todo</ActionButton>
             <ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} variant="excel">Exportar Excel</ActionButton>
           </>
@@ -1034,7 +1034,7 @@ export function LoteriaPage() {
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end"><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Décimos y pagos guardados.')} variant="save">Guardar pagos</ActionButton></div>
+            <div className="flex justify-end"><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Décimos y pagos guardados.')} size="sm" variant="save">Guardar pagos</ActionButton></div>
           </div>
         </SectionShell>
       ) : null}

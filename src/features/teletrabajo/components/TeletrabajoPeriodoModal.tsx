@@ -1,4 +1,5 @@
 import { Field, Input, Select } from '../../../components/ui/Field';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalShell } from '../../../components/ui/ModalShell';
 
@@ -96,21 +97,13 @@ export function TeletrabajoPeriodoModal({
         )}
       </div>
       <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
-        <button
-          className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-          onClick={onClose}
-          type="button"
-        >
-          Cancelar
-        </button>
-        <button
-          className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+        <ActionButton iconOnly={false} onClick={onClose} variant="secondary">Cancelar</ActionButton>
+        <ActionButton
           disabled={!newPeriodoName.trim() || (copyFromPreviousPeriodo && !sourcePeriodo.trim())}
+          iconOnly={false}
           onClick={onCreatePeriodo}
-          type="button"
-        >
-          Crear periodo
-        </button>
+          variant="save"
+        >Crear periodo</ActionButton>
       </footer>
     </ModalShell>
   );

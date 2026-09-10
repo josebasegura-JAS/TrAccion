@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { BriefcaseBusiness, Download, Plus, Upload, Users } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { TELETRABAJO_HELP_SECTIONS } from './teletrabajoHelpSections';
 
 interface TeletrabajoPageHeaderProps {
@@ -94,34 +95,10 @@ export function TeletrabajoPageHeader({
             ]}
             label="Importar"
           />
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onOpenPuestosModal}
-            type="button"
-          >
-            <BriefcaseBusiness size={14} /> Puestos Teletrabajo
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onOpenGruposCoberturaModal}
-            type="button"
-          >
-            <Users size={14} /> Grupos Cobertura
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-            onClick={onOpenPeriodoModal}
-            type="button"
-          >
-            <Plus size={14} /> Nuevo periodo
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg bg-metro-red px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-metro-dark"
-            onClick={onCreateSolicitud}
-            type="button"
-          >
-            <Plus size={14} /> Nueva solicitud
-          </button>
+          <ActionButton icon={BriefcaseBusiness} iconOnly={false} onClick={onOpenPuestosModal} size="sm" variant="secondary">Puestos Teletrabajo</ActionButton>
+          <ActionButton icon={Users} iconOnly={false} onClick={onOpenGruposCoberturaModal} size="sm" variant="secondary">Grupos Cobertura</ActionButton>
+          <ActionButton icon={Plus} iconOnly={false} onClick={onOpenPeriodoModal} size="sm" variant="secondary">Nuevo periodo</ActionButton>
+          <ActionButton icon={Plus} iconOnly={false} onClick={onCreateSolicitud} size="sm" variant="add">Nueva solicitud</ActionButton>
         </>
       }
     />

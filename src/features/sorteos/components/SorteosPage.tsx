@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Gift, History, Search, ShieldMinus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Gift, History, Search, ShieldMinus } from 'lucide-react';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   buildSorteosSummary,
@@ -436,8 +436,10 @@ export function SorteosPage() {
                         </p>
                         <p className="text-xs text-metro-muted">{person.empleado}</p>
                       </div>
-                      <button
-                        className="rounded-lg bg-metro-red px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+                      <ActionButton
+                        iconOnly={false}
+                        size="sm"
+                        variant="add"
                         onClick={() => {
                           void (async () => {
                             setBusyAction(`exclude-${person.empleado}`);
@@ -461,10 +463,8 @@ export function SorteosPage() {
                           })();
                         }}
                         disabled={isActionDisabled}
-                        type="button"
-                      >
-                        {busyAction === `exclude-${person.empleado}` ? 'Excluyendo…' : 'Excluir'}
-                      </button>
+                        loading={busyAction === `exclude-${person.empleado}`}
+                      >Excluir</ActionButton>
                     </div>
                   ))}
                   {search.length >= SORTEOS_MIN_SEARCH_LENGTH && searchResults.length === 0 && (
@@ -486,14 +486,14 @@ export function SorteosPage() {
                       rows: exclusions,
                     }}
                   />
-                  <button
-                    className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-bold text-metro-text transition hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+                  <ActionButton
+                    icon={ShieldMinus}
+                    iconOnly={false}
+                    size="sm"
+                    variant="secondary"
                     disabled={isActionDisabled || exclusions.length === 0}
                     onClick={requestResetAllExclusions}
-                    type="button"
-                  >
-                    Resetear todas las exclusiones
-                  </button>
+                  >Resetear todas las exclusiones</ActionButton>
                 </div>
                 <div className="overflow-hidden rounded-lg border border-metro-border">
                   <CompactTable>
@@ -516,8 +516,10 @@ export function SorteosPage() {
                             {exclusion.excludedAt.slice(0, 10)}
                           </td>
                           <td className="px-3 py-2">
-                            <button
-                              className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                            <ActionButton
+                              iconOnly={false}
+                              size="sm"
+                              variant="secondary"
                               onClick={() => {
                                 void (async () => {
                                   setBusyAction(`remove-exclusion-${exclusion.id}`);
@@ -541,12 +543,8 @@ export function SorteosPage() {
                                 })();
                               }}
                               disabled={isActionDisabled}
-                              type="button"
-                            >
-                              {busyAction === `remove-exclusion-${exclusion.id}`
-                                ? 'Quitando…'
-                                : 'Quitar'}
-                            </button>
+                              loading={busyAction === `remove-exclusion-${exclusion.id}`}
+                            >Quitar</ActionButton>
                           </td>
                         </tr>
                       ))}
@@ -573,29 +571,15 @@ export function SorteosPage() {
             Indica si quieres quitar también las exclusiones vinculadas a ganadores de ese sorteo.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+            <ActionButton
+              iconOnly={false}
+              size="sm"
+              variant="delete"
               disabled={isActionDisabled}
               onClick={() => confirmDeleteDraw(true)}
-              type="button"
-            >
-              Eliminar y quitar exclusiones
-            </button>
-            <button
-              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:text-metro-text"
-              disabled={isActionDisabled}
-              onClick={() => confirmDeleteDraw(false)}
-              type="button"
-            >
-              Eliminar solo sorteo
-            </button>
-            <button
-              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:text-metro-text"
-              onClick={cancelConfirmation}
-              type="button"
-            >
-              Cancelar
-            </button>
+            >Eliminar y quitar exclusiones</ActionButton>
+            <ActionButton disabled={isActionDisabled} iconOnly={false} onClick={() => confirmDeleteDraw(false)} size="sm" variant="delete">Eliminar solo sorteo</ActionButton>
+            <ActionButton iconOnly={false} onClick={cancelConfirmation} size="sm" variant="secondary">Cancelar</ActionButton>
           </div>
         </div>
       )}
@@ -607,21 +591,17 @@ export function SorteosPage() {
             Esta acción elimina exclusiones manuales y de ganadores.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+            <ActionButton
+              iconOnly={false}
+              size="sm"
+              variant="delete"
               disabled={isActionDisabled}
               onClick={confirmResetAllExclusions}
               type="button"
             >
               Resetear todas las exclusiones
-            </button>
-            <button
-              className="rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-muted hover:text-metro-text"
-              onClick={cancelConfirmation}
-              type="button"
-            >
-              Cancelar
-            </button>
+            </ActionButton>
+            <ActionButton iconOnly={false} onClick={cancelConfirmation} size="sm" variant="secondary">Cancelar</ActionButton>
           </div>
         </div>
       )}
@@ -665,14 +645,8 @@ export function SorteosPage() {
                       <td className="px-3 py-2 text-metro-muted">{draw.date}</td>
                       <td className="px-3 py-2 text-metro-muted">{draw.winners.length}</td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
-                            onClick={() => viewDraw(draw.id)}
-                            type="button"
-                          >
-                            Ver ganadores
-                          </button>
+                        <div className="flex flex-nowrap items-center gap-1">
+                          <ActionButton iconOnly={false} onClick={() => viewDraw(draw.id)} size="sm" variant="secondary">Ver ganadores</ActionButton>
                           <ExportPrintButtons
                             payload={{
                               title: `Ganadores - ${draw.title}`,
@@ -682,8 +656,10 @@ export function SorteosPage() {
                               filterLabel: `Sorteo: ${draw.title} · Fecha: ${draw.date}`,
                             }}
                           />
-                          <button
-                            className="rounded-lg border border-metro-border px-2 py-1 text-xs font-semibold text-metro-text hover:border-metro-red"
+                          <ActionButton
+                            iconOnly={false}
+                            size="sm"
+                            variant="secondary"
                             onClick={() => {
                               void (async () => {
                                 setBusyAction(`reset-draw-exclusions-${draw.id}`);
@@ -707,21 +683,9 @@ export function SorteosPage() {
                               })();
                             }}
                             disabled={isActionDisabled}
-                            type="button"
-                          >
-                            {busyAction === `reset-draw-exclusions-${draw.id}`
-                              ? 'Reseteando…'
-                              : 'Resetear exclusiones por sorteo'}
-                          </button>
-                          <button
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-400/40 px-2 py-1 text-xs font-semibold text-red-100 hover:border-red-300"
-                            disabled={isActionDisabled}
-                            onClick={() => requestDeleteDraw(draw.id)}
-                            type="button"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Eliminar
-                          </button>
+                            loading={busyAction === `reset-draw-exclusions-${draw.id}`}
+                          >Resetear exclusiones por sorteo</ActionButton>
+                          <ActionButton disabled={isActionDisabled} iconOnly={false} onClick={() => requestDeleteDraw(draw.id)} size="sm" variant="delete">Eliminar</ActionButton>
                         </div>
                       </td>
                     </tr>

@@ -11,6 +11,7 @@ import type { buildPuestosByKey, buildSolicitudesByPeriodoPuestoCount } from '..
 import type { TeletrabajoTableColumnId } from './teletrabajoTableConfig';
 import { teletrabajoExportColumns } from './teletrabajoTableConfig';
 import { CountBadge } from '../../../components/ui/CountBadge';
+import { ActionButton } from '../../../components/ui/ActionButton';
 
 interface SharedTableProps {
   columns: Array<DataTableColumn<TeletrabajoSolicitud, TeletrabajoTableColumnId>>;
@@ -67,26 +68,12 @@ export function TeletrabajoMainTableSection({
               filterLabel,
             }}
           />
-          <button
-            className="inline-flex items-center justify-center rounded-xl border border-transparent bg-[#1a5c38] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#217346] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={rows.length === 0}
-            onClick={onExportDireccion}
-            title="Exportar a Dirección"
-            type="button"
-          >
-            Dirección
-          </button>
+          <ActionButton disabled={rows.length === 0} iconOnly={false} onClick={onExportDireccion} size="sm" title="Exportar a Dirección" variant="excel">Dirección</ActionButton>
         </div>
         <CountBadge>{rows.length} registros</CountBadge>
       </div>
       <div className="flex flex-wrap justify-end pb-2">
-        <button
-          className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
-          onClick={onResetPreferences}
-          type="button"
-        >
-          <RotateCcw size={14} /> Restablecer vista
-        </button>
+        <ActionButton icon={RotateCcw} iconOnly={false} onClick={onResetPreferences} size="sm" variant="secondary">Restablecer vista</ActionButton>
       </div>
       <DataTable
         ariaLabel="Solicitudes de teletrabajo"

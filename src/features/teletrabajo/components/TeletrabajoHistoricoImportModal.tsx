@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalShell } from '../../../components/ui/ModalShell';
 import type { PendingHistoricoImport } from '../store/useTeletrabajoStore';
@@ -83,20 +84,8 @@ export function TeletrabajoHistoricoImportModal({
         )}
       </div>
       <footer className="flex flex-wrap justify-end gap-2 border-t border-metro-border p-4">
-        <button
-          className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-          onClick={onCancel}
-          type="button"
-        >
-          Cancelar
-        </button>
-        <button
-          className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-          onClick={onConfirm}
-          type="button"
-        >
-          Confirmar e importar
-        </button>
+        <ActionButton iconOnly={false} onClick={onCancel} variant="secondary">Cancelar</ActionButton>
+        <ActionButton iconOnly={false} onClick={onConfirm} variant="save">Confirmar e importar</ActionButton>
       </footer>
     </ModalShell>
   );
