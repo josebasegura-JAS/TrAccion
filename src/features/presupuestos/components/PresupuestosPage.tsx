@@ -386,7 +386,7 @@ export function PresupuestosPage() {
     <div className="space-y-4 pb-6">
       <PageHeader
         title="Presupuestos"
-        status={<InlineSaveFeedback storageKey="traccion.v1.presupuestos" />}
+        status={<InlineSaveFeedback />}
         helpSections={PRESUPUESTOS_HELP_SECTIONS}
         helpSubtitle="Flujo anual: crear, simular, elegir, cerrar y controlar."
       />
