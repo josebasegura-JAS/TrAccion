@@ -144,23 +144,24 @@ export function LicenciasTable({
       {
         id: 'actions',
         header: 'Acciones',
-        width: 220,
-        minWidth: 190,
+        width: compact ? 240 : 310,
+        minWidth: compact ? 220 : 280,
         resizable: false,
         isActionColumn: true,
         render: (record) => (
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-nowrap items-center justify-end gap-2">
             {record.estado === 'pendiente_aprobacion' && (
-              <button
-                className="text-xs font-semibold text-metro-red hover:text-metro-text"
+              <ActionButton
+                iconOnly={false}
                 onClick={(event) => {
                   event.stopPropagation();
                   onAdvance(record);
                 }}
-                type="button"
+                size="sm"
+                variant="approve"
               >
                 Aprobar
-              </button>
+              </ActionButton>
             )}
             {record.estado === 'pendiente_firma' &&
               (record.tipo === 'Licencia sin sueldo' || record.tipo === 'Excedencia') && (
@@ -208,16 +209,17 @@ export function LicenciasTable({
               </ActionButton>
             )}
             {record.estado === 'pendiente_firma' && (
-              <button
-                className="text-xs font-semibold text-metro-red hover:text-metro-text"
+              <ActionButton
+                iconOnly={false}
                 onClick={(event) => {
                   event.stopPropagation();
                   onAdvance(record);
                 }}
-                type="button"
+                size="sm"
+                variant="secondary"
               >
                 Firma recibida
-              </button>
+              </ActionButton>
             )}
             <ActionButton
               aria-label="Eliminar"
@@ -233,7 +235,7 @@ export function LicenciasTable({
         ),
       },
     ],
-    [generatingWordId, onAdvance, onDelete, onExtendExcedencia, onGenerateProrrogaWord, onGenerateWord],
+    [compact, generatingWordId, onAdvance, onDelete, onExtendExcedencia, onGenerateProrrogaWord, onGenerateWord],
   );
 
   const visibleColumns = useMemo(
@@ -273,6 +275,7 @@ export function LicenciasTable({
         columns={visibleColumns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
+        heightClassName={compact ? 'h-[216px]' : undefined}
         maxHeightClassName="max-h-[320px]"
         onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}

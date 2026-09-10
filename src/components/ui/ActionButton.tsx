@@ -167,7 +167,7 @@ export function ActionButton({
   return (
     <button
       className={cx(
-        'inline-flex items-center justify-center gap-2 border font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap border font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-50',
         sizeClassBySize[size],
         colorClassByVariant[variant],
         iconOnly && 'aspect-square px-0',

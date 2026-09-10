@@ -16,7 +16,7 @@ interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   wrapperClassName?: string;
 }
 
-/** Selector estándar de 36 px para filtros de listados. */
+/** Selector estándar de 40 px para filtros de listados. */
 export function FilterSelect({
   allLabel,
   className,

@@ -44,7 +44,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   dateTone?: DateInputTone;
 }
 
-/** Campo de texto estándar de 36 px de altura. */
+/** Campo de texto estándar de 40 px de altura. */
 export function Input({ className, dateTone, ...props }: InputProps) {
   return (
     <input
@@ -71,7 +71,7 @@ export function Textarea({ className, ...props }: TextareaProps) {
 
 type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 
-/** Selector estándar de 36 px de altura. */
+/** Selector estándar de 40 px de altura. */
 export function Select({ className, ...props }: SelectProps) {
   return <select className={cx(fieldInputClass, className)} {...props} />;
 }

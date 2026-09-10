@@ -11,7 +11,7 @@ interface SearchFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, '
   wrapperClassName?: string;
 }
 
-/** Buscador estándar de 36 px para barras de herramientas. */
+/** Buscador estándar de 40 px para barras de herramientas. */
 export function SearchField({
   className,
   onClear,

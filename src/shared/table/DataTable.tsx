@@ -60,6 +60,8 @@ interface DataTableProps<Row, ColumnId extends string> {
   rowClassName?: (row: Row) => string;
   ariaLabel: string;
   maxHeightClassName?: string;
+  /** Altura estable opcional del viewport. Útil en bandejas de workflow para evitar saltos al mover registros entre estados. */
+  heightClassName?: string;
   /** Mantiene la posición vertical cuando cambian filas por una edición. Útil en tablas de trabajo largas. */
   preserveScrollOnRowsChange?: boolean;
 }
@@ -154,6 +156,7 @@ export function DataTable<Row, ColumnId extends string>({
   rowClassName,
   ariaLabel,
   maxHeightClassName = 'max-h-[460px]',
+  heightClassName,
   preserveScrollOnRowsChange = false,
 }: DataTableProps<Row, ColumnId>) {
   const resizeStateRef = useRef<{
@@ -338,7 +341,7 @@ export function DataTable<Row, ColumnId extends string>({
   return (
     <div className="space-y-2">
       <div
-        className={`relative ${maxHeightClassName} overflow-auto rounded-2xl border border-metro-border/80 bg-metro-surface/70 shadow-sm shadow-slate-950/15`}
+        className={`relative ${heightClassName ?? ''} ${maxHeightClassName} overflow-auto rounded-2xl border border-metro-border/80 bg-metro-surface/70 shadow-sm shadow-slate-950/15`}
         ref={scrollContainerRef}
       >
         {onResetColumnWidths && (

@@ -430,7 +430,6 @@ export function LicenciasSinSueldoEditor({
                   disabled={generatingWordId !== null}
                   iconOnly={false}
                   onClick={() => onGenerateWord(record)}
-                  size="sm"
                   variant="word"
                 >
                   {generatingWordId === record.id ? 'Generando…' : 'Generar Word'}
@@ -447,7 +446,6 @@ export function LicenciasSinSueldoEditor({
               disabled={isReadOnly || isSaving}
               iconOnly={false}
               onClick={handleSave}
-              size="sm"
               variant="save"
             >
               {isSaving ? 'Guardando…' : <>Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></>}
