@@ -47,45 +47,52 @@ export const defaultTablePreferences: TableViewPreferences<LicenciasTableColumnI
 
 export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
-    title: '¿Qué hace este módulo?',
-    body: 'Gestiona solicitudes de Licencia sin sueldo, Permiso no retribuido, Año de Libre Disposición y Excedencia, desde la aprobación hasta el histórico, con generación del documento Word de concesión.',
+    title: '¿Qué gestiona este módulo?',
+    body: 'Centraliza Licencias sin sueldo, Permisos no retribuidos, Año de Libre Disposición y Excedencias. La pantalla principal prioriza el seguimiento del flujo y deja el detalle completo dentro de cada ficha.',
   },
   {
-    title: 'Estados',
+    title: 'Bandejas de trabajo',
     items: [
-      'Pendiente de aprobar → Pendiente de firma → Vigente. También puede pasar a Denegada desde la tramitación.',
-      'Una solicitud "Vigente" pasa a mostrarse como histórica automáticamente en cuanto su fecha de fin queda en el pasado, sin necesidad de cambiarla a mano.',
-      'Las solicitudes denegadas se conservan en el histórico y exigen registrar el motivo en Actualizaciones.',
+      'Pendientes de aprobar y Pendientes de firma muestran solo Nº, Nombre, Tipo y Acciones para facilitar una revisión rápida.',
+      'Haz un clic sobre cualquier fila para abrir la ficha completa y consultar fechas, estado, observaciones y actualizaciones.',
+      'Las tablas de Vigentes e Histórico mantienen el detalle ampliado para consulta y explotación.',
     ],
   },
   {
-    title: 'Reglas de duración según el tipo',
+    title: 'Estados y flujo',
     items: [
-      'Licencia sin sueldo: duración obligatoria de entre 15 días naturales y 9 meses desde la fecha de inicio.',
-      'Año de Libre Disposición: la fecha de fin se calcula automáticamente como 5 años después del inicio; no se edita a mano.',
-      'Permiso no retribuido y Excedencia: no tienen una duración mínima ni máxima automática; solo se exige que la fecha de fin no sea anterior a la de inicio.',
+      'Pendiente de aprobar → Pendiente de firma → Vigente. También puede pasar a Denegada durante la tramitación.',
+      'Una solicitud Vigente pasa a Histórico automáticamente cuando su fecha de fin queda en el pasado.',
+      'Las solicitudes denegadas se conservan en el histórico y requieren registrar el motivo en Actualizaciones.',
+    ],
+  },
+  {
+    title: 'Reglas de duración',
+    items: [
+      'Licencia sin sueldo: entre 15 días naturales y 9 meses desde la fecha de inicio.',
+      'Año de Libre Disposición: la fecha de fin se calcula automáticamente como 5 años después del inicio.',
+      'Permiso no retribuido y Excedencia: no tienen una duración mínima o máxima automática; la fecha de fin no puede ser anterior a la de inicio.',
       'En todos los tipos son obligatorios el número de empleado, nombre completo, fecha de solicitud, fecha de inicio y fecha de fin.',
     ],
   },
   {
-    title: 'Generación documental',
+    title: 'Generación Word',
     items: [
-      'En los registros aprobados puede generarse el documento Word de concesión a partir de una plantilla externa configurada en Ajustes.',
-      'Para Excedencia se usa una plantilla DOCX externa independiente. Al aprobar una excedencia se genera automáticamente el Word y, mientras siga Pendiente de firma, puede regenerarse desde el botón Word.',
-      'La plantilla de Excedencia debe conservar los marcadores {{NOMBRE_COMPLETO}}, {{DIRECCION}}, {{CODIGO_POSTAL}}, {{POBLACION}}, {{PROVINCIA}}, {{FECHA_CARTA_EU}}, {{FECHA_CARTA_ES}}, {{NOMBRE}}, {{FECHA_INICIO_EU}}, {{FECHA_FIN_EU}}, {{FECHA_INICIO_ES}} y {{FECHA_FIN_ES}}.',
-      'Los datos personales de Excedencia se obtienen de Plantilla por número de empleado; DIRECCION se forma con calle + número + piso. Si falta un dato obligatorio o un marcador, TrAccion avisa y no genera un documento incompleto.',
-      'Para Licencia sin sueldo se mantiene su plantilla externa y el relleno automático de puesto, fechas y demás datos configurados.',
+      'Cuando una Licencia sin sueldo o una Excedencia está Pendiente de firma, el Word puede generarse tanto desde la tabla como desde la ficha de detalle.',
+      'Para Excedencia se utiliza su plantilla DOCX configurada en Ajustes y, al aprobarla, TrAccion intenta generar automáticamente el documento.',
+      'Los datos personales necesarios se obtienen de Plantilla por número de empleado. Si falta información obligatoria o la plantilla no es válida, TrAccion avisa antes de generar un documento incompleto.',
+      'Las prórrogas de Excedencia conservan su generación Word específica cuando corresponda.',
     ],
   },
   {
     title: 'Flujo recomendado',
     ordered: true,
     items: [
-      'Crear la solicitud indicando tipo, persona, fechas y datos básicos obligatorios.',
-      'Revisar que la duración cumpla las reglas del tipo elegido y completar observaciones si procede.',
-      'Actualizar el estado del expediente a medida que avance: aprobar, firma, vigencia o denegación.',
-      'Generar el documento Word de concesión cuando el caso esté aprobado y la plantilla esté disponible.',
-      'Consultar el histórico para expedientes finalizados o solicitudes ya denegadas.',
+      'Crear la solicitud con la persona, el tipo y las fechas correspondientes.',
+      'Revisar la bandeja Pendientes de aprobar y abrir la ficha con un clic cuando necesites el detalle.',
+      'Aprobar la solicitud para pasarla a Pendiente de firma.',
+      'Generar o regenerar el Word desde la tabla o desde la propia ficha.',
+      'Registrar la firma recibida para completar el flujo y consultar posteriormente Vigentes o Histórico.',
     ],
   },
 ];

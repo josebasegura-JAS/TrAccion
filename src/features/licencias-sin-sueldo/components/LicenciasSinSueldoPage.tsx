@@ -378,9 +378,9 @@ export function LicenciasSinSueldoPage() {
       id="licencias-sin-sueldo"
     >
       <PageHeader
-        title="Licencias sin sueldo y permisos no retribuidos"
+        title="Licencias sin sueldo y Excedencias"
         helpSections={LICENCIAS_HELP_SECTIONS}
-        helpSubtitle="Guía rápida de estados, reglas, vigencia, histórico y generación documental."
+        helpSubtitle="Guía visual del flujo, detalle, generación Word y gestión del histórico."
         className="mb-0"
         actions={
           <Toolbar
@@ -448,6 +448,7 @@ export function LicenciasSinSueldoPage() {
           >
             <LicenciasTable
               blockId="pendiente_aprobacion"
+              compact
               emptyText="No hay solicitudes pendientes de aprobar."
               onAdvance={advanceRecord}
               generatingWordId={generatingWordId}
@@ -474,6 +475,7 @@ export function LicenciasSinSueldoPage() {
           >
             <LicenciasTable
               blockId="pendiente_firma"
+              compact
               emptyText="No hay solicitudes pendientes de firma."
               onAdvance={advanceRecord}
               generatingWordId={generatingWordId}
@@ -574,6 +576,10 @@ export function LicenciasSinSueldoPage() {
           onClose={() => setEditor(null)}
           onDelete={() => {
             if (editor.record) void deleteRecord(editor.record);
+          }}
+          generatingWordId={generatingWordId}
+          onGenerateWord={(record) => {
+            void generateWord(record);
           }}
           onSave={saveDraft}
           record={editor.record}

@@ -41,6 +41,8 @@ export function LicenciasSinSueldoEditor({
   record,
   onClose,
   onDelete,
+  onGenerateWord,
+  generatingWordId,
   onSave,
 }: {
   employees: ReturnType<typeof useEmployeeStore.getState>['employees'];
@@ -48,6 +50,8 @@ export function LicenciasSinSueldoEditor({
   record: LicenciaSinSueldoRecord | null;
   onClose: () => void;
   onDelete: () => void;
+  onGenerateWord: (record: LicenciaSinSueldoRecord) => void;
+  generatingWordId: string | null;
   onSave: (draft: LicenciaSinSueldoDraft) => Promise<{ ok: boolean; message: string }>;
 }) {
   const [draft, setDraft] = useState<LicenciaSinSueldoDraft>(() =>
@@ -183,7 +187,7 @@ export function LicenciasSinSueldoEditor({
       <ModalHeader>
         <ModalTitle
           id="licencia-editor-title"
-          subtitle="Doble clic en una fila abre esta ficha para editar el flujo."
+          subtitle="La ficha concentra el detalle, el flujo y las acciones documentales."
         >
           {mode === 'create' ? 'Nueva licencia o permiso' : 'Ficha de licencia o permiso'}
         </ModalTitle>
@@ -418,6 +422,20 @@ export function LicenciasSinSueldoEditor({
             <ActionButton variant="secondary" iconOnly={false} onClick={() => void requestClose()}>
               Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
             </ActionButton>
+            {mode === 'edit' &&
+              record &&
+              record.estado === 'pendiente_firma' &&
+              (record.tipo === 'Licencia sin sueldo' || record.tipo === 'Excedencia') && (
+                <ActionButton
+                  disabled={generatingWordId !== null}
+                  iconOnly={false}
+                  onClick={() => onGenerateWord(record)}
+                  size="sm"
+                  variant="word"
+                >
+                  {generatingWordId === record.id ? 'Generando…' : 'Generar Word'}
+                </ActionButton>
+              )}
             {mode === 'edit' && record && (
               <AuditHistoryButton
                 entityId={record.id}

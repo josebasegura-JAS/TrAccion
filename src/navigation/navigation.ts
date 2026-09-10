@@ -87,7 +87,7 @@ export const navigationGroups: NavigationGroup[] = [
     items: [
       { label: 'Plantilla', icon: UsersRound, view: 'plantilla' },
       { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' },
-      { label: 'Licencias sin sueldo', icon: CalendarDays, view: 'licencias-sin-sueldo' },
+      { label: 'Licencias sin sueldo y Excedencias', icon: CalendarDays, view: 'licencias-sin-sueldo' },
       { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
     ],
   },

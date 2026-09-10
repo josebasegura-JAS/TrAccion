@@ -31,6 +31,7 @@ export function LicenciasTable({
   onExtendExcedencia,
   onGenerateProrrogaWord,
   generatingWordId,
+  compact = false,
 }: {
   blockId: BlockId;
   emptyText: string;
@@ -43,6 +44,7 @@ export function LicenciasTable({
   onExtendExcedencia?: (record: LicenciaSinSueldoRecord) => void;
   onGenerateProrrogaWord?: (record: LicenciaSinSueldoRecord) => void;
   generatingWordId: string | null;
+  compact?: boolean;
 }) {
   const {
     preferences,
@@ -234,6 +236,16 @@ export function LicenciasTable({
     [generatingWordId, onAdvance, onDelete, onExtendExcedencia, onGenerateProrrogaWord, onGenerateWord],
   );
 
+  const visibleColumns = useMemo(
+    () =>
+      compact
+        ? columns.filter((column) =>
+            ['numeroEmpleado', 'nombreCompleto', 'tipo', 'actions'].includes(column.id),
+          )
+        : columns,
+    [columns, compact],
+  );
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -258,13 +270,13 @@ export function LicenciasTable({
         columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
         onResetColumnWidths={resetColumnWidths}
-        columns={columns}
+        columns={visibleColumns}
         emptyMessage={emptyText}
         getRowId={(record) => record.id}
         maxHeightClassName="max-h-[320px]"
         onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
-        onRowDoubleClick={onEdit}
+        onRowClick={onEdit}
         onSortChange={setSort}
         rows={records}
         sort={preferences.sort}
