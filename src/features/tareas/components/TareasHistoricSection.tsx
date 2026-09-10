@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo } from 'react';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { type Task } from '../domain/task';
 import {
   HISTORIC_PAGE_SIZE_OPTIONS,
@@ -86,7 +87,7 @@ export function HistoricYearSection({
               <label className="flex items-center gap-2">
                 Mostrar
                 <select
-                  className="rounded-lg border border-metro-border bg-metro-panel px-2 py-1 text-metro-text outline-none"
+                  className="h-8 rounded-lg border border-metro-border bg-metro-panel px-2 text-metro-text outline-none"
                   onChange={(event) => onPageSizeChange(Number(event.target.value))}
                   value={pageSize}
                 >
@@ -97,25 +98,27 @@ export function HistoricYearSection({
                   ))}
                 </select>
               </label>
-              <button
-                className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text disabled:cursor-not-allowed disabled:opacity-45"
+              <ActionButton
                 disabled={safePage <= 1}
+                iconOnly={false}
                 onClick={() => onPageChange(group.year, safePage - 1)}
-                type="button"
+                size="sm"
+                variant="secondary"
               >
                 ← Anterior
-              </button>
+              </ActionButton>
               <span className="font-semibold text-metro-text">
                 Página {safePage} de {totalPages}
               </span>
-              <button
-                className="rounded-lg border border-metro-border px-2 py-1 font-semibold text-metro-text disabled:cursor-not-allowed disabled:opacity-45"
+              <ActionButton
                 disabled={safePage >= totalPages}
+                iconOnly={false}
                 onClick={() => onPageChange(group.year, safePage + 1)}
-                type="button"
+                size="sm"
+                variant="secondary"
               >
                 Siguiente →
-              </button>
+              </ActionButton>
             </div>
           </div>
           <div className="max-h-[320px] overflow-auto">

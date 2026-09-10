@@ -144,13 +144,15 @@ function OrganPanel({
             <div className="mt-1 text-lg font-black text-amber-300">{organTasks.length}</div>
           </div>
         </div>
-        <button
-          className={`self-center rounded-xl border px-3 py-2 text-sm font-bold transition hover:-translate-y-0.5 ${isComite ? 'border-blue-400/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/15' : 'border-violet-400/30 bg-violet-500/10 text-violet-200 hover:bg-violet-500/15'}`}
+        <ActionButton
+          className={isComite ? 'border-blue-400/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/15' : 'border-violet-400/30 bg-violet-500/10 text-violet-200 hover:bg-violet-500/15'}
+          iconOnly={false}
           onClick={() => onOpen(activeSession?.id)}
-          type="button"
+          size="sm"
+          variant="secondary"
         >
           Abrir gestión
-        </button>
+        </ActionButton>
       </div>
 
       <div className="px-4 py-3">
@@ -323,22 +325,28 @@ export function ComiteParitariaWorkflow({ onOpenOrgan }: WorkflowProps) {
                   <span className="truncate text-xs text-metro-muted">{task.origen || '—'}</span>
                   <StatusPill state={task.estado} />
                   <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-1 py-1.5 text-[11px] font-bold text-blue-200 transition hover:bg-blue-500/20 disabled:opacity-50"
+                    <ActionButton
+                      className="min-w-0 border-blue-400/30 bg-blue-500/10 px-1.5 text-blue-200 hover:bg-blue-500/20"
                       disabled={assigningTaskId === task.id}
+                      icon={UsersRound}
+                      iconOnly={false}
                       onClick={() => void assignTask(task, 'comite')}
-                      type="button"
+                      size="sm"
+                      variant="secondary"
                     >
-                      <UsersRound size={13} /> <span>Comité</span> <ArrowRight size={12} />
-                    </button>
-                    <button
-                      className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-violet-400/30 bg-violet-500/10 px-1 py-1.5 text-[11px] font-bold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+                      Comité →
+                    </ActionButton>
+                    <ActionButton
+                      className="min-w-0 border-violet-400/30 bg-violet-500/10 px-1.5 text-violet-200 hover:bg-violet-500/20"
                       disabled={assigningTaskId === task.id}
+                      icon={Handshake}
+                      iconOnly={false}
                       onClick={() => void assignTask(task, 'paritaria')}
-                      type="button"
+                      size="sm"
+                      variant="secondary"
                     >
-                      <Handshake size={13} /> <span>Paritaria</span> <ArrowRight size={12} />
-                    </button>
+                      Paritaria →
+                    </ActionButton>
                   </div>
                 </div>
               )) : (

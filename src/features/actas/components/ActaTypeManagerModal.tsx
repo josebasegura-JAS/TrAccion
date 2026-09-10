@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../../components/ui/DeleteConfirmDialog';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -77,13 +77,14 @@ export function ActaTypeManagerModal({
                   <span className="text-xs font-semibold text-metro-muted">
                     {usageCount} acta{usageCount === 1 ? '' : 's'}
                   </span>
-                  <button
-                    className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                  <ActionButton
+                    iconOnly={false}
                     onClick={() => void toggleActaTypeWithFeedback(type.id)}
-                    type="button"
+                    size="sm"
+                    variant="secondary"
                   >
                     {type.disabled ? 'Habilitar' : 'Deshabilitar'}
-                  </button>
+                  </ActionButton>
                   {pendingDeleteActaTypeId === type.id ? (
                     <div className="xl:col-span-4">
                       <DeleteConfirmDialog
@@ -95,19 +96,17 @@ export function ActaTypeManagerModal({
                       />
                     </div>
                   ) : (
-                    <button
-                      className="inline-flex items-center justify-center rounded-lg border border-red-500/40 p-2 text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    <ActionButton
                       disabled={usageCount > 0}
                       onClick={() => setPendingDeleteActaTypeId(type.id)}
+                      size="sm"
                       title={
                         usageCount > 0
                           ? 'No se puede eliminar: tiene actas asociadas'
                           : 'Eliminar tipo de acta'
                       }
-                      type="button"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                      variant="delete"
+                    />
                   )}
                 </div>
               );

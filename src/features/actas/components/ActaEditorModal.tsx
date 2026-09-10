@@ -350,22 +350,24 @@ export function ActaEditorModal({
                 placeholder="Ruta de red del acta firmada..."
                 value={draft.actaPath}
               />
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+              <ActionButton
                 disabled={!canAttachFinalActa}
+                icon={FolderOpen}
+                iconOnly={false}
                 onClick={() => void selectActaPath()}
-                type="button"
+                variant="secondary"
               >
-                <FolderOpen size={15} /> Ruta
-              </button>
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                Ruta
+              </ActionButton>
+              <ActionButton
                 disabled={!canAttachFinalActa || !draft.actaPath.trim()}
+                icon={Eye}
+                iconOnly={false}
                 onClick={() => void openActaPath()}
-                type="button"
+                variant="secondary"
               >
-                <Eye size={15} /> Ver
-              </button>
+                Ver
+              </ActionButton>
             </div>
             {pathStatus && (
               <p
