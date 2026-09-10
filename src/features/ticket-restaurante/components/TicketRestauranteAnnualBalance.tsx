@@ -52,6 +52,10 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
 }
 
+function trimString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function normalizeText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
@@ -67,7 +71,7 @@ function buildEmployeeAreaMap(employees: readonly Employee[]): Map<string, strin
   return new Map(
     employees.map((employee) => [
       normalizeTicketEmployeeNumber(employee.empleado),
-      employee.direccionOrganizativa.trim() || employee.unidad.trim() || 'Sin área',
+      trimString(employee.direccionOrganizativa) || trimString(employee.unidad) || 'Sin área',
     ]),
   );
 }

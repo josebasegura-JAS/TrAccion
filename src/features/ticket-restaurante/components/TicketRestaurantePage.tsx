@@ -1226,6 +1226,7 @@ export function TicketRestaurantePage({
           onOpenAbsences={() => setActiveSubview('ausencias')}
           onOpenCalendars={() => setActiveSubview('calendarios')}
           onOpenContribution={() => setActiveSubview('computoCotizacion')}
+          onOpenAnnualBalance={() => setActiveSubview('balanceAnual')}
           onOpenManutenciones={() => setActiveSubview('manutenciones')}
           onOpenManualDebt={() => setActiveSubview('deudaManual')}
           onOpenMonthlyCalculation={() => setActiveSubview('computoMensual')}

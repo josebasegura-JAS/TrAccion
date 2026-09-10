@@ -27,6 +27,10 @@ function monthKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+function trimString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function normalizeSearch(value: string): string {
   return value
     .normalize('NFD')
@@ -138,9 +142,9 @@ export function TicketRestauranteManualPeoplePanel({
 
   const applySuggestion = (employee: Employee) => {
     setEmpleado(normalizeTicketEmployeeNumber(employee.empleado));
-    setNombreApellidos(employee.nombreApellidos.trim());
-    setDni((employee.dni || employee.nif || '').trim());
-    setArea(employee.direccionOrganizativa.trim() || employee.unidad.trim());
+    setNombreApellidos(trimString(employee.nombreApellidos));
+    setDni(trimString(employee.dni) || trimString(employee.nif));
+    setArea(trimString(employee.direccionOrganizativa) || trimString(employee.unidad));
     setSuggestionField(null);
     setMessage('');
   };

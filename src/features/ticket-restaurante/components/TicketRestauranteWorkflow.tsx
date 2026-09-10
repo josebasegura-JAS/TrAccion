@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BarChart3,
   CalendarDays,
   Calculator,
   Check,
@@ -166,6 +167,7 @@ export interface TicketRestauranteWorkflowProps {
   onImportManutenciones: () => void;
   onOpenMonthlyCalculation: () => void;
   onOpenContribution: () => void;
+  onOpenAnnualBalance: () => void;
   onReviewChange: (kind: 'absencesReviewed' | 'manutencionesReviewed' | 'manualDebtsReviewed', checked: boolean) => void;
 }
 
@@ -197,6 +199,7 @@ export function TicketRestauranteWorkflow({
   onImportManutenciones,
   onOpenMonthlyCalculation,
   onOpenContribution,
+  onOpenAnnualBalance,
   onReviewChange,
 }: TicketRestauranteWorkflowProps) {
   const baseReady = activeCalendars > 0 && activePeople > 0 && effectiveTicketPrice > 0;
@@ -412,6 +415,25 @@ export function TicketRestauranteWorkflow({
           </div>
         </section>
       </div>
+
+      <button
+        className="group flex w-full items-center justify-between gap-4 rounded-xl border border-blue-400/25 bg-blue-500/[0.055] p-4 text-left shadow-card transition hover:border-blue-300/45 hover:bg-blue-500/[0.085]"
+        onClick={onOpenAnnualBalance}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/12 text-blue-200">
+            <BarChart3 className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[13px] font-extrabold text-metro-text">Balance anual</span>
+            <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">Consulta el acumulado del año, evolución mensual, reparto por área y detalle por persona. Exportable a Excel.</span>
+          </span>
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold text-blue-200">
+          Abrir balance <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+        </span>
+      </button>
 
       <details className="group rounded-xl border border-metro-border bg-metro-panel shadow-card">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
