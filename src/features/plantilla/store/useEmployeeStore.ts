@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { hydrateEmployee } from '../domain/derived';
 import { EMPTY_EMPLOYEE_FILTERS, filterEmployees, type EmployeeFilters } from '../domain/filters';
-import { readEmployeeImportFromFile } from '../domain/importExcel';
+import { readEmployeeImportFromFile, type EmployeeImportSourceProfile } from '../domain/importExcel';
 import { importJobPositionTranslationsFromFile } from '../domain/importJobPositionTranslations';
 import { normalizeJobPosition, type JobPositionTranslation } from '../domain/jobPositionTranslation';
 import type { Employee, EmployeeDraft, EmployeeField } from '../domain/employee';
@@ -19,11 +19,15 @@ export const EMPLOYEES_STORAGE_KEY = 'traccion.v1.plantilla.employees';
 const STORAGE_KEY = EMPLOYEES_STORAGE_KEY;
 const JOB_POSITION_TRANSLATIONS_STORAGE_KEY = 'traccion.v1.plantilla.jobPositionTranslations';
 
+export type EmployeeImportConflictResolution = Record<string, 'keep' | 'source'>;
+
 interface EmployeeImportResult {
   totalRows: number;
   updated: number;
   created: number;
   ignored: number;
+  deactivated: number;
+  reactivated: number;
   mode: 'full' | 'antiguedadPuesto';
 }
 
@@ -39,7 +43,7 @@ interface EmployeeState {
   createWithConcurrencyCheck: (draft: EmployeeDraft) => Promise<{ ok: boolean; message: string; recordId?: string }>;
   updateWithConcurrencyCheck: (empleado: string, draft: EmployeeDraft, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
   removeWithConcurrencyCheck: (empleado: string, expectedSnapshot: string | null) => Promise<{ ok: boolean; message: string }>;
-  importExcel: (file: File, columnMapping?: Array<EmployeeField | null>) => Promise<EmployeeImportResult>;
+  importExcel: (file: File, columnMapping?: Array<EmployeeField | null>, sourceProfile?: EmployeeImportSourceProfile, conflictResolution?: EmployeeImportConflictResolution) => Promise<EmployeeImportResult>;
   importJobPositionTranslations: (file: File) => Promise<number>;
   createJobPositionTranslation: (translation: JobPositionTranslation) => Promise<{ ok: boolean; message: string }>;
   syncMissingJobPositionTranslationsFromEmployees: () => Promise<{ created: number; createdPuestos: string[] }>;
@@ -312,6 +316,8 @@ function buildEmployeeImport(
   drafts: EmployeeDraft[],
   importedFields: ReadonlySet<keyof EmployeeDraft>,
   translations: JobPositionTranslation[],
+  deactivateMissing: boolean,
+  conflictResolution: EmployeeImportConflictResolution = {},
 ): { employees: Employee[]; changedEmployees: Employee[]; result: EmployeeImportResult } {
   const employeesById = new Map(current.map((employee) => [employee.empleado, employee]));
   const importedFieldNames = Array.from(importedFields);
@@ -325,6 +331,8 @@ function buildEmployeeImport(
   let updated = 0;
   let created = 0;
   let ignored = 0;
+  let deactivated = 0;
+  let reactivated = 0;
 
   drafts.forEach((draft) => {
     const previous = employeesById.get(draft.empleado);
@@ -374,6 +382,19 @@ function buildEmployeeImport(
       : { ...draft };
 
     importedFieldNames.forEach((field) => {
+      if (field === 'empleado') {
+        nextDraft[field] = draft[field];
+        return;
+      }
+
+      const conflictKey = `${draft.empleado}::${field}`;
+      const hasConflict = Boolean(previous) && previous[field].trim() !== draft[field].trim();
+      if (deactivateMissing && hasConflict && conflictResolution[conflictKey] !== 'source') {
+        // En sincronización Zerkos, cualquier diferencia con un dato ya existente
+        // se conserva por defecto salvo elección expresa de «Usar Zerkos».
+        return;
+      }
+
       nextDraft[field] = draft[field];
     });
 
@@ -391,6 +412,9 @@ function buildEmployeeImport(
     // Si una persona previamente eliminada vuelve a aparecer en la fuente
     // principal, se reactiva automáticamente.
     const nextEmployee = hydrateEmployee(nextDraft, null);
+    if (previous?.deletedAt) {
+      reactivated += 1;
+    }
     employeesById.set(draft.empleado, nextEmployee);
     if (!previous || employeeSnapshot(nextEmployee) !== employeeSnapshot(previous)) {
       changedEmployees.push(nextEmployee);
@@ -403,6 +427,19 @@ function buildEmployeeImport(
     }
   });
 
+  if (deactivateMissing && !isAntiguedadOnlyImport) {
+    const importedIds = new Set(drafts.map((draft) => draft.empleado));
+    const deletedAt = new Date().toISOString();
+    current.forEach((employee) => {
+      if (!employee.deletedAt && !importedIds.has(employee.empleado)) {
+        const deactivatedEmployee = { ...employee, deletedAt };
+        employeesById.set(employee.empleado, deactivatedEmployee);
+        changedEmployees.push(deactivatedEmployee);
+        deactivated += 1;
+      }
+    });
+  }
+
   return {
     employees: Array.from(employeesById.values()),
     changedEmployees,
@@ -411,6 +448,8 @@ function buildEmployeeImport(
       updated,
       created,
       ignored,
+      deactivated,
+      reactivated,
       mode: isAntiguedadOnlyImport ? 'antiguedadPuesto' : 'full',
     },
   };
@@ -617,7 +656,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido eliminar la persona.' };
     }
   },
-  importExcel: async (file, columnMapping) => {
+  importExcel: async (file, columnMapping, sourceProfile = 'generic', conflictResolution = {}) => {
     const { drafts, importedFields } = await readEmployeeImportFromFile(file, columnMapping);
     if (!importedFields.includes('empleado')) {
       throw new Error('No se ha encontrado una columna de Empleado reconocible en el Excel.');
@@ -632,6 +671,8 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       drafts,
       new Set(importedFields),
       get().jobPositionTranslations,
+      sourceProfile === 'zerkos',
+      conflictResolution,
     );
     if (hasEmployeeSqliteBatchRepository()) {
       const previousById = new Map(currentEmployees.map((employee) => [employee.empleado, employeeSnapshot(employee)]));

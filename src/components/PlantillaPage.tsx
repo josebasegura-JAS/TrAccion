@@ -19,7 +19,7 @@ import { EmployeeImportPreviewModal } from './EmployeeImportPreviewModal';
 import type { Employee, EmployeeField } from '../features/plantilla/domain/employee';
 import { analyzeEmployeeImportFile, type EmployeeImportPreview } from '../features/plantilla/domain/importExcel';
 import { uniqueSorted } from '../features/plantilla/domain/filters';
-import { filterEmployees, useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
+import { filterEmployees, useEmployeeStore, type EmployeeImportConflictResolution } from '../features/plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
 import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import type { ExportColumn } from '../shared/export/types';
@@ -44,10 +44,14 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Importación de personas',
     items: [
-      'Admite Excel, CSV, TSV o TXT. Las columnas se reconocen por variantes habituales del nombre (con/sin acentos, "Nº Empleado", etc.), no hace falta que coincidan exactamente.',
+      'El Excel de Zerkos se reconoce automáticamente y puede importarse tal cual sale del sistema, sin preparar ni mapear columnas.',
+      'En una importación Zerkos, TrAccion compara la fuente con la Plantilla actual y muestra antes de confirmar las altas, cambios, reactivaciones y bajas detectadas. Cada dato diferente permite elegir entre mantener el valor actual o usar el de Zerkos; por defecto se conserva el dato actual.',
+      'Las personas que ya no aparezcan en Zerkos se dan de baja lógicamente al confirmar, conservando sus históricos. Si reaparecen en una importación posterior, se reactivan.',
+      'Solo se toman de Zerkos los campos de Plantilla acordados; el resto de columnas se ignora y los datos propios de TrAccion, como Puesto EUS o Antigüedad Puesto, se conservan.',
+      'Otros Excel, CSV, TSV o TXT siguen admitiendo el mapeo flexible de columnas por variantes habituales del nombre.',
       'Si la persona ya existe (mismo número de empleado), se actualiza; si no existe, se crea. Solo se actualizan las columnas que realmente vienen en el fichero: las columnas ausentes conservan el dato ya guardado.',
       'Modo especial "solo antigüedad": si el fichero importado únicamente tiene informadas las columnas Empleado y Antigüedad Puesto (todo lo demás vacío en todas las filas), la app entiende que es una actualización masiva de antigüedad y solo toca ese campo en las personas que ya existen; no crea personas nuevas ni modifica el resto de datos.',
-      'Antes de importar se muestra una revisión de columnas: las reconocidas se enlazan automáticamente y las no reconocidas pueden asignarse manualmente a un campo de Plantilla o ignorarse.',
+      'En ficheros genéricos se mantiene la revisión de columnas: las reconocidas se enlazan automáticamente y las no reconocidas pueden asignarse manualmente o ignorarse.',
       'El botón "Generar muestra" descarga un Excel de ejemplo con las columnas que reconoce el importador.',
     ],
   },
@@ -64,7 +68,7 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
     ordered: true,
     items: [
       'Importar o actualizar la Plantilla desde el Excel maestro de personas.',
-      'Revisar las columnas reconocidas y resolver, si procede, las no reconocidas antes de confirmar la importación.',
+      'Si es un fichero Zerkos, revisar el resumen de altas, cambios y bajas; si es genérico, revisar el mapeo de columnas antes de confirmar.',
       'Comprobar traducciones EUS pendientes para completar puestos que falten.',
       'Usar la tabla filtrada como referencia maestra y exportarla solo cuando necesites compartir una foto concreta de la plantilla.',
     ],
@@ -690,13 +694,15 @@ export function PlantillaPage() {
             setPendingImportFile(null);
             setImportPreview(null);
           }}
-          onImport={async (mapping: Array<EmployeeField | null>) => {
-            const result = await importExcel(pendingImportFile, mapping);
+          onImport={async (mapping: Array<EmployeeField | null>, conflictResolution?: EmployeeImportConflictResolution) => {
+            const result = await importExcel(pendingImportFile, mapping, importPreview.sourceProfile, conflictResolution);
             setImportMessageIsError(false);
             setImportMessage(
               result.mode === 'antiguedadPuesto'
                 ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
-                : `Importación completada: ${pendingImportFile.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
+                : importPreview.sourceProfile === 'zerkos'
+                  ? `Sincronización Zerkos completada. Actualizadas: ${result.updated}. Creadas: ${result.created}. Reactivadas: ${result.reactivated}. Bajas: ${result.deactivated}.`
+                  : `Importación completada: ${pendingImportFile.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
             );
             setPendingImportFile(null);
             setImportPreview(null);
