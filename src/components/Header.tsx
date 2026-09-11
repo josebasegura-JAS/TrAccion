@@ -130,9 +130,13 @@ export function Header({
     };
   }, []);
 
+  const isDashboard = activeView === 'dashboard';
+
   return (
-    <header className="border-b border-white/5 px-4 pb-3 pt-4">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/10 bg-gradient-to-r from-metro-topbar via-metro-navy to-metro-topbar px-5 py-4 shadow-[0_18px_40px_rgba(2,6,23,0.26)]">
+    <header className={isDashboard ? "px-4 pb-2 pt-3" : "border-b border-white/5 px-4 pb-3 pt-4"}>
+      <div className={isDashboard
+        ? "flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-sky-300/10 px-1 pb-3"
+        : "flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/10 bg-gradient-to-r from-metro-topbar via-metro-navy to-metro-topbar px-5 py-4 shadow-[0_18px_40px_rgba(2,6,23,0.26)]"}>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex min-w-0 items-center gap-2">
@@ -147,7 +151,7 @@ export function Header({
                 />
               ) : null}
             </div>
-            <h1 className="truncate text-[1.45rem] font-black tracking-tight text-metro-text">
+            <h1 className={isDashboard ? "truncate text-[1.55rem] font-black tracking-tight text-metro-text" : "truncate text-[1.45rem] font-black tracking-tight text-metro-text"}>
               {headerCopy.title}
             </h1>
             <p className="truncate text-sm text-metro-muted">{headerCopy.subtitle}</p>
@@ -155,7 +159,7 @@ export function Header({
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <div className="min-w-[18rem] max-w-[28rem] flex-1">
+          <div className={isDashboard ? "min-w-[16rem] max-w-[30rem] flex-1" : "min-w-[18rem] max-w-[28rem] flex-1"}>
             <GlobalSearch onNavigate={onViewChange} />
           </div>
 

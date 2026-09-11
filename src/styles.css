@@ -749,3 +749,39 @@ body {
     padding: 10px;
   }
 }
+
+/* Dashboard profesional 1.1: composición densa para portátiles de 14" (1366×768). */
+.app-module-stage--dashboard {
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 4px 4px;
+}
+
+.app-shell__content--dashboard {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+
+.dashboard-pro {
+  min-height: 0;
+}
+
+@media (max-height: 820px) {
+  .app-shell__content--dashboard {
+    padding-bottom: 6px;
+  }
+
+  .app-module-stage--dashboard {
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .dashboard-pro {
+    font-size: 0.95em;
+  }
+}
