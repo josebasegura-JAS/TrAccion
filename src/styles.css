@@ -785,3 +785,45 @@ body {
     font-size: 0.95em;
   }
 }
+
+/* Dashboard fase 5: densidad prioritaria en portátil y expansión útil en escritorio. */
+.dashboard-pro__large-only {
+  display: none !important;
+}
+
+.dashboard-attention-row + .dashboard-attention-row {
+  border-top: 1px solid rgba(125, 211, 252, 0.055);
+}
+
+/* 14" / 1366×768: se conserva la composición compacta sin scroll. */
+@media (max-height: 820px) {
+  .dashboard-pro {
+    grid-template-rows: 42px 82px minmax(0, 1fr) minmax(0, 0.88fr);
+    gap: 8px;
+  }
+}
+
+/* Pantallas grandes: usamos la altura extra para mostrar más información real,
+ * no para crear huecos vacíos. */
+@media (min-width: 1600px) and (min-height: 880px) {
+  .dashboard-pro {
+    grid-template-rows: 46px 90px minmax(0, 1.06fr) minmax(0, 0.94fr);
+    gap: 10px;
+  }
+
+  .dashboard-pro__large-only {
+    display: grid !important;
+  }
+
+  .dashboard-attention-row {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+}
+
+@media (min-width: 1900px) and (min-height: 1000px) {
+  .dashboard-pro {
+    grid-template-rows: 48px 94px minmax(0, 1.08fr) minmax(0, 0.96fr);
+    gap: 12px;
+  }
+}

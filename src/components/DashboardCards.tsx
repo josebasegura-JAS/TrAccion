@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
+  BellRing,
   BarChart3,
   CalendarDays,
   ChevronLeft,
@@ -26,6 +27,7 @@ import { useActasStore } from '../features/actas/store/useActasStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/store/useLicenciasSinSueldoStore';
 import { useLoteriaStore } from '../features/loteria/store/useLoteriaStore';
+import { buildDashboardAttentionItems, type DashboardAttentionKind, type DashboardAttentionLevel } from './dashboard/dashboardAttention';
 import { DashboardRecordsModal } from './dashboard/DashboardUi';
 import type {
   CalendarEvent,
@@ -66,6 +68,29 @@ const priorityPill: Record<TaskPriority, string> = {
   alta: 'border-red-500/25 bg-red-500/15 text-red-200',
   media: 'border-amber-400/25 bg-amber-400/15 text-amber-200',
   baja: 'border-sky-400/25 bg-sky-400/15 text-sky-200',
+};
+
+const attentionLevelTone: Record<DashboardAttentionLevel, string> = {
+  critical: 'border-l-red-500 bg-red-500/5 text-red-300',
+  high: 'border-l-orange-400 bg-orange-400/5 text-orange-300',
+  medium: 'border-l-amber-300 bg-amber-300/[0.035] text-amber-200',
+  info: 'border-l-sky-400 bg-sky-400/[0.035] text-sky-200',
+};
+
+const attentionLevelLabel: Record<DashboardAttentionLevel, string> = {
+  critical: 'Crítico',
+  high: 'Alto',
+  medium: 'Medio',
+  info: 'Info',
+};
+
+const attentionKindIcon: Record<DashboardAttentionKind, typeof ClipboardList> = {
+  task: ClipboardList,
+  session: CalendarDays,
+  acta: FileText,
+  license: UserRound,
+  telework: Laptop,
+  lottery: Sparkles,
 };
 
 function DashboardPanel({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -296,7 +321,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     if (a.fechaLimite) return -1;
     if (b.fechaLimite) return 1;
     return b.updatedAt.localeCompare(a.updatedAt);
-  }).slice(0, 4), [activeTasks]);
+  }).slice(0, 6), [activeTasks]);
 
   const taskSegments = useMemo(() => stateSegmentsFromTasks(nonDeletedTasks), [nonDeletedTasks]);
   const donutStyle = useMemo(() => miniDonutStyle(taskSegments), [taskSegments]);
@@ -306,34 +331,29 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }, [visibleMonth]);
 
-  const attentionItems = useMemo(() => {
-    const items: Array<{ key: string; icon: typeof ClipboardList; title: string; subtitle: string; trailing: string; tone: string; onClick: () => void }> = [];
-    if (criticalTasks.length) items.push({
-      key: 'critical', icon: AlertTriangle,
-      title: `${criticalTasks.length} tarea${criticalTasks.length === 1 ? '' : 's'} crítica${criticalTasks.length === 1 ? '' : 's'}`,
-      subtitle: 'Requieren intervención', trailing: 'Hoy', tone: 'text-red-400', onClick: () => showTaskPopup('Tareas críticas', criticalTasks),
-    });
-    if (nextSession) items.push({
-      key: 'session', icon: CalendarDays,
-      title: `Próxima sesión de ${nextSession.module === 'comite' ? 'Comité' : 'Paritaria'}`,
-      subtitle: `${formatDisplayDate(nextSession.date)} · ${nextSession.title}`,
-      trailing: nextSession.date === todayIso ? 'Hoy' : formatDisplayDate(nextSession.date), tone: 'text-sky-300',
-      onClick: () => openRecord({ view: nextSession.module, recordId: nextSession.id }),
-    });
-    if (openActas.length) items.push({
-      key: 'actas', icon: FileText, title: `${openActas.length} acta${openActas.length === 1 ? '' : 's'} en seguimiento`,
-      subtitle: 'Pendientes de revisión o actuación', trailing: 'Ver', tone: 'text-sky-300', onClick: () => openRecord({ view: 'actas' }),
-    });
-    if (pendingSignatureLicenses.length) items.push({
-      key: 'licenses', icon: UserRound, title: `${pendingSignatureLicenses.length} licencia${pendingSignatureLicenses.length === 1 ? '' : 's'} por firmar`,
-      subtitle: 'Pendientes de firma', trailing: 'Ver', tone: 'text-sky-300', onClick: () => openRecord({ view: 'licencias-sin-sueldo' }),
-    });
-    if (items.length < 4 && upcomingTasks.length) items.push({
-      key: 'due', icon: ClipboardList, title: `${upcomingTasks.length} tarea${upcomingTasks.length === 1 ? '' : 's'} próxima${upcomingTasks.length === 1 ? '' : 's'} a vencer`,
-      subtitle: 'Durante los próximos 7 días', trailing: '7 días', tone: 'text-amber-300', onClick: () => showTaskPopup('Tareas próximas a vencer', upcomingTasks),
-    });
-    return items.slice(0, 4);
-  }, [criticalTasks, nextSession, openActas.length, pendingSignatureLicenses.length, upcomingTasks, showTaskPopup, todayIso, openRecord]);
+  const attentionItems = useMemo(
+    () => buildDashboardAttentionItems({
+      todayIso,
+      tasks: nonDeletedTasks,
+      sessions: allOpenSessions,
+      actas: openActas,
+      licenses: licencias,
+      telework: teletrabajo,
+      lotteryCampaign: loteriaCampaign,
+    }),
+    [allOpenSessions, licencias, loteriaCampaign, nonDeletedTasks, openActas, teletrabajo, todayIso],
+  );
+
+  const attentionCriticalCount = useMemo(
+    () => attentionItems.filter((item) => item.level === 'critical' || item.level === 'high').length,
+    [attentionItems],
+  );
+
+  const overdueTasks = useMemo(
+    () => activeTasks.filter((task) => task.fechaLimite && task.fechaLimite < todayIso),
+    [activeTasks, todayIso],
+  );
+
 
   const taskStateDisplay = useMemo(() => taskSegments.filter((segment) => segment.value > 0), [taskSegments]);
   const totalTasksForDonut = Math.max(1, nonDeletedTasks.length);
@@ -373,7 +393,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
       </div>
 
       <div className="grid min-h-0 grid-cols-6 gap-2">
-        <MetricCard icon={ClipboardList} label="Tareas abiertas" value={activeTasks.length} detail={`${upcomingTasks.length} vencen en 7 días`} iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
+        <MetricCard icon={ClipboardList} label="Tareas abiertas" value={activeTasks.length} detail={overdueTasks.length ? `${overdueTasks.length} vencidas` : `${upcomingTasks.length} vencen en 7 días`} iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
         <MetricCard icon={AlertTriangle} label="Críticas" value={criticalTasks.length} detail="requieren atención" iconTone="border-red-400/15 bg-red-500/15 text-red-300" valueTone="text-white" onClick={() => showTaskPopup('Tareas críticas', criticalTasks)} />
         <MetricCard icon={UsersRound} label="Sesiones abiertas" value={allOpenSessions.length} detail={nextSession ? `próxima ${formatDisplayDate(nextSession.date)}` : 'sin próximas sesiones'} iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => openRecord({ view: 'comite' })} />
         <MetricCard icon={FileText} label="Actas en seguimiento" value={openActas.length} detail="con acciones pendientes" iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => openRecord({ view: 'actas' })} />
@@ -383,21 +403,45 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
 
       <div className="grid min-h-0 grid-cols-[1.08fr_1.12fr_0.92fr] gap-2">
         <DashboardPanel className="flex flex-col">
-          <PanelTitle icon={AlertTriangle} title="Pendiente de atención" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver todas</button>} />
-          <div className="grid min-h-0 flex-1 content-start divide-y divide-sky-200/7 overflow-hidden px-2">
-            {attentionItems.length ? attentionItems.map((item) => (
-              <button className="grid min-h-0 grid-cols-[28px_minmax(0,1fr)_auto_12px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025]" key={item.key} onClick={item.onClick} type="button">
-                <item.icon className={item.tone} size={17} />
-                <span className="min-w-0">
-                  <span className="block truncate text-[10px] font-extrabold text-slate-100">{item.title}</span>
-                  <span className="block truncate text-[9px] font-medium text-slate-400">{item.subtitle}</span>
-                </span>
-                <span className={`text-[9px] font-bold ${item.tone}`}>{item.trailing}</span>
-                <ChevronRight className="text-slate-500" size={12} />
-              </button>
-            )) : (
+          <PanelTitle
+            icon={BellRing}
+            title="Pendiente de atención"
+            action={
+              <div className="flex items-center gap-1.5">
+                {attentionCriticalCount > 0 && (
+                  <span className="rounded-full border border-red-400/20 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-black text-red-200">
+                    {attentionCriticalCount} prioritarios
+                  </span>
+                )}
+                <span className="text-[8px] font-semibold text-slate-500">ordenado por urgencia</span>
+              </div>
+            }
+          />
+          <div className="grid min-h-0 flex-1 content-start overflow-hidden px-2 py-0.5">
+            {attentionItems.length ? attentionItems.slice(0, 6).map((item, index) => {
+              const AttentionIcon = attentionKindIcon[item.kind];
+              return (
+                <button
+                  className={`dashboard-attention-row grid min-h-0 grid-cols-[24px_minmax(0,1fr)_auto_12px] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition hover:bg-white/[0.04] ${attentionLevelTone[item.level]} ${index >= 4 ? 'dashboard-pro__large-only' : ''}`}
+                  key={item.key}
+                  onClick={() => openRecord({ view: item.view, recordId: item.recordId })}
+                  type="button"
+                >
+                  <AttentionIcon className="opacity-90" size={15} />
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-[9px] font-extrabold text-slate-100">{item.title}</span>
+                      <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide opacity-75">{attentionLevelLabel[item.level]}</span>
+                    </span>
+                    <span className="block truncate text-[8px] font-medium text-slate-400">{item.subtitle}</span>
+                  </span>
+                  <span className="whitespace-nowrap text-[8px] font-black">{item.trailing}</span>
+                  <ChevronRight className="text-slate-500" size={11} />
+                </button>
+              );
+            }) : (
               <div className="grid h-full place-items-center text-center">
-                <div><CircleCheck className="mx-auto text-emerald-400" size={24} /><p className="mt-2 text-[11px] font-bold text-emerald-200">Sin incidencias prioritarias</p></div>
+                <div><CircleCheck className="mx-auto text-emerald-400" size={24} /><p className="mt-2 text-[11px] font-bold text-emerald-200">Sin incidencias prioritarias</p><p className="mt-1 text-[8px] text-slate-500">No hay vencimientos ni expedientes envejecidos.</p></div>
               </div>
             )}
           </div>
@@ -465,8 +509,8 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         <DashboardPanel className="flex flex-col">
           <PanelTitle icon={ClipboardList} title="Mis tareas prioritarias" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver todas</button>} />
           <div className="grid min-h-0 flex-1 content-start divide-y divide-sky-200/7 overflow-hidden px-2">
-            {priorityTasks.length ? priorityTasks.map((task) => (
-              <button className="grid grid-cols-[14px_minmax(0,1fr)_48px_34px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025]" key={task.id} onClick={() => openRecord({ view: 'tareas', recordId: task.id })} type="button">
+            {priorityTasks.length ? priorityTasks.map((task, index) => (
+              <button className={`grid grid-cols-[14px_minmax(0,1fr)_48px_34px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025] ${index >= 4 ? 'dashboard-pro__large-only' : ''}`} key={task.id} onClick={() => openRecord({ view: 'tareas', recordId: task.id })} type="button">
                 <span className={`text-[12px] ${task.prioridad === 'critica' || task.prioridad === 'alta' ? 'text-red-400' : 'text-amber-300'}`}>⚑</span>
                 <span className="min-w-0"><span className="block truncate text-[9px] font-bold text-slate-100">{task.titulo}</span><span className="block truncate text-[8px] text-slate-400">{task.fase || 'Tareas'}</span></span>
                 <span className={`rounded-md border px-1.5 py-1 text-center text-[8px] font-bold ${priorityPill[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
@@ -479,10 +523,10 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         <DashboardPanel className="flex flex-col">
           <PanelTitle icon={CalendarDays} title="Próximos hitos" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'comite' })} type="button">Ver agenda</button>} />
           <div className="grid min-h-0 flex-1 content-start overflow-hidden px-2 py-1">
-            {upcomingEvents.slice(0, 5).map((event, index) => (
-              <button className="grid grid-cols-[44px_10px_minmax(0,1fr)] items-center gap-1.5 py-1 text-left hover:bg-white/[0.025]" key={event.id} onClick={() => openRecord({ view: event.view, recordId: event.recordId })} type="button">
+            {upcomingEvents.slice(0, 6).map((event, index) => (
+              <button className={`grid grid-cols-[44px_10px_minmax(0,1fr)] items-center gap-1.5 py-1 text-left hover:bg-white/[0.025] ${index >= 5 ? 'dashboard-pro__large-only' : ''}`} key={event.id} onClick={() => openRecord({ view: event.view, recordId: event.recordId })} type="button">
                 <span className="text-right text-[8px] font-bold text-slate-300">{formatDisplayDate(event.date)}</span>
-                <span className="relative grid h-full place-items-center"><span className={`z-10 h-2.5 w-2.5 rounded-full ${eventTone[event.type]}`} />{index < Math.min(upcomingEvents.length, 5) - 1 && <span className="absolute top-1/2 h-full w-px bg-sky-300/15" />}</span>
+                <span className="relative grid h-full place-items-center"><span className={`z-10 h-2.5 w-2.5 rounded-full ${eventTone[event.type]}`} />{index < Math.min(upcomingEvents.length, 6) - 1 && <span className="absolute top-1/2 h-full w-px bg-sky-300/15" />}</span>
                 <span className="min-w-0"><span className="block truncate text-[9px] font-bold text-slate-100">{event.title}</span><span className="block truncate text-[8px] text-slate-400">{event.detail}</span></span>
               </button>
             ))}
