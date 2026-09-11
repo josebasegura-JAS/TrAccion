@@ -29,12 +29,9 @@ import {
   lotteryOrderedCount,
   lotteryPaidTotal,
   lotteryPendingPaymentAmount,
-  lotteryRequestAmount,
   lotteryRequestedCount,
   lotteryRequestedCountByNumber,
-  lotteryRequestTotalCount,
   type LotteryCampaign,
-  type LotteryPaymentMethod,
   type LotteryRequest,
 } from '../domain/loteria';
 import { useLoteriaStore } from '../store/useLoteriaStore';
@@ -45,15 +42,9 @@ import {
   labelClass,
   textareaClass,
   money,
-  dateText,
   nowIso,
   LOTERIA_HELP_SECTIONS,
   WorkspaceSection,
-  RequestSortKey,
-  SortDirection,
-  compareLotteryRequests,
-  SortableHeader,
-  cx,
   renderTemplate,
   plainTextToHtml,
   isValidEmail,
@@ -69,6 +60,7 @@ import {
   SaveState,
   SummaryPill,
 } from './loteriaPage.helpers';
+import { LoteriaParticipantsTable, LoteriaTrackingTable } from './LoteriaRequestsTables';
 
 export function LoteriaPage() {
   const campaign = useLoteriaStore((state) => state.campaign);
@@ -81,8 +73,6 @@ export function LoteriaPage() {
   const [activeSection, setActiveSection] = useState<WorkspaceSection | null>(null);
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'todos' | 'pagados' | 'pendientes'>('todos');
-  const [sortKey, setSortKey] = useState<RequestSortKey>('employee');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [participantSearch, setParticipantSearch] = useState('');
   const [showExternalForm, setShowExternalForm] = useState(false);
   const [externalName, setExternalName] = useState('');
@@ -204,29 +194,15 @@ export function LoteriaPage() {
       .slice(0, 8);
   }, [employees, participantSearch]);
 
-  const sortedRequests = useMemo(
-    () => [...draft.requests].sort((left, right) => compareLotteryRequests(left, right, sortKey, sortDirection)),
-    [draft.requests, sortDirection, sortKey],
-  );
-
   const filteredRequests = useMemo(() => {
     const needle = normalizeSearch(search);
-    return sortedRequests.filter((request) => {
+    return draft.requests.filter((request) => {
       const haystack = normalizeSearch(`${request.nombre} ${request.empleado ?? ''} ${request.email} ${request.contactoObservaciones}`);
       const matchesSearch = !needle || haystack.includes(needle);
       const matchesPayment = paymentFilter === 'todos' || (paymentFilter === 'pagados' ? request.pagado : !request.pagado);
       return matchesSearch && matchesPayment;
     });
-  }, [paymentFilter, search, sortedRequests]);
-
-  const toggleSort = (nextKey: RequestSortKey) => {
-    if (sortKey === nextKey) {
-      setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
-      return;
-    }
-    setSortKey(nextKey);
-    setSortDirection('asc');
-  };
+  }, [draft.requests, paymentFilter, search]);
 
   const persist = async (next = draft, success = 'Cambios guardados.') => {
     const result = await saveCampaign(next);
@@ -619,33 +595,12 @@ export function LoteriaPage() {
                 <SummaryPill label={`Disponible ${draft.numero2 || 'Nº 2'}`} value={String(availableNumero2)} tone={stockTone(availableNumero2)} />
                 <SummaryPill label="Disponible total" value={String(availableTotal)} tone={stockTone(availableTotal)} />
               </div>
-              <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-panel">
-                <table className="w-full min-w-[1240px] border-collapse text-left text-[11px]">
-                  <thead className="bg-metro-raised text-[11px] uppercase tracking-wide text-metro-muted">
-                    <tr>
-                      <th className="px-2 py-2"><SortableHeader active={sortKey === 'employee'} direction={sortDirection} label="Nº empleado" onClick={() => toggleSort('employee')} /></th>
-                      <th className="px-2 py-2"><SortableHeader active={sortKey === 'name'} direction={sortDirection} label="Apellidos / nombre" onClick={() => toggleSort('name')} /></th>
-                      <th className="px-2 py-2">Tipo</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Contacto / nota</th><th className="w-9 px-2 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRequests.map((request) => (
-                      <tr className="border-t border-metro-border" key={request.id}>
-                        <td className="px-2 py-1.5 font-semibold text-metro-secondary">{request.empleado ?? '—'}</td>
-                        <td className="p-1.5"><input className={inputClass} disabled={!request.externa} value={request.nombre} onChange={(e) => updateRequest(request.id, { nombre: e.target.value })} /></td>
-                        <td className="px-2 py-1.5">{request.externa ? <StatusBadge size="xs" tone="warning">Externa</StatusBadge> : <StatusBadge size="xs" tone="success">Plantilla</StatusBadge>}</td>
-                        <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero1} onChange={(e) => updateRequest(request.id, { decimosNumero1: Math.max(0, Number(e.target.value)) })} /></td>
-                        <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero2} onChange={(e) => updateRequest(request.id, { decimosNumero2: Math.max(0, Number(e.target.value)) })} /></td>
-                        <td className="px-2 py-1.5 text-center font-bold text-metro-text">{lotteryRequestTotalCount(request)}</td>
-                        <td className="p-1.5"><input className={cx(inputClass, request.email && !isValidEmail(request.email) && 'border-amber-500/60')} placeholder="nombre@dominio.es" type="email" value={request.email} onChange={(e) => updateRequest(request.id, { email: e.target.value })} /></td>
-                        <td className="p-1.5"><input className={inputClass} placeholder="Teléfono, nota breve…" value={request.contactoObservaciones} onChange={(e) => updateRequest(request.id, { contactoObservaciones: e.target.value })} /></td>
-                        <td className="px-1 py-1.5"><ActionButton onClick={() => removePerson(request.id)} size="sm" title="Eliminar participante" variant="delete" /></td>
-                      </tr>
-                    ))}
-                    {draft.requests.length === 0 ? <tr><td className="px-3 py-8 text-center text-xs text-metro-muted" colSpan={9}>Todavía no hay participantes. Usa el buscador de Plantilla o el alta de persona externa.</td></tr> : null}
-                  </tbody>
-                </table>
-              </div>
+              <LoteriaParticipantsTable
+                campaign={draft}
+                requests={draft.requests}
+                onUpdate={updateRequest}
+                onRemove={removePerson}
+              />
             </div>
           </div>
         </SectionShell>
@@ -678,34 +633,12 @@ export function LoteriaPage() {
               <label className="ml-auto inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-2 text-xs text-metro-secondary"><input checked={draft.workflow.seguimientoIniciado} onChange={(e) => setWorkflowFlag('seguimientoIniciado', e.target.checked)} type="checkbox" />Seguimiento iniciado</label>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-metro-border bg-metro-surface">
-              <table className="w-full min-w-[1280px] border-collapse text-left text-[11px]">
-                <thead className="bg-metro-raised text-[11px] uppercase tracking-wide text-metro-muted">
-                  <tr>
-                    <th className="px-2 py-2"><SortableHeader active={sortKey === 'employee'} direction={sortDirection} label="Nº empleado" onClick={() => toggleSort('employee')} /></th>
-                    <th className="px-2 py-2"><SortableHeader active={sortKey === 'name'} direction={sortDirection} label="Apellidos / nombre" onClick={() => toggleSort('name')} /></th>
-                    <th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-center">Pagado</th><th className="px-2 py-2">Fecha pago</th><th className="px-2 py-2">Forma pago</th><th className="px-2 py-2">Observaciones pago</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRequests.map((request) => (
-                    <tr className="border-t border-metro-border" key={request.id}>
-                      <td className="px-2 py-1.5 text-metro-secondary">{request.empleado ?? 'Externa'}</td>
-                      <td className="px-2 py-1.5 font-semibold text-metro-text">{request.nombre}</td>
-                      <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero1} onChange={(e) => updateRequest(request.id, { decimosNumero1: Math.max(0, Number(e.target.value)) })} /></td>
-                      <td className="p-1.5"><input className={`${inputClass} text-center`} min="0" step="1" type="number" value={request.decimosNumero2} onChange={(e) => updateRequest(request.id, { decimosNumero2: Math.max(0, Number(e.target.value)) })} /></td>
-                      <td className="px-2 py-1.5 text-center font-bold text-metro-text">{lotteryRequestTotalCount(request)}</td>
-                      <td className="px-2 py-1.5 text-right font-bold text-metro-text">{money(lotteryRequestAmount(draft, request))}</td>
-                      <td className="px-2 py-1.5 text-center"><button aria-label={request.pagado ? 'Marcar como pendiente' : 'Marcar como pagado'} className={cx('relative h-5 w-9 rounded-full transition', request.pagado ? 'bg-emerald-500' : 'bg-metro-raised')} onClick={() => togglePaid(request)} type="button"><span className={cx('absolute top-0.5 h-4 w-4 rounded-full bg-white transition', request.pagado ? 'left-[18px]' : 'left-0.5')} /></button></td>
-                      <td className="px-2 py-1.5 text-metro-secondary">{dateText(request.fechaPago)}</td>
-                      <td className="p-1.5"><select className={inputClass} disabled={!request.pagado} value={request.formaPago} onChange={(e) => updateRequest(request.id, { formaPago: e.target.value as LotteryPaymentMethod })}><option value="efectivo">Efectivo</option><option value="bizum">Bizum</option></select></td>
-                      <td className="p-1.5"><input className={inputClass} placeholder="Incidencia o nota del cobro" value={request.observacionesPago} onChange={(e) => updateRequest(request.id, { observacionesPago: e.target.value })} /></td>
-                    </tr>
-                  ))}
-                  {filteredRequests.length === 0 ? <tr><td className="px-3 py-8 text-center text-xs text-metro-muted" colSpan={10}>No hay participantes que coincidan con los filtros. Las altas se realizan en Octubre.</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
+            <LoteriaTrackingTable
+              campaign={draft}
+              requests={filteredRequests}
+              onUpdate={updateRequest}
+              onTogglePaid={togglePaid}
+            />
             <div className="flex justify-end"><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Décimos y pagos guardados.')} size="sm" variant="save">Guardar pagos</ActionButton></div>
           </div>
         </SectionShell>

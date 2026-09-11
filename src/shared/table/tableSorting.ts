@@ -43,17 +43,30 @@ export function sortDataTableRows<Row, ColumnId extends string>(
   }
 
   const sortedColumn = columns.find((column) => column.id === sort.columnId);
-  if (!sortedColumn?.sortable || !sortedColumn.accessor) {
+  if (!sortedColumn?.sortable || (!sortedColumn.accessor && !sortedColumn.compare)) {
     return rows;
   }
 
   return rows
     .map((row, index) => ({ row, index }))
     .sort((first, second) => {
-      const comparison = compareDataTableValues(
-        sortedColumn.accessor?.(first.row),
-        sortedColumn.accessor?.(second.row),
-      );
+      if (sortedColumn.emptyValuesLast && sortedColumn.accessor) {
+        const firstValue = sortedColumn.accessor(first.row);
+        const secondValue = sortedColumn.accessor(second.row);
+        const firstEmpty = firstValue === null || firstValue === undefined || firstValue === '';
+        const secondEmpty = secondValue === null || secondValue === undefined || secondValue === '';
+
+        if (firstEmpty !== secondEmpty) {
+          return firstEmpty ? 1 : -1;
+        }
+      }
+
+      const comparison = sortedColumn.compare
+        ? sortedColumn.compare(first.row, second.row)
+        : compareDataTableValues(
+            sortedColumn.accessor?.(first.row),
+            sortedColumn.accessor?.(second.row),
+          );
       const directedComparison = sort.direction === 'asc' ? comparison : -comparison;
       return directedComparison || first.index - second.index;
     })

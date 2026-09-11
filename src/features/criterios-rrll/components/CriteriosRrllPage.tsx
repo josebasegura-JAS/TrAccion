@@ -5,12 +5,7 @@ import {
   parseCriteriosRrllImportFile,
   type CriterioRrllImportPreviewRow,
 } from '../domain/importExcel';
-import {
-  sortCriteriosRrllByColumn,
-  sortCriteriosRrllByDefault,
-  type CriterioRrllSortKey,
-  type SortDirection,
-} from '../domain/sort';
+import { sortCriteriosRrllByDefault } from '../domain/sort';
 import {
   CRITERIO_RRLL_ESTADOS,
   CRITERIO_RRLL_SENTIDOS,
@@ -32,7 +27,9 @@ import { Toolbar } from '../../../components/ui/Toolbar';
 import { SearchField } from '../../../components/ui/SearchField';
 import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { useAppDialog } from '../../../hooks/useAppDialog';
-import { CompactTable, CompactTableBody, CompactTableEmpty, CompactTableHead } from '../../../shared/table/CompactTable';
+import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
+import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 
 const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -69,10 +66,6 @@ const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
   },
 ];
 
-interface SortState {
-  key: CriterioRrllSortKey;
-  direction: SortDirection;
-}
 
 interface ImportPreviewRow extends CriterioRrllImportPreviewRow {
   id: string;
@@ -83,6 +76,25 @@ interface ImportPreviewState {
   fileName: string;
   rows: ImportPreviewRow[];
 }
+
+type CriteriosTableColumnId =
+  | 'tema'
+  | 'estado'
+  | 'sentido'
+  | 'fecha'
+  | 'responsable'
+  | 'criterio'
+  | 'acciones';
+
+const criteriosTableColumnIds: CriteriosTableColumnId[] = [
+  'tema',
+  'estado',
+  'sentido',
+  'fecha',
+  'responsable',
+  'criterio',
+  'acciones',
+];
 
 function createPreviewRowId(row: CriterioRrllImportPreviewRow): string {
   return `${row.rowNumber}-${row.draft.tema}-${row.draft.fecha}`;
@@ -145,13 +157,6 @@ async function downloadCriteriosRrllTemplate(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-const sortableColumns: Array<{ key: CriterioRrllSortKey; label: string; className: string }> = [
-  { key: 'tema', label: 'Tema', className: 'w-[220px]' },
-  { key: 'estado', label: 'Estado', className: 'w-[120px]' },
-  { key: 'sentido', label: 'Sentido', className: 'w-[120px]' },
-  { key: 'fecha', label: 'Fecha', className: 'w-[115px]' },
-  { key: 'responsable', label: 'Responsable', className: 'w-[150px]' },
-];
 
 function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
   const tone = sentido === 'aprobado' ? 'success' : sentido === 'denegado' ? 'error' : 'muted';
@@ -176,7 +181,6 @@ export function CriteriosRrllPage() {
   const { alert, dialogNode } = useAppDialog();
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingCriterioId, setEditingCriterioId] = useState<string | null>(null);
-  const [sortState, setSortState] = useState<SortState | null>(null);
   const [importMessage, setImportMessage] = useState('');
   const [importPreview, setImportPreview] = useState<ImportPreviewState | null>(null);
   const [templateMessage, setTemplateMessage] = useState('');
@@ -194,13 +198,10 @@ export function CriteriosRrllPage() {
     () => filterCriteriosRrll(criterios, filters),
     [criterios, filters],
   );
-  const sortedCriterios = useMemo(() => {
-    if (!sortState) {
-      return sortCriteriosRrllByDefault(filteredCriterios);
-    }
-
-    return sortCriteriosRrllByColumn(filteredCriterios, sortState.key, sortState.direction);
-  }, [filteredCriterios, sortState]);
+  const sortedCriterios = useMemo(
+    () => sortCriteriosRrllByDefault(filteredCriterios),
+    [filteredCriterios],
+  );
 
   const editorCriterio =
     editorMode === 'edit'
@@ -223,12 +224,105 @@ export function CriteriosRrllPage() {
     setEditingCriterioId(null);
   };
 
-  const toggleSort = (key: CriterioRrllSortKey) => {
-    setSortState((current) => ({
-      key,
-      direction: current?.key === key && current.direction === 'asc' ? 'desc' : 'asc',
-    }));
-  };
+  const {
+    preferences: tablePreferences,
+    setSort: setTableSort,
+    setColumnWidth: setTableColumnWidth,
+    setColumnOrder: setTableColumnOrder,
+    resetColumnWidths: resetTableColumnWidths,
+  } = useTableViewPreferences<CriteriosTableColumnId>({
+    storageKey: 'traccion.tableView.criteriosRrll.main',
+    defaultPreferences: {
+      sort: null,
+      columnWidths: {},
+      columnOrder: null,
+    },
+    validColumnIds: criteriosTableColumnIds,
+  });
+
+  const tableColumns = useMemo<Array<DataTableColumn<CriterioRrll, CriteriosTableColumnId>>>(() => [
+    {
+      id: 'tema',
+      header: 'Tema',
+      tone: 'identity',
+      accessor: (criterio) => criterio.tema,
+      render: (criterio) => <span className="font-semibold text-metro-text" title={criterio.tema}>{criterio.tema}</span>,
+      width: 220,
+      minWidth: 150,
+      sortable: true,
+    },
+    {
+      id: 'estado',
+      header: 'Estado',
+      accessor: (criterio) => criterio.estado,
+      render: (criterio) => criterio.estado,
+      width: 120,
+      sortable: true,
+    },
+    {
+      id: 'sentido',
+      header: 'Sentido',
+      accessor: (criterio) => criterio.sentido,
+      render: (criterio) => <SentidoBadge sentido={criterio.sentido} />,
+      width: 120,
+      sortable: true,
+    },
+    {
+      id: 'fecha',
+      header: 'Fecha',
+      accessor: (criterio) => criterio.fecha,
+      render: (criterio) => criterio.fecha || '—',
+      width: 115,
+      sortable: true,
+    },
+    {
+      id: 'responsable',
+      header: 'Responsable',
+      accessor: (criterio) => criterio.responsable,
+      render: (criterio) => criterio.responsable || '—',
+      width: 150,
+      sortable: true,
+    },
+    {
+      id: 'criterio',
+      header: 'Criterio',
+      accessor: (criterio) => criterio.criterio,
+      render: (criterio) => <span title={criterio.criterio}>{criterio.criterio}</span>,
+      width: 300,
+      minWidth: 220,
+      sortable: true,
+    },
+    {
+      id: 'acciones',
+      header: 'Acciones',
+      width: 72,
+      minWidth: 72,
+      maxWidth: 72,
+      isActionColumn: true,
+      reorderable: false,
+      resizable: false,
+      render: (criterio) => (
+        <div className="flex justify-end">
+          <ActionButton
+            aria-label="Eliminar criterio"
+            size="sm"
+            variant="delete"
+            iconOnly
+            onClick={(event) => {
+              event.stopPropagation();
+              void (async () => {
+                const result = await removeWithConcurrencyCheck(criterio.id, criterio.updatedAt);
+                if (!result.ok) {
+                  await alert(result.message, { type: 'error' });
+                }
+              })();
+            }}
+          />
+        </div>
+      ),
+    },
+  ], [alert, removeWithConcurrencyCheck]);
+
 
   const selectedImportRows = importPreview?.rows.filter((row) => row.selected) ?? [];
 
@@ -405,91 +499,23 @@ export function CriteriosRrllPage() {
           </div>
           <CountBadge>{filteredCriterios.length} registros</CountBadge>
         </div>
-        <div className="max-h-[460px] overflow-auto">
-          <CompactTable>
-            <CompactTableHead>
-              <tr>
-                {sortableColumns.map((column) => {
-                  const isActive = sortState?.key === column.key;
-
-                  return (
-                    <th className={`${column.className} px-3 py-2`} key={column.key}>
-                      <button
-                        className="flex w-full items-center gap-1 text-left font-semibold hover:text-metro-text"
-                        onClick={() => toggleSort(column.key)}
-                        type="button"
-                      >
-                        <span>{column.label}</span>
-                        {isActive && <span>{sortState.direction === 'asc' ? '↑' : '↓'}</span>}
-                      </button>
-                    </th>
-                  );
-                })}
-                <th className="w-[300px] px-3 py-2">Criterio</th>
-                <th className="w-[56px] px-3 py-2 text-right">Acciones</th>
-              </tr>
-            </CompactTableHead>
-            <CompactTableBody>
-              {sortedCriterios.length === 0 && (
-                <CompactTableEmpty colSpan={7} message="No hay criterios para los filtros seleccionados." />
-              )}
-              {sortedCriterios.map((criterio) => (
-                <tr
-                  className="cursor-pointer hover:bg-metro-red/10"
-                  key={criterio.id}
-                  onClick={() => openEditor(criterio)}
-                >
-                  <td
-                    className="truncate px-3 py-1.5 font-semibold text-metro-text"
-                    title={criterio.tema}
-                  >
-                    {criterio.tema}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.estado}>
-                    {criterio.estado}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.sentido}>
-                    <SentidoBadge sentido={criterio.sentido} />
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={criterio.fecha || '—'}
-                  >
-                    {criterio.fecha || '—'}
-                  </td>
-                  <td
-                    className="truncate px-3 py-1.5 text-metro-muted"
-                    title={criterio.responsable}
-                  >
-                    {criterio.responsable}
-                  </td>
-                  <td className="truncate px-3 py-1.5 text-metro-muted" title={criterio.criterio}>
-                    {criterio.criterio}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                    <ActionButton
-                      aria-label="Eliminar criterio"
-                      size="sm"
-                      variant="delete"
-                      iconOnly
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void (async () => {
-                          const result = await removeWithConcurrencyCheck(
-                            criterio.id,
-                            criterio.updatedAt,
-                          );
-                          if (!result.ok) {
-                            await alert(result.message, { type: 'error' });
-                          }
-                        })();
-                      }}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </CompactTableBody>
-          </CompactTable>
+        <div className="p-2">
+          <DataTable
+            ariaLabel="Criterios RRLL"
+            columns={tableColumns}
+            rows={sortedCriterios}
+            getRowId={(criterio) => criterio.id}
+            sort={tablePreferences.sort}
+            onSortChange={setTableSort}
+            columnWidths={tablePreferences.columnWidths}
+            onColumnWidthChange={setTableColumnWidth}
+            onResetColumnWidths={resetTableColumnWidths}
+            columnOrder={tablePreferences.columnOrder}
+            onColumnOrderChange={setTableColumnOrder}
+            emptyMessage="No hay criterios para los filtros seleccionados."
+            onRowClick={openEditor}
+            maxHeightClassName="max-h-[460px]"
+          />
         </div>
       </div>
 

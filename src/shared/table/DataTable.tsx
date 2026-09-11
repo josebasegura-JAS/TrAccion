@@ -27,6 +27,10 @@ export interface DataTableColumn<Row, ColumnId extends string> {
   id: ColumnId;
   header: string;
   accessor?: (row: Row) => DataTableSortValue;
+  /** Comparador opcional para reglas de ordenación específicas del dominio. */
+  compare?: (first: Row, second: Row) => number;
+  /** Mantiene valores vacíos al final tanto en ascendente como en descendente. */
+  emptyValuesLast?: boolean;
   render?: (row: Row) => ReactNode;
   width: number;
   minWidth?: number;
@@ -369,7 +373,7 @@ export function DataTable<Row, ColumnId extends string>({
             <tr>
               {visibleColumns.map((column) => {
                 const isSorted = sort?.columnId === column.id;
-                const canSort = Boolean(column.sortable && column.accessor);
+                const canSort = Boolean(column.sortable && (column.accessor || column.compare));
                 const ariaSort = isSorted
                   ? sort?.direction === 'asc'
                     ? 'ascending'

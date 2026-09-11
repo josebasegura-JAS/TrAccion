@@ -1,6 +1,6 @@
 import { escapeHtml } from '../../../shared/security/escapeHtml';
 import type { ReactNode } from 'react';
-import { ArrowUpDown, Check, type LucideIcon } from 'lucide-react';
+import { Check, type LucideIcon } from 'lucide-react';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { Employee } from '../../plantilla/domain/employee';
@@ -17,7 +17,6 @@ import {
   lotteryRequestedCountByNumber,
   lotteryRequestTotalCount,
   type LotteryCampaign,
-  type LotteryRequest,
 } from '../domain/loteria';
 
 export const inputClass = 'h-8 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 text-xs text-metro-text outline-none transition focus:border-metro-red';
@@ -66,69 +65,6 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
 ];
 
 export type WorkspaceSection = 'septiembre' | 'octubre' | 'seguimiento' | 'cierre';
-
-export type RequestSortKey = 'employee' | 'name';
-export type SortDirection = 'asc' | 'desc';
-
-export function compareLotteryRequests(
-  left: LotteryRequest,
-  right: LotteryRequest,
-  sortKey: RequestSortKey,
-  direction: SortDirection,
-): number {
-  let result = 0;
-
-  if (sortKey === 'employee') {
-    const leftNumber = left.empleado && /^\d+$/.test(left.empleado.trim())
-      ? Number.parseInt(left.empleado.trim(), 10)
-      : null;
-    const rightNumber = right.empleado && /^\d+$/.test(right.empleado.trim())
-      ? Number.parseInt(right.empleado.trim(), 10)
-      : null;
-
-    // Las personas externas, sin nº de empleado, permanecen al final para que
-    // no interrumpan la secuencia de plantilla en ninguno de los dos sentidos.
-    if (leftNumber === null && rightNumber !== null) return 1;
-    if (leftNumber !== null && rightNumber === null) return -1;
-    if (leftNumber !== null && rightNumber !== null) result = leftNumber - rightNumber;
-  } else {
-    result = left.nombre.localeCompare(right.nombre, 'es', { sensitivity: 'base' });
-  }
-
-  if (result === 0) {
-    result = left.nombre.localeCompare(right.nombre, 'es', { sensitivity: 'base' });
-  }
-
-  return direction === 'asc' ? result : -result;
-}
-
-export function SortableHeader({
-  active,
-  direction,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  direction: SortDirection;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={cx(
-        'inline-flex items-center gap-1.5 font-extrabold uppercase tracking-wide transition hover:text-metro-text',
-        active ? 'text-red-300' : 'text-metro-muted',
-      )}
-      onClick={onClick}
-      title={`Ordenar por ${label}`}
-      type="button"
-    >
-      <span>{label}</span>
-      <ArrowUpDown className={active ? 'text-red-300' : 'text-metro-muted'} size={12} />
-      {active ? <span className="text-[9px] font-black">{direction === 'asc' ? 'A→Z' : 'Z→A'}</span> : null}
-    </button>
-  );
-}
 
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
