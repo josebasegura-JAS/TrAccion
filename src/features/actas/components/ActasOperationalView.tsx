@@ -17,7 +17,7 @@ type ClosedActasByYear = Array<[string, { count: number; rows: Acta[] }]>;
 type Props = {
   closedActasByYear: ClosedActasByYear;
   columns: Array<DataTableColumn<Acta, ActaColumnId>>;
-  filterLabel: string;
+  filterLabel: string | undefined;
   filteredActas: Acta[];
   hasLoadedHistoricalActas: boolean;
   onBack: () => void;
