@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowUpDown,
   CalendarDays,
   Check,
   CircleDollarSign,
@@ -89,6 +90,69 @@ const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
 ];
 
 type WorkspaceSection = 'septiembre' | 'octubre' | 'seguimiento' | 'cierre';
+
+type RequestSortKey = 'employee' | 'name';
+type SortDirection = 'asc' | 'desc';
+
+function compareLotteryRequests(
+  left: LotteryRequest,
+  right: LotteryRequest,
+  sortKey: RequestSortKey,
+  direction: SortDirection,
+): number {
+  let result = 0;
+
+  if (sortKey === 'employee') {
+    const leftNumber = left.empleado && /^\d+$/.test(left.empleado.trim())
+      ? Number.parseInt(left.empleado.trim(), 10)
+      : null;
+    const rightNumber = right.empleado && /^\d+$/.test(right.empleado.trim())
+      ? Number.parseInt(right.empleado.trim(), 10)
+      : null;
+
+    // Las personas externas, sin nº de empleado, permanecen al final para que
+    // no interrumpan la secuencia de plantilla en ninguno de los dos sentidos.
+    if (leftNumber === null && rightNumber !== null) return 1;
+    if (leftNumber !== null && rightNumber === null) return -1;
+    if (leftNumber !== null && rightNumber !== null) result = leftNumber - rightNumber;
+  } else {
+    result = left.nombre.localeCompare(right.nombre, 'es', { sensitivity: 'base' });
+  }
+
+  if (result === 0) {
+    result = left.nombre.localeCompare(right.nombre, 'es', { sensitivity: 'base' });
+  }
+
+  return direction === 'asc' ? result : -result;
+}
+
+function SortableHeader({
+  active,
+  direction,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  direction: SortDirection;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={cx(
+        'inline-flex items-center gap-1.5 font-extrabold uppercase tracking-wide transition hover:text-metro-text',
+        active ? 'text-red-300' : 'text-metro-muted',
+      )}
+      onClick={onClick}
+      title={`Ordenar por ${label}`}
+      type="button"
+    >
+      <span>{label}</span>
+      <ArrowUpDown className={active ? 'text-red-300' : 'text-metro-muted'} size={12} />
+      {active ? <span className="text-[9px] font-black">{direction === 'asc' ? 'A→Z' : 'Z→A'}</span> : null}
+    </button>
+  );
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
@@ -448,6 +512,8 @@ export function LoteriaPage() {
   const [activeSection, setActiveSection] = useState<WorkspaceSection | null>(null);
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'todos' | 'pagados' | 'pendientes'>('todos');
+  const [sortKey, setSortKey] = useState<RequestSortKey>('employee');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [participantSearch, setParticipantSearch] = useState('');
   const [showExternalForm, setShowExternalForm] = useState(false);
   const [externalName, setExternalName] = useState('');
@@ -557,15 +623,29 @@ export function LoteriaPage() {
       .slice(0, 8);
   }, [employees, participantSearch]);
 
+  const sortedRequests = useMemo(
+    () => [...draft.requests].sort((left, right) => compareLotteryRequests(left, right, sortKey, sortDirection)),
+    [draft.requests, sortDirection, sortKey],
+  );
+
   const filteredRequests = useMemo(() => {
     const needle = normalizeSearch(search);
-    return draft.requests.filter((request) => {
+    return sortedRequests.filter((request) => {
       const haystack = normalizeSearch(`${request.nombre} ${request.empleado ?? ''} ${request.email} ${request.contactoObservaciones}`);
       const matchesSearch = !needle || haystack.includes(needle);
       const matchesPayment = paymentFilter === 'todos' || (paymentFilter === 'pagados' ? request.pagado : !request.pagado);
       return matchesSearch && matchesPayment;
     });
-  }, [draft.requests, paymentFilter, search]);
+  }, [paymentFilter, search, sortedRequests]);
+
+  const toggleSort = (nextKey: RequestSortKey) => {
+    if (sortKey === nextKey) {
+      setSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection('asc');
+  };
 
   const persist = async (next = draft, success = 'Cambios guardados.') => {
     const result = await saveCampaign(next);
@@ -958,10 +1038,14 @@ export function LoteriaPage() {
               <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-panel">
                 <table className="w-full min-w-[1240px] border-collapse text-left text-[11px]">
                   <thead className="bg-metro-raised text-[11px] uppercase tracking-wide text-metro-muted">
-                    <tr><th className="px-2 py-2">Nº empleado</th><th className="px-2 py-2">Nombre y apellidos</th><th className="px-2 py-2">Tipo</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Contacto / nota</th><th className="w-9 px-2 py-2" /></tr>
+                    <tr>
+                      <th className="px-2 py-2"><SortableHeader active={sortKey === 'employee'} direction={sortDirection} label="Nº empleado" onClick={() => toggleSort('employee')} /></th>
+                      <th className="px-2 py-2"><SortableHeader active={sortKey === 'name'} direction={sortDirection} label="Apellidos / nombre" onClick={() => toggleSort('name')} /></th>
+                      <th className="px-2 py-2">Tipo</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2">Email</th><th className="px-2 py-2">Contacto / nota</th><th className="w-9 px-2 py-2" />
+                    </tr>
                   </thead>
                   <tbody>
-                    {draft.requests.map((request) => (
+                    {sortedRequests.map((request) => (
                       <tr className="border-t border-metro-border" key={request.id}>
                         <td className="px-2 py-1.5 font-semibold text-metro-secondary">{request.empleado ?? '—'}</td>
                         <td className="p-1.5"><input className={inputClass} disabled={!request.externa} value={request.nombre} onChange={(e) => updateRequest(request.id, { nombre: e.target.value })} /></td>
@@ -1013,7 +1097,11 @@ export function LoteriaPage() {
             <div className="overflow-x-auto rounded-xl border border-metro-border bg-metro-surface">
               <table className="w-full min-w-[1280px] border-collapse text-left text-[11px]">
                 <thead className="bg-metro-raised text-[11px] uppercase tracking-wide text-metro-muted">
-                  <tr><th className="px-2 py-2">Nº empleado</th><th className="px-2 py-2">Persona</th><th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-center">Pagado</th><th className="px-2 py-2">Fecha pago</th><th className="px-2 py-2">Forma pago</th><th className="px-2 py-2">Observaciones pago</th></tr>
+                  <tr>
+                    <th className="px-2 py-2"><SortableHeader active={sortKey === 'employee'} direction={sortDirection} label="Nº empleado" onClick={() => toggleSort('employee')} /></th>
+                    <th className="px-2 py-2"><SortableHeader active={sortKey === 'name'} direction={sortDirection} label="Apellidos / nombre" onClick={() => toggleSort('name')} /></th>
+                    <th className="px-2 py-2 text-center">{draft.numero1 || 'Nº 1'}</th><th className="px-2 py-2 text-center">{draft.numero2 || 'Nº 2'}</th><th className="px-2 py-2 text-center">Total</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-center">Pagado</th><th className="px-2 py-2">Fecha pago</th><th className="px-2 py-2">Forma pago</th><th className="px-2 py-2">Observaciones pago</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {filteredRequests.map((request) => (
@@ -1038,6 +1126,18 @@ export function LoteriaPage() {
           </div>
         </SectionShell>
       ) : null}
+
+      <div className="fixed bottom-5 right-5 z-40 rounded-2xl border border-metro-red/35 bg-metro-topbar/95 p-1.5 shadow-[0_18px_50px_rgba(2,6,23,0.55)] backdrop-blur">
+        <ActionButton
+          className="min-w-[9.5rem] shadow-lg shadow-red-950/30"
+          icon={Save}
+          iconOnly={false}
+          onClick={() => void persist(draft, 'Cambios de Lotería guardados.')}
+          variant="save"
+        >
+          Guardar cambios
+        </ActionButton>
+      </div>
 
       {activeSection === 'cierre' ? (
         <SectionShell
