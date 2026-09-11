@@ -12,6 +12,7 @@ import {
 } from './services/externalDataSync';
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
+import { hasDirtyEditors } from './services/dirtyEditors';
 import {
   bootstrapSqlitePersistence,
   isTemporarySqliteLockMessage,
@@ -386,7 +387,15 @@ export function App() {
   }, []);
 
   const changeActiveView = (view: AppView): void => {
-    setActiveView(resolveActiveViewForNavigation(view));
+    const nextView = resolveActiveViewForNavigation(view);
+    if (nextView === activeView) return;
+    if (hasDirtyEditors()) {
+      const shouldLeave = window.confirm(
+        'Hay cambios sin guardar en el formulario abierto. Si cambia de módulo ahora, el borrador se conservará para poder recuperarlo. ¿Desea continuar?',
+      );
+      if (!shouldLeave) return;
+    }
+    setActiveView(nextView);
   };
 
   const resetToDashboard = (): void => {

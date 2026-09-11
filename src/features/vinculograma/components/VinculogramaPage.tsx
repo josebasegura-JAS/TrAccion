@@ -31,6 +31,8 @@ import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input } from '../../../components/ui/Field';
@@ -718,6 +720,32 @@ export function VinculogramaPage() {
   const { alert, dialogNode } = useAppDialog();
   const today = todayIso();
   const expiryDate = calculateExpiryDate(draft.requestDate);
+  const initialEditorDraft = useMemo(() => {
+    if (editingId) {
+      const record = records.find((item) => item.id === editingId);
+      return record ? toDraft(record) : EMPTY_VINCULOGRAMA_DRAFT;
+    }
+    return { ...EMPTY_VINCULOGRAMA_DRAFT, requestDate: todayIso() };
+  }, [editingId, records]);
+  const recoveryKey = buildRecoverableDraftKey('vinculograma', editingId ?? '__new__');
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draft,
+    initialValue: initialEditorDraft,
+    enabled: showModal,
+    onRecover: setDraft,
+    storageKey: recoveryKey,
+  });
+  const { requestClose: requestEditorClose, dialogNode: unsavedDialogNode } = useUnsavedChanges({
+    currentValue: draft,
+    initialValue: initialEditorDraft,
+    enabled: showModal,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      setShowModal(false);
+      setEditingId(null);
+      setDraft({ ...EMPTY_VINCULOGRAMA_DRAFT, requestDate: todayIso() });
+    },
+  });
 
   useEffect(() => {
     load();
@@ -755,6 +783,7 @@ export function VinculogramaPage() {
   };
 
   const closeModal = () => {
+    clearRecoveryDraft();
     setShowModal(false);
     setEditingId(null);
     setDraft({ ...EMPTY_VINCULOGRAMA_DRAFT, requestDate: todayIso() });
@@ -966,7 +995,7 @@ export function VinculogramaPage() {
           expiryDate={expiryDate}
           mode={editingId ? 'edit' : 'create'}
           onChange={setDraft}
-          onClose={closeModal}
+          onClose={() => void requestEditorClose()}
           onDelete={() => {
             void deleteRecord();
           }}
@@ -974,6 +1003,8 @@ export function VinculogramaPage() {
           recordId={editingId}
         />
       )}
+      {recoveryDialogNode}
+      {unsavedDialogNode}
       {dialogNode}
     </section>
   );

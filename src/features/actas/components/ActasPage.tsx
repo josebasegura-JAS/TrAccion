@@ -16,6 +16,8 @@ import {
 import { useActasStore } from '../store/useActasStore';
 import { relativeDate } from '../../../utils/relativeDate';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -103,6 +105,37 @@ export function ActasPage() {
   const editingActa = editingActaId ? actas.find((acta) => acta.id === editingActaId) : null;
   const isClosedActa = editingActa?.estado === 'Cerrada';
   const isEditorReadOnly = recordLock.isReadOnly || isClosedActa;
+  const initialEditorDraft = useMemo<ActaDraft>(() => {
+    if (!editingActa) return EMPTY_ACTA_DRAFT;
+    return {
+      titulo: editingActa.titulo,
+      tipo: editingActa.tipo,
+      fechaSesion: editingActa.fechaSesion,
+      estado: editingActa.estado,
+      fechaLimite: editingActa.fechaLimite,
+      observaciones: editingActa.observaciones,
+      alegaciones: editingActa.alegaciones,
+      actualizaciones: editingActa.actualizaciones,
+      actaPath: editingActa.actaPath,
+    };
+  }, [editingActa]);
+  const recoveryKey = buildRecoverableDraftKey('actas', editingActaId ?? '__new__');
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draft,
+    initialValue: initialEditorDraft,
+    enabled: isEditorOpen && !isEditorReadOnly,
+    onRecover: setDraft,
+    storageKey: recoveryKey,
+  });
+  const { requestClose: requestEditorClose, dialogNode: unsavedDialogNode } = useUnsavedChanges({
+    currentValue: draft,
+    initialValue: initialEditorDraft,
+    enabled: isEditorOpen && !isEditorReadOnly,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      setIsEditorOpen(false);
+    },
+  });
   const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
     useTableViewPreferences<ActaColumnId>({
       storageKey: 'traccion.tableView.actas.main',
@@ -736,6 +769,8 @@ export function ActasPage() {
       const result = await updateWithConcurrencyCheck(editingActaId, draft, expectedUpdatedAt);
       if (!result.ok) {
         setSaveError(result.message);
+      } else {
+        clearRecoveryDraft();
       }
       return;
     }
@@ -745,6 +780,7 @@ export function ActasPage() {
       setSaveError(result.message);
       return;
     }
+    clearRecoveryDraft();
 
     // Guardar no cierra el editor: tras crearla, seguimos trabajando sobre el registro ya persistido.
     if (result.recordId) {
@@ -1157,7 +1193,7 @@ export function ActasPage() {
           isEditorReadOnly={isEditorReadOnly}
           isClosedActa={isClosedActa}
           newUpdateText={newUpdateText}
-          onClose={() => setIsEditorOpen(false)}
+          onClose={() => void requestEditorClose()}
           openActaPath={openActaPath}
           outlookDraftStatus={outlookDraftStatus}
           outlookDraftStatusIsError={outlookDraftStatusIsError}
@@ -1175,6 +1211,8 @@ export function ActasPage() {
           updateDraft={updateDraft}
         />
       )}
+      {recoveryDialogNode}
+      {unsavedDialogNode}
       {dialogNode}
     </section>
   );

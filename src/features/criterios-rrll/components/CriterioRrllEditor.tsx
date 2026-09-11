@@ -1,6 +1,6 @@
 import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   EMPTY_CRITERIO_RRLL_DRAFT,
   CRITERIO_RRLL_ESTADOS,
@@ -19,6 +19,7 @@ import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import { ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { RecordLockNotice } from '../../../components/ui/RecordLockNotice';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import { useEditorShortcuts } from '../../../hooks/useEditorShortcuts';
 
 const criterioTextFields: Array<{
@@ -74,11 +75,23 @@ export function CriterioRrllEditor({
   });
   const isReadOnly = recordLock.isReadOnly;
   const canSubmit = draft.tema.trim().length > 0 && draft.criterio.trim().length > 0 && !isReadOnly;
+  const initialDraft = useMemo(() => toDraft(criterio), [criterio]);
+  const recoveryKey = buildRecoverableDraftKey('criterios-rrll', criterio?.id ?? '__new__');
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draft,
+    initialValue: initialDraft,
+    enabled: !isReadOnly,
+    onRecover: setDraft,
+    storageKey: recoveryKey,
+  });
   const { requestClose, dialogNode } = useUnsavedChanges({
     currentValue: draft,
-    initialValue: toDraft(criterio),
+    initialValue: initialDraft,
     enabled: !isReadOnly,
-    onDiscard: onDone,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      onDone();
+    },
   });
   const formRef = useRef<HTMLFormElement>(null);
   useEditorShortcuts({
@@ -132,6 +145,7 @@ export function CriterioRrllEditor({
                 setSaveError(result.message);
                 return;
               }
+              clearRecoveryDraft();
               onDone();
             })();
           }}
@@ -238,6 +252,7 @@ export function CriterioRrllEditor({
                       setSaveError(result.message);
                       return;
                     }
+                    clearRecoveryDraft();
                     onDone();
                   })();
                 }}
@@ -250,6 +265,7 @@ export function CriterioRrllEditor({
             </ActionButton>
           </div>
         </form>
+      {recoveryDialogNode}
       {dialogNode}
     </ModalShell>
   );

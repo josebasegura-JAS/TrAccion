@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   EMPTY_EMPLOYEE_DRAFT,
   type Employee,
@@ -16,6 +16,7 @@ import { ModalCloseButton } from './ui/ModalCloseButton';
 import { ModalHeader, ModalShell, ModalTitle } from './ui/ModalShell';
 import { RecordLockNotice } from './ui/RecordLockNotice';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 
 const employeeFormFields: Array<{ field: EmployeeField; label: string; required?: boolean }> = [
@@ -93,11 +94,23 @@ export function EmployeeEditor({
   });
   const isReadOnly = recordLock.isReadOnly;
   const canSubmit = Boolean(draft.empleado.trim() && draft.nombreApellidos.trim()) && !isReadOnly;
+  const initialDraft = useMemo(() => toDraft(employee), [employee]);
+  const recoveryKey = buildRecoverableDraftKey('plantilla', employee?.empleado ?? '__new__');
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draft,
+    initialValue: initialDraft,
+    enabled: !isReadOnly,
+    onRecover: setDraft,
+    storageKey: recoveryKey,
+  });
   const { requestClose, dialogNode } = useUnsavedChanges({
     currentValue: draft,
-    initialValue: toDraft(employee),
+    initialValue: initialDraft,
     enabled: !isReadOnly,
-    onDiscard: onDone,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      onDone();
+    },
   });
   const formRef = useRef<HTMLFormElement>(null);
   useEditorShortcuts({
@@ -152,6 +165,7 @@ export function EmployeeEditor({
                 return;
               }
 
+              clearRecoveryDraft();
               onDone();
             })();
           }}
@@ -234,6 +248,7 @@ export function EmployeeEditor({
                       setSaveError(result.message);
                       return;
                     }
+                    clearRecoveryDraft();
                     onDone();
                   })();
                 }}
@@ -251,6 +266,7 @@ export function EmployeeEditor({
             </button>
           </div>
         </form>
+      {recoveryDialogNode}
       {dialogNode}
     </ModalShell>
   );

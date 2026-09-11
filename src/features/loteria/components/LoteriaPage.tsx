@@ -43,6 +43,8 @@ import {
   type LotteryRequest,
 } from '../domain/loteria';
 import { useLoteriaStore } from '../store/useLoteriaStore';
+import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 
 const inputClass = 'h-8 w-full rounded-lg border border-metro-border bg-metro-surface px-2.5 text-xs text-metro-text outline-none transition focus:border-metro-red';
 const labelClass = 'mb-1 block text-[11px] font-bold uppercase tracking-wide text-metro-muted';
@@ -528,6 +530,18 @@ export function LoteriaPage() {
   useEffect(() => { setDraft(campaign); }, [campaign]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(campaign), [campaign, draft]);
+  const recoveryKey = buildRecoverableDraftKey('loteria', String(draft.year));
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draft,
+    initialValue: campaign,
+    onRecover: setDraft,
+    storageKey: recoveryKey,
+  });
+  const { dialogNode: unsavedDialogNode } = useUnsavedChanges({
+    currentValue: draft,
+    initialValue: campaign,
+    onDiscard: () => setDraft(campaign),
+  });
   const orderedTotal = lotteryOrderedCount(draft);
   const requestedTotal = lotteryRequestedCount(draft);
   const availableTotal = lotteryAvailableCount(draft);
@@ -649,6 +663,7 @@ export function LoteriaPage() {
 
   const persist = async (next = draft, success = 'Cambios guardados.') => {
     const result = await saveCampaign(next);
+    if (result.ok) clearRecoveryDraft();
     setMessage(result.ok ? success : result.message);
   };
 
@@ -879,7 +894,9 @@ export function LoteriaPage() {
             <MetricCard icon={Ticket} label="Disponibles" value={String(availableTotal)} detail={`${orderedTotal} encargados`} />
             <MetricCard icon={CircleDollarSign} label="Pendiente de cobro" value={money(pendingAmount)} detail={pendingAmount > 0 ? 'Requiere seguimiento' : 'Cobros al día'} />
             <MetricCard icon={Euro} label="Cobrado" value={money(paid)} detail={`${money(cash)} efectivo · ${money(bizum)} Bizum`} />
-          </section>
+            {recoveryDialogNode}
+      {unsavedDialogNode}
+    </section>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2">

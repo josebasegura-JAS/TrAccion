@@ -9,6 +9,7 @@ import { Notice } from '../../../components/ui/Notice';
 import { AuditHistoryButton } from '../../../shared/audit/AuditHistoryButton';
 import { ModalDatabaseStatus } from '../../../components/ModalDatabaseStatus';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
+import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import { useEditorShortcuts } from '../../../hooks/useEditorShortcuts';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
@@ -72,11 +73,26 @@ export function LicenciasSinSueldoEditor({
   const lockMessage =
     recordLock.message ||
     (isEditWithoutAcquiredLock ? 'Adquiriendo bloqueo de edición compartida...' : '');
+  const initialDraft = useMemo(
+    () => record ? toDraft(record) : { ...EMPTY_LICENCIA_SIN_SUELDO_DRAFT, fechaSolicitud: todayIso() },
+    [record],
+  );
+  const recoveryKey = buildRecoverableDraftKey('licencias-sin-sueldo', record?.id ?? '__new__');
+  const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
+    currentValue: draft,
+    initialValue: initialDraft,
+    enabled: !isReadOnly,
+    onRecover: setDraft,
+    storageKey: recoveryKey,
+  });
   const { requestClose, dialogNode } = useUnsavedChanges({
     currentValue: draft,
-    initialValue: record ? toDraft(record) : { ...EMPTY_LICENCIA_SIN_SUELDO_DRAFT, fechaSolicitud: todayIso() },
+    initialValue: initialDraft,
     enabled: !isReadOnly,
-    onDiscard: onClose,
+    onDiscard: () => {
+      clearRecoveryDraft();
+      onClose();
+    },
   });
 
   const suggestions = useMemo(
@@ -165,7 +181,9 @@ export function LicenciasSinSueldoEditor({
       .then((saveResult) => {
         if (!saveResult.ok) {
           setSaveStatus(saveResult.message);
+          return;
         }
+        clearRecoveryDraft();
       })
       .finally(() => setIsSaving(false));
   };
@@ -453,6 +471,7 @@ export function LicenciasSinSueldoEditor({
             <InlineSaveFeedback />
           </div>
       </ModalFooter>
+      {recoveryDialogNode}
       {dialogNode}
     </ModalShell>
   );
