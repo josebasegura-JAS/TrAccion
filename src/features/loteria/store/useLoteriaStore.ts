@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
   createDefaultLotteryCampaign,
   type LotteryCampaign,
@@ -10,6 +11,8 @@ export const LOTTERY_STORAGE_KEY = 'traccion.v1.loteria.campaign';
 
 interface LotteryState {
   campaign: LotteryCampaign;
+  campaignUpdatedAt: string | null;
+  requestUpdatedAt: Record<string, string | null>;
   load: () => void;
   reloadFromStorage: () => void;
   saveCampaign: (campaign: LotteryCampaign) => Promise<{ ok: boolean; message: string }>;
@@ -175,14 +178,106 @@ function buildArchiveWithCampaign(campaign: LotteryCampaign): LotteryCampaignArc
   return { version: 2, campaigns };
 }
 
-export const useLoteriaStore = create<LotteryState>((set) => ({
+async function loadCampaignFromSqlite(): Promise<{
+  campaign: LotteryCampaign;
+  campaignUpdatedAt: string | null;
+  requestUpdatedAt: Record<string, string | null>;
+} | null> {
+  const loadRecords = window.traccion?.loadLoteriaRecords;
+  if (!loadRecords) return null;
+
+  const snapshot = await loadRecords();
+  publishDatabaseStatus(snapshot.status);
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') return null;
+
+  const currentYear = new Date().getFullYear();
+  const campaignRecord = snapshot.campaigns.find((record) => record.id === String(currentYear));
+  if (!campaignRecord) {
+    return {
+      campaign: createDefaultLotteryCampaign(currentYear),
+      campaignUpdatedAt: null,
+      requestUpdatedAt: {},
+    };
+  }
+
+  let rawCampaign: unknown = null;
+  try { rawCampaign = JSON.parse(campaignRecord.value); } catch { rawCampaign = null; }
+  const currentYearRequests = snapshot.requests.filter((record) => record.campaignYear === currentYear);
+  const requests = currentYearRequests.flatMap((record) => {
+    try {
+      const parsed = normalizeRequest(JSON.parse(record.value));
+      return parsed ? [parsed] : [];
+    } catch {
+      return [];
+    }
+  });
+  const campaign = normalizeCampaign({ ...(rawCampaign as object), requests }, currentYear);
+  return {
+    campaign,
+    campaignUpdatedAt: campaignRecord.updatedAt,
+    requestUpdatedAt: Object.fromEntries(currentYearRequests.map((record) => [record.id, record.updatedAt])),
+  };
+}
+
+function writeLocalArchiveCache(campaign: LotteryCampaign): void {
+  try {
+    const archive = buildArchiveWithCampaign(campaign);
+    window.localStorage.setItem(LOTTERY_STORAGE_KEY, JSON.stringify(archive));
+  } catch {
+    // La caché local es secundaria; SQLite sigue siendo la fuente de verdad.
+  }
+}
+
+export const useLoteriaStore = create<LotteryState>((set, get) => ({
   campaign: createDefaultLotteryCampaign(),
-  load: () => set({ campaign: readCampaign() }),
-  reloadFromStorage: () => set({ campaign: readCampaign() }),
+  campaignUpdatedAt: null,
+  requestUpdatedAt: {},
+  load: () => {
+    set({ campaign: readCampaign() });
+    void loadCampaignFromSqlite().then((loaded) => {
+      if (loaded) {
+        set(loaded);
+        writeLocalArchiveCache(loaded.campaign);
+      }
+    }).catch(() => undefined);
+  },
+  reloadFromStorage: () => {
+    void loadCampaignFromSqlite().then((loaded) => {
+      if (loaded) {
+        set(loaded);
+        writeLocalArchiveCache(loaded.campaign);
+      } else {
+        set({ campaign: readCampaign(), campaignUpdatedAt: null, requestUpdatedAt: {} });
+      }
+    }).catch(() => set({ campaign: readCampaign(), campaignUpdatedAt: null, requestUpdatedAt: {} }));
+  },
   saveCampaign: async (campaign) => {
+    const saveSnapshot = window.traccion?.saveLoteriaSnapshotIfUnchanged;
+    if (saveSnapshot) {
+      const campaignWithoutRequests = { ...campaign, requests: [] };
+      const result = await saveSnapshot({
+        year: campaign.year,
+        campaignValue: JSON.stringify(campaignWithoutRequests),
+        requests: campaign.requests.map((request) => ({ id: request.id, value: JSON.stringify(request) })),
+        expectedCampaignUpdatedAt: get().campaignUpdatedAt,
+        expectedRequestUpdatedAt: get().requestUpdatedAt,
+      });
+      publishDatabaseStatus(result.status);
+      if (result.ok) {
+        set({
+          campaign,
+          campaignUpdatedAt: result.campaignUpdatedAt,
+          requestUpdatedAt: result.requestUpdatedAt,
+        });
+        writeLocalArchiveCache(campaign);
+      }
+      return { ok: result.ok, message: result.message };
+    }
+
+    // Compatibilidad fuera de Electron / antes de la migración de IPC.
     const archive = buildArchiveWithCampaign(campaign);
     const result = await writeStorageItem(LOTTERY_STORAGE_KEY, JSON.stringify(archive));
-    if (result.ok) set({ campaign });
+    if (result.ok) set({ campaign, campaignUpdatedAt: null, requestUpdatedAt: {} });
     return { ok: result.ok, message: result.message };
   },
 }));

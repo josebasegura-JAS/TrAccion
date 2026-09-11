@@ -45,6 +45,7 @@ export const DIRECT_STORE_UPDATED_AT_TABLES: Record<string, string | string[]> =
   'criterios-rrll': 'criterios_rrll_records',
   vinculograma: 'vinculograma_records',
   configuracion: 'configuracion_state',
+  loteria: ['loteria_campaign_records', 'loteria_request_records'],
   // Ticket Restaurante es un único storeId (registrado así en
   // syncableStoreRegistrations.ts) sobre 5 tablas físicas independientes:
   // cualquiera de las 5 debe disparar la recarga.

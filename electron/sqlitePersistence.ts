@@ -62,6 +62,7 @@ import { createTicketRestaurantePeopleRepository } from './persistence/ticketRes
 import { createTicketRestauranteAbsencesRepository } from './persistence/ticketRestauranteAbsencesRepository.js';
 import { createTicketRestauranteManutencionesRepository } from './persistence/ticketRestauranteManutencionesRepository.js';
 import { createPresupuestosRepository } from './persistence/presupuestosRepository.js';
+import { createLoteriaRepository } from './persistence/loteriaRepository.js';
 import {
   getVacuumStatus as getVacuumStatusFromModule,
   runScheduledVacuumIfDue as runScheduledVacuumIfDueFromModule,
@@ -1785,6 +1786,18 @@ const jobPositionTranslationsModule = createJobPositionTranslationsRepository(
 const { loadJobPositionTranslationRecordsSnapshot, saveJobPositionTranslationRecordIfUnchanged } =
   jobPositionTranslationsModule;
 export { loadJobPositionTranslationRecordsSnapshot, saveJobPositionTranslationRecordIfUnchanged };
+
+const loteriaModule = createLoteriaRepository({
+  safeDatabaseOperation,
+  getSqliteStatus,
+  requireDatabase,
+  updateRefreshMetadata,
+  enqueueLocalBackup,
+  assertDatabaseWritesAllowed,
+  isDatabaseWriteBlockedByHeartbeat,
+});
+const { loadSnapshot: loadLoteriaRecordsSnapshot, saveSnapshotIfUnchanged: saveLoteriaSnapshotIfUnchanged } = loteriaModule;
+export { loadLoteriaRecordsSnapshot, saveLoteriaSnapshotIfUnchanged };
 
 const presupuestosModule = createPresupuestosRepository({
   createJsonModuleRepository,

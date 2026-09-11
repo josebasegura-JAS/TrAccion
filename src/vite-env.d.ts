@@ -587,6 +587,14 @@ interface TraccionApi {
   saveLocalStorageRecordIfUnchanged?: (
     record: TraccionConditionalStorageRecord,
   ) => Promise<TraccionConditionalStorageSaveResult>;
+  loadLoteriaRecords?: () => Promise<TraccionLoteriaSnapshot>;
+  saveLoteriaSnapshotIfUnchanged?: (payload: {
+    year: number;
+    campaignValue: string;
+    requests: Array<{ id: string; value: string }>;
+    expectedCampaignUpdatedAt: string | null;
+    expectedRequestUpdatedAt: Record<string, string | null>;
+  }) => Promise<TraccionLoteriaSaveResult>;
   acquireRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
@@ -759,6 +767,25 @@ interface RrllOutlookApi {
   ) => Promise<EspecialOutlookCalendarResult>;
 }
 
+
+interface TraccionLoteriaRecord {
+  id: string;
+  value: string;
+  updatedAt: string;
+  campaignYear?: number;
+}
+interface TraccionLoteriaSnapshot {
+  status: TraccionDatabaseStatus;
+  campaigns: TraccionLoteriaRecord[];
+  requests: TraccionLoteriaRecord[];
+}
+interface TraccionLoteriaSaveResult {
+  ok: boolean;
+  status: TraccionDatabaseStatus;
+  campaignUpdatedAt: string | null;
+  requestUpdatedAt: Record<string, string>;
+  message: string;
+}
 interface Window {
   traccion?: TraccionApi;
   rrllMsg?: RrllMsgApi;

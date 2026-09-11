@@ -6,7 +6,7 @@ import type { Database } from 'better-sqlite3';
  * abrir una base con un schema más nuevo que el que sabe manejar) y para
  * reportar el estado de la base de datos.
  */
-export const CURRENT_SCHEMA_VERSION = 18;
+export const CURRENT_SCHEMA_VERSION = 19;
 
 interface SchemaMigrationRow {
   version: number;
@@ -652,6 +652,34 @@ function migrateToVersion18(db: Database): void {
   }
 }
 
+function migrateToVersion19(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS loteria_campaign_records (
+      id TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_loteria_campaign_records_updated_at ON loteria_campaign_records(updated_at);
+
+    CREATE TABLE IF NOT EXISTS loteria_request_records (
+      id TEXT PRIMARY KEY,
+      campaign_year INTEGER NOT NULL,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_loteria_request_records_campaign_year ON loteria_request_records(campaign_year);
+    CREATE INDEX IF NOT EXISTS idx_loteria_request_records_updated_at ON loteria_request_records(updated_at);
+  `);
+  const currentVersion = readCurrentSchemaVersion(db);
+  if (currentVersion < 19) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(19, new Date().toISOString());
+  }
+}
+
 export function applyMigrations(db: Database): void {
   migrateToVersion1(db);
   migrateToVersion2(db);
@@ -671,4 +699,5 @@ export function applyMigrations(db: Database): void {
   migrateToVersion16(db);
   migrateToVersion17(db);
   migrateToVersion18(db);
+  migrateToVersion19(db);
 }

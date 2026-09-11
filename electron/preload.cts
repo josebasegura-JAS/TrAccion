@@ -62,6 +62,14 @@ contextBridge.exposeInMainWorld('traccion', {
     value: string;
     expectedUpdatedAt: string | null;
   }) => ipcRenderer.invoke('database:save-local-storage-record-if-unchanged', record),
+  loadLoteriaRecords: () => ipcRenderer.invoke('loteria:load-records'),
+  saveLoteriaSnapshotIfUnchanged: (payload: {
+    year: number;
+    campaignValue: string;
+    requests: Array<{ id: string; value: string }>;
+    expectedCampaignUpdatedAt: string | null;
+    expectedRequestUpdatedAt: Record<string, string | null>;
+  }) => ipcRenderer.invoke('loteria:save-snapshot-if-unchanged', payload),
   acquireRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:acquire', payload),
   heartbeatRecordLock: (payload: { module: string; recordId: string }) =>
