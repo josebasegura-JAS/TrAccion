@@ -5,7 +5,10 @@ import type {
   TicketPersonCalculation,
   TicketPersonDraft,
   TicketRestaurantAbsence,
+  TicketRestaurantConfig,
+  TicketMonthlyWorkflowReview,
 } from '../domain/ticketRestaurante';
+import { getTicketMonthlyWorkflowReview, ticketWorkflowMonthKey } from '../domain/ticketRestaurante';
 import type { TicketRestaurantAbsencePreviewRow, TicketRestaurantAbsenceSaveResult } from '../domain/importAbsences';
 import type { TicketManutencion } from '../domain/importManutenciones';
 import { MONTH_OPTIONS } from './ticketRestaurantePageConfig';
@@ -147,3 +150,39 @@ export function normalizeTicketEmployeeSearch(value: string): string {
     .replace(/\.0$/, '');
 }
 
+
+
+export function currentTicketYear(): number {
+  return new Date().getFullYear();
+}
+
+export function currentTicketMonth(): number {
+  return new Date().getMonth() + 1;
+}
+
+export function addTicketYearMonth(
+  year: number,
+  month: number,
+  offset: number,
+): { year: number; month: number } {
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}
+
+export function withTicketWorkflowReview(
+  config: TicketRestaurantConfig,
+  year: number,
+  month: number,
+  kind: keyof TicketMonthlyWorkflowReview,
+  checked: boolean,
+): TicketRestaurantConfig {
+  const key = ticketWorkflowMonthKey(year, month);
+  const currentReview = getTicketMonthlyWorkflowReview(config, year, month);
+  return {
+    ...config,
+    workflowReviews: {
+      ...(config.workflowReviews ?? {}),
+      [key]: { ...currentReview, [kind]: checked },
+    },
+  };
+}

@@ -6,6 +6,7 @@ import { TeletrabajoFiltersBar } from '../features/teletrabajo/components/Teletr
 import { TeletrabajoPageHeader } from '../features/teletrabajo/components/TeletrabajoPageHeader';
 import { TeletrabajoWorkflow } from '../features/teletrabajo/components/TeletrabajoWorkflow';
 import { TeletrabajoStatusMessages } from '../features/teletrabajo/components/TeletrabajoStatusMessages';
+import { TeletrabajoIncidentSummaryBar } from '../features/teletrabajo/components/TeletrabajoIncidentSummaryBar';
 import { TeletrabajoPeriodoModal } from '../features/teletrabajo/components/TeletrabajoPeriodoModal';
 import {
   TeletrabajoEncuestaImportModal,
@@ -1000,62 +1001,11 @@ export function TeletrabajoPage({
 
       <TeletrabajoFiltersBar filters={filters} periodos={periodos} onSetFilter={setFilter} />
 
-      <div className="mb-3 flex flex-nowrap gap-1.5 overflow-x-auto">
-        {[
-          {
-            key: '',
-            label: 'Todas',
-            value: incidentStats.total,
-            className: 'border-metro-border text-metro-text',
-          },
-          {
-            key: 'sinRevisar',
-            label: 'Sin revisar',
-            value: incidentStats.notReviewed,
-            className: 'border-amber-400/40 text-amber-100',
-          },
-          {
-            key: 'revisadasPendientes',
-            label: 'Revisadas pendientes',
-            value: incidentStats.reviewedPending,
-            className: 'border-amber-400/40 text-amber-100',
-          },
-          {
-            key: 'conflictos',
-            label: 'Con incidencias',
-            value: incidentStats.conflicts,
-            className: 'border-amber-400/40 text-amber-100',
-          },
-          {
-            key: 'bloqueantes',
-            label: 'Bloqueantes',
-            value: incidentStats.blocked,
-            className: 'border-red-400/40 text-red-100',
-          },
-          {
-            key: 'listasAprobar',
-            label: 'Listas para aprobar',
-            value: incidentStats.readyToApprove,
-            className: 'border-emerald-400/40 text-emerald-100',
-          },
-        ].map((item) => {
-          const key = item.key as TeletrabajoIncidentFilter;
-          const isActive = incidentFilter === key;
-          return (
-            <button
-              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border bg-metro-surface px-2.5 py-1.5 text-xs font-semibold transition hover:border-metro-red ${item.className} ${
-                isActive ? 'ring-2 ring-metro-red/60' : ''
-              }`}
-              key={item.label}
-              onClick={() => setIncidentFilter(key)}
-              type="button"
-            >
-              <span className="text-metro-muted">{item.label}</span>
-              <span className="font-black">{item.value}</span>
-            </button>
-          );
-        })}
-      </div>
+      <TeletrabajoIncidentSummaryBar
+        activeFilter={incidentFilter}
+        onChange={setIncidentFilter}
+        stats={incidentStats}
+      />
 
       {activeFilterChips.length > 0 && (
         <div className="mb-3">

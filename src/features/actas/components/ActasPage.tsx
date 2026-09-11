@@ -1,13 +1,9 @@
-import { ArrowLeft, Mail, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
-import { reorderExportColumns } from '../../../shared/export/reorderExportColumns';
-import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
-import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import type { DataTableColumn } from '../../../shared/table/DataTable';
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 import {
-  ACTA_STATES,
   EMPTY_ACTA_DRAFT,
   type Acta,
   type ActaAlegacion,
@@ -21,19 +17,16 @@ import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/us
 import { useSharedRecordLock } from '../../../services/useSharedRecordLock';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
-import { Toolbar } from '../../../components/ui/Toolbar';
-import { SearchField } from '../../../components/ui/SearchField';
-import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { ActasOutlookTemplateModal } from './ActasOutlookTemplateModal';
 import { ActaTypeManagerModal } from './ActaTypeManagerModal';
 import { ActaEditorModal } from './ActaEditorModal';
 import { ActasWorkflow } from './ActasWorkflow';
+import { ActasOperationalView } from './ActasOperationalView';
 import {
   ACTAS_HELP_SECTIONS,
   type ActaColumnId,
   type ActasOutlookTemplate,
   EMPTY_ACTAS_OUTLOOK_TEMPLATE,
-  actaExportColumns,
   buildBorradorActaOutlookHtml,
   buildBorradorActaOutlookSubject,
   buildDefaultActaOutlookSubject,
@@ -940,13 +933,13 @@ export function ActasPage() {
           }}
         />
       ) : (
-        <>
-      <div className="sticky top-0 z-20 -mx-1 flex items-center border-b border-metro-border/70 bg-metro-app/95 px-1 pb-2 pt-0.5 backdrop-blur">
-        <ActionButton
-          variant="secondary"
-          icon={ArrowLeft}
-          iconOnly={false}
-          onClick={() => {
+        <ActasOperationalView
+          closedActasByYear={closedActasByYear}
+          columns={columns}
+          filterLabel={filterLabel}
+          filteredActas={filteredActas}
+          hasLoadedHistoricalActas={hasLoadedHistoricalActas}
+          onBack={() => {
             setIsEditorOpen(false);
             setEditingActaId(null);
             setStateFilter('');
@@ -954,191 +947,31 @@ export function ActasPage() {
             setYearFilter('');
             setIsWorkflowHome(true);
           }}
-          size="sm"
-          title="Volver a la pantalla de seguimiento de Actas"
-        >
-          Inicio Actas
-        </ActionButton>
-        <span className="ml-2 text-xs font-semibold text-metro-muted">
-          Vista operativa
-          {stateFilter ? ` · ${stateFilter}` : ''}
-        </span>
-      </div>
-      <PageHeader
-        title="Actas"
-        actions={
-          <Toolbar
-            className="gap-1.5"
-            filters={
-              <>
-                <SearchField
-                  onChange={(event) => setSearch(event.target.value)}
-                  onClear={() => setSearch('')}
-                  placeholder="Buscar por título, estado, actualización, alegación o ruta..."
-                  value={search}
-                  wrapperClassName="min-w-[240px] flex-1"
-                />
-                <FilterSelect
-                  allLabel="Todos los estados"
-                  aria-label="Filtrar actas por estado"
-                  onChange={(event) => setStateFilter(event.target.value)}
-                  options={ACTA_STATES}
-                  value={stateFilter}
-                  wrapperClassName="w-[185px]"
-                />
-                <FilterSelect
-                  allLabel="Todos los años"
-                  aria-label="Filtrar actas por año"
-                  onChange={(event) => setYearFilter(event.target.value)}
-                  options={years.map((year) => ({ label: year, value: year }))}
-                  value={yearFilter}
-                  wrapperClassName="w-[120px]"
-                />
-              </>
-            }
-            actions={
-              <>
-            <ActionButton
-              variant="secondary"
-              icon={Settings2}
-              iconOnly={false}
-              onClick={() => {
-                if (!hasLoadedHistoricalActas) {
-                  void loadHistoricalActas();
-                }
-                setIsTypeManagerOpen(true);
-              }}
-              size="sm"
-              title="Gestionar tipos de acta"
-            >
-              Nuevo tipo
-            </ActionButton>
-            <ActionButton
-              variant="secondary"
-              icon={Mail}
-              iconOnly={false}
-              onClick={openOutlookTemplateManager}
-              size="sm"
-              title="Configurar plantilla Outlook de Actas"
-            >
-              Outlook
-            </ActionButton>
-            <ExportPrintButtons
-              payload={{
-                title: 'Actas',
-                filename: 'actas',
-                columns: reorderExportColumns(actaExportColumns, preferences.columnOrder),
-                rows: filteredActas,
-                filterLabel,
-              }}
-              size="sm"
-            />
-            <ActionButton
-              iconOnly={false}
-              onClick={() => openEditor()}
-              size="sm"
-              title="Nueva acta"
-              variant="add"
-            >
-              Nueva acta
-            </ActionButton>
-              </>
-            }
-          />
-        }
-      />
-
-      {outlookDraftStatus && (
-        <p
-          className={`rounded-lg border px-3 py-2 text-xs font-semibold ${outlookDraftStatusIsError ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}
-        >
-          {outlookDraftStatus}
-        </p>
-      )}
-
-      <div className="rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="mb-3 text-sm font-bold text-metro-muted">
-          Actas abiertas
-        </h3>
-        <DataTable
-          ariaLabel="Actas abiertas"
-          columnOrder={preferences.columnOrder}
-          columnWidths={preferences.columnWidths}
-          onResetColumnWidths={resetColumnWidths}
-          columns={columns}
-          emptyMessage="No hay actas abiertas con los filtros actuales."
-          getRowId={(acta) => acta.id}
           onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
-          onRowClick={openEditor}
+          onNewActa={() => openEditor()}
+          onOpenActa={openEditor}
+          onOpenOutlookTemplate={openOutlookTemplateManager}
+          onOpenTypeManager={() => {
+            if (!hasLoadedHistoricalActas) {
+              void loadHistoricalActas();
+            }
+            setIsTypeManagerOpen(true);
+          }}
+          onResetColumnWidths={resetColumnWidths}
           onSortChange={setSort}
-          rows={openActas}
-          sort={preferences.sort}
-          maxHeightClassName="max-h-none"
+          openActas={openActas}
+          openHistoryYears={openHistoryYears}
+          preferences={preferences}
+          search={search}
+          setOpenHistoryYears={setOpenHistoryYears}
+          setSearch={setSearch}
+          setStateFilter={setStateFilter}
+          setYearFilter={setYearFilter}
+          stateFilter={stateFilter}
+          yearFilter={yearFilter}
+          years={years}
         />
-      </div>
-
-      <div className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="text-sm font-bold text-metro-muted">
-          Histórico de actas
-        </h3>
-        {!hasLoadedHistoricalActas && !search.trim() && !yearFilter && (
-          <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
-            El histórico se cargará al buscar, filtrar por año o abrir un ejercicio.
-          </p>
-        )}
-        {closedActasByYear.length === 0 && hasLoadedHistoricalActas && (
-          <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
-            No hay actas cerradas con los filtros actuales.
-          </p>
-        )}
-        {closedActasByYear.map(([year, group]) => {
-          const isYearOpen = Boolean(search || yearFilter || openHistoryYears[year]);
-          const rows = isYearOpen ? group.rows : [];
-
-          return (
-            <details
-              className="rounded-xl border border-metro-border bg-metro-surface p-3"
-              key={year}
-              onToggle={(event) => {
-                if (search || yearFilter) {
-                  return;
-                }
-                setOpenHistoryYears((current) => ({
-                  ...current,
-                  [year]: event.currentTarget.open,
-                }));
-              }}
-              open={isYearOpen}
-            >
-              <summary className="cursor-pointer text-sm font-bold text-metro-text">
-                {year} · {group.count} acta{group.count === 1 ? '' : 's'}
-              </summary>
-              {isYearOpen && (
-                <div className="mt-3">
-                  <DataTable
-                    ariaLabel={`Actas históricas ${year}`}
-                    columnOrder={preferences.columnOrder}
-                    columnWidths={preferences.columnWidths}
-                    onResetColumnWidths={resetColumnWidths}
-                    columns={columns}
-                    emptyMessage="No hay actas cerradas."
-                    getRowId={(acta) => acta.id}
-                    onColumnOrderChange={setColumnOrder}
-                    onColumnWidthChange={setColumnWidth}
-                    onRowClick={openEditor}
-                    onSortChange={setSort}
-                    rows={rows}
-                    sort={preferences.sort}
-                  />
-                </div>
-              )}
-            </details>
-          );
-        })}
-      </div>
-
-        </>
       )}
 
       {isOutlookTemplateOpen && (

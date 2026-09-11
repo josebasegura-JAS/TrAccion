@@ -1,4 +1,4 @@
-import { CalendarDays, Euro } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
@@ -14,7 +14,6 @@ import {
   filterTicketRestaurantAbsencesByMonth,
   getEffectiveTicketPrice,
   getTicketMonthlyWorkflowReview,
-  ticketWorkflowMonthKey,
   visibleTicketCalendars,
   type TicketCalendar,
   type TicketDebtRegularizationDraft,
@@ -23,8 +22,6 @@ import {
   type TicketPerson,
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
-  type TicketRestaurantConfig,
-  type TicketMonthlyWorkflowReview,
   normalizeTicketEmployeeNumber,
 } from '../domain/ticketRestaurante';
 import {
@@ -42,7 +39,6 @@ import {
 import { importTicketPeopleFromFile, type TicketPeopleImportResult } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { PageHeader } from '../../../components/ui/PageHeader';
-import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
@@ -51,12 +47,12 @@ import {
   EmptyCalendar,
   Legend,
   MonthCalendar,
-  SubviewButton,
 } from './TicketRestauranteCalendarPanels';
 import { PeoplePanel } from './TicketRestaurantePeoplePanel';
 import { TicketPriceModal, TicketRulesModal } from './TicketRestauranteConfigModals';
 import { CalculationPanel } from './TicketRestauranteCalculationPanel';
 import { TicketRestauranteWorkflow } from './TicketRestauranteWorkflow';
+import { TicketRestauranteSubviewNav, type TicketRestauranteSubview } from './TicketRestauranteSubviewNav';
 import { TicketRestaurantePeopleImportModal } from './TicketRestaurantePeopleImportModal';
 import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
 import { TicketRestauranteManualPeoplePanel } from './TicketRestauranteManualPeoplePanel';
@@ -67,6 +63,9 @@ import {
 } from './TicketRestauranteOperationalModals';
 import { TICKET_RESTAURANTE_HELP_SECTIONS, MONTH_OPTIONS } from './ticketRestaurantePageConfig';
 import {
+  addTicketYearMonth,
+  currentTicketMonth,
+  currentTicketYear,
   formatManutencionMonth,
   formatSaveSummary,
   normalizeTicketEmployeeSearch,
@@ -77,6 +76,7 @@ import {
   toCalendarDraft,
   toManutencionDetailAbsences,
   toPersonDraft,
+  withTicketWorkflowReview,
 } from './ticketRestaurantePageHelpers';
 import {
   ABSENCE_MODEL_HEADERS,
@@ -94,51 +94,6 @@ import {
   AbsencesTable,
   type TicketAbsenceDisplayRow,
 } from './TicketRestauranteAbsencesTable';
-
-function currentYear(): number {
-  return new Date().getFullYear();
-}
-
-function currentMonth(): number {
-  return new Date().getMonth() + 1;
-}
-
-function addYearMonth(
-  year: number,
-  month: number,
-  offset: number,
-): { year: number; month: number } {
-  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
-}
-
-function withWorkflowReview(
-  config: TicketRestaurantConfig,
-  year: number,
-  month: number,
-  kind: keyof TicketMonthlyWorkflowReview,
-  checked: boolean,
-): TicketRestaurantConfig {
-  const key = ticketWorkflowMonthKey(year, month);
-  const currentReview = getTicketMonthlyWorkflowReview(config, year, month);
-  return {
-    ...config,
-    workflowReviews: {
-      ...(config.workflowReviews ?? {}),
-      [key]: { ...currentReview, [kind]: checked },
-    },
-  };
-}
-
-type TicketRestauranteSubview =
-  | 'calendarios'
-  | 'personas'
-  | 'computoMensual'
-  | 'computoCotizacion'
-  | 'ausencias'
-  | 'manutenciones'
-  | 'deudaManual'
-  | 'balanceAnual';
 
 export function TicketRestaurantePage({
   initialAbsenceId = null,
@@ -173,13 +128,13 @@ export function TicketRestaurantePage({
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const { alert, confirm, dialogNode } = useAppDialog();
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
-  const [year, setYear] = useState(currentYear());
-  const [absenceYear, setAbsenceYear] = useState(currentYear());
-  const [calculationYear, setCalculationYear] = useState(currentYear());
-  const [calculationMonth, setCalculationMonth] = useState(currentMonth());
-  const [absenceMonth, setAbsenceMonth] = useState(currentMonth());
-  const [manutencionYear, setManutencionYear] = useState(currentYear());
-  const [manutencionMonth, setManutencionMonth] = useState(currentMonth());
+  const [year, setYear] = useState(currentTicketYear());
+  const [absenceYear, setAbsenceYear] = useState(currentTicketYear());
+  const [calculationYear, setCalculationYear] = useState(currentTicketYear());
+  const [calculationMonth, setCalculationMonth] = useState(currentTicketMonth());
+  const [absenceMonth, setAbsenceMonth] = useState(currentTicketMonth());
+  const [manutencionYear, setManutencionYear] = useState(currentTicketYear());
+  const [manutencionMonth, setManutencionMonth] = useState(currentTicketMonth());
   const [calendarDraft, setCalendarDraft] = useState<TicketCalendarDraft>(
     EMPTY_TICKET_CALENDAR_DRAFT,
   );
@@ -201,8 +156,8 @@ export function TicketRestaurantePage({
   const [manualManutencionEmployee, setManualManutencionEmployee] = useState('');
   const [manualManutencionDate, setManualManutencionDate] = useState('');
   const [isManutencionMonthModalOpen, setIsManutencionMonthModalOpen] = useState(false);
-  const [manutencionImputationYear, setManutencionImputationYear] = useState(currentYear());
-  const [manutencionImputationMonth, setManutencionImputationMonth] = useState(currentMonth());
+  const [manutencionImputationYear, setManutencionImputationYear] = useState(currentTicketYear());
+  const [manutencionImputationMonth, setManutencionImputationMonth] = useState(currentTicketMonth());
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isAbsenceImportHelpOpen, setIsAbsenceImportHelpOpen] = useState(false);
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
@@ -407,7 +362,7 @@ export function TicketRestaurantePage({
       checked: boolean,
     ) => {
       const result = await updateConfig(
-        withWorkflowReview(config, calculationYear, calculationMonth, kind, checked),
+        withTicketWorkflowReview(config, calculationYear, calculationMonth, kind, checked),
       );
       if (!result.ok) {
         await alert(result.message ?? 'No se ha podido guardar la revisión mensual.');
@@ -578,13 +533,13 @@ export function TicketRestaurantePage({
   };
 
   const moveCalculationMonth = (offset: number) => {
-    const next = addYearMonth(calculationYear, calculationMonth, offset);
+    const next = addTicketYearMonth(calculationYear, calculationMonth, offset);
     setCalculationYear(next.year);
     setCalculationMonth(next.month);
   };
 
   const moveAbsenceMonth = (offset: number) => {
-    const next = addYearMonth(absenceYear, absenceMonth, offset);
+    const next = addTicketYearMonth(absenceYear, absenceMonth, offset);
     setAbsenceYear(next.year);
     setAbsenceMonth(next.month);
   };
@@ -604,7 +559,7 @@ export function TicketRestaurantePage({
   };
 
   const moveManutencionListMonth = (offset: number) => {
-    const next = addYearMonth(manutencionYear, manutencionMonth, offset);
+    const next = addTicketYearMonth(manutencionYear, manutencionMonth, offset);
     setManutencionYear(next.year);
     setManutencionMonth(next.month);
   };
@@ -790,7 +745,7 @@ export function TicketRestaurantePage({
       return;
     }
     await updateConfig(
-      withWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
+      withTicketWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
     );
     setImportMessage(formatSaveSummary(result));
     setPreviewRows([]);
@@ -813,7 +768,7 @@ export function TicketRestaurantePage({
         return;
       }
       await updateConfig(
-        withWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
+        withTicketWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
       );
     })();
   };
@@ -936,7 +891,7 @@ export function TicketRestaurantePage({
         return;
       }
       await updateConfig(
-        withWorkflowReview(
+        withTicketWorkflowReview(
           config,
           manutencionImputationYear,
           manutencionImputationMonth,
@@ -966,13 +921,13 @@ export function TicketRestaurantePage({
         return;
       }
       await updateConfig(
-        withWorkflowReview(config, manutencionYear, manutencionMonth, 'manutencionesReviewed', false),
+        withTicketWorkflowReview(config, manutencionYear, manutencionMonth, 'manutencionesReviewed', false),
       );
     })();
   };
 
   const moveManutencionImputationMonth = (offset: number) => {
-    const next = addYearMonth(manutencionImputationYear, manutencionImputationMonth, offset);
+    const next = addTicketYearMonth(manutencionImputationYear, manutencionImputationMonth, offset);
     setManutencionImputationYear(next.year);
     setManutencionImputationMonth(next.month);
   };
@@ -1009,7 +964,7 @@ export function TicketRestaurantePage({
       : `ticket-manual-debt-${Date.now()}`;
     const debt = buildTicketManualDebt(draft, now, id);
     return updateConfig(
-      withWorkflowReview(
+      withTicketWorkflowReview(
         { ...config, manualDebts: [...(config.manualDebts ?? []), debt] },
         calculationYear,
         calculationMonth,
@@ -1027,7 +982,7 @@ export function TicketRestaurantePage({
     const now = new Date().toISOString();
     const updated = buildTicketManualDebt(draft, now, existing.id);
     return updateConfig(
-      withWorkflowReview(
+      withTicketWorkflowReview(
         {
           ...config,
           manualDebts: (config.manualDebts ?? []).map((debt) =>
@@ -1052,7 +1007,7 @@ export function TicketRestaurantePage({
   const cancelManualDebt = async (id: string, reason: string) => {
     const now = new Date().toISOString();
     return updateConfig(
-      withWorkflowReview(
+      withTicketWorkflowReview(
         {
           ...config,
           manualDebts: (config.manualDebts ?? []).map((debt) =>
@@ -1082,7 +1037,7 @@ export function TicketRestaurantePage({
       : `ticket-debt-regularization-${Date.now()}`);
     const regularization = buildTicketDebtRegularization(draft, now, id);
     return updateConfig(
-      withWorkflowReview(
+      withTicketWorkflowReview(
         {
           ...config,
           debtRegularizations: existing
@@ -1135,60 +1090,11 @@ export function TicketRestaurantePage({
       />
 
       {activeSubview ? (
-      <div className="mb-3 flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-2">
-          <SubviewButton
-            active={false}
-            label="← Inicio"
-            onClick={() => setActiveSubview(null)}
-          />
-          <SubviewButton
-            active={activeSubview === 'calendarios'}
-            label="Calendarios"
-            onClick={() => setActiveSubview('calendarios')}
-          />
-          <SubviewButton
-            active={activeSubview === 'personas'}
-            label="Personas"
-            onClick={() => setActiveSubview('personas')}
-          />
-          <SubviewButton
-            active={activeSubview === 'computoMensual'}
-            label="Cómputo mensual"
-            onClick={() => setActiveSubview('computoMensual')}
-          />
-          <SubviewButton
-            active={activeSubview === 'computoCotizacion'}
-            label="Cómputo cotización"
-            onClick={() => setActiveSubview('computoCotizacion')}
-          />
-          <SubviewButton
-            active={activeSubview === 'ausencias'}
-            label="Ausencias"
-            onClick={() => setActiveSubview('ausencias')}
-          />
-          <SubviewButton
-            active={activeSubview === 'manutenciones'}
-            label="Manutenciones"
-            onClick={() => setActiveSubview('manutenciones')}
-          />
-          <SubviewButton
-            active={activeSubview === 'deudaManual'}
-            label="Deudas"
-            onClick={() => setActiveSubview('deudaManual')}
-          />
-          <SubviewButton
-            active={activeSubview === 'balanceAnual'}
-            label="Balance anual"
-            onClick={() => setActiveSubview('balanceAnual')}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <ActionButton icon={Euro} iconOnly={false} onClick={() => setIsPriceModalOpen(true)} size="sm" variant="secondary">
-            Precio ticket
-          </ActionButton>
-        </div>
-      </div>
+        <TicketRestauranteSubviewNav
+          activeSubview={activeSubview}
+          onChange={setActiveSubview}
+          onOpenPrice={() => setIsPriceModalOpen(true)}
+        />
       ) : null}
 
       {activeSubview === null ? (
