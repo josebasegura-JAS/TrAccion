@@ -10,7 +10,7 @@ import {
   type LotteryPaymentMethod,
   type LotteryRequest,
 } from '../domain/loteria';
-import { cx, dateText, inputClass, isValidEmail, money } from './loteriaPage.helpers';
+import { cx, dateText, inputClass, isValidEmail, money } from './loteriaPage.utils';
 
 type ParticipantsColumnId =
   | 'employee'

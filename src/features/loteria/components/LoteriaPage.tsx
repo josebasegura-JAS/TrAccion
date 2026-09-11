@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
-import { StatusBadge } from '../../../components/ui/StatusBadge';
 import type { Employee } from '../../plantilla/domain/employee';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
@@ -44,7 +43,7 @@ import {
   money,
   nowIso,
   LOTERIA_HELP_SECTIONS,
-  WorkspaceSection,
+  type WorkspaceSection,
   renderTemplate,
   plainTextToHtml,
   isValidEmail,
@@ -53,13 +52,9 @@ import {
   createRequestId,
   buildLotteryAdministrationWorkbook,
   exportCampaign,
-  MetricCard,
   stockTone,
-  StepCard,
-  SectionShell,
-  SaveState,
-  SummaryPill,
-} from './loteriaPage.helpers';
+} from './loteriaPage.utils';
+import { MetricCard, StepCard, SectionShell, SaveState, SummaryPill } from './loteriaPage.helpers';
 import { LoteriaParticipantsTable, LoteriaTrackingTable } from './LoteriaRequestsTables';
 
 export function LoteriaPage() {

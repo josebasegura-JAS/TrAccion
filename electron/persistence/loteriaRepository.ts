@@ -1,10 +1,11 @@
 import type { Database } from 'better-sqlite3';
+import type { DatabaseStatus } from '../sqlitePersistence.js';
 
 const LEGACY_KEY = 'traccion.v1.loteria.campaign';
 
 export interface LotterySqliteRecord { id: string; value: string; updatedAt: string; campaignYear?: number; }
 export interface LotterySqliteSnapshot {
-  status: any;
+  status: DatabaseStatus;
   campaigns: LotterySqliteRecord[];
   requests: LotterySqliteRecord[];
 }
@@ -17,15 +18,15 @@ export interface LotterySavePayload {
 }
 export interface LotterySaveResult {
   ok: boolean;
-  status: any;
+  status: DatabaseStatus;
   campaignUpdatedAt: string | null;
   requestUpdatedAt: Record<string, string>;
   message: string;
 }
 
 interface Dependencies {
-  safeDatabaseOperation: <T>(operation: () => T, fallback: (status: any, message: string) => T) => Promise<T>;
-  getSqliteStatus: () => any;
+  safeDatabaseOperation: <T>(operation: () => T, fallback: (status: DatabaseStatus, message: string) => T) => Promise<T>;
+  getSqliteStatus: () => DatabaseStatus;
   requireDatabase: () => Database;
   updateRefreshMetadata: (db: Database, updatedAt: string) => void;
   enqueueLocalBackup: (reason: string) => void;
@@ -33,18 +34,24 @@ interface Dependencies {
   isDatabaseWriteBlockedByHeartbeat: () => boolean;
 }
 
-function extractArchive(raw: string): Array<{ year: number; campaign: any }> {
+type LegacyCampaign = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractArchive(raw: string): Array<{ year: number; campaign: LegacyCampaign }> {
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed?.version === 2 && parsed.campaigns && typeof parsed.campaigns === 'object') {
+    const parsed: unknown = JSON.parse(raw);
+    if (isRecord(parsed) && parsed.version === 2 && isRecord(parsed.campaigns)) {
       return Object.entries(parsed.campaigns).flatMap(([year, campaign]) => {
         const numericYear = Number(year);
-        return Number.isFinite(numericYear) && campaign && typeof campaign === 'object'
+        return Number.isFinite(numericYear) && isRecord(campaign)
           ? [{ year: numericYear, campaign }]
           : [];
       });
     }
-    if (parsed && typeof parsed === 'object') {
+    if (isRecord(parsed)) {
       const year = Number(parsed.year);
       return Number.isFinite(year) ? [{ year, campaign: parsed }] : [];
     }
