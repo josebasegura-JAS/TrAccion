@@ -41,7 +41,7 @@ export interface DatabaseConnectivityIssuePayload {
 }
 
 export interface DatabaseLockManagerDependencies {
-  /** Id estable del propietario (ver `resolveStableOwnerId` en sqlitePersistence.ts). */
+  /** Id estable del propietario (ver `resolveStableOwnerId` en stableOwnerIdentity.ts). */
   getOwnerId: () => string;
 }
 

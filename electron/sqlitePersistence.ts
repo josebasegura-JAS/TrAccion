@@ -1,18 +1,17 @@
-import { app } from 'electron';
 import {
-  constants,
-  copyFile,
-  mkdir,
-  readFile,
   readdir,
   rmdir,
-  stat,
   unlink,
-  writeFile,
-  access,
 } from 'node:fs/promises';
-import { hostname } from 'node:os';
 import path from 'node:path';
+import {
+  ensureDirectoryIsUsable,
+  prepareDatabaseFile,
+} from './persistence/databaseFileSystem.js';
+import {
+  createVolatileOwnerId,
+  resolveStableOwnerId,
+} from './persistence/stableOwnerIdentity.js';
 import type { Database } from 'better-sqlite3';
 import {
   createSimpleJsonModuleRepository,
@@ -271,45 +270,7 @@ export interface DatabaseStatus {
   message?: string;
 }
 
-const OWNER_ID_FILE_NAME = 'traccion-owner-id.json';
-
-function getOwnerIdFilePath(): string {
-  return path.join(app.getPath('userData'), OWNER_ID_FILE_NAME);
-}
-
-/**
- * Lee o crea un ownerId estable en userData. Reutilizarlo entre reinicios
- * permite limpiar los editing_locks propios al arrancar (crash recovery),
- * en lugar de esperar a que expiren por TTL (30s).
- */
-async function resolveStableOwnerId(): Promise<string> {
-  const filePath = getOwnerIdFilePath();
-  try {
-    const raw = await readFile(filePath, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      typeof (parsed as { id?: unknown }).id === 'string'
-    ) {
-      return (parsed as { id: string }).id;
-    }
-  } catch {
-    // Fichero no existe o corrupto — crear uno nuevo.
-  }
-
-  const newId = `${hostname()}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  try {
-    await writeFile(filePath, JSON.stringify({ id: newId }), 'utf8');
-  } catch {
-    // Si no se puede escribir, el id volátil sigue siendo válido para esta sesión.
-  }
-  return newId;
-}
-
-// Se inicializa de forma síncrona con un valor temporal; se sobreescribe en
-// initializeSqlitePersistence antes de abrir la base de datos.
-let ownerId = `${hostname()}-${process.pid}-${Date.now().toString(36)}`;
+let ownerId = createVolatileOwnerId();
 
 let database: Database | null = null;
 let status: DatabaseStatus | null = null;
@@ -626,25 +587,16 @@ async function backupExistingDatabase(databasePath: string): Promise<void> {
   }
 }
 
-async function ensureDirectoryIsUsable(directoryPath: string): Promise<void> {
-  await mkdir(directoryPath, { recursive: true });
-  await access(directoryPath, constants.R_OK | constants.W_OK);
-  const probePath = path.join(directoryPath, `.traccion-write-test-${process.pid}-${Date.now()}`);
-  await writeFile(probePath, 'ok', { encoding: 'utf8', flag: 'wx' });
-  await unlink(probePath);
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await stat(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function openDatabase(databasePath: string): Database {
   return openSqliteDatabase(databasePath, { busyTimeoutMs: SQLITE_BUSY_TIMEOUT_MS });
+}
+
+function resetRepositoryMigrationState(): void {
+  taskModule.resetMigrationState();
+  employeeModule.resetMigrationState();
+  sorteosModule.resetMigrationState();
+  sesionesModule.resetMigrationState();
+  teletrabajoModule.resetMigrationState();
 }
 
 function closeDatabase(): void {
@@ -652,11 +604,7 @@ function closeDatabase(): void {
     database.close();
     database = null;
   }
-  taskModule.resetMigrationState();
-  employeeModule.resetMigrationState();
-  sorteosModule.resetMigrationState();
-  sesionesModule.resetMigrationState();
-  teletrabajoModule.resetMigrationState();
+  resetRepositoryMigrationState();
 }
 
 async function closeDatabaseAndReleaseLock(): Promise<void> {
@@ -664,29 +612,7 @@ async function closeDatabaseAndReleaseLock(): Promise<void> {
     database.close();
     database = null;
   }
-  taskModule.resetMigrationState();
-  employeeModule.resetMigrationState();
-  sorteosModule.resetMigrationState();
-  sesionesModule.resetMigrationState();
-  teletrabajoModule.resetMigrationState();
-}
-
-async function prepareDatabaseAtPath(
-  databasePath: string,
-  sourceDatabasePath: string | null,
-): Promise<void> {
-  const targetExists = await fileExists(databasePath);
-  if (targetExists) {
-    return;
-  }
-
-  if (
-    sourceDatabasePath &&
-    sourceDatabasePath !== databasePath &&
-    (await fileExists(sourceDatabasePath))
-  ) {
-    await copyFile(sourceDatabasePath, databasePath);
-  }
+  resetRepositoryMigrationState();
 }
 
 async function activateDatabase(
@@ -706,7 +632,7 @@ async function activateDatabase(
   const startupLockHeartbeat = startDatabaseLockHeartbeat(lockPath, startupLock);
 
   try {
-    await prepareDatabaseAtPath(databasePath, sourceDatabasePath);
+    await prepareDatabaseFile(databasePath, sourceDatabasePath);
     const db = openDatabase(databasePath);
     // Limpiar los editing_locks que este proceso dejó sin liberar en un reinicio
     // o crash anterior. Al tener ownerId estable, podemos eliminarlos activamente
