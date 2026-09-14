@@ -1,4 +1,4 @@
-import { FolderOpen, Plus } from 'lucide-react';
+import { Database, FileText, FolderOpen, ListChecks, Plus, Settings2, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { publishDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
@@ -681,9 +681,20 @@ export function AjustesPage() {
     setProrrogaExcedenciaTemplateStatus(result.ok ? 'Ruta de plantilla de prórroga guardada.' : result.message);
   };
 
+  const scrollToSettingsSection = (id: string) => {
+    const target = document.getElementById(id);
+    if (target instanceof HTMLDetailsElement) {
+      target.open = true;
+    }
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const templateInputClass =
+    'mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none transition focus:border-sky-400';
+
   return (
     <>
-      <section className="rounded-3xl border border-metro-border bg-metro-surface p-5">
+      <section className="space-y-4">
         <PageHeader
           helpSections={AJUSTES_HELP_SECTIONS}
           helpSubtitle="Guía rápida de rutas, estado de base de datos, plantillas y ajustes auxiliares."
@@ -691,282 +702,253 @@ export function AjustesPage() {
           title="Configuración"
         />
 
-        <DatabaseSettingsSection
-          databaseStatus={databaseStatus}
-          databaseBadge={databaseBadge}
-          databasePhaseLabel={databasePhaseLabel}
-          databaseActionStatus={databaseActionStatus}
-          currentDatabaseLock={currentDatabaseLock}
-          isCheckingDatabaseLock={isCheckingDatabaseLock}
-          databaseLockCheckError={databaseLockCheckError}
-          isForcingLockRelease={isForcingLockRelease}
-          refreshCurrentDatabaseLock={refreshCurrentDatabaseLock}
-          handleForceReleaseDatabaseLock={handleForceReleaseDatabaseLock}
-          handleSelectDatabaseDirectory={handleSelectDatabaseDirectory}
-          handleResetDatabaseDirectory={handleResetDatabaseDirectory}
-          localBackups={localBackups}
-          isLoadingBackups={isLoadingBackups}
-          isRestoringBackup={isRestoringBackup}
-          isCreatingManualBackup={isCreatingManualBackup}
-          refreshLocalBackups={refreshLocalBackups}
-          handleCreateManualBackup={handleCreateManualBackup}
-          handleRestoreLocalBackup={handleRestoreLocalBackup}
-          secondaryBackupPath={secondaryBackupPath}
-          secondaryBackupStatus={secondaryBackupStatus}
-          handleSetSecondaryBackupDirectory={handleSetSecondaryBackupDirectory}
-          handleClearSecondaryBackupDirectory={handleClearSecondaryBackupDirectory}
-          updatesDirectoryPath={updatesDirectoryPath}
-          updatesDirectoryStatus={updatesDirectoryStatus}
-          updateCheckResult={updateCheckResult}
-          isCheckingForUpdate={isCheckingForUpdate}
-          isApplyingUpdate={isApplyingUpdate}
-          handleSetUpdatesDirectory={handleSetUpdatesDirectory}
-          handleClearUpdatesDirectory={handleClearUpdatesDirectory}
-          handleCheckForUpdateNow={handleCheckForUpdateNow}
-          handleApplyUpdateNow={handleApplyUpdateNow}
-          dailyBackupSettings={dailyBackupSettings}
-          dailyBackupStatus={dailyBackupStatus}
-          handleToggleDailyBackupEnabled={handleToggleDailyBackupEnabled}
-          handleChangeDailyBackupRetentionDays={handleChangeDailyBackupRetentionDays}
-          handleSetDailyBackupDirectory={handleSetDailyBackupDirectory}
-          handleClearDailyBackupDirectory={handleClearDailyBackupDirectory}
-          vacuumStatus={vacuumStatus}
-          isLoadingVacuumStatus={isLoadingVacuumStatus}
-          vacuumStatusError={vacuumStatusError}
-          onRetryVacuumStatus={refreshVacuumStatus}
-          isVacuuming={isVacuuming}
-          vacuumActionStatus={vacuumActionStatus}
-          handleVacuumNow={handleVacuumNow}
-        />
-
-        <DataIntegrityAuditSection
-          integrityReport={integrityReport}
-          isRunningIntegrityAudit={isRunningIntegrityAudit}
-          integrityAuditStatus={integrityAuditStatus}
-          handleRunIntegrityAudit={handleRunIntegrityAudit}
-          handleExportIntegrityReport={handleExportIntegrityReport}
-        />
-
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-metro-text">Plantilla Teletrabajo</h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Guarda únicamente la ruta local, UNC o de unidad mapeada del DOCX externo.
-            </p>
-          </div>
-
-          <label className="block text-xs font-semibold text-metro-muted">
-            Ruta plantilla DOCX
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => {
-                void setRutaPlantillaTeletrabajo(event.target.value);
-              }}
-              placeholder="C:\\RRLL\\Plantillas\\Acuerdo Teletrabajo.docx"
-              type="text"
-              value={rutaPlantillaTeletrabajo}
-            />
-          </label>
-
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-              onClick={handleSelectTemplate}
-              type="button"
-            >
-              <FolderOpen size={16} />
-              Seleccionar plantilla
-            </button>
-            {status && <Notice tone={noticeTone(status)}>{status}</Notice>}
+        <div className="rounded-[1.4rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(21,39,62,0.98),rgba(15,31,50,0.96))] p-4 shadow-[0_18px_42px_rgba(2,8,23,0.22)]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
+                <Settings2 size={22} />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-metro-text">Ajustes de TrAccion</h2>
+                <p className="mt-1 text-sm text-metro-muted">Configuración agrupada por función para localizar cada opción con rapidez.</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-200">
+              Los cambios se guardan automáticamente
+            </span>
           </div>
         </div>
 
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-metro-text">Plantilla Licencia sin sueldo</h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Guarda la ruta externa del DOCX usado para generar la concesión en pendientes de
-              firma.
-            </p>
-          </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <button
+            className="group rounded-[1.15rem] border border-sky-400/20 bg-[linear-gradient(180deg,rgba(22,57,94,0.68),rgba(15,38,63,0.75))] p-4 text-left transition hover:-translate-y-0.5 hover:border-sky-300/35"
+            onClick={() => scrollToSettingsSection('plantillas-documentales')}
+            type="button"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl border border-sky-300/20 bg-sky-400/10 text-sky-200"><FileText size={18} /></div>
+              <span className="rounded-full border border-metro-border bg-metro-surface/70 px-2.5 py-1 text-[11px] font-bold text-metro-muted">5 plantillas</span>
+            </div>
+            <h3 className="mt-3 text-sm font-extrabold text-metro-text">Plantillas documentales</h3>
+            <p className="mt-1 text-xs text-metro-muted">Teletrabajo, licencias, excedencias y vinculograma.</p>
+          </button>
 
-          <label className="block text-xs font-semibold text-metro-muted">
-            Ruta plantilla DOCX
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => {
-                void setRutaPlantillaLicenciaSinSueldo(event.target.value);
-              }}
-              placeholder="C:\\RRLL\\Plantillas\\Concesión licencia sin sueldo.docx"
-              type="text"
-              value={rutaPlantillaLicenciaSinSueldo}
-            />
-          </label>
+          <button
+            className="group rounded-[1.15rem] border border-emerald-400/20 bg-[linear-gradient(180deg,rgba(17,74,65,0.55),rgba(13,48,46,0.7))] p-4 text-left transition hover:-translate-y-0.5 hover:border-emerald-300/35"
+            onClick={() => scrollToSettingsSection('ajustes-base-datos')}
+            type="button"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-400/10 text-emerald-200"><Database size={18} /></div>
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-100">{databaseBadge.label}</span>
+            </div>
+            <h3 className="mt-3 text-sm font-extrabold text-metro-text">Base de datos y copias</h3>
+            <p className="mt-1 truncate text-xs text-metro-muted">{databaseStatus?.path ?? 'SQLite no inicializado'}</p>
+          </button>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-              onClick={handleSelectLicenciaSinSueldoTemplate}
-              type="button"
-            >
-              <FolderOpen size={16} />
-              Seleccionar plantilla
-            </button>
-            {licenciaTemplateStatus && (
-              <Notice tone={noticeTone(licenciaTemplateStatus)}>{licenciaTemplateStatus}</Notice>
-            )}
-          </div>
+          <button
+            className="group rounded-[1.15rem] border border-violet-400/20 bg-[linear-gradient(180deg,rgba(66,43,104,0.55),rgba(39,31,71,0.72))] p-4 text-left transition hover:-translate-y-0.5 hover:border-violet-300/35"
+            onClick={() => scrollToSettingsSection('fases-tareas')}
+            type="button"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl border border-violet-300/20 bg-violet-400/10 text-violet-200"><ListChecks size={18} /></div>
+              <span className="rounded-full border border-violet-400/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-bold text-violet-100">{taskPhases.filter((phase) => phase.active).length} activas</span>
+            </div>
+            <h3 className="mt-3 text-sm font-extrabold text-metro-text">Fases de tareas</h3>
+            <p className="mt-1 text-xs text-metro-muted">Gestiona las fases disponibles en el módulo Tareas.</p>
+          </button>
+
+          <button
+            className="group rounded-[1.15rem] border border-amber-400/20 bg-[linear-gradient(180deg,rgba(91,66,24,0.46),rgba(54,43,24,0.66))] p-4 text-left transition hover:-translate-y-0.5 hover:border-amber-300/35"
+            onClick={() => scrollToSettingsSection('ajustes-integridad')}
+            type="button"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl border border-amber-300/20 bg-amber-400/10 text-amber-200"><ShieldCheck size={18} /></div>
+              <span className="rounded-full border border-metro-border bg-metro-surface/70 px-2.5 py-1 text-[11px] font-bold text-metro-muted">Diagnóstico</span>
+            </div>
+            <h3 className="mt-3 text-sm font-extrabold text-metro-text">Integridad y mantenimiento</h3>
+            <p className="mt-1 text-xs text-metro-muted">Comprueba datos, esquema y bloqueos sin modificar información.</p>
+          </button>
         </div>
 
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-metro-text">Plantilla Excedencia</h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              DOCX externo con marcadores para nombre, dirección y fechas. Puedes editar su texto o formato sin recompilar TrAccion.
-            </p>
+        <section
+          className="scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/45 p-4"
+          id="plantillas-documentales"
+        >
+          <div className="mb-4 flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-sky-400/20 bg-sky-500/10 text-sky-200"><FileText size={18} /></div>
+            <div>
+              <h3 className="text-base font-extrabold text-metro-text">Plantillas documentales</h3>
+              <p className="mt-1 text-sm text-metro-muted">Rutas de los DOCX externos utilizados por los distintos módulos.</p>
+            </div>
           </div>
 
-          <label className="block text-xs font-semibold text-metro-muted">
-            Ruta plantilla DOCX
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => {
-                void setRutaPlantillaExcedencia(event.target.value);
-              }}
-              placeholder="C:\RRLL\Plantillas\Plantilla Excedencia.docx"
-              type="text"
-              value={rutaPlantillaExcedencia}
-            />
-          </label>
+          <div className="grid gap-3 xl:grid-cols-2">
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3">
+              <h4 className="text-sm font-bold text-metro-text">Teletrabajo</h4>
+              <p className="mt-1 text-xs text-metro-muted">Acuerdo de teletrabajo generado desde el módulo correspondiente.</p>
+              <label className="mt-3 block text-xs font-semibold text-metro-muted">Ruta plantilla DOCX
+                <input className={templateInputClass} onChange={(event) => { void setRutaPlantillaTeletrabajo(event.target.value); }} placeholder="C:\\RRLL\\Plantillas\\Acuerdo Teletrabajo.docx" type="text" value={rutaPlantillaTeletrabajo} />
+              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={handleSelectTemplate} type="button"><FolderOpen size={14} />Seleccionar</button>
+                {status && <Notice tone={noticeTone(status)}>{status}</Notice>}
+              </div>
+            </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-              onClick={handleSelectExcedenciaTemplate}
-              type="button"
-            >
-              <FolderOpen size={16} />
-              Seleccionar plantilla
-            </button>
-            {excedenciaTemplateStatus && (
-              <Notice tone={noticeTone(excedenciaTemplateStatus)}>{excedenciaTemplateStatus}</Notice>
-            )}
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3">
+              <h4 className="text-sm font-bold text-metro-text">Licencia sin sueldo</h4>
+              <p className="mt-1 text-xs text-metro-muted">Documento de concesión utilizado en pendientes de firma.</p>
+              <label className="mt-3 block text-xs font-semibold text-metro-muted">Ruta plantilla DOCX
+                <input className={templateInputClass} onChange={(event) => { void setRutaPlantillaLicenciaSinSueldo(event.target.value); }} placeholder="C:\\RRLL\\Plantillas\\Concesión licencia sin sueldo.docx" type="text" value={rutaPlantillaLicenciaSinSueldo} />
+              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={handleSelectLicenciaSinSueldoTemplate} type="button"><FolderOpen size={14} />Seleccionar</button>
+                {licenciaTemplateStatus && <Notice tone={noticeTone(licenciaTemplateStatus)}>{licenciaTemplateStatus}</Notice>}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3">
+              <h4 className="text-sm font-bold text-metro-text">Excedencia</h4>
+              <p className="mt-1 text-xs text-metro-muted">Plantilla editable con marcadores de persona y fechas.</p>
+              <label className="mt-3 block text-xs font-semibold text-metro-muted">Ruta plantilla DOCX
+                <input className={templateInputClass} onChange={(event) => { void setRutaPlantillaExcedencia(event.target.value); }} placeholder="C:\\RRLL\\Plantillas\\Plantilla Excedencia.docx" type="text" value={rutaPlantillaExcedencia} />
+              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={handleSelectExcedenciaTemplate} type="button"><FolderOpen size={14} />Seleccionar</button>
+                {excedenciaTemplateStatus && <Notice tone={noticeTone(excedenciaTemplateStatus)}>{excedenciaTemplateStatus}</Notice>}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3">
+              <h4 className="text-sm font-bold text-metro-text">Prórroga de excedencia</h4>
+              <p className="mt-1 text-xs text-metro-muted">Documento utilizado para generar la prórroga de una excedencia.</p>
+              <label className="mt-3 block text-xs font-semibold text-metro-muted">Ruta plantilla DOCX
+                <input className={templateInputClass} onChange={(event) => { void setRutaPlantillaProrrogaExcedencia(event.target.value); }} placeholder="C:\\RRLL\\Plantillas\\Plantilla Prórroga Excedencia.docx" type="text" value={rutaPlantillaProrrogaExcedencia} />
+              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={handleSelectProrrogaExcedenciaTemplate} type="button"><FolderOpen size={14} />Seleccionar</button>
+                {prorrogaExcedenciaTemplateStatus && <Notice tone={noticeTone(prorrogaExcedenciaTemplateStatus)}>{prorrogaExcedenciaTemplateStatus}</Notice>}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3 xl:col-span-2">
+              <h4 className="text-sm font-bold text-metro-text">Vinculograma</h4>
+              <p className="mt-1 text-xs text-metro-muted">Solicitud de declaración responsable generada desde Vinculograma.</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <input className={templateInputClass.replace('mt-1 ', '')} onChange={(event) => { void setRutaPlantillaVinculograma(event.target.value); }} placeholder="C:\\RRLL\\Plantillas\\Solicitud Vinculograma.docx" type="text" value={rutaPlantillaVinculograma} />
+                <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={handleSelectVinculogramaTemplate} type="button"><FolderOpen size={14} />Seleccionar</button>
+              </div>
+              {vinculogramaTemplateStatus && <div className="mt-2"><Notice tone={noticeTone(vinculogramaTemplateStatus)}>{vinculogramaTemplateStatus}</Notice></div>}
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-metro-text">Plantilla Prórroga Excedencia</h3>
-            <p className="mt-1 text-sm text-metro-muted">DOCX externo usado para generar la única prórroga posible de una excedencia.</p>
-          </div>
-          <label className="block text-xs font-semibold text-metro-muted">
-            Ruta plantilla DOCX
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => { void setRutaPlantillaProrrogaExcedencia(event.target.value); }}
-              placeholder="C:\\RRLL\\Plantillas\\Plantilla Prórroga Excedencia.docx"
-              type="text"
-              value={rutaPlantillaProrrogaExcedencia}
-            />
-          </label>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" onClick={handleSelectProrrogaExcedenciaTemplate} type="button">
-              <FolderOpen size={16} /> Seleccionar plantilla
-            </button>
-            {prorrogaExcedenciaTemplateStatus && <Notice tone={noticeTone(prorrogaExcedenciaTemplateStatus)}>{prorrogaExcedenciaTemplateStatus}</Notice>}
-          </div>
-        </div>
-
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-4">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-metro-text">Plantilla Vinculograma</h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Guarda la ruta externa del DOCX usado para generar la solicitud de declaración
-              responsable.
-            </p>
-          </div>
-
-          <label className="block text-xs font-semibold text-metro-muted">
-            Ruta plantilla DOCX
-            <input
-              className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => {
-                void setRutaPlantillaVinculograma(event.target.value);
-              }}
-              placeholder="C:\\RRLL\\Plantillas\\Solicitud Vinculograma.docx"
-              type="text"
-              value={rutaPlantillaVinculograma}
-            />
-          </label>
-
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-              onClick={handleSelectVinculogramaTemplate}
-              type="button"
-            >
-              <FolderOpen size={16} />
-              Seleccionar plantilla
-            </button>
-            {vinculogramaTemplateStatus && (
-              <Notice tone={noticeTone(vinculogramaTemplateStatus)}>
-                {vinculogramaTemplateStatus}
-              </Notice>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-metro-border bg-metro-panel p-4">
-          <div className="mb-4">
-            <h3 className="text-base font-bold text-metro-text">Fases de tareas</h3>
-            <p className="mt-1 text-sm text-metro-muted">
-              Configura las fases usadas en Tareas. Desactivar una fase evita nuevas selecciones,
-              pero mantiene el histórico y las tareas existentes.
-            </p>
+        <section className="scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/45 p-4" id="fases-tareas">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-violet-400/20 bg-violet-500/10 text-violet-200"><ListChecks size={18} /></div>
+            <div>
+              <h3 className="text-base font-extrabold text-metro-text">Fases de tareas</h3>
+              <p className="mt-1 text-sm text-metro-muted">Desactivar una fase impide nuevas selecciones sin afectar al histórico.</p>
+            </div>
           </div>
 
           <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-            <input
-              className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => setNewTaskPhase(event.target.value)}
-              placeholder="Nueva fase"
-              type="text"
-              value={newTaskPhase}
-            />
-            <button
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!newTaskPhase.trim()}
-              onClick={handleAddTaskPhase}
-              type="button"
-            >
-              <Plus size={16} />
-              Añadir fase
-            </button>
+            <input className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-violet-400" onChange={(event) => setNewTaskPhase(event.target.value)} placeholder="Nueva fase" type="text" value={newTaskPhase} />
+            <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50" disabled={!newTaskPhase.trim()} onClick={handleAddTaskPhase} type="button"><Plus size={16} />Añadir fase</button>
           </div>
 
-          <div className="space-y-2">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {taskPhases.map((phase) => (
-              <div
-                className="grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 sm:grid-cols-[minmax(0,1fr)_auto]"
-                key={phase.id}
-              >
-                <input
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateTaskPhase(phase.id, event.target.value)}
-                  type="text"
-                  value={phase.nombre}
-                />
-                <button
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-                  onClick={() => toggleTaskPhase(phase.id)}
-                  type="button"
-                >
-                  {phase.active ? 'Desactivar' : 'Activar'}
+              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-surface/65 p-2.5" key={phase.id}>
+                <input className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-violet-400" onChange={(event) => updateTaskPhase(phase.id, event.target.value)} type="text" value={phase.nombre} />
+                <button className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${phase.active ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/15' : 'border-metro-border bg-metro-panel text-metro-muted hover:border-metro-red'}`} onClick={() => toggleTaskPhase(phase.id)} type="button">
+                  {phase.active ? 'Activa · Desactivar' : 'Inactiva · Activar'}
                 </button>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+
+        <details className="group scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/35" defaultOpen={window.location.hash === '#base-de-datos'} id="ajustes-base-datos">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl border border-emerald-400/20 bg-emerald-500/10 text-emerald-200"><Database size={18} /></div>
+              <div><h3 className="text-base font-extrabold text-metro-text">Base de datos, copias y actualizaciones</h3><p className="mt-0.5 text-xs text-metro-muted">Opciones avanzadas de SQLite, copias, VACUUM y actualización de la aplicación.</p></div>
+            </div>
+            <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-bold text-metro-muted">Abrir</span>
+          </summary>
+          <div className="px-3 pb-3">
+            <DatabaseSettingsSection
+              databaseStatus={databaseStatus}
+              databaseBadge={databaseBadge}
+              databasePhaseLabel={databasePhaseLabel}
+              databaseActionStatus={databaseActionStatus}
+              currentDatabaseLock={currentDatabaseLock}
+              isCheckingDatabaseLock={isCheckingDatabaseLock}
+              databaseLockCheckError={databaseLockCheckError}
+              isForcingLockRelease={isForcingLockRelease}
+              refreshCurrentDatabaseLock={refreshCurrentDatabaseLock}
+              handleForceReleaseDatabaseLock={handleForceReleaseDatabaseLock}
+              handleSelectDatabaseDirectory={handleSelectDatabaseDirectory}
+              handleResetDatabaseDirectory={handleResetDatabaseDirectory}
+              localBackups={localBackups}
+              isLoadingBackups={isLoadingBackups}
+              isRestoringBackup={isRestoringBackup}
+              isCreatingManualBackup={isCreatingManualBackup}
+              refreshLocalBackups={refreshLocalBackups}
+              handleCreateManualBackup={handleCreateManualBackup}
+              handleRestoreLocalBackup={handleRestoreLocalBackup}
+              secondaryBackupPath={secondaryBackupPath}
+              secondaryBackupStatus={secondaryBackupStatus}
+              handleSetSecondaryBackupDirectory={handleSetSecondaryBackupDirectory}
+              handleClearSecondaryBackupDirectory={handleClearSecondaryBackupDirectory}
+              updatesDirectoryPath={updatesDirectoryPath}
+              updatesDirectoryStatus={updatesDirectoryStatus}
+              updateCheckResult={updateCheckResult}
+              isCheckingForUpdate={isCheckingForUpdate}
+              isApplyingUpdate={isApplyingUpdate}
+              handleSetUpdatesDirectory={handleSetUpdatesDirectory}
+              handleClearUpdatesDirectory={handleClearUpdatesDirectory}
+              handleCheckForUpdateNow={handleCheckForUpdateNow}
+              handleApplyUpdateNow={handleApplyUpdateNow}
+              dailyBackupSettings={dailyBackupSettings}
+              dailyBackupStatus={dailyBackupStatus}
+              handleToggleDailyBackupEnabled={handleToggleDailyBackupEnabled}
+              handleChangeDailyBackupRetentionDays={handleChangeDailyBackupRetentionDays}
+              handleSetDailyBackupDirectory={handleSetDailyBackupDirectory}
+              handleClearDailyBackupDirectory={handleClearDailyBackupDirectory}
+              vacuumStatus={vacuumStatus}
+              isLoadingVacuumStatus={isLoadingVacuumStatus}
+              vacuumStatusError={vacuumStatusError}
+              onRetryVacuumStatus={refreshVacuumStatus}
+              isVacuuming={isVacuuming}
+              vacuumActionStatus={vacuumActionStatus}
+              handleVacuumNow={handleVacuumNow}
+            />
+          </div>
+        </details>
+
+        <details className="group scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/35" id="ajustes-integridad">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-500/10 text-amber-200"><ShieldCheck size={18} /></div>
+              <div><h3 className="text-base font-extrabold text-metro-text">Diagnóstico de integridad</h3><p className="mt-0.5 text-xs text-metro-muted">Comprobaciones técnicas que no modifican los datos.</p></div>
+            </div>
+            <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-bold text-metro-muted">Abrir</span>
+          </summary>
+          <div className="px-3 pb-3">
+            <DataIntegrityAuditSection
+              integrityReport={integrityReport}
+              isRunningIntegrityAudit={isRunningIntegrityAudit}
+              integrityAuditStatus={integrityAuditStatus}
+              handleRunIntegrityAudit={handleRunIntegrityAudit}
+              handleExportIntegrityReport={handleExportIntegrityReport}
+            />
+          </div>
+        </details>
       </section>
       {dialogNode}
     </>
