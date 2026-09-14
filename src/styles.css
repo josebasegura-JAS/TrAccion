@@ -28,6 +28,15 @@
   --accent-blue: theme('colors.metro.info');
   --accent-green: theme('colors.metro.success');
   --accent-amber: theme('colors.metro.warning');
+
+  /* Sistema visual común: una escala pequeña y estable evita que cada módulo
+     invente densidades, radios y separaciones distintas. */
+  --ui-space-xs: 0.5rem;
+  --ui-space-sm: 0.75rem;
+  --ui-space-md: 1rem;
+  --ui-radius-control: 0.75rem;
+  --ui-radius-card: 1rem;
+  --ui-radius-stage: 1.5rem;
   color: var(--text-primary);
   background: var(--app-bg);
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
@@ -651,6 +660,8 @@ body {
 
 /* -----------------------------------------------------------
    v1.1 mockup-aligned visual system
+   Este bloque es la capa visual sobre la estructura base del shell anterior;
+   evita redefinir layout funcional y concentra aquí solo los overrides visuales.
    La lógica de negocio no cambia: este bloque solo homogeneiza
    jerarquía, superficies, densidad y estados visuales.
    ----------------------------------------------------------- */
@@ -671,7 +682,7 @@ body {
 
 .app-module-stage {
   min-height: calc(100vh - 124px);
-  border-radius: 24px;
+  border-radius: var(--ui-radius-stage);
   border-color: rgba(148, 163, 184, 0.14);
   background:
     radial-gradient(circle at top right, rgba(59, 130, 246, 0.035), transparent 24rem),
@@ -798,7 +809,7 @@ body {
 /* 14" / 1366×768: se conserva la composición compacta sin scroll. */
 @media (max-height: 820px) {
   .dashboard-pro {
-    grid-template-rows: 42px 82px minmax(0, 1fr) minmax(0, 0.88fr);
+    grid-template-rows: 44px 100px minmax(0, 1fr) minmax(0, 0.88fr);
     gap: 8px;
   }
 }
@@ -807,7 +818,7 @@ body {
  * no para crear huecos vacíos. */
 @media (min-width: 1600px) and (min-height: 880px) {
   .dashboard-pro {
-    grid-template-rows: 46px 90px minmax(0, 1.06fr) minmax(0, 0.94fr);
+    grid-template-rows: 46px 104px minmax(0, 1.06fr) minmax(0, 0.94fr);
     gap: 10px;
   }
 
@@ -823,7 +834,7 @@ body {
 
 @media (min-width: 1900px) and (min-height: 1000px) {
   .dashboard-pro {
-    grid-template-rows: 48px 94px minmax(0, 1.08fr) minmax(0, 0.96fr);
+    grid-template-rows: 48px 108px minmax(0, 1.08fr) minmax(0, 0.96fr);
     gap: 12px;
   }
 }

@@ -13,7 +13,7 @@ export function CompactTable({
 }: CompactTableProps) {
   return (
     <table
-      className={`${minWidthClassName} table-fixed text-left text-xs leading-5 ${className ?? ''}`}
+      className={`${minWidthClassName} table-fixed text-left text-[13px] leading-5 ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -28,7 +28,7 @@ export function CompactTableHead({
 }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <thead
-      className={`sticky top-0 z-10 bg-metro-panel text-xs font-semibold text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.14)] ${className ?? ''}`}
+      className={`sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.06em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -43,7 +43,7 @@ export function CompactTableBody({
 }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
     <tbody
-      className={`divide-y divide-metro-border/70 bg-metro-surface [&>tr:nth-child(even)]:bg-metro-panel/40 ${className ?? ''}`}
+      className={`divide-y divide-metro-border/55 bg-metro-surface/75 [&>tr]:transition-colors [&>tr:nth-child(odd)]:bg-[#10243b]/45 [&>tr:nth-child(even)]:bg-[#1a3048]/62 [&>tr:hover]:bg-sky-400/[0.08] ${className ?? ''}`}
       {...props}
     >
       {children}

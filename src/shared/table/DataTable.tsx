@@ -160,7 +160,7 @@ export function DataTable<Row, ColumnId extends string>({
   onRowClick,
   onRowDoubleClick,
   rowClassName,
-  strongZebra = false,
+  strongZebra = true,
   ariaLabel,
   maxHeightClassName = 'max-h-[460px]',
   heightClassName,
@@ -364,7 +364,7 @@ export function DataTable<Row, ColumnId extends string>({
         )}
         <table
           aria-label={ariaLabel}
-          className="w-full table-fixed text-left text-xs"
+          className="w-full table-fixed text-left text-[13px] leading-5"
           style={{ minWidth: tableMinWidth }}
         >
           <colgroup>
@@ -372,7 +372,7 @@ export function DataTable<Row, ColumnId extends string>({
               <col key={column.id} style={{ width: column.width }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.08em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur">
+          <thead className="sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.06em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur">
             <tr>
               {visibleColumns.map((column) => {
                 const isSorted = sort?.columnId === column.id;
@@ -394,7 +394,7 @@ export function DataTable<Row, ColumnId extends string>({
                 return (
                   <th
                     aria-sort={canSort ? ariaSort : undefined}
-                    className={`relative px-3 py-2 ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.tone ? columnToneClasses[column.tone].header : ''} ${column.headerClassName ?? ''} ${
+                    className={`relative px-3 py-2.5 ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.tone ? columnToneClasses[column.tone].header : ''} ${column.headerClassName ?? ''} ${
                       isDragging ? 'opacity-40' : ''
                     } ${isDragOver ? 'bg-metro-red/10' : ''}`}
                     draggable={isReorderable}
@@ -478,7 +478,7 @@ export function DataTable<Row, ColumnId extends string>({
             ) : (
               visibleRows.map((row, rowIndex) => (
                 <tr
-                  className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/40' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/60' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                  className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/45' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/62' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                   key={getRowId(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
@@ -490,7 +490,7 @@ export function DataTable<Row, ColumnId extends string>({
 
                     return (
                       <td
-                        className={`truncate px-3 py-2 ${column.isActionColumn ? 'text-right' : ''} ${
+                        className={`truncate px-3 py-2.5 ${column.isActionColumn ? 'text-right' : ''} ${
                           column.tone ? columnToneClasses[column.tone].cell : ''
                         } ${column.className ?? ''}`}
                         key={column.id}
