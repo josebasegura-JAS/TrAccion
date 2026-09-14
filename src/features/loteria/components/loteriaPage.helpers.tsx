@@ -5,13 +5,13 @@ import { cx } from './loteriaPage.utils';
 
 export function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5">
+    <div className="rounded-xl border border-metro-border bg-metro-panel px-3.5 py-3 shadow-sm">
       <div className="flex items-center gap-2 text-metro-secondary">
         <span className="grid h-7 w-7 place-items-center rounded-lg bg-metro-red/10 text-red-300"><Icon size={15} /></span>
-        <span className="text-[11px] font-bold">{label}</span>
+        <span className="text-xs font-bold">{label}</span>
       </div>
       <p className="mt-1 text-xl font-extrabold tracking-tight text-metro-text">{value}</p>
-      {detail ? <p className="text-[11px] text-metro-muted">{detail}</p> : null}
+      {detail ? <p className="text-xs text-metro-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -36,7 +36,7 @@ export function StepCard({
   return (
     <button
       className={cx(
-        'rounded-xl border p-3 text-left transition',
+        'rounded-2xl border p-3.5 text-left transition shadow-sm',
         active
           ? 'border-metro-red bg-metro-red/10 shadow-[0_0_0_1px_rgba(218,41,28,0.2)]'
           : done
@@ -53,7 +53,7 @@ export function StepCard({
             active ? 'border-metro-red/50 bg-metro-red/10 text-red-300' : 'border-metro-border bg-metro-surface text-metro-secondary',
           )}><Icon size={16} /></span>
           <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-wide text-red-300">{month}</p>
+            <p className="text-xs font-extrabold uppercase tracking-wide text-red-300">{month}</p>
             <p className="text-xs font-extrabold text-metro-text">{title}</p>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function StepCard({
 
 export function SectionShell({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 md:p-4">
+    <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-metro-border pb-3">
         <div>
           <h3 className="text-sm font-extrabold text-metro-text">{title}</h3>
@@ -93,7 +93,7 @@ export function SaveState({ dirty, message }: { dirty: boolean; message: string 
 export function SummaryPill({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'good' | 'warning' | 'alert' }) {
   return (
     <div className={cx(
-      'rounded-lg border px-2.5 py-2',
+      'rounded-xl border px-3 py-2.5',
       tone === 'good'
         ? 'border-emerald-500/35 bg-emerald-500/[0.07]'
         : tone === 'warning'
@@ -102,7 +102,7 @@ export function SummaryPill({ label, value, tone = 'default' }: { label: string;
             ? 'border-red-500/45 bg-red-500/10'
             : 'border-metro-border bg-metro-surface',
     )}>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">{label}</p>
       <p className="mt-0.5 text-sm font-extrabold text-metro-text">{value}</p>
     </div>
   );

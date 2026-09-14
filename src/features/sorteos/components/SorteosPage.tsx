@@ -101,7 +101,7 @@ const drawHistoryExportColumns: ExportColumn<SorteosDraw>[] = [
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-0 rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 shadow-sm">
+    <div className="min-w-0 rounded-xl border border-metro-border bg-metro-surface/70 px-3.5 py-3 shadow-sm">
       <p className="truncate text-xs font-semibold text-metro-muted">
         {label}
       </p>
@@ -270,7 +270,7 @@ export function SorteosPage() {
 
   return (
     <section
-      className="space-y-3"
+      className="space-y-4"
       id="sorteos"
     >
       <PageHeader
@@ -282,7 +282,7 @@ export function SorteosPage() {
       />
 
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.48fr)]">
-        <div className="min-w-0 rounded-xl bg-metro-panel p-3">
+        <div className="min-w-0 rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
             <Gift className="h-4 w-4 shrink-0 text-metro-red" />
             <div className="min-w-0">
@@ -348,7 +348,7 @@ export function SorteosPage() {
           )}
         </div>
 
-        <div className="min-w-0 rounded-xl bg-metro-panel p-3">
+        <div className="min-w-0 rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-metro-red">
               Plantilla / disponibilidad
@@ -363,7 +363,7 @@ export function SorteosPage() {
         </div>
       </div>
 
-      <div className="rounded-xl bg-metro-panel p-3">
+      <div className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm">
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-base font-bold text-metro-text">Resultado del sorteo</h3>
@@ -392,7 +392,7 @@ export function SorteosPage() {
         )}
       </div>
 
-      <div className="rounded-xl border border-metro-border bg-metro-panel">
+      <div className="rounded-2xl border border-metro-border bg-metro-panel shadow-sm">
         <button
           className="flex w-full items-center justify-between px-3 py-3 text-left"
           onClick={() => setExclusionsOpen((open) => !open)}
@@ -407,10 +407,10 @@ export function SorteosPage() {
         {exclusionsOpen && (
           <div className="space-y-3 border-t border-metro-border p-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(280px,0.8fr)_minmax(420px,1.2fr)]">
-              <div className="rounded-xl bg-metro-surface p-3">
+              <div className="rounded-xl border border-metro-border/70 bg-metro-surface/70 p-3.5">
                 <label className="block text-sm font-semibold text-metro-text">
                   Buscar persona a excluir
-                  <div className="mt-1 flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 focus-within:border-metro-red">
+                  <div className="mt-1 flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5 focus-within:border-metro-red">
                     <Search className="h-4 w-4 text-metro-muted" />
                     <input
                       className="w-full bg-transparent text-sm text-metro-text outline-none"
@@ -427,7 +427,7 @@ export function SorteosPage() {
                 <div className="mt-3 space-y-2">
                   {searchResults.map((person) => (
                     <div
-                      className="flex items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5"
                       key={person.empleado}
                     >
                       <div className="min-w-0">
@@ -468,14 +468,14 @@ export function SorteosPage() {
                     </div>
                   ))}
                   {search.length >= SORTEOS_MIN_SEARCH_LENGTH && searchResults.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-metro-border p-3 text-sm text-metro-muted">
+                    <p className="rounded-xl border border-dashed border-metro-border p-3.5 text-sm text-metro-muted">
                       No hay resultados disponibles para excluir.
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-xl bg-metro-surface p-3">
+              <div className="rounded-xl border border-metro-border/70 bg-metro-surface/70 p-3.5">
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h4 className="text-sm font-bold text-metro-text">Personas excluidas</h4>
                   <ExportPrintButtons
@@ -495,7 +495,7 @@ export function SorteosPage() {
                     onClick={requestResetAllExclusions}
                   >Resetear todas las exclusiones</ActionButton>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-metro-border">
+                <div className="overflow-hidden rounded-xl border border-metro-border">
                   <CompactTable>
                     <CompactTableHead>
                       <tr>
@@ -606,7 +606,7 @@ export function SorteosPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-metro-border bg-metro-panel">
+      <div className="rounded-2xl border border-metro-border bg-metro-panel shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3">
           <button
             className="flex items-center gap-2 text-left text-base font-bold text-metro-text"
@@ -628,7 +628,7 @@ export function SorteosPage() {
         </div>
         {historyOpen && (
           <div className="border-t border-metro-border p-3">
-            <div className="overflow-hidden rounded-lg border border-metro-border bg-metro-surface">
+            <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
               <CompactTable>
                 <CompactTableHead>
                   <tr>

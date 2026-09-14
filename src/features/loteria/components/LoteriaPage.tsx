@@ -386,7 +386,7 @@ export function LoteriaPage() {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <PageHeader
         title="Lotería"
         helpSections={LOTERIA_HELP_SECTIONS}
@@ -402,8 +402,8 @@ export function LoteriaPage() {
       />
 
       {activeSection === null ? (
-        <div className="space-y-3">
-          <section className="rounded-2xl border border-metro-border bg-metro-panel p-3 md:p-4">
+        <div className="space-y-4">
+          <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm">
             <div className="mb-3">
               <h3 className="text-sm font-extrabold text-metro-text">Campaña {draft.year}</h3>
               <p className="mt-1 text-xs text-metro-muted">Sigue el recorrido de izquierda a derecha. Puedes entrar en cualquier fase, pero la app te indica cuál conviene completar ahora.</p>
@@ -437,9 +437,9 @@ export function LoteriaPage() {
     </section>
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2">
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-metro-border bg-metro-panel px-3.5 py-2.5 shadow-sm">
           <ActionButton icon={ArrowLeft} iconOnly={false} onClick={() => setActiveSection(null)} size="sm" variant="secondary">Volver al flujograma</ActionButton>
-          <span className="text-[11px] font-semibold text-metro-muted">Campaña {draft.year} · {activeSection === 'septiembre' ? 'Septiembre' : activeSection === 'octubre' ? 'Octubre' : activeSection === 'seguimiento' ? 'Seguimiento' : 'Cierre'}</span>
+          <span className="text-xs font-semibold text-metro-muted">Campaña {draft.year} · {activeSection === 'septiembre' ? 'Septiembre' : activeSection === 'octubre' ? 'Octubre' : activeSection === 'seguimiento' ? 'Seguimiento' : 'Cierre'}</span>
         </div>
       )}
 
@@ -450,8 +450,8 @@ export function LoteriaPage() {
           actions={<ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Datos de septiembre guardados.')} size="sm" variant="save">Guardar septiembre</ActionButton>}
         >
           <div className="grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
-            <div className="space-y-3">
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
                 <h4 className="mb-3 text-xs font-extrabold text-metro-text">Configuración del encargo</h4>
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <label><span className={labelClass}>Número 1</span><input className={inputClass} value={draft.numero1} onChange={(e) => updateDraft((current) => ({ ...current, numero1: e.target.value }))} /></label>
@@ -465,10 +465,10 @@ export function LoteriaPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h4 className="text-xs font-extrabold text-metro-text">Datos del lotero</h4>
-                  <div className="flex flex-wrap gap-3 text-[11px] text-metro-muted">
+                  <div className="flex flex-wrap gap-3 text-xs text-metro-muted">
                     <label className="inline-flex items-center gap-2"><input checked={draft.workflow.loteroAvisado} onChange={(e) => setWorkflowFlag('loteroAvisado', e.target.checked)} type="checkbox" />Lotero avisado</label>
                     <label className="inline-flex items-center gap-2"><input checked={draft.workflow.encargoConfirmado} onChange={(e) => setWorkflowFlag('encargoConfirmado', e.target.checked)} type="checkbox" />Encargo confirmado</label>
                   </div>
@@ -481,7 +481,7 @@ export function LoteriaPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-xs font-extrabold text-metro-text">Plantilla de email al lotero</h4>
                 <div className="flex gap-2">
@@ -493,9 +493,9 @@ export function LoteriaPage() {
                 <label><span className={labelClass}>Asunto</span><input className={inputClass} value={draft.loteroEmailSubject} onChange={(e) => updateDraft((current) => ({ ...current, loteroEmailSubject: e.target.value }))} /></label>
                 <label><span className={labelClass}>Mensaje</span><textarea className={textareaClass} value={draft.loteroEmailBody} onChange={(e) => updateDraft((current) => ({ ...current, loteroEmailBody: e.target.value }))} /></label>
                 <div className="rounded-xl border border-dashed border-metro-border bg-metro-panel p-3">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-metro-muted">Vista previa</p>
-                  <p className="text-[11px] font-bold text-metro-text">{draft.loteroEmailSubject}</p>
-                  <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-5 text-metro-secondary">{loteroMailPreview}</pre>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-metro-muted">Vista previa</p>
+                  <p className="text-xs font-bold text-metro-text">{draft.loteroEmailSubject}</p>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs leading-5 text-metro-secondary">{loteroMailPreview}</pre>
                 </div>
               </div>
             </div>
@@ -509,13 +509,13 @@ export function LoteriaPage() {
           subtitle="Busca personas de Plantilla por nº de empleado, nombre o apellidos. Si no existen, dales de alta solo para esta campaña."
           actions={<ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Participantes y aviso guardados.')} size="sm" variant="save">Guardar octubre</ActionButton>}
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div>
                     <h4 className="text-xs font-extrabold text-metro-text">Alta de participantes</h4>
-                    <p className="mt-1 text-[11px] text-metro-muted">La búsqueda consulta directamente la Plantilla actual.</p>
+                    <p className="mt-1 text-xs text-metro-muted">La búsqueda consulta directamente la Plantilla actual.</p>
                   </div>
                   <ActionButton icon={UserRoundPlus} iconOnly={false} onClick={() => setShowExternalForm((value) => !value)} size="sm" variant="secondary">Persona externa</ActionButton>
                 </div>
@@ -526,12 +526,12 @@ export function LoteriaPage() {
                 </div>
 
                 {employeeSuggestions.length > 0 ? (
-                  <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-metro-border bg-metro-panel p-1">
+                  <div className="mt-2 max-h-64 overflow-y-auto rounded-xl border border-metro-border bg-metro-panel p-1">
                     {employeeSuggestions.map(({ employee }) => (
                       <button className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-metro-raised" key={employee.empleado} onClick={() => addEmployeeParticipant(employee)} type="button">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold text-metro-text">{employee.nombreApellidos}</p>
-                          <p className="text-[11px] text-metro-muted">Empleado {employee.empleado}</p>
+                          <p className="text-xs text-metro-muted">Empleado {employee.empleado}</p>
                         </div>
                         <Plus className="shrink-0 text-red-300" size={15} />
                       </button>
@@ -556,11 +556,11 @@ export function LoteriaPage() {
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h4 className="text-xs font-extrabold text-metro-text">Aviso a participantes</h4>
-                    <p className="mt-1 text-[11px] text-metro-muted">Outlook coloca todas las direcciones en CCO para que no sean visibles entre sí.</p>
+                    <p className="mt-1 text-xs text-metro-muted">Outlook coloca todas las direcciones en CCO para que no sean visibles entre sí.</p>
                   </div>
                   <ActionButton icon={Mail} iconOnly={false} onClick={() => void generateParticipantsOutlookDraft()} size="sm" variant="outlook">Generar correo CCO</ActionButton>
                 </div>
@@ -572,7 +572,7 @@ export function LoteriaPage() {
                     <SummaryPill label="Emails válidos" value={String(draft.requests.filter((request) => isValidEmail(request.email)).length)} tone={draft.requests.length > 0 && draft.requests.every((request) => isValidEmail(request.email)) ? 'good' : 'alert'} />
                     <SummaryPill label="Sin email" value={String(draft.requests.filter((request) => !isValidEmail(request.email)).length)} tone={draft.requests.every((request) => isValidEmail(request.email)) ? 'good' : 'alert'} />
                   </div>
-                  <div className="flex flex-wrap gap-3 pt-1 text-[11px] text-metro-muted">
+                  <div className="flex flex-wrap gap-3 pt-1 text-xs text-metro-muted">
                     <label className="inline-flex items-center gap-2"><input checked={draft.workflow.participantesPreparados} onChange={(e) => setWorkflowFlag('participantesPreparados', e.target.checked)} type="checkbox" />Lista preparada</label>
                     <label className="inline-flex items-center gap-2"><input checked={draft.workflow.avisoPersonasEnviado} onChange={(e) => setWorkflowFlag('avisoPersonasEnviado', e.target.checked)} type="checkbox" />Aviso enviado</label>
                   </div>
@@ -580,7 +580,7 @@ export function LoteriaPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2"><UserRound size={15} className="text-red-300" /><h4 className="text-xs font-extrabold text-metro-text">Personas de la campaña</h4></div>
                 <ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Lista de participantes guardada.')} size="sm" variant="save">Guardar lista</ActionButton>
@@ -612,7 +612,7 @@ export function LoteriaPage() {
             </>
           }
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="grid gap-2 lg:grid-cols-6">
               <SummaryPill label={`Disponible ${draft.numero1 || 'Nº 1'}`} value={String(availableNumero1)} tone={stockTone(availableNumero1)} />
               <SummaryPill label={`Disponible ${draft.numero2 || 'Nº 2'}`} value={String(availableNumero2)} tone={stockTone(availableNumero2)} />
@@ -625,7 +625,7 @@ export function LoteriaPage() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-56 flex-1 max-w-md"><Search className="absolute left-2.5 top-2 text-metro-muted" size={14} /><input className={`${inputClass} pl-8`} placeholder="Buscar persona o nº empleado" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
               <select className={`${inputClass} w-auto min-w-32`} value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)}><option value="todos">Todos</option><option value="pagados">Pagados</option><option value="pendientes">Pendientes</option></select>
-              <label className="ml-auto inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-2.5 py-2 text-xs text-metro-secondary"><input checked={draft.workflow.seguimientoIniciado} onChange={(e) => setWorkflowFlag('seguimientoIniciado', e.target.checked)} type="checkbox" />Seguimiento iniciado</label>
+              <label className="ml-auto inline-flex items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-xs text-metro-secondary"><input checked={draft.workflow.seguimientoIniciado} onChange={(e) => setWorkflowFlag('seguimientoIniciado', e.target.checked)} type="checkbox" />Seguimiento iniciado</label>
             </div>
 
             <LoteriaTrackingTable
@@ -657,7 +657,7 @@ export function LoteriaPage() {
           subtitle="Revisa sobrantes, pendientes de pago, caja y exporta el resultado de la campaña."
           actions={<><ActionButton icon={Download} iconOnly={false} onClick={() => void exportCampaign(draft)} size="sm" variant="excel">Exportar Excel</ActionButton><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Cierre guardado.')} size="sm" variant="save">Guardar cierre</ActionButton></>}
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard icon={Euro} label="Total cobrado" value={money(paid)} detail={`${draft.requests.filter((request) => request.pagado).length} pagos registrados`} />
               <MetricCard icon={CircleDollarSign} label="Dinero en caja" value={money(cash)} detail="Cobros en efectivo" />
@@ -665,14 +665,14 @@ export function LoteriaPage() {
               <MetricCard icon={Ticket} label="Pendiente de cobro" value={money(pendingAmount)} detail={`${draft.requests.filter((request) => !request.pagado).length} personas pendientes`} />
             </div>
             <div className="grid gap-3 xl:grid-cols-[0.85fr_1.15fr]">
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
-                <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-[11px] text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => setCampaignClosed(e.target.checked)} type="checkbox" />Campaña cerrada</label></div>
+              <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
+                <div className="mb-3 flex items-center justify-between gap-2"><h4 className="text-xs font-extrabold text-metro-text">Resumen por número</h4><label className="inline-flex items-center gap-2 text-xs text-metro-muted"><input checked={draft.workflow.campanaCerrada} onChange={(e) => setCampaignClosed(e.target.checked)} type="checkbox" />Campaña cerrada</label></div>
                 <div className="space-y-2">
-                  <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero1 || 'Número 1'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero1)} /><SummaryPill label="Solicitados" value={String(requestedNumero1)} /><SummaryPill label="Disponibles" value={String(availableNumero1)} tone={stockTone(availableNumero1)} /></div></div>
-                  <div className="rounded-lg border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero2 || 'Número 2'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero2)} /><SummaryPill label="Solicitados" value={String(requestedNumero2)} /><SummaryPill label="Disponibles" value={String(availableNumero2)} tone={stockTone(availableNumero2)} /></div></div>
+                  <div className="rounded-xl border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero1 || 'Número 1'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero1)} /><SummaryPill label="Solicitados" value={String(requestedNumero1)} /><SummaryPill label="Disponibles" value={String(availableNumero1)} tone={stockTone(availableNumero1)} /></div></div>
+                  <div className="rounded-xl border border-metro-border bg-metro-panel p-3"><p className="text-xs font-extrabold text-metro-text">{draft.numero2 || 'Número 2'}</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><SummaryPill label="Encargados" value={String(draft.decimosNumero2)} /><SummaryPill label="Solicitados" value={String(requestedNumero2)} /><SummaryPill label="Disponibles" value={String(availableNumero2)} tone={stockTone(availableNumero2)} /></div></div>
                 </div>
               </div>
-              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+              <div className="rounded-xl border border-metro-border bg-metro-surface/70 p-3.5">
                 <h4 className="mb-3 text-xs font-extrabold text-metro-text">Estado final</h4>
                 <div className="grid gap-2 md:grid-cols-2"><SummaryPill label="Participantes" value={String(draft.requests.length)} /><SummaryPill label="Pendientes de pago" value={String(draft.requests.filter((request) => !request.pagado).length)} tone={pendingAmount > 0 ? 'alert' : 'good'} /><SummaryPill label="Importe pendiente" value={money(pendingAmount)} tone={pendingAmount > 0 ? 'alert' : 'good'} /><SummaryPill label="Disponible total" value={String(availableTotal)} tone={stockTone(availableTotal)} /></div>
               </div>

@@ -78,7 +78,7 @@ function WorkflowStep({ number, title, detail, active, done, onClick }: StepProp
       </span>
       <span className="min-w-0 pt-0.5">
         <span className="block text-[13px] font-extrabold leading-4 text-metro-text">{title}</span>
-        <span className="mt-1 block text-[11px] leading-4 text-metro-muted">{detail}</span>
+        <span className="mt-1 block text-xs leading-5 text-metro-muted">{detail}</span>
       </span>
     </button>
   );
@@ -99,7 +99,7 @@ function Panel({
     <section className={cx('rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-sm', className)}>
       <div className="mb-3">
         <h3 className="text-sm font-extrabold text-metro-text">{title}</h3>
-        {subtitle ? <p className="mt-0.5 text-[11px] text-metro-muted">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-0.5 text-xs text-metro-muted">{subtitle}</p> : null}
       </div>
       {children}
     </section>
@@ -108,10 +108,10 @@ function Panel({
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-surface/65 px-3 py-2.5">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
+    <div className="rounded-xl border border-metro-border bg-metro-surface/65 px-3.5 py-3 shadow-sm">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">{label}</p>
       <p className="mt-0.5 text-lg font-extrabold text-metro-text">{value}</p>
-      {detail ? <p className="text-[10px] text-metro-muted">{detail}</p> : null}
+      {detail ? <p className="text-[11px] text-metro-muted">{detail}</p> : null}
     </div>
   );
 }
@@ -458,7 +458,7 @@ export function PresupuestosPage() {
                   .map((scenario) => {
                     const total = calculateBudgetScenarioYear(scenario, manualItems, ticketGroups, scenario.year, calendars, people);
                     return (
-                      <div key={scenario.id} className="flex items-center gap-3 rounded-xl border border-metro-border bg-metro-surface/55 px-3 py-2.5">
+                      <div key={scenario.id} className="flex items-center gap-3 rounded-xl border border-metro-border bg-metro-surface/55 px-3.5 py-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="truncate text-sm font-bold text-metro-text">{scenario.name}</p>
@@ -514,15 +514,15 @@ export function PresupuestosPage() {
                   </Field>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-xl border border-metro-border bg-metro-surface/55 p-3">
+                  <div className="rounded-xl border border-metro-border bg-metro-surface/55 p-3.5">
                     <p className="text-xs font-bold text-metro-text">Escenario A · {ticketAbsenceA}%</p>
                     <p className="mt-1 text-lg font-extrabold text-metro-text">{euro(liveTicketPlan.annualAmountA)}</p>
-                    <p className="text-[11px] text-metro-muted">{liveTicketPlan.annualTicketsA.toLocaleString('es-ES')} tickets previstos</p>
+                    <p className="text-xs text-metro-muted">{liveTicketPlan.annualTicketsA.toLocaleString('es-ES')} tickets previstos</p>
                   </div>
-                  <div className="rounded-xl border border-metro-border bg-metro-surface/55 p-3">
+                  <div className="rounded-xl border border-metro-border bg-metro-surface/55 p-3.5">
                     <p className="text-xs font-bold text-metro-text">Escenario B · {ticketAbsenceB}%</p>
                     <p className="mt-1 text-lg font-extrabold text-metro-text">{euro(liveTicketPlan.annualAmountB)}</p>
-                    <p className="text-[11px] text-metro-muted">{liveTicketPlan.annualTicketsB.toLocaleString('es-ES')} tickets previstos</p>
+                    <p className="text-xs text-metro-muted">{liveTicketPlan.annualTicketsB.toLocaleString('es-ES')} tickets previstos</p>
                   </div>
                 </div>
                 <div className="mt-3 max-h-[240px] overflow-y-auto rounded-xl border border-metro-border">
@@ -601,12 +601,12 @@ export function PresupuestosPage() {
                 return (
                   <div key={scenario.id} className={cx('rounded-xl border p-3', scenario.selectedForExecution ? 'border-emerald-500/45 bg-emerald-500/[0.055]' : 'border-metro-border bg-metro-surface/55')}>
                     <div className="flex items-start justify-between gap-2">
-                      <div><p className="font-bold text-metro-text">{scenario.name}</p><p className="text-[11px] text-metro-muted">Ticket {euro(scenario.ticketAmount)} · absentismo {(scenario.ticketAbsenceRateA ?? 0.03) * 100}%</p></div>
+                      <div><p className="font-bold text-metro-text">{scenario.name}</p><p className="text-xs text-metro-muted">Ticket {euro(scenario.ticketAmount)} · absentismo {(scenario.ticketAbsenceRateA ?? 0.03) * 100}%</p></div>
                       {scenario.selectedForExecution ? <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-bold text-emerald-300">Elegido</span> : null}
                     </div>
                     <p className="mt-3 text-2xl font-extrabold text-metro-text">{euro(total.total)}</p>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-metro-muted"><span>Ticket: <strong className="text-metro-text">{euro(total.ticketTotal)}</strong></span><span>Partidas: <strong className="text-metro-text">{euro(total.manualTotal)}</strong></span></div>
-                    {ticketPlan ? <p className="mt-2 text-[10px] text-metro-muted">Sensibilidad con absentismo B: {euro(ticketPlan.annualAmountB + total.manualTotal)}</p> : null}
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-metro-muted"><span>Ticket: <strong className="text-metro-text">{euro(total.ticketTotal)}</strong></span><span>Partidas: <strong className="text-metro-text">{euro(total.manualTotal)}</strong></span></div>
+                    {ticketPlan ? <p className="mt-2 text-[11px] text-metro-muted">Sensibilidad con absentismo B: {euro(ticketPlan.annualAmountB + total.manualTotal)}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <ActionButton size="sm" iconOnly={false} variant={scenario.selectedForExecution ? 'approve' : 'primary'} onClick={() => chooseScenario(scenario)}>{scenario.selectedForExecution ? 'Seleccionado' : 'Seleccionar'}</ActionButton>
                       <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setActiveScenario(scenario.id); setStage('simulate'); }}>Editar</ActionButton>
@@ -635,7 +635,7 @@ export function PresupuestosPage() {
                 <Metric label="Definitivo en edición" value={euro(finalPreviewTotal)} />
                 <Metric label="Estado" value={selectedScenario.finalizedAt ? 'Definitivo guardado' : 'Pendiente de cierre'} />
               </div>
-              <div className="rounded-xl border border-metro-border overflow-hidden">
+              <div className="overflow-hidden rounded-xl border border-metro-border bg-metro-surface/45">
                 <table className="w-full text-xs">
                   <thead className="bg-metro-raised text-metro-muted"><tr><th className="px-3 py-2 text-left">Partida</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-right">Importe definitivo</th></tr></thead>
                   <tbody>
@@ -665,7 +665,7 @@ export function PresupuestosPage() {
                 <div className="mt-3 flex justify-end"><ActionButton iconOnly={false} size="sm" variant="add" onClick={saveActual}>Añadir ejecutado</ActionButton></div>
                 <div className="mt-3 max-h-[220px] overflow-y-auto rounded-xl border border-metro-border">
                   {actuals.filter((actual) => !actual.deletedAt && actual.year === selectedScenario.year).slice().sort((a, b) => b.month - a.month).map((actual) => (
-                    <div key={actual.id} className="flex items-center gap-2 border-b border-metro-border/70 px-3 py-2 last:border-b-0"><span className="w-20 text-[11px] text-metro-muted">{MONTH_NAMES[actual.month - 1]}</span><span className="min-w-0 flex-1 truncate text-xs text-metro-text">{actual.concept}</span><strong className="text-xs text-metro-text">{euro(actual.amount)}</strong><button className="text-red-300" type="button" onClick={() => removeActual(actual.id)}><Trash2 size={13} /></button></div>
+                    <div key={actual.id} className="flex items-center gap-2 border-b border-metro-border/70 px-3 py-2 last:border-b-0"><span className="w-20 text-xs text-metro-muted">{MONTH_NAMES[actual.month - 1]}</span><span className="min-w-0 flex-1 truncate text-xs text-metro-text">{actual.concept}</span><strong className="text-xs text-metro-text">{euro(actual.amount)}</strong><button className="text-red-300" type="button" onClick={() => removeActual(actual.id)}><Trash2 size={13} /></button></div>
                   ))}
                 </div>
               </Panel>
