@@ -155,7 +155,7 @@ function PlantillaMetricCard({
         <div className="min-w-0">
           <div className="text-[23px] font-black leading-none text-white">{value}</div>
           <div className="mt-1 truncate text-[11px] font-extrabold text-slate-100">{label}</div>
-          <div className="mt-1 truncate text-[9px] font-medium text-slate-400">{detail}</div>
+          <div className="mt-1 truncate text-[10px] font-medium text-slate-400">{detail}</div>
         </div>
       </div>
     </div>
