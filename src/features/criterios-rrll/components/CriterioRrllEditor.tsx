@@ -120,6 +120,7 @@ export function CriterioRrllEditor({
         </div>
       </ModalHeader>
 
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
         {recordLock.status === 'locked' && recordLock.lockedBy && (
           <RecordLockNotice className="mb-3" lockedBy={recordLock.lockedBy} />
         )}
@@ -265,6 +266,7 @@ export function CriterioRrllEditor({
             </ActionButton>
           </div>
         </form>
+      </div>
       {recoveryDialogNode}
       {dialogNode}
     </ModalShell>
