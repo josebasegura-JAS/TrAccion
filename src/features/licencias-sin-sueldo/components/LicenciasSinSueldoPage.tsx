@@ -12,7 +12,6 @@ import { Toolbar } from '../../../components/ui/Toolbar';
 import { SearchField } from '../../../components/ui/SearchField';
 import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { Notice } from '../../../components/ui/Notice';
-import { CountBadge } from '../../../components/ui/CountBadge';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
@@ -373,10 +372,7 @@ export function LicenciasSinSueldoPage() {
   };
 
   return (
-    <section
-      className="space-y-3"
-      id="licencias-sin-sueldo"
-    >
+    <section className="space-y-4" id="licencias-sin-sueldo">
       <PageHeader
         title="Licencias sin sueldo y Excedencias"
         helpSections={LICENCIAS_HELP_SECTIONS}
@@ -438,12 +434,14 @@ export function LicenciasSinSueldoPage() {
 
       {wordStatus && <Notice tone="muted">{wordStatus}</Notice>}
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2">
         <div className="min-w-0">
           <LicenciasBlock
             count={blocks.pendienteAprobacion.length}
             icon={<Clock size={18} />}
+            subtitle="Solicitudes pendientes de aprobación."
             title="Pendientes de aprobar"
+            tone="danger"
           >
             <LicenciasTable
               blockId="pendiente_aprobacion"
@@ -461,6 +459,7 @@ export function LicenciasSinSueldoPage() {
               }}
               onGenerateProrrogaWord={(record) => { void generateProrrogaWord(record); }}
               records={blocks.pendienteAprobacion}
+              showToolbar={false}
               title="Licencias sin sueldo - Pendientes de aprobar"
             />
           </LicenciasBlock>
@@ -470,7 +469,9 @@ export function LicenciasSinSueldoPage() {
           <LicenciasBlock
             count={blocks.pendienteFirma.length}
             icon={<FileSignature size={18} />}
+            subtitle="Solicitudes aprobadas pendientes de firma."
             title="Pendientes de firma"
+            tone="warning"
           >
             <LicenciasTable
               blockId="pendiente_firma"
@@ -484,6 +485,7 @@ export function LicenciasSinSueldoPage() {
                 void generateWord(record);
               }}
               records={blocks.pendienteFirma}
+              showToolbar={false}
               title="Licencias sin sueldo - Pendientes de firma"
             />
           </LicenciasBlock>
@@ -493,7 +495,9 @@ export function LicenciasSinSueldoPage() {
       <LicenciasBlock
         count={blocks.vigente.length}
         icon={<CheckCircle2 size={18} />}
+        subtitle="Solicitudes y excedencias actualmente en vigor."
         title="Vigentes"
+        tone="success"
       >
         <LicenciasTable
           blockId="vigente"
@@ -510,15 +514,18 @@ export function LicenciasSinSueldoPage() {
           }}
           onGenerateProrrogaWord={(record) => { void generateProrrogaWord(record); }}
           records={blocks.vigente}
+          showToolbar={false}
           title="Licencias sin sueldo - Vigentes"
         />
       </LicenciasBlock>
 
-      <section className="rounded-xl bg-metro-panel/45 p-3">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-metro-text">Histórico por año</h2>
-          <CountBadge tone="muted">{historicalCount}</CountBadge>
-        </div>
+      <LicenciasBlock
+        count={historicalCount}
+        icon={<ChevronRight size={18} />}
+        subtitle="Solicitudes finalizadas agrupadas por año."
+        title="Histórico por año"
+        tone="history"
+      >
         <div className="space-y-3">
           {groupedHistory.length === 0 && (
             <p className="rounded-xl border border-dashed border-metro-border p-4 text-sm text-metro-muted">
@@ -566,7 +573,7 @@ export function LicenciasSinSueldoPage() {
             );
           })}
         </div>
-      </section>
+      </LicenciasBlock>
 
       {editor && (
         <LicenciasSinSueldoEditor
