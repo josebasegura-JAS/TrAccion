@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Settings, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Clock3, ListChecks, PlayCircle, Settings, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -89,6 +89,100 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
 ];
 
 const PRIORITY_ORDER = new Map(TASK_PRIORITIES.map((priority, index) => [priority, index]));
+
+
+const TASK_STATE_LABELS: Record<Task['estado'], string> = {
+  pendiente: 'Pendiente',
+  'en curso': 'En curso',
+  bloqueada: 'Bloqueada',
+  resuelta: 'Resuelta',
+  cerrada: 'Cerrada',
+};
+
+const TASK_STATE_PILL: Record<Task['estado'], string> = {
+  pendiente: 'border-amber-400/40 bg-amber-400/10 text-amber-200 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.04)]',
+  'en curso': 'border-sky-400/40 bg-sky-400/10 text-sky-200 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.04)]',
+  bloqueada: 'border-rose-400/40 bg-rose-400/10 text-rose-200 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.04)]',
+  resuelta: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.04)]',
+  cerrada: 'border-slate-400/30 bg-slate-400/10 text-slate-300',
+};
+
+const TASK_STATE_DOT: Record<Task['estado'], string> = {
+  pendiente: 'bg-amber-400',
+  'en curso': 'bg-sky-400',
+  bloqueada: 'bg-rose-400',
+  resuelta: 'bg-emerald-400',
+  cerrada: 'bg-slate-400',
+};
+
+const TASK_PRIORITY_LABELS: Record<Task['prioridad'], string> = {
+  critica: 'Crítica',
+  alta: 'Alta',
+  media: 'Media',
+  baja: 'Baja',
+};
+
+const TASK_PRIORITY_DOT: Record<Task['prioridad'], string> = {
+  critica: 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.35)]',
+  alta: 'bg-red-400',
+  media: 'bg-amber-400',
+  baja: 'bg-emerald-400',
+};
+
+function TaskSummaryCard({
+  icon: Icon,
+  value,
+  label,
+  detail,
+  tone,
+}: {
+  icon: typeof ListChecks;
+  value: number;
+  label: string;
+  detail: string;
+  tone: 'blue' | 'amber' | 'cyan' | 'rose' | 'red';
+}) {
+  const toneMap = {
+    blue: {
+      card: 'border-sky-400/20 bg-[linear-gradient(135deg,rgba(30,64,175,0.16),rgba(14,34,57,0.9))]',
+      icon: 'border-sky-400/15 bg-sky-400/10 text-sky-300',
+      label: 'text-sky-300',
+    },
+    amber: {
+      card: 'border-amber-400/20 bg-[linear-gradient(135deg,rgba(217,119,6,0.10),rgba(14,34,57,0.9))]',
+      icon: 'border-amber-400/15 bg-amber-400/10 text-amber-300',
+      label: 'text-amber-300',
+    },
+    cyan: {
+      card: 'border-cyan-400/20 bg-[linear-gradient(135deg,rgba(6,182,212,0.10),rgba(14,34,57,0.9))]',
+      icon: 'border-cyan-400/15 bg-cyan-400/10 text-cyan-300',
+      label: 'text-cyan-300',
+    },
+    rose: {
+      card: 'border-rose-400/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.11),rgba(14,34,57,0.9))]',
+      icon: 'border-rose-400/15 bg-rose-400/10 text-rose-300',
+      label: 'text-rose-300',
+    },
+    red: {
+      card: 'border-red-400/20 bg-[linear-gradient(135deg,rgba(239,68,68,0.10),rgba(14,34,57,0.9))]',
+      icon: 'border-red-400/15 bg-red-400/10 text-red-300',
+      label: 'text-red-300',
+    },
+  }[tone];
+
+  return (
+    <div className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.18)] ${toneMap.card}`}>
+      <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}>
+        <Icon size={20} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xl font-black leading-none text-metro-text">{value}</span>
+        <span className={`mt-1 block truncate text-sm font-extrabold ${toneMap.label}`}>{label}</span>
+        <span className="mt-0.5 block truncate text-[11px] font-medium text-metro-muted">{detail}</span>
+      </span>
+    </div>
+  );
+}
 
 const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active';
 
@@ -195,6 +289,29 @@ export function TareasPage({
     [taskOrigins],
   );
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
+  const activeTasks = useMemo(() => visibleTasks.filter((task) => !isTaskClosed(task)), [visibleTasks]);
+  const taskSummary = useMemo(() => {
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const total = activeTasks.length;
+    const percentage = (count: number) => (total > 0 ? Math.round((count / total) * 100) : 0);
+    const pending = activeTasks.filter((task) => task.estado === 'pendiente').length;
+    const inProgress = activeTasks.filter((task) => task.estado === 'en curso').length;
+    const critical = activeTasks.filter((task) => task.prioridad === 'critica').length;
+    const dueToday = activeTasks.filter((task) => task.fechaLimite === todayIso).length;
+
+    return {
+      total,
+      pending,
+      inProgress,
+      critical,
+      dueToday,
+      pendingPercentage: percentage(pending),
+      inProgressPercentage: percentage(inProgress),
+      criticalPercentage: percentage(critical),
+      dueTodayPercentage: percentage(dueToday),
+    };
+  }, [activeTasks]);
   const filteredTasks = useMemo(() => filterTasks(tasks, filters), [filters, tasks]);
   const historicTasks = useMemo(
     () => visibleTasks.filter((task) => isTaskClosed(task)),
@@ -313,7 +430,12 @@ export function TareasPage({
         id: 'estado',
         header: 'Estado',
         accessor: (task) => task.estado,
-        render: (task) => task.estado,
+        render: (task) => (
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${TASK_STATE_PILL[task.estado]}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${TASK_STATE_DOT[task.estado]}`} />
+            {TASK_STATE_LABELS[task.estado]}
+          </span>
+        ),
         width: 120,
         minWidth: 95,
         maxWidth: 180,
@@ -324,7 +446,12 @@ export function TareasPage({
         id: 'prioridad',
         header: 'Prioridad',
         accessor: (task) => PRIORITY_ORDER.get(task.prioridad) ?? TASK_PRIORITIES.length,
-        render: (task) => task.prioridad,
+        render: (task) => (
+          <span className="inline-flex items-center gap-2 font-semibold text-metro-secondary">
+            <span className={`h-2 w-2 rounded-full ${TASK_PRIORITY_DOT[task.prioridad]}`} />
+            {TASK_PRIORITY_LABELS[task.prioridad]}
+          </span>
+        ),
         width: 105,
         minWidth: 90,
         maxWidth: 165,
@@ -475,89 +602,127 @@ export function TareasPage({
       id="tareas"
     >
       <PageHeader
-        actions={
-          <Toolbar
-            filters={
-              <>
-                <SearchField
-                  onChange={(event) => setFilter('search', event.target.value)}
-                  onClear={() => setFilter('search', '')}
-                  placeholder="Buscar..."
-                  value={filters.search}
-                  wrapperClassName="min-w-[220px]"
-                />
-                <FilterSelect
-                  allLabel="Todos los tipos"
-                  aria-label="Filtrar tareas por tipo"
-                  onChange={(event) => setFilter('tipo', event.target.value as typeof filters.tipo)}
-                  options={TASK_TYPES}
-                  value={filters.tipo}
-                  wrapperClassName="w-[96px]"
-                />
-                <FilterSelect
-                  allLabel="Todas las fases"
-                  aria-label="Filtrar tareas por fase"
-                  onChange={(event) => setFilter('fase', event.target.value)}
-                  options={phaseFilterOptions}
-                  value={filters.fase}
-                  wrapperClassName="w-[104px]"
-                />
-                <FilterSelect
-                  allLabel="Todos los estados"
-                  aria-label="Filtrar tareas por estado"
-                  onChange={(event) => setFilter('estado', event.target.value as typeof filters.estado)}
-                  options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
-                  value={filters.estado}
-                  wrapperClassName="w-[104px]"
-                />
-                <FilterSelect
-                  allLabel="Todas las prioridades"
-                  aria-label="Filtrar tareas por prioridad"
-                  onChange={(event) =>
-                    setFilter('prioridad', event.target.value as typeof filters.prioridad)
-                  }
-                  options={TASK_PRIORITIES}
-                  value={filters.prioridad}
-                  wrapperClassName="w-[116px]"
-                />
-                <FilterSelect
-                  allLabel="Todos los orígenes"
-                  aria-label="Filtrar tareas por origen"
-                  onChange={(event) => setFilter('origen', event.target.value)}
-                  options={originFilterOptions}
-                  value={filters.origen}
-                  wrapperClassName="w-[120px]"
-                />
-              </>
-            }
-            actions={
-              <>
-                <ActionButton
-                  icon={Settings}
-                  iconOnly={false}
-                  onClick={() => setIsOriginsModalOpen(true)}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Orígenes
-                </ActionButton>
-                <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
-                  Nueva tarea
-                </ActionButton>
-              </>
-            }
-          />
-        }
         helpSections={TAREAS_HELP_SECTIONS}
         helpSubtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
         status={<InlineSaveFeedback />}
         title="Tareas"
       />
 
-      <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
+      <Toolbar
+        className="border-slate-400/20 bg-[linear-gradient(180deg,rgba(31,48,69,0.78),rgba(20,35,54,0.74))] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.18)]"
+        filters={
+          <>
+            <SearchField
+              onChange={(event) => setFilter('search', event.target.value)}
+              onClear={() => setFilter('search', '')}
+              placeholder="Buscar tareas, responsables, palabras clave..."
+              value={filters.search}
+              wrapperClassName="min-w-[250px] flex-[1.4]"
+            />
+            <FilterSelect
+              allLabel="Todos los tipos"
+              aria-label="Filtrar tareas por tipo"
+              onChange={(event) => setFilter('tipo', event.target.value as typeof filters.tipo)}
+              options={TASK_TYPES}
+              value={filters.tipo}
+              wrapperClassName="w-[118px]"
+            />
+            <FilterSelect
+              allLabel="Todas las fases"
+              aria-label="Filtrar tareas por fase"
+              onChange={(event) => setFilter('fase', event.target.value)}
+              options={phaseFilterOptions}
+              value={filters.fase}
+              wrapperClassName="w-[128px]"
+            />
+            <FilterSelect
+              allLabel="Todos los estados"
+              aria-label="Filtrar tareas por estado"
+              onChange={(event) => setFilter('estado', event.target.value as typeof filters.estado)}
+              options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
+              value={filters.estado}
+              wrapperClassName="w-[132px]"
+            />
+            <FilterSelect
+              allLabel="Todas las prioridades"
+              aria-label="Filtrar tareas por prioridad"
+              onChange={(event) =>
+                setFilter('prioridad', event.target.value as typeof filters.prioridad)
+              }
+              options={TASK_PRIORITIES}
+              value={filters.prioridad}
+              wrapperClassName="w-[148px]"
+            />
+            <FilterSelect
+              allLabel="Todos los orígenes"
+              aria-label="Filtrar tareas por origen"
+              onChange={(event) => setFilter('origen', event.target.value)}
+              options={originFilterOptions}
+              value={filters.origen}
+              wrapperClassName="w-[138px]"
+            />
+          </>
+        }
+        actions={
+          <>
+            <ActionButton
+              icon={Settings}
+              iconOnly={false}
+              onClick={() => setIsOriginsModalOpen(true)}
+              size="sm"
+              variant="secondary"
+            >
+              Orígenes
+            </ActionButton>
+            <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
+              Nueva tarea
+            </ActionButton>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-5 gap-2.5">
+        <TaskSummaryCard
+          detail="Total de tareas activas"
+          icon={ListChecks}
+          label="Activas"
+          tone="blue"
+          value={taskSummary.total}
+        />
+        <TaskSummaryCard
+          detail={`${taskSummary.pendingPercentage}% del total`}
+          icon={Clock3}
+          label="Pendientes"
+          tone="amber"
+          value={taskSummary.pending}
+        />
+        <TaskSummaryCard
+          detail={`${taskSummary.inProgressPercentage}% del total`}
+          icon={PlayCircle}
+          label="En curso"
+          tone="cyan"
+          value={taskSummary.inProgress}
+        />
+        <TaskSummaryCard
+          detail={`${taskSummary.criticalPercentage}% del total`}
+          icon={AlertTriangle}
+          label="Críticas"
+          tone="rose"
+          value={taskSummary.critical}
+        />
+        <TaskSummaryCard
+          detail={`${taskSummary.dueTodayPercentage}% del total`}
+          icon={CalendarClock}
+          label="Vencen hoy"
+          tone="red"
+          value={taskSummary.dueToday}
+        />
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
+        <div className="flex items-center justify-between border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-metro-red" /> Tareas activas
+            <SlidersHorizontal size={16} className="text-sky-300" /> Tareas activas
             <CountBadge>{filteredTasks.length} registros</CountBadge>
           </div>
           <ExportPrintButtons
@@ -590,6 +755,7 @@ export function TareasPage({
           onSortChange={setSort}
           rows={activeTaskRows}
           sort={preferences.sort}
+          strongZebra
         />
       </div>
 

@@ -62,6 +62,8 @@ interface DataTableProps<Row, ColumnId extends string> {
   onRowClick?: (row: Row) => void;
   onRowDoubleClick?: (row: Row) => void;
   rowClassName?: (row: Row) => string;
+  /** Aumenta el contraste del cebreado para pantallas operativas densas. */
+  strongZebra?: boolean;
   ariaLabel: string;
   maxHeightClassName?: string;
   /** Altura estable opcional del viewport. Útil en bandejas de workflow para evitar saltos al mover registros entre estados. */
@@ -158,6 +160,7 @@ export function DataTable<Row, ColumnId extends string>({
   onRowClick,
   onRowDoubleClick,
   rowClassName,
+  strongZebra = false,
   ariaLabel,
   maxHeightClassName = 'max-h-[460px]',
   heightClassName,
@@ -475,7 +478,7 @@ export function DataTable<Row, ColumnId extends string>({
             ) : (
               visibleRows.map((row, rowIndex) => (
                 <tr
-                  className={`${rowIndex % 2 === 0 ? 'bg-transparent' : 'bg-metro-panel/28'} border-b border-metro-border/55 transition-colors hover:bg-metro-red/[0.07] ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                  className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/40' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/60' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                   key={getRowId(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
