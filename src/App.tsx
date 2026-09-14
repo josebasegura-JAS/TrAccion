@@ -13,6 +13,7 @@ import {
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
 import { hasDirtyEditors } from './services/dirtyEditors';
+import { useAppDialog } from './hooks/useAppDialog';
 import {
   bootstrapSqlitePersistence,
   isTemporarySqliteLockMessage,
@@ -368,6 +369,7 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
 }
 
 export function App() {
+  const { confirm, dialogNode } = useAppDialog();
   const [activeView, setActiveView] = useState<AppView>(() => readInitialActiveView());
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
 
@@ -386,12 +388,17 @@ export function App() {
     };
   }, []);
 
-  const changeActiveView = (view: AppView): void => {
+  const changeActiveView = async (view: AppView): Promise<void> => {
     const nextView = resolveActiveViewForNavigation(view);
     if (nextView === activeView) return;
     if (hasDirtyEditors()) {
-      const shouldLeave = window.confirm(
+      const shouldLeave = await confirm(
         'Hay cambios sin guardar en el formulario abierto. Si cambia de módulo ahora, el borrador se conservará para poder recuperarlo. ¿Desea continuar?',
+        {
+          title: 'Cambios sin guardar',
+          confirmLabel: 'Cambiar de módulo',
+          cancelLabel: 'Seguir editando',
+        },
       );
       if (!shouldLeave) return;
     }
@@ -499,6 +506,7 @@ export function App() {
         </main>
       </div>
       </div>
+      {dialogNode}
     </AppShellErrorBoundary>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { openWorkbookInExcel } from '../../../shared/export/tableExport';
 import type { Employee } from '../../plantilla/domain/employee';
 import {
@@ -207,6 +208,7 @@ export function TicketRestauranteAnnualBalance({
   people: readonly TicketPerson[];
   onUpdateConfig: (config: TicketRestaurantConfig) => Promise<{ ok: boolean; message?: string }>;
 }) {
+  const { confirm, dialogNode } = useAppDialog();
   const [year, setYear] = useState(new Date().getFullYear());
   const [mode, setMode] = useState<'people' | 'areas'>('people');
   const [search, setSearch] = useState('');
@@ -318,7 +320,11 @@ export function TicketRestauranteAnnualBalance({
       setStatusMessage('El ejercicio solo puede cerrarse cuando el año ha finalizado.');
       return;
     }
-    if (!window.confirm(`Cerrar el ejercicio ${year}? Se guardará una fotografía definitiva de los 12 meses. Podrás reabrirlo después si necesitas hacer una regularización.`)) return;
+    const confirmed = await confirm(
+      `Cerrar el ejercicio ${year}? Se guardará una fotografía definitiva de los 12 meses. Podrás reabrirlo después si necesitas hacer una regularización.`,
+      { title: 'Cerrar ejercicio', confirmLabel: 'Cerrar ejercicio', cancelLabel: 'Cancelar' },
+    );
+    if (!confirmed) return;
 
     setClosingYear(true);
     setStatusMessage('');
@@ -358,7 +364,11 @@ export function TicketRestauranteAnnualBalance({
   };
 
   const handleReopenYear = async () => {
-    if (!window.confirm(`Reabrir el ejercicio ${year}? El balance volverá a calcularse con los datos actuales y podrás incorporar regularizaciones retroactivas.`)) return;
+    const confirmed = await confirm(
+      `Reabrir el ejercicio ${year}? El balance volverá a calcularse con los datos actuales y podrás incorporar regularizaciones retroactivas.`,
+      { title: 'Reabrir ejercicio', confirmLabel: 'Reabrir ejercicio', cancelLabel: 'Cancelar' },
+    );
+    if (!confirmed) return;
 
     setClosingYear(true);
     setStatusMessage('');
@@ -548,6 +558,7 @@ export function TicketRestauranteAnnualBalance({
           <Users className="mr-2 h-4 w-4 text-blue-500" /> {peopleRows.filter((row) => row.area === 'Sin área').length} persona(s) sin área asignada
         </div>
       </div>
+      {dialogNode}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select } from '../../../components/ui/Field';
 import { Notice } from '../../../components/ui/Notice';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
 import {
   BUDGET_ACTUAL_BLOCKS,
@@ -126,6 +127,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function PresupuestosPage() {
+  const { confirm, dialogNode } = useAppDialog();
   const { calendars, people, load: loadTicketData } = useTicketRestauranteStore();
   const {
     activeScenarioId,
@@ -359,17 +361,29 @@ export function PresupuestosPage() {
     setMessage(`${scenario.name} seleccionado como escenario a ejecutar para ${scenario.year}.`);
   };
 
-  const confirmAndRemoveScenario = (scenario: BudgetScenario) => {
+  const confirmAndRemoveScenario = async (scenario: BudgetScenario) => {
     const isFinalized = Boolean(scenario.finalizedAt);
     const firstMessage = isFinalized
       ? `Vas a eliminar el presupuesto definitivo "${scenario.name}" de ${scenario.year}. También se eliminarán su escenario y sus partidas asociadas. ¿Quieres continuar?`
       : `¿Eliminar el escenario "${scenario.name}" de ${scenario.year}? También se eliminarán sus partidas asociadas.`;
 
-    if (!window.confirm(firstMessage)) return;
+    const firstConfirmed = await confirm(firstMessage, {
+      title: isFinalized ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario',
+      confirmLabel: isFinalized ? 'Continuar' : 'Eliminar',
+      cancelLabel: 'Cancelar',
+      danger: true,
+    });
+    if (!firstConfirmed) return;
 
     if (isFinalized) {
-      const secondConfirmed = window.confirm(
-        `SEGUNDA CONFIRMACIÓN: el presupuesto "${scenario.name}" está cerrado como definitivo. Esta acción lo eliminará del flujo presupuestario. ¿Confirmas definitivamente?`,
+      const secondConfirmed = await confirm(
+        `El presupuesto "${scenario.name}" está cerrado como definitivo. Esta acción lo eliminará del flujo presupuestario de forma permanente.`,
+        {
+          title: 'Confirmación definitiva',
+          confirmLabel: 'Eliminar definitivamente',
+          cancelLabel: 'Cancelar',
+          danger: true,
+        },
       );
       if (!secondConfirmed) return;
     }
@@ -701,6 +715,7 @@ export function PresupuestosPage() {
           </div>
         )
       )}
+      {dialogNode}
     </div>
   );
 }
