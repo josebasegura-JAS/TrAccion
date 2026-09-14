@@ -205,32 +205,28 @@ function MetricCard({
       <span className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${tone.accentBar}`} />
       <span className={`pointer-events-none absolute -left-8 top-1/2 h-20 w-20 -translate-y-1/2 rounded-full blur-2xl ${tone.glow}`} />
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${tone.icon}`}>
-            <Icon size={18} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] font-semibold text-slate-200">{label}</span>
-            <span className="mt-1 block text-[30px] font-black leading-none text-white">{value}</span>
-            <span className={`mt-2 block truncate text-[10px] font-medium ${tone.detail}`}>{detail}</span>
-          </span>
-        </div>
+      <div className="relative flex min-w-0 flex-1 items-center gap-3 pb-4 pt-1.5">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${tone.icon}`}>
+          <Icon size={18} />
+        </span>
+        <span className="min-w-0 flex-1 pt-0.5">
+          <span className="block truncate text-[11px] font-semibold leading-tight text-slate-200">{label}</span>
+          <span className="mt-1 block text-[28px] font-black leading-none text-white">{value}</span>
+          <span className={`mt-1.5 block truncate text-[10px] font-medium leading-tight ${tone.detail}`}>{detail}</span>
+        </span>
 
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/5">
-            <div className={`h-full rounded-full ${tone.accentBar} ${progressWidth}`} />
-          </div>
-          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border transition ${tone.arrow}`}>
-            <ChevronRight size={12} />
-          </span>
+        <div className="absolute bottom-0 left-0 right-10 h-1 overflow-hidden rounded-full bg-white/5">
+          <div className={`h-full rounded-full ${tone.accentBar} ${progressWidth}`} />
         </div>
+        <span className={`absolute bottom-[-9px] right-0 grid h-7 w-7 place-items-center rounded-full border transition ${tone.arrow}`}>
+          <ChevronRight size={12} />
+        </span>
       </div>
     </>
   );
 
   const className =
-    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3.5 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
+    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3.5 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
 
   return onClick ? (
     <button className={`${className} transition hover:-translate-y-[1px] hover:brightness-[1.04]`} onClick={onClick} type="button">
