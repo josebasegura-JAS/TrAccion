@@ -1,4 +1,4 @@
-import { RotateCcw, Upload } from 'lucide-react';
+import { Eye, FileText, Mail, RotateCcw, Upload, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildEspecialesHtmlBody,
@@ -392,186 +392,349 @@ export function EspecialesPage() {
   };
 
   return (
-    <section className="space-y-3" id="especiales">
-      <div>
-        <PageHeader
-          title="Especiales"
-          status={<InlineSaveFeedback />}
-          helpSections={ESPECIALES_HELP_SECTIONS}
-          helpSubtitle="Guía rápida de comunicaciones Outlook, destinatarios, plantilla HTML y mensajes .msg."
-          actions={
-            <>
-              <ActionButton
-                variant="outlook"
-                iconOnly={false}
-                disabled={Boolean(draftUnavailableReason) || isGeneratingDraft}
-                onClick={() => void createOutlookDraft()}
-                size="sm"
-              >
-                {isGeneratingDraft
-                  ? 'Generando borrador en Outlook...'
-                  : 'Generar borrador en Outlook'}
-              </ActionButton>
+    <section className="space-y-4" id="especiales">
+      <PageHeader
+        title="Especiales"
+        status={<InlineSaveFeedback />}
+        helpSections={ESPECIALES_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de comunicaciones Outlook, destinatarios, plantilla HTML y mensajes .msg."
+        actions={
+          <>
+            <ActionButton
+              variant="outlook"
+              iconOnly={false}
+              disabled={Boolean(draftUnavailableReason) || isGeneratingDraft}
+              onClick={() => void createOutlookDraft()}
+              size="sm"
+            >
+              {isGeneratingDraft ? 'Generando borrador…' : 'Generar borrador en Outlook'}
+            </ActionButton>
+            <ActionButton
+              variant="secondary"
+              icon={RotateCcw}
+              iconOnly={false}
+              onClick={resetForm}
+              size="sm"
+            >
+              Limpiar formulario
+            </ActionButton>
+          </>
+        }
+      />
+
+      <div className="space-y-4 rounded-[1.4rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(24,43,67,0.97),rgba(18,34,54,0.95))] p-4 shadow-[0_18px_42px_rgba(2,8,23,0.24)]">
+        <div
+          className={`rounded-[1.15rem] border-2 border-dashed p-4 transition ${
+            isDropActive
+              ? 'border-sky-400/70 bg-sky-500/10 shadow-[0_0_0_1px_rgba(56,189,248,0.18)]'
+              : 'border-sky-400/20 bg-sky-500/5'
+          }`}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setIsDropActive(true);
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setIsDropActive(false);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setIsDropActive(false);
+            const files = Array.from(event.dataTransfer.files || []);
+            const file = files.find((item) => /\.msg$/i.test(item.name));
+            if (!file) {
+              setMsgStatus(
+                'Si el arrastre directo desde Outlook no funciona, guarda primero el correo como archivo .msg.',
+              );
+              setMsgStatusIsError(true);
+              return;
+            }
+            handleSelectedFile(file);
+          }}
+        >
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-sky-400/20 bg-sky-500/12 text-sky-200">
+                <Mail size={20} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-metro-text">Importar correo del servicio especial</h3>
+                <p className="text-sm text-metro-muted">Arrastra aquí el archivo .msg o selecciónalo manualmente para rellenar el formulario.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <ActionButton
                 variant="secondary"
-                icon={RotateCcw}
+                icon={Upload}
                 iconOnly={false}
-                onClick={resetForm}
-                size="sm"
+                onClick={() => fileInputRef.current?.click()}
               >
-                Limpiar formulario
+                Seleccionar mensaje
               </ActionButton>
-            </>
-          }
-        />
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
-          <div className="space-y-4">
-            <div
-              className={`flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-sm font-semibold transition ${
-                isDropActive
-                  ? 'border-metro-red bg-metro-red/10'
-                  : 'border-metro-border bg-metro-panel'
-              }`}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDropActive(true);
-              }}
-              onDragLeave={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDropActive(false);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setIsDropActive(false);
-                const files = Array.from(event.dataTransfer.files || []);
-                const file = files.find((item) => /\.msg$/i.test(item.name));
-                if (!file) {
-                  setMsgStatus(
-                    'Si el arrastre directo desde Outlook no funciona, guarda primero el correo como archivo .msg.',
-                  );
-                  setMsgStatusIsError(true);
-                  return;
-                }
-                handleSelectedFile(file);
-              }}
-            >
-              Arrastra aquí el correo .msg del servicio especial o selecciónalo manualmente.
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <ActionButton
-                  variant="secondary"
-                  icon={Upload}
-                  iconOnly={false}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Seleccionar mensaje
-                </ActionButton>
-                <ActionButton variant="save" iconOnly={false} onClick={() => void importMessage()}>
-                  Importar mensaje
-                </ActionButton>
-              </div>
-              <input
-                ref={fileInputRef}
-                accept=".msg"
-                className="hidden"
-                onChange={(event) => handleSelectedFile(event.target.files?.[0] ?? null)}
-                type="file"
-              />
+              <ActionButton variant="save" iconOnly={false} onClick={() => void importMessage()}>
+                Importar mensaje
+              </ActionButton>
             </div>
-            {msgStatus && (
+          </div>
+          <input
+            ref={fileInputRef}
+            accept=".msg"
+            className="hidden"
+            onChange={(event) => handleSelectedFile(event.target.files?.[0] ?? null)}
+            type="file"
+          />
+          {(messageFile || msgStatus) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
+              {messageFile ? (
+                <span className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-sky-100">
+                  Archivo: {messageFile.name}
+                </span>
+              ) : null}
+              {msgStatus ? (
+                <span
+                  className={`rounded-full border px-3 py-1 ${
+                    msgStatusIsError
+                      ? 'border-red-400/30 bg-red-500/10 text-red-200'
+                      : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
+                  }`}
+                >
+                  {msgStatus}
+                </span>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(400px,0.92fr)] xl:items-start">
+          <div className="min-w-0 space-y-4">
+            <div className="rounded-[1.2rem] border border-metro-border/80 bg-metro-panel/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-metro-text">Datos del servicio especial</h3>
+                    <p className="text-xs text-metro-muted">Completa o revisa los datos detectados antes de generar el correo.</p>
+                  </div>
+                </div>
+                <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-semibold text-metro-muted">
+                  Año detectado: {detectYearFromText(`${serviceDraft.evento} ${serviceDraft.fecha} ${serviceDraft.enlace}`) || '—'}
+                </span>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-12">
+                <FieldLabel className="lg:col-span-6">
+                  Evento <span className="text-metro-red">*</span>
+                  <Input
+                    required
+                    onChange={(event) => setField('evento', event.target.value)}
+                    placeholder="Nombre del evento"
+                    value={serviceDraft.evento}
+                  />
+                </FieldLabel>
+                <FieldLabel className="lg:col-span-3">
+                  Fecha
+                  <Input
+                    onChange={(event) => setField('fecha', event.target.value)}
+                    placeholder="DD/MM/AAAA"
+                    type="date"
+                    value={serviceDraft.fecha}
+                  />
+                </FieldLabel>
+                <FieldLabel className="lg:col-span-3">
+                  Hora
+                  <Input
+                    onChange={(event) => setField('hora', event.target.value)}
+                    placeholder="HH:mm"
+                    type="time"
+                    value={serviceDraft.hora}
+                  />
+                </FieldLabel>
+                <FieldLabel className="lg:col-span-12">
+                  Texto intranet del servicio especial
+                  <Input
+                    onChange={(event) =>
+                      setServiceDraft((current) => ({
+                        ...current,
+                        enlace: event.target.value,
+                      }))
+                    }
+                    placeholder="Ej.: BEC Alejandro Sanz Obra Lutxana Vía 2 Domingo"
+                    value={serviceDraft.enlace}
+                  />
+                </FieldLabel>
+                <FieldLabel className="lg:col-span-12">
+                  Ruta común / ubicación de turnos
+                  <Input
+                    onChange={(event) => setField('ruta', event.target.value)}
+                    placeholder="\\servidor\carpeta\..."
+                    value={serviceDraft.ruta}
+                  />
+                </FieldLabel>
+                <FieldLabel className="lg:col-span-12">
+                  Observaciones internas (opcional)
+                  <Textarea
+                    onChange={(event) => setField('observaciones', event.target.value)}
+                    placeholder="Solo para uso interno"
+                    rows={2}
+                    value={serviceDraft.observaciones}
+                  />
+                </FieldLabel>
+              </div>
+            </div>
+
+            <div className="rounded-[1.2rem] border border-metro-border/80 bg-metro-panel/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-metro-text">Destinatarios</h3>
+                    <p className="text-xs text-metro-muted">Gestiona las listas Para y CC sin salir de la misma pantalla.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-metro-muted">
+                  <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1">Para: {recipientGroups.to.length}</span>
+                  <span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1">CC: {recipientGroups.cc.length}</span>
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-3">
+                <RecipientTable
+                  items={sortRecipients(recipientGroups.to)}
+                  onDelete={deleteRecipient}
+                  onEdit={editRecipient}
+                  title="Para"
+                />
+                <RecipientTable
+                  items={sortRecipients(recipientGroups.cc)}
+                  onDelete={deleteRecipient}
+                  onEdit={editRecipient}
+                  title="Con copia (CC)"
+                />
+
+                <div className="rounded-xl border border-metro-border/80 bg-metro-surface/45 p-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-metro-text">Destinatario</h4>
+                      <p className="text-[11px] text-metro-muted">{editingRecipientId ? `Editando ${editingRecipientType === 'to' ? 'Para' : 'CC'}` : 'Alta rápida de destinatarios'}</p>
+                    </div>
+                    {editingRecipientId ? (
+                      <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">
+                        Edición
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-3">
+                    <FieldLabel>
+                      Nombre
+                      <Input
+                        onChange={(event) =>
+                          setRecipientDraft((current) => ({ ...current, name: event.target.value }))
+                        }
+                        value={recipientDraft.name}
+                      />
+                    </FieldLabel>
+                    <FieldLabel>
+                      Email
+                      <Input
+                        onChange={(event) =>
+                          setRecipientDraft((current) => ({ ...current, email: event.target.value }))
+                        }
+                        type="email"
+                        value={recipientDraft.email}
+                      />
+                    </FieldLabel>
+                    <div className="flex flex-wrap gap-2">
+                      <ActionButton variant="save" iconOnly={false} onClick={() => saveRecipient('to')} size="sm">
+                        {editingRecipientId ? 'Guardar cambios' : 'Añadir a Para'}
+                      </ActionButton>
+                      {!editingRecipientId && (
+                        <ActionButton
+                          variant="secondary"
+                          iconOnly={false}
+                          onClick={() => saveRecipient('cc')}
+                          size="sm"
+                        >
+                          Añadir a CC
+                        </ActionButton>
+                      )}
+                      <ActionButton
+                        variant="secondary"
+                        iconOnly={false}
+                        onClick={() => {
+                          setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
+                          setEditingRecipientId(null);
+                          setEditingRecipientType('to');
+                        }}
+                        size="sm"
+                      >
+                        Cancelar
+                      </ActionButton>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {outlookStatus && (
               <p
-                className={`text-xs font-semibold ${msgStatusIsError ? 'text-metro-red' : 'text-metro-muted'}`}
+                className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                  outlookStatusTone === 'success'
+                    ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+                    : outlookStatusTone === 'error'
+                      ? 'border-red-400/30 bg-metro-red/10 text-red-200'
+                      : 'border-metro-border bg-metro-surface text-metro-muted'
+                }`}
               >
-                {msgStatus}
+                {outlookStatus}
               </p>
             )}
+          </div>
 
-            <div className="grid gap-3 lg:grid-cols-3">
-              <FieldLabel>
-                Evento <span className="text-metro-red">*</span>
-                <Input
-                  required
-                  onChange={(event) => setField('evento', event.target.value)}
-                  placeholder="Nombre del evento"
-                  value={serviceDraft.evento}
-                />
-              </FieldLabel>
-              <FieldLabel>
-                Fecha
-                <Input
-                  onChange={(event) => setField('fecha', event.target.value)}
-                  placeholder="DD/MM/AAAA"
-                  type="date"
-                  value={serviceDraft.fecha}
-                />
-              </FieldLabel>
-              <FieldLabel>
-                Hora
-                <Input
-                  onChange={(event) => setField('hora', event.target.value)}
-                  placeholder="HH:mm"
-                  type="time"
-                  value={serviceDraft.hora}
-                />
-              </FieldLabel>
-              <FieldLabel className="lg:col-span-3">
-                Texto Intranet del Servicio Especial
-                <Input
-                  onChange={(event) =>
-                    setServiceDraft((current) => ({
-                      ...current,
-                      enlace: event.target.value,
-                    }))
-                  }
-                  placeholder="Ej.: BEC Alejandro Sanz Obra Lutxana Vía 2 Domingo"
-                  value={serviceDraft.enlace}
-                />
-              </FieldLabel>
-              <FieldLabel className="lg:col-span-3">
-                Ruta común / ubicación de turnos
-                <Input
-                  onChange={(event) => setField('ruta', event.target.value)}
-                  placeholder="\\servidor\carpeta\..."
-                  value={serviceDraft.ruta}
-                />
-              </FieldLabel>
-              <FieldLabel className="lg:col-span-3">
-                Observaciones internas (opcional)
-                <Textarea
-                  onChange={(event) => setField('observaciones', event.target.value)}
-                  placeholder="Solo para uso interno"
-                  rows={2}
-                  value={serviceDraft.observaciones}
-                />
-              </FieldLabel>
-            </div>
-
-            <div className="rounded-xl bg-metro-panel/45 p-3">
+          <aside className="min-w-0">
+            <div className="rounded-[1.2rem] border border-metro-border/80 bg-metro-panel/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
-                  <p className="text-xs font-semibold text-metro-muted">Asunto: {subject}</p>
+                <div className="flex items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-blue-400/20 bg-blue-500/10 text-blue-200">
+                    <Eye size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-metro-text">Preview del correo</h3>
+                    <p className="text-xs font-semibold text-metro-muted">Asunto: {subject}</p>
+                  </div>
                 </div>
                 <ActionButton
                   variant="secondary"
                   iconOnly={false}
                   disabled={!hasEditedPreview}
                   onClick={resetPreview}
+                  size="sm"
                 >
                   Regenerar preview
                 </ActionButton>
               </div>
+
+              {draftUnavailableReason && (
+                <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200">
+                  No disponible: {draftUnavailableReason}.
+                </p>
+              )}
+
               <div
                 ref={previewRef}
                 aria-label="Editor del cuerpo del correo"
-                className="min-h-[220px] rounded-xl border border-metro-border bg-metro-surface p-4 text-sm leading-relaxed text-metro-text outline-none focus:border-metro-red [&_p]:mb-3 [&_p]:leading-relaxed [&_strong]:font-bold"
+                className="min-h-[540px] rounded-xl border border-metro-border bg-metro-surface p-4 text-sm leading-relaxed text-metro-text outline-none focus:border-metro-red [&_p]:mb-3 [&_p]:leading-relaxed [&_strong]:font-bold xl:max-h-[760px] xl:overflow-auto"
                 contentEditable
                 onInput={updatePreviewHtml}
                 role="textbox"
@@ -580,96 +743,12 @@ export function EspecialesPage() {
                 dangerouslySetInnerHTML={{ __html: previewHtml }}
               />
             </div>
-          </div>
-
-          <aside className="space-y-4">
-            {draftUnavailableReason && (
-              <p className="rounded-xl border border-metro-warning/30 bg-metro-warning/10 px-3 py-2 text-xs font-semibold text-amber-200">
-                No disponible: {draftUnavailableReason}.
-              </p>
-            )}
-
-            <RecipientTable
-              items={sortRecipients(recipientGroups.to)}
-              onDelete={deleteRecipient}
-              onEdit={editRecipient}
-              title="Para"
-            />
-            <RecipientTable
-              items={sortRecipients(recipientGroups.cc)}
-              onDelete={deleteRecipient}
-              onEdit={editRecipient}
-              title="Con copia (CC)"
-            />
-
-            <div className="rounded-xl bg-metro-panel/45 p-3">
-              <h3 className="text-base font-bold text-metro-text">Destinatario</h3>
-              <div className="mt-3 space-y-3">
-                <FieldLabel>
-                  Nombre
-                  <Input
-                    onChange={(event) =>
-                      setRecipientDraft((current) => ({ ...current, name: event.target.value }))
-                    }
-                    value={recipientDraft.name}
-                  />
-                </FieldLabel>
-                <FieldLabel>
-                  Email
-                  <Input
-                    onChange={(event) =>
-                      setRecipientDraft((current) => ({ ...current, email: event.target.value }))
-                    }
-                    type="email"
-                    value={recipientDraft.email}
-                  />
-                </FieldLabel>
-                <div className="flex flex-wrap gap-2">
-                  <ActionButton variant="save" iconOnly={false} onClick={() => saveRecipient('to')}>
-                    {editingRecipientId ? 'Guardar cambios' : 'Añadir a Para'}
-                  </ActionButton>
-                  {!editingRecipientId && (
-                    <ActionButton
-                      variant="secondary"
-                      iconOnly={false}
-                      onClick={() => saveRecipient('cc')}
-                    >
-                      Añadir a CC
-                    </ActionButton>
-                  )}
-                  <ActionButton
-                    variant="secondary"
-                    iconOnly={false}
-                    onClick={() => {
-                      setRecipientDraft(EMPTY_ESPECIAL_RECIPIENT_DRAFT);
-                      setEditingRecipientId(null);
-                      setEditingRecipientType('to');
-                    }}
-                  >
-                    Cancelar
-                  </ActionButton>
-                </div>
-              </div>
-            </div>
-
-            {outlookStatus && (
-              <p
-                className={`rounded-xl px-3 py-2 text-xs font-semibold ${
-                  outlookStatusTone === 'success'
-                    ? 'bg-green-50 text-metro-success'
-                    : outlookStatusTone === 'error'
-                      ? 'bg-metro-red/10 text-metro-red'
-                      : 'bg-metro-panel text-metro-muted'
-                }`}
-              >
-                {outlookStatus}
-              </p>
-            )}
           </aside>
         </div>
       </div>
     </section>
   );
+
 }
 
 function RecipientTable({
@@ -684,11 +763,12 @@ function RecipientTable({
   onDelete: (recipientId: string) => void;
 }) {
   return (
-    <div className="rounded-xl bg-metro-panel/45 p-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-bold text-metro-text">
-          {title} ({items.length})
-        </h3>
+    <div className="rounded-xl border border-metro-border/80 bg-metro-surface/45 p-3">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-bold text-metro-text">{title}</h4>
+          <p className="text-[11px] text-metro-muted">{items.length} destinatarios</p>
+        </div>
         <ExportPrintButtons
           payload={{
             title: `Especiales - ${title}`,
@@ -697,33 +777,36 @@ function RecipientTable({
             rows: items,
             filterLabel: `Tipo: ${title}`,
           }}
+          size="sm"
         />
       </div>
-      <div className="overflow-hidden rounded-xl border border-metro-border">
-        <CompactTable>
-          <CompactTableHead>
-            <tr>
-              <th className="px-3 py-2">Nombre</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2 text-right">Acciones</th>
-            </tr>
-          </CompactTableHead>
-          <CompactTableBody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td className="px-3 py-2 text-metro-text">{item.name}</td>
-                <td className="px-3 py-2 text-metro-muted">{item.email}</td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-1">
-                    <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} />
-                    <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} />
-                  </div>
-                </td>
+      <div className="overflow-hidden rounded-xl border border-metro-border/80">
+        <div className="max-h-[188px] overflow-auto">
+          <CompactTable>
+            <CompactTableHead>
+              <tr>
+                <th className="px-3 py-2">Nombre</th>
+                <th className="px-3 py-2">Email</th>
+                <th className="px-3 py-2 text-right">Acciones</th>
               </tr>
-            ))}
-            {items.length === 0 && <CompactTableEmpty colSpan={3} message="Sin destinatarios." />}
-          </CompactTableBody>
-        </CompactTable>
+            </CompactTableHead>
+            <CompactTableBody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td className="truncate px-3 py-2 text-metro-text">{item.name}</td>
+                  <td className="truncate px-3 py-2 text-metro-muted">{item.email}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-1">
+                      <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} />
+                      <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && <CompactTableEmpty colSpan={3} message="Sin destinatarios." />}
+            </CompactTableBody>
+          </CompactTable>
+        </div>
       </div>
     </div>
   );
