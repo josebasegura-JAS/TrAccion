@@ -1,8 +1,16 @@
 import {
+  BriefcaseBusiness,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Languages,
+  Layers3,
+  MapPin,
   RotateCcw,
   SlidersHorizontal,
+  UsersRound,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
@@ -10,7 +18,6 @@ import { EmployeeEditor } from './EmployeeEditor';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
 import { PageHeader } from './ui/PageHeader';
-import { Toolbar } from './ui/Toolbar';
 import { SearchField } from './ui/SearchField';
 import { FilterSelect } from './ui/FilterSelect';
 import { CountBadge } from './ui/CountBadge';
@@ -118,6 +125,43 @@ const plantillaTableColumnIds: EmployeeTableColumnId[] = [
   'actions',
 ];
 
+function PlantillaMetricCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  detail: string;
+  tone: 'sky' | 'emerald' | 'violet' | 'amber' | 'rose';
+}) {
+  const toneClasses = {
+    sky: 'border-sky-400/25 bg-[linear-gradient(135deg,rgba(14,65,111,0.72),rgba(12,34,59,0.92))] text-sky-200',
+    emerald: 'border-emerald-400/25 bg-[linear-gradient(135deg,rgba(5,91,74,0.58),rgba(12,34,59,0.92))] text-emerald-200',
+    violet: 'border-violet-400/25 bg-[linear-gradient(135deg,rgba(76,45,130,0.58),rgba(12,34,59,0.92))] text-violet-200',
+    amber: 'border-amber-400/25 bg-[linear-gradient(135deg,rgba(120,82,18,0.54),rgba(12,34,59,0.92))] text-amber-200',
+    rose: 'border-rose-400/25 bg-[linear-gradient(135deg,rgba(121,38,57,0.58),rgba(12,34,59,0.92))] text-rose-200',
+  }[tone];
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border px-4 py-3 shadow-[0_12px_26px_rgba(2,6,23,0.22)] ${toneClasses}`}>
+      <div className="flex items-center gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/10 bg-black/10">
+          <Icon size={21} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[23px] font-black leading-none text-white">{value}</div>
+          <div className="mt-1 truncate text-[11px] font-extrabold text-slate-100">{label}</div>
+          <div className="mt-1 truncate text-[9px] font-medium text-slate-400">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const employeeExportColumns: ExportColumn<Employee>[] = [
   { key: 'empleado', header: 'Empleado', value: (employee) => employee.empleado },
   {
@@ -159,6 +203,8 @@ export function PlantillaPage() {
   const [importMessageIsError, setImportMessageIsError] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<EmployeeImportPreview | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -201,6 +247,7 @@ export function PlantillaPage() {
   const direcciones = uniqueSorted(
     visibleEmployees.map((employee) => employee.direccionOrganizativa),
   );
+  const puestosNomina = uniqueSorted(visibleEmployees.map((employee) => employee.puestoNomina));
   const emptyPuestoEusCount = visibleEmployees.filter(
     (employee) => !employee.puestoEus.trim(),
   ).length;
@@ -397,6 +444,19 @@ export function PlantillaPage() {
     [employeeTableColumns, filteredEmployees, preferences.sort],
   );
 
+  const totalPages = Math.max(1, Math.ceil(sortedEmployees.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const pageEnd = Math.min(pageStart + pageSize, sortedEmployees.length);
+  const paginatedEmployees = useMemo(
+    () => sortedEmployees.slice(pageStart, pageEnd),
+    [pageEnd, pageStart, sortedEmployees],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [deferredFilters, pageSize, preferences.sort]);
+
   const handleGenerateSampleExcel = async () => {
     try {
       const { default: ExcelJS } = await import('exceljs');
@@ -502,60 +562,95 @@ export function PlantillaPage() {
   };
 
   return (
-    <section
-      className="space-y-3"
-      id="plantilla"
-    >
+    <section className="space-y-3" id="plantilla">
       <PageHeader
-        actions={
-          <Toolbar
-            filters={
-              <>
-                <SearchField
-                  onChange={(event) => setFilter('search', event.target.value)}
-                  onClear={() => setFilter('search', '')}
-                  placeholder="Buscar por empleado o nombre..."
-                  value={filters.search}
-                  wrapperClassName="min-w-[280px]"
-                />
-                <FilterSelect
-                  allLabel="Todas las residencias"
-                  aria-label="Filtrar plantilla por residencia"
-                  onChange={(event) => setFilter('residencia', event.target.value)}
-                  options={residencias}
-                  value={filters.residencia}
-                  wrapperClassName="w-[190px]"
-                />
-                <FilterSelect
-                  allLabel="Todos los niveles"
-                  aria-label="Filtrar plantilla por nivel retributivo"
-                  onChange={(event) => setFilter('nivelRetributivo', event.target.value)}
-                  options={niveles}
-                  value={filters.nivelRetributivo}
-                  wrapperClassName="w-[190px]"
-                />
-                <FilterSelect
-                  allLabel="Todas las direcciones"
-                  aria-label="Filtrar plantilla por dirección"
-                  onChange={(event) => setFilter('direccionOrganizativa', event.target.value)}
-                  options={direcciones}
-                  value={filters.direccionOrganizativa}
-                  wrapperClassName="w-[190px]"
-                />
-              </>
-            }
-            actions={
-              <>
+        helpSections={PLANTILLA_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
+        title="Plantilla"
+      />
+
+      <div className="grid grid-cols-5 gap-2.5">
+        <PlantillaMetricCard
+          detail="Registros activos"
+          icon={UsersRound}
+          label="Personas en plantilla"
+          tone="sky"
+          value={visibleEmployees.length}
+        />
+        <PlantillaMetricCard
+          detail="Centros de trabajo distintos"
+          icon={MapPin}
+          label="Residencias"
+          tone="emerald"
+          value={residencias.length}
+        />
+        <PlantillaMetricCard
+          detail="Según nivel retributivo"
+          icon={Layers3}
+          label="Niveles profesionales"
+          tone="violet"
+          value={niveles.length}
+        />
+        <PlantillaMetricCard
+          detail="Puestos de nómina distintos"
+          icon={BriefcaseBusiness}
+          label="Puestos diferentes"
+          tone="amber"
+          value={puestosNomina.length}
+        />
+        <PlantillaMetricCard
+          detail="Personas sin traducción de puesto"
+          icon={Languages}
+          label="Puesto EUS pendiente"
+          tone="rose"
+          value={emptyPuestoEusCount}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-metro-border/80 bg-metro-panel/55 p-2.5 shadow-sm shadow-slate-950/20">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <SearchField
+              onChange={(event) => setFilter('search', event.target.value)}
+              onClear={() => setFilter('search', '')}
+              placeholder="Buscar por empleado o nombre..."
+              value={filters.search}
+              wrapperClassName="min-w-[300px] flex-1"
+            />
+            <FilterSelect
+              allLabel="Todas las residencias"
+              aria-label="Filtrar plantilla por residencia"
+              onChange={(event) => setFilter('residencia', event.target.value)}
+              options={residencias}
+              value={filters.residencia}
+              wrapperClassName="w-[190px]"
+            />
+            <FilterSelect
+              allLabel="Todos los niveles"
+              aria-label="Filtrar plantilla por nivel retributivo"
+              onChange={(event) => setFilter('nivelRetributivo', event.target.value)}
+              options={niveles}
+              value={filters.nivelRetributivo}
+              wrapperClassName="w-[180px]"
+            />
+            <FilterSelect
+              allLabel="Todas las direcciones"
+              aria-label="Filtrar plantilla por dirección"
+              onChange={(event) => setFilter('direccionOrganizativa', event.target.value)}
+              options={direcciones}
+              value={filters.direccionOrganizativa}
+              wrapperClassName="w-[190px]"
+            />
+          </div>
+
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
             <input
               accept=".xlsx,.xls,.csv,.tsv,.txt"
               className="hidden"
               onChange={async (event) => {
                 const file = event.target.files?.[0];
                 event.target.value = '';
-                if (!file) {
-                  return;
-                }
-
+                if (!file) return;
                 try {
                   const preview = await analyzeEmployeeImportFile(file);
                   setImportMessage('');
@@ -564,22 +659,13 @@ export function PlantillaPage() {
                   setImportPreview(preview);
                 } catch (error) {
                   setImportMessageIsError(true);
-                  setImportMessage(
-                    error instanceof Error
-                      ? error.message
-                      : 'No se ha podido analizar la plantilla.',
-                  );
+                  setImportMessage(error instanceof Error ? error.message : 'No se ha podido analizar la plantilla.');
                 }
               }}
               ref={fileInputRef}
               type="file"
             />
-            <ActionButton
-              iconOnly={false}
-              onClick={() => fileInputRef.current?.click()}
-              size="sm"
-              variant="import"
-            >
+            <ActionButton iconOnly={false} onClick={() => fileInputRef.current?.click()} size="sm" variant="import">
               Importar Excel
             </ActionButton>
             <ActionButton
@@ -587,11 +673,7 @@ export function PlantillaPage() {
               iconOnly={false}
               onClick={() => setTranslationsModalOpen(true)}
               size="sm"
-              title={
-                emptyPuestoEusCount === 0
-                  ? 'Traducciones de puestos EUS'
-                  : `${emptyPuestoEusCount} personas tienen el Puesto EUS pendiente`
-              }
+              title={emptyPuestoEusCount === 0 ? 'Traducciones de puestos EUS' : `${emptyPuestoEusCount} personas tienen el Puesto EUS pendiente`}
               variant="secondary"
             >
               Traducciones EUS{emptyPuestoEusCount > 0 ? ` (${emptyPuestoEusCount})` : ''}
@@ -609,46 +691,45 @@ export function PlantillaPage() {
             <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
               Nueva persona
             </ActionButton>
-              </>
-            }
-          />
-        }
-        helpSections={PLANTILLA_HELP_SECTIONS}
-        helpSubtitle="Guía rápida de mantenimiento de personas, importación Excel y uso transversal."
-        title="Plantilla"
-      />
-
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <span className="font-semibold text-slate-700">Dónde obtener el Excel:</span>
-          <span className="font-medium text-slate-600">
-            Lanzador → Expediente Personal → Consultas Generales → Datos personales
-          </span>
+          </div>
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-300/10 bg-[#0e2239]/70 px-3 py-2 text-[11px] shadow-sm shadow-slate-950/15">
+        <div className="flex min-w-0 items-center gap-2 text-slate-300">
+          <Building2 className="shrink-0 text-sky-300" size={15} />
+          <span className="font-bold text-slate-200">Dónde obtener el Excel:</span>
+          <span className="truncate text-slate-400">Lanzador → Expediente Personal → Consultas Generales → Datos personales</span>
+        </div>
+        {activeFilterChips.length > 0 && (
+          <button
+            className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-[10px] font-bold text-metro-muted hover:border-metro-red hover:text-metro-text"
+            onClick={clearActiveFilters}
+            type="button"
+          >
+            <RotateCcw size={12} /> Limpiar filtros
+          </button>
+        )}
+      </div>
+
       {importMessage && (
-        <div
-          className={
-            importMessageIsError
-              ? 'mb-3 rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-sm font-semibold text-red-200'
-              : 'mb-3 rounded-xl border border-metro-success/30 bg-metro-success/10 px-3 py-2 text-sm font-semibold text-emerald-200'
-          }
-        >
+        <div className={importMessageIsError
+          ? 'rounded-xl border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-sm font-semibold text-red-200'
+          : 'rounded-xl border border-metro-success/30 bg-metro-success/10 px-3 py-2 text-sm font-semibold text-emerald-200'}>
           {importMessage}
         </div>
       )}
 
-      {activeFilterChips.length > 0 && (
-        <div className="mb-3">
-          <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
-        </div>
-      )}
+      {activeFilterChips.length > 0 && <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />}
 
-      <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
+      <div className="overflow-hidden rounded-2xl border border-metro-border bg-[#0d2036]/80 shadow-[0_14px_34px_rgba(2,6,23,0.24)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-[#11243a]/95 px-3 py-2.5">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-metro-red" /> Personas en plantilla
+            <SlidersHorizontal size={16} className="text-metro-red" />
+            <span>Personas en plantilla</span>
+            <CountBadge>{filteredEmployees.length} registros</CountBadge>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <ExportPrintButtons
               payload={{
                 title: 'Personas en plantilla',
@@ -658,18 +739,16 @@ export function PlantillaPage() {
                 filterLabel: employeeFilterLabel,
               }}
             />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
             <button
-              className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              className="inline-flex items-center gap-1 rounded-lg border border-metro-border bg-metro-panel px-2.5 py-1.5 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
               onClick={resetPreferences}
               type="button"
             >
               <RotateCcw size={14} /> Restablecer vista
             </button>
-            <CountBadge>{filteredEmployees.length} registros</CountBadge>
           </div>
         </div>
+
         <DataTable
           ariaLabel="Personas en plantilla"
           columnOrder={preferences.columnOrder}
@@ -682,20 +761,59 @@ export function PlantillaPage() {
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
           onSortChange={setSort}
-          rowClassName={() => 'cursor-pointer hover:bg-metro-red/10'}
-          rows={filteredEmployees}
+          rowClassName={() => 'cursor-pointer hover:bg-sky-400/[0.07]'}
+          rows={paginatedEmployees}
           sort={preferences.sort}
+          strongZebra
+          maxHeightClassName="max-h-none"
         />
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-metro-border bg-[#102238]/90 px-3 py-2.5">
+          <span className="text-[11px] font-medium text-slate-400">
+            {sortedEmployees.length === 0 ? 'Sin registros' : `Mostrando ${pageStart + 1}–${pageEnd} de ${sortedEmployees.length} personas`}
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              aria-label="Página anterior"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel text-slate-300 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              type="button"
+            >
+              <ChevronLeft size={15} />
+            </button>
+
+            <span className="min-w-[74px] text-center text-[11px] font-bold text-slate-300">
+              {safeCurrentPage} / {totalPages}
+            </span>
+
+            <button
+              aria-label="Página siguiente"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel text-slate-300 transition hover:border-sky-300/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              type="button"
+            >
+              <ChevronRight size={15} />
+            </button>
+
+            <select
+              aria-label="Registros por página"
+              className="h-8 rounded-lg border border-metro-border bg-metro-panel px-2 text-[11px] font-semibold text-slate-300 outline-none focus:border-sky-300/40"
+              onChange={(event) => setPageSize(Number(event.target.value))}
+              value={pageSize}
+            >
+              <option value={10}>10 por página</option>
+              <option value={25}>25 por página</option>
+              <option value={50}>50 por página</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      {editorMode && (
-        <EmployeeEditor employee={editorEmployee} mode={editorMode} onDone={closeEditor} />
-      )}
-
-      {isTranslationsModalOpen && (
-        <JobPositionTranslationsModal onClose={() => setTranslationsModalOpen(false)} />
-      )}
-
+      {editorMode && <EmployeeEditor employee={editorEmployee} mode={editorMode} onDone={closeEditor} />}
+      {isTranslationsModalOpen && <JobPositionTranslationsModal onClose={() => setTranslationsModalOpen(false)} />}
       {pendingImportFile && importPreview && (
         <EmployeeImportPreviewModal
           employees={employees}
