@@ -1,4 +1,4 @@
-import { FileDown, FileUp, SlidersHorizontal } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, FileDown, FileText, FileUp, SlidersHorizontal, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCriteriosRrll } from '../domain/filters';
 import {
@@ -29,6 +29,7 @@ import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { sortDataTableRows } from '../../../shared/table/tableSorting';
 import { useTableViewPreferences } from '../../../shared/table/useTableViewPreferences';
 
 const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -168,6 +169,51 @@ function SentidoBadge({ sentido }: { sentido: CriterioRrllSentido }) {
   );
 }
 
+function EstadoBadge({ estado }: { estado: CriterioRrllEstado }) {
+  const tone = estado === 'vigente' ? 'success' : estado === 'en revisión' ? 'warning' : 'muted';
+  return (
+    <StatusBadge size="xs" tone={tone} className="capitalize">
+      {estado}
+    </StatusBadge>
+  );
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: typeof FileText;
+  label: string;
+  value: number;
+  detail: string;
+  tone: 'blue' | 'green' | 'emerald' | 'red';
+}) {
+  const tones = {
+    blue: 'border-sky-400/25 bg-sky-400/[0.07] text-sky-200',
+    green: 'border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-200',
+    emerald: 'border-teal-400/25 bg-teal-400/[0.07] text-teal-200',
+    red: 'border-red-400/25 bg-red-400/[0.07] text-red-200',
+  } as const;
+
+  return (
+    <div className={`rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] ${tones[tone]}`}>
+      <div className="flex items-center gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-current/20 bg-current/[0.08]">
+          <Icon size={20} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-2xl font-black leading-none text-metro-text">{value}</div>
+          <div className="mt-1 truncate text-sm font-bold">{label}</div>
+          <div className="mt-1 truncate text-[11px] text-metro-muted">{detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CriteriosRrllPage() {
   const {
     criterios,
@@ -185,6 +231,8 @@ export function CriteriosRrllPage() {
   const [importPreview, setImportPreview] = useState<ImportPreviewState | null>(null);
   const [templateMessage, setTemplateMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     load();
@@ -255,7 +303,7 @@ export function CriteriosRrllPage() {
       id: 'estado',
       header: 'Estado',
       accessor: (criterio) => criterio.estado,
-      render: (criterio) => criterio.estado,
+      render: (criterio) => <EstadoBadge estado={criterio.estado} />,
       width: 120,
       sortable: true,
     },
@@ -323,6 +371,29 @@ export function CriteriosRrllPage() {
     },
   ], [alert, removeWithConcurrencyCheck]);
 
+  const globallySortedCriterios = useMemo(
+    () => sortDataTableRows(sortedCriterios, tableColumns, tablePreferences.sort),
+    [sortedCriterios, tableColumns, tablePreferences.sort],
+  );
+  const totalPages = Math.max(1, Math.ceil(globallySortedCriterios.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCriterios = useMemo(
+    () => globallySortedCriterios.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [currentPage, globallySortedCriterios, pageSize],
+  );
+  const visibleStart = globallySortedCriterios.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const visibleEnd = Math.min(currentPage * pageSize, globallySortedCriterios.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.search, filters.estado, filters.sentido, pageSize]);
+
+  const summary = useMemo(() => ({
+    total: visibleCriterios.length,
+    vigentes: visibleCriterios.filter((criterio) => criterio.estado === 'vigente').length,
+    aprobados: visibleCriterios.filter((criterio) => criterio.sentido === 'aprobado').length,
+    denegados: visibleCriterios.filter((criterio) => criterio.sentido === 'denegado').length,
+  }), [visibleCriterios]);
 
   const selectedImportRows = importPreview?.rows.filter((row) => row.selected) ?? [];
 
@@ -375,10 +446,7 @@ export function CriteriosRrllPage() {
   };
 
   return (
-    <section
-      className="space-y-3"
-      id="criterios-rrll"
-    >
+    <section className="space-y-4" id="criterios-rrll">
       <PageHeader
         title="Criterios RRLL"
         helpSections={CRITERIOS_RRLL_HELP_SECTIONS}
@@ -481,6 +549,13 @@ export function CriteriosRrllPage() {
         }
       />
 
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard icon={FileText} label="Criterios totales" value={summary.total} detail="Registros disponibles en la base de datos" tone="blue" />
+        <SummaryCard icon={CheckCircle2} label="Vigentes" value={summary.vigentes} detail="Activos para consulta y aplicación" tone="green" />
+        <SummaryCard icon={CheckCircle2} label="Aprobados" value={summary.aprobados} detail="Con sentido aprobado" tone="emerald" />
+        <SummaryCard icon={XCircle} label="Denegados" value={summary.denegados} detail="Con sentido denegado" tone="red" />
+      </div>
+
       {importMessage && (
         <p className="mb-3 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
           {importMessage}
@@ -492,18 +567,18 @@ export function CriteriosRrllPage() {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-metro-border">
-        <div className="flex items-center justify-between border-b border-metro-border bg-metro-surface px-3 py-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
+      <div className="overflow-hidden rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
+        <div className="flex items-center justify-between border-b border-metro-border/80 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-metro-text">
             <SlidersHorizontal size={16} className="text-metro-red" /> Criterios RRLL
           </div>
           <CountBadge>{filteredCriterios.length} registros</CountBadge>
         </div>
-        <div className="p-2">
+        <div className="p-2.5">
           <DataTable
             ariaLabel="Criterios RRLL"
             columns={tableColumns}
-            rows={sortedCriterios}
+            rows={pagedCriterios}
             getRowId={(criterio) => criterio.id}
             sort={tablePreferences.sort}
             onSortChange={setTableSort}
@@ -514,8 +589,54 @@ export function CriteriosRrllPage() {
             onColumnOrderChange={setTableColumnOrder}
             emptyMessage="No hay criterios para los filtros seleccionados."
             onRowClick={openEditor}
-            maxHeightClassName="max-h-[460px]"
+            maxHeightClassName="max-h-[430px]"
+            strongZebra
           />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-metro-border/70 px-4 py-3">
+          <span className="text-xs text-metro-muted">
+            Mostrando {visibleStart}–{visibleEnd} de {globallySortedCriterios.length} registros
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              aria-label="Página anterior"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel/70 text-metro-muted transition hover:border-sky-300/30 hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              type="button"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            {Array.from({ length: totalPages }, (_, index) => index + 1).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2)).map((pageNumber) => (
+              <button
+                className={`h-8 min-w-8 rounded-lg border px-2 text-xs font-bold transition ${pageNumber === currentPage ? 'border-red-400/30 bg-metro-red text-white' : 'border-metro-border bg-metro-panel/70 text-metro-muted hover:border-sky-300/30 hover:text-metro-text'}`}
+                key={pageNumber}
+                onClick={() => setPage(pageNumber)}
+                type="button"
+              >
+                {pageNumber}
+              </button>
+            ))}
+            <button
+              aria-label="Página siguiente"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel/70 text-metro-muted transition hover:border-sky-300/30 hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              type="button"
+            >
+              <ChevronRight size={15} />
+            </button>
+            <select
+              aria-label="Registros por página"
+              className="h-8 rounded-lg border border-metro-border bg-metro-panel/70 px-2 text-xs font-semibold text-metro-text outline-none"
+              onChange={(event) => setPageSize(Number(event.target.value))}
+              value={pageSize}
+            >
+              <option value={10}>10 por página</option>
+              <option value={25}>25 por página</option>
+              <option value={50}>50 por página</option>
+            </select>
+          </div>
         </div>
       </div>
 
