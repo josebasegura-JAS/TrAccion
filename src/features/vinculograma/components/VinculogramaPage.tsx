@@ -1,7 +1,8 @@
 import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
-import { Link2, RotateCcw, Search } from 'lucide-react';
+import { CalendarClock, History, Link2, RotateCcw, Search, UsersRound } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
+import { sortDataTableRows } from '../../../shared/table/tableSorting';
 import { ModalCloseButton } from '../../../components/ui/ModalCloseButton';
 import {
   useTableViewPreferences,
@@ -39,6 +40,8 @@ import { FieldLabel, Input } from '../../../components/ui/Field';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../../components/ui/ModalShell';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { SearchField } from '../../../components/ui/SearchField';
+import { FilterSelect } from '../../../components/ui/FilterSelect';
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -561,6 +564,9 @@ function VinculogramaTable({
   setColumnOrder,
   resetColumnWidths,
   resetPreferences,
+  page,
+  pageSize,
+  onPageChange,
 }: {
   emptyText: string;
   records: Vinculograma[];
@@ -573,6 +579,9 @@ function VinculogramaTable({
   setColumnOrder: (columnOrder: VinculogramaTableColumnId[]) => void;
   resetColumnWidths: () => void;
   resetPreferences: () => void;
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
 }) {
   const columns = useMemo<Array<DataTableColumn<Vinculograma, VinculogramaTableColumnId>>>(
     () => [
@@ -645,31 +654,51 @@ function VinculogramaTable({
         id: 'actions',
         header: 'Acciones',
         render: (record) => (
-          <ActionButton
-            size="sm"
-            variant="delete"
-            iconOnly={false}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete(record);
-            }}
-          >
-            Eliminar
-          </ActionButton>
+          <div className="flex items-center justify-end gap-2">
+            <ActionButton
+              size="sm"
+              variant="edit"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit(record);
+              }}
+              title="Editar vínculo"
+            />
+            <ActionButton
+              size="sm"
+              variant="delete"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(record);
+              }}
+              title="Eliminar vínculo"
+            />
+          </div>
         ),
-        width: 110,
-        minWidth: 95,
-        maxWidth: 130,
+        width: 104,
+        minWidth: 96,
+        maxWidth: 120,
         resizable: false,
         isActionColumn: true,
         className: 'whitespace-nowrap',
       },
     ],
-    [onDelete, today],
+    [onDelete, onEdit, today],
   );
 
+  const sortedRecords = useMemo(
+    () => sortDataTableRows(records, columns, preferences.sort),
+    [columns, preferences.sort, records],
+  );
+  const totalPages = Math.max(1, Math.ceil(sortedRecords.length / pageSize));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+  const paginatedRecords = sortedRecords.slice(start, start + pageSize);
+  const firstVisible = records.length === 0 ? 0 : start + 1;
+  const lastVisible = Math.min(start + pageSize, sortedRecords.length);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex justify-end">
         <ActionButton
           size="sm"
@@ -693,9 +722,60 @@ function VinculogramaTable({
         onColumnWidthChange={setColumnWidth}
         onRowClick={onEdit}
         onSortChange={setSort}
-        rows={records}
+        rows={paginatedRecords}
         sort={preferences.sort}
+        strongZebra
       />
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-metro-muted">
+        <span>
+          Mostrando {firstVisible}–{lastVisible} de {sortedRecords.length} registros
+        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel/70 font-bold text-metro-secondary transition hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={safePage <= 1}
+            onClick={() => onPageChange(safePage - 1)}
+            type="button"
+          >
+            ‹
+          </button>
+          {Array.from({ length: totalPages }, (_, index) => index + 1)
+            .filter((pageNumber) =>
+              totalPages <= 7 ||
+              pageNumber === 1 ||
+              pageNumber === totalPages ||
+              Math.abs(pageNumber - safePage) <= 1,
+            )
+            .map((pageNumber, index, visiblePages) => {
+              const previous = visiblePages[index - 1];
+              const showGap = previous !== undefined && pageNumber - previous > 1;
+              return (
+                <span className="flex items-center gap-1.5" key={pageNumber}>
+                  {showGap ? <span className="px-1 text-metro-muted">…</span> : null}
+                  <button
+                    className={`grid h-8 min-w-8 place-items-center rounded-lg border px-2 font-bold transition ${
+                      pageNumber === safePage
+                        ? 'border-metro-red bg-metro-red text-white'
+                        : 'border-metro-border bg-metro-panel/70 text-metro-secondary hover:border-metro-red hover:text-metro-text'
+                    }`}
+                    onClick={() => onPageChange(pageNumber)}
+                    type="button"
+                  >
+                    {pageNumber}
+                  </button>
+                </span>
+              );
+            })}
+          <button
+            className="grid h-8 w-8 place-items-center rounded-lg border border-metro-border bg-metro-panel/70 font-bold text-metro-secondary transition hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={safePage >= totalPages}
+            onClick={() => onPageChange(safePage + 1)}
+            type="button"
+          >
+            ›
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -717,6 +797,11 @@ export function VinculogramaPage() {
   const [showModal, setShowModal] = useState(false);
   const [showSolicitudModal, setShowSolicitudModal] = useState(false);
   const [showExpired, setShowExpired] = useState(readExpiredVisibility);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'Vigente' | 'Vencido' | 'Revocado'>('todos');
+  const [activePage, setActivePage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const pageSize = 10;
   const { alert, dialogNode } = useAppDialog();
   const today = todayIso();
   const expiryDate = calculateExpiryDate(draft.requestDate);
@@ -756,6 +841,48 @@ export function VinculogramaPage() {
     () => splitVinculogramasByStatus(records, today),
     [records, today],
   );
+
+  const normalizeSearch = useCallback((value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('es')
+      .trim(), []);
+
+  const normalizedQuery = useMemo(() => normalizeSearch(query), [normalizeSearch, query]);
+  const matchesFilters = useCallback((record: Vinculograma) => {
+    const status = getVinculogramaStatus(record.expiryDate, today, record.revokedAt);
+    const matchesStatus = statusFilter === 'todos' || status === statusFilter;
+    if (!matchesStatus) return false;
+    if (!normalizedQuery) return true;
+    const haystack = normalizeSearch(
+      `${record.employeeNumber} ${record.nombreCompleto} ${record.linkedPerson} ${status} ${record.expiryDate}`,
+    );
+    return haystack.includes(normalizedQuery);
+  }, [normalizeSearch, normalizedQuery, statusFilter, today]);
+
+  const filteredVigentes = useMemo(() => vigentes.filter(matchesFilters), [matchesFilters, vigentes]);
+  const filteredVencidos = useMemo(() => vencidos.filter(matchesFilters), [matchesFilters, vencidos]);
+
+  useEffect(() => {
+    setActivePage(1);
+    setHistoryPage(1);
+  }, [query, statusFilter]);
+
+  const linkedEmployeesCount = useMemo(
+    () => new Set(vigentes.map((record) => record.employeeNumber.trim())).size,
+    [vigentes],
+  );
+
+  const expiringSoonCount = useMemo(() => {
+    const todayDate = new Date(`${today}T00:00:00`);
+    const limitDate = new Date(todayDate);
+    limitDate.setDate(limitDate.getDate() + 90);
+    return vigentes.filter((record) => {
+      const expiry = new Date(`${record.expiryDate}T00:00:00`);
+      return expiry >= todayDate && expiry <= limitDate;
+    }).length;
+  }, [today, vigentes]);
 
   const {
     preferences: tablePreferences,
@@ -874,76 +1001,172 @@ export function VinculogramaPage() {
   };
 
   return (
-    <section className="space-y-3" id="vinculograma">
-      <div>
-        <PageHeader
-          title="Vinculograma"
-          helpSections={VINCULOGRAMA_HELP_SECTIONS}
-          helpSubtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
-          className="mb-0"
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <ActionButton
-                variant="word"
-                iconOnly={false}
-                onClick={() => setShowSolicitudModal(true)}
-                size="sm"
-              >
-                Enviar solicitud Word
-              </ActionButton>
-              <ActionButton variant="add" iconOnly={false} onClick={openCreateModal} size="sm">
-                Nuevo vínculo
-              </ActionButton>
+    <section className="space-y-4" id="vinculograma">
+      <PageHeader
+        title="Vinculograma"
+        helpSections={VINCULOGRAMA_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de vínculos, vigencias, histórico y relación con plantilla."
+        className="mb-0"
+      />
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <article className="relative overflow-hidden rounded-2xl border border-emerald-400/25 bg-[linear-gradient(135deg,rgba(6,78,59,0.42),rgba(15,35,54,0.94))] p-4 shadow-[0_14px_30px_rgba(2,8,23,0.22)]">
+          <div className="flex items-center gap-3">
+            <span className="grid h-12 w-12 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-400/[0.12] text-emerald-200">
+              <Link2 size={23} />
+            </span>
+            <div>
+              <strong className="block text-2xl font-black text-white">{vigentes.length}</strong>
+              <span className="text-sm font-semibold text-slate-200">Vinculaciones vigentes</span>
             </div>
-          }
-        />
+          </div>
+          <p className="mt-3 text-xs text-emerald-100/75">Relaciones actualmente activas</p>
+        </article>
+
+        <article className="relative overflow-hidden rounded-2xl border border-sky-400/25 bg-[linear-gradient(135deg,rgba(30,64,175,0.36),rgba(15,35,54,0.94))] p-4 shadow-[0_14px_30px_rgba(2,8,23,0.22)]">
+          <div className="flex items-center gap-3">
+            <span className="grid h-12 w-12 place-items-center rounded-xl border border-sky-300/20 bg-sky-400/[0.12] text-sky-200">
+              <UsersRound size={23} />
+            </span>
+            <div>
+              <strong className="block text-2xl font-black text-white">{linkedEmployeesCount}</strong>
+              <span className="text-sm font-semibold text-slate-200">Personas con vínculo</span>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-sky-100/75">Empleados con al menos un vínculo vigente</p>
+        </article>
+
+        <article className="relative overflow-hidden rounded-2xl border border-violet-400/25 bg-[linear-gradient(135deg,rgba(91,33,182,0.34),rgba(15,35,54,0.94))] p-4 shadow-[0_14px_30px_rgba(2,8,23,0.22)]">
+          <div className="flex items-center gap-3">
+            <span className="grid h-12 w-12 place-items-center rounded-xl border border-violet-300/20 bg-violet-400/[0.12] text-violet-200">
+              <CalendarClock size={23} />
+            </span>
+            <div>
+              <strong className="block text-2xl font-black text-white">{expiringSoonCount}</strong>
+              <span className="text-sm font-semibold text-slate-200">Vencen en 90 días</span>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-violet-100/75">Vínculos vigentes próximos a caducar</p>
+        </article>
+
+        <article className="relative overflow-hidden rounded-2xl border border-amber-400/25 bg-[linear-gradient(135deg,rgba(146,64,14,0.34),rgba(15,35,54,0.94))] p-4 shadow-[0_14px_30px_rgba(2,8,23,0.22)]">
+          <div className="flex items-center gap-3">
+            <span className="grid h-12 w-12 place-items-center rounded-xl border border-amber-300/20 bg-amber-400/[0.12] text-amber-200">
+              <History size={23} />
+            </span>
+            <div>
+              <strong className="block text-2xl font-black text-white">{vencidos.length}</strong>
+              <span className="text-sm font-semibold text-slate-200">Histórico</span>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-amber-100/75">Vínculos vencidos o revocados</p>
+        </article>
       </div>
 
-      <div className="rounded-xl border border-metro-border/80 bg-metro-surface p-3">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <Link2 size={16} className="text-metro-red" /> Vinculogramas vigentes
-            <ExportPrintButtons
-              payload={{
-                title: 'Vinculogramas vigentes',
-                filename: 'vinculogramas-vigentes',
-                columns: reorderExportColumns(
-                  vinculogramaExportColumns(today),
-                  tablePreferences.columnOrder,
-                ),
-                rows: vigentes,
-                filterLabel: 'Estado: vigente',
-              }}
-            />
+      <div className="rounded-2xl border border-metro-border/80 bg-metro-surface/85 p-3 shadow-[0_12px_30px_rgba(2,8,23,0.18)]">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField
+            onChange={(event) => setQuery(event.target.value)}
+            onClear={() => setQuery('')}
+            placeholder="Buscar por empleado, nombre o persona vinculada..."
+            value={query}
+            wrapperClassName="min-w-[300px] flex-1"
+          />
+          <FilterSelect
+            aria-label="Filtrar vinculogramas por estado"
+            onChange={(event) =>
+              setStatusFilter(event.target.value as 'todos' | 'Vigente' | 'Vencido' | 'Revocado')
+            }
+            options={[
+              { label: 'Todos los estados', value: 'todos' },
+              { label: 'Vigentes', value: 'Vigente' },
+              { label: 'Vencidos', value: 'Vencido' },
+              { label: 'Revocados', value: 'Revocado' },
+            ]}
+            value={statusFilter}
+            wrapperClassName="w-52"
+          />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <ActionButton
+              variant="word"
+              iconOnly={false}
+              onClick={() => setShowSolicitudModal(true)}
+              size="sm"
+            >
+              Enviar solicitud Word
+            </ActionButton>
+            <ActionButton variant="add" iconOnly={false} onClick={openCreateModal} size="sm">
+              Nuevo vínculo
+            </ActionButton>
           </div>
-          <span className="rounded-full bg-metro-success/10 px-3 py-1 text-xs font-bold text-emerald-200">
-            {vigentes.length} registros
-          </span>
         </div>
-        <div className="overflow-auto">
-          <VinculogramaTable
-            emptyText="No hay vinculogramas vigentes."
-            onDelete={deleteTableRecord}
-            onEdit={openEditModal}
-            records={vigentes}
-            today={today}
-            preferences={tablePreferences}
-            setSort={setTableSort}
-            setColumnWidth={setTableColumnWidth}
-            setColumnOrder={setTableColumnOrder}
-            resetColumnWidths={resetTableColumnWidths}
-            resetPreferences={resetTablePreferences}
+      </div>
+
+      <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300">
+              <Link2 size={18} />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-metro-text">Vinculogramas vigentes</h2>
+                <span className="rounded-full border border-red-400/20 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-100">
+                  {filteredVigentes.length} registros
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-metro-muted">Relaciones activas entre personas.</p>
+            </div>
+          </div>
+          <ExportPrintButtons
+            payload={{
+              title: 'Vinculogramas vigentes',
+              filename: 'vinculogramas-vigentes',
+              columns: reorderExportColumns(
+                vinculogramaExportColumns(today),
+                tablePreferences.columnOrder,
+              ),
+              rows: filteredVigentes,
+              filterLabel: 'Estado: vigente',
+            }}
+            size="sm"
           />
         </div>
-      </div>
+        <VinculogramaTable
+          emptyText="No hay vinculogramas vigentes con los filtros actuales."
+          onDelete={deleteTableRecord}
+          onEdit={openEditModal}
+          records={filteredVigentes}
+          today={today}
+          preferences={tablePreferences}
+          setSort={setTableSort}
+          setColumnWidth={setTableColumnWidth}
+          setColumnOrder={setTableColumnOrder}
+          resetColumnWidths={resetTableColumnWidths}
+          resetPreferences={resetTablePreferences}
+          page={activePage}
+          pageSize={pageSize}
+          onPageChange={setActivePage}
+        />
+      </section>
 
-      <div className="rounded-xl border border-metro-border/80 bg-metro-surface p-3">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-sm font-semibold text-metro-text">
-            <Search size={16} className="text-metro-red" /> Vinculogramas vencidos / revocados
-            <span className="rounded-full bg-metro-warning/10 px-3 py-1 text-xs font-bold text-amber-200">
-              {vencidos.length} registros
+      <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-200">
+              <Search size={18} />
             </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-metro-text">Vinculogramas vencidos / revocados</h2>
+                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-100">
+                  {filteredVencidos.length} registros
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-metro-muted">Histórico de relaciones ya no vigentes.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <ExportPrintButtons
               payload={{
                 title: 'Vinculogramas vencidos / revocados',
@@ -952,22 +1175,23 @@ export function VinculogramaPage() {
                   vinculogramaExportColumns(today),
                   tablePreferences.columnOrder,
                 ),
-                rows: vencidos,
+                rows: filteredVencidos,
                 filterLabel: 'Estado: vencido o revocado',
               }}
+              size="sm"
             />
+            <ActionButton variant="secondary" iconOnly={false} onClick={toggleExpired} size="sm">
+              {showExpired ? 'Ocultar histórico' : 'Mostrar histórico'}
+            </ActionButton>
           </div>
-          <ActionButton variant="secondary" iconOnly={false} onClick={toggleExpired}>
-            {showExpired ? 'Ocultar' : 'Mostrar'}
-          </ActionButton>
         </div>
         {showExpired && (
-          <div className="overflow-auto">
+          <div className="mt-3">
             <VinculogramaTable
-              emptyText="No hay vinculogramas vencidos ni revocados."
+              emptyText="No hay vinculogramas vencidos ni revocados con los filtros actuales."
               onDelete={deleteTableRecord}
               onEdit={openEditModal}
-              records={vencidos}
+              records={filteredVencidos}
               today={today}
               preferences={tablePreferences}
               setSort={setTableSort}
@@ -975,10 +1199,13 @@ export function VinculogramaPage() {
               setColumnOrder={setTableColumnOrder}
               resetColumnWidths={resetTableColumnWidths}
               resetPreferences={resetTablePreferences}
+              page={historyPage}
+              pageSize={pageSize}
+              onPageChange={setHistoryPage}
             />
           </div>
         )}
-      </div>
+      </section>
 
       {showSolicitudModal && (
         <SolicitudVinculogramaModal
