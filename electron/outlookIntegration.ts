@@ -159,14 +159,27 @@ function vbsStringLiteral(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-const OUTLOOK_MAIL_FONT_CSS =
-  'html,body,div,p,span,table,tbody,thead,tfoot,tr,td,th,a,ul,ol,li,strong,b,em,i{' +
-  'font-family:Verdana,Arial,sans-serif !important;font-size:10pt !important;}';
+const OUTLOOK_MAIL_FONT_CSS = [
+  'html,body,.traccion-mail-root,.traccion-mail-root *{',
+  'font-family:Verdana,Arial,sans-serif !important;',
+  'font-size:10pt !important;',
+  'mso-fareast-font-family:Verdana !important;',
+  '}',
+].join('');
 
+/**
+ * Outlook usa el motor de Word para renderizar HTML y puede conservar fuentes
+ * incrustadas en fragmentos pegados desde Word/Outlook. Por eso la fuente se
+ * fuerza en el punto común de salida, no en cada módulo: todos los borradores
+ * generados por TrAccion pasan por esta función.
+ *
+ * Se preservan negritas, cursivas, colores, enlaces, tablas y el resto del
+ * formato; únicamente se normalizan familia y tamaño tipográfico.
+ */
 function forceOutlookVerdana10(html: string): string {
   const content = html.trim() ? html : '<br>';
   return `<style type="text/css">${OUTLOOK_MAIL_FONT_CSS}</style>` +
-    `<div style="font-family:Verdana,Arial,sans-serif;font-size:10pt;">${content}</div>`;
+    `<div class="traccion-mail-root" style="font-family:Verdana,Arial,sans-serif !important;font-size:10pt !important;mso-fareast-font-family:Verdana !important;">${content}</div>`;
 }
 
 function buildOutlookDraftPowerShellScript(payloadPath: string): string {
