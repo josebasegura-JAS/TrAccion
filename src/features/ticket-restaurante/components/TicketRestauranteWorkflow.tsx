@@ -77,7 +77,7 @@ function ProcessStep({
       </span>
       <span className="min-w-0 pt-0.5">
         <span className="block text-[13px] font-extrabold leading-4 text-metro-text">{title}</span>
-        <span className="mt-1 block text-[11px] leading-4 text-metro-muted">{detail}</span>
+        <span className="mt-1 block text-xs leading-5 text-metro-muted">{detail}</span>
       </span>
     </button>
   );
@@ -105,7 +105,7 @@ function AdvancedAction({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-xs font-bold text-metro-text">{title}</span>
-        <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">{detail}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-metro-muted">{detail}</span>
       </span>
       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" />
     </button>
@@ -133,7 +133,7 @@ function ReviewCheck({
       />
       <span className="min-w-0">
         <span className="block text-[12px] font-bold text-metro-text">{label}</span>
-        <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">{detail}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-metro-muted">{detail}</span>
       </span>
     </label>
   );
@@ -263,7 +263,7 @@ export function TicketRestauranteWorkflow({
 
   return (
     <div className="space-y-3">
-      <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+      <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-base font-extrabold text-metro-text">Proceso mensual de Ticket Restaurante</p>
@@ -337,7 +337,7 @@ export function TicketRestauranteWorkflow({
       </section>
 
       <section className={cx(
-        'rounded-xl border p-4 shadow-card',
+        'rounded-2xl border p-4 shadow-card',
         readyForOrder
           ? 'border-emerald-400/30 bg-emerald-500/[0.055]'
           : 'border-metro-red/45 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/10',
@@ -373,11 +373,11 @@ export function TicketRestauranteWorkflow({
       </section>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
-        <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+        <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-extrabold text-metro-text">Controles del mes</p>
-              <p className="mt-0.5 text-[11px] text-metro-muted">Marca cada bloque cuando hayas comprobado que sus datos son correctos.</p>
+              <p className="mt-0.5 text-xs text-metro-muted">Marca cada bloque cuando hayas comprobado que sus datos son correctos.</p>
             </div>
             <span className="rounded-full border border-metro-border bg-metro-surface px-2.5 py-1 text-[11px] font-bold text-metro-secondary">
               {[absencesReviewed, manutencionesReviewed, manualDebtsReviewed].filter(Boolean).length}/3 revisados
@@ -405,7 +405,7 @@ export function TicketRestauranteWorkflow({
           </div>
         </section>
 
-        <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+        <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
           <p className="text-sm font-extrabold text-metro-text">Resumen del pedido</p>
           <div className="mt-3 space-y-2.5">
             <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Users className="h-4 w-4" />Personas con derecho</span><strong className="text-sm text-metro-text">{formatInteger(activePeople)}</strong></div>
@@ -417,7 +417,7 @@ export function TicketRestauranteWorkflow({
       </div>
 
       <button
-        className="group flex w-full items-center justify-between gap-4 rounded-xl border border-blue-400/25 bg-blue-500/[0.055] p-4 text-left shadow-card transition hover:border-blue-300/45 hover:bg-blue-500/[0.085]"
+        className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-blue-400/25 bg-blue-500/[0.055] p-4 text-left shadow-card transition hover:border-blue-300/45 hover:bg-blue-500/[0.085]"
         onClick={onOpenAnnualBalance}
         type="button"
       >
@@ -427,7 +427,7 @@ export function TicketRestauranteWorkflow({
           </span>
           <span className="min-w-0">
             <span className="block text-[13px] font-extrabold text-metro-text">Balance anual</span>
-            <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">Consulta el acumulado del año, evolución mensual, reparto por área y detalle por persona. Exportable a Excel.</span>
+            <span className="mt-0.5 block text-xs leading-5 text-metro-muted">Consulta el acumulado del año, evolución mensual, reparto por área y detalle por persona. Exportable a Excel.</span>
           </span>
         </span>
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold text-blue-200">
@@ -435,13 +435,13 @@ export function TicketRestauranteWorkflow({
         </span>
       </button>
 
-      <details className="group rounded-xl border border-metro-border bg-metro-panel shadow-card">
+      <details className="group rounded-2xl border border-metro-border bg-metro-panel shadow-card">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
           <div className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-metro-surface text-metro-secondary"><Settings className="h-4 w-4" /></span>
             <div>
               <p className="text-[13px] font-extrabold text-metro-text">Configuración y herramientas avanzadas</p>
-              <p className="mt-0.5 text-[11px] text-metro-muted">Calendarios, personas, precio, reglas y accesos de mantenimiento.</p>
+              <p className="mt-0.5 text-xs text-metro-muted">Calendarios, personas, precio, reglas y accesos de mantenimiento.</p>
             </div>
           </div>
           <ChevronDown className="h-4 w-4 shrink-0 text-metro-muted transition group-open:rotate-180" />

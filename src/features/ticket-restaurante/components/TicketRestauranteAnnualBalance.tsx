@@ -386,8 +386,8 @@ export function TicketRestauranteAnnualBalance({
   };
 
   return (
-    <div className="space-y-2.5">
-      <section className="rounded-xl border border-metro-border bg-metro-panel p-3 shadow-card">
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -399,7 +399,7 @@ export function TicketRestauranteAnnualBalance({
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">
               Año
-              <select className="ml-2 h-8 rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" value={year} onChange={(event) => setYear(Number(event.target.value))}>
+              <select className="ml-2 h-9 rounded-xl border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" value={year} onChange={(event) => setYear(Number(event.target.value))}>
                 {Array.from({ length: 7 }, (_, index) => new Date().getFullYear() + 1 - index).map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
@@ -418,7 +418,7 @@ export function TicketRestauranteAnnualBalance({
           </div>
         </div>
       </section>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[10px] text-metro-muted">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-metro-muted">
         <span>
           {isYearClosed
             ? `Ejercicio cerrado${yearClosure?.closedAt ? ` el ${new Date(yearClosure.closedAt).toLocaleDateString('es-ES')}` : ''}. El histórico permanece fijo hasta que lo reabras.`
@@ -439,32 +439,32 @@ export function TicketRestauranteAnnualBalance({
       </div>
 
       <div className="grid gap-2.5 xl:grid-cols-[1.35fr_1fr]">
-        <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
+        <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-black text-metro-text">Evolución mensual</h3>
-              <p className="text-[11px] text-metro-muted">Tickets computados por mes</p>
+              <p className="text-xs text-metro-muted">Tickets computados por mes</p>
             </div>
             <CalendarCheck2 className="h-4 w-4 text-blue-500" />
           </div>
           <div className="flex h-44 items-end gap-2 border-b border-metro-border/80 px-1 pb-1">
             {monthlyTotals.map((value, index) => (
               <div className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1" key={MONTHS[index]}>
-                <span className="text-[10px] font-bold text-metro-muted">{value || ''}</span>
+                <span className="text-xs font-bold text-metro-muted">{value || ''}</span>
                 <div className="w-full rounded-t-md bg-blue-500/80" style={{ height: `${Math.max(value ? 8 : 1, (value / maxMonthly) * 112)}px` }} title={`${MONTHS[index]}: ${value} tickets`} />
-                <span className="text-[10px] font-semibold text-metro-muted">{MONTHS[index]}</span>
+                <span className="text-[11px] font-semibold text-metro-muted">{MONTHS[index]}</span>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
+        <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
           <h3 className="text-sm font-black text-metro-text">Tickets por área</h3>
-          <p className="mb-3 text-[11px] text-metro-muted">Peso de cada área sobre el acumulado</p>
+          <p className="mb-3 text-xs text-metro-muted">Peso de cada área sobre el acumulado</p>
           <div className="space-y-2">
             {areaRows.slice(0, 8).map((row, index) => (
               <div key={row.area}>
-                <div className="mb-1 flex items-center justify-between gap-3 text-[11px]">
+                <div className="mb-1 flex items-center justify-between gap-3 text-xs">
                   <span className="truncate font-semibold text-metro-text" title={row.area}>{row.area}</span>
                   <span className="shrink-0 font-bold text-metro-muted">{row.tickets.toLocaleString('es-ES')} · {(row.share * 100).toFixed(1)}%</span>
                 </div>
@@ -478,18 +478,18 @@ export function TicketRestauranteAnnualBalance({
         </section>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel">
+      <section className="overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-card">
         <div className="flex flex-col gap-2 border-b border-metro-border p-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
-            <button className={`h-8 rounded-lg px-3 text-xs font-bold ${mode === 'people' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('people')} type="button">Personas</button>
-            <button className={`h-8 rounded-lg px-3 text-xs font-bold ${mode === 'areas' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('areas')} type="button">Áreas</button>
+            <button className={`h-9 rounded-xl px-3 text-xs font-bold ${mode === 'people' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('people')} type="button">Personas</button>
+            <button className={`h-9 rounded-xl px-3 text-xs font-bold ${mode === 'areas' ? 'bg-blue-500 text-white' : 'bg-metro-surface text-metro-muted'}`} onClick={() => setMode('areas')} type="button">Áreas</button>
           </div>
           <div className="flex flex-1 flex-wrap gap-2 lg:justify-end">
             <label className="relative min-w-[220px] max-w-sm flex-1 lg:flex-none">
               <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-metro-muted" />
-              <input className="h-8 w-full rounded-lg border border-metro-border bg-metro-surface pl-8 pr-3 text-xs text-metro-text outline-none focus:border-blue-500" onChange={(event) => setSearch(event.target.value)} placeholder={mode === 'people' ? 'Buscar persona, nº o área…' : 'Buscar área…'} value={search} />
+              <input className="h-9 w-full rounded-xl border border-metro-border bg-metro-surface pl-8 pr-3 text-xs text-metro-text outline-none focus:border-blue-500" onChange={(event) => setSearch(event.target.value)} placeholder={mode === 'people' ? 'Buscar persona, nº o área…' : 'Buscar área…'} value={search} />
             </label>
-            <select className="h-8 min-w-[190px] rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" onChange={(event) => setAreaFilter(event.target.value)} value={areaFilter}>
+            <select className="h-9 min-w-[190px] rounded-xl border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text" onChange={(event) => setAreaFilter(event.target.value)} value={areaFilter}>
               <option value="">Todas las áreas</option>
               {areas.map((area) => <option key={area} value={area}>{area}</option>)}
             </select>
@@ -498,7 +498,7 @@ export function TicketRestauranteAnnualBalance({
 
         {mode === 'people' ? (
           <div className="overflow-x-auto">
-            <table className="min-w-[1180px] w-full border-collapse text-[11px]">
+            <table className="min-w-[1180px] w-full border-collapse text-xs">
               <thead className="bg-metro-surface/80 text-metro-muted">
                 <tr>
                   <th className="px-2 py-2 text-left">Nº empleado</th><th className="px-2 py-2 text-left">Persona</th><th className="px-2 py-2 text-left">Área</th>
@@ -510,7 +510,7 @@ export function TicketRestauranteAnnualBalance({
                 {filteredPeople.map((row) => (
                   <tr className="border-t border-metro-border/70 hover:bg-metro-surface/60" key={row.empleado}>
                     <td className="px-2 py-1.5 font-bold text-metro-text">{row.empleado}</td>
-                    <td className="px-2 py-1.5 text-metro-text"><span className="font-semibold">{row.nombreApellidos}</span>{row.manual ? <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[9px] font-bold text-violet-500">MANUAL</span> : null}</td>
+                    <td className="px-2 py-1.5 text-metro-text"><span className="font-semibold">{row.nombreApellidos}</span>{row.manual ? <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-bold text-violet-400">MANUAL</span> : null}</td>
                     <td className="max-w-[190px] truncate px-2 py-1.5 text-metro-muted" title={row.area}>{row.area}</td>
                     {row.monthlyTickets.map((tickets, index) => <td className="px-1.5 py-1.5 text-right tabular-nums text-metro-muted" key={index}>{tickets || '—'}</td>)}
                     <td className="px-2 py-1.5 text-right font-black tabular-nums text-metro-text">{row.totalTickets}</td>
@@ -541,10 +541,10 @@ export function TicketRestauranteAnnualBalance({
       </section>
 
       <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[11px] text-metro-muted">
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-metro-muted">
           <strong className="text-metro-text">Criterio:</strong> mientras el ejercicio está abierto, el balance se recalcula con los datos actuales y admite tickets o regularizaciones a mes vencido. Al cerrar el ejercicio se guarda una fotografía definitiva de los 12 meses. Los importes usan el precio vigente en cada mes.
         </div>
-        <div className="flex items-center rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-[11px] text-metro-muted">
+        <div className="flex items-center rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs text-metro-muted">
           <Users className="mr-2 h-4 w-4 text-blue-500" /> {peopleRows.filter((row) => row.area === 'Sin área').length} persona(s) sin área asignada
         </div>
       </div>
@@ -554,9 +554,9 @@ export function TicketRestauranteAnnualBalance({
 
 function MetricCard({ icon: Icon, label, value, secondary }: { icon: LucideIcon; label: string; value: string; secondary?: string }) {
   return (
-    <section className="flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 shadow-card">
+    <section className="flex items-center gap-3 rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-500/10"><Icon className="h-5 w-5 text-blue-500" /></div>
-      <div className="min-w-0"><p className="text-[11px] font-bold text-metro-muted">{label}</p><p className="truncate text-xl font-black text-metro-text">{value}</p>{secondary ? <p className="text-[10px] text-metro-muted">{secondary}</p> : null}</div>
+      <div className="min-w-0"><p className="text-xs font-bold text-metro-muted">{label}</p><p className="truncate text-xl font-black text-metro-text">{value}</p>{secondary ? <p className="text-[11px] text-metro-muted">{secondary}</p> : null}</div>
     </section>
   );
 }

@@ -66,7 +66,7 @@ export function ManutencionesPanel({
   };
 
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+    <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
       <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-base font-bold text-metro-text">Manutenciones</h3>
@@ -89,7 +89,7 @@ export function ManutencionesPanel({
         <p className="mb-2 text-xs font-semibold text-metro-muted">{importMessage}</p>
       ) : null}
 
-      <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
+      <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface p-3">
         <p className="mb-2 text-xs font-bold text-metro-muted">
           Alta manual
         </p>
@@ -124,7 +124,7 @@ export function ManutencionesPanel({
       </div>
 
       {previewRows.length > 0 ? (
-        <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface p-2">
+        <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface p-3">
           <div className="mb-3">
             <ImportReviewSummary
               detail="Revisa qué registros deben importarse y cuáles afectan al ticket antes de confirmar."
@@ -203,7 +203,7 @@ export function ManutencionesPanel({
         </div>
       ) : null}
 
-      <div className="mb-2 flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-2 flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-surface p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs font-semibold text-metro-muted">
           Manutenciones del mes seleccionado: <span className="text-metro-red">{manutenciones.length}</span>
         </div>
@@ -218,7 +218,7 @@ export function ManutencionesPanel({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-metro-border bg-metro-surface">
+      <div className="overflow-x-auto rounded-xl border border-metro-border bg-metro-surface">
         <CompactTable>
           <CompactTableHead>
             <tr>

@@ -289,9 +289,9 @@ export function PeoplePanel({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+      <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
         <button
-          className="flex w-full items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-left text-sm font-bold text-metro-text hover:border-metro-red"
+          className="flex w-full items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-left text-sm font-bold text-metro-text hover:border-metro-red"
           onClick={() => setIsPersonFormOpen((isOpen) => !isOpen)}
           type="button"
         >
@@ -418,7 +418,7 @@ export function PeoplePanel({
           </div>
         ) : null}
       </div>
-      <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+      <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
         <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-base font-bold text-metro-text">Personas con derecho a ticket</h3>

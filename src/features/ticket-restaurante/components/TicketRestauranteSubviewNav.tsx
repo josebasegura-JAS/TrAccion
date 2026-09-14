@@ -33,7 +33,7 @@ export function TicketRestauranteSubviewNav({
   onOpenPrice: () => void;
 }) {
   return (
-    <div className="mb-3 flex flex-col gap-2 rounded-xl border border-metro-border bg-metro-panel p-2 lg:flex-row lg:items-center lg:justify-between">
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap gap-2">
         <SubviewButton active={false} label="← Inicio" onClick={() => onChange(null)} />
         {SUBVIEWS.map((subview) => (

@@ -287,14 +287,14 @@ export function TicketRestauranteManualPeoplePanel({
   ) : null;
 
   return (
-    <div className="mb-3 rounded-xl border border-metro-border bg-metro-panel p-2.5">
+    <div className="mb-3 rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
       <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-bold text-metro-text">Personas manuales</h3>
             <StatusBadge size="xs" tone="info">{monthLabel}</StatusBadge>
           </div>
-          <p className="text-[11px] text-metro-muted">
+          <p className="text-xs text-metro-muted">
             Personas sin calendario fijo. Añádelas una vez y, cada mes, informa aquí sus tickets y si deben cotizar.
           </p>
         </div>
@@ -320,11 +320,11 @@ export function TicketRestauranteManualPeoplePanel({
       </div>
 
       {isFormOpen ? (
-        <div className="mb-3 rounded-lg border border-metro-border bg-metro-surface/45 p-2.5">
+        <div className="mb-3 rounded-xl border border-metro-border bg-metro-surface/45 p-2.5">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
               <p className="text-xs font-bold text-metro-text">{editingId ? 'Editar persona manual' : 'Nueva persona manual'}</p>
-              <p className="text-[11px] text-metro-muted">Busca por nº de empleado, nombre o apellidos y completa los datos si hace falta.</p>
+              <p className="text-xs text-metro-muted">Busca por nº de empleado, nombre o apellidos y completa los datos si hace falta.</p>
             </div>
           </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[110px_1fr_150px_180px_190px] xl:items-end">
@@ -399,14 +399,14 @@ export function TicketRestauranteManualPeoplePanel({
         </div>
       ) : null}
 
-      {message ? <p className="mb-2 text-[11px] text-metro-muted">{message}</p> : null}
+      {message ? <p className="mb-2 text-xs text-metro-muted">{message}</p> : null}
 
       {people.length ? (
         <div className="overflow-hidden rounded-lg border border-metro-border">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface/50 px-2.5 py-2">
             <div>
               <p className="text-xs font-bold text-metro-text">Tickets del mes</p>
-              <p className="text-[11px] text-metro-muted">Indica los tickets de {monthLabel} y guarda cuando termines.</p>
+              <p className="text-xs text-metro-muted">Indica los tickets de {monthLabel} y guarda cuando termines.</p>
               <div className="mt-1 flex flex-wrap gap-2">
                 <StatusBadge size="xs" tone="success">Cotiza</StatusBadge>
                 <StatusBadge size="xs" tone="accent">No cotiza</StatusBadge>

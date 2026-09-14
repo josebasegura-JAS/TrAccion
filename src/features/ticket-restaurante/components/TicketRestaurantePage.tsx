@@ -1168,7 +1168,7 @@ export function TicketRestaurantePage({
             year={year}
           />
 
-          <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+          <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
             <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">

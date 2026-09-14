@@ -255,7 +255,7 @@ export function CalculationPanel({
               {row.ticketsFinales}
             </span>
             {row.manualEntry ? (
-              <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-[11px] font-bold text-metro-muted">Manual</span>
+              <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-xs font-bold text-metro-muted">Manual</span>
             ) : (
             <button
               aria-label={`Ver cálculo de ${row.nombreApellidos}`}
@@ -312,7 +312,7 @@ export function CalculationPanel({
   }, [effectiveTicketPrice, mode]);
 
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel p-2.5">
+    <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
       <div className="mb-3 flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
@@ -523,7 +523,7 @@ function DetailFormulaItem({
 
 function DetailStat({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border border-metro-border bg-metro-panel p-2">
+    <div className="rounded-2xl border border-metro-border bg-metro-panel p-3">
       <p className="text-xs font-bold text-metro-muted">{label}</p>
       <p className="mt-1 text-sm font-bold text-metro-text">{value}</p>
     </div>
@@ -540,7 +540,7 @@ function DetailSection({
   title: string;
 }) {
   return (
-    <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
+    <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
       <h4 className="mb-2 text-sm font-bold text-metro-text">{title}</h4>
       {rows.length > 0 ? (
         <CompactTable>
@@ -574,7 +574,7 @@ function DetailSection({
 
 function HojaGastoDetailSection({ rows }: { rows: TicketPersonCalculation['hojaGastoDetalle'] }) {
   return (
-    <section className="rounded-xl border border-metro-border bg-metro-panel p-3">
+    <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
       <h4 className="mb-2 text-sm font-bold text-metro-text">Hojas de gasto</h4>
       {rows.length > 0 ? (
         <CompactTable>
