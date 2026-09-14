@@ -86,6 +86,9 @@ export function AjustesPage() {
   const [databaseLockCheckError, setDatabaseLockCheckError] = useState('');
   const [isForcingLockRelease, setIsForcingLockRelease] = useState(false);
   const [newTaskPhase, setNewTaskPhase] = useState('');
+  const [isDatabaseSectionOpen, setIsDatabaseSectionOpen] = useState(
+    () => window.location.hash === '#base-de-datos',
+  );
   const { confirm, dialogNode } = useAppDialog();
 
   useEffect(() => {
@@ -872,7 +875,12 @@ export function AjustesPage() {
           </div>
         </section>
 
-        <details className="group scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/35" defaultOpen={window.location.hash === '#base-de-datos'} id="ajustes-base-datos">
+        <details
+          className="group scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/35"
+          id="ajustes-base-datos"
+          onToggle={(event) => setIsDatabaseSectionOpen(event.currentTarget.open)}
+          open={isDatabaseSectionOpen}
+        >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl border border-emerald-400/20 bg-emerald-500/10 text-emerald-200"><Database size={18} /></div>
