@@ -1,4 +1,4 @@
-
+import { Building2, FileBadge2, IdCard, MapPin, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   EMPTY_EMPLOYEE_DRAFT,
@@ -40,6 +40,33 @@ const employeeFormFields: Array<{ field: EmployeeField; label: string; required?
   { field: 'nif', label: 'NIF' },
 ];
 
+const fieldMeta = Object.fromEntries(employeeFormFields.map((entry) => [entry.field, entry])) as Record<
+  EmployeeField,
+  { field: EmployeeField; label: string; required?: boolean }
+>;
+
+const identificationFields: EmployeeField[] = ['empleado', 'nombreApellidos'];
+const organizationFields: EmployeeField[] = [
+  'puestoNomina',
+  'puestoOrganizativo',
+  'puestoEus',
+  'residencia',
+  'unidad',
+  'nivelRetributivo',
+  'direccionOrganizativa',
+  'antiguedadPuesto',
+];
+const personalFields: EmployeeField[] = [
+  'sexo',
+  'calle',
+  'numero',
+  'piso',
+  'codigoPostal',
+  'poblacion',
+  'provincia',
+  'nif',
+];
+
 function toDraft(employee: Employee | null): EmployeeDraft {
   if (!employee) {
     return { ...EMPTY_EMPLOYEE_DRAFT };
@@ -65,6 +92,33 @@ function toDraft(employee: Employee | null): EmployeeDraft {
     provincia: employee.provincia,
     nif: employee.nif,
   };
+}
+
+function EmployeeSection({
+  children,
+  description,
+  icon,
+  title,
+}: {
+  children: React.ReactNode;
+  description: string;
+  icon: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <section className="rounded-2xl border border-metro-border/80 bg-[linear-gradient(180deg,rgba(22,42,66,0.92),rgba(18,35,56,0.88))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
+          {icon}
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-metro-text">{title}</h3>
+          <p className="text-sm text-metro-muted">{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function EmployeeEditor({
@@ -119,20 +173,52 @@ export function EmployeeEditor({
     onSave: () => formRef.current?.requestSubmit(),
   });
 
+  const renderField = (field: EmployeeField) => {
+    const { label, required } = fieldMeta[field];
+    const isEmployeeKey = field === 'empleado';
+    const isReadOnlyKey = isEmployeeKey && !isCreate;
+    const value = draft[field];
+
+    return (
+      <label className="text-xs font-semibold text-metro-muted" key={field}>
+        <span className="mb-1 block text-[11px] uppercase tracking-[0.12em] text-metro-muted">
+          {label}
+          {required ? <span className="ml-1 text-metro-red">*</span> : null}
+        </span>
+        <Input
+          className={isReadOnlyKey ? 'text-metro-muted' : undefined}
+          onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))}
+          readOnly={isReadOnlyKey || isReadOnly}
+          disabled={isReadOnly}
+          required={required}
+          value={value}
+        />
+        {isReadOnlyKey && (
+          <span className="mt-1 block text-[11px] font-medium text-metro-muted">Clave única; no editable.</span>
+        )}
+      </label>
+    );
+  };
+
   return (
     <ModalShell
       labelledBy="employee-editor-title"
-      maxWidthClassName="max-w-[760px]"
+      maxWidthClassName="max-w-[1120px]"
       onClose={() => void requestClose()}
-      panelClassName="bg-metro-panel"
+      panelClassName="bg-[linear-gradient(180deg,rgba(15,30,49,0.98),rgba(11,24,41,0.98))]"
     >
       <ModalHeader>
-        <ModalTitle
-          id="employee-editor-title"
-          subtitle={isCreate ? 'Alta manual compacta.' : `Editando empleado ${employee?.empleado ?? '—'}`}
-        >
-          {isCreate ? 'Nueva persona' : employee?.nombreApellidos || 'Editar persona'}
-        </ModalTitle>
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
+            <UserRound size={24} />
+          </div>
+          <ModalTitle
+            id="employee-editor-title"
+            subtitle={isCreate ? 'Alta manual compacta.' : `Editando empleado ${employee?.empleado ?? '—'}`}
+          >
+            {isCreate ? 'Nueva persona' : employee?.nombreApellidos || 'Editar persona'}
+          </ModalTitle>
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           <ModalDatabaseStatus />
           <ModalCloseButton label="Cerrar editor" onClick={() => void requestClose()} />
@@ -146,7 +232,7 @@ export function EmployeeEditor({
 
         <form
           ref={formRef}
-          className="flex min-h-0 flex-1 flex-col space-y-3"
+          className="flex min-h-0 flex-1 flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSubmit) {
@@ -171,100 +257,106 @@ export function EmployeeEditor({
             })();
           }}
         >
-          <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-            {employeeFormFields.map(({ field, label, required }) => {
-              const isEmployeeKey = field === 'empleado';
-              const isReadOnlyKey = isEmployeeKey && !isCreate;
+          <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+            <EmployeeSection
+              description="Datos principales del empleado en la organización."
+              icon={<IdCard size={20} />}
+              title="Identificación"
+            >
+              <div className="grid gap-4 md:grid-cols-2">{identificationFields.map(renderField)}</div>
+            </EmployeeSection>
 
-              return (
-                <label className="text-xs font-semibold text-metro-muted" key={field}>
-                  {label}{required ? <span className="ml-1 text-metro-red">*</span> : null}
-                  <Input
-                    className={isReadOnlyKey ? 'text-metro-muted' : undefined}
-                    onChange={(event) =>
-                      setDraft((current) => ({ ...current, [field]: event.target.value }))
-                    }
-                    readOnly={isReadOnlyKey || isReadOnly}
-                    disabled={isReadOnly}
-                    required={required}
-                    value={draft[field]}
-                  />
-                  {isReadOnlyKey && (
-                    <span className="mt-1 block text-[11px] font-medium text-metro-muted">
-                      Clave única; no editable.
-                    </span>
-                  )}
-                </label>
-              );
-            })}
+            <EmployeeSection
+              description="Información de puesto, unidad y relación organizativa."
+              icon={<Building2 size={20} />}
+              title="Puesto y organización"
+            >
+              <div className="grid gap-4 md:grid-cols-2">{organizationFields.map(renderField)}</div>
+            </EmployeeSection>
+
+            <EmployeeSection
+              description="Información de contacto y datos personales."
+              icon={<MapPin size={20} />}
+              title="Datos personales y dirección"
+            >
+              <div className="grid gap-4 md:grid-cols-2">{personalFields.map(renderField)}</div>
+            </EmployeeSection>
+
+            {!isCreate && employee && (
+              <EmployeeSection
+                description="Información calculada automáticamente desde otros datos."
+                icon={<FileBadge2 size={20} />}
+                title="Campos derivados"
+              >
+                <div className="rounded-xl border border-metro-border/80 bg-metro-surface/35 px-4 py-3 text-sm text-metro-muted">
+                  <dl className="space-y-2">
+                    <div className="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
+                      <dt className="font-bold text-metro-text">DNI</dt>
+                      <dd className="truncate" title={employee.dni || '—'}>
+                        <span className="inline-flex rounded-md bg-red-400/10 px-2 py-0.5 font-semibold text-red-200">
+                          {employee.dni || '—'}
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
+                      <dt className="font-bold text-metro-text">Residencia EUS</dt>
+                      <dd className="truncate" title={employee.residenciaEus || '—'}>
+                        {employee.residenciaEus || '—'}
+                      </dd>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
+                      <dt className="font-bold text-metro-text">Dirección teletrabajo</dt>
+                      <dd className="truncate" title={employee.direccionTeletrabajo || '—'}>
+                        {employee.direccionTeletrabajo || '—'}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </EmployeeSection>
+            )}
           </div>
 
-          {!isCreate && employee && (
-            <section className="rounded-lg border border-metro-border bg-metro-surface p-3 text-xs text-metro-muted">
-              <p className="mb-2 font-semibold text-metro-text">
-                Campos derivados
-              </p>
-              <dl className="space-y-1">
-                <div className="grid grid-cols-[135px_1fr] gap-2">
-                  <dt className="font-bold text-metro-text">DNI</dt>
-                  <dd className="truncate" title={employee.dni || '—'}>
-                    {employee.dni || '—'}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[135px_1fr] gap-2">
-                  <dt className="font-bold text-metro-text">Residencia EUS</dt>
-                  <dd className="truncate" title={employee.residenciaEus || '—'}>
-                    {employee.residenciaEus || '—'}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[135px_1fr] gap-2">
-                  <dt className="font-bold text-metro-text">Dirección teletrabajo</dt>
-                  <dd className="truncate" title={employee.direccionTeletrabajo || '—'}>
-                    {employee.direccionTeletrabajo || '—'}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          )}
-
-          <div className="flex flex-wrap gap-2 border-t border-metro-border pt-3">
+          <div className="border-t border-metro-border/80 pt-4">
             {saveError && (
-              <p className="w-full rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
+              <p className="mb-3 w-full rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">
                 {saveError}
               </p>
             )}
-            <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
-              Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
-            </ActionButton>
-            <InlineSaveFeedback />
-            {!isCreate && employee && (
-              <ActionButton
-                disabled={isReadOnly}
-                iconOnly={false}
-                onClick={() => {
-                  void (async () => {
-                    setSaveError('');
-                    const result = await removeEmployee(employee.empleado, JSON.stringify(employee));
-                    if (!result.ok) {
-                      setSaveError(result.message);
-                      return;
-                    }
-                    clearRecoveryDraft();
-                    onDone();
-                  })();
-                }}
-                variant="delete"
-              >
-                Eliminar
+            <div className="flex flex-wrap items-center gap-2">
+              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
+                Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
               </ActionButton>
-            )}
-            <button
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
-              onClick={() => void requestClose()}
-              type="button"
-            >
-              Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
-            </button>
+              <InlineSaveFeedback />
+              <div className="flex-1" />
+              <button
+                className="rounded-xl border border-metro-border bg-metro-surface px-4 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
+                onClick={() => void requestClose()}
+                type="button"
+              >
+                Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
+              </button>
+              {!isCreate && employee && (
+                <ActionButton
+                  disabled={isReadOnly}
+                  iconOnly={false}
+                  onClick={() => {
+                    void (async () => {
+                      setSaveError('');
+                      const result = await removeEmployee(employee.empleado, JSON.stringify(employee));
+                      if (!result.ok) {
+                        setSaveError(result.message);
+                        return;
+                      }
+                      clearRecoveryDraft();
+                      onDone();
+                    })();
+                  }}
+                  variant="delete"
+                >
+                  Eliminar
+                </ActionButton>
+              )}
+            </div>
           </div>
         </form>
       </div>
