@@ -72,6 +72,15 @@ const PLANTILLA_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Ficha de persona',
+    items: [
+      'Al abrir una persona, la ficha agrupa los datos en Identificación, Puesto y organización, Datos personales y dirección y Campos derivados.',
+      'El número de empleado es la clave única y no se puede modificar una vez creada la persona.',
+      'Los Campos derivados son informativos y se calculan a partir de otros datos de Plantilla; no se editan directamente.',
+      'Guardar conserva los cambios de la ficha; Cancelar respeta el aviso de cambios sin guardar y Eliminar mantiene las comprobaciones habituales de la aplicación.',
+    ],
+  },
+  {
     title: 'Flujo recomendado',
     ordered: true,
     items: [

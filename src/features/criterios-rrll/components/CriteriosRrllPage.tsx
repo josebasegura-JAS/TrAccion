@@ -47,6 +47,15 @@ const CRITERIOS_RRLL_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Ficha de criterio',
+    items: [
+      'La edición se organiza por bloques para separar Información general, Fecha y gestión, Contenido del criterio y Observaciones.',
+      'Tema y Criterio siguen siendo los únicos campos obligatorios; Estado, Sentido, Fecha, Responsable y Observaciones sirven para clasificar y documentar el precedente.',
+      'Al editar un registro, el estado se muestra también en la cabecera para identificar rápidamente si está vigente, en revisión o archivado.',
+      'Guardar, Cancelar y Eliminar mantienen las mismas validaciones, bloqueo compartido y control de cambios sin guardar.',
+    ],
+  },
+  {
     title: 'Importación desde Excel',
     items: [
       'Admite Excel, CSV, TSV o TXT, con columnas reconocidas por variantes habituales del nombre (Tema/Asunto/Materia, Criterio/Descripción/Detalle, Sentido/Resultado, etc.); no hace falta que coincidan exactamente.',

@@ -196,12 +196,12 @@ export function ModuleHelpButton({ title, subtitle, sections, ariaLabel }: Modul
     <>
       <button
         aria-label={ariaLabel ?? `Abrir ayuda de ${title}`}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-blue-400/70 bg-blue-500/15 text-blue-200 shadow-sm transition hover:border-blue-300 hover:bg-blue-500/25 hover:text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-400/70 bg-blue-500/15 text-blue-200 shadow-sm transition hover:border-blue-300 hover:bg-blue-500/25 hover:text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
         data-tip={`Ayuda de ${title}`}
         onClick={() => setIsOpen(true)}
         type="button"
       >
-        <HelpCircle size={17} strokeWidth={2.4} />
+        <HelpCircle size={18} strokeWidth={2.4} />
       </button>
 
       {isOpen ? (

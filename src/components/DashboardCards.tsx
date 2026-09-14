@@ -29,6 +29,8 @@ import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/sto
 import { useLoteriaStore } from '../features/loteria/store/useLoteriaStore';
 import { buildDashboardAttentionItems, type DashboardAttentionKind, type DashboardAttentionLevel } from './dashboard/dashboardAttention';
 import { DashboardRecordsModal } from './dashboard/DashboardUi';
+import { useModuleHelpRegistry } from '../services/moduleHelpRegistry';
+import type { ModuleHelpSection } from './ModuleHelp';
 import type {
   CalendarEvent,
   CalendarEventType,
@@ -69,6 +71,46 @@ const priorityPill: Record<TaskPriority, string> = {
   media: 'border-amber-400/25 bg-amber-400/20 text-amber-200',
   baja: 'border-sky-400/25 bg-sky-400/15 text-sky-200',
 };
+
+const DASHBOARD_HELP_SECTIONS: ModuleHelpSection[] = [
+  {
+    title: 'Para qué sirve',
+    body: 'El Dashboard RRLL concentra las prioridades del día, próximos vencimientos, agenda y accesos rápidos a los módulos principales. No sustituye a cada módulo: resume la información que requiere atención.',
+  },
+  {
+    title: 'Indicadores superiores',
+    items: [
+      'Las seis tarjetas muestran tareas abiertas, tareas críticas, sesiones abiertas, actas en seguimiento, solicitudes de teletrabajo y licencias pendientes.',
+      'Pulsa una tarjeta para abrir el detalle disponible o ir directamente al módulo correspondiente.',
+      'Los colores ayudan a diferenciar cada bloque; no implican por sí solos una incidencia salvo cuando el propio texto lo indique.',
+    ],
+  },
+  {
+    title: 'Pendiente de atención',
+    items: [
+      'Ordena automáticamente incidencias y vencimientos por urgencia para que lo más importante aparezca primero.',
+      'Cada aviso enlaza con el registro o módulo al que pertenece.',
+      'Si no hay incidencias prioritarias, el panel lo indica expresamente.',
+    ],
+  },
+  {
+    title: 'Calendario y próximos hitos',
+    items: [
+      'El calendario reúne fechas de tareas, Comité, Paritaria y Actas. Los puntos de color indican qué tipo de evento existe en cada día.',
+      'Pulsa un día para consultar sus registros y usa Próximos hitos para revisar lo que viene a continuación.',
+    ],
+  },
+  {
+    title: 'Flujo recomendado',
+    ordered: true,
+    items: [
+      'Revisar primero Pendiente de atención y las tarjetas con valores distintos de cero.',
+      'Comprobar el calendario y Próximos hitos para anticipar fechas próximas.',
+      'Entrar en Mis tareas prioritarias para ordenar el trabajo personal.',
+      'Usar los accesos rápidos superiores para crear o abrir directamente el módulo que necesites.',
+    ],
+  },
+];
 
 const attentionLevelTone: Record<DashboardAttentionLevel, string> = {
   critical: 'border-l-red-500 bg-red-500/5 text-red-300',
@@ -238,6 +280,8 @@ function MetricCard({
 }
 
 export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: DashboardNavigationTarget) => void }) {
+  const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
+  const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dashboardPopup, setDashboardPopup] = useState<DashboardPopup | null>(null);
@@ -269,6 +313,16 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     void loadLicencias();
     loadLoteria();
   }, [loadActas, loadLicencias, loadLoteria, loadParitariaSessions, loadSessions, loadTasks, loadTeletrabajo]);
+
+  useEffect(() => {
+    setModuleHelp({
+      title: 'Dashboard RRLL',
+      subtitle: 'Guía rápida de prioridades, agenda, tareas e indicadores del inicio.',
+      sections: DASHBOARD_HELP_SECTIONS,
+    });
+
+    return () => clearModuleHelp();
+  }, [clearModuleHelp, setModuleHelp]);
 
   const openRecord = useCallback((target: DashboardNavigationTarget) => onOpenRecord?.(target), [onOpenRecord]);
 
