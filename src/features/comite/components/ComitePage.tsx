@@ -53,9 +53,9 @@ export function ComitePage({
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-metro-panel/70 px-3 py-2">
+      <div className="mb-4 flex items-center justify-between rounded-2xl border border-metro-border/80 bg-metro-panel/60 px-4 py-3 shadow-[0_10px_24px_rgba(2,8,23,0.14)]">
         <button
-          className="flex items-center gap-2 text-sm font-bold text-metro-secondary transition hover:text-white"
+          className="flex items-center gap-2 text-sm font-bold text-sky-200 transition hover:text-white"
           onClick={() => {
             setOperationalOrgan(null);
             setOperationalSessionId(null);

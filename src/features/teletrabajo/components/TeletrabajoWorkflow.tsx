@@ -39,7 +39,7 @@ function ProcessStep({
   return (
     <button
       className={cx(
-        'group relative flex min-h-[76px] min-w-0 flex-1 items-start gap-3 rounded-xl border px-3 py-3 text-left transition',
+        'group relative flex min-h-[80px] min-w-0 flex-1 items-start gap-3 rounded-2xl border px-3.5 py-3 text-left transition shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]',
         state === 'current'
           ? 'border-metro-red bg-metro-red/[0.075] shadow-[0_10px_24px_rgba(220,38,38,0.12)]'
           : state === 'done'
@@ -82,7 +82,7 @@ function AdvancedAction({
 }) {
   return (
     <button
-      className="group flex min-h-[62px] items-center gap-3 rounded-lg border border-metro-border bg-metro-surface/55 px-3 py-2.5 text-left transition hover:border-metro-red/50 hover:bg-metro-raised"
+      className="group flex min-h-[66px] items-center gap-3 rounded-xl border border-metro-border bg-metro-surface/55 px-3.5 py-3 text-left transition hover:border-metro-red/50 hover:bg-metro-raised"
       onClick={onClick}
       type="button"
     >
@@ -220,7 +220,7 @@ export function TeletrabajoWorkflow({
 
   return (
     <div className="space-y-3">
-      <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+      <section className="rounded-2xl border border-metro-border/80 bg-metro-panel/60 p-4 shadow-[0_12px_30px_rgba(2,8,23,0.14)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-base font-extrabold text-metro-text">Proceso de Teletrabajo</p>
@@ -312,7 +312,7 @@ export function TeletrabajoWorkflow({
         </div>
       </section>
 
-      <section className="rounded-xl border border-metro-border bg-metro-panel p-4 shadow-card">
+      <section className="rounded-2xl border border-metro-border/80 bg-metro-panel/60 p-4 shadow-[0_12px_30px_rgba(2,8,23,0.14)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-extrabold text-metro-text">Resumen del periodo</p>

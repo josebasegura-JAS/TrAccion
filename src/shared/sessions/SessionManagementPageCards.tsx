@@ -23,7 +23,7 @@ import {
 
 export function ImportMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-metro-panel px-3 py-2">
+    <div className="rounded-xl border border-metro-border/80 bg-metro-panel/70 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
       <p className="text-xs font-semibold text-metro-muted">{label}</p>
       <p className="mt-1 text-xl font-black text-metro-text">{value}</p>
     </div>
@@ -44,9 +44,9 @@ export function SessionPanel({
   onToggle: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-metro-border/80">
+    <div className="overflow-hidden rounded-2xl border border-metro-border/80 bg-metro-panel/45 shadow-[0_12px_30px_rgba(2,8,23,0.16)]">
       <button
-        className="flex w-full items-center justify-between border-b border-metro-border/70 bg-metro-panel px-3 py-2 text-left"
+        className="flex w-full items-center justify-between border-b border-metro-border/70 bg-metro-panel/80 px-4 py-3 text-left"
         onClick={onToggle}
         type="button"
       >
@@ -57,7 +57,7 @@ export function SessionPanel({
         <CountBadge>{count}</CountBadge>
       </button>
       {isOpen && (
-        <div className="max-h-[640px] space-y-3 overflow-auto bg-metro-surface p-3">{children}</div>
+        <div className="max-h-[640px] space-y-3 overflow-auto bg-metro-surface/45 p-3.5">{children}</div>
       )}
     </div>
   );
@@ -120,7 +120,7 @@ export function SessionCard({
       : undefined;
 
   return (
-    <article className="rounded-lg bg-metro-panel p-3 shadow-sm">
+    <article className="rounded-2xl border border-metro-border/80 bg-metro-panel/65 p-4 shadow-[0_12px_26px_rgba(2,8,23,0.16)]">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <button className="min-w-0 flex-1 text-left" onClick={onToggle} type="button">
           <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
@@ -172,7 +172,7 @@ export function SessionCard({
       </div>
 
       {isExpanded && (
-        <div className="mt-3 rounded-lg bg-metro-app/45 p-3">
+        <div className="mt-4 rounded-xl border border-metro-border/70 bg-metro-app/45 p-3.5">
           {recordLock.message && (
             <p
               className={`mb-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
@@ -186,7 +186,7 @@ export function SessionCard({
           )}
           <div className="flex flex-col gap-2 lg:flex-row">
             <select
-              className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              className="min-w-0 flex-1 rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
               disabled={isReadOnly}
               onChange={(event) => {
                 if (!isReadOnly && event.target.value) {
@@ -203,7 +203,7 @@ export function SessionCard({
                 </option>
               ))}
             </select>
-            <span className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-muted">
+            <span className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2.5 text-xs text-metro-muted">
               {unassignedTasks.length} tareas disponibles
             </span>
           </div>
@@ -219,7 +219,7 @@ export function SessionCard({
 
               return (
                 <div
-                  className="flex items-center gap-2 rounded-lg bg-metro-surface px-3 py-2"
+                  className="flex items-center gap-2 rounded-xl border border-metro-border/60 bg-metro-surface px-3 py-2.5 transition hover:bg-metro-raised/60"
                   key={taskId}
                 >
                   <span className="w-7 shrink-0 text-sm font-bold text-metro-red">{index + 1}</span>
@@ -236,7 +236,7 @@ export function SessionCard({
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
+                      className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
                       disabled={isReadOnly || index === 0}
                       onClick={() => void moveTask(session, taskId, 'up')}
                       type="button"
@@ -244,7 +244,7 @@ export function SessionCard({
                       ↑
                     </button>
                     <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
+                      className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:opacity-30"
                       disabled={isReadOnly || index === session.items.length - 1}
                       onClick={() => void moveTask(session, taskId, 'down')}
                       type="button"
@@ -252,7 +252,7 @@ export function SessionCard({
                       ↓
                     </button>
                     <button
-                      className="inline-flex items-center gap-1 rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-metro-red hover:text-metro-text disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={isReadOnly || !task}
                       onClick={() => void onEditTask(session, taskId, isReadOnly)}
                       title={task ? 'Editar punto' : 'No se ha encontrado el punto'}
@@ -261,7 +261,7 @@ export function SessionCard({
                       <Pencil size={12} /> Editar
                     </button>
                     <button
-                      className="rounded border border-metro-border px-2 py-1 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-lg border border-metro-border px-2 py-1.5 text-xs text-metro-muted hover:border-red-400 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={isReadOnly}
                       onClick={() => void removeTask(session, taskId)}
                       type="button"
@@ -310,7 +310,7 @@ export function HistoricSessionCard({
       : undefined;
 
   return (
-    <article className="rounded-lg bg-metro-panel p-3 shadow-sm">
+    <article className="rounded-2xl border border-metro-border/80 bg-metro-panel/65 p-4 shadow-[0_12px_26px_rgba(2,8,23,0.16)]">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
@@ -354,8 +354,8 @@ export function HistoricSessionCard({
           </button>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        <div className="rounded-lg bg-metro-surface p-2">
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-metro-border/60 bg-metro-surface p-3">
           <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-metro-muted">
             <ClipboardList size={14} /> Tratadas ({session.treatedTaskIds.length})
           </p>
@@ -370,7 +370,7 @@ export function HistoricSessionCard({
             ))}
           </ol>
         </div>
-        <div className="rounded-lg bg-metro-surface p-2">
+        <div className="rounded-xl border border-metro-border/60 bg-metro-surface p-3">
           <p className="mb-2 text-xs font-semibold text-metro-muted">
             No tratadas ({session.untreatedTaskIds.length})
           </p>

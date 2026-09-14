@@ -71,7 +71,7 @@ export function ActasOperationalView({
 }: Props) {
   return (
     <>
-      <div className="sticky top-0 z-20 -mx-1 flex items-center border-b border-metro-border/70 bg-metro-app/95 px-1 pb-2 pt-0.5 backdrop-blur">
+      <div className="sticky top-0 z-20 mb-3 flex items-center rounded-2xl border border-metro-border/80 bg-metro-panel/65 px-3 py-2.5 shadow-[0_10px_24px_rgba(2,8,23,0.14)] backdrop-blur">
         <ActionButton
           variant="secondary"
           icon={ArrowLeft}
@@ -166,8 +166,8 @@ export function ActasOperationalView({
         }
       />
 
-      <div className="rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="mb-3 text-sm font-bold text-metro-muted">Actas abiertas</h3>
+      <div className="rounded-2xl border border-metro-border/80 bg-metro-panel/45 p-3.5 shadow-[0_12px_30px_rgba(2,8,23,0.14)]">
+        <div className="mb-3 flex items-center justify-between"><div><h3 className="text-[15px] font-bold text-metro-text">Actas abiertas</h3><p className="mt-0.5 text-xs text-metro-muted">Actas con seguimiento o acciones pendientes.</p></div><span className="rounded-full border border-metro-border bg-metro-surface px-3 py-1 text-xs font-bold text-metro-muted">{openActas.length} registros</span></div>
         <DataTable
           ariaLabel="Actas abiertas"
           columnOrder={preferences.columnOrder}
@@ -186,8 +186,8 @@ export function ActasOperationalView({
         />
       </div>
 
-      <div className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/40 p-3">
-        <h3 className="text-sm font-bold text-metro-muted">Histórico de actas</h3>
+      <div className="space-y-3 rounded-2xl border border-metro-border/80 bg-metro-panel/45 p-3.5 shadow-[0_12px_30px_rgba(2,8,23,0.14)]">
+        <div><h3 className="text-[15px] font-bold text-metro-text">Histórico de actas</h3><p className="mt-0.5 text-xs text-metro-muted">Actas cerradas agrupadas por ejercicio.</p></div>
         {!hasLoadedHistoricalActas && !search.trim() && !yearFilter && (
           <p className="rounded-lg border border-dashed border-metro-border px-3 py-4 text-sm text-metro-muted">
             El histórico se cargará al buscar, filtrar por año o abrir un ejercicio.
@@ -204,7 +204,7 @@ export function ActasOperationalView({
 
           return (
             <details
-              className="rounded-xl border border-metro-border bg-metro-surface p-3"
+              className="rounded-xl border border-metro-border/70 bg-metro-surface/55 p-3.5"
               key={year}
               onToggle={(event) => {
                 if (search || yearFilter) return;
@@ -215,7 +215,7 @@ export function ActasOperationalView({
               }}
               open={isYearOpen}
             >
-              <summary className="cursor-pointer text-sm font-bold text-metro-text">
+              <summary className="cursor-pointer text-sm font-bold text-metro-text marker:text-metro-muted">
                 {year} · {group.count} acta{group.count === 1 ? '' : 's'}
               </summary>
               {isYearOpen && (

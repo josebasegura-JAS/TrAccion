@@ -15,8 +15,8 @@ export function TeletrabajoFiltersBar({
   onSetFilter,
 }: TeletrabajoFiltersBarProps) {
   return (
-    <div className="mb-3 grid grid-cols-[minmax(200px,1.3fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)_minmax(130px,0.8fr)] gap-2 overflow-x-auto rounded-xl border border-metro-border bg-metro-panel p-2">
-      <label className="flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-1.5 text-sm text-metro-muted">
+    <div className="mb-4 grid grid-cols-[minmax(240px,1.35fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)] gap-2.5 overflow-x-auto rounded-2xl border border-metro-border/80 bg-metro-panel/60 p-3 shadow-[0_10px_24px_rgba(2,8,23,0.12)]">
+      <label className="flex h-10 items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 text-sm text-metro-muted focus-within:border-metro-red/70">
         <Search size={16} />
         <input
           className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"

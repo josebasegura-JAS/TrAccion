@@ -54,9 +54,9 @@ export function TeletrabajoMainTableSection({
   solicitudesByPuestoCount,
 }: TeletrabajoMainTableSectionProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-metro-border">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border bg-metro-surface px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
+    <div className="overflow-hidden rounded-2xl border border-metro-border/80 bg-metro-panel/45 shadow-[0_12px_30px_rgba(2,8,23,0.14)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-metro-border/70 bg-metro-panel/75 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-[15px] font-bold text-metro-text">
           <SlidersHorizontal size={16} className="text-metro-red" /> Solicitudes de teletrabajo ·{' '}
           {mainPeriodo || 'Sin periodo'}
           <ExportPrintButtons
@@ -72,7 +72,7 @@ export function TeletrabajoMainTableSection({
         </div>
         <CountBadge>{rows.length} registros</CountBadge>
       </div>
-      <div className="flex flex-wrap justify-end pb-2">
+      <div className="flex flex-wrap justify-end px-3 py-2">
         <ActionButton icon={RotateCcw} iconOnly={false} onClick={onResetPreferences} size="sm" variant="secondary">Restablecer vista</ActionButton>
       </div>
       <DataTable
@@ -140,9 +140,9 @@ export function TeletrabajoHistoricoSection({
   solicitudesByPuestoCount,
 }: TeletrabajoHistoricoSectionProps) {
   return (
-    <div className="mt-4 overflow-hidden rounded-xl border border-metro-border bg-metro-surface">
+    <div className="mt-4 overflow-hidden rounded-2xl border border-metro-border/80 bg-metro-panel/45 shadow-[0_12px_30px_rgba(2,8,23,0.14)]">
       <button
-        className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-metro-border px-3 py-2 text-left text-sm font-semibold text-metro-text hover:bg-metro-panel"
+        className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-metro-border/70 px-4 py-3 text-left text-[15px] font-bold text-metro-text hover:bg-metro-panel"
         onClick={onToggle}
         type="button"
       >
@@ -154,7 +154,7 @@ export function TeletrabajoHistoricoSection({
       </button>
 
       {isOpen && (
-        <div className="space-y-3 p-3">
+        <div className="space-y-3 p-3.5">
           {groups.length === 0 ? (
             <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-muted">
               No hay solicitudes históricas para los criterios seleccionados.
@@ -164,11 +164,11 @@ export function TeletrabajoHistoricoSection({
               const isPeriodoOpen = Boolean(openPeriodos[group.periodo]);
               return (
                 <div
-                  className="overflow-hidden rounded-xl border border-metro-border bg-metro-panel"
+                  className="overflow-hidden rounded-xl border border-metro-border/70 bg-metro-surface/55"
                   key={group.periodo}
                 >
                   <button
-                    className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-metro-text hover:bg-metro-surface"
+                    className="flex w-full flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm font-semibold text-metro-text hover:bg-metro-surface"
                     onClick={() => onTogglePeriodo(group.periodo)}
                     type="button"
                   >
