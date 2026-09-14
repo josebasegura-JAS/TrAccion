@@ -66,7 +66,7 @@ const priorityLabels: Record<TaskPriority, string> = {
 const priorityPill: Record<TaskPriority, string> = {
   critica: 'border-red-500/25 bg-red-500/15 text-red-200',
   alta: 'border-red-500/25 bg-red-500/15 text-red-200',
-  media: 'border-amber-400/25 bg-amber-400/15 text-amber-200',
+  media: 'border-amber-400/25 bg-amber-400/20 text-amber-200',
   baja: 'border-sky-400/25 bg-sky-400/15 text-sky-200',
 };
 
@@ -92,6 +92,57 @@ const attentionKindIcon: Record<DashboardAttentionKind, typeof ClipboardList> = 
   telework: Laptop,
   lottery: Sparkles,
 };
+
+const metricToneCatalog = {
+  sky: {
+    accentBar: 'bg-cyan-400',
+    border: 'border-cyan-400/25 hover:border-cyan-300/40',
+    glow: 'bg-cyan-400/20',
+    icon: 'border-cyan-300/20 bg-cyan-400/10 text-cyan-200',
+    arrow: 'border-cyan-300/25 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20',
+    detail: 'text-cyan-100/80',
+  },
+  rose: {
+    accentBar: 'bg-rose-400',
+    border: 'border-rose-400/28 hover:border-rose-300/45',
+    glow: 'bg-rose-400/20',
+    icon: 'border-rose-300/20 bg-rose-400/10 text-rose-200',
+    arrow: 'border-rose-300/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/20',
+    detail: 'text-rose-100/80',
+  },
+  teal: {
+    accentBar: 'bg-cyan-300',
+    border: 'border-cyan-300/24 hover:border-cyan-200/40',
+    glow: 'bg-cyan-300/20',
+    icon: 'border-cyan-200/20 bg-cyan-300/10 text-cyan-100',
+    arrow: 'border-cyan-200/25 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20',
+    detail: 'text-cyan-50/80',
+  },
+  violet: {
+    accentBar: 'bg-violet-400',
+    border: 'border-violet-400/25 hover:border-violet-300/40',
+    glow: 'bg-violet-400/20',
+    icon: 'border-violet-300/20 bg-violet-400/10 text-violet-200',
+    arrow: 'border-violet-300/25 bg-violet-400/10 text-violet-200 hover:bg-violet-400/20',
+    detail: 'text-violet-100/80',
+  },
+  emerald: {
+    accentBar: 'bg-emerald-400',
+    border: 'border-emerald-400/25 hover:border-emerald-300/40',
+    glow: 'bg-emerald-400/20',
+    icon: 'border-emerald-300/20 bg-emerald-400/10 text-emerald-200',
+    arrow: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20',
+    detail: 'text-emerald-100/80',
+  },
+  amber: {
+    accentBar: 'bg-amber-400',
+    border: 'border-amber-400/28 hover:border-amber-300/45',
+    glow: 'bg-amber-400/20',
+    icon: 'border-amber-300/20 bg-amber-400/10 text-amber-200',
+    arrow: 'border-amber-300/25 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20',
+    detail: 'text-amber-100/80',
+  },
+} satisfies Record<string, MetricCardTone>;
 
 function DashboardPanel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -123,41 +174,66 @@ function PanelTitle({
   );
 }
 
+type MetricCardTone = {
+  accentBar: string;
+  border: string;
+  glow: string;
+  icon: string;
+  arrow: string;
+  detail: string;
+};
+
 function MetricCard({
   icon: Icon,
   label,
   value,
   detail,
-  iconTone,
-  valueTone = 'text-white',
+  tone,
+  progressWidth,
   onClick,
 }: {
   icon: typeof ClipboardList;
   label: string;
   value: number;
   detail: string;
-  iconTone: string;
-  valueTone?: string;
+  tone: MetricCardTone;
+  progressWidth: string;
   onClick?: () => void;
 }) {
   const content = (
     <>
-      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border ${iconTone}`}>
-        <Icon size={17} />
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-[10px] font-semibold text-slate-300">{label}</span>
-        <span className={`mt-0.5 block text-[22px] font-black leading-none ${valueTone}`}>{value}</span>
-        <span className="mt-1 block truncate text-[9px] font-medium text-slate-400">{detail}</span>
-      </span>
+      <span className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${tone.accentBar}`} />
+      <span className={`pointer-events-none absolute -left-8 top-1/2 h-20 w-20 -translate-y-1/2 rounded-full blur-2xl ${tone.glow}`} />
+
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${tone.icon}`}>
+            <Icon size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[10px] font-semibold text-slate-300">{label}</span>
+            <span className="mt-1 block text-[24px] font-black leading-none text-white">{value}</span>
+            <span className={`mt-2 block truncate text-[9px] font-medium ${tone.detail}`}>{detail}</span>
+          </span>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/5">
+            <div className={`h-full rounded-full ${tone.accentBar} ${progressWidth}`} />
+          </div>
+          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition ${tone.arrow}`}>
+            <ChevronRight size={12} />
+          </span>
+        </div>
+      </div>
     </>
   );
 
   const className =
-    'flex min-w-0 items-center gap-2.5 rounded-xl border border-sky-300/10 bg-[#102842]/90 px-3 py-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]';
+    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
 
   return onClick ? (
-    <button className={`${className} transition hover:border-sky-300/20 hover:bg-[#13304e]`} onClick={onClick} type="button">
+    <button className={`${className} transition hover:-translate-y-[1px] hover:brightness-[1.04]`} onClick={onClick} type="button">
       {content}
     </button>
   ) : (
@@ -393,12 +469,60 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
       </div>
 
       <div className="grid min-h-0 grid-cols-6 gap-2">
-        <MetricCard icon={ClipboardList} label="Tareas abiertas" value={activeTasks.length} detail={overdueTasks.length ? `${overdueTasks.length} vencidas` : `${upcomingTasks.length} vencen en 7 días`} iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} />
-        <MetricCard icon={AlertTriangle} label="Críticas" value={criticalTasks.length} detail="requieren atención" iconTone="border-red-400/15 bg-red-500/15 text-red-300" valueTone="text-white" onClick={() => showTaskPopup('Tareas críticas', criticalTasks)} />
-        <MetricCard icon={UsersRound} label="Sesiones abiertas" value={allOpenSessions.length} detail={nextSession ? `próxima ${formatDisplayDate(nextSession.date)}` : 'sin próximas sesiones'} iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => openRecord({ view: 'comite' })} />
-        <MetricCard icon={FileText} label="Actas en seguimiento" value={openActas.length} detail="con acciones pendientes" iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => openRecord({ view: 'actas' })} />
-        <MetricCard icon={Laptop} label="Solicitudes teletrabajo" value={pendingTelework.length} detail="pendientes de gestión" iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => openRecord({ view: 'teletrabajo' })} />
-        <MetricCard icon={UserRound} label="Licencias pendientes" value={pendingLicenses.length} detail={`${pendingSignatureLicenses.length} por firmar`} iconTone="border-sky-300/10 bg-sky-400/10 text-sky-200" onClick={() => openRecord({ view: 'licencias-sin-sueldo' })} />
+        <MetricCard
+          detail={overdueTasks.length ? `${overdueTasks.length} vencidas` : `${upcomingTasks.length} vencen en 7 días`}
+          icon={ClipboardList}
+          label="Tareas abiertas"
+          onClick={() => showTaskPopup('Tareas abiertas', activeTasks)}
+          progressWidth="w-[28%]"
+          tone={metricToneCatalog.sky}
+          value={activeTasks.length}
+        />
+        <MetricCard
+          detail="requieren atención"
+          icon={AlertTriangle}
+          label="Críticas"
+          onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
+          progressWidth="w-[16%]"
+          tone={metricToneCatalog.rose}
+          value={criticalTasks.length}
+        />
+        <MetricCard
+          detail={nextSession ? `próxima ${formatDisplayDate(nextSession.date)}` : 'sin próximas sesiones'}
+          icon={UsersRound}
+          label="Sesiones abiertas"
+          onClick={() => openRecord({ view: 'comite' })}
+          progressWidth="w-[22%]"
+          tone={metricToneCatalog.teal}
+          value={allOpenSessions.length}
+        />
+        <MetricCard
+          detail="con acciones pendientes"
+          icon={FileText}
+          label="Actas en seguimiento"
+          onClick={() => openRecord({ view: 'actas' })}
+          progressWidth="w-[34%]"
+          tone={metricToneCatalog.violet}
+          value={openActas.length}
+        />
+        <MetricCard
+          detail="pendientes de gestión"
+          icon={Laptop}
+          label="Solicitudes teletrabajo"
+          onClick={() => openRecord({ view: 'teletrabajo' })}
+          progressWidth="w-[20%]"
+          tone={metricToneCatalog.emerald}
+          value={pendingTelework.length}
+        />
+        <MetricCard
+          detail={`${pendingSignatureLicenses.length} por firmar`}
+          icon={UserRound}
+          label="Licencias pendientes"
+          onClick={() => openRecord({ view: 'licencias-sin-sueldo' })}
+          progressWidth="w-[24%]"
+          tone={metricToneCatalog.amber}
+          value={pendingLicenses.length}
+        />
       </div>
 
       <div className="grid min-h-0 grid-cols-[1.08fr_1.12fr_0.92fr] gap-2">
