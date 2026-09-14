@@ -167,7 +167,7 @@ function PanelTitle({
     <div className="flex min-w-0 items-center justify-between gap-2 border-b border-sky-200/10 px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <Icon className="shrink-0 text-sky-200" size={16} />
-        <h2 className="truncate text-[12px] font-extrabold text-slate-50">{title}</h2>
+        <h2 className="truncate text-[13px] font-extrabold text-slate-50">{title}</h2>
       </div>
       {action}
     </div>
@@ -211,9 +211,9 @@ function MetricCard({
             <Icon size={18} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[10px] font-semibold text-slate-300">{label}</span>
-            <span className="mt-1 block text-[24px] font-black leading-none text-white">{value}</span>
-            <span className={`mt-2 block truncate text-[9px] font-medium ${tone.detail}`}>{detail}</span>
+            <span className="block truncate text-[11px] font-semibold text-slate-200">{label}</span>
+            <span className="mt-1 block text-[30px] font-black leading-none text-white">{value}</span>
+            <span className={`mt-2 block truncate text-[10px] font-medium ${tone.detail}`}>{detail}</span>
           </span>
         </div>
 
@@ -221,7 +221,7 @@ function MetricCard({
           <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/5">
             <div className={`h-full rounded-full ${tone.accentBar} ${progressWidth}`} />
           </div>
-          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border transition ${tone.arrow}`}>
+          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border transition ${tone.arrow}`}>
             <ChevronRight size={12} />
           </span>
         </div>
@@ -230,7 +230,7 @@ function MetricCard({
   );
 
   const className =
-    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
+    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3.5 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
 
   return onClick ? (
     <button className={`${className} transition hover:-translate-y-[1px] hover:brightness-[1.04]`} onClick={onClick} type="button">
@@ -443,8 +443,8 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   ];
 
   return (
-    <div className="dashboard-pro grid h-full min-h-0 grid-rows-[42px_82px_minmax(0,1fr)_minmax(0,0.88fr)] gap-2 overflow-hidden">
-      <div className="grid grid-cols-6 gap-2">
+    <div className="dashboard-pro grid h-full min-h-0 grid-rows-[44px_104px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-hidden">
+      <div className="grid grid-cols-6 gap-3">
         {[
           { label: 'Nueva tarea', icon: Plus, view: 'tareas' as const, primary: true },
           { label: 'Nueva sesión', icon: UsersRound, view: 'comite' as const },
@@ -454,7 +454,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' as const },
         ].map((action) => (
           <button
-            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg border px-2 text-[10px] font-bold transition ${action.primary
+            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg border px-3 text-[11px] font-bold transition ${action.primary
               ? 'border-red-400/30 bg-gradient-to-b from-red-500 to-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] hover:from-red-400 hover:to-red-600'
               : 'border-sky-300/15 bg-gradient-to-b from-[#173b61] to-[#102944] text-slate-100 hover:border-sky-300/25 hover:from-[#1b456f] hover:to-[#12314f]'
             }`}
@@ -468,7 +468,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         ))}
       </div>
 
-      <div className="grid min-h-0 grid-cols-6 gap-2">
+      <div className="grid min-h-0 grid-cols-6 gap-3">
         <MetricCard
           detail={overdueTasks.length ? `${overdueTasks.length} vencidas` : `${upcomingTasks.length} vencen en 7 días`}
           icon={ClipboardList}
@@ -533,11 +533,11 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
             action={
               <div className="flex items-center gap-1.5">
                 {attentionCriticalCount > 0 && (
-                  <span className="rounded-full border border-red-400/20 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-black text-red-200">
+                  <span className="rounded-full border border-red-400/20 bg-red-500/10 px-2 py-0.5 text-[9px] font-black text-red-200">
                     {attentionCriticalCount} prioritarios
                   </span>
                 )}
-                <span className="text-[8px] font-semibold text-slate-500">ordenado por urgencia</span>
+                <span className="text-[9px] font-semibold text-slate-500">ordenado por urgencia</span>
               </div>
             }
           />
@@ -546,7 +546,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
               const AttentionIcon = attentionKindIcon[item.kind];
               return (
                 <button
-                  className={`dashboard-attention-row grid min-h-0 grid-cols-[24px_minmax(0,1fr)_auto_12px] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition hover:bg-white/[0.04] ${attentionLevelTone[item.level]} ${index >= 4 ? 'dashboard-pro__large-only' : ''}`}
+                  className={`dashboard-attention-row grid min-h-0 grid-cols-[26px_minmax(0,1fr)_auto_14px] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition hover:bg-white/[0.04] ${attentionLevelTone[item.level]} ${index >= 4 ? 'dashboard-pro__large-only' : ''}`}
                   key={item.key}
                   onClick={() => openRecord({ view: item.view, recordId: item.recordId })}
                   type="button"
@@ -554,18 +554,18 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
                   <AttentionIcon className="opacity-90" size={15} />
                   <span className="min-w-0">
                     <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate text-[9px] font-extrabold text-slate-100">{item.title}</span>
+                      <span className="truncate text-[10px] font-extrabold text-slate-100">{item.title}</span>
                       <span className="shrink-0 rounded px-1 py-0.5 text-[7px] font-black uppercase tracking-wide opacity-75">{attentionLevelLabel[item.level]}</span>
                     </span>
-                    <span className="block truncate text-[8px] font-medium text-slate-400">{item.subtitle}</span>
+                    <span className="block truncate text-[9px] font-medium text-slate-400">{item.subtitle}</span>
                   </span>
-                  <span className="whitespace-nowrap text-[8px] font-black">{item.trailing}</span>
+                  <span className="whitespace-nowrap text-[9px] font-black">{item.trailing}</span>
                   <ChevronRight className="text-slate-500" size={11} />
                 </button>
               );
             }) : (
               <div className="grid h-full place-items-center text-center">
-                <div><CircleCheck className="mx-auto text-emerald-400" size={24} /><p className="mt-2 text-[11px] font-bold text-emerald-200">Sin incidencias prioritarias</p><p className="mt-1 text-[8px] text-slate-500">No hay vencimientos ni expedientes envejecidos.</p></div>
+                <div><CircleCheck className="mx-auto text-emerald-400" size={24} /><p className="mt-2 text-[12px] font-bold text-emerald-200">Sin incidencias prioritarias</p><p className="mt-1 text-[9px] text-slate-500">No hay vencimientos ni expedientes envejecidos.</p></div>
               </div>
             )}
           </div>
@@ -575,21 +575,21 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           <PanelTitle icon={CalendarDays} title="Calendario" action={
             <div className="flex items-center gap-1.5">
               <button className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-white" onClick={() => setVisibleMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} type="button"><ChevronLeft size={13} /></button>
-              <span className="min-w-[76px] text-center text-[9px] font-bold text-slate-200">{monthLabel}</span>
+              <span className="min-w-[96px] text-center text-[10px] font-bold text-slate-200">{monthLabel}</span>
               <button className="rounded p-1 text-slate-400 hover:bg-white/5 hover:text-white" onClick={() => setVisibleMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} type="button"><ChevronRight size={13} /></button>
-              <button className="ml-1 rounded-md border border-sky-300/15 bg-sky-400/5 px-2 py-1 text-[8px] font-bold text-sky-200" onClick={() => setVisibleMonth(new Date())} type="button">Hoy</button>
+              <button className="ml-1 rounded-md border border-sky-300/15 bg-sky-400/5 px-2.5 py-1 text-[9px] font-bold text-sky-200" onClick={() => setVisibleMonth(new Date())} type="button">Hoy</button>
             </div>
           } />
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_82px] gap-2 p-2.5">
             <div className="grid min-h-0 grid-rows-[14px_minmax(0,1fr)]">
-              <div className="grid grid-cols-7 text-center text-[8px] font-bold text-slate-400">{['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map((d) => <span key={d}>{d}</span>)}</div>
+              <div className="grid grid-cols-7 text-center text-[9px] font-bold text-slate-400">{['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map((d) => <span key={d}>{d}</span>)}</div>
               <div className="grid min-h-0 grid-cols-7 grid-rows-6 gap-px overflow-hidden rounded-md border border-sky-200/5 bg-sky-200/5">
                 {monthCells.slice(0, 42).map((date, index) => {
                   const iso = date ? toIsoDate(date) : `empty-${index}`;
                   const events = date ? (eventsByDay[iso] ?? []) : [];
                   const isToday = iso === todayIso;
                   return (
-                    <button className={`relative min-h-0 bg-[#0c1e33] text-[8px] font-semibold text-slate-300 hover:bg-[#15304e] ${isToday ? 'font-black text-white' : ''}`} disabled={!date} key={iso} onClick={() => date && setSelectedDate(iso)} type="button">
+                    <button className={`relative min-h-0 bg-[#0c1e33] text-[9px] font-semibold text-slate-300 hover:bg-[#15304e] ${isToday ? 'font-black text-white' : ''}`} disabled={!date} key={iso} onClick={() => date && setSelectedDate(iso)} type="button">
                       {isToday && <span className="absolute inset-1 rounded-full bg-red-500/90 shadow-[0_0_12px_rgba(239,68,68,0.35)]" />}
                       <span className="relative z-10">{date?.getDate() ?? ''}</span>
                       <span className="absolute bottom-0.5 left-1/2 z-10 flex -translate-x-1/2 gap-0.5">{events.slice(0, 3).map((event) => <span className={`h-1 w-1 rounded-full ${eventTone[event.type]}`} key={event.id} />)}</span>
@@ -598,7 +598,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
                 })}
               </div>
             </div>
-            <div className="flex flex-col justify-center gap-2 border-l border-sky-200/10 pl-2 text-[8px] font-semibold text-slate-300">
+            <div className="flex flex-col justify-center gap-2 border-l border-sky-200/10 pl-2 text-[9px] font-semibold text-slate-300">
               <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-red-500" />Tareas</span>
               <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-sky-500" />Comité</span>
               <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-amber-400" />Paritaria</span>
@@ -608,16 +608,16 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         </DashboardPanel>
 
         <DashboardPanel className="flex flex-col">
-          <PanelTitle icon={BarChart3} title="Tareas" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver detalle</button>} />
+          <PanelTitle icon={BarChart3} title="Tareas" action={<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver detalle</button>} />
           <div className="grid min-h-0 flex-1 grid-cols-[94px_minmax(0,1fr)] items-center gap-2 px-3 py-2">
             <button className="relative mx-auto grid h-[88px] w-[88px] place-items-center rounded-full p-[13px]" onClick={() => showTaskPopup('Tareas abiertas', activeTasks)} style={donutStyle} type="button">
               <span className="grid h-full w-full place-items-center rounded-full bg-[#0e2239] text-center">
-                <span><strong className="block text-[18px] font-black leading-none text-white">{activeTasks.length}</strong><small className="mt-1 block text-[8px] font-bold text-slate-300">tareas</small></span>
+                <span><strong className="block text-[18px] font-black leading-none text-white">{activeTasks.length}</strong><small className="mt-1 block text-[9px] font-bold text-slate-300">tareas</small></span>
               </span>
             </button>
             <div className="space-y-1.5">
               {taskStateDisplay.slice(0, 4).map((segment) => (
-                <div className="grid grid-cols-[8px_minmax(0,1fr)_20px_28px] items-center gap-1.5 text-[8px]" key={segment.label}>
+                <div className="grid grid-cols-[8px_minmax(0,1fr)_20px_28px] items-center gap-1.5 text-[9px]" key={segment.label}>
                   <span className={`h-2 w-2 rounded-full ${segment.className}`} />
                   <span className="truncate font-semibold text-slate-300">{segment.label}</span>
                   <strong className="text-right text-slate-100">{segment.value}</strong>
@@ -631,40 +631,40 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
 
       <div className="grid min-h-0 grid-cols-[1.1fr_0.92fr_1.08fr] gap-2">
         <DashboardPanel className="flex flex-col">
-          <PanelTitle icon={ClipboardList} title="Mis tareas prioritarias" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver todas</button>} />
+          <PanelTitle icon={ClipboardList} title="Mis tareas prioritarias" action={<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver todas</button>} />
           <div className="grid min-h-0 flex-1 content-start divide-y divide-sky-200/7 overflow-hidden px-2">
             {priorityTasks.length ? priorityTasks.map((task, index) => (
-              <button className={`grid grid-cols-[14px_minmax(0,1fr)_48px_34px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025] ${index >= 4 ? 'dashboard-pro__large-only' : ''}`} key={task.id} onClick={() => openRecord({ view: 'tareas', recordId: task.id })} type="button">
+              <button className={`grid grid-cols-[14px_minmax(0,1fr)_56px_42px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025] ${index >= 4 ? 'dashboard-pro__large-only' : ''}`} key={task.id} onClick={() => openRecord({ view: 'tareas', recordId: task.id })} type="button">
                 <span className={`text-[12px] ${task.prioridad === 'critica' || task.prioridad === 'alta' ? 'text-red-400' : 'text-amber-300'}`}>⚑</span>
-                <span className="min-w-0"><span className="block truncate text-[9px] font-bold text-slate-100">{task.titulo}</span><span className="block truncate text-[8px] text-slate-400">{task.fase || 'Tareas'}</span></span>
-                <span className={`rounded-md border px-1.5 py-1 text-center text-[8px] font-bold ${priorityPill[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
-                <span className="text-right text-[8px] font-semibold text-slate-300">{formatDisplayDate(task.fechaLimite)}</span>
+                <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-slate-100">{task.titulo}</span><span className="block truncate text-[9px] text-slate-400">{task.fase || 'Tareas'}</span></span>
+                <span className={`rounded-md border px-1.5 py-1 text-center text-[9px] font-bold ${priorityPill[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
+                <span className="text-right text-[9px] font-semibold text-slate-300">{formatDisplayDate(task.fechaLimite)}</span>
               </button>
-            )) : <div className="grid h-full place-items-center text-[9px] text-slate-400">No hay tareas abiertas.</div>}
+            )) : <div className="grid h-full place-items-center text-[10px] text-slate-400">No hay tareas abiertas.</div>}
           </div>
         </DashboardPanel>
 
         <DashboardPanel className="flex flex-col">
-          <PanelTitle icon={CalendarDays} title="Próximos hitos" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'comite' })} type="button">Ver agenda</button>} />
+          <PanelTitle icon={CalendarDays} title="Próximos hitos" action={<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'comite' })} type="button">Ver agenda</button>} />
           <div className="grid min-h-0 flex-1 content-start overflow-hidden px-2 py-1">
             {upcomingEvents.slice(0, 6).map((event, index) => (
-              <button className={`grid grid-cols-[44px_10px_minmax(0,1fr)] items-center gap-1.5 py-1 text-left hover:bg-white/[0.025] ${index >= 5 ? 'dashboard-pro__large-only' : ''}`} key={event.id} onClick={() => openRecord({ view: event.view, recordId: event.recordId })} type="button">
-                <span className="text-right text-[8px] font-bold text-slate-300">{formatDisplayDate(event.date)}</span>
+              <button className={`grid grid-cols-[52px_10px_minmax(0,1fr)] items-center gap-1.5 py-1 text-left hover:bg-white/[0.025] ${index >= 5 ? 'dashboard-pro__large-only' : ''}`} key={event.id} onClick={() => openRecord({ view: event.view, recordId: event.recordId })} type="button">
+                <span className="text-right text-[9px] font-bold text-slate-300">{formatDisplayDate(event.date)}</span>
                 <span className="relative grid h-full place-items-center"><span className={`z-10 h-2.5 w-2.5 rounded-full ${eventTone[event.type]}`} />{index < Math.min(upcomingEvents.length, 6) - 1 && <span className="absolute top-1/2 h-full w-px bg-sky-300/15" />}</span>
-                <span className="min-w-0"><span className="block truncate text-[9px] font-bold text-slate-100">{event.title}</span><span className="block truncate text-[8px] text-slate-400">{event.detail}</span></span>
+                <span className="min-w-0"><span className="block truncate text-[10px] font-bold text-slate-100">{event.title}</span><span className="block truncate text-[9px] text-slate-400">{event.detail}</span></span>
               </button>
             ))}
-            {!upcomingEvents.length && <div className="grid h-full place-items-center text-[9px] text-slate-400">No hay hitos próximos.</div>}
+            {!upcomingEvents.length && <div className="grid h-full place-items-center text-[10px] text-slate-400">No hay hitos próximos.</div>}
           </div>
         </DashboardPanel>
 
         <DashboardPanel className="flex flex-col">
-          <PanelTitle icon={BarChart3} title="Estado de módulos" action={<button className="text-[9px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'ajustes' })} type="button">Ver todos</button>} />
+          <PanelTitle icon={BarChart3} title="Estado de módulos" action={<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'ajustes' })} type="button">Ver todos</button>} />
           <div className="grid min-h-0 flex-1 grid-cols-2 gap-1.5 p-2">
             {moduleStatus.map((module) => (
-              <button className="grid min-h-0 grid-cols-[28px_minmax(0,1fr)_14px] items-center gap-2 rounded-lg border border-sky-300/10 bg-[#102842]/70 px-2 text-left hover:border-sky-300/20 hover:bg-[#14314f]" key={module.label} onClick={() => openRecord({ view: module.view })} type="button">
-                <span className="grid h-7 w-7 place-items-center rounded-md bg-sky-400/10 text-sky-200"><module.icon size={14} /></span>
-                <span className="min-w-0"><span className="block truncate text-[8px] font-extrabold text-slate-100">{module.label}</span><span className="block truncate text-[7px] text-slate-400">{module.detail}</span></span>
+              <button className="grid min-h-0 grid-cols-[30px_minmax(0,1fr)_16px] items-center gap-2 rounded-lg border border-sky-300/10 bg-[#102842]/70 px-2 text-left hover:border-sky-300/20 hover:bg-[#14314f]" key={module.label} onClick={() => openRecord({ view: module.view })} type="button">
+                <span className="grid h-8 w-8 place-items-center rounded-md bg-sky-400/10 text-sky-200"><module.icon size={15} /></span>
+                <span className="min-w-0"><span className="block truncate text-[10px] font-extrabold text-slate-100">{module.label}</span><span className="block truncate text-[9px] text-slate-400">{module.detail}</span></span>
                 {module.tone === 'ok' ? <CircleCheck className="text-emerald-400" size={13} /> : <AlertTriangle className="text-amber-400" size={13} />}
               </button>
             ))}
