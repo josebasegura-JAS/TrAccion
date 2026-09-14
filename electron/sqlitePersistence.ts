@@ -1,6 +1,8 @@
 import {
+  copyFile,
   readdir,
   rmdir,
+  stat,
   unlink,
 } from 'node:fs/promises';
 import path from 'node:path';
