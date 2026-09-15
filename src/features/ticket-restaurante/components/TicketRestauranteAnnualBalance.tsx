@@ -32,6 +32,8 @@ const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 const AREA_COLORS = ['#4F8DF7', '#5BCB78', '#FFAA3D', '#9B6DE3', '#E85D75', '#41B3B3', '#F4C542', '#8C7AE6'];
 
 type AnnualMonthKind = 'actual' | 'current' | 'forecast' | 'inactive';
+type PeopleSortKey = 'empleado' | 'nombre' | 'area' | 'totalTickets' | 'totalAmount' | 'monthsWithTickets' | `month-${number}`;
+type SortDirection = 'asc' | 'desc';
 
 interface AnnualMonthDetail {
   kind: AnnualMonthKind;
@@ -97,6 +99,73 @@ function annualMonthKind(year: number, month: number, isYearClosed: boolean): An
   if (month < currentMonth) return 'actual';
   if (month === currentMonth) return 'current';
   return 'forecast';
+}
+
+
+function ticketPersonCreatedMonth(person: TicketPerson): string | null {
+  const match = /^(\d{4})-(\d{2})/.exec(person.createdAt?.trim() ?? '');
+  if (!match) return null;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return `${match[1]}-${match[2]}`;
+}
+
+function resolveBaselineImportMonth(people: readonly TicketPerson[], year: number): string | null {
+  if (year !== 2026) return null;
+  const historyStart = '2026-05';
+  const counts = new Map<string, number>();
+  people.forEach((person) => {
+    if (person.deletedAt) return;
+    const month = ticketPersonCreatedMonth(person);
+    if (!month || month < historyStart || month > '2026-12') return;
+    counts.set(month, (counts.get(month) ?? 0) + 1);
+  });
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+}
+
+function ticketPeopleForAnnualMonth(
+  people: readonly TicketPerson[],
+  year: number,
+  month: number,
+  baselineImportMonth: string | null,
+): TicketPerson[] {
+  const normal = ticketPeopleExistingInMonth(people, year, month);
+  if (year !== 2026 || !baselineImportMonth || baselineImportMonth <= '2026-05') return normal;
+
+  const targetMonth = `${year}-${String(month).padStart(2, '0')}`;
+  if (targetMonth < '2026-05' || targetMonth >= baselineImportMonth) return normal;
+
+  // La plantilla inicial de Ticket Restaurante se cargó después de comenzar el
+  // histórico. El mes de carga masiva no debe interpretarse como fecha de alta
+  // laboral: ese lote se considera vigente desde mayo de 2026. Las altas
+  // posteriores mantienen su createdAt como inicio efectivo.
+  return people.filter((person) => {
+    if (person.deletedAt) return false;
+    const createdMonth = ticketPersonCreatedMonth(person);
+    if (createdMonth === null) return true;
+    const effectiveStart = createdMonth === baselineImportMonth ? '2026-05' : createdMonth;
+    return effectiveStart <= targetMonth;
+  });
+}
+
+function explainMonthResult(
+  detail: AnnualMonthDetail | null,
+  kind: AnnualMonthKind,
+  tickets: number,
+  manual: boolean,
+): string {
+  if (kind === 'inactive') return 'Fuera del histórico o sin vigencia';
+  if (!detail) return 'Histórico consolidado';
+  if (manual) return tickets === 0 ? 'Carga manual: 0 tickets en este mes' : 'Carga manual';
+  if (detail.calendario === 'Sin calendario') return 'Sin calendario asignado';
+  if (detail.diasTeoricos === 0) return 'El calendario no genera días con ticket este mes';
+  if (tickets === 0 && detail.ausenciasAplicadas >= detail.diasTeoricos) {
+    return `Los descuentos aplicados (${detail.ausenciasAplicadas}) absorben los ${detail.diasTeoricos} días teóricos`;
+  }
+  if (tickets === 0) return 'El cálculo del mes da 0; revisa descuentos y regularizaciones';
+  if (kind === 'forecast') return 'Previsión según calendario, sin incidencias futuras';
+  return 'Cálculo del mes con las incidencias registradas';
 }
 
 function buildForecastConfig(config: TicketRestaurantConfig): TicketRestaurantConfig {
@@ -313,9 +382,12 @@ export function TicketRestauranteAnnualBalance({
   const [closingYear, setClosingYear] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
+  const [peopleSortKey, setPeopleSortKey] = useState<PeopleSortKey>('empleado');
+  const [peopleSortDirection, setPeopleSortDirection] = useState<SortDirection>('asc');
   const areaByEmployee = useMemo(() => buildEmployeeAreaMap(employees), [employees]);
   const yearClosure = config.annualClosures?.[String(year)];
   const isYearClosed = Boolean(yearClosure);
+  const baselineImportMonth = useMemo(() => resolveBaselineImportMonth(people, year), [people, year]);
 
   const peopleRows = useMemo<AnnualPersonRow[]>(() => {
     const byEmployee = new Map<string, AnnualPersonRow>();
@@ -326,7 +398,7 @@ export function TicketRestauranteAnnualBalance({
       const monthKind = annualMonthKind(year, month, isYearClosed);
       if (monthKind === 'inactive') continue;
       const snapshot = monthKind === 'actual' && isYearClosed ? config.monthlySnapshots?.[key] : undefined;
-      const monthPeople = ticketPeopleExistingInMonth(people, year, month);
+      const monthPeople = ticketPeopleForAnnualMonth(people, year, month, baselineImportMonth);
       const effectiveConfig = monthKind === 'forecast' ? forecastConfig : config;
       const calculation = snapshot
         ? null
@@ -411,7 +483,7 @@ export function TicketRestauranteAnnualBalance({
       });
     }
     return [...byEmployee.values()].sort((a, b) => a.empleado.localeCompare(b.empleado, 'es', { numeric: true, sensitivity: 'base' }));
-  }, [absences, areaByEmployee, calendars, config, isYearClosed, manutenciones, people, year]);
+  }, [absences, areaByEmployee, baselineImportMonth, calendars, config, isYearClosed, manutenciones, people, year]);
 
   const areaRows = useMemo<AnnualAreaRow[]>(() => {
     const totalAmount = peopleRows.reduce((sum, row) => sum + row.totalAmount, 0);
@@ -441,6 +513,40 @@ export function TicketRestauranteAnnualBalance({
       return normalizeText(`${row.empleado} ${row.nombreApellidos} ${row.area}`).includes(query);
     });
   }, [areaFilter, peopleRows, search]);
+  const sortedFilteredPeople = useMemo(() => {
+    const direction = peopleSortDirection === 'asc' ? 1 : -1;
+    const valueFor = (row: AnnualPersonRow): string | number => {
+      if (peopleSortKey === 'empleado') return row.empleado;
+      if (peopleSortKey === 'nombre') return row.nombreApellidos;
+      if (peopleSortKey === 'area') return row.area;
+      if (peopleSortKey === 'totalTickets') return row.totalTickets;
+      if (peopleSortKey === 'totalAmount') return row.totalAmount;
+      if (peopleSortKey === 'monthsWithTickets') return row.monthsWithTickets;
+      const match = /^month-(\d+)$/.exec(peopleSortKey);
+      return match ? row.monthlyTickets[Number(match[1])] ?? 0 : row.empleado;
+    };
+    return [...filteredPeople].sort((first, second) => {
+      const firstValue = valueFor(first);
+      const secondValue = valueFor(second);
+      if (typeof firstValue === 'number' && typeof secondValue === 'number') {
+        return (firstValue - secondValue) * direction || first.empleado.localeCompare(second.empleado, 'es', { numeric: true });
+      }
+      return String(firstValue).localeCompare(String(secondValue), 'es', { numeric: true, sensitivity: 'base' }) * direction
+        || first.empleado.localeCompare(second.empleado, 'es', { numeric: true });
+    });
+  }, [filteredPeople, peopleSortDirection, peopleSortKey]);
+
+  const changePeopleSort = (key: PeopleSortKey) => {
+    if (peopleSortKey === key) {
+      setPeopleSortDirection((current) => current === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+    setPeopleSortKey(key);
+    setPeopleSortDirection('asc');
+  };
+
+  const sortMark = (key: PeopleSortKey) => peopleSortKey === key ? (peopleSortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+
   const filteredAreas = useMemo(() => {
     const query = normalizeText(search);
     return areaRows.filter((row) => (!areaFilter || row.area === areaFilter) && (!query || normalizeText(row.area).includes(query)));
@@ -680,16 +786,21 @@ export function TicketRestauranteAnnualBalance({
             <table className="min-w-[1180px] w-full border-collapse text-xs">
               <thead className="bg-metro-surface/80 text-metro-muted">
                 <tr>
-                  <th className="px-2 py-2 text-left">Nº empleado</th><th className="px-2 py-2 text-left">Persona</th><th className="px-2 py-2 text-left">Área</th>
+                  <th className="px-2 py-2 text-left"><button className="font-bold hover:text-metro-text" onClick={() => changePeopleSort('empleado')} type="button">Nº empleado{sortMark('empleado')}</button></th>
+                  <th className="px-2 py-2 text-left"><button className="font-bold hover:text-metro-text" onClick={() => changePeopleSort('nombre')} type="button">Persona{sortMark('nombre')}</button></th>
+                  <th className="px-2 py-2 text-left"><button className="font-bold hover:text-metro-text" onClick={() => changePeopleSort('area')} type="button">Área{sortMark('area')}</button></th>
                   {MONTHS.map((month, index) => {
                     const kind = annualMonthKind(year, index + 1, isYearClosed);
-                    return <th className={`px-1.5 py-2 text-right ${kind === 'inactive' ? 'bg-slate-400/5 text-slate-500' : kind === 'forecast' ? 'bg-amber-400/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`} key={month}>{month}</th>;
+                    const sortKey = `month-${index}` as PeopleSortKey;
+                    return <th className={`px-1.5 py-2 text-right ${kind === 'inactive' ? 'bg-slate-400/5 text-slate-500' : kind === 'forecast' ? 'bg-amber-400/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`} key={month}><button className="font-bold hover:brightness-125" onClick={() => changePeopleSort(sortKey)} type="button">{month}{sortMark(sortKey)}</button></th>;
                   })}
-                  <th className="px-2 py-2 text-right">Total</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-right">Meses</th>
+                  <th className="px-2 py-2 text-right"><button className="font-bold hover:text-metro-text" onClick={() => changePeopleSort('totalTickets')} type="button">Total{sortMark('totalTickets')}</button></th>
+                  <th className="px-2 py-2 text-right"><button className="font-bold hover:text-metro-text" onClick={() => changePeopleSort('totalAmount')} type="button">Importe{sortMark('totalAmount')}</button></th>
+                  <th className="px-2 py-2 text-right"><button className="font-bold hover:text-metro-text" onClick={() => changePeopleSort('monthsWithTickets')} type="button">Meses{sortMark('monthsWithTickets')}</button></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredPeople.map((row) => (
+                {sortedFilteredPeople.map((row) => (
                   <tr className="cursor-pointer border-t border-metro-border/70 hover:bg-metro-surface/60" key={row.empleado} onClick={() => setSelectedEmployee(row.empleado)} title="Ver desglose anual">
                     <td className="px-2 py-1.5 font-bold text-metro-text">{row.empleado}</td>
                     <td className="px-2 py-1.5 text-metro-text"><span className="font-semibold">{row.nombreApellidos}</span>{row.manual ? <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-bold text-violet-400">MANUAL</span> : null}</td>
@@ -737,7 +848,7 @@ export function TicketRestauranteAnnualBalance({
 
       <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-metro-muted">
-          <strong className="text-metro-text">Criterio:</strong> los meses transcurridos y el mes en curso muestran el pedido calculado con ausencias, manutenciones/notas de gasto y regularizaciones registradas. Los meses futuros son una previsión teórica según calendario y vigencia, sin anticipar incidencias. Una incorporación posterior no genera tickets retroactivos. Al cerrar el ejercicio se guarda una fotografía definitiva.
+          <strong className="text-metro-text">Criterio:</strong> en 2026 el histórico comienza en mayo. La carga masiva inicial de personas se trata como plantilla de partida aunque se realizara después; las incorporaciones posteriores mantienen su mes real de alta en Ticket Restaurante. Los meses transcurridos y el actual se calculan con incidencias registradas y los futuros son previsión por calendario. Al cerrar el ejercicio se guarda una fotografía definitiva.
         </div>
         <div className="flex items-center rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs text-metro-muted">
           <Users className="mr-2 h-4 w-4 text-blue-500" /> {peopleRows.filter((row) => row.area === 'Sin área').length} persona(s) sin área asignada
@@ -753,8 +864,8 @@ export function TicketRestauranteAnnualBalance({
             <div className="overflow-auto p-4">
               <div className="mb-3 flex flex-wrap gap-3 text-[11px] font-semibold text-metro-muted"><span><strong className="text-metro-text">Real/en curso:</strong> {selectedPerson.actualTickets} tickets · {formatCurrency(selectedPerson.actualAmount)}</span><span><strong className="text-metro-text">Previsión:</strong> {selectedPerson.forecastTickets} tickets · {formatCurrency(selectedPerson.forecastAmount)}</span><span><strong className="text-metro-text">Estimación anual:</strong> {selectedPerson.totalTickets} tickets · {formatCurrency(selectedPerson.totalAmount)}</span></div>
               <table className="w-full min-w-[980px] border-collapse text-xs">
-                <thead className="bg-metro-surface/80 text-metro-muted"><tr><th className="px-2 py-2 text-left">Mes</th><th className="px-2 py-2 text-left">Estado</th><th className="px-2 py-2 text-left">Calendario</th><th className="px-2 py-2 text-right">Días calendario</th><th className="px-2 py-2 text-right">Ausencias</th><th className="px-2 py-2 text-right">Notas gasto</th><th className="px-2 py-2 text-right">Deuda entrante</th><th className="px-2 py-2 text-right">Descuentos aplicados</th><th className="px-2 py-2 text-right">Deuda pendiente</th><th className="px-2 py-2 text-right">Tickets</th><th className="px-2 py-2 text-right">Importe</th></tr></thead>
-                <tbody>{MONTHS.map((monthLabel, index) => { const detail = selectedPerson.monthlyDetails[index]; const kind = selectedPerson.monthlyKinds[index]; return (<tr className={`border-t border-metro-border/70 ${kind === 'inactive' ? 'bg-slate-400/[0.03]' : kind === 'forecast' ? 'bg-amber-400/[0.06]' : 'bg-emerald-500/[0.05]'}`} key={monthLabel}><td className="px-2 py-2 font-bold text-metro-text">{monthLabel}</td><td className={`px-2 py-2 font-semibold ${kind === 'forecast' ? 'text-amber-500' : kind === 'inactive' ? 'text-slate-500' : 'text-emerald-500'}`}>{kind === 'inactive' ? 'Fuera histórico / sin vigencia' : kind === 'forecast' ? 'Previsión' : kind === 'current' ? 'En curso' : 'Real'}</td><td className="px-2 py-2 text-metro-muted">{detail?.calendario || '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.diasTeoricos ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.hojasGastoMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaEntrante ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasAplicadas ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaPendiente ?? '—'}</td><td className="px-2 py-2 text-right font-black tabular-nums text-metro-text">{kind === 'inactive' ? '—' : selectedPerson.monthlyTickets[index]}</td><td className="px-2 py-2 text-right font-bold tabular-nums text-metro-text">{kind === 'inactive' ? '—' : formatCurrency(selectedPerson.monthlyAmounts[index])}</td></tr>); })}</tbody>
+                <thead className="bg-metro-surface/80 text-metro-muted"><tr><th className="px-2 py-2 text-left">Mes</th><th className="px-2 py-2 text-left">Estado</th><th className="px-2 py-2 text-left">Calendario</th><th className="px-2 py-2 text-right">Días calendario</th><th className="px-2 py-2 text-right">Ausencias</th><th className="px-2 py-2 text-right">Notas gasto</th><th className="px-2 py-2 text-right">Deuda entrante</th><th className="px-2 py-2 text-right">Descuentos aplicados</th><th className="px-2 py-2 text-right">Deuda pendiente</th><th className="px-2 py-2 text-right">Tickets</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-left">Comprobación</th></tr></thead>
+                <tbody>{MONTHS.map((monthLabel, index) => { const detail = selectedPerson.monthlyDetails[index]; const kind = selectedPerson.monthlyKinds[index]; return (<tr className={`border-t border-metro-border/70 ${kind === 'inactive' ? 'bg-slate-400/[0.03]' : kind === 'forecast' ? 'bg-amber-400/[0.06]' : 'bg-emerald-500/[0.05]'}`} key={monthLabel}><td className="px-2 py-2 font-bold text-metro-text">{monthLabel}</td><td className={`px-2 py-2 font-semibold ${kind === 'forecast' ? 'text-amber-500' : kind === 'inactive' ? 'text-slate-500' : 'text-emerald-500'}`}>{kind === 'inactive' ? 'Fuera histórico / sin vigencia' : kind === 'forecast' ? 'Previsión' : kind === 'current' ? 'En curso' : 'Real'}</td><td className="px-2 py-2 text-metro-muted">{detail?.calendario || '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.diasTeoricos ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.hojasGastoMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaEntrante ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasAplicadas ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaPendiente ?? '—'}</td><td className="px-2 py-2 text-right font-black tabular-nums text-metro-text">{kind === 'inactive' ? '—' : selectedPerson.monthlyTickets[index]}</td><td className="px-2 py-2 text-right font-bold tabular-nums text-metro-text">{kind === 'inactive' ? '—' : formatCurrency(selectedPerson.monthlyAmounts[index])}</td><td className="max-w-[280px] px-2 py-2 text-left text-metro-muted">{explainMonthResult(detail, kind, selectedPerson.monthlyTickets[index], selectedPerson.manual)}</td></tr>); })}</tbody>
               </table>
               <p className="mt-3 text-[11px] text-metro-muted">En los meses futuros no se anticipan ausencias, notas de gasto ni regularizaciones: la previsión se basa únicamente en el calendario y la vigencia conocida.</p>
             </div>
