@@ -111,6 +111,65 @@ describe('createEmployeeRepository', () => {
     expect(deps.enqueueLocalBackup).not.toHaveBeenCalled();
   });
 
+  it('saveEmployeeRecordsIfUnchanged acepta un snapshot hidratado equivalente al JSON antiguo de SQLite', async () => {
+    const rawEmployee = JSON.stringify({
+      empleado: '100',
+      nombreApellidos: 'Persona Uno',
+      puestoNomina: 'Técnico',
+      puestoOrganizativo: 'RRLL',
+      residencia: 'Bilbao',
+      nivelRetributivo: '10',
+      direccionOrganizativa: 'Personas',
+      antiguedadPuesto: '',
+      sexo: '',
+      calle: '',
+      numero: '',
+      piso: '',
+      codigoPostal: '',
+      poblacion: '',
+      provincia: '',
+      nif: '12345678Z',
+    });
+    const hydratedSnapshot = JSON.stringify({
+      empleado: '100',
+      nombreApellidos: 'Persona Uno',
+      puestoNomina: 'Técnico',
+      puestoOrganizativo: 'RRLL',
+      puestoEus: '',
+      residencia: 'Bilbao',
+      unidad: '',
+      nivelRetributivo: '10',
+      direccionOrganizativa: 'Personas',
+      antiguedadPuesto: '',
+      sexo: '',
+      calle: '',
+      numero: '',
+      piso: '',
+      codigoPostal: '',
+      poblacion: '',
+      provincia: '',
+      nif: '12345678Z',
+      dni: '12345678Z',
+      residenciaCast: 'Bilbao',
+      residenciaEus: 'Bilbao',
+      direccionTeletrabajo: '',
+      deletedAt: null,
+    });
+    const db = buildDb({ get: { value_json: rawEmployee }, runChanges: 1 });
+    const deps = buildDeps({
+      requireDatabase: vi.fn(() => db as unknown as ReturnType<Parameters<typeof createEmployeeRepository>[0]['requireDatabase']>),
+    });
+    const { saveEmployeeRecordsIfUnchanged } = createEmployeeRepository(deps);
+
+    const result = await saveEmployeeRecordsIfUnchanged([
+      { id: '100', value: hydratedSnapshot, expectedValue: hydratedSnapshot },
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(result.saved).toBe(1);
+    expect(deps.enqueueLocalBackup).toHaveBeenCalledWith('batch-save:employee_records');
+  });
+
   it('saveEmployeeRecordsIfUnchanged solo hace backup si se guardó al menos un registro', async () => {
     const db = buildDb({ get: null, runChanges: 1 });
     const deps = buildDeps({

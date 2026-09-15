@@ -26,6 +26,7 @@ interface EmployeeImportResult {
   updated: number;
   created: number;
   ignored: number;
+  unchanged: number;
   deactivated: number;
   reactivated: number;
   mode: 'full' | 'antiguedadPuesto';
@@ -331,6 +332,7 @@ function buildEmployeeImport(
   let updated = 0;
   let created = 0;
   let ignored = 0;
+  let unchanged = 0;
   let deactivated = 0;
   let reactivated = 0;
 
@@ -350,8 +352,10 @@ function buildEmployeeImport(
       employeesById.set(draft.empleado, nextEmployee);
       if (employeeSnapshot(nextEmployee) !== employeeSnapshot(previous)) {
         changedEmployees.push(nextEmployee);
+        updated += 1;
+      } else {
+        unchanged += 1;
       }
-      updated += 1;
       return;
     }
 
@@ -416,14 +420,21 @@ function buildEmployeeImport(
       reactivated += 1;
     }
     employeesById.set(draft.empleado, nextEmployee);
-    if (!previous || employeeSnapshot(nextEmployee) !== employeeSnapshot(previous)) {
+    const hasChanged = !previous || employeeSnapshot(nextEmployee) !== employeeSnapshot(previous);
+    if (hasChanged) {
       changedEmployees.push(nextEmployee);
     }
 
-    if (previous) {
+    if (!previous) {
+      created += 1;
+    } else if (previous.deletedAt) {
+      // La reactivación se informa por separado para no inflar el contador
+      // de «actualizados» con personas que simplemente vuelven a estar activas.
+      reactivated += 1;
+    } else if (hasChanged) {
       updated += 1;
     } else {
-      created += 1;
+      unchanged += 1;
     }
   });
 
@@ -448,6 +459,7 @@ function buildEmployeeImport(
       updated,
       created,
       ignored,
+      unchanged,
       deactivated,
       reactivated,
       mode: isAntiguedadOnlyImport ? 'antiguedadPuesto' : 'full',

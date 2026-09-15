@@ -91,6 +91,84 @@ function readValueJson(row: unknown): string | null {
     : null;
 }
 
+const EMPLOYEE_COMPARABLE_FIELDS = [
+  'empleado',
+  'nombreApellidos',
+  'puestoNomina',
+  'puestoOrganizativo',
+  'puestoEus',
+  'residencia',
+  'unidad',
+  'nivelRetributivo',
+  'direccionOrganizativa',
+  'antiguedadPuesto',
+  'sexo',
+  'calle',
+  'numero',
+  'piso',
+  'codigoPostal',
+  'poblacion',
+  'provincia',
+  'nif',
+] as const;
+
+/**
+ * Plantilla guarda el empleado completo, incluidas propiedades derivadas como
+ * dni/residenciaEus/direccionTeletrabajo. Al cargar registros antiguos esas
+ * propiedades se regeneran en renderer, por lo que el JSON hidratado puede no
+ * ser byte-a-byte idéntico al value_json original aunque los datos editables
+ * sean exactamente los mismos.
+ *
+ * Para OCC de la importación comparamos solo los campos persistidos/editables
+ * y deletedAt. Así evitamos falsos conflictos sin dejar de detectar cambios
+ * reales realizados por otro usuario.
+ */
+function canonicalEmployeeStorageValue(value: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    const candidate = parsed as Record<string, unknown>;
+    if (typeof candidate.empleado !== 'string' || typeof candidate.nombreApellidos !== 'string') {
+      return null;
+    }
+
+    const comparable: Record<string, string | null> = {};
+    for (const field of EMPLOYEE_COMPARABLE_FIELDS) {
+      comparable[field] = typeof candidate[field] === 'string' ? candidate[field] as string : '';
+    }
+    comparable.deletedAt = typeof candidate.deletedAt === 'string' ? candidate.deletedAt : null;
+    return JSON.stringify(comparable);
+  } catch {
+    return null;
+  }
+}
+
+function areEmployeeStorageValuesEquivalent(left: string | null, right: string | null): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left === null || right === null) {
+    return false;
+  }
+
+  const canonicalLeft = canonicalEmployeeStorageValue(left);
+  const canonicalRight = canonicalEmployeeStorageValue(right);
+  return canonicalLeft !== null && canonicalRight !== null && canonicalLeft === canonicalRight;
+}
+
+class EmployeeBatchSaveRejected extends Error {
+  constructor(
+    message: string,
+    readonly currentValue: string | null,
+  ) {
+    super(message);
+    this.name = 'EmployeeBatchSaveRejected';
+  }
+}
+
 /**
  * Dependencias de orquestación que siguen viviendo en sqlitePersistence.ts
  * (safeDatabaseOperation, guards de fila genéricos, backups, etc.) y se
@@ -336,94 +414,103 @@ export function createEmployeeRepository(deps: EmployeeRepositoryDeps): Employee
         assertDatabaseWritesAllowed();
 
         const db = requireDatabase();
-        const result = db.transaction((): ConditionalSqliteEmployeeBatchSaveResult => {
-          maybeMigrateEmployeesFromPersistedRecord(db);
-          const selectCurrent = db.prepare('SELECT value_json FROM employee_records WHERE id = ?');
-          const insertRecord = db.prepare(
-            `INSERT OR IGNORE INTO employee_records (id, value_json, created_at, updated_at, deleted_at)
-             VALUES (?, ?, ?, ?, ?)`,
-          );
-          const updateRecord = db.prepare(
-            `UPDATE employee_records
-             SET value_json = ?, updated_at = ?, deleted_at = ?
-             WHERE id = ? AND value_json = ?`,
-          );
+        try {
+          const result = db.transaction((): ConditionalSqliteEmployeeBatchSaveResult => {
+            maybeMigrateEmployeesFromPersistedRecord(db);
+            const selectCurrent = db.prepare('SELECT value_json FROM employee_records WHERE id = ?');
+            const insertRecord = db.prepare(
+              `INSERT OR IGNORE INTO employee_records (id, value_json, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?)`,
+            );
+            const updateRecord = db.prepare(
+              `UPDATE employee_records
+               SET value_json = ?, updated_at = ?, deleted_at = ?
+               WHERE id = ? AND value_json = ?`,
+            );
 
-          const now = new Date().toISOString();
-          let saved = 0;
+            // Preflight completo antes de escribir. Evita que un conflicto en
+            // una fila tardía deje una importación parcial con mensaje de error.
+            const currentValues = new Map<string, string | null>();
+            for (const record of records) {
+              const row = selectCurrent.get(record.id);
+              const currentValue = readValueJson(row);
+              currentValues.set(record.id, currentValue);
 
-          for (const record of records) {
-            const row = selectCurrent.get(record.id);
-            const currentValue = readValueJson(row);
-
-            if (currentValue !== record.expectedValue) {
-              return {
-                ok: false,
-                status: currentStatus,
-                currentValue,
-                message:
-                  'La plantilla ha sido modificada por otro usuario durante la importación. Recarga antes de volver a importar.',
-                saved: 0,
-              };
-            }
-
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(record.value);
-            } catch {
-              parsed = null;
-            }
-            const deletedAt =
-              parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
-                ? (parsed as { deletedAt: string }).deletedAt
-                : null;
-
-            if (currentValue === null) {
-              const insertResult = insertRecord.run(record.id, record.value, now, now, deletedAt);
-              if (insertResult.changes !== 1) {
-                const latest = selectCurrent.get(record.id);
-                return {
-                  ok: false,
-                  status: currentStatus,
-                  currentValue: readValueJson(latest),
-                  message: 'La persona ya existe en la base compartida. Recarga antes de volver a importar.',
-                  saved: 0,
-                };
+              if (!areEmployeeStorageValuesEquivalent(currentValue, record.expectedValue)) {
+                const message = record.expectedValue === null && currentValue !== null
+                  ? 'La persona ya existe en la base compartida. Recarga antes de volver a importar.'
+                  : 'La plantilla ha sido modificada por otro usuario durante la importación. Recarga antes de volver a importar.';
+                throw new EmployeeBatchSaveRejected(message, currentValue);
               }
-            } else {
-              const updateResult = updateRecord.run(record.value, now, deletedAt, record.id, currentValue);
-              if (updateResult.changes !== 1) {
-                const latest = selectCurrent.get(record.id);
-                return {
-                  ok: false,
-                  status: currentStatus,
-                  currentValue: readValueJson(latest),
-                  message:
+            }
+
+            const now = new Date().toISOString();
+            let saved = 0;
+
+            for (const record of records) {
+              const currentValue = currentValues.get(record.id) ?? null;
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(record.value);
+              } catch {
+                parsed = null;
+              }
+              const deletedAt =
+                parsed && typeof parsed === 'object' && typeof (parsed as { deletedAt?: unknown }).deletedAt === 'string'
+                  ? (parsed as { deletedAt: string }).deletedAt
+                  : null;
+
+              if (currentValue === null) {
+                const insertResult = insertRecord.run(record.id, record.value, now, now, deletedAt);
+                if (insertResult.changes !== 1) {
+                  const latest = selectCurrent.get(record.id);
+                  throw new EmployeeBatchSaveRejected(
+                    'La persona ya existe en la base compartida. Recarga antes de volver a importar.',
+                    readValueJson(latest),
+                  );
+                }
+              } else {
+                const updateResult = updateRecord.run(record.value, now, deletedAt, record.id, currentValue);
+                if (updateResult.changes !== 1) {
+                  const latest = selectCurrent.get(record.id);
+                  throw new EmployeeBatchSaveRejected(
                     'La plantilla ha sido modificada por otro usuario durante la importación. Recarga antes de volver a importar.',
-                  saved: 0,
-                };
+                    readValueJson(latest),
+                  );
+                }
               }
+
+              saved += 1;
             }
 
-            saved += 1;
+            updateRefreshMetadata(db, now);
+
+            return {
+              ok: true,
+              status: currentStatus,
+              currentValue: null,
+              message: `${saved} personas importadas en SQLite.`,
+              saved,
+            };
+          })();
+
+          if (result.ok && result.saved > 0) {
+            enqueueLocalBackup('batch-save:employee_records');
           }
 
-          updateRefreshMetadata(db, now);
-
-          return {
-            ok: true,
-            status: currentStatus,
-            currentValue: null,
-            message: `${saved} personas importadas en SQLite.`,
-            saved,
-          };
-        })();
-
-        if (result.ok && result.saved > 0) {
-          enqueueLocalBackup('batch-save:employee_records');
+          return result;
+        } catch (error) {
+          if (error instanceof EmployeeBatchSaveRejected) {
+            return {
+              ok: false,
+              status: currentStatus,
+              currentValue: error.currentValue,
+              message: error.message,
+              saved: 0,
+            };
+          }
+          throw error;
         }
-
-        return result;
       },
       (nextStatus, message) => ({
         ok: false,

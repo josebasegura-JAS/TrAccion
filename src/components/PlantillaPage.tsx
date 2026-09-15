@@ -836,10 +836,10 @@ export function PlantillaPage() {
             setImportMessageIsError(false);
             setImportMessage(
               result.mode === 'antiguedadPuesto'
-                ? `Antigüedad actualizada: ${result.updated} personas. Ignoradas: ${result.ignored}.`
+                ? `${result.totalRows} registros importados · ${result.updated} actualizados · ${result.unchanged} sin cambios · ${result.ignored} ignorados.`
                 : importPreview.sourceProfile === 'zerkos'
-                  ? `Importación de Datos personales completada. Actualizadas: ${result.updated}. Creadas: ${result.created}. Reactivadas: ${result.reactivated}. Bajas: ${result.deactivated}.`
-                  : `Importación completada: ${pendingImportFile.name}. Actualizadas: ${result.updated}. Creadas: ${result.created}.`,
+                  ? `${result.totalRows} registros importados · ${result.created} nuevos · ${result.updated} actualizados · ${result.unchanged} sin cambios · ${result.reactivated} reactivados · ${result.deactivated} bajas.`
+                  : `${result.totalRows} registros importados · ${result.created} nuevos · ${result.updated} actualizados · ${result.unchanged} sin cambios.`,
             );
             setPendingImportFile(null);
             setImportPreview(null);
