@@ -7,6 +7,7 @@ import {
   LockOpen,
   Search,
   Ticket,
+  X,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -32,6 +33,20 @@ const AREA_COLORS = ['#4F8DF7', '#5BCB78', '#FFAA3D', '#9B6DE3', '#E85D75', '#41
 
 type AnnualMonthKind = 'actual' | 'current' | 'forecast' | 'inactive';
 
+interface AnnualMonthDetail {
+  kind: AnnualMonthKind;
+  diasTeoricos: number;
+  ausenciasMes: number;
+  hojasGastoMes: number;
+  deudaEntrante: number;
+  ausenciasAplicadas: number;
+  deudaPendiente: number;
+  tickets: number;
+  importe: number;
+  calendario: string;
+}
+
+
 interface AnnualPersonRow {
   empleado: string;
   nombreApellidos: string;
@@ -39,6 +54,7 @@ interface AnnualPersonRow {
   monthlyTickets: number[];
   monthlyAmounts: number[];
   monthlyKinds: AnnualMonthKind[];
+  monthlyDetails: Array<AnnualMonthDetail | null>;
   actualTickets: number;
   forecastTickets: number;
   totalTickets: number;
@@ -70,7 +86,8 @@ function normalizeText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
-function annualMonthKind(year: number, month: number, isYearClosed: boolean): Exclude<AnnualMonthKind, 'inactive'> {
+function annualMonthKind(year: number, month: number, isYearClosed: boolean): AnnualMonthKind {
+  if (year === 2026 && month < 5) return 'inactive';
   if (isYearClosed) return 'actual';
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -235,6 +252,37 @@ async function exportAnnualWorkbook(
   monthly.columns = [{ width: 16 }, { width: 16 }, { width: 16 }, { width: 18 }, { width: 22 }];
   monthly.getColumn(4).numFmt = '#,##0.00 [$€-es-ES]';
 
+  const personDetail = workbook.addWorksheet('Detalle por persona', { views: [{ state: 'frozen', ySplit: 2 }] });
+  personDetail.addRow([`Detalle anual por persona ${year}`]);
+  personDetail.mergeCells('A1:M1');
+  personDetail.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FF17365D' } };
+  const detailHeader = personDetail.addRow([
+    'Nº empleado', 'Persona', 'Área', 'Mes', 'Estado', 'Calendario', 'Días calendario',
+    'Ausencias del mes', 'Notas de gasto', 'Deuda entrante', 'Descuentos aplicados', 'Tickets', 'Importe',
+  ]);
+  detailHeader.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
+  peopleRows.forEach((person) => {
+    MONTHS.forEach((monthLabel, index) => {
+      const detail = person.monthlyDetails[index];
+      const kind = person.monthlyKinds[index];
+      const excelRow = personDetail.addRow([
+        person.empleado, person.nombreApellidos, person.area, monthLabel,
+        kind === 'inactive' ? 'Sin histórico/vigencia' : kind === 'forecast' ? 'Previsión' : kind === 'current' ? 'En curso' : 'Real',
+        detail?.calendario ?? '', detail?.diasTeoricos ?? '', detail?.ausenciasMes ?? '', detail?.hojasGastoMes ?? '',
+        detail?.deudaEntrante ?? '', detail?.ausenciasAplicadas ?? '',
+        kind === 'inactive' ? '' : person.monthlyTickets[index], kind === 'inactive' ? '' : person.monthlyAmounts[index],
+      ]);
+      const fill = kind === 'forecast' ? forecastFill : kind === 'current' ? currentFill : kind === 'actual' ? realFill : inactiveFill;
+      excelRow.eachCell((cell) => { cell.fill = fill; });
+    });
+  });
+  personDetail.columns = [
+    { width: 14 }, { width: 34 }, { width: 30 }, { width: 10 }, { width: 20 }, { width: 22 },
+    { width: 16 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 20 }, { width: 12 }, { width: 16 },
+  ];
+  personDetail.getColumn(13).numFmt = '#,##0.00 [$€-es-ES]';
+  personDetail.autoFilter = 'A2:M2';
+
   const buffer = await workbook.xlsx.writeBuffer();
   await openWorkbookInExcel(buffer, `Balance_anual_ticket_restaurante_${year}.xlsx`);
 }
@@ -264,6 +312,7 @@ export function TicketRestauranteAnnualBalance({
   const [exporting, setExporting] = useState(false);
   const [closingYear, setClosingYear] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const areaByEmployee = useMemo(() => buildEmployeeAreaMap(employees), [employees]);
   const yearClosure = config.annualClosures?.[String(year)];
   const isYearClosed = Boolean(yearClosure);
@@ -275,6 +324,7 @@ export function TicketRestauranteAnnualBalance({
     for (let month = 1; month <= 12; month += 1) {
       const key = `${year}-${String(month).padStart(2, '0')}`;
       const monthKind = annualMonthKind(year, month, isYearClosed);
+      if (monthKind === 'inactive') continue;
       const snapshot = monthKind === 'actual' && isYearClosed ? config.monthlySnapshots?.[key] : undefined;
       const monthPeople = ticketPeopleExistingInMonth(people, year, month);
       const effectiveConfig = monthKind === 'forecast' ? forecastConfig : config;
@@ -297,6 +347,7 @@ export function TicketRestauranteAnnualBalance({
             tickets: row.tickets,
             importe: row.importe,
             manual: row.manual,
+            detail: null as AnnualMonthDetail | null,
           }))
         : (calculation?.rows ?? []).map((row) => {
             const employeeKey = normalizeTicketEmployeeNumber(row.empleado);
@@ -308,6 +359,18 @@ export function TicketRestauranteAnnualBalance({
               tickets: row.ticketsFinales,
               importe: row.importe,
               manual: row.manualEntry === true,
+              detail: {
+                kind: monthKind,
+                diasTeoricos: row.diasTeoricos,
+                ausenciasMes: row.ausenciasMes,
+                hojasGastoMes: row.hojasGastoMes,
+                deudaEntrante: row.deudaEntrante,
+                ausenciasAplicadas: row.ausenciasAplicadas,
+                deudaPendiente: row.deudaPendiente,
+                tickets: row.ticketsFinales,
+                importe: row.importe,
+                calendario: row.calendario,
+              } satisfies AnnualMonthDetail,
             };
           });
 
@@ -320,6 +383,7 @@ export function TicketRestauranteAnnualBalance({
           monthlyTickets: Array(12).fill(0) as number[],
           monthlyAmounts: Array(12).fill(0) as number[],
           monthlyKinds: Array(12).fill('inactive') as AnnualMonthKind[],
+          monthlyDetails: Array(12).fill(null) as Array<AnnualMonthDetail | null>,
           actualTickets: 0,
           forecastTickets: 0,
           totalTickets: 0,
@@ -332,6 +396,7 @@ export function TicketRestauranteAnnualBalance({
         existing.monthlyTickets[month - 1] = row.tickets;
         existing.monthlyAmounts[month - 1] = row.importe;
         existing.monthlyKinds[month - 1] = monthKind;
+        existing.monthlyDetails[month - 1] = row.detail;
         if (monthKind === 'forecast') {
           existing.forecastTickets += row.tickets;
           existing.forecastAmount += row.importe;
@@ -380,6 +445,11 @@ export function TicketRestauranteAnnualBalance({
     const query = normalizeText(search);
     return areaRows.filter((row) => (!areaFilter || row.area === areaFilter) && (!query || normalizeText(row.area).includes(query)));
   }, [areaFilter, areaRows, search]);
+
+  const selectedPerson = useMemo(
+    () => selectedEmployee ? peopleRows.find((row) => row.empleado === selectedEmployee) ?? null : null,
+    [peopleRows, selectedEmployee],
+  );
 
   const actualTickets = peopleRows.reduce((sum, row) => sum + row.actualTickets, 0);
   const forecastTickets = peopleRows.reduce((sum, row) => sum + row.forecastTickets, 0);
@@ -550,7 +620,7 @@ export function TicketRestauranteAnnualBalance({
               <div className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1" key={MONTHS[index]}>
                 <span className="text-xs font-bold text-metro-muted">{value || ''}</span>
                 <div
-                  className={`w-full rounded-t-md ${annualMonthKind(year, index + 1, isYearClosed) === 'forecast' ? 'bg-amber-400/80' : 'bg-emerald-500/80'}`}
+                  className={`w-full rounded-t-md ${annualMonthKind(year, index + 1, isYearClosed) === 'inactive' ? 'bg-slate-400/20' : annualMonthKind(year, index + 1, isYearClosed) === 'forecast' ? 'bg-amber-400/80' : 'bg-emerald-500/80'}`}
                   style={{ height: `${Math.max(value ? 8 : 1, (value / maxMonthly) * 112)}px` }}
                   title={`${MONTHS[index]}: ${value} tickets · ${annualMonthKind(year, index + 1, isYearClosed) === 'forecast' ? 'previsión' : annualMonthKind(year, index + 1, isYearClosed) === 'current' ? 'en curso' : 'real'}`}
                 />
@@ -613,14 +683,14 @@ export function TicketRestauranteAnnualBalance({
                   <th className="px-2 py-2 text-left">Nº empleado</th><th className="px-2 py-2 text-left">Persona</th><th className="px-2 py-2 text-left">Área</th>
                   {MONTHS.map((month, index) => {
                     const kind = annualMonthKind(year, index + 1, isYearClosed);
-                    return <th className={`px-1.5 py-2 text-right ${kind === 'forecast' ? 'bg-amber-400/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`} key={month}>{month}</th>;
+                    return <th className={`px-1.5 py-2 text-right ${kind === 'inactive' ? 'bg-slate-400/5 text-slate-500' : kind === 'forecast' ? 'bg-amber-400/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`} key={month}>{month}</th>;
                   })}
                   <th className="px-2 py-2 text-right">Total</th><th className="px-2 py-2 text-right">Importe</th><th className="px-2 py-2 text-right">Meses</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPeople.map((row) => (
-                  <tr className="border-t border-metro-border/70 hover:bg-metro-surface/60" key={row.empleado}>
+                  <tr className="cursor-pointer border-t border-metro-border/70 hover:bg-metro-surface/60" key={row.empleado} onClick={() => setSelectedEmployee(row.empleado)} title="Ver desglose anual">
                     <td className="px-2 py-1.5 font-bold text-metro-text">{row.empleado}</td>
                     <td className="px-2 py-1.5 text-metro-text"><span className="font-semibold">{row.nombreApellidos}</span>{row.manual ? <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-bold text-violet-400">MANUAL</span> : null}</td>
                     <td className="max-w-[190px] truncate px-2 py-1.5 text-metro-muted" title={row.area}>{row.area}</td>
@@ -673,6 +743,24 @@ export function TicketRestauranteAnnualBalance({
           <Users className="mr-2 h-4 w-4 text-blue-500" /> {peopleRows.filter((row) => row.area === 'Sin área').length} persona(s) sin área asignada
         </div>
       </div>
+      {selectedPerson ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-label={`Desglose anual de ${selectedPerson.nombreApellidos}`}>
+          <section className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-panel shadow-2xl">
+            <header className="flex items-start justify-between gap-3 border-b border-metro-border px-5 py-4">
+              <div><p className="text-[11px] font-bold uppercase tracking-wide text-blue-500">Detalle anual · {year}</p><h3 className="mt-1 text-lg font-black text-metro-text">{selectedPerson.nombreApellidos}</h3><p className="text-xs text-metro-muted">Nº {selectedPerson.empleado} · {selectedPerson.area}</p></div>
+              <button className="grid h-9 w-9 place-items-center rounded-xl border border-metro-border bg-metro-surface text-metro-muted hover:text-metro-text" onClick={() => setSelectedEmployee(null)} type="button" aria-label="Cerrar detalle"><X className="h-4 w-4" /></button>
+            </header>
+            <div className="overflow-auto p-4">
+              <div className="mb-3 flex flex-wrap gap-3 text-[11px] font-semibold text-metro-muted"><span><strong className="text-metro-text">Real/en curso:</strong> {selectedPerson.actualTickets} tickets · {formatCurrency(selectedPerson.actualAmount)}</span><span><strong className="text-metro-text">Previsión:</strong> {selectedPerson.forecastTickets} tickets · {formatCurrency(selectedPerson.forecastAmount)}</span><span><strong className="text-metro-text">Estimación anual:</strong> {selectedPerson.totalTickets} tickets · {formatCurrency(selectedPerson.totalAmount)}</span></div>
+              <table className="w-full min-w-[980px] border-collapse text-xs">
+                <thead className="bg-metro-surface/80 text-metro-muted"><tr><th className="px-2 py-2 text-left">Mes</th><th className="px-2 py-2 text-left">Estado</th><th className="px-2 py-2 text-left">Calendario</th><th className="px-2 py-2 text-right">Días calendario</th><th className="px-2 py-2 text-right">Ausencias</th><th className="px-2 py-2 text-right">Notas gasto</th><th className="px-2 py-2 text-right">Deuda entrante</th><th className="px-2 py-2 text-right">Descuentos aplicados</th><th className="px-2 py-2 text-right">Deuda pendiente</th><th className="px-2 py-2 text-right">Tickets</th><th className="px-2 py-2 text-right">Importe</th></tr></thead>
+                <tbody>{MONTHS.map((monthLabel, index) => { const detail = selectedPerson.monthlyDetails[index]; const kind = selectedPerson.monthlyKinds[index]; return (<tr className={`border-t border-metro-border/70 ${kind === 'inactive' ? 'bg-slate-400/[0.03]' : kind === 'forecast' ? 'bg-amber-400/[0.06]' : 'bg-emerald-500/[0.05]'}`} key={monthLabel}><td className="px-2 py-2 font-bold text-metro-text">{monthLabel}</td><td className={`px-2 py-2 font-semibold ${kind === 'forecast' ? 'text-amber-500' : kind === 'inactive' ? 'text-slate-500' : 'text-emerald-500'}`}>{kind === 'inactive' ? 'Fuera histórico / sin vigencia' : kind === 'forecast' ? 'Previsión' : kind === 'current' ? 'En curso' : 'Real'}</td><td className="px-2 py-2 text-metro-muted">{detail?.calendario || '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.diasTeoricos ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.hojasGastoMes ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaEntrante ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.ausenciasAplicadas ?? '—'}</td><td className="px-2 py-2 text-right tabular-nums">{detail?.deudaPendiente ?? '—'}</td><td className="px-2 py-2 text-right font-black tabular-nums text-metro-text">{kind === 'inactive' ? '—' : selectedPerson.monthlyTickets[index]}</td><td className="px-2 py-2 text-right font-bold tabular-nums text-metro-text">{kind === 'inactive' ? '—' : formatCurrency(selectedPerson.monthlyAmounts[index])}</td></tr>); })}</tbody>
+              </table>
+              <p className="mt-3 text-[11px] text-metro-muted">En los meses futuros no se anticipan ausencias, notas de gasto ni regularizaciones: la previsión se basa únicamente en el calendario y la vigencia conocida.</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {dialogNode}
     </div>
   );
