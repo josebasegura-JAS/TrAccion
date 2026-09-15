@@ -546,7 +546,8 @@ body {
 }
 
 .app-shell__content--dashboard {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .app-module-stage {
@@ -566,7 +567,7 @@ body {
 
 .app-module-stage--dashboard {
   min-height: calc(100vh - 118px);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .persistence-error-banner,

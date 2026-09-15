@@ -146,7 +146,7 @@ const metricToneCatalog = {
   },
   rose: {
     accentBar: 'bg-rose-400',
-    border: 'border-rose-400/28 hover:border-rose-300/45',
+    border: 'border-rose-500/18 hover:border-rose-400/30',
     glow: 'bg-rose-400/20',
     icon: 'border-rose-300/20 bg-rose-400/10 text-rose-200',
     arrow: 'border-rose-300/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/20',
@@ -154,7 +154,7 @@ const metricToneCatalog = {
   },
   teal: {
     accentBar: 'bg-cyan-300',
-    border: 'border-cyan-300/24 hover:border-cyan-200/40',
+    border: 'border-cyan-400/18 hover:border-cyan-300/30',
     glow: 'bg-cyan-300/20',
     icon: 'border-cyan-200/20 bg-cyan-300/10 text-cyan-100',
     arrow: 'border-cyan-200/25 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-300/20',
@@ -178,7 +178,7 @@ const metricToneCatalog = {
   },
   amber: {
     accentBar: 'bg-amber-400',
-    border: 'border-amber-400/28 hover:border-amber-300/45',
+    border: 'border-amber-500/18 hover:border-amber-400/30',
     glow: 'bg-amber-400/20',
     icon: 'border-amber-300/20 bg-amber-400/10 text-amber-200',
     arrow: 'border-amber-300/25 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20',
@@ -493,7 +493,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   ];
 
   return (
-    <div className="dashboard-pro grid h-full min-h-0 grid-rows-[44px_104px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-hidden">
+    <div className="dashboard-pro grid h-full min-h-[780px] grid-rows-[44px_104px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-visible">
       <div className="grid grid-cols-6 gap-3">
         {[
           { label: 'Nueva tarea', icon: Plus, view: 'tareas' as const, primary: true },
@@ -591,31 +591,39 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
               </div>
             }
           />
-          <div className="grid min-h-0 flex-1 content-start overflow-hidden px-2 py-0.5">
-            {attentionItems.length ? attentionItems.slice(0, 6).map((item, index) => {
-              const AttentionIcon = attentionKindIcon[item.kind];
-              return (
-                <button
-                  className={`dashboard-attention-row grid min-h-0 grid-cols-[26px_minmax(0,1fr)_auto_14px] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition hover:bg-white/[0.04] ${attentionLevelTone[item.level]} ${index >= 4 ? 'dashboard-pro__large-only' : ''}`}
-                  key={item.key}
-                  onClick={() => openRecord({ view: item.view, recordId: item.recordId })}
-                  type="button"
-                >
-                  <AttentionIcon className="opacity-90" size={15} />
-                  <span className="min-w-0">
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="truncate text-[10px] font-extrabold text-slate-100">{item.title}</span>
-                      <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-black uppercase tracking-wide opacity-75">{attentionLevelLabel[item.level]}</span>
-                    </span>
-                    <span className="block truncate text-[10px] font-medium text-slate-400">{item.subtitle}</span>
-                  </span>
-                  <span className="whitespace-nowrap text-[10px] font-black">{item.trailing}</span>
-                  <ChevronRight className="text-slate-500" size={11} />
-                </button>
-              );
-            }) : (
-              <div className="grid h-full place-items-center text-center">
-                <div><CircleCheck className="mx-auto text-emerald-400" size={24} /><p className="mt-2 text-[12px] font-bold text-emerald-200">Sin incidencias prioritarias</p><p className="mt-1 text-[10px] text-slate-500">No hay vencimientos ni expedientes envejecidos.</p></div>
+          <div className="min-h-0 flex-1 overflow-hidden px-2 py-0.5">
+            {attentionItems.length ? (
+              <div className="grid min-h-0 content-start">
+                {attentionItems.slice(0, 6).map((item, index) => {
+                  const AttentionIcon = attentionKindIcon[item.kind];
+                  return (
+                    <button
+                      className={`dashboard-attention-row grid min-h-0 grid-cols-[26px_minmax(0,1fr)_auto_14px] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition hover:bg-white/[0.04] ${attentionLevelTone[item.level]} ${index >= 4 ? 'dashboard-pro__large-only' : ''}`}
+                      key={item.key}
+                      onClick={() => openRecord({ view: item.view, recordId: item.recordId })}
+                      type="button"
+                    >
+                      <AttentionIcon className="opacity-90" size={15} />
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate text-[10px] font-extrabold text-slate-100">{item.title}</span>
+                          <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-black uppercase tracking-wide opacity-75">{attentionLevelLabel[item.level]}</span>
+                        </span>
+                        <span className="block truncate text-[10px] font-medium text-slate-400">{item.subtitle}</span>
+                      </span>
+                      <span className="whitespace-nowrap text-[10px] font-black">{item.trailing}</span>
+                      <ChevronRight className="text-slate-500" size={11} />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-center">
+                <div>
+                  <CircleCheck className="mx-auto text-emerald-400" size={24} />
+                  <p className="mt-2 text-[12px] font-bold text-emerald-200">Sin incidencias prioritarias</p>
+                  <p className="mt-1 text-[10px] text-slate-500">No hay vencimientos ni expedientes envejecidos.</p>
+                </div>
               </div>
             )}
           </div>
