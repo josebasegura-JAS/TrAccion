@@ -498,6 +498,8 @@ export function PlantillaPage() {
         { header: 'Poblacion', key: 'poblacion', width: 18 },
         { header: 'Provincia', key: 'provincia', width: 18 },
         { header: 'NIF', key: 'nif', width: 14 },
+        { header: 'Telefono 1', key: 'telefono1', width: 18 },
+        { header: 'Telefono 2', key: 'telefono2', width: 18 },
       ];
 
       worksheet.getRow(1).font = { bold: true };
@@ -522,6 +524,8 @@ export function PlantillaPage() {
         poblacion: 'Bilbao',
         provincia: 'Bizkaia',
         nif: '00000000A',
+        telefono1: '944000000',
+        telefono2: '600000000',
       });
 
       const notesSheet = workbook.addWorksheet('Instrucciones');
@@ -550,6 +554,7 @@ export function PlantillaPage() {
           'Opcionales. Domicilio particular.',
         ],
         ['NIF', 'Opcional.'],
+        ['Telefono 1 / Telefono 2', 'Opcionales. Se importan y quedan visibles en la cabecera de la ficha de persona.'],
         [
           'General',
           'Los nombres de columnas admiten variantes habituales (con/sin acentos, "Nº Empleado", etc.). Fila de ejemplo: sustituir o borrar antes de importar.',

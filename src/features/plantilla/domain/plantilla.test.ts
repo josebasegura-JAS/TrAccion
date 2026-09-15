@@ -123,6 +123,26 @@ describe('plantilla import', () => {
     ]);
   });
 
+  it('importa Teléfono 1 y Teléfono 2 desde Excel', () => {
+    expect(
+      rowsToEmployeeDrafts([
+        ['Empleado', 'Nombre y apellidos', 'Teléfono 1', 'Teléfono 2'],
+        ['101', 'Iker Bilbao', '944123456', '600123456'],
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        empleado: '101',
+        nombreApellidos: 'Iker Bilbao',
+        telefono1: '944123456',
+        telefono2: '600123456',
+      }),
+    ]);
+  });
+
+  it('hidrata registros antiguos sin teléfonos asignando valores vacíos', () => {
+    expect(existingEmployee).toMatchObject({ telefono1: '', telefono2: '' });
+  });
+
   it('ignora columnas desconocidas y descarta filas sin empleado', () => {
     expect(
       rowsToEmployeeDrafts([

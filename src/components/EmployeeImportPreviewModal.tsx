@@ -34,6 +34,8 @@ const FIELD_LABELS: Record<EmployeeField, string> = {
   poblacion: 'Población',
   provincia: 'Provincia',
   nif: 'NIF',
+  telefono1: 'Teléfono 1',
+  telefono2: 'Teléfono 2',
 };
 
 interface EmployeeImportPreviewModalProps {

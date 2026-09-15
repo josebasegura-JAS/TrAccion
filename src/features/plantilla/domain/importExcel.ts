@@ -68,6 +68,8 @@ const HEADER_ALIASES: ReadonlyArray<readonly [EmployeeField, readonly string[]]>
   ['poblacion', ['poblacion', 'población', 'localidad', 'municipio']],
   ['provincia', ['provincia', 'territorio']],
   ['nif', ['nif', 'dni', 'documento', 'documento identidad']],
+  ['telefono1', ['telefono1', 'telefono 1', 'teléfono 1', 'telefono principal', 'teléfono principal', 'telefono', 'teléfono']],
+  ['telefono2', ['telefono2', 'telefono 2', 'teléfono 2', 'telefono secundario', 'teléfono secundario', 'movil', 'móvil']],
 ];
 
 const FIELD_BY_HEADER = buildFieldByHeader();
@@ -133,6 +135,8 @@ const ZERKOS_FIELD_BY_HEADER = new Map<string, EmployeeField>([
   ['poblacion', 'poblacion'],
   ['provincia', 'provincia'],
   ['nif', 'nif'],
+  ['telefono 1', 'telefono1'],
+  ['telefono 2', 'telefono2'],
 ]);
 
 export async function analyzeEmployeeImportFile(file: File): Promise<EmployeeImportPreview> {

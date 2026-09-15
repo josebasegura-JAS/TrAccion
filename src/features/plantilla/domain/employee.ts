@@ -17,6 +17,8 @@ export interface EmployeePersistedFields {
   poblacion: string;
   provincia: string;
   nif: string;
+  telefono1: string;
+  telefono2: string;
 }
 
 export interface EmployeeDerivedFields {
@@ -53,6 +55,8 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
   'poblacion',
   'provincia',
   'nif',
+  'telefono1',
+  'telefono2',
 ];
 
 export const EMPTY_EMPLOYEE_DRAFT: EmployeeDraft = {
@@ -74,4 +78,6 @@ export const EMPTY_EMPLOYEE_DRAFT: EmployeeDraft = {
   poblacion: '',
   provincia: '',
   nif: '',
+  telefono1: '',
+  telefono2: '',
 };

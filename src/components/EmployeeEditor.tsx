@@ -1,4 +1,4 @@
-import { Building2, FileBadge2, IdCard, MapPin, UserRound } from 'lucide-react';
+import { Building2, FileBadge2, IdCard, MapPin, Phone, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   EMPTY_EMPLOYEE_DRAFT,
@@ -38,6 +38,8 @@ const employeeFormFields: Array<{ field: EmployeeField; label: string; required?
   { field: 'poblacion', label: 'Población' },
   { field: 'provincia', label: 'Provincia' },
   { field: 'nif', label: 'NIF' },
+  { field: 'telefono1', label: 'Teléfono 1' },
+  { field: 'telefono2', label: 'Teléfono 2' },
 ];
 
 const fieldMeta = Object.fromEntries(employeeFormFields.map((entry) => [entry.field, entry])) as Record<
@@ -65,6 +67,8 @@ const personalFields: EmployeeField[] = [
   'poblacion',
   'provincia',
   'nif',
+  'telefono1',
+  'telefono2',
 ];
 
 function toDraft(employee: Employee | null): EmployeeDraft {
@@ -91,6 +95,8 @@ function toDraft(employee: Employee | null): EmployeeDraft {
     poblacion: employee.poblacion,
     provincia: employee.provincia,
     nif: employee.nif,
+    telefono1: employee.telefono1,
+    telefono2: employee.telefono2,
   };
 }
 
@@ -212,12 +218,32 @@ export function EmployeeEditor({
           <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
             <UserRound size={24} />
           </div>
-          <ModalTitle
-            id="employee-editor-title"
-            subtitle={isCreate ? 'Alta manual compacta.' : `Editando empleado ${employee?.empleado ?? '—'}`}
-          >
-            {isCreate ? 'Nueva persona' : employee?.nombreApellidos || 'Editar persona'}
-          </ModalTitle>
+          <div className="min-w-0">
+            <ModalTitle
+              id="employee-editor-title"
+              subtitle={isCreate ? 'Alta manual compacta.' : `Editando empleado ${employee?.empleado ?? '—'}`}
+            >
+              {isCreate ? 'Nueva persona' : employee?.nombreApellidos || 'Editar persona'}
+            </ModalTitle>
+            {!isCreate && employee && (employee.telefono1 || employee.telefono2) && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {employee.telefono1 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-xs font-bold text-sky-100">
+                    <Phone size={13} />
+                    <span className="text-sky-300/80">Tel. 1</span>
+                    {employee.telefono1}
+                  </span>
+                )}
+                {employee.telefono2 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-xs font-bold text-sky-100">
+                    <Phone size={13} />
+                    <span className="text-sky-300/80">Tel. 2</span>
+                    {employee.telefono2}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ModalDatabaseStatus />

@@ -128,6 +128,8 @@ function canonicalEmployeeSnapshot(employee: Employee): string {
     poblacion: employee.poblacion,
     provincia: employee.provincia,
     nif: employee.nif,
+    telefono1: employee.telefono1,
+    telefono2: employee.telefono2,
     dni: employee.dni,
     residenciaCast: employee.residenciaCast,
     residenciaEus: employee.residenciaEus,
@@ -382,6 +384,8 @@ function buildEmployeeImport(
           poblacion: previous.poblacion,
           provincia: previous.provincia,
           nif: previous.nif,
+          telefono1: previous.telefono1,
+          telefono2: previous.telefono2,
         }
       : { ...draft };
 

@@ -1,6 +1,10 @@
 import type { Employee, EmployeeDerivedFields, EmployeeDraft } from './employee';
 
-type LegacyEmployeeDraft = Omit<EmployeeDraft, 'unidad'> & { unidad?: string };
+type LegacyEmployeeDraft = Omit<EmployeeDraft, 'unidad' | 'telefono1' | 'telefono2'> & {
+  unidad?: string;
+  telefono1?: string;
+  telefono2?: string;
+};
 
 const RESIDENCIA_EUS_MAP: Record<string, string> = {
   'Oficinas Centrales': 'Bulego Nagusiak',
@@ -38,6 +42,8 @@ export function hydrateEmployee(draft: LegacyEmployeeDraft, deletedAt: string | 
   const normalizedDraft: EmployeeDraft = {
     ...draft,
     unidad: draft.unidad ?? '',
+    telefono1: draft.telefono1 ?? '',
+    telefono2: draft.telefono2 ?? '',
   };
 
   return {
