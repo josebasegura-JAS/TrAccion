@@ -18,6 +18,7 @@ import { openWorkbookInExcel } from '../../../shared/export/tableExport';
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   calculateMonthlyTicketOrder,
+  ticketPeopleExistingInMonth,
   normalizeTicketEmployeeNumber,
   type TicketCalendar,
   type TicketManutencionImpact,
@@ -235,7 +236,15 @@ export function TicketRestauranteAnnualBalance({
             importe: row.importe,
             manual: row.manual,
           }))
-        : calculateMonthlyTicketOrder(people, calendars, absences, config, year, month, manutenciones).rows.map((row) => {
+        : calculateMonthlyTicketOrder(
+            ticketPeopleExistingInMonth(people, year, month),
+            calendars,
+            absences,
+            config,
+            year,
+            month,
+            manutenciones,
+          ).rows.map((row) => {
             const employeeKey = normalizeTicketEmployeeNumber(row.empleado);
             const manualPerson = (config.manualPeople ?? []).find((item) => normalizeTicketEmployeeNumber(item.empleado) === employeeKey);
             return {
@@ -333,7 +342,15 @@ export function TicketRestauranteAnnualBalance({
       const snapshots: Record<string, TicketMonthlySnapshot> = { ...(config.monthlySnapshots ?? {}) };
       for (let month = 1; month <= 12; month += 1) {
         const key = `${year}-${String(month).padStart(2, '0')}`;
-        const calculation = calculateMonthlyTicketOrder(people, calendars, absences, config, year, month, manutenciones);
+        const calculation = calculateMonthlyTicketOrder(
+          ticketPeopleExistingInMonth(people, year, month),
+          calendars,
+          absences,
+          config,
+          year,
+          month,
+          manutenciones,
+        );
         snapshots[key] = {
           year,
           month,
@@ -552,7 +569,7 @@ export function TicketRestauranteAnnualBalance({
 
       <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-metro-muted">
-          <strong className="text-metro-text">Criterio:</strong> mientras el ejercicio está abierto, el balance se recalcula con los datos actuales y admite tickets o regularizaciones a mes vencido. Al cerrar el ejercicio se guarda una fotografía definitiva de los 12 meses. Los importes usan el precio vigente en cada mes.
+          <strong className="text-metro-text">Criterio:</strong> mientras el ejercicio está abierto, cada mes se recalcula únicamente con las personas que ya existían en Ticket Restaurante en ese periodo; una incorporación posterior no genera tickets retroactivos. Al cerrar el ejercicio se guarda una fotografía definitiva. Los importes usan el precio vigente en cada mes.
         </div>
         <div className="flex items-center rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs text-metro-muted">
           <Users className="mr-2 h-4 w-4 text-blue-500" /> {peopleRows.filter((row) => row.area === 'Sin área').length} persona(s) sin área asignada

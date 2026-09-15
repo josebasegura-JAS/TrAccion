@@ -9,6 +9,7 @@ import {
   calculateTicketAbsenceMonthImpact,
   calculateTicketContribution,
   calculateMonthlyTicketOrder,
+  ticketPeopleExistingInMonth,
   calculateTicketMonth,
   filterTicketRestaurantAbsencesByMonth,
   nextCalendarYear,
@@ -22,6 +23,7 @@ import {
   visibleTicketCalendars,
   type TicketCalendar,
   type TicketManutencionImpact,
+  type TicketPerson,
   type TicketRestaurantAbsence,
   normalizeTicketCalculationRules,
   normalizeTicketRestaurantConfig,
@@ -1302,5 +1304,48 @@ describe('ticket restaurante — personas manuales', () => {
       manualPeople: manualConfig.manualPeople.map((person) => ({ ...person, includeContribution: false })),
     }, 2026, 9);
     expect(excluded.rows).toHaveLength(0);
+  });
+});
+
+
+describe('ticketPeopleExistingInMonth', () => {
+  const person = (empleado: string, createdAt: string): TicketPerson => ({
+    empleado,
+    nombre: 'Nombre',
+    apellido1: 'Apellido',
+    apellido2: '',
+    dni: '',
+    nombreApellidos: `Persona ${empleado}`,
+    puesto: 'Puesto',
+    calendarId: 'calendar-base',
+    activo: true,
+    createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
+  });
+
+  it('no proyecta una incorporación sobre meses anteriores', () => {
+    const people = [
+      person('1', '2026-04-02T08:00:00.000Z'),
+      person('2', '2026-09-10T08:00:00.000Z'),
+    ];
+
+    expect(ticketPeopleExistingInMonth(people, 2026, 1)).toEqual([]);
+    expect(ticketPeopleExistingInMonth(people, 2026, 4).map((item) => item.empleado)).toEqual(['1']);
+    expect(ticketPeopleExistingInMonth(people, 2026, 8).map((item) => item.empleado)).toEqual(['1']);
+    expect(ticketPeopleExistingInMonth(people, 2026, 9).map((item) => item.empleado)).toEqual(['1', '2']);
+  });
+
+  it('mantiene por compatibilidad un registro antiguo sin fecha interpretable', () => {
+    const legacy = person('1', 'fecha-desconocida');
+    expect(ticketPeopleExistingInMonth([legacy], 2026, 1)).toEqual([legacy]);
+  });
+
+  it('no usa registros eliminados', () => {
+    const deleted: TicketPerson = {
+      ...person('1', '2026-04-01T00:00:00.000Z'),
+      deletedAt: '2026-09-01T00:00:00.000Z',
+    };
+    expect(ticketPeopleExistingInMonth([deleted], 2026, 8)).toEqual([]);
   });
 });

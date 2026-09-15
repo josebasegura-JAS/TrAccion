@@ -518,6 +518,34 @@ export function visibleTicketPeople(people: TicketPerson[]): TicketPerson[] {
   return people.filter((person) => !person.deletedAt);
 }
 
+function ticketPersonMonthFromTimestamp(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})/.exec(value.trim());
+  if (!match) return null;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return `${match[1]}-${match[2]}`;
+}
+
+/**
+ * Plantilla regular que ya existía en Ticket Restaurante durante el mes indicado.
+ * Evita que una incorporación posterior reciba tickets de meses anteriores en
+ * el Balance anual. Los registros antiguos sin fecha interpretable se conservan
+ * por compatibilidad.
+ */
+export function ticketPeopleExistingInMonth(
+  people: readonly TicketPerson[],
+  year: number,
+  month: number,
+): TicketPerson[] {
+  const targetMonth = `${year}-${String(month).padStart(2, '0')}`;
+  return people.filter((person) => {
+    if (person.deletedAt) return false;
+    const createdMonth = ticketPersonMonthFromTimestamp(person.createdAt);
+    return createdMonth === null || createdMonth <= targetMonth;
+  });
+}
+
 export function calculateMonthlyTicketOrder(
   people: readonly TicketPerson[],
   calendars: readonly TicketCalendar[],
