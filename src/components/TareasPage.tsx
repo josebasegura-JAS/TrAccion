@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Clock3, FileText, ListChecks, PlayCircle, Settings, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Clock3, FileSpreadsheet, ListChecks, PlayCircle, Settings, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -262,7 +262,7 @@ export function TareasPage({
   const [historicPages, setHistoricPages] = useState<Record<string, number>>({});
   const [historicPageSize, setHistoricPageSize] = useState<number>(DEFAULT_HISTORIC_PAGE_SIZE);
   const [isOriginsModalOpen, setIsOriginsModalOpen] = useState(false);
-  const [isGeneratingOpenTasksWord, setIsGeneratingOpenTasksWord] = useState(false);
+  const [isGeneratingOpenTasksExcel, setIsGeneratingOpenTasksExcel] = useState(false);
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -379,7 +379,7 @@ export function TareasPage({
     setFilter('origen', '');
   };
 
-  const handleGenerateOpenTasksWord = async () => {
+  const handleGenerateOpenTasksExcel = async () => {
     const bridge = (window as unknown as {
       traccionTaskWord?: {
         refresh: () => Promise<{
@@ -393,16 +393,16 @@ export function TareasPage({
     }).traccionTaskWord;
 
     if (!bridge) {
-      await alert('La generación del Word solo está disponible en la aplicación de escritorio.');
+      await alert('La generación del Excel compartido solo está disponible en la aplicación de escritorio.');
       return;
     }
 
-    setIsGeneratingOpenTasksWord(true);
+    setIsGeneratingOpenTasksExcel(true);
     try {
       const result = await bridge.refresh();
       if (result.skipped) {
         await alert(
-          'No hay carpeta configurada para el Word de tareas abiertas. Configúrala en Ajustes.',
+          'No hay carpeta configurada para el Excel de tareas abiertas. Configúrala en Ajustes.',
         );
         return;
       }
@@ -413,11 +413,11 @@ export function TareasPage({
       await alert(result.message);
     } catch (error) {
       await alert(
-        `No se ha podido generar el Word: ${error instanceof Error ? error.message : String(error)}`,
+        `No se ha podido generar el Excel compartido: ${error instanceof Error ? error.message : String(error)}`,
         { type: 'error' },
       );
     } finally {
-      setIsGeneratingOpenTasksWord(false);
+      setIsGeneratingOpenTasksExcel(false);
     }
   };
 
@@ -769,14 +769,14 @@ export function TareasPage({
           </div>
           <div className="flex items-center gap-2">
             <ActionButton
-              icon={FileText}
+              icon={FileSpreadsheet}
               iconOnly={false}
-              loading={isGeneratingOpenTasksWord}
-              onClick={() => void handleGenerateOpenTasksWord()}
+              loading={isGeneratingOpenTasksExcel}
+              onClick={() => void handleGenerateOpenTasksExcel()}
               size="sm"
               variant="secondary"
             >
-              {isGeneratingOpenTasksWord ? 'Generando…' : 'Word'}
+              {isGeneratingOpenTasksExcel ? 'Generando…' : 'Excel compartido'}
             </ActionButton>
             <ExportPrintButtons
               payload={{

@@ -1,4 +1,4 @@
-import { FileText, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react';
+import { FileSpreadsheet, FolderOpen, RefreshCw, RotateCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -27,7 +27,7 @@ export function TaskWordSettingsCard() {
   useEffect(() => {
     const bridge = getBridge();
     if (!bridge) {
-      setStatus('La configuración del Word automático solo está disponible en escritorio.');
+      setStatus('La configuración del Excel automático solo está disponible en escritorio.');
       return;
     }
     void bridge.getDirectory().then(setDirectoryPath).catch(() => {
@@ -66,7 +66,7 @@ export function TaskWordSettingsCard() {
     const bridge = getBridge();
     if (!bridge) return;
     setBusy(true);
-    setStatus('Generando Tareas abiertas.doc…');
+    setStatus('Generando Tareas abiertas.xlsx…');
     try {
       const result = await bridge.refresh();
       setStatus(result.message);
@@ -79,14 +79,14 @@ export function TaskWordSettingsCard() {
     <div className="mt-4 rounded-xl border border-sky-400/20 bg-metro-surface p-3">
       <div className="flex items-start gap-3">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-sky-400/20 bg-sky-500/10 text-sky-200">
-          <FileText size={18} />
+          <FileSpreadsheet size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-metro-muted">Word automático de tareas abiertas</p>
+          <p className="text-xs font-semibold text-metro-muted">Excel automático de tareas abiertas</p>
           <p className="mt-1 text-xs leading-relaxed text-metro-muted">
             Después de cada guardado correcto de una tarea, TrAccion actualiza automáticamente
-            <strong className="text-metro-text"> Tareas abiertas.doc</strong>. El documento contiene
-            únicamente tareas abiertas y mantiene el formato tabular del listado.
+            <strong className="text-metro-text"> Tareas abiertas.xlsx</strong>. El libro contiene
+            una hoja filtrable de tareas abiertas y otra con todos los registros de seguimiento.
           </p>
         </div>
       </div>
@@ -96,7 +96,7 @@ export function TaskWordSettingsCard() {
           {directoryPath}
         </p>
       ) : (
-        <p className="mt-3 text-xs text-metro-muted">Sin carpeta configurada. El Word automático está desactivado.</p>
+        <p className="mt-3 text-xs text-metro-muted">Sin carpeta configurada. El Excel automático está desactivado.</p>
       )}
 
       {status && (

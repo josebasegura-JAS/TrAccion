@@ -1,6 +1,6 @@
 /**
  * Módulo Tareas, incluyendo selección/apertura de documentos vinculados y
- * mantenimiento automático del Word compartido de tareas abiertas.
+ * mantenimiento automático del Excel compartido de tareas abiertas.
  */
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
@@ -88,7 +88,7 @@ async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
       ok: false,
       path: null,
       count: 0,
-      message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Word.',
+      message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Excel.',
     };
   }
   return exportOpenTasksWord(snapshot.records);
@@ -104,11 +104,11 @@ function scheduleOpenTasksWordRefresh(): void {
     void enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord)
       .then((result) => {
         if (!result.ok) {
-          console.warn(`[tareas-word] ${result.message}`);
+          console.warn(`[tareas-excel] ${result.message}`);
         }
       })
       .catch((error: unknown) => {
-        console.warn('No se ha podido actualizar el Word de tareas abiertas.', error);
+        console.warn('No se ha podido actualizar el Excel de tareas abiertas.', error);
       });
   }, 1500);
 }
@@ -166,7 +166,7 @@ export function registerTareasIpc(): void {
   ipcMain.handle('tasks:select-open-word-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
-      title: 'Seleccionar carpeta para Tareas abiertas.doc',
+      title: 'Seleccionar carpeta para Tareas abiertas.xlsx',
       properties: ['openDirectory', 'createDirectory'],
     };
     const result = browserWindow
@@ -188,7 +188,7 @@ export function registerTareasIpc(): void {
 
   ipcMain.handle('tasks:clear-open-word-directory', async () => {
     await clearOpenTasksWordDirectory();
-    return { ok: true, path: null, message: 'Carpeta del Word de tareas eliminada.' };
+    return { ok: true, path: null, message: 'Carpeta del Excel de tareas eliminada.' };
   });
 
   ipcMain.handle('tasks:refresh-open-word', () =>

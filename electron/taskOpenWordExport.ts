@@ -1,4 +1,5 @@
-import { copyFile, mkdir, unlink, writeFile } from 'node:fs/promises';
+import ExcelJS from 'exceljs';
+import { copyFile, mkdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { getOpenTasksWordDirectory } from './taskOpenWordPreferences.js';
 
@@ -21,12 +22,12 @@ interface TaskTrackingEntry {
 
 interface ExportableTrackingEntry {
   fechaHora: string;
-  fecha: string;
   usuario: string;
   texto: string;
 }
 
 interface ExportableTask {
+  id: string;
   titulo: string;
   tipo: string;
   fase: string;
@@ -49,44 +50,41 @@ const PRIORITY_ORDER: Record<string, number> = {
   baja: 3,
 };
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+const PRIORITY_LABELS: Record<string, string> = {
+  critica: 'Crítica',
+  alta: 'Alta',
+  media: 'Media',
+  baja: 'Baja',
+};
 
-function normalizeDate(value: string): string {
-  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
-}
+const STATE_LABELS: Record<string, string> = {
+  pendiente: 'Pendiente',
+  'en curso': 'En curso',
+  bloqueada: 'Bloqueada',
+  resuelta: 'Resuelta',
+  cerrada: 'Cerrada',
+};
 
-function normalizeDateTime(value: string): string {
-  if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return normalizeDate(value) || value;
-  }
+const PRIORITY_COLORS: Record<string, { fill: string; font: string }> = {
+  critica: { fill: 'FDE8E8', font: '9B1C1C' },
+  alta: { fill: 'FFF1E6', font: '9A3412' },
+  media: { fill: 'FFF8DB', font: '854D0E' },
+  baja: { fill: 'E8F7EE', font: '166534' },
+};
 
-  return parsed.toLocaleString('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+const STATE_COLORS: Record<string, { fill: string; font: string }> = {
+  pendiente: { fill: 'FFF8DB', font: '854D0E' },
+  'en curso': { fill: 'E8F2FF', font: '1D4ED8' },
+  bloqueada: { fill: 'FDE8E8', font: '9B1C1C' },
+  resuelta: { fill: 'E8F7EE', font: '166534' },
+};
 
 function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry {
   const rawText = typeof entry.texto === 'string' ? entry.texto : '';
-  const fallbackDate = normalizeDateTime(entry.fechaHora);
 
   if (!rawText.startsWith(TRACKING_META_PREFIX)) {
     return {
       fechaHora: entry.fechaHora,
-      fecha: fallbackDate,
       usuario: '',
       texto: rawText.trim(),
     };
@@ -96,7 +94,6 @@ function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry 
   if (metadataEnd < 0) {
     return {
       fechaHora: entry.fechaHora,
-      fecha: fallbackDate,
       usuario: '',
       texto: rawText.trim(),
     };
@@ -109,20 +106,15 @@ function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry 
     .trim();
 
   try {
-    const metadata = JSON.parse(metadataRaw) as { fecha?: unknown; usuario?: unknown };
-    const metadataDate = typeof metadata.fecha === 'string' ? metadata.fecha : '';
-    const metadataUser = typeof metadata.usuario === 'string' ? metadata.usuario.trim() : '';
-
+    const metadata = JSON.parse(metadataRaw) as { usuario?: unknown };
     return {
       fechaHora: entry.fechaHora,
-      fecha: metadataDate ? normalizeDate(metadataDate) || metadataDate : fallbackDate,
-      usuario: metadataUser,
+      usuario: typeof metadata.usuario === 'string' ? metadata.usuario.trim() : '',
       texto: visibleText,
     };
   } catch {
     return {
       fechaHora: entry.fechaHora,
-      fecha: fallbackDate,
       usuario: '',
       texto: visibleText || rawText.trim(),
     };
@@ -149,13 +141,18 @@ function parseTask(value: string): ExportableTask | null {
   try {
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== 'object') return null;
-    const task = parsed as Partial<ExportableTask> & { seguimiento?: unknown };
+
+    const task = parsed as Partial<ExportableTask> & {
+      id?: unknown;
+      seguimiento?: unknown;
+    };
 
     if (typeof task.titulo !== 'string') return null;
     if (task.deletedAt) return null;
     if (task.estado === 'cerrada' || task.fase?.trim().toLowerCase() === 'cerrada') return null;
 
     return {
+      id: typeof task.id === 'string' ? task.id : '',
       titulo: task.titulo,
       tipo: task.tipo ?? '',
       fase: task.fase ?? '',
@@ -173,197 +170,291 @@ function parseTask(value: string): ExportableTask | null {
 }
 
 function sortTasks(tasks: ExportableTask[]): ExportableTask[] {
-  return [...tasks].sort((a, b) => {
+  return [...tasks].sort((first, second) => {
     const priority =
-      (PRIORITY_ORDER[a.prioridad] ?? 99) - (PRIORITY_ORDER[b.prioridad] ?? 99);
+      (PRIORITY_ORDER[first.prioridad] ?? 99) - (PRIORITY_ORDER[second.prioridad] ?? 99);
     if (priority !== 0) return priority;
 
-    const aDate = a.fechaLimite || '9999-12-31';
-    const bDate = b.fechaLimite || '9999-12-31';
-    const dateComparison = aDate.localeCompare(bDate);
+    const firstDate = first.fechaLimite || '9999-12-31';
+    const secondDate = second.fechaLimite || '9999-12-31';
+    const dateComparison = firstDate.localeCompare(secondDate);
     if (dateComparison !== 0) return dateComparison;
 
-    return a.titulo.localeCompare(b.titulo, 'es', { sensitivity: 'base' });
+    return first.titulo.localeCompare(second.titulo, 'es', { sensitivity: 'base' });
   });
 }
 
-function priorityStyle(priority: string): string {
-  switch (priority) {
-    case 'critica':
-      return 'background:#fde8e8;color:#9b1c1c;font-weight:700;';
-    case 'alta':
-      return 'background:#fff1e6;color:#9a3412;font-weight:700;';
-    case 'media':
-      return 'background:#fff8db;color:#854d0e;font-weight:700;';
-    case 'baja':
-      return 'background:#e8f7ee;color:#166534;font-weight:700;';
-    default:
-      return '';
-  }
-}
+function parseDate(value: string): Date | null {
+  if (!value) return null;
 
-function stateStyle(state: string): string {
-  switch (state) {
-    case 'pendiente':
-      return 'background:#fff8db;color:#854d0e;';
-    case 'en curso':
-      return 'background:#e8f2ff;color:#1d4ed8;';
-    case 'bloqueada':
-      return 'background:#fde8e8;color:#9b1c1c;';
-    case 'resuelta':
-      return 'background:#e8f7ee;color:#166534;';
-    default:
-      return '';
-  }
-}
-
-function buildTrackingRow(task: ExportableTask): string {
-  if (task.seguimiento.length === 0) {
-    return '';
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    return new Date(
+      Number(dateOnlyMatch[1]),
+      Number(dateOnlyMatch[2]) - 1,
+      Number(dateOnlyMatch[3]),
+    );
   }
 
-  const items = task.seguimiento
-    .map((entry) => {
-      const meta = [entry.fecha, entry.usuario].filter(Boolean).join(' · ');
-      return `<div class="tracking-item">
-  <span class="tracking-meta">${escapeHtml(meta || 'Seguimiento')}</span>
-  <span class="tracking-text">${escapeHtml(entry.texto)}</span>
-</div>`;
-    })
-    .join('');
-
-  return `<tr class="tracking-row">
-<td colspan="8">
-  <div class="tracking-wrapper">
-    <div class="tracking-heading">Seguimiento (${task.seguimiento.length})</div>
-    ${items}
-  </div>
-</td>
-</tr>`;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function buildTaskRows(task: ExportableTask): string {
-  return `<tr class="task-row">
-<td>${escapeHtml(normalizeDate(task.createdAt))}</td>
-<td class="title">${escapeHtml(task.titulo)}</td>
-<td>${escapeHtml(task.tipo)}</td>
-<td>${escapeHtml(task.fase)}</td>
-<td style="${stateStyle(task.estado)}">${escapeHtml(task.estado)}</td>
-<td style="${priorityStyle(task.prioridad)}">${escapeHtml(task.prioridad)}</td>
-<td>${escapeHtml(normalizeDate(task.fechaLimite))}</td>
-<td>${escapeHtml(task.sindicato || '—')}</td>
-</tr>
-${buildTrackingRow(task)}`;
+function setTitle(
+  worksheet: ExcelJS.Worksheet,
+  title: string,
+  subtitle: string,
+  lastColumn: number,
+): void {
+  worksheet.mergeCells(1, 1, 1, lastColumn);
+  const titleCell = worksheet.getCell(1, 1);
+  titleCell.value = title;
+  titleCell.font = { bold: true, size: 18, color: { argb: 'FF17365D' } };
+  titleCell.alignment = { vertical: 'middle' };
+  worksheet.getRow(1).height = 28;
+
+  worksheet.mergeCells(2, 1, 2, lastColumn);
+  const subtitleCell = worksheet.getCell(2, 1);
+  subtitleCell.value = subtitle;
+  subtitleCell.font = { size: 10, color: { argb: 'FF64748B' } };
+  worksheet.getRow(2).height = 18;
 }
 
-function buildWordHtml(tasks: ExportableTask[]): string {
-  const generatedAt = new Date().toLocaleString('es-ES');
-  const rows = tasks.map(buildTaskRows).join('\n');
+function setTableHeaderStyle(worksheet: ExcelJS.Worksheet, headerRowNumber: number): void {
+  const row = worksheet.getRow(headerRowNumber);
+  row.height = 22;
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF17365D' },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+  });
+}
 
-  const emptyRow =
-    '<tr><td colspan="8" class="empty">No hay tareas abiertas.</td></tr>';
+function styleTaskRows(
+  worksheet: ExcelJS.Worksheet,
+  tasks: ExportableTask[],
+  firstDataRow: number,
+): void {
+  tasks.forEach((task, index) => {
+    const rowNumber = firstDataRow + index;
+    const row = worksheet.getRow(rowNumber);
+    row.alignment = { vertical: 'top', wrapText: true };
 
-  return `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="utf-8">
-<meta name="ProgId" content="Word.Document">
-<meta name="Generator" content="TrAccion">
-<style>
-@page Section1 {
-  size: 841.9pt 595.3pt;
-  mso-page-orientation: landscape;
-  margin: 28.35pt 28.35pt 28.35pt 28.35pt;
+    const stateColor = STATE_COLORS[task.estado];
+    if (stateColor) {
+      const stateCell = worksheet.getCell(rowNumber, 5);
+      stateCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: `FF${stateColor.fill}` },
+      };
+      stateCell.font = { bold: true, color: { argb: `FF${stateColor.font}` } };
+    }
+
+    const priorityColor = PRIORITY_COLORS[task.prioridad];
+    if (priorityColor) {
+      const priorityCell = worksheet.getCell(rowNumber, 6);
+      priorityCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: `FF${priorityColor.fill}` },
+      };
+      priorityCell.font = { bold: true, color: { argb: `FF${priorityColor.font}` } };
+    }
+  });
 }
-div.Section1 { page: Section1; }
-body { font-family: Calibri, Arial, sans-serif; color:#172033; font-size:9pt; }
-h1 { font-size:18pt; margin:0 0 4pt 0; color:#17365d; }
-.meta { color:#64748b; margin:0 0 12pt 0; font-size:9pt; }
-table { border-collapse:collapse; width:100%; table-layout:fixed; }
-th {
-  background:#17365d;
-  color:white;
-  border:1px solid #b9c5d4;
-  padding:5pt 4pt;
-  font-size:8.5pt;
-  text-align:left;
+
+function addTasksWorksheet(
+  workbook: ExcelJS.Workbook,
+  tasks: ExportableTask[],
+  generatedAt: string,
+): void {
+  const worksheet = workbook.addWorksheet('Tareas abiertas', {
+    views: [{ state: 'frozen', ySplit: 4 }],
+  });
+
+  setTitle(
+    worksheet,
+    'Tareas abiertas',
+    `${tasks.length} tarea${tasks.length === 1 ? '' : 's'} · Actualizado ${generatedAt}`,
+    10,
+  );
+
+  const tableRows: ExcelJS.CellValue[][] = tasks.map((task) => [
+    parseDate(task.createdAt),
+    task.titulo,
+    task.tipo,
+    task.fase,
+    STATE_LABELS[task.estado] ?? task.estado,
+    PRIORITY_LABELS[task.prioridad] ?? task.prioridad,
+    parseDate(task.fechaLimite),
+    task.sindicato || '',
+    task.seguimiento.length,
+    task.id,
+  ]);
+
+  worksheet.addTable({
+    name: 'TareasAbiertasTable',
+    ref: 'A4',
+    headerRow: true,
+    totalsRow: false,
+    style: {
+      theme: 'TableStyleMedium2',
+      showFirstColumn: false,
+      showLastColumn: false,
+      showRowStripes: true,
+      showColumnStripes: false,
+    },
+    columns: [
+      { name: 'Fecha creación', filterButton: true },
+      { name: 'Título', filterButton: true },
+      { name: 'Tipo', filterButton: true },
+      { name: 'Fase', filterButton: true },
+      { name: 'Estado', filterButton: true },
+      { name: 'Prioridad', filterButton: true },
+      { name: 'Fecha límite', filterButton: true },
+      { name: 'Origen', filterButton: true },
+      { name: 'Nº seguimientos', filterButton: true },
+      { name: 'ID tarea', filterButton: true },
+    ],
+    rows: tableRows,
+  });
+
+  setTableHeaderStyle(worksheet, 4);
+
+  worksheet.getColumn(1).width = 15;
+  worksheet.getColumn(2).width = 42;
+  worksheet.getColumn(3).width = 14;
+  worksheet.getColumn(4).width = 19;
+  worksheet.getColumn(5).width = 16;
+  worksheet.getColumn(6).width = 14;
+  worksheet.getColumn(7).width = 15;
+  worksheet.getColumn(8).width = 22;
+  worksheet.getColumn(9).width = 17;
+  worksheet.getColumn(10).width = 36;
+  worksheet.getColumn(10).hidden = true;
+
+  if (tasks.length > 0) {
+    const firstDataRow = 5;
+    const lastDataRow = firstDataRow + tasks.length - 1;
+    worksheet.getColumn(1).numFmt = 'dd/mm/yyyy';
+    worksheet.getColumn(7).numFmt = 'dd/mm/yyyy';
+    worksheet.getCell(firstDataRow, 1).numFmt = 'dd/mm/yyyy';
+    worksheet.getCell(firstDataRow, 7).numFmt = 'dd/mm/yyyy';
+
+    for (let rowNumber = firstDataRow; rowNumber <= lastDataRow; rowNumber += 1) {
+      worksheet.getCell(rowNumber, 1).numFmt = 'dd/mm/yyyy';
+      worksheet.getCell(rowNumber, 7).numFmt = 'dd/mm/yyyy';
+    }
+
+    styleTaskRows(worksheet, tasks, firstDataRow);
+  }
+
+  worksheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: {
+      left: 0.3,
+      right: 0.3,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2,
+    },
+  };
 }
-td {
-  border:1px solid #cbd5e1;
-  padding:4pt;
-  vertical-align:top;
-  word-wrap:break-word;
-}
-.task-row:nth-of-type(4n+3) td { background-color:#f7f9fc; }
-td.title { font-weight:600; }
-.empty { text-align:center; color:#64748b; padding:14pt; }
-.col-date { width:9%; }
-.col-title { width:27%; }
-.col-small { width:9%; }
-.col-medium { width:11%; }
-.tracking-row td {
-  padding:0;
-  background:#f8fafc;
-  border-top:0;
-  border-bottom:2px solid #9fb2c7;
-}
-.tracking-wrapper {
-  padding:5pt 7pt 6pt 7pt;
-  background:#f8fafc;
-}
-.tracking-heading {
-  margin-bottom:3pt;
-  color:#17365d;
-  font-size:8pt;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:.3pt;
-}
-.tracking-item {
-  margin:2pt 0 0 0;
-  padding:3pt 5pt;
-  border-left:2pt solid #8ba9c7;
-  background:#ffffff;
-}
-.tracking-meta {
-  display:block;
-  margin-bottom:1pt;
-  color:#64748b;
-  font-size:7.5pt;
-  font-weight:700;
-}
-.tracking-text {
-  display:block;
-  color:#26364a;
-  font-size:8.5pt;
-  line-height:1.2;
-}
-</style>
-</head>
-<body>
-<div class="Section1">
-  <h1>Tareas abiertas</h1>
-  <p class="meta">${tasks.length} tarea${tasks.length === 1 ? '' : 's'} · Actualizado ${escapeHtml(generatedAt)}</p>
-  <table>
-    <thead>
-      <tr>
-        <th class="col-date">Fecha creación</th>
-        <th class="col-title">Título</th>
-        <th class="col-small">Tipo</th>
-        <th class="col-medium">Fase</th>
-        <th class="col-medium">Estado</th>
-        <th class="col-small">Prioridad</th>
-        <th class="col-date">Fecha límite</th>
-        <th class="col-medium">Origen</th>
-      </tr>
-    </thead>
-    <tbody>${rows || emptyRow}</tbody>
-  </table>
-</div>
-</body>
-</html>`;
+
+function addTrackingWorksheet(
+  workbook: ExcelJS.Workbook,
+  tasks: ExportableTask[],
+  generatedAt: string,
+): void {
+  const worksheet = workbook.addWorksheet('Seguimientos', {
+    views: [{ state: 'frozen', ySplit: 4 }],
+  });
+
+  const trackingCount = tasks.reduce((total, task) => total + task.seguimiento.length, 0);
+  setTitle(
+    worksheet,
+    'Seguimientos',
+    `${trackingCount} registro${trackingCount === 1 ? '' : 's'} · Actualizado ${generatedAt}`,
+    5,
+  );
+
+  const rows: ExcelJS.CellValue[][] = [];
+  tasks.forEach((task) => {
+    task.seguimiento.forEach((tracking) => {
+      rows.push([
+        task.titulo,
+        parseDate(tracking.fechaHora),
+        tracking.usuario,
+        tracking.texto,
+        task.id,
+      ]);
+    });
+  });
+
+  worksheet.addTable({
+    name: 'SeguimientosTareasTable',
+    ref: 'A4',
+    headerRow: true,
+    totalsRow: false,
+    style: {
+      theme: 'TableStyleMedium2',
+      showFirstColumn: false,
+      showLastColumn: false,
+      showRowStripes: true,
+      showColumnStripes: false,
+    },
+    columns: [
+      { name: 'Tarea', filterButton: true },
+      { name: 'Fecha / hora', filterButton: true },
+      { name: 'Usuario', filterButton: true },
+      { name: 'Seguimiento', filterButton: true },
+      { name: 'ID tarea', filterButton: true },
+    ],
+    rows,
+  });
+
+  setTableHeaderStyle(worksheet, 4);
+
+  worksheet.getColumn(1).width = 42;
+  worksheet.getColumn(2).width = 21;
+  worksheet.getColumn(3).width = 18;
+  worksheet.getColumn(4).width = 75;
+  worksheet.getColumn(5).width = 36;
+  worksheet.getColumn(5).hidden = true;
+
+  if (rows.length > 0) {
+    const firstDataRow = 5;
+    const lastDataRow = firstDataRow + rows.length - 1;
+
+    for (let rowNumber = firstDataRow; rowNumber <= lastDataRow; rowNumber += 1) {
+      worksheet.getCell(rowNumber, 2).numFmt = 'dd/mm/yyyy hh:mm';
+      worksheet.getRow(rowNumber).alignment = { vertical: 'top', wrapText: true };
+    }
+  }
+
+  worksheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: {
+      left: 0.3,
+      right: 0.3,
+      top: 0.5,
+      bottom: 0.5,
+      header: 0.2,
+      footer: 0.2,
+    },
+  };
 }
 
 export async function exportOpenTasksWord(
@@ -376,7 +467,7 @@ export async function exportOpenTasksWord(
       skipped: true,
       path: null,
       count: 0,
-      message: 'No hay carpeta configurada para el Word de tareas abiertas.',
+      message: 'No hay carpeta configurada para el Excel de tareas abiertas.',
     };
   }
 
@@ -386,23 +477,45 @@ export async function exportOpenTasksWord(
       .filter((task): task is ExportableTask => task !== null),
   );
 
-  const finalPath = path.join(directoryPath, 'Tareas abiertas.doc');
+  const finalPath = path.join(directoryPath, 'Tareas abiertas.xlsx');
   const tempPath = path.join(
     directoryPath,
-    `.Tareas abiertas.${process.pid}.${Date.now()}.tmp.doc`,
+    `.Tareas abiertas.${process.pid}.${Date.now()}.tmp.xlsx`,
   );
+  const legacyWordPath = path.join(directoryPath, 'Tareas abiertas.doc');
 
   try {
     await mkdir(directoryPath, { recursive: true });
-    const html = buildWordHtml(tasks);
-    await writeFile(tempPath, Buffer.from(`\uFEFF${html}`, 'utf8'));
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'TrAccion';
+    workbook.company = 'TrAccion';
+    workbook.subject = 'Tareas abiertas y seguimientos';
+    workbook.title = 'Tareas abiertas';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const generatedAt = new Date().toLocaleString('es-ES');
+    addTasksWorksheet(workbook, tasks, generatedAt);
+    addTrackingWorksheet(workbook, tasks, generatedAt);
+
+    await workbook.xlsx.writeFile(tempPath);
     await copyFile(tempPath, finalPath);
     await unlink(tempPath).catch(() => undefined);
+
+    // El desarrollo anterior generaba un .doc. Una vez que el XLSX ha quedado
+    // escrito correctamente, se elimina el antiguo para evitar dos fuentes.
+    await unlink(legacyWordPath).catch(() => undefined);
+
+    const trackingCount = tasks.reduce((total, task) => total + task.seguimiento.length, 0);
+
     return {
       ok: true,
       path: finalPath,
       count: tasks.length,
-      message: `Word actualizado correctamente (${tasks.length} tareas abiertas).`,
+      message:
+        `Excel actualizado correctamente: ${tasks.length} tareas abiertas y ` +
+        `${trackingCount} registros de seguimiento.`,
     };
   } catch (error) {
     await unlink(tempPath).catch(() => undefined);
@@ -411,7 +524,7 @@ export async function exportOpenTasksWord(
       path: finalPath,
       count: tasks.length,
       message:
-        `La tarea se ha guardado, pero no se ha podido actualizar el Word compartido: ${
+        `La tarea se ha guardado, pero no se ha podido actualizar el Excel compartido: ${
           error instanceof Error ? error.message : String(error)
         }`,
     };
