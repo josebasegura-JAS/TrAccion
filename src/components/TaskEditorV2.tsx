@@ -144,6 +144,7 @@ function toDraft(task: Task | null): TaskDraft {
     fase: task.fase,
     estado: task.estado,
     prioridad: task.prioridad,
+    createdAt: task.createdAt,
     fechaLimite: task.fechaLimite,
     responsable: task.responsable,
     origen: task.origen,
@@ -216,7 +217,9 @@ export function TaskEditor({
   const isFormReadOnly = !isCreate && (recordLock.isReadOnly || recordLock.status !== 'acquired');
   const lockMessage = recordLock.message || (!isCreate && recordLock.status !== 'acquired' ? 'Adquiriendo bloqueo de edición compartida...' : '');
   const canSubmit = draft.titulo.trim().length > 0 && !isFormReadOnly;
-  const creationDate = task?.createdAt ? task.createdAt.slice(0, 10) : todayIsoDate();
+  const creationDate = isCreate
+    ? todayIsoDate()
+    : (draft.createdAt?.slice(0, 10) ?? task?.createdAt?.slice(0, 10) ?? todayIsoDate());
 
   useEffect(() => {
     loadConfiguracion();
@@ -419,7 +422,19 @@ export function TaskEditor({
                     <Input value={draft.origen} onChange={(e) => setDraft((c) => ({ ...c, origen: e.target.value }))} />
                   </label>
                   <label className="text-xs font-semibold text-metro-muted lg:col-span-2">Fecha de creación
-                    <Input type="date" value={creationDate} disabled />
+                    <Input
+                      type="date"
+                      value={creationDate}
+                      disabled={isCreate}
+                      onChange={(e) => {
+                        const original = task?.createdAt ?? '';
+                        const suffix = original.length > 10 ? original.slice(10) : 'T00:00:00.000Z';
+                        setDraft((current) => ({
+                          ...current,
+                          createdAt: `${e.target.value}${suffix}`,
+                        }));
+                      }}
+                    />
                   </label>
                   <label className="text-xs font-semibold text-metro-muted lg:col-span-2">Fecha límite
                     <Input type="date" value={draft.fechaLimite} onChange={(e) => setDraft((c) => ({ ...c, fechaLimite: e.target.value }))} />

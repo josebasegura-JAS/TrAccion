@@ -45,7 +45,7 @@ import {
   type HistoricSortState,
 } from '../features/tareas/components/tareasHistoricUtils';
 
-type ActiveTaskTableColumnId = TaskSortKey | 'actions';
+type ActiveTaskTableColumnId = TaskSortKey | 'createdAt' | 'actions';
 
 const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -89,7 +89,6 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
 ];
 
 const PRIORITY_ORDER = new Map(TASK_PRIORITIES.map((priority, index) => [priority, index]));
-
 
 const TASK_STATE_LABELS: Record<Task['estado'], string> = {
   pendiente: 'Pendiente',
@@ -184,18 +183,18 @@ function TaskSummaryCard({
   );
 }
 
-const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active';
+const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v2';
 
 const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnId> = {
   sort: null,
   columnWidths: {
+    createdAt: 115,
     titulo: 230,
     tipo: 100,
     fase: 130,
     estado: 120,
     prioridad: 105,
     fechaLimite: 120,
-    responsable: 150,
     sindicato: 145,
     actions: 88,
   },
@@ -203,25 +202,25 @@ const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnI
 };
 
 const tareasTableColumnIds: ActiveTaskTableColumnId[] = [
+  'createdAt',
   'titulo',
   'tipo',
   'fase',
   'estado',
   'prioridad',
   'fechaLimite',
-  'responsable',
   'sindicato',
   'actions',
 ];
 
 const taskExportColumns: ExportColumn<Task>[] = [
+  { key: 'createdAt', header: 'Fecha creación', value: (task) => task.createdAt.slice(0, 10) },
   { key: 'titulo', header: 'Título', value: (task) => task.titulo },
   { key: 'tipo', header: 'Tipo', value: (task) => task.tipo },
   { key: 'fase', header: 'Fase', value: (task) => task.fase },
   { key: 'estado', header: 'Estado', value: (task) => task.estado },
   { key: 'prioridad', header: 'Prioridad', value: (task) => task.prioridad },
   { key: 'fechaLimite', header: 'Fecha límite', value: (task) => task.fechaLimite || null },
-  { key: 'responsable', header: 'Responsable', value: (task) => task.responsable || null },
   { key: 'sindicato', header: 'Origen', value: (task) => task.sindicato || null },
   {
     key: 'sessionDocumentCode',
@@ -394,6 +393,17 @@ export function TareasPage({
   const activeTaskColumns = useMemo<Array<DataTableColumn<Task, ActiveTaskTableColumnId>>>(
     () => [
       {
+        id: 'createdAt',
+        header: 'Fecha creación',
+        accessor: (task) => task.createdAt,
+        render: (task) => task.createdAt.slice(0, 10),
+        width: 115,
+        minWidth: 105,
+        maxWidth: 145,
+        sortable: true,
+        className: 'whitespace-nowrap text-metro-muted',
+      },
+      {
         id: 'titulo',
         header: 'Título',
         accessor: (task) => task.titulo,
@@ -477,17 +487,6 @@ export function TareasPage({
         width: 120,
         minWidth: 105,
         maxWidth: 180,
-        sortable: true,
-        className: 'text-metro-muted',
-      },
-      {
-        id: 'responsable',
-        header: 'Responsable',
-        accessor: (task) => task.responsable,
-        render: (task) => task.responsable || '—',
-        width: 150,
-        minWidth: 110,
-        maxWidth: 260,
         sortable: true,
         className: 'text-metro-muted',
       },

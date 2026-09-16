@@ -61,7 +61,9 @@ export type TaskDraft = Pick<
   | 'observaciones'
   | 'mail'
   | 'documentLinks'
->;
+> & {
+  createdAt?: string;
+};
 
 export type TaskDraftField = keyof TaskDraft;
 
