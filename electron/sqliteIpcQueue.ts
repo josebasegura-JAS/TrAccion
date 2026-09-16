@@ -1,14 +1,21 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /**
  * Cola de serialización para las operaciones IPC que tocan SQLite: garantiza
- * que solo se ejecuta una a la vez (evita colisiones de escritura concurrente
- * dentro del propio proceso principal).
+ * que solo se ejecuta una a la vez dentro del propio proceso principal.
  *
- * La base vive habitualmente sobre SMB. No todas las operaciones deben tener
- * el mismo límite: una escritura normal debe fallar relativamente rápido,
- * mientras que el arranque y la recuperación de una red lenta necesitan más
- * margen para no interpretar latencia Wi-Fi/SMB como una caída de SQLite.
+ * La base vive habitualmente sobre SMB. El contexto AsyncLocalStorage permite
+ * que la capa de persistencia sepa si la operación IPC actual es de solo
+ * lectura. Las lecturas no necesitan competir por el lock externo `.lockdir`;
+ * SQLite ya permite lectores concurrentes. Las escrituras y operaciones
+ * críticas mantienen el lock exclusivo.
  */
 type QueuedIpcOperation<T> = () => T | Promise<T>;
+
+interface SqliteIpcOperationContext {
+  operationName: string;
+  readOnly: boolean;
+}
 
 const DEFAULT_OPERATION_TIMEOUT_MS = 12_000;
 const STARTUP_OPERATION_TIMEOUT_MS = 30_000;
@@ -29,7 +36,41 @@ const RECOVERY_OPERATIONS = new Set([
   'database:reset-directory',
 ]);
 
+const EXPLICIT_READ_ONLY_OPERATIONS = new Set([
+  'database:run-integrity-audit',
+  'database:get-integrity-audit-summary',
+  'tasks:refresh-open-word',
+]);
+
+const sqliteIpcContext = new AsyncLocalStorage<SqliteIpcOperationContext>();
+
 let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
+
+export function isSqliteIpcReadOnlyOperation(operationName: string): boolean {
+  if (EXPLICIT_READ_ONLY_OPERATIONS.has(operationName)) {
+    return true;
+  }
+
+  // Convención de los handlers de TrAccion:
+  //   * get/load/list/status => consulta
+  //   * save/set/create/update/delete/migrate/restore/vacuum/... => escritura
+  //
+  // Ejemplos cubiertos:
+  // database:get-persisted-records-token
+  // tasks:load-records
+  // plantilla:load-records
+  // configuracion:load
+  // database:list-local-backups
+  return /(^|:)(get|load|list|status)(-|$)/.test(operationName);
+}
+
+export function isCurrentSqliteIpcReadOnly(): boolean {
+  return sqliteIpcContext.getStore()?.readOnly === true;
+}
+
+export function getCurrentSqliteIpcOperationName(): string | null {
+  return sqliteIpcContext.getStore()?.operationName ?? null;
+}
 
 export function resolveSqliteIpcTimeoutMs(operationName: string): number {
   if (STARTUP_OPERATIONS.has(operationName)) {
@@ -87,6 +128,7 @@ export function enqueueSqliteIpc<T>(
 ): Promise<Awaited<T>> {
   const startedAt = Date.now();
   const timeoutMs = resolveSqliteIpcTimeoutMs(operationName);
+  const readOnly = isSqliteIpcReadOnlyOperation(operationName);
 
   const queuedOperation = sqliteIpcQueue.then(async (): Promise<Awaited<T>> => {
     const queuedMs = Date.now() - startedAt;
@@ -97,7 +139,10 @@ export function enqueueSqliteIpc<T>(
     const operationStartedAt = Date.now();
     try {
       const result = await withTimeout(
-        Promise.resolve().then(() => operation()),
+        sqliteIpcContext.run(
+          { operationName, readOnly },
+          () => Promise.resolve().then(() => operation()),
+        ),
         timeoutMs,
         operationName,
       );

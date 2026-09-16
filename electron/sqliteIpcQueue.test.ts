@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueueSqliteIpc, resolveSqliteIpcTimeoutMs } from './sqliteIpcQueue.js';
+import {
+  enqueueSqliteIpc,
+  isCurrentSqliteIpcReadOnly,
+  isSqliteIpcReadOnlyOperation,
+  resolveSqliteIpcTimeoutMs,
+} from './sqliteIpcQueue.js';
 
 describe('enqueueSqliteIpc', () => {
   beforeEach(() => {
@@ -41,6 +46,36 @@ describe('enqueueSqliteIpc', () => {
   it('da margen adicional a las operaciones de recuperación del bloqueo', () => {
     expect(resolveSqliteIpcTimeoutMs('database:force-release-lock')).toBe(25_000);
     expect(resolveSqliteIpcTimeoutMs('database:get-current-lock')).toBe(25_000);
+  });
+
+  it('clasifica como solo lectura las cargas y consultas, pero no los guardados', () => {
+    expect(isSqliteIpcReadOnlyOperation('database:get-persisted-records-token')).toBe(true);
+    expect(isSqliteIpcReadOnlyOperation('tasks:load-records')).toBe(true);
+    expect(isSqliteIpcReadOnlyOperation('configuracion:load')).toBe(true);
+    expect(isSqliteIpcReadOnlyOperation('tasks:refresh-open-word')).toBe(true);
+
+    expect(isSqliteIpcReadOnlyOperation('tasks:save-record-if-unchanged')).toBe(false);
+    expect(isSqliteIpcReadOnlyOperation('database:migrate-local-storage')).toBe(false);
+    expect(isSqliteIpcReadOnlyOperation('database:force-release-lock')).toBe(false);
+    expect(isSqliteIpcReadOnlyOperation('database:vacuum-now')).toBe(false);
+  });
+
+  it('propaga el contexto read-only durante toda la operación IPC', async () => {
+    const read = enqueueSqliteIpc('tasks:load-records', async () => {
+      await Promise.resolve();
+      return isCurrentSqliteIpcReadOnly();
+    });
+
+    await vi.runAllTimersAsync();
+    await expect(read).resolves.toBe(true);
+
+    const write = enqueueSqliteIpc('tasks:save-record-if-unchanged', async () => {
+      await Promise.resolve();
+      return isCurrentSqliteIpcReadOnly();
+    });
+
+    await vi.runAllTimersAsync();
+    await expect(write).resolves.toBe(false);
   });
 
   it('si una operación ordinaria se queda colgada, la cancela a los 12 s y deja avanzar la cola', async () => {
