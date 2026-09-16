@@ -1,7 +1,6 @@
 /**
- * Módulo Tareas, incluyendo selección y apertura de documentos vinculados.
- * Extraído de main.ts como parte de la división de registerIpcHandlers()
- * en un fichero por área funcional.
+ * Módulo Tareas, incluyendo selección/apertura de documentos vinculados y
+ * mantenimiento automático del Word compartido de tareas abiertas.
  */
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent, OpenDialogOptions } from 'electron';
@@ -13,6 +12,12 @@ import {
   saveTaskRecordIfUnchanged,
   type SqliteTaskRecordsFilter,
 } from '../sqlitePersistence.js';
+import {
+  clearOpenTasksWordDirectory,
+  getOpenTasksWordDirectory,
+  setOpenTasksWordDirectory,
+} from '../taskOpenWordPreferences.js';
+import { exportOpenTasksWord, type TaskWordExportResult } from '../taskOpenWordExport.js';
 
 const allowedTaskDocumentExtensions = new Set([
   '.doc',
@@ -30,6 +35,8 @@ const allowedTaskDocumentExtensions = new Set([
   '.ppt',
   '.pptx',
 ]);
+
+let openTasksWordTimer: ReturnType<typeof setTimeout> | null = null;
 
 function assertAllowedTaskDocumentPath(filePath: string): void {
   if (!allowedTaskDocumentExtensions.has(path.extname(filePath).toLowerCase())) {
@@ -74,6 +81,38 @@ async function openTaskDocumentPath(filePath: unknown): Promise<{ ok: boolean; m
   return { ok: true, message: 'Documento abierto.' };
 }
 
+async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
+  const snapshot = await loadTaskRecordsSnapshot({ mode: 'active' });
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    return {
+      ok: false,
+      path: null,
+      count: 0,
+      message: snapshot.status.message ?? 'SQLite no está activa; no se ha actualizado el Word.',
+    };
+  }
+  return exportOpenTasksWord(snapshot.records);
+}
+
+function scheduleOpenTasksWordRefresh(): void {
+  if (openTasksWordTimer) {
+    clearTimeout(openTasksWordTimer);
+  }
+
+  openTasksWordTimer = setTimeout(() => {
+    openTasksWordTimer = null;
+    void enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord)
+      .then((result) => {
+        if (!result.ok) {
+          console.warn(`[tareas-word] ${result.message}`);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn('No se ha podido actualizar el Word de tareas abiertas.', error);
+      });
+  }, 1500);
+}
+
 export function registerTareasIpc(): void {
   ipcMain.handle('tasks:load-records', (_event, payload: unknown) => {
     const filter: SqliteTaskRecordsFilter =
@@ -83,7 +122,7 @@ export function registerTareasIpc(): void {
     return enqueueSqliteIpc('tasks:load-records', () => loadTaskRecordsSnapshot(filter));
   });
 
-  ipcMain.handle('tasks:save-record-if-unchanged', (_event, payload: unknown) => {
+  ipcMain.handle('tasks:save-record-if-unchanged', async (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {
       return {
         ok: false,
@@ -107,17 +146,54 @@ export function registerTareasIpc(): void {
       };
     }
 
-    const id = candidate.id;
-    const value = candidate.value;
-    const expectedUpdatedAt = candidate.expectedUpdatedAt;
-    return enqueueSqliteIpc('tasks:save-record-if-unchanged', () =>
+    const result = await enqueueSqliteIpc('tasks:save-record-if-unchanged', () =>
       saveTaskRecordIfUnchanged({
-        id,
-        value,
-        expectedUpdatedAt,
+        id: candidate.id as string,
+        value: candidate.value as string,
+        expectedUpdatedAt: candidate.expectedUpdatedAt as string | null,
       }),
     );
+
+    if (result.ok) {
+      scheduleOpenTasksWordRefresh();
+    }
+
+    return result;
   });
+
+  ipcMain.handle('tasks:get-open-word-directory', () => getOpenTasksWordDirectory());
+
+  ipcMain.handle('tasks:select-open-word-directory', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar carpeta para Tareas abiertas.doc',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || !result.filePaths[0]) {
+      return { ok: false, path: await getOpenTasksWordDirectory(), message: 'Selección cancelada.' };
+    }
+
+    const directoryPath = await setOpenTasksWordDirectory(result.filePaths[0]);
+    const exportResult = await enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord);
+    return {
+      ok: exportResult.ok,
+      path: directoryPath,
+      message: exportResult.message,
+    };
+  });
+
+  ipcMain.handle('tasks:clear-open-word-directory', async () => {
+    await clearOpenTasksWordDirectory();
+    return { ok: true, path: null, message: 'Carpeta del Word de tareas eliminada.' };
+  });
+
+  ipcMain.handle('tasks:refresh-open-word', () =>
+    enqueueSqliteIpc('tasks:refresh-open-word', refreshOpenTasksWord),
+  );
 
   ipcMain.handle('tasks:select-document', (event) => selectTaskDocumentPaths(event));
   ipcMain.handle('tasks:open-document', (_event, filePath: unknown) =>

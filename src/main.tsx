@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
+import { TaskWordSettingsPortal } from './components/ajustes/TaskWordSettingsPortal';
 import {
   flushPendingSqliteWrites,
   getPendingSqliteWriteCount,
@@ -65,7 +66,10 @@ async function renderApp(): Promise<void> {
 
   root.render(
     <React.StrictMode>
-      <App />
+      <>
+        <App />
+        <TaskWordSettingsPortal />
+      </>
     </React.StrictMode>,
   );
 
@@ -81,8 +85,6 @@ async function startApp(): Promise<void> {
   reportStartupHydrationResult(hydrationResult);
   renderBootScreen('Preparando módulos...');
   await renderApp();
-  // Flush de writes pendientes en background, después de que la App ya es visible.
-  // No bloquea el arranque — el polling lo reintentará si falla.
   void flushPendingSqliteWrites().catch(() => undefined);
   void flushPendingRecordWrites().catch(() => undefined);
 }
@@ -99,9 +101,6 @@ startApp().catch((error: unknown) => {
   });
 });
 
-// Antes de cerrar la ventana, intentar sincronizar cualquier cambio pendiente.
-// Si quedan writes pendientes tras el intento, el diálogo nativo de Electron
-// da al usuario la oportunidad de cancelar el cierre.
 window.addEventListener('beforeunload', (event) => {
   const pending = getPendingSqliteWriteCount() + getPendingRecordWriteCount();
   const dirtyEditors = getDirtyEditorCount();

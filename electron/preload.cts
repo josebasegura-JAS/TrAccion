@@ -306,6 +306,16 @@ contextBridge.exposeInMainWorld('traccion', {
   extractDocxText: (payload: ArrayBuffer) => ipcRenderer.invoke('docx:extract-text', payload),
 });
 
+// Puente aislado para el Word automático de tareas abiertas.
+// Se mantiene separado del API principal para no ampliar innecesariamente
+// el contrato global de módulos que no lo usan.
+contextBridge.exposeInMainWorld('traccionTaskWord', {
+  getDirectory: () => ipcRenderer.invoke('tasks:get-open-word-directory'),
+  selectDirectory: () => ipcRenderer.invoke('tasks:select-open-word-directory'),
+  clearDirectory: () => ipcRenderer.invoke('tasks:clear-open-word-directory'),
+  refresh: () => ipcRenderer.invoke('tasks:refresh-open-word'),
+});
+
 // Compatibilidad con el módulo Especiales de RRLL Dashboard y con builds intermedias.
 contextBridge.exposeInMainWorld('rrllOutlook', {
   createDraft: createOutlookDraft,
