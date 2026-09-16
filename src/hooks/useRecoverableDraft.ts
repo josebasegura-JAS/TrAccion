@@ -78,14 +78,16 @@ export function useRecoverableDraft<T>({
   const readyRef = useRef(false);
   const currentRef = useRef(currentValue);
   const initialRef = useRef(initialValue);
+  const onRecoverRef = useRef(onRecover);
 
   currentRef.current = currentValue;
   initialRef.current = initialValue;
+  onRecoverRef.current = onRecover;
 
-  const isDirty = useMemo(
-    () => enabled && serialize(currentValue) !== serialize(initialValue),
-    [currentValue, enabled, initialValue],
-  );
+  const currentSerialized = useMemo(() => serialize(currentValue), [currentValue]);
+  const initialSerialized = useMemo(() => serialize(initialValue), [initialValue]);
+
+  const isDirty = enabled && currentSerialized !== initialSerialized;
 
   const clearDraft = useCallback(() => clearRecoverableDraft(storageKey), [storageKey]);
 
@@ -102,7 +104,7 @@ export function useRecoverableDraft<T>({
     }
 
     const stored = readRecoverableDraft<T>(storageKey);
-    if (!stored || serialize(stored.value) === serialize(initialValue)) {
+    if (!stored || serialize(stored.value) === initialSerialized) {
       if (stored) clearRecoverableDraft(storageKey);
       readyRef.current = true;
       return () => {
@@ -119,18 +121,20 @@ export function useRecoverableDraft<T>({
       },
     ).then((shouldRecover) => {
       if (cancelled) return;
+
       if (shouldRecover) {
-        onRecover(stored.value);
+        onRecoverRef.current(stored.value);
       } else {
         clearRecoverableDraft(storageKey);
       }
+
       readyRef.current = true;
     });
 
     return () => {
       cancelled = true;
     };
-  }, [confirm, enabled, initialValue, onRecover, storageKey]);
+  }, [confirm, enabled, initialSerialized, storageKey]);
 
   useEffect(() => {
     if (!enabled || !readyRef.current) return;
