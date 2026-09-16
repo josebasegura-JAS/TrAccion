@@ -1,4 +1,9 @@
-import { normalizeTicketEmployeeNumber, type TicketPerson } from './ticketRestaurante';
+import {
+  normalizeTicketEmployeeNumber,
+  normalizeTicketIsoWeekdays,
+  type TicketCalendar,
+  type TicketPerson,
+} from './ticketRestaurante';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseDelimitedText } from '../../../shared/import/delimitedText';
 
@@ -30,6 +35,22 @@ export interface TicketManutencion extends TicketManutencionDraft {
   deletedAt: string | null;
 }
 
+export type TicketManutencionEligibilityReason =
+  | 'ok'
+  | 'invalid_employee'
+  | 'inactive_ticket_person'
+  | 'missing_calendar'
+  | 'invalid_date'
+  | 'no_ticket_day';
+
+export interface TicketManutencionEligibility {
+  eligible: boolean;
+  reason: TicketManutencionEligibilityReason;
+  message: string;
+  person: TicketPerson | null;
+  calendar: TicketCalendar | null;
+}
+
 type TabularRow = string[];
 
 export async function importTicketManutencionesFromFile(
@@ -58,7 +79,12 @@ export function importTicketManutenciones(
 
   const parsed: TicketManutencionPreviewRow[] = [];
   const startIndex = findManutencionStartIndex(rows);
-  const candidateRows = rows.slice(startIndex >= 0 ? startIndex : 0);
+  const effectiveStart = startIndex >= 0 ? startIndex : 0;
+  const relationsIndex = rows.findIndex(
+    (row, index) =>
+      index > effectiveStart && normalizeHeader(row.join(' ')).includes('relaciones externas'),
+  );
+  const candidateRows = rows.slice(effectiveStart, relationsIndex >= 0 ? relationsIndex : undefined);
 
   candidateRows.forEach((row, index) => {
     const text = row.map(cleanText).filter(Boolean).join(' ');
@@ -86,6 +112,93 @@ export function importTicketManutenciones(
   });
 
   return deduplicatePreviewRows(parsed);
+}
+
+/**
+ * Evalúa si una persona concreta debe generar descuento por manutención en una fecha.
+ * La regla es estrictamente individual: que pague o figure como "repartido entre" no cambia
+ * el criterio. Solo cuenta si está activa en Ticket Restaurante y el calendario asignado genera
+ * ticket ese día.
+ */
+export function evaluateTicketManutencionEligibility(
+  row: Pick<TicketManutencionPreviewRow, 'empleado' | 'fechaGasto'>,
+  ticketPeople: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+): TicketManutencionEligibility {
+  const empleado = normalizeTicketEmployeeNumber(row.empleado);
+  if (!/^\d+$/.test(empleado)) {
+    return eligibility(false, 'invalid_employee', 'Nº de empleado no válido.', null, null);
+  }
+
+  const person =
+    ticketPeople.find(
+      (candidate) =>
+        !candidate.deletedAt &&
+        candidate.activo &&
+        normalizeTicketEmployeeNumber(candidate.empleado) === empleado,
+    ) ?? null;
+
+  if (!person) {
+    return eligibility(
+      false,
+      'inactive_ticket_person',
+      'Persona sin derecho activo a Ticket Restaurante.',
+      null,
+      null,
+    );
+  }
+
+  const calendar =
+    calendars.find(
+      (candidate) =>
+        !candidate.deletedAt && candidate.activo && candidate.id === person.calendarId,
+    ) ?? null;
+
+  if (!calendar) {
+    return eligibility(
+      false,
+      'missing_calendar',
+      'La persona no tiene un calendario activo de Ticket Restaurante.',
+      person,
+      null,
+    );
+  }
+
+  if (!isIsoDate(row.fechaGasto)) {
+    return eligibility(false, 'invalid_date', 'Fecha de gasto no válida.', person, calendar);
+  }
+
+  const isoWeekday = getIsoWeekday(row.fechaGasto);
+  const allowedWeekdays = new Set(normalizeTicketIsoWeekdays(calendar.ticketIsoWeekdays));
+  const isExplicitNoTicketDay = new Set(calendar.diasSinTicket).has(row.fechaGasto);
+
+  if (!allowedWeekdays.has(isoWeekday) || isExplicitNoTicketDay) {
+    return eligibility(
+      false,
+      'no_ticket_day',
+      'Ese día no genera ticket según el calendario asignado.',
+      person,
+      calendar,
+    );
+  }
+
+  return eligibility(true, 'ok', 'Válida: descontará 1 ticket.', person, calendar);
+}
+
+export function applyTicketManutencionEligibility(
+  rows: readonly TicketManutencionPreviewRow[],
+  ticketPeople: readonly TicketPerson[],
+  calendars: readonly TicketCalendar[],
+): TicketManutencionPreviewRow[] {
+  return rows.map((row) => {
+    const result = evaluateTicketManutencionEligibility(row, ticketPeople, calendars);
+    return {
+      ...row,
+      nombreApellidos: result.person?.nombreApellidos || row.nombreApellidos,
+      importar: result.eligible ? row.importar : false,
+      afectaTicket: result.eligible,
+    };
+  });
 }
 
 export function buildTicketManutencion(
@@ -154,10 +267,15 @@ function importStructuredManutenciones(
   if (!columns) return [];
 
   const parsed: TicketManutencionPreviewRow[] = [];
+  const relationsIndex = rows.findIndex(
+    (row, index) =>
+      index > headerIndex && normalizeHeader(row.join(' ')).includes('relaciones externas'),
+  );
+  const dataRows = rows.slice(headerIndex + 1, relationsIndex >= 0 ? relationsIndex : undefined);
   let currentPayer: { empleado: string; nombreApellidos: string } | null = null;
   let currentDate = '';
 
-  rows.slice(headerIndex + 1).forEach((row, offset) => {
+  dataRows.forEach((row, offset) => {
     const rowIndex = headerIndex + offset + 1;
     const text = row.map(cleanText).filter(Boolean).join(' ');
     if (!text || isIgnoredRow(text)) return;
@@ -253,11 +371,19 @@ function pushPreviewRow(
 
 function isIgnoredRow(text: string): boolean {
   const normalized = normalizeHeader(text);
-  return normalized.includes('gastos de manutencion') || normalized.includes('fecha desde');
+  return (
+    normalized.includes('gastos de manutencion') ||
+    normalized.includes('fecha desde') ||
+    normalized.includes('relaciones externas')
+  );
 }
 
 function extractEmployees(text: string): { empleado: string; nombreApellidos: string }[] {
-  const matches = Array.from(text.matchAll(/(?:^|\s)(\d{1,6})(?:\.0)?\s+([^\d;|]+?)(?=\s+\d{1,6}(?:\.0)?\s+|\s+\d{1,2}[/-]\d{1,2}[/-](?:\d{2}|\d{4})|$)/g));
+  const matches = Array.from(
+    text.matchAll(
+      /(?:^|\s)(\d{1,6})(?:\.0)?\s+([^\d;|]+?)(?=\s+\d{1,6}(?:\.0)?\s+|\s+\d{1,2}[/-]\d{1,2}[/-](?:\d{2}|\d{4})|$)/g,
+    ),
+  );
   return matches
     .map((match) => ({
       empleado: normalizeTicketEmployeeNumber(match[1] ?? ''),
@@ -279,7 +405,9 @@ function extractDateFromText(text: string): string {
   return match ? normalizeDate(match[1]) : '';
 }
 
-function deduplicatePreviewRows(rows: readonly TicketManutencionPreviewRow[]): TicketManutencionPreviewRow[] {
+function deduplicatePreviewRows(
+  rows: readonly TicketManutencionPreviewRow[],
+): TicketManutencionPreviewRow[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
     const key = `${normalizeTicketEmployeeNumber(row.empleado)}|${row.fechaGasto}`;
@@ -295,6 +423,20 @@ function isIsoDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+function getIsoWeekday(value: string): number {
+  const day = new Date(`${value}T00:00:00.000Z`).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function eligibility(
+  eligibleValue: boolean,
+  reason: TicketManutencionEligibilityReason,
+  message: string,
+  person: TicketPerson | null,
+  calendar: TicketCalendar | null,
+): TicketManutencionEligibility {
+  return { eligible: eligibleValue, reason, message, person, calendar };
+}
 
 function cleanText(value: unknown): string {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -336,5 +478,3 @@ function normalizeDate(value: unknown): string {
 
   return '';
 }
-
-
