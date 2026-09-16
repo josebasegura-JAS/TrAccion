@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
 import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLockQuickActionsPortal';
+import { SettingsLoadingIndicatorPortal } from './components/ajustes/SettingsLoadingIndicatorPortal';
 import { TaskWordSettingsPortal } from './components/ajustes/TaskWordSettingsPortal';
 import {
   flushPendingSqliteWrites,
@@ -11,8 +12,11 @@ import {
 } from './services/persistence';
 import { flushPendingRecordWrites, getPendingRecordWriteCount } from './services/pendingRecordWrites';
 import { getDirtyEditorCount } from './services/dirtyEditors';
+import { installProgressiveSettingsQueries } from './services/settingsProgressiveLoading';
 import './styles.css';
 import './dashboard-overrides.css';
+
+installProgressiveSettingsQueries();
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => {
@@ -71,6 +75,7 @@ async function renderApp(): Promise<void> {
         <App />
         <TaskWordSettingsPortal />
         <DatabaseLockQuickActionsPortal />
+        <SettingsLoadingIndicatorPortal />
       </>
     </React.StrictMode>,
   );
