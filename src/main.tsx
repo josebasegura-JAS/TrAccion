@@ -10,6 +10,7 @@ import {
 import { flushPendingRecordWrites, getPendingRecordWriteCount } from './services/pendingRecordWrites';
 import { getDirtyEditorCount } from './services/dirtyEditors';
 import './styles.css';
+import './dashboard-overrides.css';
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => {
