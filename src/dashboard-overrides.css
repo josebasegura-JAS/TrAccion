@@ -1,0 +1,28 @@
+/* Ajustes puntuales del Dashboard RRLL.
+ * Se mantienen separados del sistema visual global para evitar efectos laterales
+ * sobre el resto de módulos.
+ */
+
+/* Tailwind no genera las variantes /18 con la configuración actual. Cuando la
+ * utilidad de color no existe, la clase base `border` cae en currentColor y el
+ * borde aparece blanco. Fijamos aquí los tres tonos afectados. */
+.dashboard-pro .border-rose-500\/18 {
+  border-color: rgb(244 63 94 / 0.18);
+}
+
+.dashboard-pro .border-cyan-400\/18 {
+  border-color: rgb(34 211 238 / 0.18);
+}
+
+.dashboard-pro .border-amber-500\/18 {
+  border-color: rgb(245 158 11 / 0.18);
+}
+
+/* Mis tareas prioritarias: en alturas ajustadas la última fila podía quedar
+ * recortada por el overflow del panel. La lista conserva la altura disponible
+ * y desplaza solo su contenido, sin hacer crecer el Dashboard completo. */
+.dashboard-pro > div:nth-child(4) > section:first-child > div:nth-child(2) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
