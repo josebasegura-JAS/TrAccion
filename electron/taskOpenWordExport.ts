@@ -14,6 +14,18 @@ export interface TaskWordExportResult {
   message: string;
 }
 
+interface TaskTrackingEntry {
+  fechaHora: string;
+  texto: string;
+}
+
+interface ExportableTrackingEntry {
+  fechaHora: string;
+  fecha: string;
+  usuario: string;
+  texto: string;
+}
+
 interface ExportableTask {
   titulo: string;
   tipo: string;
@@ -23,8 +35,12 @@ interface ExportableTask {
   fechaLimite: string;
   sindicato: string;
   createdAt: string;
+  seguimiento: ExportableTrackingEntry[];
   deletedAt?: string | null;
 }
+
+const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
+const TRACKING_META_SUFFIX = ']]';
 
 const PRIORITY_ORDER: Record<string, number> = {
   critica: 0,
@@ -47,11 +63,93 @@ function normalizeDate(value: string): string {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
 }
 
+function normalizeDateTime(value: string): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return normalizeDate(value) || value;
+  }
+
+  return parsed.toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry {
+  const rawText = typeof entry.texto === 'string' ? entry.texto : '';
+  const fallbackDate = normalizeDateTime(entry.fechaHora);
+
+  if (!rawText.startsWith(TRACKING_META_PREFIX)) {
+    return {
+      fechaHora: entry.fechaHora,
+      fecha: fallbackDate,
+      usuario: '',
+      texto: rawText.trim(),
+    };
+  }
+
+  const metadataEnd = rawText.indexOf(TRACKING_META_SUFFIX);
+  if (metadataEnd < 0) {
+    return {
+      fechaHora: entry.fechaHora,
+      fecha: fallbackDate,
+      usuario: '',
+      texto: rawText.trim(),
+    };
+  }
+
+  const metadataRaw = rawText.slice(TRACKING_META_PREFIX.length, metadataEnd);
+  const visibleText = rawText
+    .slice(metadataEnd + TRACKING_META_SUFFIX.length)
+    .replace(/^\s*\n?/, '')
+    .trim();
+
+  try {
+    const metadata = JSON.parse(metadataRaw) as { fecha?: unknown; usuario?: unknown };
+    const metadataDate = typeof metadata.fecha === 'string' ? metadata.fecha : '';
+    const metadataUser = typeof metadata.usuario === 'string' ? metadata.usuario.trim() : '';
+
+    return {
+      fechaHora: entry.fechaHora,
+      fecha: metadataDate ? normalizeDate(metadataDate) || metadataDate : fallbackDate,
+      usuario: metadataUser,
+      texto: visibleText,
+    };
+  } catch {
+    return {
+      fechaHora: entry.fechaHora,
+      fecha: fallbackDate,
+      usuario: '',
+      texto: visibleText || rawText.trim(),
+    };
+  }
+}
+
+function parseTracking(value: unknown): ExportableTrackingEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is TaskTrackingEntry => {
+      if (!entry || typeof entry !== 'object') return false;
+      const candidate = entry as Partial<TaskTrackingEntry>;
+      return typeof candidate.fechaHora === 'string' && typeof candidate.texto === 'string';
+    })
+    .map(decodeTrackingEntry)
+    .filter((entry) => entry.texto.length > 0)
+    .sort((first, second) => second.fechaHora.localeCompare(first.fechaHora));
+}
+
 function parseTask(value: string): ExportableTask | null {
   try {
     const parsed: unknown = JSON.parse(value);
     if (!parsed || typeof parsed !== 'object') return null;
-    const task = parsed as Partial<ExportableTask>;
+    const task = parsed as Partial<ExportableTask> & { seguimiento?: unknown };
 
     if (typeof task.titulo !== 'string') return null;
     if (task.deletedAt) return null;
@@ -66,6 +164,7 @@ function parseTask(value: string): ExportableTask | null {
       fechaLimite: task.fechaLimite ?? '',
       sindicato: task.sindicato ?? '',
       createdAt: task.createdAt ?? '',
+      seguimiento: parseTracking(task.seguimiento),
       deletedAt: task.deletedAt ?? null,
     };
   } catch {
@@ -118,11 +217,33 @@ function stateStyle(state: string): string {
   }
 }
 
-function buildWordHtml(tasks: ExportableTask[]): string {
-  const generatedAt = new Date().toLocaleString('es-ES');
-  const rows = tasks
-    .map(
-      (task) => `<tr>
+function buildTrackingRow(task: ExportableTask): string {
+  if (task.seguimiento.length === 0) {
+    return '';
+  }
+
+  const items = task.seguimiento
+    .map((entry) => {
+      const meta = [entry.fecha, entry.usuario].filter(Boolean).join(' · ');
+      return `<div class="tracking-item">
+  <span class="tracking-meta">${escapeHtml(meta || 'Seguimiento')}</span>
+  <span class="tracking-text">${escapeHtml(entry.texto)}</span>
+</div>`;
+    })
+    .join('');
+
+  return `<tr class="tracking-row">
+<td colspan="8">
+  <div class="tracking-wrapper">
+    <div class="tracking-heading">Seguimiento (${task.seguimiento.length})</div>
+    ${items}
+  </div>
+</td>
+</tr>`;
+}
+
+function buildTaskRows(task: ExportableTask): string {
+  return `<tr class="task-row">
 <td>${escapeHtml(normalizeDate(task.createdAt))}</td>
 <td class="title">${escapeHtml(task.titulo)}</td>
 <td>${escapeHtml(task.tipo)}</td>
@@ -131,9 +252,13 @@ function buildWordHtml(tasks: ExportableTask[]): string {
 <td style="${priorityStyle(task.prioridad)}">${escapeHtml(task.prioridad)}</td>
 <td>${escapeHtml(normalizeDate(task.fechaLimite))}</td>
 <td>${escapeHtml(task.sindicato || '—')}</td>
-</tr>`,
-    )
-    .join('\n');
+</tr>
+${buildTrackingRow(task)}`;
+}
+
+function buildWordHtml(tasks: ExportableTask[]): string {
+  const generatedAt = new Date().toLocaleString('es-ES');
+  const rows = tasks.map(buildTaskRows).join('\n');
 
   const emptyRow =
     '<tr><td colspan="8" class="empty">No hay tareas abiertas.</td></tr>';
@@ -171,13 +296,50 @@ td {
   vertical-align:top;
   word-wrap:break-word;
 }
-tr:nth-child(even) td { background-color:#f7f9fc; }
+.task-row:nth-of-type(4n+3) td { background-color:#f7f9fc; }
 td.title { font-weight:600; }
 .empty { text-align:center; color:#64748b; padding:14pt; }
 .col-date { width:9%; }
 .col-title { width:27%; }
 .col-small { width:9%; }
 .col-medium { width:11%; }
+.tracking-row td {
+  padding:0;
+  background:#f8fafc;
+  border-top:0;
+  border-bottom:2px solid #9fb2c7;
+}
+.tracking-wrapper {
+  padding:5pt 7pt 6pt 7pt;
+  background:#f8fafc;
+}
+.tracking-heading {
+  margin-bottom:3pt;
+  color:#17365d;
+  font-size:8pt;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.3pt;
+}
+.tracking-item {
+  margin:2pt 0 0 0;
+  padding:3pt 5pt;
+  border-left:2pt solid #8ba9c7;
+  background:#ffffff;
+}
+.tracking-meta {
+  display:block;
+  margin-bottom:1pt;
+  color:#64748b;
+  font-size:7.5pt;
+  font-weight:700;
+}
+.tracking-text {
+  display:block;
+  color:#26364a;
+  font-size:8.5pt;
+  line-height:1.2;
+}
 </style>
 </head>
 <body>
@@ -219,7 +381,9 @@ export async function exportOpenTasksWord(
   }
 
   const tasks = sortTasks(
-    records.map((record) => parseTask(record.value)).filter((task): task is ExportableTask => task !== null),
+    records
+      .map((record) => parseTask(record.value))
+      .filter((task): task is ExportableTask => task !== null),
   );
 
   const finalPath = path.join(directoryPath, 'Tareas abiertas.doc');
