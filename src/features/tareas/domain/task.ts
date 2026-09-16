@@ -10,6 +10,14 @@ export type TaskState = (typeof TASK_STATES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export interface TaskSeguimientoEntry {
+  /**
+   * Identificador estable del seguimiento.
+   *
+   * Es opcional por compatibilidad con registros históricos. El editor
+   * reconoce seguimientos antiguos sin id y les asigna uno estable al
+   * modificarlos.
+   */
+  id?: string;
   fechaHora: string;
   texto: string;
 }
@@ -68,6 +76,7 @@ export type TaskDraft = Pick<
 export type TaskDraftField = keyof TaskDraft;
 
 export interface LegacyPeticionSeguimientoEntry {
+  id?: string;
   fechaHora: string;
   texto: string;
 }

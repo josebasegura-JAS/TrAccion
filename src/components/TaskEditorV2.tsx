@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Check,
   Eye,
   FileText,
   Info,
@@ -7,9 +8,11 @@ import {
   Mail,
   MessageSquare,
   Paperclip,
+  Pencil,
   Search,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActionButton } from './ui/ActionButton';
@@ -30,6 +33,7 @@ import {
   type Task,
   type TaskDocumentLink,
   type TaskDraft,
+  type TaskSeguimientoEntry,
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
@@ -38,11 +42,25 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { readStorageItem } from '../services/persistence';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
+import { enqueueAuditEvent } from '../shared/audit/auditTrail';
 
 const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
 const TRACKING_META_SUFFIX = ']]';
 
-type TrackingMeta = { fecha: string; usuario: string };
+type TrackingMeta = { fecha: string; usuario: string; id?: string };
+
+function createTrackingId(): string {
+  return `tracking-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function hashTrackingIdentity(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 type TaskRecoveryValue = {
   draft: TaskDraft;
@@ -60,17 +78,29 @@ function getActiveUser(): string {
   return readStorageItem('traccion.header.username')?.trim() || 'Usuario local';
 }
 
-function encodeTracking(text: string, date: string, user: string): string {
-  const payload = JSON.stringify({ fecha: date || todayIsoDate(), usuario: user || 'Usuario local' });
+function encodeTracking(
+  text: string,
+  date: string,
+  user: string,
+  trackingId = createTrackingId(),
+): string {
+  const payload = JSON.stringify({
+    fecha: date || todayIsoDate(),
+    usuario: user || 'Usuario local',
+    id: trackingId,
+  });
   return `${TRACKING_META_PREFIX}${payload}${TRACKING_META_SUFFIX}\n${text.trim()}`;
 }
 
-function decodeTracking(text: string, fallbackDate: string): { text: string; date: string; user: string } {
+function decodeTracking(
+  text: string,
+  fallbackDate: string,
+): { text: string; date: string; user: string; id: string | null } {
   if (!text.startsWith(TRACKING_META_PREFIX)) {
-    return { text, date: fallbackDate, user: '—' };
+    return { text, date: fallbackDate, user: '—', id: null };
   }
   const end = text.indexOf(TRACKING_META_SUFFIX);
-  if (end < 0) return { text, date: fallbackDate, user: '—' };
+  if (end < 0) return { text, date: fallbackDate, user: '—', id: null };
   const raw = text.slice(TRACKING_META_PREFIX.length, end);
   try {
     const parsed = JSON.parse(raw) as Partial<TrackingMeta>;
@@ -78,9 +108,10 @@ function decodeTracking(text: string, fallbackDate: string): { text: string; dat
       text: text.slice(end + TRACKING_META_SUFFIX.length).replace(/^\s*\n?/, ''),
       date: parsed.fecha || fallbackDate,
       user: parsed.usuario || '—',
+      id: typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id.trim() : null,
     };
   } catch {
-    return { text, date: fallbackDate, user: '—' };
+    return { text, date: fallbackDate, user: '—', id: null };
   }
 }
 
@@ -216,6 +247,10 @@ export function TaskEditor({
   const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(task?.updatedAt ?? null);
+  const [editingTrackingId, setEditingTrackingId] = useState<string | null>(null);
+  const [editingTrackingDate, setEditingTrackingDate] = useState('');
+  const [editingTrackingText, setEditingTrackingText] = useState('');
+  const [isSavingTrackingEdit, setIsSavingTrackingEdit] = useState(false);
   const [recoveryBaseline, setRecoveryBaseline] = useState<TaskRecoveryValue>(() => ({
     draft: toDraft(task),
     trackingText: '',
@@ -266,6 +301,9 @@ export function TaskEditor({
     setDocumentStatus('');
     setMailStatus('');
     setSaveStatus('');
+    setEditingTrackingId(null);
+    setEditingTrackingDate('');
+    setEditingTrackingText('');
     setLoadedUpdatedAt(task?.updatedAt ?? null);
     setLoadedIdentity(identity);
   }, [loadedIdentity, mode, task]);
@@ -412,7 +450,171 @@ export function TaskEditor({
     setMailStatus('Texto del mensaje copiado al campo Email.');
   };
 
-  const trackingItems = task?.seguimiento ?? [];
+  const liveTask = useTaskStore((state) =>
+    task ? state.tasks.find((candidate) => candidate.id === task.id) : undefined,
+  );
+  const trackingItems = liveTask?.seguimiento ?? task?.seguimiento ?? [];
+
+  const verifyTrackingMutationCanProceed = async (): Promise<Task | null> => {
+    if (!task || isFormReadOnly) return null;
+
+    const liveLock = await window.traccion?.getRecordLock?.({
+      module: 'tareas',
+      recordId: task.id,
+    });
+    if (!liveLock?.ok || liveLock.status !== 'acquired') {
+      setSaveStatus(
+        liveLock?.message || 'No se ha confirmado el bloqueo compartido de edición.',
+      );
+      setSaveStatusIsError(true);
+      return null;
+    }
+
+    const latestTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
+    if (!latestTask) {
+      setSaveStatus('La tarea ya no existe en la base de datos compartida.');
+      setSaveStatusIsError(true);
+      return null;
+    }
+
+    if (latestTask.updatedAt !== loadedUpdatedAt) {
+      setSaveStatus(
+        'La tarea ha cambiado desde que abriste el detalle. Cierra y vuelve a abrirla antes de modificar el seguimiento.',
+      );
+      setSaveStatusIsError(true);
+      return null;
+    }
+
+    return latestTask;
+  };
+
+  const persistTrackingMutation = async (
+    latestTask: Task,
+    nextTracking: TaskSeguimientoEntry[],
+    successMessage: string,
+    auditSummary: string,
+  ): Promise<boolean> => {
+    const saveTaskRecord = window.traccion?.saveTaskRecordIfUnchanged;
+    if (!saveTaskRecord) {
+      setSaveStatus('El guardado directo de tareas no está disponible.');
+      setSaveStatusIsError(true);
+      return false;
+    }
+
+    const updatedTask: Task = {
+      ...latestTask,
+      seguimiento: nextTracking,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = await saveTaskRecord({
+      id: latestTask.id,
+      value: JSON.stringify(updatedTask),
+      expectedUpdatedAt: loadedUpdatedAt,
+    });
+
+    if (!result.ok) {
+      setSaveStatus(result.message || 'No se ha podido actualizar el seguimiento.');
+      setSaveStatusIsError(true);
+      return false;
+    }
+
+    useTaskStore.setState((state) => ({
+      tasks: state.tasks.map((candidate) =>
+        candidate.id === latestTask.id ? updatedTask : candidate,
+      ),
+    }));
+
+    setLoadedUpdatedAt(updatedTask.updatedAt);
+    setSaveStatus(successMessage);
+    setSaveStatusIsError(false);
+
+    enqueueAuditEvent({
+      module: 'tareas',
+      entityId: latestTask.id,
+      action: 'updated',
+      summary: auditSummary,
+      changes: [],
+    });
+
+    return true;
+  };
+
+  const startTrackingEdit = (entry: TaskSeguimientoEntry, index: number) => {
+    if (!task || isFormReadOnly) return;
+    const decoded = decodeTracking(entry.texto, entry.fechaHora);
+    setEditingTrackingId(resolveTrackingId(entry, index, task.id));
+    setEditingTrackingDate(decoded.date || todayIsoDate());
+    setEditingTrackingText(decoded.text);
+    setSaveStatus('');
+    setSaveStatusIsError(false);
+  };
+
+  const cancelTrackingEdit = () => {
+    setEditingTrackingId(null);
+    setEditingTrackingDate('');
+    setEditingTrackingText('');
+  };
+
+  const handleSaveTrackingEdit = async (
+    entry: TaskSeguimientoEntry,
+    index: number,
+  ) => {
+    if (!task || isFormReadOnly || !editingTrackingText.trim()) return;
+
+    const trackingId = resolveTrackingId(entry, index, task.id);
+    if (editingTrackingId !== trackingId) return;
+
+    setIsSavingTrackingEdit(true);
+    try {
+      const latestTask = await verifyTrackingMutationCanProceed();
+      if (!latestTask) return;
+
+      const latestIndex = latestTask.seguimiento.findIndex(
+        (candidate, candidateIndex) =>
+          resolveTrackingId(candidate, candidateIndex, latestTask.id) === trackingId,
+      );
+      if (latestIndex < 0) {
+        setSaveStatus('Ese seguimiento ya no existe. Recarga la tarea.');
+        setSaveStatusIsError(true);
+        return;
+      }
+
+      const original = latestTask.seguimiento[latestIndex];
+      const originalDecoded = decodeTracking(original.texto, original.fechaHora);
+      const nextTracking = latestTask.seguimiento.map((candidate, candidateIndex) => {
+        if (candidateIndex !== latestIndex) {
+          return {
+            ...candidate,
+            id: candidate.id ?? resolveTrackingId(candidate, candidateIndex, latestTask.id),
+          };
+        }
+
+        return {
+          ...candidate,
+          id: trackingId,
+          texto: encodeTracking(
+            editingTrackingText,
+            editingTrackingDate,
+            originalDecoded.user,
+            trackingId,
+          ),
+        };
+      });
+
+      const saved = await persistTrackingMutation(
+        latestTask,
+        nextTracking,
+        'Seguimiento actualizado.',
+        'Seguimiento editado',
+      );
+      if (saved) {
+        cancelTrackingEdit();
+      }
+    } finally {
+      setIsSavingTrackingEdit(false);
+    }
+  };
 
   const handleDeleteTracking = async (index: number) => {
     if (!task || isFormReadOnly) return;
@@ -437,45 +639,26 @@ export function TaskEditor({
 
     if (!confirmed) return;
 
-    const liveLock = await window.traccion?.getRecordLock?.({
-      module: 'tareas',
-      recordId: task.id,
-    });
-    if (!liveLock?.ok || liveLock.status !== 'acquired') {
-      setSaveStatus(
-        liveLock?.message || 'No se ha confirmado el bloqueo compartido de edición.',
-      );
-      setSaveStatusIsError(true);
-      return;
-    }
+    const latestTask = await verifyTrackingMutationCanProceed();
+    if (!latestTask || !task) return;
 
-    const latestTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
-    if (!latestTask) {
-      setSaveStatus('La tarea ya no existe en la base de datos compartida.');
-      setSaveStatusIsError(true);
-      return;
-    }
-
-    if (latestTask.updatedAt !== loadedUpdatedAt) {
-      setSaveStatus(
-        'La tarea ha cambiado desde que abriste el detalle. Cierra y vuelve a abrirla antes de eliminar el seguimiento.',
-      );
-      setSaveStatusIsError(true);
-      return;
-    }
-
+    const trackingId = resolveTrackingId(entry, index, task.id);
     let removed = false;
-    const nextTracking = latestTask.seguimiento.filter((candidate) => {
-      if (
-        !removed &&
-        candidate.fechaHora === entry.fechaHora &&
-        candidate.texto === entry.texto
-      ) {
-        removed = true;
-        return false;
-      }
-      return true;
-    });
+    const nextTracking = latestTask.seguimiento
+      .filter((candidate, candidateIndex) => {
+        if (
+          !removed &&
+          resolveTrackingId(candidate, candidateIndex, latestTask.id) === trackingId
+        ) {
+          removed = true;
+          return false;
+        }
+        return true;
+      })
+      .map((candidate, candidateIndex) => ({
+        ...candidate,
+        id: candidate.id ?? resolveTrackingId(candidate, candidateIndex, latestTask.id),
+      }));
 
     if (!removed) {
       setSaveStatus('Ese seguimiento ya no existe. Recarga la tarea.');
@@ -483,40 +666,12 @@ export function TaskEditor({
       return;
     }
 
-    const updatedTask: Task = {
-      ...latestTask,
-      seguimiento: nextTracking,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const saveTaskRecord = window.traccion?.saveTaskRecordIfUnchanged;
-    if (!saveTaskRecord) {
-      setSaveStatus('El guardado directo de tareas no está disponible.');
-      setSaveStatusIsError(true);
-      return;
-    }
-
-    const result = await saveTaskRecord({
-      id: task.id,
-      value: JSON.stringify(updatedTask),
-      expectedUpdatedAt: loadedUpdatedAt,
-    });
-
-    if (!result.ok) {
-      setSaveStatus(result.message || 'No se ha podido eliminar el seguimiento.');
-      setSaveStatusIsError(true);
-      return;
-    }
-
-    useTaskStore.setState((state) => ({
-      tasks: state.tasks.map((candidate) =>
-        candidate.id === task.id ? updatedTask : candidate,
-      ),
-    }));
-
-    setLoadedUpdatedAt(updatedTask.updatedAt);
-    setSaveStatus('Seguimiento eliminado.');
-    setSaveStatusIsError(false);
+    await persistTrackingMutation(
+      latestTask,
+      nextTracking,
+      'Seguimiento eliminado.',
+      'Seguimiento eliminado',
+    );
   };
 
   return (
@@ -634,21 +789,97 @@ export function TaskEditor({
                   <div className="mt-3 overflow-hidden rounded-lg border border-sky-300/10 bg-[#0a1b2e]/70">
                     {trackingItems.map((entry, index) => {
                       const decoded = decodeTracking(entry.texto, entry.fechaHora);
+                      const trackingId = task
+                        ? resolveTrackingId(entry, index, task.id)
+                        : `${entry.fechaHora}-${index}`;
+                      const isEditing = editingTrackingId === trackingId;
+
                       return (
-                        <article className="grid grid-cols-[110px_125px_minmax(0,1fr)_30px] items-start gap-3 border-b border-sky-300/10 px-3 py-2 last:border-b-0" key={`${entry.fechaHora}-${index}`}>
-                          <div className="flex items-center gap-2 text-xs font-bold text-slate-200"><CalendarDays size={13} className="text-sky-300" />{formatDate(decoded.date)}</div>
-                          <div className="flex items-center gap-2 truncate text-xs font-semibold text-slate-300"><UserRound size={13} className="text-sky-300" /><span className="truncate">{decoded.user}</span></div>
-                          <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{decoded.text}</p>
-                          <button
-                            aria-label={`Eliminar seguimiento del ${formatDate(decoded.date)}`}
-                            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={isFormReadOnly}
-                            onClick={() => void handleDeleteTracking(index)}
-                            title="Eliminar seguimiento"
-                            type="button"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        <article
+                          className={`border-b border-sky-300/10 px-3 py-2 last:border-b-0 ${
+                            isEditing ? 'bg-sky-500/[0.05]' : ''
+                          }`}
+                          key={trackingId}
+                        >
+                          {isEditing ? (
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-[150px_125px_minmax(0,1fr)_66px] lg:items-start">
+                              <Input
+                                aria-label="Fecha del seguimiento"
+                                className="h-8 text-xs"
+                                onChange={(event) => setEditingTrackingDate(event.target.value)}
+                                type="date"
+                                value={editingTrackingDate}
+                              />
+                              <div className="flex h-8 items-center gap-2 truncate rounded-lg border border-metro-border bg-metro-panel px-2 text-xs font-semibold text-slate-300">
+                                <UserRound size={13} className="shrink-0 text-sky-300" />
+                                <span className="truncate">{decoded.user}</span>
+                              </div>
+                              <Textarea
+                                aria-label="Texto del seguimiento"
+                                className="min-h-[62px] text-xs"
+                                onChange={(event) => setEditingTrackingText(event.target.value)}
+                                value={editingTrackingText}
+                              />
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  aria-label="Guardar cambios del seguimiento"
+                                  className="grid h-7 w-7 place-items-center rounded-md text-emerald-300 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                  disabled={!editingTrackingText.trim() || isSavingTrackingEdit}
+                                  onClick={() => void handleSaveTrackingEdit(entry, index)}
+                                  title="Guardar cambios"
+                                  type="button"
+                                >
+                                  <Check size={15} />
+                                </button>
+                                <button
+                                  aria-label="Cancelar edición del seguimiento"
+                                  className="grid h-7 w-7 place-items-center rounded-md text-slate-400 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+                                  disabled={isSavingTrackingEdit}
+                                  onClick={cancelTrackingEdit}
+                                  title="Cancelar"
+                                  type="button"
+                                >
+                                  <X size={15} />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-[110px_125px_minmax(0,1fr)_62px] items-start gap-3">
+                              <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                                <CalendarDays size={13} className="text-sky-300" />
+                                {formatDate(decoded.date)}
+                              </div>
+                              <div className="flex items-center gap-2 truncate text-xs font-semibold text-slate-300">
+                                <UserRound size={13} className="text-sky-300" />
+                                <span className="truncate">{decoded.user}</span>
+                              </div>
+                              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-300">
+                                {decoded.text}
+                              </p>
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  aria-label={`Editar seguimiento del ${formatDate(decoded.date)}`}
+                                  className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-sky-500/10 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                  disabled={isFormReadOnly || editingTrackingId !== null}
+                                  onClick={() => startTrackingEdit(entry, index)}
+                                  title="Editar seguimiento"
+                                  type="button"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  aria-label={`Eliminar seguimiento del ${formatDate(decoded.date)}`}
+                                  className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                  disabled={isFormReadOnly || editingTrackingId !== null}
+                                  onClick={() => void handleDeleteTracking(index)}
+                                  title="Eliminar seguimiento"
+                                  type="button"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </article>
                       );
                     })}
