@@ -8,12 +8,33 @@ function notifyDatabaseStatusListeners(): void {
   databaseStatusListeners.forEach((listener) => listener());
 }
 
+function pointToDatabaseSettingsWhenLocked(status: TraccionDatabaseStatus | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const isLocked = status?.phase === 'locked' || status?.phase === 'fallback';
+  if (!isLocked || window.location.hash === '#base-de-datos') {
+    return;
+  }
+
+  // No navegamos de módulo aquí: únicamente dejamos preparado el ancla.
+  // Cuando el usuario pulse "Ver bloqueo en Ajustes", AjustesPage se monta
+  // con esta hash y abre automáticamente el bloque avanzado de Base de datos.
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${window.location.pathname}${window.location.search}#base-de-datos`,
+  );
+}
+
 export function getCachedDatabaseStatus(): TraccionDatabaseStatus | null {
   return cachedDatabaseStatus;
 }
 
 export function publishDatabaseStatus(status: TraccionDatabaseStatus | null): void {
   cachedDatabaseStatus = status;
+  pointToDatabaseSettingsWhenLocked(status);
   notifyDatabaseStatusListeners();
 }
 
