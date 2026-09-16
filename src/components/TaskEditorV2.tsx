@@ -115,6 +115,26 @@ function decodeTracking(
   }
 }
 
+function resolveTrackingId(
+  entry: TaskSeguimientoEntry,
+  index: number,
+  taskId: string,
+): string {
+  const decoded = decodeTracking(entry.texto, entry.fechaHora);
+
+  if (entry.id?.trim()) {
+    return entry.id.trim();
+  }
+
+  if (decoded.id) {
+    return decoded.id;
+  }
+
+  return `tracking-legacy-${hashTrackingIdentity(
+    `${taskId}|${entry.fechaHora}|${entry.texto}|${index}`,
+  )}`;
+}
+
 function formatDate(value: string): string {
   if (!value) return '—';
   const normalized = value.length === 10 ? `${value}T00:00:00` : value;
