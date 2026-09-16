@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Paperclip,
   Search,
+  Trash2,
   UserRound,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -34,6 +35,7 @@ import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { useAppDialog } from '../hooks/useAppDialog';
 import { readStorageItem } from '../services/persistence';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 
@@ -41,6 +43,12 @@ const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
 const TRACKING_META_SUFFIX = ']]';
 
 type TrackingMeta = { fecha: string; usuario: string };
+
+type TaskRecoveryValue = {
+  draft: TaskDraft;
+  trackingText: string;
+  trackingDate: string;
+};
 
 function todayIsoDate(): string {
   const now = new Date();
@@ -195,6 +203,7 @@ export function TaskEditor({
   const createTask = useTaskStore((state) => state.createWithConcurrencyCheck);
   const updateTask = useTaskStore((state) => state.updateWithConcurrencyCheck);
   const removeTask = useTaskStore((state) => state.removeWithConcurrencyCheck);
+  const { confirm: confirmTrackingDelete, dialogNode: trackingDeleteDialogNode } = useAppDialog();
 
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [trackingText, setTrackingText] = useState('');
@@ -207,6 +216,11 @@ export function TaskEditor({
   const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
   const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(task?.updatedAt ?? null);
+  const [recoveryBaseline, setRecoveryBaseline] = useState<TaskRecoveryValue>(() => ({
+    draft: toDraft(task),
+    trackingText: '',
+    trackingDate: todayIsoDate(),
+  }));
 
   const isCreate = mode === 'create';
   const recordLock = useSharedRecordLock({
@@ -236,9 +250,18 @@ export function TaskEditor({
   useEffect(() => {
     const identity = `${mode}:${task?.id ?? 'new'}`;
     if (identity === loadedIdentity) return;
-    setDraft(toDraft(task));
+
+    const nextDraft = toDraft(task);
+    const nextTrackingDate = todayIsoDate();
+
+    setDraft(nextDraft);
     setTrackingText('');
-    setTrackingDate(todayIsoDate());
+    setTrackingDate(nextTrackingDate);
+    setRecoveryBaseline({
+      draft: nextDraft,
+      trackingText: '',
+      trackingDate: nextTrackingDate,
+    });
     setManualDocumentPath('');
     setDocumentStatus('');
     setMailStatus('');
@@ -256,14 +279,10 @@ export function TaskEditor({
     return draft.sindicato && !active.includes(draft.sindicato) ? [draft.sindicato, ...active] : active;
   }, [draft.sindicato, taskOrigins]);
 
-  const recoveryInitialValue = useMemo(
-    () => ({ draft: toDraft(task), trackingText: '', trackingDate: todayIsoDate() }),
-    [task],
-  );
   const recoveryStorageKey = buildRecoverableDraftKey('tareas', task?.id ?? 'new');
   const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
     currentValue: { draft, trackingText, trackingDate },
-    initialValue: recoveryInitialValue,
+    initialValue: recoveryBaseline,
     enabled: !isFormReadOnly,
     onRecover: (value) => {
       setDraft(value.draft);
@@ -274,7 +293,7 @@ export function TaskEditor({
   });
   const { requestClose, dialogNode } = useUnsavedChanges({
     currentValue: { draft, trackingText, trackingDate },
-    initialValue: recoveryInitialValue,
+    initialValue: recoveryBaseline,
     enabled: !isFormReadOnly,
     onDiscard: () => {
       clearRecoveryDraft();
@@ -319,12 +338,27 @@ export function TaskEditor({
     }
 
     const savedTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
+    const nextTrackingDate = todayIsoDate();
+
     if (savedTask) {
-      setDraft(toDraft(savedTask));
+      const savedDraft = toDraft(savedTask);
+      setDraft(savedDraft);
       setLoadedUpdatedAt(savedTask.updatedAt);
+      setRecoveryBaseline({
+        draft: savedDraft,
+        trackingText: '',
+        trackingDate: nextTrackingDate,
+      });
+    } else {
+      setRecoveryBaseline({
+        draft,
+        trackingText: '',
+        trackingDate: nextTrackingDate,
+      });
     }
+
     setTrackingText('');
-    setTrackingDate(todayIsoDate());
+    setTrackingDate(nextTrackingDate);
     clearRecoveryDraft();
     setSaveStatus('Guardado correctamente. Puedes seguir editando la tarea.');
     setSaveStatusIsError(false);
@@ -379,6 +413,111 @@ export function TaskEditor({
   };
 
   const trackingItems = task?.seguimiento ?? [];
+
+  const handleDeleteTracking = async (index: number) => {
+    if (!task || isFormReadOnly) return;
+
+    const entry = trackingItems[index];
+    if (!entry) return;
+
+    const decoded = decodeTracking(entry.texto, entry.fechaHora);
+    const preview =
+      decoded.text.length > 90 ? `${decoded.text.slice(0, 87)}…` : decoded.text;
+
+    const confirmed = await confirmTrackingDelete(
+      `Se eliminará el seguimiento del ${formatDate(decoded.date)}${decoded.user !== '—' ? ` · ${decoded.user}` : ''}.` +
+        `${preview ? `\n\n“${preview}”` : ''}\n\nEsta acción se guarda inmediatamente. ¿Continuar?`,
+      {
+        title: 'Eliminar seguimiento',
+        confirmLabel: 'Eliminar',
+        cancelLabel: 'Cancelar',
+        danger: true,
+      },
+    );
+
+    if (!confirmed) return;
+
+    const liveLock = await window.traccion?.getRecordLock?.({
+      module: 'tareas',
+      recordId: task.id,
+    });
+    if (!liveLock?.ok || liveLock.status !== 'acquired') {
+      setSaveStatus(
+        liveLock?.message || 'No se ha confirmado el bloqueo compartido de edición.',
+      );
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    const latestTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
+    if (!latestTask) {
+      setSaveStatus('La tarea ya no existe en la base de datos compartida.');
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    if (latestTask.updatedAt !== loadedUpdatedAt) {
+      setSaveStatus(
+        'La tarea ha cambiado desde que abriste el detalle. Cierra y vuelve a abrirla antes de eliminar el seguimiento.',
+      );
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    let removed = false;
+    const nextTracking = latestTask.seguimiento.filter((candidate) => {
+      if (
+        !removed &&
+        candidate.fechaHora === entry.fechaHora &&
+        candidate.texto === entry.texto
+      ) {
+        removed = true;
+        return false;
+      }
+      return true;
+    });
+
+    if (!removed) {
+      setSaveStatus('Ese seguimiento ya no existe. Recarga la tarea.');
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    const updatedTask: Task = {
+      ...latestTask,
+      seguimiento: nextTracking,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const saveTaskRecord = window.traccion?.saveTaskRecordIfUnchanged;
+    if (!saveTaskRecord) {
+      setSaveStatus('El guardado directo de tareas no está disponible.');
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    const result = await saveTaskRecord({
+      id: task.id,
+      value: JSON.stringify(updatedTask),
+      expectedUpdatedAt: loadedUpdatedAt,
+    });
+
+    if (!result.ok) {
+      setSaveStatus(result.message || 'No se ha podido eliminar el seguimiento.');
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    useTaskStore.setState((state) => ({
+      tasks: state.tasks.map((candidate) =>
+        candidate.id === task.id ? updatedTask : candidate,
+      ),
+    }));
+
+    setLoadedUpdatedAt(updatedTask.updatedAt);
+    setSaveStatus('Seguimiento eliminado.');
+    setSaveStatusIsError(false);
+  };
 
   return (
     <>
@@ -496,10 +635,20 @@ export function TaskEditor({
                     {trackingItems.map((entry, index) => {
                       const decoded = decodeTracking(entry.texto, entry.fechaHora);
                       return (
-                        <article className="grid grid-cols-[110px_125px_minmax(0,1fr)] gap-3 border-b border-sky-300/10 px-3 py-2 last:border-b-0" key={`${entry.fechaHora}-${index}`}>
+                        <article className="grid grid-cols-[110px_125px_minmax(0,1fr)_30px] items-start gap-3 border-b border-sky-300/10 px-3 py-2 last:border-b-0" key={`${entry.fechaHora}-${index}`}>
                           <div className="flex items-center gap-2 text-xs font-bold text-slate-200"><CalendarDays size={13} className="text-sky-300" />{formatDate(decoded.date)}</div>
                           <div className="flex items-center gap-2 truncate text-xs font-semibold text-slate-300"><UserRound size={13} className="text-sky-300" /><span className="truncate">{decoded.user}</span></div>
                           <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{decoded.text}</p>
+                          <button
+                            aria-label={`Eliminar seguimiento del ${formatDate(decoded.date)}`}
+                            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={isFormReadOnly}
+                            onClick={() => void handleDeleteTracking(index)}
+                            title="Eliminar seguimiento"
+                            type="button"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </article>
                       );
                     })}
@@ -562,6 +711,7 @@ export function TaskEditor({
       </ModalShell>
       {dialogNode}
       {recoveryDialogNode}
+      {trackingDeleteDialogNode}
     </>
   );
 }
