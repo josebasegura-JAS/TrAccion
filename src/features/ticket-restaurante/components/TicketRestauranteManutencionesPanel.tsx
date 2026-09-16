@@ -71,6 +71,7 @@ export function ManutencionesPanel({
 }) {
   const calendars = useTicketRestauranteStore((state) => state.calendars);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [isEmptyImportNoticeOpen, setIsEmptyImportNoticeOpen] = useState(false);
   const manualPerson = ticketPeople.find(
     (person) =>
       normalizeTicketEmployeeSearch(person.empleado) ===
@@ -96,8 +97,22 @@ export function ManutencionesPanel({
   useEffect(() => {
     if (previewRows.length > 0 && importFileName) {
       setIsReviewOpen(true);
+      setIsEmptyImportNoticeOpen(false);
     }
   }, [importFileName, previewRows.length]);
+
+  useEffect(() => {
+    const isFinishedEmptyImport =
+      Boolean(importFileName) &&
+      previewRows.length === 0 &&
+      importMessage.trim().length > 0 &&
+      !importMessage.startsWith('Procesando') &&
+      !importMessage.startsWith('Analizando');
+
+    if (isFinishedEmptyImport) {
+      setIsEmptyImportNoticeOpen(true);
+    }
+  }, [importFileName, importMessage, previewRows.length]);
 
   useEffect(() => {
     const changed = reviewRows.some((row, index) => {
@@ -290,6 +305,51 @@ export function ManutencionesPanel({
           </CompactTableBody>
         </CompactTable>
       </div>
+
+      {isEmptyImportNoticeOpen && previewRows.length === 0 ? (
+        <ModalShell
+          labelledBy="ticket-manutencion-empty-import-title"
+          maxWidthClassName="max-w-lg"
+          onClose={() => setIsEmptyImportNoticeOpen(false)}
+        >
+          <ModalHeader>
+            <ModalTitle
+              id="ticket-manutencion-empty-import-title"
+              subtitle={importFileName ? `Fichero procesado: ${importFileName}` : undefined}
+            >
+              No hay manutenciones para importar
+            </ModalTitle>
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-3 text-sm text-metro-text">
+              <p>
+                El Excel se ha procesado correctamente, pero no se ha encontrado ninguna
+                manutención que cumpla las condiciones para descontar Ticket Restaurante.
+              </p>
+              <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+                <p className="text-xs font-bold text-metro-muted">Se comprueba que:</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-metro-muted">
+                  <li>La persona tenga derecho activo a Ticket Restaurante.</li>
+                  <li>La fecha del gasto sea un día que genere ticket según su calendario.</li>
+                  <li>El registro corresponda a una manutención reconocida en el Excel.</li>
+                </ul>
+              </div>
+              {importMessage ? (
+                <p className="text-xs font-semibold text-metro-muted">{importMessage}</p>
+              ) : null}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton
+              iconOnly={false}
+              onClick={() => setIsEmptyImportNoticeOpen(false)}
+              variant="secondary"
+            >
+              Entendido
+            </ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
 
       {isReviewOpen && reviewRows.length > 0 ? (
         <ModalShell
