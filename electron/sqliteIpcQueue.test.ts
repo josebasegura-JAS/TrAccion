@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enqueueSqliteIpc } from './sqliteIpcQueue.js';
+import { enqueueSqliteIpc, resolveSqliteIpcTimeoutMs } from './sqliteIpcQueue.js';
 
 describe('enqueueSqliteIpc', () => {
   beforeEach(() => {
@@ -29,21 +29,48 @@ describe('enqueueSqliteIpc', () => {
     expect(order).toEqual(['primera', 'segunda']);
   });
 
-  it('si una operación se queda colgada (p. ej. red), la cancela pasado el límite y deja avanzar a la siguiente', async () => {
-    // Nunca se resuelve: simula un stat() sobre una ruta de red que no responde.
+  it('mantiene un límite corto para las operaciones ordinarias', () => {
+    expect(resolveSqliteIpcTimeoutMs('database:save-local-storage-record')).toBe(12_000);
+  });
+
+  it('da 30 segundos a las lecturas de arranque sobre SMB', () => {
+    expect(resolveSqliteIpcTimeoutMs('database:get-persisted-records-token')).toBe(30_000);
+    expect(resolveSqliteIpcTimeoutMs('database:load-persisted-records')).toBe(30_000);
+  });
+
+  it('da margen adicional a las operaciones de recuperación del bloqueo', () => {
+    expect(resolveSqliteIpcTimeoutMs('database:force-release-lock')).toBe(25_000);
+    expect(resolveSqliteIpcTimeoutMs('database:get-current-lock')).toBe(25_000);
+  });
+
+  it('si una operación ordinaria se queda colgada, la cancela a los 12 s y deja avanzar la cola', async () => {
     const hungOperation = enqueueSqliteIpc('operacion-colgada', () => new Promise(() => {}));
     const hungRejection = hungOperation.catch((error: unknown) => error);
 
     const nextOperation = enqueueSqliteIpc('siguiente-operacion', async () => 'ok');
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(12_000);
 
     const error = await hungRejection;
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('operacion-colgada');
-
-    // La operación colgada no debe bloquear a la que va detrás en la cola.
     await expect(nextOperation).resolves.toBe('ok');
+  });
+
+  it('una lectura de arranque no se cancela prematuramente a los 10-12 s', async () => {
+    const startupOperation = enqueueSqliteIpc(
+      'database:get-persisted-records-token',
+      () => new Promise(() => {}),
+    );
+    const startupRejection = startupOperation.catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(resolveSqliteIpcTimeoutMs('database:get-persisted-records-token')).toBe(30_000);
+
+    await vi.advanceTimersByTimeAsync(18_000);
+    const error = await startupRejection;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('30000 ms');
   });
 
   it('si una operación falla, la cola sigue funcionando para la siguiente', async () => {

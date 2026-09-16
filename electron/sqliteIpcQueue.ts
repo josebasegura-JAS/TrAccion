@@ -1,49 +1,93 @@
 /**
  * Cola de serialización para las operaciones IPC que tocan SQLite: garantiza
  * que solo se ejecuta una a la vez (evita colisiones de escritura concurrente
- * dentro del propio proceso principal). Extraído de main.ts porque lo usan
- * prácticamente todos los módulos (tareas, teletrabajo, actas, ticket
- * restaurante, etc.), así que necesita vivir en un sitio común que todos
- * puedan importar.
+ * dentro del propio proceso principal).
  *
- * Cada operación tiene además un límite de tiempo: la carpeta compartida
- * vive en una unidad de red (SMB), y una operación que toque el disco ahí
- * (por ejemplo, un `stat()` del tamaño de la base de datos) puede quedarse
- * colgada indefinidamente si la red falla en ese instante. Como la cola es
- * global y la usa toda la app, una sola operación colgada sin límite
- * bloquearía para siempre cualquier otra pantalla que necesite SQLite, no
- * solo la que la haya lanzado. Al agotarse el tiempo, la operación en curso
- * se abandona (puede seguir resolviéndose sola en segundo plano; no toca la
- * conexión de better-sqlite3 ni ningún lock, así que abandonarla es seguro)
- * y la cola sigue adelante con la siguiente operación pendiente.
+ * La base vive habitualmente sobre SMB. No todas las operaciones deben tener
+ * el mismo límite: una escritura normal debe fallar relativamente rápido,
+ * mientras que el arranque y la recuperación de una red lenta necesitan más
+ * margen para no interpretar latencia Wi-Fi/SMB como una caída de SQLite.
  */
 type QueuedIpcOperation<T> = () => T | Promise<T>;
 
-const OPERATION_TIMEOUT_MS = 10_000;
+const DEFAULT_OPERATION_TIMEOUT_MS = 12_000;
+const STARTUP_OPERATION_TIMEOUT_MS = 30_000;
+const RECOVERY_OPERATION_TIMEOUT_MS = 25_000;
+const SLOW_NETWORK_WARNING_MS = 10_000;
+
+const STARTUP_OPERATIONS = new Set([
+  'database:load-persisted-records',
+  'database:get-persisted-records-token',
+  'database:get-persisted-record',
+  'database:migrate-local-storage',
+]);
+
+const RECOVERY_OPERATIONS = new Set([
+  'database:get-current-lock',
+  'database:force-release-lock',
+  'database:select-directory',
+  'database:reset-directory',
+]);
 
 let sqliteIpcQueue: Promise<unknown> = Promise.resolve();
 
+export function resolveSqliteIpcTimeoutMs(operationName: string): number {
+  if (STARTUP_OPERATIONS.has(operationName)) {
+    return STARTUP_OPERATION_TIMEOUT_MS;
+  }
+  if (RECOVERY_OPERATIONS.has(operationName)) {
+    return RECOVERY_OPERATION_TIMEOUT_MS;
+  }
+  return DEFAULT_OPERATION_TIMEOUT_MS;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms y se ha cancelado.`));
+    const timeoutTimer = setTimeout(() => {
+      reject(
+        new Error(
+          `[sqlite-ipc-queue] ${operationName} superó el límite de ${ms} ms y se ha cancelado.`,
+        ),
+      );
     }, ms);
+
+    const slowNetworkTimer =
+      ms > SLOW_NETWORK_WARNING_MS
+        ? setTimeout(() => {
+            console.warn(
+              `[sqlite-ipc-queue] ${operationName} lleva más de ${SLOW_NETWORK_WARNING_MS} ms. ` +
+                'La conexión SMB parece lenta; TrAccion seguirá esperando antes de darla por fallida.',
+            );
+          }, SLOW_NETWORK_WARNING_MS)
+        : null;
+
+    const clearTimers = () => {
+      clearTimeout(timeoutTimer);
+      if (slowNetworkTimer) {
+        clearTimeout(slowNetworkTimer);
+      }
+    };
 
     promise.then(
       (value) => {
-        clearTimeout(timer);
+        clearTimers();
         resolve(value);
       },
       (error) => {
-        clearTimeout(timer);
+        clearTimers();
         reject(error);
       },
     );
   });
 }
 
-export function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcOperation<T>): Promise<Awaited<T>> {
+export function enqueueSqliteIpc<T>(
+  operationName: string,
+  operation: QueuedIpcOperation<T>,
+): Promise<Awaited<T>> {
   const startedAt = Date.now();
+  const timeoutMs = resolveSqliteIpcTimeoutMs(operationName);
+
   const queuedOperation = sqliteIpcQueue.then(async (): Promise<Awaited<T>> => {
     const queuedMs = Date.now() - startedAt;
     if (queuedMs > 100) {
@@ -54,20 +98,21 @@ export function enqueueSqliteIpc<T>(operationName: string, operation: QueuedIpcO
     try {
       const result = await withTimeout(
         Promise.resolve().then(() => operation()),
-        OPERATION_TIMEOUT_MS,
+        timeoutMs,
         operationName,
       );
       return result as Awaited<T>;
     } catch (error) {
-      if (Date.now() - operationStartedAt >= OPERATION_TIMEOUT_MS) {
+      if (Date.now() - operationStartedAt >= timeoutMs) {
         console.error(
-          `[sqlite-ipc-queue] ${operationName} se ha cancelado por tardar demasiado (posible problema de red); la cola continúa con el resto de operaciones.`,
+          `[sqlite-ipc-queue] ${operationName} se ha cancelado tras ${timeoutMs} ms ` +
+            '(posible problema de red); la cola continúa con el resto de operaciones.',
         );
       }
       throw error;
     } finally {
       const operationMs = Date.now() - operationStartedAt;
-      if (operationMs > 250 && operationMs < OPERATION_TIMEOUT_MS) {
+      if (operationMs > 250 && operationMs < timeoutMs) {
         console.warn(`[sqlite-ipc-queue] ${operationName} tardó ${operationMs} ms.`);
       }
     }
