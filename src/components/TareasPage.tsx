@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Clock3, ListChecks, PlayCircle, Settings, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Clock3, FileText, ListChecks, PlayCircle, Settings, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -262,6 +262,7 @@ export function TareasPage({
   const [historicPages, setHistoricPages] = useState<Record<string, number>>({});
   const [historicPageSize, setHistoricPageSize] = useState<number>(DEFAULT_HISTORIC_PAGE_SIZE);
   const [isOriginsModalOpen, setIsOriginsModalOpen] = useState(false);
+  const [isGeneratingOpenTasksWord, setIsGeneratingOpenTasksWord] = useState(false);
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -376,6 +377,48 @@ export function TareasPage({
     setFilter('estado', '');
     setFilter('prioridad', '');
     setFilter('origen', '');
+  };
+
+  const handleGenerateOpenTasksWord = async () => {
+    const bridge = (window as unknown as {
+      traccionTaskWord?: {
+        refresh: () => Promise<{
+          ok: boolean;
+          skipped?: boolean;
+          path: string | null;
+          count: number;
+          message: string;
+        }>;
+      };
+    }).traccionTaskWord;
+
+    if (!bridge) {
+      await alert('La generación del Word solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+
+    setIsGeneratingOpenTasksWord(true);
+    try {
+      const result = await bridge.refresh();
+      if (result.skipped) {
+        await alert(
+          'No hay carpeta configurada para el Word de tareas abiertas. Configúrala en Ajustes.',
+        );
+        return;
+      }
+      if (!result.ok) {
+        await alert(result.message, { type: 'error' });
+        return;
+      }
+      await alert(result.message);
+    } catch (error) {
+      await alert(
+        `No se ha podido generar el Word: ${error instanceof Error ? error.message : String(error)}`,
+        { type: 'error' },
+      );
+    } finally {
+      setIsGeneratingOpenTasksWord(false);
+    }
   };
 
   const { preferences, setSort, setColumnWidth, setColumnOrder, resetColumnWidths } =
@@ -724,15 +767,27 @@ export function TareasPage({
             <SlidersHorizontal size={16} className="text-sky-300" /> Tareas activas
             <CountBadge>{filteredTasks.length} registros</CountBadge>
           </div>
-          <ExportPrintButtons
-            payload={{
-              title: 'Tareas activas',
-              filename: 'tareas-activas',
-              columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
-              rows: sortedTasks,
-              filterLabel: activeTasksFilterLabel,
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <ActionButton
+              icon={FileText}
+              iconOnly={false}
+              loading={isGeneratingOpenTasksWord}
+              onClick={() => void handleGenerateOpenTasksWord()}
+              size="sm"
+              variant="secondary"
+            >
+              {isGeneratingOpenTasksWord ? 'Generando…' : 'Word'}
+            </ActionButton>
+            <ExportPrintButtons
+              payload={{
+                title: 'Tareas activas',
+                filename: 'tareas-activas',
+                columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
+                rows: sortedTasks,
+                filterLabel: activeTasksFilterLabel,
+              }}
+            />
+          </div>
         </div>
         {activeFilterChips.length > 0 && (
           <div className="border-b border-metro-border bg-metro-panel px-3 py-2">

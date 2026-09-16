@@ -1,4 +1,4 @@
-import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getOpenTasksWordDirectory } from './taskOpenWordPreferences.js';
 
@@ -232,7 +232,8 @@ export async function exportOpenTasksWord(
     await mkdir(directoryPath, { recursive: true });
     const html = buildWordHtml(tasks);
     await writeFile(tempPath, Buffer.from(`\uFEFF${html}`, 'utf8'));
-    await rename(tempPath, finalPath);
+    await copyFile(tempPath, finalPath);
+    await unlink(tempPath).catch(() => undefined);
     return {
       ok: true,
       path: finalPath,

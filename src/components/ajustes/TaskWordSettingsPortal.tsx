@@ -19,7 +19,7 @@ function getBridge(): TaskWordBridge | null {
   return (window as unknown as { traccionTaskWord?: TaskWordBridge }).traccionTaskWord ?? null;
 }
 
-function Card() {
+export function TaskWordSettingsCard() {
   const [directoryPath, setDirectoryPath] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
@@ -144,20 +144,50 @@ function Card() {
 }
 
 export function TaskWordSettingsPortal() {
-  const [target, setTarget] = useState<HTMLElement | null>(() =>
-    document.getElementById('base-de-datos'),
-  );
+  const [target, setTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    const findTarget = () => {
-      setTarget(document.getElementById('base-de-datos'));
+    let mountNode: HTMLDivElement | null = null;
+
+    const ensureTarget = () => {
+      const databaseSection = document.getElementById('base-de-datos');
+      const databaseDetails = databaseSection?.closest('details');
+      const settingsContainer = databaseDetails?.parentElement;
+
+      if (!databaseDetails || !settingsContainer) {
+        if (mountNode?.isConnected) {
+          mountNode.remove();
+        }
+        mountNode = null;
+        setTarget(null);
+        return;
+      }
+
+      if (!mountNode || !mountNode.isConnected) {
+        const existing = document.getElementById('task-word-settings-slot');
+        if (existing instanceof HTMLDivElement) {
+          mountNode = existing;
+        } else {
+          mountNode = document.createElement('div');
+          mountNode.id = 'task-word-settings-slot';
+          settingsContainer.insertBefore(mountNode, databaseDetails);
+        }
+      }
+
+      setTarget(mountNode);
     };
 
-    findTarget();
-    const observer = new MutationObserver(findTarget);
+    ensureTarget();
+    const observer = new MutationObserver(ensureTarget);
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+
+    return () => {
+      observer.disconnect();
+      if (mountNode?.isConnected) {
+        mountNode.remove();
+      }
+    };
   }, []);
 
-  return target ? createPortal(<Card />, target) : null;
+  return target ? createPortal(<TaskWordSettingsCard />, target) : null;
 }
