@@ -96,6 +96,12 @@ function formatFsError(error: unknown): string {
   return code ? `${code}: ${message}` : message;
 }
 
+function createErrorWithCause(message: string, cause: unknown): Error {
+  const error = new Error(message) as Error & { cause?: unknown };
+  error.cause = cause;
+  return error;
+}
+
 export function createDatabaseLockManager(
   dependencies: DatabaseLockManagerDependencies,
 ): DatabaseLockManager {
@@ -151,10 +157,10 @@ export function createDatabaseLockManager(
     try {
       parsed = JSON.parse(raw);
     } catch (error) {
-      throw new Error(
+      throw createErrorWithCause(
         `El bloqueo SQLite existe pero ${sourcePath} contiene JSON incompleto o ilegible. ` +
           'Se reintentará sin asumir que el lock está libre.',
-        { cause: error },
+        error,
       );
     }
 
@@ -187,9 +193,9 @@ export function createDatabaseLockManager(
       return parseLockPayload(raw, infoPath);
     } catch (ownerError) {
       if (!isMissingOwnerMetadataError(ownerError)) {
-        throw new Error(
+        throw createErrorWithCause(
           `No se ha podido leer de forma fiable el bloqueo SQLite en ${infoPath}: ${formatFsError(ownerError)}`,
-          { cause: ownerError },
+          ownerError,
         );
       }
     }
@@ -206,9 +212,9 @@ export function createDatabaseLockManager(
       // Si lockPath es un directorio pero owner.json aún no existe (otra
       // instancia está justo creándolo), no es un lock libre. Se trata como
       // lectura transitoria y acquireLock reintentará.
-      throw new Error(
+      throw createErrorWithCause(
         `El directorio de bloqueo SQLite existe, pero sus metadatos no se han podido leer todavía: ${formatFsError(legacyError)}`,
-        { cause: legacyError },
+        legacyError,
       );
     }
   }
@@ -375,10 +381,10 @@ export function createDatabaseLockManager(
     }
 
     if (lastReadError) {
-      throw new Error(
+      throw createErrorWithCause(
         'No se ha podido comprobar de forma fiable el bloqueo SQLite en la carpeta compartida. ' +
           `Posible problema temporal de red/SMB: ${lastReadError instanceof Error ? lastReadError.message : String(lastReadError)}`,
-        { cause: lastReadError },
+        lastReadError,
       );
     }
 
