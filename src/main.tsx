@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
 import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLockQuickActionsPortal';
+import { SafeSettingsLoadingIndicator } from './components/ajustes/SafeSettingsLoadingIndicator';
 import { TaskWordSettingsPortal } from './components/ajustes/TaskWordSettingsPortal';
 import {
   flushPendingSqliteWrites,
@@ -71,6 +72,7 @@ async function renderApp(): Promise<void> {
         <App />
         <TaskWordSettingsPortal />
         <DatabaseLockQuickActionsPortal />
+        <SafeSettingsLoadingIndicator />
       </>
     </React.StrictMode>,
   );
