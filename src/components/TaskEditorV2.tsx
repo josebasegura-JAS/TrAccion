@@ -361,7 +361,8 @@ export function TaskEditor({
       setMailStatus(parsed.message || 'No se ha podido leer el mensaje.');
       return;
     }
-    setDraft((current) => ({ ...current, mail: normalizeMailBodyAsPlainText(parsed.data.body) }));
+    const parsedMailData = parsed.data;
+    setDraft((current) => ({ ...current, mail: normalizeMailBodyAsPlainText(parsedMailData.body) }));
     setMailStatus('Texto del mensaje copiado al campo Email.');
   };
 
