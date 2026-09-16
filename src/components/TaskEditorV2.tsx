@@ -317,8 +317,17 @@ export function TaskEditor({
       setSaveStatusIsError(true);
       return;
     }
+
+    const savedTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
+    if (savedTask) {
+      setDraft(toDraft(savedTask));
+      setLoadedUpdatedAt(savedTask.updatedAt);
+    }
+    setTrackingText('');
+    setTrackingDate(todayIsoDate());
     clearRecoveryDraft();
-    onDone();
+    setSaveStatus('Guardado correctamente. Puedes seguir editando la tarea.');
+    setSaveStatusIsError(false);
   };
 
   useEditorShortcuts({
@@ -425,13 +434,13 @@ export function TaskEditor({
                     <Input
                       type="date"
                       value={creationDate}
-                      disabled={isCreate}
                       onChange={(e) => {
-                        const original = task?.createdAt ?? '';
+                        const nextDate = e.target.value;
+                        const original = draft.createdAt ?? task?.createdAt ?? '';
                         const suffix = original.length > 10 ? original.slice(10) : 'T00:00:00.000Z';
                         setDraft((current) => ({
                           ...current,
-                          createdAt: `${e.target.value}${suffix}`,
+                          createdAt: nextDate ? `${nextDate}${suffix}` : current.createdAt,
                         }));
                       }}
                     />
