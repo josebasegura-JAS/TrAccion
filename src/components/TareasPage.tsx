@@ -1,4 +1,14 @@
-import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Clock3, FileSpreadsheet, ListChecks, PlayCircle, Settings, SlidersHorizontal } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  FileSpreadsheet,
+  ListChecks,
+  PlayCircle,
+  Settings,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
@@ -14,16 +24,10 @@ import {
 import {
   isTaskClosed,
   TASK_PRIORITIES,
-  TASK_STATES,
-  TASK_TYPES,
   type Task,
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
 import { buildFilterLabel } from '../shared/export/filterLabel';
-import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
-import { FilterSelect } from './ui/FilterSelect';
-import { SearchField } from './ui/SearchField';
-import { Toolbar } from './ui/Toolbar';
 import type { ExportColumn } from '../shared/export/types';
 import { reorderExportColumns } from '../shared/export/reorderExportColumns';
 import { ExportPrintButtons } from '../shared/print/ExportPrintButtons';
@@ -34,6 +38,7 @@ import {
   type TableViewPreferences,
   useTableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
+import { SearchField } from './ui/SearchField';
 import { TaskEditor } from './TaskEditor';
 import { useAppDialog } from '../hooks/useAppDialog';
 import { TaskOriginsModal } from '../features/tareas/components/TaskOriginsModal';
@@ -82,7 +87,7 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'Dar de alta cada asunto indicando tipo, fase, prioridad y responsable.',
       'Añadir seguimiento, documentos y cambios de estado a medida que avance el caso.',
-      'Filtrar y ordenar la tabla para revisar primero lo urgente o lo próximo a vencer.',
+      'Ordenar la tabla por fecha, prioridad, fase o estado para revisar primero lo importante.',
       'Cerrar la tarea cuando quede resuelta para que deje de aparecer como pendiente en los módulos que consumen esos puntos.',
     ],
   },
@@ -99,10 +104,14 @@ const TASK_STATE_LABELS: Record<Task['estado'], string> = {
 };
 
 const TASK_STATE_PILL: Record<Task['estado'], string> = {
-  pendiente: 'border-amber-400/40 bg-amber-400/10 text-amber-200 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.04)]',
-  'en curso': 'border-sky-400/40 bg-sky-400/10 text-sky-200 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.04)]',
-  bloqueada: 'border-rose-400/40 bg-rose-400/10 text-rose-200 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.04)]',
-  resuelta: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.04)]',
+  pendiente:
+    'border-amber-400/40 bg-amber-400/10 text-amber-200 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.04)]',
+  'en curso':
+    'border-sky-400/40 bg-sky-400/10 text-sky-200 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.04)]',
+  bloqueada:
+    'border-rose-400/40 bg-rose-400/10 text-rose-200 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.04)]',
+  resuelta:
+    'border-emerald-400/40 bg-emerald-400/10 text-emerald-200 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.04)]',
   cerrada: 'border-slate-400/30 bg-slate-400/10 text-slate-300',
 };
 
@@ -123,12 +132,12 @@ const TASK_PRIORITY_LABELS: Record<Task['prioridad'], string> = {
 
 const TASK_PRIORITY_DOT: Record<Task['prioridad'], string> = {
   critica: 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.35)]',
-  alta: 'bg-red-400',
+  alta: 'bg-orange-400',
   media: 'bg-amber-400',
   baja: 'bg-emerald-400',
 };
 
-function TaskSummaryCard({
+function CompactTaskSummaryCard({
   icon: Icon,
   value,
   label,
@@ -143,22 +152,22 @@ function TaskSummaryCard({
 }) {
   const toneMap = {
     blue: {
-      card: 'border-sky-400/20 bg-[linear-gradient(135deg,rgba(30,64,175,0.16),rgba(14,34,57,0.9))]',
+      card: 'border-sky-400/20 bg-[linear-gradient(135deg,rgba(30,64,175,0.14),rgba(14,34,57,0.9))]',
       icon: 'border-sky-400/15 bg-sky-400/10 text-sky-300',
       label: 'text-sky-300',
     },
     amber: {
-      card: 'border-amber-400/20 bg-[linear-gradient(135deg,rgba(217,119,6,0.10),rgba(14,34,57,0.9))]',
+      card: 'border-amber-400/20 bg-[linear-gradient(135deg,rgba(217,119,6,0.09),rgba(14,34,57,0.9))]',
       icon: 'border-amber-400/15 bg-amber-400/10 text-amber-300',
       label: 'text-amber-300',
     },
     cyan: {
-      card: 'border-cyan-400/20 bg-[linear-gradient(135deg,rgba(6,182,212,0.10),rgba(14,34,57,0.9))]',
+      card: 'border-cyan-400/20 bg-[linear-gradient(135deg,rgba(6,182,212,0.09),rgba(14,34,57,0.9))]',
       icon: 'border-cyan-400/15 bg-cyan-400/10 text-cyan-300',
       label: 'text-cyan-300',
     },
     rose: {
-      card: 'border-rose-400/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.11),rgba(14,34,57,0.9))]',
+      card: 'border-rose-400/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.10),rgba(14,34,57,0.9))]',
       icon: 'border-rose-400/15 bg-rose-400/10 text-rose-300',
       label: 'text-rose-300',
     },
@@ -170,32 +179,42 @@ function TaskSummaryCard({
   }[tone];
 
   return (
-    <div className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.18)] ${toneMap.card}`}>
-      <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}>
-        <Icon size={20} />
+    <div
+      className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.16)] ${toneMap.card}`}
+    >
+      <span
+        className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}
+      >
+        <Icon size={18} />
       </span>
-      <span className="min-w-0">
-        <span className="block text-xl font-black leading-none text-metro-text">{value}</span>
-        <span className={`mt-1 block truncate text-sm font-extrabold ${toneMap.label}`}>{label}</span>
-        <span className="mt-0.5 block truncate text-[11px] font-medium text-metro-muted">{detail}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[1.65rem] font-black leading-none text-metro-text">
+          {value}
+        </span>
+        <span className={`mt-0.5 block truncate text-sm font-extrabold ${toneMap.label}`}>
+          {label}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] font-medium text-metro-muted">
+          {detail}
+        </span>
       </span>
     </div>
   );
 }
 
-const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v2';
+const TAREAS_TABLE_STORAGE_KEY = 'traccion.tableView.tareas.active.v3';
 
 const defaultTareasTablePreferences: TableViewPreferences<ActiveTaskTableColumnId> = {
   sort: null,
   columnWidths: {
     createdAt: 115,
-    titulo: 230,
-    tipo: 100,
+    titulo: 265,
+    tipo: 96,
     fase: 130,
-    estado: 120,
-    prioridad: 105,
-    fechaLimite: 120,
-    sindicato: 145,
+    estado: 122,
+    prioridad: 112,
+    fechaLimite: 122,
+    sindicato: 135,
     actions: 88,
   },
   columnOrder: null,
@@ -248,9 +267,8 @@ export function TareasPage({
     tasks,
   } = useTaskStore();
   const { alert, dialogNode } = useAppDialog();
-  const taskPhases = useConfiguracionStore((state) => state.taskPhases);
-  const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
+  const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [historicSortState, setHistoricSortState] = useState<HistoricSortState>({
@@ -268,7 +286,12 @@ export function TareasPage({
   useEffect(() => {
     load();
     loadConfiguracion();
-  }, [load, loadConfiguracion]);
+    setFilter('tipo', '');
+    setFilter('fase', '');
+    setFilter('estado', '');
+    setFilter('prioridad', '');
+    setFilter('origen', '');
+  }, [load, loadConfiguracion, setFilter]);
 
   useEffect(() => {
     if (isHistoricOpen) {
@@ -276,23 +299,16 @@ export function TareasPage({
     }
   }, [isHistoricOpen, loadHistoricalTasks]);
 
-  const phaseFilterOptions = useMemo(
-    () => taskPhases.filter((phase) => phase.active).map((phase) => phase.nombre),
-    [taskPhases],
+  const activeTasks = useMemo(
+    () => visibleTasks.filter((task) => !isTaskClosed(task)),
+    [visibleTasks],
   );
-  const originFilterOptions = useMemo(
-    () =>
-      taskOrigins
-        .filter((origin) => origin.active && !origin.deletedAt)
-        .map((origin) => origin.nombre)
-        .sort((first, second) => first.localeCompare(second, 'es', { sensitivity: 'base' })),
-    [taskOrigins],
-  );
-  const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
-  const activeTasks = useMemo(() => visibleTasks.filter((task) => !isTaskClosed(task)), [visibleTasks]);
+
   const taskSummary = useMemo(() => {
     const now = new Date();
-    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate(),
+    ).padStart(2, '0')}`;
     const total = activeTasks.length;
     const percentage = (count: number) => (total > 0 ? Math.round((count / total) * 100) : 0);
     const pending = activeTasks.filter((task) => task.estado === 'pendiente').length;
@@ -312,7 +328,20 @@ export function TareasPage({
       dueTodayPercentage: percentage(dueToday),
     };
   }, [activeTasks]);
-  const filteredTasks = useMemo(() => filterTasks(tasks, filters), [filters, tasks]);
+
+  const filteredTasks = useMemo(
+    () =>
+      filterTasks(tasks, {
+        ...filters,
+        tipo: '',
+        fase: '',
+        estado: '',
+        prioridad: '',
+        origen: '',
+      }),
+    [filters, tasks],
+  );
+
   const historicTasks = useMemo(
     () => visibleTasks.filter((task) => isTaskClosed(task)),
     [visibleTasks],
@@ -321,63 +350,8 @@ export function TareasPage({
     () => (isHistoricOpen && historicalTasksLoaded ? groupHistoricTasks(historicTasks) : []),
     [historicTasks, historicalTasksLoaded, isHistoricOpen],
   );
-  const activeTasksFilterLabel = buildFilterLabel([
-    ['Búsqueda', filters.search],
-    ['Tipo', filters.tipo],
-    ['Fase', filters.fase],
-    ['Estado', filters.estado],
-    ['Prioridad', filters.prioridad],
-    ['Origen', filters.origen],
-  ]);
-  const activeFilterChips: ActiveFilterChip[] = [
-    filters.search.trim()
-      ? {
-          key: 'search',
-          label: 'Búsqueda',
-          value: filters.search.trim(),
-          onClear: () => setFilter('search', ''),
-        }
-      : null,
-    filters.tipo
-      ? { key: 'tipo', label: 'Tipo', value: filters.tipo, onClear: () => setFilter('tipo', '') }
-      : null,
-    filters.fase
-      ? { key: 'fase', label: 'Fase', value: filters.fase, onClear: () => setFilter('fase', '') }
-      : null,
-    filters.estado
-      ? {
-          key: 'estado',
-          label: 'Estado',
-          value: filters.estado,
-          onClear: () => setFilter('estado', ''),
-        }
-      : null,
-    filters.prioridad
-      ? {
-          key: 'prioridad',
-          label: 'Prioridad',
-          value: filters.prioridad,
-          onClear: () => setFilter('prioridad', ''),
-        }
-      : null,
-    filters.origen
-      ? {
-          key: 'origen',
-          label: 'Origen',
-          value: filters.origen,
-          onClear: () => setFilter('origen', ''),
-        }
-      : null,
-  ].filter((filter): filter is ActiveFilterChip => filter !== null);
 
-  const clearActiveFilters = () => {
-    setFilter('search', '');
-    setFilter('tipo', '');
-    setFilter('fase', '');
-    setFilter('estado', '');
-    setFilter('prioridad', '');
-    setFilter('origen', '');
-  };
+  const activeTasksFilterLabel = buildFilterLabel([['Búsqueda', filters.search]]);
 
   const handleGenerateOpenTasksExcel = async () => {
     const bridge = (window as unknown as {
@@ -393,7 +367,9 @@ export function TareasPage({
     }).traccionTaskWord;
 
     if (!bridge) {
-      await alert('La generación del Excel compartido solo está disponible en la aplicación de escritorio.');
+      await alert(
+        'La generación del Excel compartido solo está disponible en la aplicación de escritorio.',
+      );
       return;
     }
 
@@ -413,7 +389,9 @@ export function TareasPage({
       await alert(result.message);
     } catch (error) {
       await alert(
-        `No se ha podido generar el Excel compartido: ${error instanceof Error ? error.message : String(error)}`,
+        `No se ha podido generar el Excel compartido: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
         { type: 'error' },
       );
     } finally {
@@ -451,9 +429,9 @@ export function TareasPage({
         header: 'Título',
         accessor: (task) => task.titulo,
         render: (task) => task.titulo,
-        width: 230,
-        minWidth: 170,
-        maxWidth: 460,
+        width: 265,
+        minWidth: 180,
+        maxWidth: 500,
         sortable: true,
         className: 'font-semibold text-metro-text',
       },
@@ -462,7 +440,7 @@ export function TareasPage({
         header: 'Tipo',
         accessor: (task) => task.tipo,
         render: (task) => task.tipo,
-        width: 100,
+        width: 96,
         minWidth: 82,
         maxWidth: 170,
         sortable: true,
@@ -484,13 +462,15 @@ export function TareasPage({
         header: 'Estado',
         accessor: (task) => task.estado,
         render: (task) => (
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${TASK_STATE_PILL[task.estado]}`}>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${TASK_STATE_PILL[task.estado]}`}
+          >
             <span className={`h-1.5 w-1.5 rounded-full ${TASK_STATE_DOT[task.estado]}`} />
             {TASK_STATE_LABELS[task.estado]}
           </span>
         ),
-        width: 120,
-        minWidth: 95,
+        width: 122,
+        minWidth: 98,
         maxWidth: 180,
         sortable: true,
         className: 'text-metro-muted',
@@ -505,8 +485,8 @@ export function TareasPage({
             {TASK_PRIORITY_LABELS[task.prioridad]}
           </span>
         ),
-        width: 105,
-        minWidth: 90,
+        width: 112,
+        minWidth: 94,
         maxWidth: 165,
         sortable: true,
         className: 'text-metro-muted',
@@ -527,7 +507,7 @@ export function TareasPage({
             </span>
           );
         },
-        width: 120,
+        width: 122,
         minWidth: 105,
         maxWidth: 180,
         sortable: true,
@@ -538,7 +518,7 @@ export function TareasPage({
         header: 'Origen',
         accessor: (task) => task.sindicato,
         render: (task) => task.sindicato || '—',
-        width: 145,
+        width: 135,
         minWidth: 95,
         maxWidth: 220,
         sortable: true,
@@ -579,7 +559,9 @@ export function TareasPage({
   );
 
   const editorTask =
-    editorMode === 'edit' ? (visibleTasks.find((task) => task.id === editingTaskId) ?? null) : null;
+    editorMode === 'edit'
+      ? (visibleTasks.find((task) => task.id === editingTaskId) ?? null)
+      : null;
 
   const openEditor = (task: Task) => {
     selectTask(task.id);
@@ -639,120 +621,44 @@ export function TareasPage({
   };
 
   return (
-    <section
-      className="space-y-3"
-      id="tareas"
-    >
+    <section className="space-y-3" id="tareas">
       <PageHeader
         helpSections={TAREAS_HELP_SECTIONS}
-        helpSubtitle="Guía rápida del centro operativo, prioridades, fases, orígenes e histórico."
+        helpSubtitle="Guía rápida del centro operativo, prioridades, seguimiento e histórico."
         status={<InlineSaveFeedback />}
         title="Tareas"
       />
 
-      <Toolbar
-        className="border-slate-400/20 bg-[linear-gradient(180deg,rgba(31,48,69,0.78),rgba(20,35,54,0.74))] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.18)]"
-        filters={
-          <>
-            <SearchField
-              onChange={(event) => setFilter('search', event.target.value)}
-              onClear={() => setFilter('search', '')}
-              placeholder="Buscar tareas, responsables, palabras clave..."
-              value={filters.search}
-              wrapperClassName="min-w-[250px] flex-[1.4]"
-            />
-            <FilterSelect
-              allLabel="Todos los tipos"
-              aria-label="Filtrar tareas por tipo"
-              onChange={(event) => setFilter('tipo', event.target.value as typeof filters.tipo)}
-              options={TASK_TYPES}
-              value={filters.tipo}
-              wrapperClassName="w-[118px]"
-            />
-            <FilterSelect
-              allLabel="Todas las fases"
-              aria-label="Filtrar tareas por fase"
-              onChange={(event) => setFilter('fase', event.target.value)}
-              options={phaseFilterOptions}
-              value={filters.fase}
-              wrapperClassName="w-[128px]"
-            />
-            <FilterSelect
-              allLabel="Todos los estados"
-              aria-label="Filtrar tareas por estado"
-              onChange={(event) => setFilter('estado', event.target.value as typeof filters.estado)}
-              options={TASK_STATES.filter((estado) => estado !== 'cerrada')}
-              value={filters.estado}
-              wrapperClassName="w-[132px]"
-            />
-            <FilterSelect
-              allLabel="Todas las prioridades"
-              aria-label="Filtrar tareas por prioridad"
-              onChange={(event) =>
-                setFilter('prioridad', event.target.value as typeof filters.prioridad)
-              }
-              options={TASK_PRIORITIES}
-              value={filters.prioridad}
-              wrapperClassName="w-[148px]"
-            />
-            <FilterSelect
-              allLabel="Todos los orígenes"
-              aria-label="Filtrar tareas por origen"
-              onChange={(event) => setFilter('origen', event.target.value)}
-              options={originFilterOptions}
-              value={filters.origen}
-              wrapperClassName="w-[138px]"
-            />
-          </>
-        }
-        actions={
-          <>
-            <ActionButton
-              icon={Settings}
-              iconOnly={false}
-              onClick={() => setIsOriginsModalOpen(true)}
-              size="sm"
-              variant="secondary"
-            >
-              Orígenes
-            </ActionButton>
-            <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
-              Nueva tarea
-            </ActionButton>
-          </>
-        }
-      />
-
-      <div className="grid grid-cols-5 gap-2.5">
-        <TaskSummaryCard
+      <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-5">
+        <CompactTaskSummaryCard
           detail="Total de tareas activas"
           icon={ListChecks}
           label="Activas"
           tone="blue"
           value={taskSummary.total}
         />
-        <TaskSummaryCard
+        <CompactTaskSummaryCard
           detail={`${taskSummary.pendingPercentage}% del total`}
           icon={Clock3}
           label="Pendientes"
           tone="amber"
           value={taskSummary.pending}
         />
-        <TaskSummaryCard
+        <CompactTaskSummaryCard
           detail={`${taskSummary.inProgressPercentage}% del total`}
           icon={PlayCircle}
           label="En curso"
           tone="cyan"
           value={taskSummary.inProgress}
         />
-        <TaskSummaryCard
+        <CompactTaskSummaryCard
           detail={`${taskSummary.criticalPercentage}% del total`}
           icon={AlertTriangle}
           label="Críticas"
           tone="rose"
           value={taskSummary.critical}
         />
-        <TaskSummaryCard
+        <CompactTaskSummaryCard
           detail={`${taskSummary.dueTodayPercentage}% del total`}
           icon={CalendarClock}
           label="Vencen hoy"
@@ -762,47 +668,72 @@ export function TareasPage({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
-        <div className="flex items-center justify-between border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-            <SlidersHorizontal size={16} className="text-sky-300" /> Tareas activas
-            <CountBadge>{filteredTasks.length} registros</CountBadge>
+        <div className="space-y-3 border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
+              <ListChecks size={16} className="text-sky-300" />
+              Tareas activas
+              <CountBadge>{filteredTasks.length} registros</CountBadge>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
+                Nueva tarea
+              </ActionButton>
+              <ActionButton
+                icon={Settings}
+                iconOnly={false}
+                onClick={() => setIsOriginsModalOpen(true)}
+                size="sm"
+                variant="secondary"
+              >
+                Orígenes
+              </ActionButton>
+              <ActionButton
+                icon={FileSpreadsheet}
+                iconOnly={false}
+                loading={isGeneratingOpenTasksExcel}
+                onClick={() => void handleGenerateOpenTasksExcel()}
+                size="sm"
+                variant="secondary"
+              >
+                {isGeneratingOpenTasksExcel ? 'Generando…' : 'Excel compartido'}
+              </ActionButton>
+              <ExportPrintButtons
+                payload={{
+                  title: 'Tareas activas',
+                  filename: 'tareas-activas',
+                  columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
+                  rows: sortedTasks,
+                  filterLabel: activeTasksFilterLabel,
+                }}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ActionButton
-              icon={FileSpreadsheet}
-              iconOnly={false}
-              loading={isGeneratingOpenTasksExcel}
-              onClick={() => void handleGenerateOpenTasksExcel()}
-              size="sm"
-              variant="secondary"
-            >
-              {isGeneratingOpenTasksExcel ? 'Generando…' : 'Excel compartido'}
-            </ActionButton>
-            <ExportPrintButtons
-              payload={{
-                title: 'Tareas activas',
-                filename: 'tareas-activas',
-                columns: reorderExportColumns(taskExportColumns, preferences.columnOrder),
-                rows: sortedTasks,
-                filterLabel: activeTasksFilterLabel,
-              }}
+
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <SearchField
+              onChange={(event) => setFilter('search', event.target.value)}
+              onClear={() => setFilter('search', '')}
+              placeholder="Buscar tareas, texto de seguimiento o palabras clave..."
+              value={filters.search}
+              wrapperClassName="min-w-[280px] xl:max-w-[440px]"
             />
+            <p className="text-xs leading-relaxed text-metro-muted">
+              Vista optimizada para ordenar por columnas. Los filtros laterales se eliminan para
+              ganar espacio útil.
+            </p>
           </div>
         </div>
-        {activeFilterChips.length > 0 && (
-          <div className="border-b border-metro-border bg-metro-panel px-3 py-2">
-            <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
-          </div>
-        )}
+
         <DataTable
           ariaLabel="Tareas activas"
           columnOrder={preferences.columnOrder}
           columnWidths={preferences.columnWidths}
           onResetColumnWidths={resetColumnWidths}
           columns={activeTaskColumns}
-          emptyMessage="No hay tareas activas con los filtros aplicados."
+          emptyMessage="No hay tareas activas con la búsqueda aplicada."
           getRowId={(task) => task.id}
-          maxHeightClassName="max-h-[460px]"
+          maxHeightClassName="max-h-[520px]"
           onColumnOrderChange={setColumnOrder}
           onColumnWidthChange={setColumnWidth}
           onRowClick={openEditor}
