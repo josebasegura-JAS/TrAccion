@@ -4,6 +4,7 @@ import { AppBootScreen } from './components/AppBootScreen';
 import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLockQuickActionsPortal';
 import { SafeSettingsLoadingIndicator } from './components/ajustes/SafeSettingsLoadingIndicator';
 import { TaskWordSettingsPortal } from './components/ajustes/TaskWordSettingsPortal';
+import { TaskCriterionBridge } from './features/criterios-rrll/components/TaskCriterionBridge';
 import {
   flushPendingSqliteWrites,
   getPendingSqliteWriteCount,
@@ -73,6 +74,7 @@ async function renderApp(): Promise<void> {
         <TaskWordSettingsPortal />
         <DatabaseLockQuickActionsPortal />
         <SafeSettingsLoadingIndicator />
+        <TaskCriterionBridge />
       </>
     </React.StrictMode>,
   );

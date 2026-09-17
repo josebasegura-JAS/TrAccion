@@ -7,6 +7,7 @@ import { useModuleHelpRegistry } from '../services/moduleHelpRegistry';
 import { useDatabaseStatus } from '../services/databaseStatus';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
+import { subscribeToAppNavigation } from '../services/appNavigationBus';
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: {
@@ -144,6 +145,8 @@ export function Header({
   const syncStatus = useExternalDataSyncStatus();
 
   const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus);
+
+  useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);
 
   useEffect(() => {
     let isMounted = true;

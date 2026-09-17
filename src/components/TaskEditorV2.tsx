@@ -5,6 +5,7 @@ import {
   FileText,
   Info,
   LockKeyhole,
+  BookOpen,
   Mail,
   MessageSquare,
   Paperclip,
@@ -43,6 +44,13 @@ import { useAppDialog } from '../hooks/useAppDialog';
 import { readStorageItem } from '../services/persistence';
 import { useSharedRecordLock } from '../services/useSharedRecordLock';
 import { enqueueAuditEvent } from '../shared/audit/auditTrail';
+import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
+import {
+  getCriterionIdForTask,
+  unlinkTaskCriterion,
+} from '../features/criterios-rrll/domain/taskCriterionLinks';
+import { requestTaskCriterionEditor } from '../features/criterios-rrll/domain/taskCriterionEditorBus';
+import { navigateInApp } from '../services/appNavigationBus';
 
 const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
 const TRACKING_META_SUFFIX = ']]';
@@ -254,6 +262,9 @@ export function TaskEditor({
   const createTask = useTaskStore((state) => state.createWithConcurrencyCheck);
   const updateTask = useTaskStore((state) => state.updateWithConcurrencyCheck);
   const removeTask = useTaskStore((state) => state.removeWithConcurrencyCheck);
+  const loadCriteriosRrll = useCriteriosRrllStore((state) => state.load);
+  const [linkedCriterionId, setLinkedCriterionId] = useState<string | null>(null);
+  const [criterionLinkReady, setCriterionLinkReady] = useState(false);
   const { confirm: confirmTrackingDelete, dialogNode: trackingDeleteDialogNode } = useAppDialog();
 
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
@@ -293,6 +304,48 @@ export function TaskEditor({
   useEffect(() => {
     loadConfiguracion();
   }, [loadConfiguracion]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (isCreate || !task?.id) {
+      setLinkedCriterionId(null);
+      setCriterionLinkReady(true);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setCriterionLinkReady(false);
+    void loadCriteriosRrll()
+      .then(() => {
+        if (!mounted) return;
+        const linkedId = getCriterionIdForTask(task.id);
+        if (!linkedId) {
+          setLinkedCriterionId(null);
+          return;
+        }
+
+        const exists = useCriteriosRrllStore
+          .getState()
+          .criterios.some((criterio) => criterio.id === linkedId && !criterio.deletedAt);
+
+        if (!exists) {
+          unlinkTaskCriterion(task.id);
+          setLinkedCriterionId(null);
+          return;
+        }
+
+        setLinkedCriterionId(linkedId);
+      })
+      .finally(() => {
+        if (mounted) setCriterionLinkReady(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [isCreate, loadCriteriosRrll, task?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -694,6 +747,79 @@ export function TaskEditor({
     );
   };
 
+  const handleOpenCriterionRrll = async () => {
+    if (!task || isCreate) return;
+
+    const hasUnsavedTaskChanges =
+      JSON.stringify({ draft, trackingText, trackingDate }) !== JSON.stringify(recoveryBaseline);
+
+    if (hasUnsavedTaskChanges) {
+      setSaveStatus(
+        'Guarda o descarta primero los cambios de la tarea antes de crear o abrir su criterio RRLL.',
+      );
+      setSaveStatusIsError(true);
+      return;
+    }
+
+    setSaveStatus('');
+    setSaveStatusIsError(false);
+    setCriterionLinkReady(false);
+
+    try {
+      await loadCriteriosRrll();
+
+      const storedLinkedId = getCriterionIdForTask(task.id);
+      const currentCriterios = useCriteriosRrllStore.getState().criterios;
+      const linkedCriterio = storedLinkedId
+        ? currentCriterios.find(
+            (criterio) => criterio.id === storedLinkedId && !criterio.deletedAt,
+          )
+        : null;
+
+      if (storedLinkedId && !linkedCriterio) {
+        unlinkTaskCriterion(task.id);
+      }
+
+      const originReference = draft.sindicato.trim() || draft.origen.trim();
+      const request = linkedCriterio
+        ? {
+            mode: 'edit' as const,
+            taskId: task.id,
+            taskTitle: draft.titulo || task.titulo,
+            criterioId: linkedCriterio.id,
+          }
+        : {
+            mode: 'create' as const,
+            taskId: task.id,
+            taskTitle: draft.titulo || task.titulo,
+            draft: {
+              tema: draft.titulo,
+              criterio: draft.descripcion,
+              estado: 'vigente' as const,
+              sentido: 'sin clasificar' as const,
+              fecha: todayIsoDate(),
+              responsable: draft.responsable,
+              observaciones: originReference ? `Origen de la tarea: ${originReference}` : '',
+            },
+          };
+
+      setLinkedCriterionId(linkedCriterio?.id ?? null);
+      clearRecoveryDraft();
+      onDone();
+      navigateInApp({ view: 'criterios-rrll' });
+      window.setTimeout(() => requestTaskCriterionEditor(request), 0);
+    } catch (error) {
+      setSaveStatus(
+        error instanceof Error
+          ? error.message
+          : 'No se ha podido abrir Criterios RRLL.',
+      );
+      setSaveStatusIsError(true);
+    } finally {
+      setCriterionLinkReady(true);
+    }
+  };
+
   return (
     <>
       <ModalShell
@@ -947,6 +1073,21 @@ export function TaskEditor({
               <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></ActionButton>
               <InlineSaveFeedback />
               {!isCreate && task && <AuditHistoryButton entityId={task.id} entityTitle={task.titulo || 'Tarea sin título'} module="tareas" />}
+              {!isCreate && task && (
+                <ActionButton
+                  disabled={!criterionLinkReady || (isFormReadOnly && !linkedCriterionId)}
+                  icon={BookOpen}
+                  iconOnly={false}
+                  onClick={() => void handleOpenCriterionRrll()}
+                  variant="secondary"
+                >
+                  {!criterionLinkReady
+                    ? 'Comprobando criterio…'
+                    : linkedCriterionId
+                      ? 'Ver criterio RRLL'
+                      : 'Crear criterio RRLL'}
+                </ActionButton>
+              )}
               {!isCreate && task && (
                 <ActionButton disabled={isFormReadOnly} iconOnly={false} variant="delete" onClick={() => void (async () => {
                   const result = await removeTask(task.id, loadedUpdatedAt);
