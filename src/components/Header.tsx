@@ -166,81 +166,58 @@ export function Header({
     };
   }, []);
 
-  const isDashboard = activeView === 'dashboard';
-
   return (
-    <header className={isDashboard ? 'px-4 pb-2 pt-3' : 'border-b border-white/5 px-4 pb-3 pt-4'}>
-      <div
-        className={
-          isDashboard
-            ? 'flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-sky-300/10 px-1 pb-3'
-            : 'flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/10 bg-gradient-to-r from-metro-topbar via-metro-navy to-metro-topbar px-5 py-4 shadow-[0_18px_40px_rgba(2,6,23,0.26)]'
-        }
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1.5 flex min-w-0 items-center gap-2">
-              <span className="inline-flex max-w-full items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-metro-muted">
-                {breadcrumb}
-              </span>
-              {moduleHelp ? (
-                <ModuleHelpButton
-                  title={moduleHelp.title}
-                  subtitle={moduleHelp.subtitle}
-                  sections={moduleHelp.sections}
-                />
-              ) : null}
-            </div>
-            <h1
-              className={
-                isDashboard
-                  ? 'truncate text-[1.55rem] font-black tracking-tight text-metro-text'
-                  : 'truncate text-[1.45rem] font-black tracking-tight text-metro-text'
-              }
-            >
+    <header className="border-b border-sky-300/[0.07] px-3 pb-2 pt-2.5 sm:px-4">
+      <div className="grid min-w-0 gap-2 rounded-[22px] border border-white/10 bg-gradient-to-r from-metro-topbar via-metro-navy to-metro-topbar px-4 py-3 shadow-[0_14px_32px_rgba(2,6,23,0.22)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,430px)_auto] lg:items-center lg:gap-4">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex max-w-full items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-metro-muted">
+              {breadcrumb}
+            </span>
+            {moduleHelp ? (
+              <ModuleHelpButton
+                title={moduleHelp.title}
+                subtitle={moduleHelp.subtitle}
+                sections={moduleHelp.sections}
+              />
+            ) : null}
+          </div>
+
+          <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <h1 className="truncate text-[1.45rem] font-black leading-tight tracking-tight text-metro-text">
               {headerCopy.title}
             </h1>
-            <p className="truncate text-sm text-metro-muted">{headerCopy.subtitle}</p>
+            <span className="hidden h-5 w-px shrink-0 bg-white/10 md:block" aria-hidden="true" />
+            <p className="min-w-0 truncate text-sm text-metro-muted">{headerCopy.subtitle}</p>
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <div className={isDashboard ? 'min-w-[16rem] max-w-[30rem] flex-1' : 'min-w-[18rem] max-w-[28rem] flex-1'}>
-            <GlobalSearch onNavigate={onViewChange} />
+        <div className="min-w-0 lg:justify-self-stretch">
+          <GlobalSearch onNavigate={onViewChange} />
+        </div>
+
+        <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:w-[300px] lg:justify-start">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-metro-red/10 text-metro-red ring-1 ring-metro-red/20">
+            <UserRound size={17} />
+            <span
+              aria-label={`Estado de sincronización: ${syncStatus.message}`}
+              className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-metro-topbar transition-colors ${syncVisual.dotClass}`}
+              data-tip={syncStatus.message}
+            />
           </div>
 
-          <div className="flex min-h-[74px] w-[272px] shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-3.5 py-2.5 shadow-sm shadow-slate-950/20">
-            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-metro-red/12 text-metro-red ring-1 ring-metro-red/20">
-              <UserRound size={18} />
-              <span
-                aria-label={`Estado de sincronización: ${syncStatus.message}`}
-                className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-metro-topbar transition-colors ${syncVisual.dotClass}`}
-                data-tip={syncStatus.message}
-              />
-            </div>
-
-            <div className="hidden min-w-0 flex-1 sm:block">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-metro-muted">
-                Usuario activo
-              </p>
-              <p className="truncate text-sm font-semibold text-metro-text" title={windowsUserName}>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate text-sm font-bold text-metro-text" title={windowsUserName}>
                 {windowsUserName}
               </p>
-
-              <div
-                className="mt-1 flex min-w-0 items-center gap-1.5"
-                title={`${dbStatus?.ready ? 'SQLite activa' : 'Modo local'} · ${syncStatus.message}`}
+              <span className="shrink-0 text-[10px] text-metro-muted/55">·</span>
+              <span
+                className={`inline-flex min-w-0 max-w-[116px] items-center rounded-full border px-2 py-0.5 text-[10px] font-bold leading-4 ${syncVisual.chipClass}`}
+                title={syncStatus.message}
               >
-                <span className="shrink-0 text-[11px] text-metro-muted">
-                  {dbStatus?.ready ? 'SQLite activa' : 'Modo local'}
-                </span>
-                <span className="shrink-0 text-[11px] text-metro-muted/70">·</span>
-                <span
-                  className={`inline-flex min-w-0 max-w-[104px] items-center rounded-full border px-2 py-0.5 text-[10px] font-bold leading-4 ${syncVisual.chipClass}`}
-                >
-                  <span className="truncate">{syncVisual.label}</span>
-                </span>
-              </div>
+                <span className="truncate">{syncVisual.label}</span>
+              </span>
             </div>
           </div>
         </div>
