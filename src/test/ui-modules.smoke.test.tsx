@@ -117,7 +117,7 @@ describe('humo UI de módulos principales', () => {
     ['Especiales', <EspecialesPage />, /Especiales/i],
     ['Criterios RRLL', <CriteriosRrllPage />, /Criterios RRLL/i],
     ['Vinculograma', <VinculogramaPage />, /Vinculograma/i],
-    ['Presupuestos', <PresupuestosPage />, /Presupuestos/i],
+    ['Presupuestos', <PresupuestosPage />, /Crear escenario/i],
   ])('renderiza el módulo %s sin romper', async (_moduleName, ui, expectedText) => {
     render(ui);
 
