@@ -180,15 +180,15 @@ function CompactTaskSummaryCard({
 
   return (
     <div
-      className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.16)] ${toneMap.card}`}
+      className={`flex min-w-0 items-center gap-3 rounded-2xl border px-3.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_8px_20px_rgba(2,6,23,0.16)] ${toneMap.card}`}
     >
       <span
-        className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border ${toneMap.icon}`}
       >
-        <Icon size={18} />
+        <Icon size={17} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[1.65rem] font-black leading-none text-metro-text">
+        <span className="block text-[1.45rem] font-black leading-none text-metro-text">
           {value}
         </span>
         <span className={`mt-0.5 block truncate text-sm font-extrabold ${toneMap.label}`}>
@@ -629,7 +629,7 @@ export function TareasPage({
         title="Tareas"
       />
 
-      <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-5">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
         <CompactTaskSummaryCard
           detail="Total de tareas activas"
           icon={ListChecks}
@@ -669,13 +669,13 @@ export function TareasPage({
 
       <div className="overflow-hidden rounded-2xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
         <div className="space-y-3 border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
               <ListChecks size={16} className="text-sky-300" />
               Tareas activas
               <CountBadge>{filteredTasks.length} registros</CountBadge>
             </div>
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
               <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
                 Nueva tarea
               </ActionButton>
@@ -710,18 +710,14 @@ export function TareasPage({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-center">
             <SearchField
               onChange={(event) => setFilter('search', event.target.value)}
               onClear={() => setFilter('search', '')}
               placeholder="Buscar tareas, texto de seguimiento o palabras clave..."
               value={filters.search}
-              wrapperClassName="min-w-[280px] xl:max-w-[440px]"
+              wrapperClassName="w-full min-w-0 sm:max-w-[460px]"
             />
-            <p className="text-xs leading-relaxed text-metro-muted">
-              Vista optimizada para ordenar por columnas. Los filtros laterales se eliminan para
-              ganar espacio útil.
-            </p>
           </div>
         </div>
 
