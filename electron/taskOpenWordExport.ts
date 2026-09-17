@@ -234,6 +234,43 @@ function setTableHeaderStyle(worksheet: ExcelJS.Worksheet, headerRowNumber: numb
   });
 }
 
+function applyTrackingGroupShading(
+  worksheet: ExcelJS.Worksheet,
+  rows: ExcelJS.CellValue[][],
+  firstDataRow: number,
+): void {
+  if (rows.length === 0) return;
+
+  const shadedFill = {
+    type: 'pattern' as const,
+    pattern: 'solid' as const,
+    fgColor: { argb: 'FFDDE6F1' },
+  };
+
+  const clearFill = {
+    type: 'pattern' as const,
+    pattern: 'solid' as const,
+    fgColor: { argb: 'FFFFFFFF' },
+  };
+
+  let currentTask = String(rows[0]?.[0] ?? '');
+  let shadedGroup = true;
+
+  rows.forEach((rowValues, index) => {
+    const taskTitle = String(rowValues[0] ?? '');
+    if (index > 0 && taskTitle !== currentTask) {
+      currentTask = taskTitle;
+      shadedGroup = !shadedGroup;
+    }
+
+    const rowNumber = firstDataRow + index;
+    for (let columnNumber = 1; columnNumber <= 5; columnNumber += 1) {
+      const cell = worksheet.getCell(rowNumber, columnNumber);
+      cell.fill = shadedGroup ? shadedFill : clearFill;
+    }
+  });
+}
+
 function styleTaskRows(
   worksheet: ExcelJS.Worksheet,
   tasks: ExportableTask[],
@@ -409,7 +446,7 @@ function addTrackingWorksheet(
       theme: 'TableStyleMedium2',
       showFirstColumn: false,
       showLastColumn: false,
-      showRowStripes: true,
+      showRowStripes: false,
       showColumnStripes: false,
     },
     columns: [
@@ -434,6 +471,8 @@ function addTrackingWorksheet(
   if (rows.length > 0) {
     const firstDataRow = 5;
     const lastDataRow = firstDataRow + rows.length - 1;
+
+    applyTrackingGroupShading(worksheet, rows, firstDataRow);
 
     for (let rowNumber = firstDataRow; rowNumber <= lastDataRow; rowNumber += 1) {
       worksheet.getCell(rowNumber, 2).numFmt = 'dd/mm/yyyy hh:mm';
