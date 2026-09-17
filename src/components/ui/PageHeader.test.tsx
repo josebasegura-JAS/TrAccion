@@ -9,7 +9,7 @@ describe('PageHeader', () => {
     useModuleHelpRegistry.setState({ content: null });
   });
 
-  it('no pinta el título en pantalla, pero lo deja accesible para lectores de pantalla', () => {
+  it('no pinta el título en pantalla, pero lo deja accesible cuando hay acciones', () => {
     render(
       <PageHeader title="Ticket Restaurante" actions={<button type="button">Acción</button>} />,
     );
@@ -18,11 +18,10 @@ describe('PageHeader', () => {
     expect(heading).toHaveClass('sr-only');
   });
 
-  it('no renderiza ningún contenedor visible si no hay ni acciones ni estado', () => {
+  it('no deja ningún nodo en el flujo si no hay acciones ni estado', () => {
     const { container } = render(<PageHeader title="Sin nada" />);
 
-    // Solo debe quedar el <h2 class="sr-only">, sin la franja de cabecera.
-    expect(container.querySelectorAll('div')).toHaveLength(0);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renderiza las acciones cuando se proporcionan', () => {
@@ -31,10 +30,26 @@ describe('PageHeader', () => {
     expect(screen.getByRole('button', { name: 'Nueva tarea' })).toBeInTheDocument();
   });
 
-  it('renderiza el indicador de estado ambiental (status) cuando se proporciona', () => {
-    render(<PageHeader title="Especiales" status={<span>Guardado</span>} />);
+  it('saca el status del flujo cuando no hay acciones para no crear un hueco vacío', () => {
+    const { container } = render(<PageHeader title="Tareas" status={<span>Guardado</span>} />);
 
     expect(screen.getByText('Guardado')).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
+    expect(document.body.querySelector('[aria-label="Tareas: estado"]')).toHaveClass('fixed');
+  });
+
+  it('mantiene status y acciones en la misma barra cuando ambos son visibles', () => {
+    const { container } = render(
+      <PageHeader
+        title="Especiales"
+        status={<span>Guardado</span>}
+        actions={<button type="button">Nueva comunicación</button>}
+      />,
+    );
+
+    expect(screen.getByText('Guardado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nueva comunicación' })).toBeInTheDocument();
+    expect(container.firstElementChild).not.toHaveClass('fixed');
   });
 
   it('registra la ayuda del módulo en moduleHelpRegistry al montarse', () => {

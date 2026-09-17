@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useModuleHelpRegistry } from '../../services/moduleHelpRegistry';
 import type { ModuleHelpSection } from '../ModuleHelp';
 
@@ -10,11 +11,11 @@ interface PageHeaderProps {
   /**
    * Título del módulo. No se pinta en pantalla (la barra superior fija de la
    * app ya indica en qué módulo estás), pero se mantiene como encabezado
-   * accesible para lectores de pantalla y como identificador de la ayuda
-   * registrada para este módulo.
+   * accesible cuando existe una barra de acciones del módulo y como
+   * identificador de la ayuda registrada para este módulo.
    */
   title: string;
-  /** Indicador de estado ambiental, p. ej. <InlineSaveFeedback />. Se renderiza en línea junto a las acciones. */
+  /** Indicador de estado ambiental, p. ej. <InlineSaveFeedback />. */
   status?: ReactNode;
   /** Buttons / controls aligned to the right (e.g. ActionButton group). */
   actions?: ReactNode;
@@ -28,11 +29,12 @@ interface PageHeaderProps {
 }
 
 /**
- * Barra de cabecera de módulo: ya no repite icono/título/subtítulo (la barra
- * superior fija de la app ya los muestra de forma permanente) ni el botón de
- * ayuda (que ahora vive junto al nombre del módulo, arriba del todo, vía
- * `moduleHelpRegistry`). Aquí solo quedan las acciones del módulo y un hueco
- * para un indicador de estado ambiental.
+ * Cabecera funcional del contenido del módulo.
+ *
+ * La identificación del módulo vive en el Header global. Por eso esta pieza
+ * solo debe ocupar altura real cuando hay acciones visibles. Los estados
+ * efímeros de guardado, cuando van solos, se muestran como feedback flotante
+ * y no reservan una fila vacía entre el Header y el contenido.
  */
 export function PageHeader({
   actions,
@@ -57,15 +59,28 @@ export function PageHeader({
     };
   }, [helpSections, helpSubtitle, resolvedHelpTitle, setModuleHelp, clearModuleHelp]);
 
-  if (!actions && !status) {
-    return <h2 className="sr-only">{title}</h2>;
+  if (!actions) {
+    if (!status) {
+      return null;
+    }
+
+    if (typeof document === 'undefined') {
+      return null;
+    }
+
+    return createPortal(
+      <div className="pointer-events-none fixed bottom-5 right-5 z-[80]" aria-label={`${title}: estado`}>
+        {status}
+      </div>,
+      document.body,
+    );
   }
 
   return (
     <div className={cx('mb-2 flex flex-wrap items-center justify-between gap-2', className)}>
       <h2 className="sr-only">{title}</h2>
       {status ? <div className="flex min-w-0 flex-wrap items-center gap-2">{status}</div> : null}
-      {actions ? <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">{actions}</div>
     </div>
   );
 }
