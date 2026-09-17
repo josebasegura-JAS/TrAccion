@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock3, FileSpreadsheet, Search, Settings2, Trash2, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, FileSpreadsheet, MailPlus, Search, Settings2, Trash2, UsersRound } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -9,6 +9,12 @@ import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persis
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
 import { enrichPersonalWithPlantilla, type HuelgaPersonalPlantillaStats } from './huelgasPersonalPlantilla';
+import {
+  buildCollectionGroups,
+  buildHuelgaCollectionMailHtml,
+  buildHuelgaCollectionSubject,
+  buildHuelgaCollectionWorkbook,
+} from './huelgasCollectionExport';
 import {
   buildAsignacionesForPersonal,
   asignacionKey,
@@ -152,6 +158,7 @@ export function HuelgasPage() {
   const [assignmentDraft, setAssignmentDraft] = useState<HuelgaPuestoAsignacion[]>([]);
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [savingAssignments, setSavingAssignments] = useState(false);
+  const [generatingCollectionForId, setGeneratingCollectionForId] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfiguracion();
@@ -461,6 +468,101 @@ export function HuelgasPage() {
     closeAssignments();
   };
 
+
+  const generateCollectionMails = async (huelga: Huelga) => {
+    const personal = huelga.personalConTurno ?? [];
+    if (personal.length === 0) {
+      await alert('Importa primero el personal con turno de esta huelga.', {
+        title: 'Falta el personal del día',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const assignments = buildAsignacionesForPersonal(
+      personal,
+      huelga.asignacionesPuesto ?? [],
+      puestoResponsables,
+    );
+    const pending = assignments.filter((item) => !isAsignacionCompleta(item));
+    if (pending.length > 0) {
+      await alert(
+        `Hay ${pending.length} combinaciones de residencia + puesto sin Área, Responsable o email. Complétalas antes de generar los correos.`,
+        { title: 'Responsables pendientes', type: 'warning' },
+      );
+      return;
+    }
+
+    const groups = buildCollectionGroups(personal, assignments);
+    if (groups.length === 0) {
+      await alert('No se han podido formar grupos de recogida con los responsables configurados.', {
+        title: 'Sin destinatarios',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const api = window.traccion?.createOutlookDraft;
+    if (!api) {
+      await alert('La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.', {
+        title: 'Outlook no disponible',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const accepted = await confirm(
+      `Se crearán ${groups.length} borrador${groups.length === 1 ? '' : 'es'} de Outlook, uno por Área + Responsable, cada uno con su Excel de recogida adjunto. ¿Continuar?`,
+      { title: 'Generar correos de recogida', confirmLabel: 'Generar correos', cancelLabel: 'Cancelar' },
+    );
+    if (!accepted) return;
+
+    setGeneratingCollectionForId(huelga.id);
+    let created = 0;
+    const failures: string[] = [];
+
+    try {
+      for (const group of groups) {
+        try {
+          const attachment = await buildHuelgaCollectionWorkbook(huelga.id, huelga.fecha, group);
+          const result = await api({
+            subject: buildHuelgaCollectionSubject(huelga.fecha, group.area),
+            html: buildHuelgaCollectionMailHtml({
+              fecha: huelga.fecha,
+              area: group.area,
+              responsableNombre: group.responsableNombre,
+              personal: group.personal,
+              asignaciones: group.asignaciones,
+            }),
+            to: [group.responsableEmail],
+            cc: [],
+            bcc: [],
+            attachments: [{ fileName: attachment.fileName, buffer: attachment.buffer }],
+          });
+          if (result.ok) created += 1;
+          else failures.push(`${group.area}: ${result.message}`);
+        } catch (error) {
+          failures.push(`${group.area}: ${error instanceof Error ? error.message : 'error no identificado'}`);
+        }
+      }
+    } finally {
+      setGeneratingCollectionForId(null);
+    }
+
+    if (failures.length > 0) {
+      await alert(
+        `Se han creado ${created} de ${groups.length} borradores. Problemas:\n${failures.join('\n')}`,
+        { title: 'Generación incompleta', type: 'warning' },
+      );
+      return;
+    }
+
+    await alert(
+      `Se han creado ${created} borrador${created === 1 ? '' : 'es'} de Outlook con su Excel de recogida adjunto.`,
+      { title: 'Correos preparados', type: 'info' },
+    );
+  };
+
   const remove = async (huelga: Huelga) => {
     const accepted = await confirm(
       `¿Eliminar la convocatoria del ${formatDate(huelga.fecha)}?`,
@@ -592,6 +694,18 @@ export function HuelgasPage() {
                             title="Asignar área y responsable a los puestos de trabajo"
                           >
                             Responsables
+                          </ActionButton>
+                          <ActionButton
+                            variant="secondary"
+                            size="sm"
+                            iconOnly={false}
+                            icon={MailPlus}
+                            loading={generatingCollectionForId === huelga.id}
+                            disabled={(huelga.personalConTurno?.length ?? 0) === 0 || configuredAssignments !== assignments.length}
+                            onClick={() => void generateCollectionMails(huelga)}
+                            title={configuredAssignments !== assignments.length ? 'Completa primero todos los responsables' : 'Generar borradores de Outlook con Excel de recogida'}
+                          >
+                            Correos
                           </ActionButton>
                           <ActionButton variant="edit" size="sm" onClick={() => openEdit(huelga)} title="Editar huelga" />
                           <ActionButton variant="delete" size="sm" onClick={() => remove(huelga)} title="Eliminar huelga" />
