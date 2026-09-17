@@ -17,6 +17,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.actas.outlookTemplate',
   'traccion.v1.actas.table',
   'traccion.v1.huelgas.records',
+  'traccion.v1.huelgas.puestoResponsables',
   'traccion.v1.paritaria.sessions',
   'traccion.v1.ticketRestaurante.calendars',
   'traccion.v1.ticketRestaurante.absences',

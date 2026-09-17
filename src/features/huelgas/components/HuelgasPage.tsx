@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock3, FileSpreadsheet, Trash2, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, FileSpreadsheet, Search, Settings2, Trash2, UsersRound } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -7,8 +7,17 @@ import { useConfiguracionStore } from '../../configuracion/store/useConfiguracio
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
+import {
+  buildAsignacionesForPersonal,
+  countPersonasByPuesto,
+  isAsignacionCompleta,
+  isHuelgaPuestoAsignaciones,
+  mergeAsignacionesIntoMaster,
+  type HuelgaPuestoAsignacion,
+} from './huelgasAssignments';
 
 const STORAGE_KEY = 'traccion.v1.huelgas.records';
+const PUESTO_RESPONSABLES_STORAGE_KEY = 'traccion.v1.huelgas.puestoResponsables';
 
 type HuelgaTipo = 'jornada-completa' | 'paros-parciales';
 
@@ -29,6 +38,7 @@ type Huelga = {
   updatedAt: string;
   personalConTurno?: HuelgaPersonalTurno[];
   personalImportadoAt?: string | null;
+  asignacionesPuesto?: HuelgaPuestoAsignacion[];
 };
 
 type HuelgaDraft = Pick<Huelga, 'fecha' | 'sindicatos' | 'tipo' | 'tramos' | 'observaciones'>;
@@ -55,7 +65,8 @@ function isHuelga(value: unknown): value is Huelga {
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string' &&
     (typeof candidate.personalConTurno === 'undefined' || Array.isArray(candidate.personalConTurno)) &&
-    (typeof candidate.personalImportadoAt === 'undefined' || candidate.personalImportadoAt === null || typeof candidate.personalImportadoAt === 'string')
+    (typeof candidate.personalImportadoAt === 'undefined' || candidate.personalImportadoAt === null || typeof candidate.personalImportadoAt === 'string') &&
+    (typeof candidate.asignacionesPuesto === 'undefined' || isHuelgaPuestoAsignaciones(candidate.asignacionesPuesto))
   );
 }
 
@@ -129,10 +140,18 @@ export function HuelgasPage() {
   const [importSkippedRows, setImportSkippedRows] = useState(0);
   const [importError, setImportError] = useState('');
   const [importing, setImporting] = useState(false);
+  const [puestoResponsables, setPuestoResponsables] = useState<HuelgaPuestoAsignacion[]>([]);
+  const [assignmentTargetId, setAssignmentTargetId] = useState<string | null>(null);
+  const [assignmentDraft, setAssignmentDraft] = useState<HuelgaPuestoAsignacion[]>([]);
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [savingAssignments, setSavingAssignments] = useState(false);
 
   useEffect(() => {
     loadConfiguracion();
     setHuelgas(readJsonStorage(STORAGE_KEY, [], isHuelgas));
+    setPuestoResponsables(
+      readJsonStorage(PUESTO_RESPONSABLES_STORAGE_KEY, [], isHuelgaPuestoAsignaciones),
+    );
   }, [loadConfiguracion]);
 
   const sindicatos = useMemo(
@@ -224,6 +243,7 @@ export function HuelgasPage() {
       updatedAt: now,
       personalConTurno: current?.personalConTurno,
       personalImportadoAt: current?.personalImportadoAt ?? null,
+      asignacionesPuesto: current?.asignacionesPuesto,
     };
     const next = current
       ? huelgas.map((item) => (item.id === current.id ? record : item))
@@ -294,9 +314,20 @@ export function HuelgasPage() {
     }
 
     const now = new Date().toISOString();
+    const asignacionesPuesto = buildAsignacionesForPersonal(
+      importPreview,
+      importTarget.asignacionesPuesto ?? [],
+      puestoResponsables,
+    );
     const next = huelgas.map((item) =>
       item.id === importTarget.id
-        ? { ...item, personalConTurno: importPreview, personalImportadoAt: now, updatedAt: now }
+        ? {
+            ...item,
+            personalConTurno: importPreview,
+            personalImportadoAt: now,
+            asignacionesPuesto,
+            updatedAt: now,
+          }
         : item,
     );
 
@@ -310,6 +341,107 @@ export function HuelgasPage() {
 
     setHuelgas(next);
     closeImport();
+  };
+
+  const assignmentTarget = assignmentTargetId
+    ? huelgas.find((item) => item.id === assignmentTargetId) ?? null
+    : null;
+
+  const assignmentPersonCounts = useMemo(
+    () => countPersonasByPuesto(assignmentTarget?.personalConTurno ?? []),
+    [assignmentTarget],
+  );
+
+  const filteredAssignmentDraft = useMemo(() => {
+    const query = assignmentSearch.trim().toLocaleLowerCase('es-ES');
+    if (!query) return assignmentDraft;
+    return assignmentDraft.filter((item) =>
+      [item.puesto, item.area, item.responsableNombre, item.responsableEmail].some((value) =>
+        value.toLocaleLowerCase('es-ES').includes(query),
+      ),
+    );
+  }, [assignmentDraft, assignmentSearch]);
+
+  const assignmentConfiguredCount = useMemo(
+    () => assignmentDraft.filter(isAsignacionCompleta).length,
+    [assignmentDraft],
+  );
+
+  const openAssignments = (huelga: Huelga) => {
+    if ((huelga.personalConTurno?.length ?? 0) === 0) return;
+    setAssignmentTargetId(huelga.id);
+    setAssignmentDraft(
+      buildAsignacionesForPersonal(
+        huelga.personalConTurno ?? [],
+        huelga.asignacionesPuesto ?? [],
+        puestoResponsables,
+      ),
+    );
+    setAssignmentSearch('');
+  };
+
+  const closeAssignments = () => {
+    if (savingAssignments) return;
+    setAssignmentTargetId(null);
+    setAssignmentDraft([]);
+    setAssignmentSearch('');
+  };
+
+  const updateAssignment = (
+    puesto: string,
+    field: 'area' | 'responsableNombre' | 'responsableEmail',
+    value: string,
+  ) => {
+    setAssignmentDraft((current) =>
+      current.map((item) =>
+        item.puesto === puesto ? { ...item, [field]: value, updatedAt: new Date().toISOString() } : item,
+      ),
+    );
+  };
+
+  const saveAssignments = async () => {
+    if (!assignmentTarget) return;
+
+    const normalized = assignmentDraft.map((item) => ({
+      ...item,
+      area: item.area.trim(),
+      responsableNombre: item.responsableNombre.trim(),
+      responsableEmail: item.responsableEmail.trim(),
+      updatedAt: new Date().toISOString(),
+    }));
+    const nextMaster = mergeAsignacionesIntoMaster(puestoResponsables, normalized);
+    const now = new Date().toISOString();
+    const nextHuelgas = huelgas.map((item) =>
+      item.id === assignmentTarget.id
+        ? { ...item, asignacionesPuesto: normalized, updatedAt: now }
+        : item,
+    );
+
+    setSavingAssignments(true);
+    const masterResult = await writeJsonStorageAsync(PUESTO_RESPONSABLES_STORAGE_KEY, nextMaster);
+    if (!masterResult.ok) {
+      setSavingAssignments(false);
+      await alert(masterResult.message || 'No se ha podido guardar el maestro de responsables.', {
+        title: 'Error de guardado',
+        type: 'error',
+      });
+      return;
+    }
+
+    const huelgaResult = await writeJsonStorageAsync(STORAGE_KEY, nextHuelgas);
+    setSavingAssignments(false);
+    if (!huelgaResult.ok) {
+      await alert(huelgaResult.message || 'El maestro se ha actualizado, pero no se ha podido guardar la copia de esta huelga.', {
+        title: 'Guardado incompleto',
+        type: 'warning',
+      });
+      setPuestoResponsables(nextMaster);
+      return;
+    }
+
+    setPuestoResponsables(nextMaster);
+    setHuelgas(nextHuelgas);
+    closeAssignments();
   };
 
   const remove = async (huelga: Huelga) => {
@@ -379,7 +511,7 @@ export function HuelgasPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="bg-metro-raised/70 text-[11px] uppercase tracking-wide text-metro-muted">
                 <tr>
                   <th className="px-4 py-2.5 font-semibold">Fecha</th>
@@ -387,12 +519,19 @@ export function HuelgasPage() {
                   <th className="px-4 py-2.5 font-semibold">Tipo</th>
                   <th className="px-4 py-2.5 font-semibold">Estado</th>
                   <th className="px-4 py-2.5 font-semibold">Personal del día</th>
-                  <th className="w-40 px-4 py-2.5 text-right font-semibold">Acciones</th>
+                  <th className="px-4 py-2.5 font-semibold">Responsables</th>
+                  <th className="w-64 px-4 py-2.5 text-right font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-metro-border">
                 {sortedHuelgas.map((huelga) => {
                   const status = huelgaStatus(huelga.fecha);
+                  const assignments = buildAsignacionesForPersonal(
+                    huelga.personalConTurno ?? [],
+                    huelga.asignacionesPuesto ?? [],
+                    puestoResponsables,
+                  );
+                  const configuredAssignments = assignments.filter(isAsignacionCompleta).length;
                   return (
                     <tr className="transition hover:bg-metro-raised/45" key={huelga.id}>
                       <td className="whitespace-nowrap px-4 py-3 font-medium text-metro-text">{formatDate(huelga.fecha)}</td>
@@ -411,8 +550,32 @@ export function HuelgasPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
+                        {assignments.length === 0 ? (
+                          <span className="text-xs text-metro-muted">Pendiente de personal</span>
+                        ) : configuredAssignments === assignments.length ? (
+                          <span className="inline-flex rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
+                            {configuredAssignments}/{assignments.length} configurados
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-200">
+                            {configuredAssignments}/{assignments.length} configurados
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
                           <ActionButton variant="import" size="sm" iconOnly={false} onClick={() => openImport(huelga)} title="Importar personal trabajador del día de la huelga">Importar personal</ActionButton>
+                          <ActionButton
+                            variant="secondary"
+                            size="sm"
+                            iconOnly={false}
+                            icon={Settings2}
+                            disabled={(huelga.personalConTurno?.length ?? 0) === 0}
+                            onClick={() => openAssignments(huelga)}
+                            title="Asignar área y responsable a los puestos de trabajo"
+                          >
+                            Responsables
+                          </ActionButton>
                           <ActionButton variant="edit" size="sm" onClick={() => openEdit(huelga)} title="Editar huelga" />
                           <ActionButton variant="delete" size="sm" onClick={() => remove(huelga)} title="Eliminar huelga" />
                         </div>
@@ -493,6 +656,137 @@ export function HuelgasPage() {
               <ActionButton variant="import" iconOnly={false} loading={importing} disabled={importPreview.length === 0} onClick={() => void saveImportedPersonal()}>
                 Importar {importPreview.length > 0 ? `${importPreview.length} personas` : 'personal'}
               </ActionButton>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {assignmentTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="presentation">
+          <section className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-app shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="huelga-assignment-title">
+            <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
+              <div>
+                <h2 id="huelga-assignment-title" className="text-lg font-semibold text-metro-text">Asignación de responsables</h2>
+                <p className="mt-1 text-sm text-metro-muted">
+                  {formatDate(assignmentTarget.fecha)} · Define el área y la persona que recibirá la recogida de datos de cada puesto.
+                </p>
+              </div>
+              <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={closeAssignments} type="button" aria-label="Cerrar">×</button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto p-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3">
+                  <p className="text-xs text-metro-muted">Puestos detectados</p>
+                  <strong className="mt-1 block text-xl text-metro-text">{assignmentDraft.length}</strong>
+                </div>
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <p className="text-xs text-emerald-200/80">Configurados</p>
+                  <strong className="mt-1 block text-xl text-emerald-200">{assignmentConfiguredCount}</strong>
+                </div>
+                <div className={`rounded-xl border p-3 ${assignmentConfiguredCount === assignmentDraft.length ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10'}`}>
+                  <p className={`text-xs ${assignmentConfiguredCount === assignmentDraft.length ? 'text-emerald-200/80' : 'text-amber-200/80'}`}>Pendientes</p>
+                  <strong className={`mt-1 block text-xl ${assignmentConfiguredCount === assignmentDraft.length ? 'text-emerald-200' : 'text-amber-200'}`}>{assignmentDraft.length - assignmentConfiguredCount}</strong>
+                </div>
+              </div>
+
+              <section className="rounded-xl border border-metro-border bg-metro-panel/55 p-4">
+                <div className="flex items-start gap-3">
+                  <Settings2 className="mt-0.5 shrink-0 text-metro-red" size={19} />
+                  <div>
+                    <p className="text-sm font-semibold text-metro-text">Configuración reutilizable</p>
+                    <p className="mt-1 text-xs leading-5 text-metro-muted">
+                      Los cambios que guardes aquí se usarán automáticamente cuando este puesto aparezca en futuras huelgas. Esta huelga conservará su propia copia para que los cambios futuros no alteren su histórico.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted" size={16} />
+                <input
+                  className="h-10 w-full rounded-xl border border-metro-border bg-metro-panel pl-9 pr-3 text-sm text-metro-text outline-none focus:border-metro-red"
+                  placeholder="Buscar puesto, área o responsable..."
+                  value={assignmentSearch}
+                  onChange={(event) => setAssignmentSearch(event.target.value)}
+                />
+              </label>
+
+              <div className="overflow-hidden rounded-xl border border-metro-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[980px] text-left text-xs">
+                    <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted">
+                      <tr>
+                        <th className="px-3 py-2.5 font-semibold">Puesto</th>
+                        <th className="w-20 px-3 py-2.5 text-center font-semibold">Personas</th>
+                        <th className="px-3 py-2.5 font-semibold">Área</th>
+                        <th className="px-3 py-2.5 font-semibold">Responsable</th>
+                        <th className="px-3 py-2.5 font-semibold">Email</th>
+                        <th className="w-28 px-3 py-2.5 font-semibold">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-metro-border">
+                      {filteredAssignmentDraft.map((item) => {
+                        const complete = isAsignacionCompleta(item);
+                        const personCount = assignmentPersonCounts.get(item.puesto.toLocaleLowerCase('es-ES')) ?? 0;
+                        return (
+                          <tr className="align-top hover:bg-metro-raised/35" key={item.puesto}>
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-metro-text">{item.puesto}</p>
+                            </td>
+                            <td className="px-3 py-3 text-center font-semibold text-metro-text">{personCount}</td>
+                            <td className="px-3 py-2">
+                              <input
+                                className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
+                                placeholder="Área"
+                                value={item.area}
+                                onChange={(event) => updateAssignment(item.puesto, 'area', event.target.value)}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
+                                placeholder="Nombre y apellidos"
+                                value={item.responsableNombre}
+                                onChange={(event) => updateAssignment(item.puesto, 'responsableNombre', event.target.value)}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
+                                placeholder="correo@empresa.es"
+                                type="email"
+                                value={item.responsableEmail}
+                                onChange={(event) => updateAssignment(item.puesto, 'responsableEmail', event.target.value)}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold ${complete ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200' : 'border-amber-500/35 bg-amber-500/10 text-amber-200'}`}>
+                                {complete ? 'Configurado' : 'Pendiente'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {filteredAssignmentDraft.length === 0 && (
+                  <div className="px-4 py-8 text-center text-sm text-metro-muted">No hay puestos que coincidan con la búsqueda.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-metro-border bg-metro-app px-5 py-4">
+              <p className="text-xs text-metro-muted">
+                Puedes guardar aunque queden puestos pendientes. Se completarán antes de generar la recogida de datos.
+              </p>
+              <div className="flex gap-2">
+                <ActionButton variant="secondary" iconOnly={false} onClick={closeAssignments}>Cancelar</ActionButton>
+                <ActionButton variant="save" iconOnly={false} loading={savingAssignments} onClick={() => void saveAssignments()}>
+                  Guardar asignaciones
+                </ActionButton>
+              </div>
             </div>
           </section>
         </div>
