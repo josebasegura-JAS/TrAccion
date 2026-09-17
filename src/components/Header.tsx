@@ -29,6 +29,10 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Actas',
     subtitle: 'Actas de Comité y Paritaria, estados y alegaciones sindicales.',
   },
+  huelgas: {
+    title: 'Huelgas',
+    subtitle: 'Convocatorias, personal con turno y seguimiento de jornadas de huelga.',
+  },
   paritaria: {
     title: 'Comisión Paritaria',
     subtitle: 'Sesiones, puntos del orden del día y tareas tratadas.',

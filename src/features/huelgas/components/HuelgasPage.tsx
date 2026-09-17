@@ -315,7 +315,7 @@ export function HuelgasPage() {
   const remove = async (huelga: Huelga) => {
     const accepted = await confirm(
       `¿Eliminar la convocatoria del ${formatDate(huelga.fecha)}?`,
-      { title: 'Eliminar huelga', confirmLabel: 'Eliminar', cancelLabel: 'Cancelar', destructive: true },
+      { title: 'Eliminar huelga', confirmLabel: 'Eliminar', cancelLabel: 'Cancelar' },
     );
     if (!accepted) return;
 
