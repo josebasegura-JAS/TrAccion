@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock3, Trash2, UsersRound } from 'lucide-react';
+import { CalendarDays, Clock3, FileSpreadsheet, Trash2, UsersRound } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
+import { parseXlsxRows } from '../../../shared/import/xlsxParser';
+import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
 
 const STORAGE_KEY = 'traccion.v1.huelgas.records';
 
@@ -25,6 +27,8 @@ type Huelga = {
   observaciones: string;
   createdAt: string;
   updatedAt: string;
+  personalConTurno?: HuelgaPersonalTurno[];
+  personalImportadoAt?: string | null;
 };
 
 type HuelgaDraft = Pick<Huelga, 'fecha' | 'sindicatos' | 'tipo' | 'tramos' | 'observaciones'>;
@@ -49,7 +53,9 @@ function isHuelga(value: unknown): value is Huelga {
     Array.isArray(candidate.tramos) &&
     typeof candidate.observaciones === 'string' &&
     typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string'
+    typeof candidate.updatedAt === 'string' &&
+    (typeof candidate.personalConTurno === 'undefined' || Array.isArray(candidate.personalConTurno)) &&
+    (typeof candidate.personalImportadoAt === 'undefined' || candidate.personalImportadoAt === null || typeof candidate.personalImportadoAt === 'string')
   );
 }
 
@@ -117,6 +123,12 @@ export function HuelgasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importTargetId, setImportTargetId] = useState<string | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [importPreview, setImportPreview] = useState<HuelgaPersonalTurno[]>([]);
+  const [importSkippedRows, setImportSkippedRows] = useState(0);
+  const [importError, setImportError] = useState('');
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     loadConfiguracion();
@@ -210,6 +222,8 @@ export function HuelgasPage() {
       ...normalizedDraft,
       createdAt: current?.createdAt ?? now,
       updatedAt: now,
+      personalConTurno: current?.personalConTurno,
+      personalImportadoAt: current?.personalImportadoAt ?? null,
     };
     const next = current
       ? huelgas.map((item) => (item.id === current.id ? record : item))
@@ -225,6 +239,77 @@ export function HuelgasPage() {
 
     setHuelgas(next);
     setEditorOpen(false);
+  };
+
+  const importTarget = importTargetId ? huelgas.find((item) => item.id === importTargetId) ?? null : null;
+
+  const openImport = (huelga: Huelga) => {
+    setImportTargetId(huelga.id);
+    setImportFileName('');
+    setImportPreview([]);
+    setImportSkippedRows(0);
+    setImportError('');
+  };
+
+  const closeImport = () => {
+    if (importing) return;
+    setImportTargetId(null);
+    setImportFileName('');
+    setImportPreview([]);
+    setImportSkippedRows(0);
+    setImportError('');
+  };
+
+  const selectImportFile = async (file: File | null) => {
+    setImportError('');
+    setImportPreview([]);
+    setImportSkippedRows(0);
+    setImportFileName(file?.name ?? '');
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      setImportError('Selecciona un archivo Excel .xlsx con el formato de personal por día.');
+      return;
+    }
+
+    try {
+      const rows = await parseXlsxRows(await file.arrayBuffer());
+      const result = parseHuelgaPersonalRows(rows);
+      setImportPreview(result.records);
+      setImportSkippedRows(result.skippedRows);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'No se ha podido leer el Excel.');
+    }
+  };
+
+  const saveImportedPersonal = async () => {
+    if (!importTarget || importPreview.length === 0) return;
+
+    if ((importTarget.personalConTurno?.length ?? 0) > 0) {
+      const accepted = await confirm(
+        `Esta huelga ya tiene ${importTarget.personalConTurno?.length ?? 0} personas importadas. ¿Quieres sustituirlas por las ${importPreview.length} del nuevo Excel?`,
+        { title: 'Sustituir personal importado', confirmLabel: 'Sustituir', cancelLabel: 'Cancelar' },
+      );
+      if (!accepted) return;
+    }
+
+    const now = new Date().toISOString();
+    const next = huelgas.map((item) =>
+      item.id === importTarget.id
+        ? { ...item, personalConTurno: importPreview, personalImportadoAt: now, updatedAt: now }
+        : item,
+    );
+
+    setImporting(true);
+    const result = await writeJsonStorageAsync(STORAGE_KEY, next);
+    setImporting(false);
+    if (!result.ok) {
+      await alert(result.message || 'No se ha podido guardar el personal importado.', { title: 'Error de guardado', type: 'error' });
+      return;
+    }
+
+    setHuelgas(next);
+    closeImport();
   };
 
   const remove = async (huelga: Huelga) => {
@@ -301,7 +386,8 @@ export function HuelgasPage() {
                   <th className="px-4 py-2.5 font-semibold">Convocantes</th>
                   <th className="px-4 py-2.5 font-semibold">Tipo</th>
                   <th className="px-4 py-2.5 font-semibold">Estado</th>
-                  <th className="w-24 px-4 py-2.5 text-right font-semibold">Acciones</th>
+                  <th className="px-4 py-2.5 font-semibold">Personal del día</th>
+                  <th className="w-40 px-4 py-2.5 text-right font-semibold">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-metro-border">
@@ -316,7 +402,17 @@ export function HuelgasPage() {
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(status)}`}>{status}</span>
                       </td>
                       <td className="px-4 py-3">
+                        {(huelga.personalConTurno?.length ?? 0) > 0 ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
+                            <UsersRound size={13} /> {huelga.personalConTurno?.length} personas
+                          </span>
+                        ) : (
+                          <span className="text-xs text-metro-muted">Sin importar</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
+                          <ActionButton variant="import" size="sm" iconOnly={false} onClick={() => openImport(huelga)} title="Importar personal trabajador del día de la huelga">Importar personal</ActionButton>
                           <ActionButton variant="edit" size="sm" onClick={() => openEdit(huelga)} title="Editar huelga" />
                           <ActionButton variant="delete" size="sm" onClick={() => remove(huelga)} title="Eliminar huelga" />
                         </div>
@@ -329,6 +425,78 @@ export function HuelgasPage() {
           </div>
         )}
       </section>
+
+      {importTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="presentation">
+          <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-metro-border bg-metro-app shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="huelga-import-title">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-metro-border bg-metro-app/95 px-5 py-4 backdrop-blur">
+              <div>
+                <h2 id="huelga-import-title" className="text-lg font-semibold text-metro-text">Importar personal con turno</h2>
+                <p className="mt-1 text-sm text-metro-muted">{formatDate(importTarget.fecha)} · Personal trabajador previsto para ese día de huelga.</p>
+              </div>
+              <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={closeImport} type="button" aria-label="Cerrar">×</button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <section className="rounded-xl border border-metro-border bg-metro-panel/60 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300"><FileSpreadsheet size={20} /></div>
+                    <div>
+                      <p className="text-sm font-semibold text-metro-text">Excel de personal por día</p>
+                      <p className="mt-1 text-xs text-metro-muted">Columnas esperadas: Resi./Estac., Inicio, Salida, Entrada, Fin, Nombre y Apellidos, Puesto y Turno.</p>
+                    </div>
+                  </div>
+                  <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3.5 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:bg-metro-raised">
+                    <FileSpreadsheet size={16} /> Seleccionar Excel
+                    <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void selectImportFile(event.target.files?.[0] ?? null)} />
+                  </label>
+                </div>
+                {importFileName && <p className="mt-3 text-xs text-metro-muted">Archivo: <span className="font-medium text-metro-text">{importFileName}</span></p>}
+              </section>
+
+              {importError && <div className="rounded-xl border border-red-500/40 bg-red-950/25 px-4 py-3 text-sm text-red-200">{importError}</div>}
+
+              {importPreview.length > 0 && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Personas detectadas</p><strong className="mt-1 block text-xl text-metro-text">{importPreview.length}</strong></div>
+                    <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Filas omitidas</p><strong className="mt-1 block text-xl text-metro-text">{importSkippedRows}</strong></div>
+                    <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Actualmente importadas</p><strong className="mt-1 block text-xl text-metro-text">{importTarget.personalConTurno?.length ?? 0}</strong></div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-metro-border">
+                    <div className="border-b border-metro-border bg-metro-raised/60 px-4 py-2.5"><p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">Vista previa · primeras {Math.min(importPreview.length, 8)} personas</p></div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] text-left text-xs">
+                        <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nombre y apellidos</th><th className="px-3 py-2">Resi./Estac.</th><th className="px-3 py-2">Horario</th><th className="px-3 py-2">Puesto</th><th className="px-3 py-2">Turno</th></tr></thead>
+                        <tbody className="divide-y divide-metro-border">
+                          {importPreview.slice(0, 8).map((persona) => (
+                            <tr key={persona.id}>
+                              <td className="px-3 py-2 font-medium text-metro-text">{persona.nombreApellidos}</td>
+                              <td className="px-3 py-2 text-metro-muted">{persona.residenciaEstacion || '—'}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-metro-muted">{persona.inicio || '—'}–{persona.fin || '—'}{persona.salida || persona.entrada ? ` · ${persona.salida || '—'} / ${persona.entrada || '—'}` : ''}</td>
+                              <td className="px-3 py-2 text-metro-muted">{persona.puesto || '—'}</td>
+                              <td className="px-3 py-2 text-metro-muted">{persona.turno || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-metro-border bg-metro-app/95 px-5 py-4 backdrop-blur">
+              <ActionButton variant="secondary" iconOnly={false} onClick={closeImport}>Cancelar</ActionButton>
+              <ActionButton variant="import" iconOnly={false} loading={importing} disabled={importPreview.length === 0} onClick={() => void saveImportedPersonal()}>
+                Importar {importPreview.length > 0 ? `${importPreview.length} personas` : 'personal'}
+              </ActionButton>
+            </div>
+          </section>
+        </div>
+      )}
 
       {editorOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="presentation">
