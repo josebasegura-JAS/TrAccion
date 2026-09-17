@@ -4,12 +4,15 @@ import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
+import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
+import { enrichPersonalWithPlantilla, type HuelgaPersonalPlantillaStats } from './huelgasPersonalPlantilla';
 import {
   buildAsignacionesForPersonal,
-  countPersonasByPuesto,
+  asignacionKey,
+  countPersonasByAsignacion,
   isAsignacionCompleta,
   isHuelgaPuestoAsignaciones,
   mergeAsignacionesIntoMaster,
@@ -129,6 +132,9 @@ export function HuelgasPage() {
   const { alert, confirm, dialogNode } = useAppDialog();
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
+  const employees = useEmployeeStore((state) => state.employees);
+  const loadEmployees = useEmployeeStore((state) => state.load);
+  const employeesLoading = useEmployeeStore((state) => state.isLoading);
   const [huelgas, setHuelgas] = useState<Huelga[]>([]);
   const [draft, setDraft] = useState<HuelgaDraft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -138,6 +144,7 @@ export function HuelgasPage() {
   const [importFileName, setImportFileName] = useState('');
   const [importPreview, setImportPreview] = useState<HuelgaPersonalTurno[]>([]);
   const [importSkippedRows, setImportSkippedRows] = useState(0);
+  const [importPlantillaStats, setImportPlantillaStats] = useState<HuelgaPersonalPlantillaStats | null>(null);
   const [importError, setImportError] = useState('');
   const [importing, setImporting] = useState(false);
   const [puestoResponsables, setPuestoResponsables] = useState<HuelgaPuestoAsignacion[]>([]);
@@ -148,11 +155,12 @@ export function HuelgasPage() {
 
   useEffect(() => {
     loadConfiguracion();
+    loadEmployees();
     setHuelgas(readJsonStorage(STORAGE_KEY, [], isHuelgas));
     setPuestoResponsables(
       readJsonStorage(PUESTO_RESPONSABLES_STORAGE_KEY, [], isHuelgaPuestoAsignaciones),
     );
-  }, [loadConfiguracion]);
+  }, [loadConfiguracion, loadEmployees]);
 
   const sindicatos = useMemo(
     () =>
@@ -268,6 +276,7 @@ export function HuelgasPage() {
     setImportFileName('');
     setImportPreview([]);
     setImportSkippedRows(0);
+    setImportPlantillaStats(null);
     setImportError('');
   };
 
@@ -277,6 +286,7 @@ export function HuelgasPage() {
     setImportFileName('');
     setImportPreview([]);
     setImportSkippedRows(0);
+    setImportPlantillaStats(null);
     setImportError('');
   };
 
@@ -284,6 +294,7 @@ export function HuelgasPage() {
     setImportError('');
     setImportPreview([]);
     setImportSkippedRows(0);
+    setImportPlantillaStats(null);
     setImportFileName(file?.name ?? '');
     if (!file) return;
 
@@ -295,7 +306,9 @@ export function HuelgasPage() {
     try {
       const rows = await parseXlsxRows(await file.arrayBuffer());
       const result = parseHuelgaPersonalRows(rows);
-      setImportPreview(result.records);
+      const enriched = enrichPersonalWithPlantilla(result.records, employees);
+      setImportPreview(enriched.records);
+      setImportPlantillaStats(enriched.stats);
       setImportSkippedRows(result.skippedRows);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'No se ha podido leer el Excel.');
@@ -348,7 +361,7 @@ export function HuelgasPage() {
     : null;
 
   const assignmentPersonCounts = useMemo(
-    () => countPersonasByPuesto(assignmentTarget?.personalConTurno ?? []),
+    () => countPersonasByAsignacion(assignmentTarget?.personalConTurno ?? []),
     [assignmentTarget],
   );
 
@@ -356,7 +369,7 @@ export function HuelgasPage() {
     const query = assignmentSearch.trim().toLocaleLowerCase('es-ES');
     if (!query) return assignmentDraft;
     return assignmentDraft.filter((item) =>
-      [item.puesto, item.area, item.responsableNombre, item.responsableEmail].some((value) =>
+      [item.residencia, item.puesto, item.area, item.responsableNombre, item.responsableEmail].some((value) =>
         value.toLocaleLowerCase('es-ES').includes(query),
       ),
     );
@@ -388,13 +401,17 @@ export function HuelgasPage() {
   };
 
   const updateAssignment = (
+    residencia: string,
     puesto: string,
     field: 'area' | 'responsableNombre' | 'responsableEmail',
     value: string,
   ) => {
+    const targetKey = asignacionKey(residencia, puesto);
     setAssignmentDraft((current) =>
       current.map((item) =>
-        item.puesto === puesto ? { ...item, [field]: value, updatedAt: new Date().toISOString() } : item,
+        asignacionKey(item.residencia, item.puesto) === targetKey
+          ? { ...item, [field]: value, updatedAt: new Date().toISOString() }
+          : item,
       ),
     );
   };
@@ -607,15 +624,19 @@ export function HuelgasPage() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300"><FileSpreadsheet size={20} /></div>
                     <div>
                       <p className="text-sm font-semibold text-metro-text">Excel de personal por día</p>
-                      <p className="mt-1 text-xs text-metro-muted">Columnas esperadas: Resi./Estac., Inicio, Salida, Entrada, Fin, Nombre y Apellidos, Puesto y Turno.</p>
+                      <p className="mt-1 text-xs text-metro-muted">Columnas esperadas: Resi./Estac., Inicio, Salida, Entrada, Fin, Nombre y Apellidos, Puesto y Turno. La residencia se contrastará con la Plantilla de TrAccion.</p>
                     </div>
                   </div>
                   <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3.5 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:bg-metro-raised">
                     <FileSpreadsheet size={16} /> Seleccionar Excel
-                    <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void selectImportFile(event.target.files?.[0] ?? null)} />
+                    <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={employeesLoading} onChange={(event) => void selectImportFile(event.target.files?.[0] ?? null)} />
                   </label>
                 </div>
                 {importFileName && <p className="mt-3 text-xs text-metro-muted">Archivo: <span className="font-medium text-metro-text">{importFileName}</span></p>}
+                {employeesLoading && <p className="mt-3 text-xs text-amber-200">Cargando Plantilla para poder contrastar la residencia…</p>}
+                {!employeesLoading && employees.length === 0 && (
+                  <p className="mt-3 text-xs text-amber-200">No hay personas disponibles en Plantilla. Podrás importar, pero la residencia se tomará provisionalmente del Excel y quedará pendiente de contraste.</p>
+                )}
               </section>
 
               {importError && <div className="rounded-xl border border-red-500/40 bg-red-950/25 px-4 py-3 text-sm text-red-200">{importError}</div>}
@@ -628,16 +649,44 @@ export function HuelgasPage() {
                     <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Actualmente importadas</p><strong className="mt-1 block text-xl text-metro-text">{importTarget.personalConTurno?.length ?? 0}</strong></div>
                   </div>
 
+                  {importPlantillaStats && (
+                    <section className="rounded-xl border border-metro-border bg-metro-panel/45 p-4">
+                      <div className="mb-3">
+                        <p className="text-sm font-semibold text-metro-text">Contraste con Plantilla</p>
+                        <p className="mt-1 text-xs text-metro-muted">La residencia usada para asignar responsables será la de Plantilla cuando exista una coincidencia única.</p>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-5">
+                        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2"><p className="text-[11px] text-emerald-200/80">Encontradas</p><strong className="text-lg text-emerald-200">{importPlantillaStats.encontrados}</strong></div>
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"><p className="text-[11px] text-amber-200/80">No encontradas</p><strong className="text-lg text-amber-200">{importPlantillaStats.noEncontrados}</strong></div>
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"><p className="text-[11px] text-amber-200/80">Ambiguas</p><strong className="text-lg text-amber-200">{importPlantillaStats.ambiguos}</strong></div>
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"><p className="text-[11px] text-amber-200/80">Sin residencia</p><strong className="text-lg text-amber-200">{importPlantillaStats.sinResidenciaPlantilla}</strong></div>
+                        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2"><p className="text-[11px] text-sky-200/80">Residencia distinta</p><strong className="text-lg text-sky-200">{importPlantillaStats.residenciaDiscrepante}</strong></div>
+                      </div>
+                    </section>
+                  )}
+
                   <div className="overflow-hidden rounded-xl border border-metro-border">
                     <div className="border-b border-metro-border bg-metro-raised/60 px-4 py-2.5"><p className="text-xs font-semibold uppercase tracking-wide text-metro-muted">Vista previa · primeras {Math.min(importPreview.length, 8)} personas</p></div>
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[760px] text-left text-xs">
-                        <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nombre y apellidos</th><th className="px-3 py-2">Resi./Estac.</th><th className="px-3 py-2">Horario</th><th className="px-3 py-2">Puesto</th><th className="px-3 py-2">Turno</th></tr></thead>
+                      <table className="w-full min-w-[980px] text-left text-xs">
+                        <thead className="bg-metro-panel text-metro-muted"><tr><th className="px-3 py-2">Nombre y apellidos</th><th className="px-3 py-2">Residencia Plantilla</th><th className="px-3 py-2">Resi./Estac. Excel</th><th className="px-3 py-2">Contraste</th><th className="px-3 py-2">Horario</th><th className="px-3 py-2">Puesto</th><th className="px-3 py-2">Turno</th></tr></thead>
                         <tbody className="divide-y divide-metro-border">
                           {importPreview.slice(0, 8).map((persona) => (
                             <tr key={persona.id}>
                               <td className="px-3 py-2 font-medium text-metro-text">{persona.nombreApellidos}</td>
-                              <td className="px-3 py-2 text-metro-muted">{persona.residenciaEstacion || '—'}</td>
+                              <td className="px-3 py-2 font-medium text-metro-text">{persona.residenciaPlantilla || persona.residenciaAsignacion || '—'}</td>
+                              <td className="px-3 py-2 text-metro-muted">{persona.residenciaExcel || persona.residenciaEstacion || '—'}</td>
+                              <td className="px-3 py-2">
+                                {persona.plantillaMatch === 'matched' ? (
+                                  <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${persona.residenciaDiscrepante ? 'border-sky-500/35 bg-sky-500/10 text-sky-200' : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'}`}>{persona.residenciaDiscrepante ? 'Coincide · residencia distinta' : 'Encontrada'}</span>
+                                ) : persona.plantillaMatch === 'ambiguous' ? (
+                                  <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200">Ambigua</span>
+                                ) : persona.plantillaMatch === 'no-residence' ? (
+                                  <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200">Sin residencia</span>
+                                ) : (
+                                  <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200">No encontrada</span>
+                                )}
+                              </td>
                               <td className="whitespace-nowrap px-3 py-2 text-metro-muted">{persona.inicio || '—'}–{persona.fin || '—'}{persona.salida || persona.entrada ? ` · ${persona.salida || '—'} / ${persona.entrada || '—'}` : ''}</td>
                               <td className="px-3 py-2 text-metro-muted">{persona.puesto || '—'}</td>
                               <td className="px-3 py-2 text-metro-muted">{persona.turno || '—'}</td>
@@ -668,7 +717,7 @@ export function HuelgasPage() {
               <div>
                 <h2 id="huelga-assignment-title" className="text-lg font-semibold text-metro-text">Asignación de responsables</h2>
                 <p className="mt-1 text-sm text-metro-muted">
-                  {formatDate(assignmentTarget.fecha)} · Define el área y la persona que recibirá la recogida de datos de cada puesto.
+                  {formatDate(assignmentTarget.fecha)} · Define el área y la persona que recibirá la recogida de datos de cada combinación residencia + puesto.
                 </p>
               </div>
               <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={closeAssignments} type="button" aria-label="Cerrar">×</button>
@@ -677,7 +726,7 @@ export function HuelgasPage() {
             <div className="space-y-4 overflow-y-auto p-5">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3">
-                  <p className="text-xs text-metro-muted">Puestos detectados</p>
+                  <p className="text-xs text-metro-muted">Residencia + puesto</p>
                   <strong className="mt-1 block text-xl text-metro-text">{assignmentDraft.length}</strong>
                 </div>
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3">
@@ -696,7 +745,7 @@ export function HuelgasPage() {
                   <div>
                     <p className="text-sm font-semibold text-metro-text">Configuración reutilizable</p>
                     <p className="mt-1 text-xs leading-5 text-metro-muted">
-                      Los cambios que guardes aquí se usarán automáticamente cuando este puesto aparezca en futuras huelgas. Esta huelga conservará su propia copia para que los cambios futuros no alteren su histórico.
+                      Los cambios que guardes aquí se usarán automáticamente cuando esta combinación de residencia y puesto aparezca en futuras huelgas. Esta huelga conservará su propia copia para que los cambios futuros no alteren su histórico.
                     </p>
                   </div>
                 </div>
@@ -706,7 +755,7 @@ export function HuelgasPage() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted" size={16} />
                 <input
                   className="h-10 w-full rounded-xl border border-metro-border bg-metro-panel pl-9 pr-3 text-sm text-metro-text outline-none focus:border-metro-red"
-                  placeholder="Buscar puesto, área o responsable..."
+                  placeholder="Buscar residencia, puesto, área o responsable..."
                   value={assignmentSearch}
                   onChange={(event) => setAssignmentSearch(event.target.value)}
                 />
@@ -717,6 +766,7 @@ export function HuelgasPage() {
                   <table className="w-full min-w-[980px] text-left text-xs">
                     <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted">
                       <tr>
+                        <th className="px-3 py-2.5 font-semibold">Residencia</th>
                         <th className="px-3 py-2.5 font-semibold">Puesto</th>
                         <th className="w-20 px-3 py-2.5 text-center font-semibold">Personas</th>
                         <th className="px-3 py-2.5 font-semibold">Área</th>
@@ -728,9 +778,12 @@ export function HuelgasPage() {
                     <tbody className="divide-y divide-metro-border">
                       {filteredAssignmentDraft.map((item) => {
                         const complete = isAsignacionCompleta(item);
-                        const personCount = assignmentPersonCounts.get(item.puesto.toLocaleLowerCase('es-ES')) ?? 0;
+                        const personCount = assignmentPersonCounts.get(asignacionKey(item.residencia, item.puesto)) ?? 0;
                         return (
-                          <tr className="align-top hover:bg-metro-raised/35" key={item.puesto}>
+                          <tr className="align-top hover:bg-metro-raised/35" key={asignacionKey(item.residencia, item.puesto)}>
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-metro-text">{item.residencia}</p>
+                            </td>
                             <td className="px-3 py-3">
                               <p className="font-semibold text-metro-text">{item.puesto}</p>
                             </td>
@@ -740,7 +793,7 @@ export function HuelgasPage() {
                                 className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
                                 placeholder="Área"
                                 value={item.area}
-                                onChange={(event) => updateAssignment(item.puesto, 'area', event.target.value)}
+                                onChange={(event) => updateAssignment(item.residencia, item.puesto, 'area', event.target.value)}
                               />
                             </td>
                             <td className="px-3 py-2">
@@ -748,7 +801,7 @@ export function HuelgasPage() {
                                 className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
                                 placeholder="Nombre y apellidos"
                                 value={item.responsableNombre}
-                                onChange={(event) => updateAssignment(item.puesto, 'responsableNombre', event.target.value)}
+                                onChange={(event) => updateAssignment(item.residencia, item.puesto, 'responsableNombre', event.target.value)}
                               />
                             </td>
                             <td className="px-3 py-2">
@@ -757,7 +810,7 @@ export function HuelgasPage() {
                                 placeholder="correo@empresa.es"
                                 type="email"
                                 value={item.responsableEmail}
-                                onChange={(event) => updateAssignment(item.puesto, 'responsableEmail', event.target.value)}
+                                onChange={(event) => updateAssignment(item.residencia, item.puesto, 'responsableEmail', event.target.value)}
                               />
                             </td>
                             <td className="px-3 py-3">
@@ -772,14 +825,14 @@ export function HuelgasPage() {
                   </table>
                 </div>
                 {filteredAssignmentDraft.length === 0 && (
-                  <div className="px-4 py-8 text-center text-sm text-metro-muted">No hay puestos que coincidan con la búsqueda.</div>
+                  <div className="px-4 py-8 text-center text-sm text-metro-muted">No hay combinaciones de residencia y puesto que coincidan con la búsqueda.</div>
                 )}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-metro-border bg-metro-app px-5 py-4">
               <p className="text-xs text-metro-muted">
-                Puedes guardar aunque queden puestos pendientes. Se completarán antes de generar la recogida de datos.
+                Puedes guardar aunque queden combinaciones pendientes. Se completarán antes de generar la recogida de datos.
               </p>
               <div className="flex gap-2">
                 <ActionButton variant="secondary" iconOnly={false} onClick={closeAssignments}>Cancelar</ActionButton>

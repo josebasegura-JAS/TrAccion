@@ -10,6 +10,12 @@ export type HuelgaPersonalTurno = {
   nombreApellidos: string;
   puesto: string;
   turno: string;
+  residenciaExcel?: string;
+  residenciaPlantilla?: string;
+  residenciaAsignacion?: string;
+  empleado?: string;
+  plantillaMatch?: 'matched' | 'not-found' | 'ambiguous' | 'no-residence';
+  residenciaDiscrepante?: boolean;
 };
 
 export type HuelgaPersonalImportResult = {
