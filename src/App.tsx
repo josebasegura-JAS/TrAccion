@@ -32,6 +32,9 @@ const AjustesPage = lazy(() =>
 const ActasPage = lazy(() =>
   import('./features/actas/components/ActasPage').then((module) => ({ default: module.ActasPage })),
 );
+const HuelgasPage = lazy(() =>
+  import('./features/huelgas/components/HuelgasPage').then((module) => ({ default: module.HuelgasPage })),
+);
 const ComitePage = lazy(() =>
   import('./features/comite/components/ComitePage').then((module) => ({ default: module.ComitePage })),
 );
@@ -157,6 +160,7 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   tareas: 'Cargando Tareas...',
   comite: 'Cargando Comité de Empresa...',
   actas: 'Cargando Actas...',
+  huelgas: 'Cargando Huelgas...',
   paritaria: 'Cargando Comisión Paritaria...',
   'criterios-rrll': 'Cargando Criterios...',
   teletrabajo: 'Cargando Teletrabajo...',
@@ -469,6 +473,7 @@ export function App() {
               />
             )}
             {activeView === 'actas' && <ActasPage />}
+            {activeView === 'huelgas' && <HuelgasPage />}
             {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
             {activeView === 'teletrabajo' && (
               <TeletrabajoPage

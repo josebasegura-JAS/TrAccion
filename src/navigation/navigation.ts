@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   FileText,
+  Megaphone,
   Landmark,
   Clover,
   ClipboardList,
@@ -20,6 +21,7 @@ export type AppView =
   | 'tareas'
   | 'comite'
   | 'actas'
+  | 'huelgas'
   | 'paritaria'
   | 'criterios-rrll'
   | 'teletrabajo'
@@ -77,6 +79,7 @@ export const navigationGroups: NavigationGroup[] = [
       { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
       { label: 'Comité / Paritaria', icon: CalendarDays, view: 'comite' },
       { label: 'Actas', icon: FileText, view: 'actas' },
+      { label: 'Huelgas', icon: Megaphone, view: 'huelgas' },
     ],
   },
   {
