@@ -668,14 +668,23 @@ export function TareasPage({
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
-        <div className="space-y-3 border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
-          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
+          <div className="grid min-w-0 items-center gap-3 xl:grid-cols-[auto_minmax(280px,1fr)_auto]">
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
-              <ListChecks size={16} className="text-sky-300" />
-              Tareas activas
+              <ListChecks size={16} className="shrink-0 text-sky-300" />
+              <span className="whitespace-nowrap">Tareas activas</span>
               <CountBadge>{filteredTasks.length} registros</CountBadge>
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+
+            <SearchField
+              onChange={(event) => setFilter('search', event.target.value)}
+              onClear={() => setFilter('search', '')}
+              placeholder="Buscar tareas, texto de seguimiento o palabras clave..."
+              value={filters.search}
+              wrapperClassName="w-full min-w-0 xl:max-w-[520px]"
+            />
+
+            <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
               <ActionButton iconOnly={false} onClick={openCreateEditor} size="sm" variant="add">
                 Nueva tarea
               </ActionButton>
@@ -708,16 +717,6 @@ export function TareasPage({
                 }}
               />
             </div>
-          </div>
-
-          <div className="flex min-w-0 items-center">
-            <SearchField
-              onChange={(event) => setFilter('search', event.target.value)}
-              onClear={() => setFilter('search', '')}
-              placeholder="Buscar tareas, texto de seguimiento o palabras clave..."
-              value={filters.search}
-              wrapperClassName="w-full min-w-0 sm:max-w-[460px]"
-            />
           </div>
         </div>
 
