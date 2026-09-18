@@ -16,6 +16,8 @@ export type HuelgaPersonalTurno = {
   empleado?: string;
   plantillaMatch?: 'matched' | 'not-found' | 'ambiguous' | 'no-residence';
   residenciaDiscrepante?: boolean;
+  residenciaPlantillaAnterior?: string;
+  residenciaCorregidaAt?: string;
 };
 
 export type HuelgaPersonalImportResult = {

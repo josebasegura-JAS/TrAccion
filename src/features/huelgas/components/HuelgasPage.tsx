@@ -5,6 +5,7 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
+import type { Employee, EmployeeDraft } from '../../plantilla/domain/employee';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
@@ -183,6 +184,42 @@ function resolveResidenceOverride(
   return current;
 }
 
+function employeeToDraft(employee: Employee): EmployeeDraft {
+  return {
+    empleado: employee.empleado,
+    nombreApellidos: employee.nombreApellidos,
+    puestoNomina: employee.puestoNomina,
+    puestoOrganizativo: employee.puestoOrganizativo,
+    puestoEus: employee.puestoEus,
+    residencia: employee.residencia,
+    unidad: employee.unidad,
+    nivelRetributivo: employee.nivelRetributivo,
+    direccionOrganizativa: employee.direccionOrganizativa,
+    antiguedadPuesto: employee.antiguedadPuesto,
+    sexo: employee.sexo,
+    calle: employee.calle,
+    numero: employee.numero,
+    piso: employee.piso,
+    codigoPostal: employee.codigoPostal,
+    poblacion: employee.poblacion,
+    provincia: employee.provincia,
+    nif: employee.nif,
+    telefono1: employee.telefono1,
+    telefono2: employee.telefono2,
+  };
+}
+
+function sameNormalizedText(left: string, right: string): boolean {
+  const normalize = (value: string) => value
+    .replace(/\u00a0/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es-ES')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalize(left) === normalize(right);
+}
+
 export function HuelgasPage() {
   const { alert, confirm, dialogNode } = useAppDialog();
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
@@ -190,6 +227,7 @@ export function HuelgasPage() {
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
   const employeesLoading = useEmployeeStore((state) => state.isLoading);
+  const updateEmployeeWithConcurrencyCheck = useEmployeeStore((state) => state.updateWithConcurrencyCheck);
   const [huelgas, setHuelgas] = useState<Huelga[]>([]);
   const [draft, setDraft] = useState<HuelgaDraft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -215,6 +253,9 @@ export function HuelgasPage() {
   const [assignmentSort, setAssignmentSort] = useState<{ key: AssignmentSortKey; direction: AssignmentSortDirection }>({ key: 'residencia', direction: 'asc' });
   const [assignmentResidenceOverrides, setAssignmentResidenceOverrides] = useState<Record<string, string>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
+  const [personDetailAssignment, setPersonDetailAssignment] = useState<HuelgaPuestoAsignacion | null>(null);
+  const [personResidenceDrafts, setPersonResidenceDrafts] = useState<Record<string, string>>({});
+  const [savingPersonId, setSavingPersonId] = useState<string | null>(null);
   const [generatingCollectionForId, setGeneratingCollectionForId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -431,6 +472,16 @@ export function HuelgasPage() {
     ? huelgas.find((item) => item.id === assignmentTargetId) ?? null
     : null;
 
+  const personDetailRows = useMemo(() => {
+    if (!assignmentTarget || !personDetailAssignment) return [];
+    const targetKey = asignacionKey(personDetailAssignment.residencia, personDetailAssignment.puesto);
+    return (assignmentTarget.personalConTurno ?? []).filter((persona) => {
+      const residenciaBase = (persona.residenciaAsignacion || persona.residenciaPlantilla || persona.residenciaEstacion || '').trim();
+      const residencia = resolveResidenceOverride(assignmentResidenceOverrides, residenciaBase, persona.puesto);
+      return asignacionKey(residencia, persona.puesto) === targetKey;
+    });
+  }, [assignmentResidenceOverrides, assignmentTarget, personDetailAssignment]);
+
   const assignmentPersonCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const persona of assignmentTarget?.personalConTurno ?? []) {
@@ -590,6 +641,120 @@ export function HuelgasPage() {
         updatedAt: now,
       };
     }));
+  };
+
+  const openPersonDetail = (assignment: HuelgaPuestoAsignacion) => {
+    setPersonDetailAssignment(assignment);
+    const targetKey = asignacionKey(assignment.residencia, assignment.puesto);
+    const drafts: Record<string, string> = {};
+    for (const persona of assignmentTarget?.personalConTurno ?? []) {
+      const residenciaBase = (persona.residenciaAsignacion || persona.residenciaPlantilla || persona.residenciaEstacion || '').trim();
+      const residencia = resolveResidenceOverride(assignmentResidenceOverrides, residenciaBase, persona.puesto);
+      if (asignacionKey(residencia, persona.puesto) === targetKey) {
+        drafts[persona.id] = persona.residenciaAsignacion || persona.residenciaPlantilla || persona.residenciaEstacion || '';
+      }
+    }
+    setPersonResidenceDrafts(drafts);
+  };
+
+  const closePersonDetail = () => {
+    if (savingPersonId) return;
+    setPersonDetailAssignment(null);
+    setPersonResidenceDrafts({});
+  };
+
+  const savePersonResidence = async (persona: HuelgaPersonalTurno) => {
+    if (!assignmentTarget) return;
+    const nextResidence = (personResidenceDrafts[persona.id] ?? '').trim();
+    if (!nextResidence) {
+      await alert('La residencia no puede quedar vacía.', { title: 'Revisa la residencia', type: 'warning' });
+      return;
+    }
+    if (!persona.empleado) {
+      await alert(
+        'Esta persona no está vinculada de forma única con la Plantilla. Revisa primero su identificación antes de modificar el maestro.',
+        { title: 'Persona no identificada', type: 'warning' },
+      );
+      return;
+    }
+    const employee = employees.find((item) => item.empleado === persona.empleado && !item.deletedAt);
+    if (!employee) {
+      await alert('No se encuentra esta persona activa en Plantilla. Recarga la información y vuelve a intentarlo.', {
+        title: 'Persona no encontrada',
+        type: 'warning',
+      });
+      return;
+    }
+    if (sameNormalizedText(employee.residencia, nextResidence)) {
+      await alert('La residencia indicada ya coincide con la guardada en Plantilla.', { title: 'Sin cambios', type: 'info' });
+      return;
+    }
+
+    const accepted = await confirm(
+      `Vas a cambiar la residencia de ${employee.nombreApellidos} de “${employee.residencia || 'Sin residencia'}” a “${nextResidence}”. Este cambio actualizará también la Plantilla y se utilizará en futuras huelgas. ¿Deseas continuar?`,
+      { title: 'Actualizar residencia en Plantilla', confirmLabel: 'Actualizar residencia', cancelLabel: 'Cancelar' },
+    );
+    if (!accepted) return;
+
+    setSavingPersonId(persona.id);
+    const employeeDraft = { ...employeeToDraft(employee), residencia: nextResidence };
+    const employeeResult = await updateEmployeeWithConcurrencyCheck(
+      employee.empleado,
+      employeeDraft,
+      JSON.stringify(employee),
+    );
+    if (!employeeResult.ok) {
+      setSavingPersonId(null);
+      await alert(employeeResult.message || 'No se ha podido actualizar la residencia en Plantilla.', {
+        title: 'Error al actualizar Plantilla',
+        type: 'error',
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const updatedPersonal = (assignmentTarget.personalConTurno ?? []).map((item) => {
+      if (item.id !== persona.id) return item;
+      const residenciaExcel = item.residenciaExcel || item.residenciaEstacion || '';
+      return {
+        ...item,
+        residenciaPlantillaAnterior: item.residenciaPlantilla || employee.residencia || '',
+        residenciaPlantilla: nextResidence,
+        residenciaAsignacion: nextResidence,
+        residenciaCorregidaAt: now,
+        plantillaMatch: 'matched' as const,
+        residenciaDiscrepante: Boolean(residenciaExcel) && !sameNormalizedText(residenciaExcel, nextResidence),
+      };
+    });
+    const rebuiltAssignments = buildAsignacionesForPersonal(
+      updatedPersonal,
+      assignmentDraft,
+      puestoResponsables,
+      zonas,
+    );
+    const nextHuelgas = huelgas.map((item) =>
+      item.id === assignmentTarget.id
+        ? { ...item, personalConTurno: updatedPersonal, asignacionesPuesto: rebuiltAssignments, updatedAt: now }
+        : item,
+    );
+    const huelgaResult = await writeJsonStorageAsync(STORAGE_KEY, nextHuelgas);
+    setSavingPersonId(null);
+    if (!huelgaResult.ok) {
+      await alert(
+        `${huelgaResult.message || 'No se ha podido guardar la corrección en la huelga.'} La residencia sí se ha actualizado en Plantilla.`,
+        { title: 'Guardado parcial', type: 'warning' },
+      );
+      return;
+    }
+
+    setHuelgas(nextHuelgas);
+    setAssignmentDraft(rebuiltAssignments);
+    setAssignmentResidenceOverrides({});
+    setPersonDetailAssignment((current) => {
+      if (!current) return null;
+      return rebuiltAssignments.find((item) => asignacionKey(item.residencia, item.puesto) === asignacionKey(nextResidence, persona.puesto)) ?? null;
+    });
+    setPersonResidenceDrafts((current) => ({ ...current, [persona.id]: nextResidence }));
   };
 
   const openZones = () => {
@@ -1111,7 +1276,7 @@ export function HuelgasPage() {
                   <div>
                     <p className="text-sm font-semibold text-metro-text">Configuración reutilizable</p>
                     <p className="mt-1 text-xs leading-5 text-metro-muted">
-                      La relación residencia + puesto → área → zona se reutilizará automáticamente en futuras huelgas. Si corriges una residencia aquí, la corrección se aplicará a las personas de esa combinación solo en esta huelga y se conservará el dato original de Plantilla. Los responsables se definen en el maestro de zonas. Esta huelga conservará su propia copia de área, zona y responsable para que los cambios futuros no alteren su histórico.
+                      La relación residencia + puesto → área → zona se reutilizará automáticamente en futuras huelgas. La residencia de esta tabla puede ajustarse como agrupación de la huelga; si el dato incorrecto está en una persona concreta, usa «Ver personas» y corrígela allí: esa corrección actualizará también la Plantilla maestra. Los responsables se definen en el maestro de zonas. Esta huelga conservará su propia copia de área, zona y responsable para que los cambios futuros no alteren su histórico.
                     </p>
                   </div>
                 </div>
@@ -1172,11 +1337,21 @@ export function HuelgasPage() {
                                 value={item.residencia}
                                 onChange={(event) => updateAssignmentResidence(item.residencia, item.puesto, event.target.value)}
                               />
+                              <p className="mt-1 text-[10px] text-metro-muted">Agrupación de esta huelga</p>
                             </td>
                             <td className="px-3 py-3">
                               <p className="font-semibold text-metro-text">{item.puesto}</p>
                             </td>
-                            <td className="px-3 py-3 text-center font-semibold text-metro-text">{personCount}</td>
+                            <td className="px-3 py-2 text-center">
+                              <p className="font-semibold text-metro-text">{personCount}</p>
+                              <button
+                                className="mt-1 text-[11px] font-semibold text-metro-red hover:underline"
+                                type="button"
+                                onClick={() => openPersonDetail(item)}
+                              >
+                                Ver personas
+                              </button>
+                            </td>
                             <td className="px-3 py-2">
                               <input
                                 className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
@@ -1228,6 +1403,122 @@ export function HuelgasPage() {
                   Guardar asignaciones
                 </ActionButton>
               </div>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {personDetailAssignment && assignmentTarget && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-4" role="presentation">
+          <section
+            className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-app shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="huelga-person-detail-title"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
+              <div>
+                <h2 id="huelga-person-detail-title" className="text-lg font-semibold text-metro-text">Personas de la combinación</h2>
+                <p className="mt-1 text-sm text-metro-muted">
+                  {personDetailAssignment.residencia} · {personDetailAssignment.puesto} · {personDetailRows.length} personas
+                </p>
+              </div>
+              <button
+                className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text"
+                onClick={closePersonDetail}
+                type="button"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto p-5">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs leading-5 text-amber-100">
+                Usa esta vista para localizar la persona que provoca una residencia incorrecta. Al guardar una corrección individual se actualizará también su residencia en Plantilla y el cambio se utilizará en futuras huelgas.
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-metro-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1080px] text-left text-xs">
+                    <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted">
+                      <tr>
+                        <th className="px-3 py-2.5 font-semibold">Nº empleado</th>
+                        <th className="px-3 py-2.5 font-semibold">Nombre y apellidos</th>
+                        <th className="px-3 py-2.5 font-semibold">Residencia Plantilla</th>
+                        <th className="px-3 py-2.5 font-semibold">Residencia Excel</th>
+                        <th className="px-3 py-2.5 font-semibold">Residencia correcta</th>
+                        <th className="px-3 py-2.5 font-semibold">Turno</th>
+                        <th className="w-32 px-3 py-2.5 font-semibold">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-metro-border">
+                      {personDetailRows.map((persona) => {
+                        const linkedEmployee = persona.empleado
+                          ? employees.find((employee) => employee.empleado === persona.empleado && !employee.deletedAt)
+                          : undefined;
+                        const canEditMaster = Boolean(linkedEmployee);
+                        const residenceValue = personResidenceDrafts[persona.id] ?? persona.residenciaAsignacion ?? persona.residenciaPlantilla ?? persona.residenciaEstacion ?? '';
+                        const plantillaResidence = linkedEmployee?.residencia || persona.residenciaPlantilla || '';
+                        return (
+                          <tr className="align-top hover:bg-metro-raised/35" key={persona.id}>
+                            <td className="px-3 py-3 font-semibold text-metro-text">{persona.empleado || '—'}</td>
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-metro-text">{persona.nombreApellidos}</p>
+                              <p className="mt-1 text-[11px] text-metro-muted">{persona.puesto}</p>
+                            </td>
+                            <td className="px-3 py-3 text-metro-text">{plantillaResidence || '—'}</td>
+                            <td className="px-3 py-3 text-metro-text">{persona.residenciaExcel || persona.residenciaEstacion || '—'}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex min-w-[260px] items-center gap-2">
+                                <input
+                                  className="h-9 min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+                                  value={residenceValue}
+                                  disabled={!canEditMaster || savingPersonId === persona.id}
+                                  onChange={(event) => setPersonResidenceDrafts((current) => ({ ...current, [persona.id]: event.target.value }))}
+                                  aria-label={`Residencia correcta de ${persona.nombreApellidos}`}
+                                />
+                                <ActionButton
+                                  variant="save"
+                                  size="sm"
+                                  iconOnly={false}
+                                  loading={savingPersonId === persona.id}
+                                  disabled={!canEditMaster || savingPersonId !== null || sameNormalizedText(plantillaResidence, residenceValue)}
+                                  onClick={() => void savePersonResidence(persona)}
+                                >
+                                  Actualizar
+                                </ActionButton>
+                              </div>
+                              {!canEditMaster && (
+                                <p className="mt-1 text-[10px] text-amber-200">No vinculada de forma única con Plantilla</p>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-metro-text">{persona.turno || '—'}</td>
+                            <td className="px-3 py-3">
+                              {persona.plantillaMatch === 'matched' ? (
+                                <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold ${persona.residenciaDiscrepante ? 'border-amber-500/35 bg-amber-500/10 text-amber-200' : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'}`}>
+                                  {persona.residenciaDiscrepante ? 'Discrepancia' : 'Coincide'}
+                                </span>
+                              ) : (
+                                <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-200">
+                                  {persona.plantillaMatch === 'ambiguous' ? 'Ambigua' : persona.plantillaMatch === 'no-residence' ? 'Sin residencia' : 'No encontrada'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {personDetailRows.length === 0 && (
+                  <div className="px-4 py-8 text-center text-sm text-metro-muted">Ya no hay personas en esta combinación después de las correcciones realizadas.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-metro-border bg-metro-app px-5 py-4">
+              <ActionButton variant="secondary" iconOnly={false} onClick={closePersonDetail}>Cerrar</ActionButton>
             </div>
           </section>
         </div>
