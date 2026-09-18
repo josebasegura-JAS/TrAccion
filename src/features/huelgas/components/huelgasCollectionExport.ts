@@ -3,7 +3,8 @@ import { asignacionKey } from './huelgasAssignments';
 import type { HuelgaPersonalTurno } from './huelgasPersonalImport';
 
 export type HuelgaCollectionGroup = {
-  area: string;
+  zonaId: string;
+  zonaNombre: string;
   responsableNombre: string;
   responsableEmail: string;
   asignaciones: HuelgaPuestoAsignacion[];
@@ -12,7 +13,7 @@ export type HuelgaCollectionGroup = {
 
 type HuelgaMailContext = {
   fecha: string;
-  area: string;
+  zonaNombre: string;
   responsableNombre: string;
   personal: HuelgaPersonalTurno[];
   asignaciones: HuelgaPuestoAsignacion[];
@@ -28,8 +29,8 @@ function personaResidencia(persona: HuelgaPersonalTurno): string {
   );
 }
 
-function groupKey(area: string, email: string): string {
-  return `${normalize(area).toLocaleLowerCase('es-ES')}::${normalize(email).toLocaleLowerCase('es-ES')}`;
+function groupKey(zonaId: string, email: string): string {
+  return `${normalize(zonaId).toLocaleLowerCase('es-ES')}::${normalize(email).toLocaleLowerCase('es-ES')}`;
 }
 
 function safeFilePart(value: string): string {
@@ -38,7 +39,7 @@ function safeFilePart(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9 _-]+/g, '')
     .replace(/\s+/g, '_')
-    .slice(0, 70) || 'Area';
+    .slice(0, 70) || 'Zona';
 }
 
 function formatDateLong(fecha: string): string {
@@ -86,18 +87,26 @@ export function buildCollectionGroups(
     const residencia = personaResidencia(persona);
     const puesto = normalize(persona.puesto);
     const assignment = assignmentByKey.get(asignacionKey(residencia, puesto));
-    if (!assignment?.area.trim() || !assignment.responsableEmail.trim()) continue;
+    if (
+      !assignment?.area.trim() ||
+      !assignment.zonaId?.trim() ||
+      !assignment.zonaNombre?.trim() ||
+      !assignment.zonaResponsableEmail?.trim()
+    ) continue;
 
-    const key = groupKey(assignment.area, assignment.responsableEmail);
+    const key = groupKey(assignment.zonaId, assignment.zonaResponsableEmail);
     const existing = groups.get(key) ?? {
-      area: assignment.area.trim(),
-      responsableNombre: assignment.responsableNombre.trim(),
-      responsableEmail: assignment.responsableEmail.trim(),
+      zonaId: assignment.zonaId,
+      zonaNombre: assignment.zonaNombre.trim(),
+      responsableNombre: assignment.zonaResponsableNombre.trim(),
+      responsableEmail: assignment.zonaResponsableEmail.trim(),
       asignaciones: [],
       personal: [],
     };
 
-    if (!existing.asignaciones.some((item) => asignacionKey(item.residencia, item.puesto) === asignacionKey(assignment.residencia, assignment.puesto))) {
+    if (!existing.asignaciones.some((item) =>
+      asignacionKey(item.residencia, item.puesto) === asignacionKey(assignment.residencia, assignment.puesto)
+    )) {
       existing.asignaciones.push(assignment);
     }
     existing.personal.push(persona);
@@ -108,20 +117,26 @@ export function buildCollectionGroups(
     .map((group) => ({
       ...group,
       asignaciones: [...group.asignaciones].sort((a, b) => {
+        const areaOrder = a.area.localeCompare(b.area, 'es', { sensitivity: 'base' });
         const residenceOrder = a.residencia.localeCompare(b.residencia, 'es', { sensitivity: 'base' });
-        return residenceOrder || a.puesto.localeCompare(b.puesto, 'es', { sensitivity: 'base' });
+        return areaOrder || residenceOrder || a.puesto.localeCompare(b.puesto, 'es', { sensitivity: 'base' });
       }),
       personal: [...group.personal].sort((a, b) => {
+        const assignmentA = assignmentByKey.get(asignacionKey(personaResidencia(a), a.puesto));
+        const assignmentB = assignmentByKey.get(asignacionKey(personaResidencia(b), b.puesto));
+        const areaOrder = (assignmentA?.area ?? '').localeCompare(assignmentB?.area ?? '', 'es', { sensitivity: 'base' });
         const residenceOrder = personaResidencia(a).localeCompare(personaResidencia(b), 'es', { sensitivity: 'base' });
         const jobOrder = a.puesto.localeCompare(b.puesto, 'es', { sensitivity: 'base' });
-        return residenceOrder || jobOrder || a.nombreApellidos.localeCompare(b.nombreApellidos, 'es', { sensitivity: 'base' });
+        return areaOrder || residenceOrder || jobOrder || a.nombreApellidos.localeCompare(b.nombreApellidos, 'es', { sensitivity: 'base' });
       }),
     }))
-    .sort((a, b) => a.area.localeCompare(b.area, 'es', { sensitivity: 'base' }));
+    .sort((a, b) => a.zonaNombre.localeCompare(b.zonaNombre, 'es', { sensitivity: 'base' }));
 }
 
 export function buildHuelgaCollectionMailHtml(context: HuelgaMailContext): string {
   const fechaLarga = formatDateLong(context.fecha);
+  const areas = [...new Set(context.asignaciones.map((assignment) => assignment.area.trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   const colectivos = context.asignaciones
     .map((assignment) => {
       const count = context.personal.filter(
@@ -129,14 +144,15 @@ export function buildHuelgaCollectionMailHtml(context: HuelgaMailContext): strin
           asignacionKey(personaResidencia(persona), persona.puesto) ===
           asignacionKey(assignment.residencia, assignment.puesto),
       ).length;
-      return `<li><strong>${escapeHtml(assignment.puesto)}</strong> · ${escapeHtml(assignment.residencia)} (${count} ${count === 1 ? 'persona' : 'personas'})</li>`;
+      return `<li><strong>${escapeHtml(assignment.area)}</strong> · ${escapeHtml(assignment.puesto)} · ${escapeHtml(assignment.residencia)} (${count} ${count === 1 ? 'persona' : 'personas'})</li>`;
     })
     .join('');
 
   return `
     <p>Kaixo${context.responsableNombre ? ` ${escapeHtml(context.responsableNombre)}` : ''},</p>
     <p>Adjunto te envío el archivo a utilizar para la recogida de datos correspondiente a la <strong>huelga del ${escapeHtml(fechaLarga)}</strong>.</p>
-    <p>Los datos solicitados corresponden al área <strong>${escapeHtml(context.area)}</strong> y a los siguientes colectivos:</p>
+    <p>Los datos solicitados corresponden a la zona <strong>${escapeHtml(context.zonaNombre)}</strong>, que en esta jornada incluye ${areas.length === 1 ? 'el área' : 'las áreas'} <strong>${escapeHtml(areas.join(', '))}</strong>.</p>
+    <p>Los colectivos incluidos son:</p>
     <ul>${colectivos}</ul>
     <p>Es <strong>muy importante</strong> disponer <strong>antes de las 9:45 horas</strong> de los datos del personal que ha trabajado. Una vez cumplimentado, remite el archivo a <strong>RELACIONES_LABORALES@metrobilbao.eus</strong>.</p>
     <p>El fichero incluye las personas que tienen turno ya precargadas. Debes revisar y completar:</p>
@@ -156,8 +172,8 @@ export function buildHuelgaCollectionMailHtml(context: HuelgaMailContext): strin
   `;
 }
 
-export function buildHuelgaCollectionSubject(fecha: string, area: string): string {
-  return `Seguimiento huelga ${formatDateFile(fecha)} · ${area}`;
+export function buildHuelgaCollectionSubject(fecha: string, zonaNombre: string): string {
+  return `Seguimiento huelga ${formatDateFile(fecha)} · ${zonaNombre}`;
 }
 
 export async function buildHuelgaCollectionWorkbook(
@@ -171,29 +187,33 @@ export async function buildHuelgaCollectionWorkbook(
   workbook.created = new Date();
   workbook.modified = new Date();
 
+  const assignmentByKey = new Map(
+    group.asignaciones.map((item) => [asignacionKey(item.residencia, item.puesto), item]),
+  );
+
   const personalSheet = workbook.addWorksheet('Personal', {
     views: [{ state: 'frozen', ySplit: 5 }],
     properties: { tabColor: { argb: 'FFD71920' } },
   });
 
-  personalSheet.mergeCells('A1:M1');
+  personalSheet.mergeCells('A1:N1');
   personalSheet.getCell('A1').value = `SEGUIMIENTO HUELGA · ${formatDateLong(fecha).toUpperCase()}`;
   personalSheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
   personalSheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD71920' } };
   personalSheet.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' };
   personalSheet.getRow(1).height = 28;
 
-  personalSheet.mergeCells('A2:M2');
-  personalSheet.getCell('A2').value = `Área: ${group.area} · Responsable: ${group.responsableNombre || '—'} · ${group.personal.length} personas con turno`;
+  personalSheet.mergeCells('A2:N2');
+  personalSheet.getCell('A2').value = `Zona: ${group.zonaNombre} · Responsable: ${group.responsableNombre || '—'} · ${group.personal.length} personas con turno`;
   personalSheet.getCell('A2').font = { bold: true, size: 11, color: { argb: 'FF1F2937' } };
   personalSheet.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
 
-  personalSheet.mergeCells('A3:M3');
+  personalSheet.mergeCells('A3:N3');
   personalSheet.getCell('A3').value = 'Rellena únicamente las columnas Servicio mínimo, Situación y Observaciones. No modifiques los datos identificativos.';
   personalSheet.getCell('A3').font = { italic: true, color: { argb: 'FF6B7280' } };
 
   const headers = [
-    'Nº empleado', 'Nombre y apellidos', 'Residencia', 'Puesto', 'Turno', 'Inicio', 'Salida', 'Entrada', 'Fin',
+    'Nº empleado', 'Nombre y apellidos', 'Área', 'Residencia', 'Puesto', 'Turno', 'Inicio', 'Salida', 'Entrada', 'Fin',
     'Servicio mínimo', 'Situación', 'Observaciones', 'TrAccion ID',
   ];
   personalSheet.getRow(5).values = headers;
@@ -204,9 +224,11 @@ export async function buildHuelgaCollectionWorkbook(
 
   group.personal.forEach((persona, index) => {
     const row = 6 + index;
+    const assignment = assignmentByKey.get(asignacionKey(personaResidencia(persona), persona.puesto));
     personalSheet.getRow(row).values = [
       persona.empleado ?? '',
       persona.nombreApellidos,
+      assignment?.area ?? '',
       personaResidencia(persona),
       persona.puesto,
       persona.turno,
@@ -223,7 +245,7 @@ export async function buildHuelgaCollectionWorkbook(
     personalSheet.getRow(row).height = 20;
     const fill = index % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB';
     personalSheet.getRow(row).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
-    personalSheet.getCell(`J${row}`).dataValidation = {
+    personalSheet.getCell(`K${row}`).dataValidation = {
       type: 'list',
       allowBlank: true,
       formulae: ['"Sí,No"'],
@@ -231,7 +253,7 @@ export async function buildHuelgaCollectionWorkbook(
       errorTitle: 'Valor no válido',
       error: 'Selecciona Sí o No.',
     };
-    personalSheet.getCell(`K${row}`).dataValidation = {
+    personalSheet.getCell(`L${row}`).dataValidation = {
       type: 'list',
       allowBlank: true,
       formulae: ['"Huelga,Trabaja"'],
@@ -239,7 +261,7 @@ export async function buildHuelgaCollectionWorkbook(
       errorTitle: 'Valor no válido',
       error: 'Selecciona Huelga o Trabaja.',
     };
-    ['J', 'K', 'L'].forEach((column) => {
+    ['K', 'L', 'M'].forEach((column) => {
       personalSheet.getCell(`${column}${row}`).fill = {
         type: 'pattern',
         pattern: 'solid',
@@ -249,25 +271,23 @@ export async function buildHuelgaCollectionWorkbook(
   });
 
   const endRow = Math.max(6, 5 + group.personal.length);
-  personalSheet.autoFilter = { from: 'A5', to: `L${endRow}` };
+  personalSheet.autoFilter = { from: 'A5', to: `M${endRow}` };
   personalSheet.columns = [
-    { width: 12 }, { width: 34 }, { width: 22 }, { width: 30 }, { width: 14 }, { width: 9 }, { width: 9 }, { width: 9 }, { width: 9 }, { width: 18 }, { width: 16 }, { width: 34 }, { width: 16 },
+    { width: 12 }, { width: 34 }, { width: 24 }, { width: 22 }, { width: 30 }, { width: 14 }, { width: 9 }, { width: 9 }, { width: 9 }, { width: 9 }, { width: 18 }, { width: 16 }, { width: 34 }, { width: 16 },
   ];
-  personalSheet.getColumn(13).hidden = true;
-
-
+  personalSheet.getColumn(14).hidden = true;
 
   const summarySheet = workbook.addWorksheet('Resumen', {
     views: [{ state: 'frozen', ySplit: 7 }],
     properties: { tabColor: { argb: 'FF374151' } },
   });
-  summarySheet.mergeCells('A1:G1');
+  summarySheet.mergeCells('A1:H1');
   summarySheet.getCell('A1').value = `RESUMEN · HUELGA ${formatDateLong(fecha).toUpperCase()}`;
   summarySheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
   summarySheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD71920' } };
   summarySheet.getRow(1).height = 28;
-  summarySheet.mergeCells('A2:G2');
-  summarySheet.getCell('A2').value = `Área: ${group.area} · Responsable: ${group.responsableNombre || '—'}`;
+  summarySheet.mergeCells('A2:H2');
+  summarySheet.getCell('A2').value = `Zona: ${group.zonaNombre} · Responsable: ${group.responsableNombre || '—'}`;
   summarySheet.getCell('A2').font = { bold: true, color: { argb: 'FF1F2937' } };
   summarySheet.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
 
@@ -275,13 +295,13 @@ export async function buildHuelgaCollectionWorkbook(
   summarySheet.getCell('A4').value = 'Personas con turno';
   summarySheet.getCell('B4').value = total;
   summarySheet.getCell('C4').value = 'Servicios mínimos';
-  summarySheet.getCell('D4').value = { formula: `COUNTIF(Personal!J6:J${endRow},"Sí")` };
+  summarySheet.getCell('D4').value = { formula: `COUNTIF(Personal!K6:K${endRow},"Sí")` };
   summarySheet.getCell('E4').value = 'Huelga';
-  summarySheet.getCell('F4').value = { formula: `COUNTIF(Personal!K6:K${endRow},"Huelga")` };
+  summarySheet.getCell('F4').value = { formula: `COUNTIF(Personal!L6:L${endRow},"Huelga")` };
   summarySheet.getCell('A5').value = 'Trabajan';
-  summarySheet.getCell('B5').value = { formula: `COUNTIFS(Personal!K6:K${endRow},"Trabaja",Personal!J6:J${endRow},"<>Sí")` };
+  summarySheet.getCell('B5').value = { formula: `COUNTIFS(Personal!L6:L${endRow},"Trabaja",Personal!K6:K${endRow},"<>Sí")` };
   summarySheet.getCell('C5').value = 'Pendientes';
-  summarySheet.getCell('D5').value = { formula: `COUNTIFS(Personal!K6:K${endRow},"",Personal!J6:J${endRow},"<>Sí")` };
+  summarySheet.getCell('D5').value = { formula: `COUNTIFS(Personal!L6:L${endRow},"",Personal!K6:K${endRow},"<>Sí")` };
   summarySheet.getCell('E5').value = '% huelga';
   summarySheet.getCell('F5').value = { formula: `IF(B4=0,0,F4/B4)` };
   summarySheet.getCell('F5').numFmt = '0.0%';
@@ -289,7 +309,7 @@ export async function buildHuelgaCollectionWorkbook(
   ['B4','D4','F4','B5','D5','F5'].forEach((cell) => { summarySheet.getCell(cell).font = { bold: true, size: 14, color: { argb: 'FF111827' } }; });
 
   const summaryHeaderRow = 7;
-  summarySheet.getRow(summaryHeaderRow).values = ['Residencia', 'Puesto', 'Personas con turno', 'Servicios mínimos', 'Huelga', 'Trabajan', 'Pendientes'];
+  summarySheet.getRow(summaryHeaderRow).values = ['Área', 'Residencia', 'Puesto', 'Personas con turno', 'Servicios mínimos', 'Huelga', 'Trabajan', 'Pendientes'];
   summarySheet.getRow(summaryHeaderRow).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   summarySheet.getRow(summaryHeaderRow).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
   summarySheet.getRow(summaryHeaderRow).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
@@ -297,21 +317,23 @@ export async function buildHuelgaCollectionWorkbook(
 
   group.asignaciones.forEach((assignment, index) => {
     const row = summaryHeaderRow + 1 + index;
+    const area = assignment.area.replace(/"/g, '""');
     const residence = assignment.residencia.replace(/"/g, '""');
     const job = assignment.puesto.replace(/"/g, '""');
-    summarySheet.getCell(`A${row}`).value = assignment.residencia;
-    summarySheet.getCell(`B${row}`).value = assignment.puesto;
-    summarySheet.getCell(`C${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${residence}",Personal!D$6:D$${endRow},"${job}")` };
-    summarySheet.getCell(`D${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${residence}",Personal!D$6:D$${endRow},"${job}",Personal!J$6:J$${endRow},"Sí")` };
-    summarySheet.getCell(`E${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${residence}",Personal!D$6:D$${endRow},"${job}",Personal!K$6:K$${endRow},"Huelga")` };
-    summarySheet.getCell(`F${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${residence}",Personal!D$6:D$${endRow},"${job}",Personal!K$6:K$${endRow},"Trabaja",Personal!J$6:J$${endRow},"<>Sí")` };
-    summarySheet.getCell(`G${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${residence}",Personal!D$6:D$${endRow},"${job}",Personal!K$6:K$${endRow},"",Personal!J$6:J$${endRow},"<>Sí")` };
+    summarySheet.getCell(`A${row}`).value = assignment.area;
+    summarySheet.getCell(`B${row}`).value = assignment.residencia;
+    summarySheet.getCell(`C${row}`).value = assignment.puesto;
+    summarySheet.getCell(`D${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${area}",Personal!D$6:D$${endRow},"${residence}",Personal!E$6:E$${endRow},"${job}")` };
+    summarySheet.getCell(`E${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${area}",Personal!D$6:D$${endRow},"${residence}",Personal!E$6:E$${endRow},"${job}",Personal!K$6:K$${endRow},"Sí")` };
+    summarySheet.getCell(`F${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${area}",Personal!D$6:D$${endRow},"${residence}",Personal!E$6:E$${endRow},"${job}",Personal!L$6:L$${endRow},"Huelga")` };
+    summarySheet.getCell(`G${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${area}",Personal!D$6:D$${endRow},"${residence}",Personal!E$6:E$${endRow},"${job}",Personal!L$6:L$${endRow},"Trabaja",Personal!K$6:K$${endRow},"<>Sí")` };
+    summarySheet.getCell(`H${row}`).value = { formula: `COUNTIFS(Personal!C$6:C$${endRow},"${area}",Personal!D$6:D$${endRow},"${residence}",Personal!E$6:E$${endRow},"${job}",Personal!L$6:L$${endRow},"",Personal!K$6:K$${endRow},"<>Sí")` };
     const fill = index % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB';
     summarySheet.getRow(row).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
   });
 
   summarySheet.columns = [
-    { width: 24 }, { width: 34 }, { width: 20 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 14 },
+    { width: 24 }, { width: 24 }, { width: 34 }, { width: 20 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 14 },
   ];
   summarySheet.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
   personalSheet.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
@@ -319,10 +341,11 @@ export async function buildHuelgaCollectionWorkbook(
   const metadataSheet = workbook.addWorksheet('_TrAccion');
   metadataSheet.state = 'veryHidden';
   metadataSheet.addRows([
-    ['Formato', 'TRACCION_HUELGA_RECOGIDA_V1'],
+    ['Formato', 'TRACCION_HUELGA_RECOGIDA_V2'],
     ['Huelga ID', huelgaId],
     ['Fecha', fecha],
-    ['Área', group.area],
+    ['Zona ID', group.zonaId],
+    ['Zona', group.zonaNombre],
     ['Responsable', group.responsableNombre],
     ['Email', group.responsableEmail],
     ['Personas', group.personal.length],
@@ -330,7 +353,7 @@ export async function buildHuelgaCollectionWorkbook(
 
   const rawBuffer = await workbook.xlsx.writeBuffer();
   return {
-    fileName: `Seguimiento_huelga_${formatDateFile(fecha)}_${safeFilePart(group.area)}.xlsx`,
+    fileName: `Seguimiento_huelga_${formatDateFile(fecha)}_${safeFilePart(group.zonaNombre)}.xlsx`,
     buffer: workbookBufferToArrayBuffer(rawBuffer),
   };
 }

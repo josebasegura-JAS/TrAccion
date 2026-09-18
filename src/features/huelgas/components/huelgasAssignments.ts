@@ -1,11 +1,17 @@
 import type { HuelgaPersonalTurno } from './huelgasPersonalImport';
+import type { HuelgaZona } from './huelgasZones';
 
 export type HuelgaPuestoAsignacion = {
   residencia: string;
   puesto: string;
   area: string;
-  responsableNombre: string;
-  responsableEmail: string;
+  zonaId: string;
+  zonaNombre: string;
+  zonaResponsableNombre: string;
+  zonaResponsableEmail: string;
+  /** Campos legacy de Fase 3/4/5. Se conservan solo para migrar datos ya guardados. */
+  responsableNombre?: string;
+  responsableEmail?: string;
   updatedAt: string;
 };
 
@@ -14,6 +20,10 @@ export function normalizePuesto(value: string): string {
 }
 
 export function normalizeResidencia(value: string): string {
+  return value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function normalizeAssignmentText(value: string): string {
   return value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -43,8 +53,12 @@ export function isHuelgaPuestoAsignacion(value: unknown): value is HuelgaPuestoA
     (typeof candidate.residencia === 'string' || typeof candidate.residencia === 'undefined') &&
     typeof candidate.puesto === 'string' &&
     typeof candidate.area === 'string' &&
-    typeof candidate.responsableNombre === 'string' &&
-    typeof candidate.responsableEmail === 'string' &&
+    (typeof candidate.zonaId === 'string' || typeof candidate.zonaId === 'undefined') &&
+    (typeof candidate.zonaNombre === 'string' || typeof candidate.zonaNombre === 'undefined') &&
+    (typeof candidate.zonaResponsableNombre === 'string' || typeof candidate.zonaResponsableNombre === 'undefined') &&
+    (typeof candidate.zonaResponsableEmail === 'string' || typeof candidate.zonaResponsableEmail === 'undefined') &&
+    (typeof candidate.responsableNombre === 'string' || typeof candidate.responsableNombre === 'undefined') &&
+    (typeof candidate.responsableEmail === 'string' || typeof candidate.responsableEmail === 'undefined') &&
     typeof candidate.updatedAt === 'string'
   );
 }
@@ -56,9 +70,11 @@ export function isHuelgaPuestoAsignaciones(value: unknown): value is HuelgaPuest
 export function isAsignacionCompleta(asignacion: HuelgaPuestoAsignacion): boolean {
   return Boolean(
     normalizeResidencia(asignacion.residencia ?? '') &&
-      asignacion.area.trim() &&
-      asignacion.responsableNombre.trim() &&
-      asignacion.responsableEmail.trim(),
+      normalizeAssignmentText(asignacion.area) &&
+      normalizeAssignmentText(asignacion.zonaId ?? '') &&
+      normalizeAssignmentText(asignacion.zonaNombre ?? '') &&
+      normalizeAssignmentText(asignacion.zonaResponsableNombre ?? '') &&
+      normalizeAssignmentText(asignacion.zonaResponsableEmail ?? ''),
   );
 }
 
@@ -74,10 +90,34 @@ export function countPersonasByAsignacion(personal: HuelgaPersonalTurno[]): Map<
   return counts;
 }
 
+function withZoneSnapshot(
+  base: HuelgaPuestoAsignacion,
+  zonesById: Map<string, HuelgaZona>,
+): HuelgaPuestoAsignacion {
+  const zona = base.zonaId ? zonesById.get(base.zonaId) : undefined;
+  if (!zona) {
+    return {
+      ...base,
+      zonaId: base.zonaId ?? '',
+      zonaNombre: base.zonaNombre ?? '',
+      zonaResponsableNombre: base.zonaResponsableNombre ?? base.responsableNombre ?? '',
+      zonaResponsableEmail: base.zonaResponsableEmail ?? base.responsableEmail ?? '',
+    };
+  }
+  return {
+    ...base,
+    zonaId: zona.id,
+    zonaNombre: zona.nombre,
+    zonaResponsableNombre: zona.responsableNombre,
+    zonaResponsableEmail: zona.responsableEmail,
+  };
+}
+
 export function buildAsignacionesForPersonal(
   personal: HuelgaPersonalTurno[],
   current: HuelgaPuestoAsignacion[],
   master: HuelgaPuestoAsignacion[],
+  zonas: HuelgaZona[] = [],
 ): HuelgaPuestoAsignacion[] {
   const currentByKey = new Map(
     current.map((item) => [asignacionKey(item.residencia ?? '', item.puesto), item]),
@@ -90,6 +130,7 @@ export function buildAsignacionesForPersonal(
       .filter((item) => !normalizeResidencia(item.residencia ?? ''))
       .map((item) => [normalizeKey(item.puesto), item]),
   );
+  const zonesById = new Map(zonas.map((zona) => [zona.id, zona]));
   const unique = new Map<string, { residencia: string; puesto: string }>();
 
   for (const persona of personal) {
@@ -103,23 +144,39 @@ export function buildAsignacionesForPersonal(
   const now = new Date().toISOString();
   return [...unique.entries()]
     .map(([key, identity]) => {
+      const currentSource = currentByKey.get(key);
       const source =
-        currentByKey.get(key) ??
+        currentSource ??
         masterByKey.get(key) ??
         legacyMasterByPuesto.get(normalizeKey(identity.puesto));
-      return {
+      const base: HuelgaPuestoAsignacion = {
         residencia: identity.residencia,
         puesto: identity.puesto,
         area: source?.area ?? '',
-        responsableNombre: source?.responsableNombre ?? '',
-        responsableEmail: source?.responsableEmail ?? '',
+        zonaId: source?.zonaId ?? '',
+        zonaNombre: source?.zonaNombre ?? '',
+        zonaResponsableNombre: source?.zonaResponsableNombre ?? source?.responsableNombre ?? '',
+        zonaResponsableEmail: source?.zonaResponsableEmail ?? source?.responsableEmail ?? '',
+        responsableNombre: source?.responsableNombre,
+        responsableEmail: source?.responsableEmail,
         updatedAt: source?.updatedAt ?? now,
       };
+      // La copia guardada en una huelga es histórica: no debe cambiar si posteriormente
+      // se modifica el responsable o el nombre de la zona maestra.
+      return currentSource ? base : withZoneSnapshot(base, zonesById);
     })
     .sort((a, b) => {
       const residenciaOrder = a.residencia.localeCompare(b.residencia, 'es', { sensitivity: 'base' });
       return residenciaOrder || a.puesto.localeCompare(b.puesto, 'es', { sensitivity: 'base' });
     });
+}
+
+export function applyZoneSnapshots(
+  assignments: HuelgaPuestoAsignacion[],
+  zonas: HuelgaZona[],
+): HuelgaPuestoAsignacion[] {
+  const zonesById = new Map(zonas.map((zona) => [zona.id, zona]));
+  return assignments.map((assignment) => withZoneSnapshot(assignment, zonesById));
 }
 
 export function mergeAsignacionesIntoMaster(
