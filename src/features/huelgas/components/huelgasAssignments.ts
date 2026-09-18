@@ -46,6 +46,51 @@ function residenciaPersona(persona: HuelgaPersonalTurno): string {
   );
 }
 
+function resolveDefaultZoneName(residencia: string, puesto: string): string | null {
+  const normalizedResidence = normalizeKey(residencia);
+  const normalizedPosition = normalizeKey(puesto);
+
+  // La regla por puesto tiene prioridad sobre cualquier residencia.
+  if (normalizedPosition === normalizeKey('Supervisión de Estaciones')) {
+    return 'GMO y Línea';
+  }
+
+  if (normalizedResidence === normalizeKey('Taller Ariz')) {
+    return 'MM Ariz';
+  }
+  if (normalizedResidence === normalizeKey('Sopela Taller')) {
+    return 'MM Sopela';
+  }
+  if (normalizedResidence === normalizeKey('Oficinas Centrales')) {
+    return 'SSCC';
+  }
+
+  return null;
+}
+
+function withDefaultZoneIfEmpty(
+  base: HuelgaPuestoAsignacion,
+  zonas: HuelgaZona[],
+): HuelgaPuestoAsignacion {
+  if (normalizeAssignmentText(base.zonaId) || normalizeAssignmentText(base.zonaNombre)) {
+    return base;
+  }
+
+  const defaultZoneName = resolveDefaultZoneName(base.residencia, base.puesto);
+  if (!defaultZoneName) return base;
+
+  const zone = zonas.find((item) => normalizeKey(item.nombre) === normalizeKey(defaultZoneName));
+  if (!zone) return base;
+
+  return {
+    ...base,
+    zonaId: zone.id,
+    zonaNombre: zone.nombre,
+    zonaResponsableNombre: zone.responsableNombre,
+    zonaResponsableEmail: zone.responsableEmail,
+  };
+}
+
 export function isHuelgaPuestoAsignacion(value: unknown): value is HuelgaPuestoAsignacion {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<HuelgaPuestoAsignacion>;
@@ -161,9 +206,11 @@ export function buildAsignacionesForPersonal(
         responsableEmail: source?.responsableEmail,
         updatedAt: source?.updatedAt ?? now,
       };
-      // La copia guardada en una huelga es histórica: no debe cambiar si posteriormente
-      // se modifica el responsable o el nombre de la zona maestra.
-      return currentSource ? base : withZoneSnapshot(base, zonesById);
+      // Las reglas automáticas solo rellenan una Zona vacía. Una asignación manual
+      // existente siempre tiene prioridad. La copia guardada en una huelga sigue siendo
+      // histórica y no cambia si posteriormente se modifica el maestro de zonas.
+      const withDefaultZone = withDefaultZoneIfEmpty(base, zonas);
+      return currentSource ? withDefaultZone : withZoneSnapshot(withDefaultZone, zonesById);
     })
     .sort((a, b) => {
       const residenciaOrder = a.residencia.localeCompare(b.residencia, 'es', { sensitivity: 'base' });

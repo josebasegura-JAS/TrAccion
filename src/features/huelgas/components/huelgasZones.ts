@@ -10,6 +10,7 @@ export type HuelgaZona = {
 
 export const DEFAULT_HUELGA_ZONE_NAMES = [
   'MM Ariz',
+  'MM Sopela',
   'GMO y Línea',
   'Instalaciones',
   'OACs',
@@ -56,20 +57,22 @@ export function isHuelgaZonas(value: unknown): value is HuelgaZona[] {
 }
 
 export function ensureDefaultZonas(current: HuelgaZona[]): HuelgaZona[] {
-  if (current.length > 0) {
-    return [...current].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
-  }
-
   const now = new Date().toISOString();
-  return DEFAULT_HUELGA_ZONE_NAMES.map((nombre) => ({
-    id: defaultId(nombre),
-    nombre,
-    responsableNombre: '',
-    responsableEmail: '',
-    active: true,
-    createdAt: now,
-    updatedAt: now,
-  })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  const existingNames = new Set(current.map((zona) => normalizeKey(zona.nombre)));
+  const missingDefaults = DEFAULT_HUELGA_ZONE_NAMES
+    .filter((nombre) => !existingNames.has(normalizeKey(nombre)))
+    .map((nombre) => ({
+      id: defaultId(nombre),
+      nombre,
+      responsableNombre: '',
+      responsableEmail: '',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+  return [...current, ...missingDefaults]
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
 }
 
 export function isZonaCompleta(zona: HuelgaZona): boolean {
