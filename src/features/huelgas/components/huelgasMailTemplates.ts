@@ -20,7 +20,7 @@ export const DEFAULT_HUELGA_MAIL_SUBJECT = 'Petición Datos Huelga {{FECHA_HUELG
 
 export const DEFAULT_HUELGA_MAIL_BODY = `<p>Kaixo,</p>
 <p>Adjunto os envío la información a utilizar para los datos correspondientes a la huelga del <strong>{{FECHA_HUELGA_LARGA}}</strong>.</p>
-<p>Los datos solicitados corresponden a los siguientes colectivos:</p>
+<p>Los datos solicitados corresponden a las siguientes áreas:</p>
 {{COLECTIVOS}}
 <p>{{PLAZOS_RECOGIDA}}</p>
 <p>{{INSTRUCCIONES_HABITUALES}}</p>
@@ -119,14 +119,34 @@ function buildPuestos(context: HuelgaMailRenderContext): string[] {
 }
 
 function buildColectivosHtml(context: HuelgaMailRenderContext): string {
-  const rows = context.asignaciones.map((assignment) => {
-    const count = context.personal.filter((persona) => {
-      return personalResidence(persona).localeCompare(assignment.residencia, 'es', { sensitivity: 'base' }) === 0
-        && persona.puesto.localeCompare(assignment.puesto, 'es', { sensitivity: 'base' }) === 0;
-    }).length;
-    const parts = [assignment.area, assignment.puesto, assignment.residencia].filter(Boolean);
-    return `<li>${parts.map(escapeHtml).join(' · ')}${count ? ` <strong>(${count} ${count === 1 ? 'persona' : 'personas'})</strong>` : ''}</li>`;
-  });
+  const assignmentsByArea = new Map<string, HuelgaPuestoAsignacion[]>();
+
+  for (const assignment of context.asignaciones) {
+    const area = assignment.area.trim();
+    if (!area) continue;
+    const key = normalizeKey(area);
+    const current = assignmentsByArea.get(key) ?? [];
+    current.push(assignment);
+    assignmentsByArea.set(key, current);
+  }
+
+  const rows = [...assignmentsByArea.values()]
+    .map((assignments) => {
+      const area = assignments[0]?.area.trim() ?? '';
+      const count = context.personal.filter((persona) =>
+        assignments.some((assignment) =>
+          normalizeKey(personalResidence(persona)) === normalizeKey(assignment.residencia)
+          && normalizeKey(persona.puesto) === normalizeKey(assignment.puesto),
+        ),
+      ).length;
+
+      return { area, count };
+    })
+    .sort((a, b) => a.area.localeCompare(b.area, 'es', { sensitivity: 'base' }))
+    .map(({ area, count }) =>
+      `<li>${escapeHtml(area)} <strong>(${count} ${count === 1 ? 'persona' : 'personas'})</strong></li>`,
+    );
+
   return `<ul>${rows.join('')}</ul>`;
 }
 
@@ -155,6 +175,10 @@ export function renderHuelgaMailTemplate(context: HuelgaMailRenderContext): { su
 
   let subject = context.zona.correoAsunto || DEFAULT_HUELGA_MAIL_SUBJECT;
   let html = context.zona.correoCuerpoHtml || DEFAULT_HUELGA_MAIL_BODY;
+  html = html.replace(
+    /Los datos solicitados corresponden a los siguientes colectivos:/gi,
+    'Los datos solicitados corresponden a las siguientes áreas:',
+  );
   for (const [marker, value] of Object.entries(replacements)) {
     subject = subject.split(marker).join(value.replace(/<[^>]*>/g, ''));
     html = html.split(marker).join(value);
