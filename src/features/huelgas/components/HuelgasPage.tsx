@@ -60,6 +60,29 @@ type Huelga = {
 };
 
 type HuelgaDraft = Pick<Huelga, 'fecha' | 'sindicatos' | 'tipo' | 'tramos' | 'observaciones'>;
+type AssignmentSortKey = 'residencia' | 'puesto' | 'personas' | 'area' | 'zona' | 'responsable' | 'estado';
+type AssignmentSortDirection = 'asc' | 'desc';
+
+type AssignmentFilters = {
+  residencia: string;
+  puesto: string;
+  personas: string;
+  area: string;
+  zona: string;
+  responsable: string;
+  estado: string;
+};
+
+const EMPTY_ASSIGNMENT_FILTERS: AssignmentFilters = {
+  residencia: '',
+  puesto: '',
+  personas: '',
+  area: '',
+  zona: '',
+  responsable: '',
+  estado: '',
+};
+
 
 const EMPTY_DRAFT: HuelgaDraft = {
   fecha: '',
@@ -143,6 +166,24 @@ function validateDraft(draft: HuelgaDraft): string | null {
   return null;
 }
 
+function resolveResidenceOverride(
+  overrides: Record<string, string>,
+  residencia: string,
+  puesto: string,
+): string {
+  let current = residencia.trim();
+  const visited = new Set<string>();
+  for (let index = 0; index < 20; index += 1) {
+    const key = asignacionKey(current, puesto);
+    if (visited.has(key)) break;
+    visited.add(key);
+    const next = overrides[key]?.trim();
+    if (!next || next === current) break;
+    current = next;
+  }
+  return current;
+}
+
 export function HuelgasPage() {
   const { alert, confirm, dialogNode } = useAppDialog();
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
@@ -171,6 +212,9 @@ export function HuelgasPage() {
   const [assignmentTargetId, setAssignmentTargetId] = useState<string | null>(null);
   const [assignmentDraft, setAssignmentDraft] = useState<HuelgaPuestoAsignacion[]>([]);
   const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [assignmentFilters, setAssignmentFilters] = useState<AssignmentFilters>(EMPTY_ASSIGNMENT_FILTERS);
+  const [assignmentSort, setAssignmentSort] = useState<{ key: AssignmentSortKey; direction: AssignmentSortDirection }>({ key: 'residencia', direction: 'asc' });
+  const [assignmentResidenceOverrides, setAssignmentResidenceOverrides] = useState<Record<string, string>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
   const [generatingCollectionForId, setGeneratingCollectionForId] = useState<string | null>(null);
 
@@ -388,20 +432,62 @@ export function HuelgasPage() {
     ? huelgas.find((item) => item.id === assignmentTargetId) ?? null
     : null;
 
-  const assignmentPersonCounts = useMemo(
-    () => countPersonasByAsignacion(assignmentTarget?.personalConTurno ?? []),
-    [assignmentTarget],
-  );
+  const assignmentPersonCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const persona of assignmentTarget?.personalConTurno ?? []) {
+      const residenciaBase = (persona.residenciaAsignacion || persona.residenciaPlantilla || persona.residenciaEstacion || '').trim();
+      const puesto = persona.puesto.trim();
+      if (!residenciaBase || !puesto) continue;
+      const residencia = resolveResidenceOverride(assignmentResidenceOverrides, residenciaBase, puesto);
+      const key = asignacionKey(residencia, puesto);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [assignmentResidenceOverrides, assignmentTarget]);
 
   const filteredAssignmentDraft = useMemo(() => {
-    const query = assignmentSearch.trim().toLocaleLowerCase('es-ES');
-    if (!query) return assignmentDraft;
-    return assignmentDraft.filter((item) =>
-      [item.residencia, item.puesto, item.area, item.zonaNombre, item.zonaResponsableNombre, item.zonaResponsableEmail].some((value) =>
-        value.toLocaleLowerCase('es-ES').includes(query),
-      ),
-    );
-  }, [assignmentDraft, assignmentSearch]);
+    const globalQuery = assignmentSearch.trim().toLocaleLowerCase('es-ES');
+    const normalize = (value: string) => value.trim().toLocaleLowerCase('es-ES');
+    const numericFilter = assignmentFilters.personas.trim();
+
+    const filtered = assignmentDraft.filter((item) => {
+      const complete = isAsignacionCompleta(item);
+      const personCount = assignmentPersonCounts.get(asignacionKey(item.residencia, item.puesto)) ?? 0;
+      const responsable = `${item.zonaResponsableNombre} ${item.zonaResponsableEmail}`.trim();
+      const estado = complete ? 'configurado' : 'pendiente';
+      const values = [item.residencia, item.puesto, item.area, item.zonaNombre, responsable, estado];
+      if (globalQuery && !values.some((value) => normalize(value).includes(globalQuery))) return false;
+      if (assignmentFilters.residencia && !normalize(item.residencia).includes(normalize(assignmentFilters.residencia))) return false;
+      if (assignmentFilters.puesto && !normalize(item.puesto).includes(normalize(assignmentFilters.puesto))) return false;
+      if (assignmentFilters.area && !normalize(item.area).includes(normalize(assignmentFilters.area))) return false;
+      if (assignmentFilters.zona && !normalize(item.zonaNombre).includes(normalize(assignmentFilters.zona))) return false;
+      if (assignmentFilters.responsable && !normalize(responsable).includes(normalize(assignmentFilters.responsable))) return false;
+      if (assignmentFilters.estado && !estado.includes(normalize(assignmentFilters.estado))) return false;
+      if (numericFilter && String(personCount) !== numericFilter) return false;
+      return true;
+    });
+
+    const direction = assignmentSort.direction === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const aCount = assignmentPersonCounts.get(asignacionKey(a.residencia, a.puesto)) ?? 0;
+      const bCount = assignmentPersonCounts.get(asignacionKey(b.residencia, b.puesto)) ?? 0;
+      const aComplete = isAsignacionCompleta(a);
+      const bComplete = isAsignacionCompleta(b);
+      let comparison = 0;
+      switch (assignmentSort.key) {
+        case 'personas': comparison = aCount - bCount; break;
+        case 'puesto': comparison = a.puesto.localeCompare(b.puesto, 'es', { sensitivity: 'base' }); break;
+        case 'area': comparison = a.area.localeCompare(b.area, 'es', { sensitivity: 'base' }); break;
+        case 'zona': comparison = a.zonaNombre.localeCompare(b.zonaNombre, 'es', { sensitivity: 'base' }); break;
+        case 'responsable': comparison = a.zonaResponsableNombre.localeCompare(b.zonaResponsableNombre, 'es', { sensitivity: 'base' }); break;
+        case 'estado': comparison = Number(aComplete) - Number(bComplete); break;
+        case 'residencia':
+        default: comparison = a.residencia.localeCompare(b.residencia, 'es', { sensitivity: 'base' }); break;
+      }
+      if (comparison === 0) comparison = a.puesto.localeCompare(b.puesto, 'es', { sensitivity: 'base' });
+      return comparison * direction;
+    });
+  }, [assignmentDraft, assignmentFilters, assignmentPersonCounts, assignmentSearch, assignmentSort]);
 
   const assignmentConfiguredCount = useMemo(
     () => assignmentDraft.filter(isAsignacionCompleta).length,
@@ -420,6 +506,9 @@ export function HuelgasPage() {
       ),
     );
     setAssignmentSearch('');
+    setAssignmentFilters(EMPTY_ASSIGNMENT_FILTERS);
+    setAssignmentSort({ key: 'residencia', direction: 'asc' });
+    setAssignmentResidenceOverrides({});
   };
 
   const closeAssignments = () => {
@@ -427,6 +516,30 @@ export function HuelgasPage() {
     setAssignmentTargetId(null);
     setAssignmentDraft([]);
     setAssignmentSearch('');
+    setAssignmentFilters(EMPTY_ASSIGNMENT_FILTERS);
+    setAssignmentResidenceOverrides({});
+  };
+
+  const toggleAssignmentSort = (key: AssignmentSortKey) => {
+    setAssignmentSort((current) => current.key === key
+      ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { key, direction: 'asc' });
+  };
+
+  const updateAssignmentFilter = (key: keyof AssignmentFilters, value: string) => {
+    setAssignmentFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const updateAssignmentResidence = (residencia: string, puesto: string, value: string) => {
+    const targetKey = asignacionKey(residencia, puesto);
+    const nextResidencia = value;
+    const now = new Date().toISOString();
+    setAssignmentResidenceOverrides((current) => ({ ...current, [targetKey]: nextResidencia }));
+    setAssignmentDraft((current) => current.map((item) =>
+      asignacionKey(item.residencia, item.puesto) === targetKey
+        ? { ...item, residencia: nextResidencia, updatedAt: now }
+        : item,
+    ));
   };
 
   const updateAssignment = (
@@ -544,13 +657,32 @@ export function HuelgasPage() {
       area: item.area.trim(),
       updatedAt: new Date().toISOString(),
     })), zonas);
+    const seenAssignmentKeys = new Set<string>();
+    for (const item of normalized) {
+      if (!item.residencia.trim()) {
+        await alert(`El puesto “${item.puesto}” no puede quedarse sin residencia.`, { title: 'Revisa la residencia', type: 'warning' });
+        return;
+      }
+      const key = asignacionKey(item.residencia, item.puesto);
+      if (seenAssignmentKeys.has(key)) {
+        await alert(`La combinación “${item.residencia} · ${item.puesto}” está duplicada. Revisa la corrección de residencia.`, { title: 'Combinación duplicada', type: 'warning' });
+        return;
+      }
+      seenAssignmentKeys.add(key);
+    }
     const nextMaster = mergeAsignacionesIntoMaster(puestoResponsables, normalized);
     const now = new Date().toISOString();
-    const nextHuelgas = huelgas.map((item) =>
-      item.id === assignmentTarget.id
-        ? { ...item, asignacionesPuesto: normalized, updatedAt: now }
-        : item,
-    );
+    const nextHuelgas = huelgas.map((item) => {
+      if (item.id !== assignmentTarget.id) return item;
+      const personalConTurno = (item.personalConTurno ?? []).map((persona) => {
+        const residenciaBase = (persona.residenciaAsignacion || persona.residenciaPlantilla || persona.residenciaEstacion || '').trim();
+        const residenciaCorregida = resolveResidenceOverride(assignmentResidenceOverrides, residenciaBase, persona.puesto);
+        return residenciaCorregida && residenciaCorregida !== residenciaBase
+          ? { ...persona, residenciaAsignacion: residenciaCorregida }
+          : persona;
+      });
+      return { ...item, personalConTurno, asignacionesPuesto: normalized, updatedAt: now };
+    });
 
     setSavingAssignments(true);
     const masterResult = await writeJsonStorageAsync(PUESTO_RESPONSABLES_STORAGE_KEY, nextMaster);
@@ -949,7 +1081,7 @@ export function HuelgasPage() {
               <div>
                 <h2 id="huelga-assignment-title" className="text-lg font-semibold text-metro-text">Asignación de áreas y zonas</h2>
                 <p className="mt-1 text-sm text-metro-muted">
-                  {formatDate(assignmentTarget.fecha)} · Define el área y la zona de trabajo de cada combinación residencia + puesto. El responsable y email se gestionan a nivel de zona.
+                  {formatDate(assignmentTarget.fecha)} · Define o corrige la residencia, el área y la zona de trabajo de cada combinación residencia + puesto. El responsable y email se gestionan a nivel de zona.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -980,7 +1112,7 @@ export function HuelgasPage() {
                   <div>
                     <p className="text-sm font-semibold text-metro-text">Configuración reutilizable</p>
                     <p className="mt-1 text-xs leading-5 text-metro-muted">
-                      La relación residencia + puesto → área → zona se reutilizará automáticamente en futuras huelgas. Los responsables se definen en el maestro de zonas. Esta huelga conservará su propia copia de área, zona y responsable para que los cambios futuros no alteren su histórico.
+                      La relación residencia + puesto → área → zona se reutilizará automáticamente en futuras huelgas. Si corriges una residencia aquí, la corrección se aplicará a las personas de esa combinación solo en esta huelga y se conservará el dato original de Plantilla. Los responsables se definen en el maestro de zonas. Esta huelga conservará su propia copia de área, zona y responsable para que los cambios futuros no alteren su histórico.
                     </p>
                   </div>
                 </div>
@@ -999,15 +1131,33 @@ export function HuelgasPage() {
               <div className="overflow-hidden rounded-xl border border-metro-border">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[980px] text-left text-xs">
-                    <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted">
-                      <tr>
-                        <th className="px-3 py-2.5 font-semibold">Residencia</th>
-                        <th className="px-3 py-2.5 font-semibold">Puesto</th>
-                        <th className="w-20 px-3 py-2.5 text-center font-semibold">Personas</th>
-                        <th className="px-3 py-2.5 font-semibold">Área</th>
-                        <th className="px-3 py-2.5 font-semibold">Zona</th>
-                        <th className="px-3 py-2.5 font-semibold">Responsable de zona</th>
-                        <th className="w-28 px-3 py-2.5 font-semibold">Estado</th>
+                    <thead className="bg-metro-raised/75 text-[11px] text-metro-muted">
+                      <tr className="uppercase tracking-wide">
+                        {[
+                          ['residencia', 'Residencia'],
+                          ['puesto', 'Puesto'],
+                          ['personas', 'Personas'],
+                          ['area', 'Área'],
+                          ['zona', 'Zona'],
+                          ['responsable', 'Responsable de zona'],
+                          ['estado', 'Estado'],
+                        ].map(([key, label]) => (
+                          <th className={`px-3 py-2.5 font-semibold ${key === 'personas' ? 'w-20 text-center' : key === 'estado' ? 'w-28' : ''}`} key={key}>
+                            <button className="inline-flex items-center gap-1 hover:text-metro-text" onClick={() => toggleAssignmentSort(key as AssignmentSortKey)} type="button">
+                              {label}
+                              <span className="text-[10px]">{assignmentSort.key === key ? (assignmentSort.direction === 'asc' ? '▲' : '▼') : '↕'}</span>
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                      <tr className="border-t border-metro-border/70 normal-case tracking-normal">
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.residencia} onChange={(event) => updateAssignmentFilter('residencia', event.target.value)} /></th>
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.puesto} onChange={(event) => updateAssignmentFilter('puesto', event.target.value)} /></th>
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-center text-[11px] text-metro-text outline-none focus:border-metro-red" inputMode="numeric" placeholder="Nº" value={assignmentFilters.personas} onChange={(event) => updateAssignmentFilter('personas', event.target.value.replace(/\D/g, ''))} /></th>
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.area} onChange={(event) => updateAssignmentFilter('area', event.target.value)} /></th>
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.zona} onChange={(event) => updateAssignmentFilter('zona', event.target.value)} /></th>
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.responsable} onChange={(event) => updateAssignmentFilter('responsable', event.target.value)} /></th>
+                        <th className="px-2 pb-2"><select className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" value={assignmentFilters.estado} onChange={(event) => updateAssignmentFilter('estado', event.target.value)}><option value="">Todos</option><option value="configurado">Configurado</option><option value="pendiente">Pendiente</option></select></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-metro-border">
@@ -1016,8 +1166,13 @@ export function HuelgasPage() {
                         const personCount = assignmentPersonCounts.get(asignacionKey(item.residencia, item.puesto)) ?? 0;
                         return (
                           <tr className="align-top hover:bg-metro-raised/35" key={asignacionKey(item.residencia, item.puesto)}>
-                            <td className="px-3 py-3">
-                              <p className="font-semibold text-metro-text">{item.residencia}</p>
+                            <td className="px-3 py-2">
+                              <input
+                                className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs font-semibold text-metro-text outline-none focus:border-metro-red"
+                                aria-label={`Residencia de ${item.puesto}`}
+                                value={item.residencia}
+                                onChange={(event) => updateAssignmentResidence(item.residencia, item.puesto, event.target.value)}
+                              />
                             </td>
                             <td className="px-3 py-3">
                               <p className="font-semibold text-metro-text">{item.puesto}</p>
