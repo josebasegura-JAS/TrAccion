@@ -1,10 +1,12 @@
 import type { HuelgaPersonalTurno } from './huelgasPersonalImport';
 import type { HuelgaZona } from './huelgasZones';
+import { areaKey, type HuelgaArea } from './huelgasAreas';
 
 export type HuelgaPuestoAsignacion = {
   residencia: string;
   puesto: string;
   area: string;
+  areaId?: string;
   zonaId: string;
   zonaNombre: string;
   zonaResponsableNombre: string;
@@ -98,6 +100,7 @@ export function isHuelgaPuestoAsignacion(value: unknown): value is HuelgaPuestoA
     (typeof candidate.residencia === 'string' || typeof candidate.residencia === 'undefined') &&
     typeof candidate.puesto === 'string' &&
     typeof candidate.area === 'string' &&
+    (typeof candidate.areaId === 'string' || typeof candidate.areaId === 'undefined') &&
     (typeof candidate.zonaId === 'string' || typeof candidate.zonaId === 'undefined') &&
     (typeof candidate.zonaNombre === 'string' || typeof candidate.zonaNombre === 'undefined') &&
     (typeof candidate.zonaResponsableNombre === 'string' || typeof candidate.zonaResponsableNombre === 'undefined') &&
@@ -116,6 +119,7 @@ export function isAsignacionCompleta(asignacion: HuelgaPuestoAsignacion): boolea
   return Boolean(
     normalizeResidencia(asignacion.residencia ?? '') &&
       normalizeAssignmentText(asignacion.area) &&
+      normalizeAssignmentText(asignacion.areaId ?? '') &&
       normalizeAssignmentText(asignacion.zonaId ?? '') &&
       normalizeAssignmentText(asignacion.zonaNombre ?? '') &&
       normalizeAssignmentText(asignacion.zonaResponsableNombre ?? '') &&
@@ -163,6 +167,7 @@ export function buildAsignacionesForPersonal(
   current: HuelgaPuestoAsignacion[],
   master: HuelgaPuestoAsignacion[],
   zonas: HuelgaZona[] = [],
+  areas: HuelgaArea[] = [],
 ): HuelgaPuestoAsignacion[] {
   const currentByKey = new Map(
     current.map((item) => [asignacionKey(item.residencia ?? '', item.puesto), item]),
@@ -176,6 +181,8 @@ export function buildAsignacionesForPersonal(
       .map((item) => [normalizeKey(item.puesto), item]),
   );
   const zonesById = new Map(zonas.map((zona) => [zona.id, zona]));
+  const areasById = new Map(areas.map((area) => [area.id, area]));
+  const areasByZoneAndName = new Map(areas.map((area) => [areaKey(area.zonaId, area.nombre), area]));
   const unique = new Map<string, { residencia: string; puesto: string }>();
 
   for (const persona of personal) {
@@ -198,6 +205,7 @@ export function buildAsignacionesForPersonal(
         residencia: identity.residencia,
         puesto: identity.puesto,
         area: source?.area ?? '',
+        areaId: source?.areaId ?? '',
         zonaId: source?.zonaId ?? '',
         zonaNombre: source?.zonaNombre ?? '',
         zonaResponsableNombre: source?.zonaResponsableNombre ?? source?.responsableNombre ?? '',
@@ -210,7 +218,28 @@ export function buildAsignacionesForPersonal(
       // existente siempre tiene prioridad. La copia guardada en una huelga sigue siendo
       // histórica y no cambia si posteriormente se modifica el maestro de zonas.
       const withDefaultZone = withDefaultZoneIfEmpty(base, zonas);
-      return currentSource ? withDefaultZone : withZoneSnapshot(withDefaultZone, zonesById);
+      if (currentSource) {
+        const historicalArea = withDefaultZone.areaId
+          ? areasById.get(withDefaultZone.areaId)
+          : areasByZoneAndName.get(areaKey(withDefaultZone.zonaId, withDefaultZone.area));
+        return historicalArea
+          ? { ...withDefaultZone, areaId: historicalArea.id }
+          : withDefaultZone;
+      }
+
+      const resolvedMasterArea = withDefaultZone.areaId
+        ? areasById.get(withDefaultZone.areaId)
+        : areasByZoneAndName.get(areaKey(withDefaultZone.zonaId, withDefaultZone.area));
+      const masterArea = resolvedMasterArea?.active ? resolvedMasterArea : undefined;
+      const withArea = masterArea
+        ? {
+            ...withDefaultZone,
+            areaId: masterArea.id,
+            area: masterArea.nombre,
+            zonaId: masterArea.zonaId,
+          }
+        : withDefaultZone;
+      return withZoneSnapshot(withArea, zonesById);
     })
     .sort((a, b) => {
       const residenciaOrder = a.residencia.localeCompare(b.residencia, 'es', { sensitivity: 'base' });

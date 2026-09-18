@@ -32,10 +32,17 @@ import {
   isZonaCompleta,
   type HuelgaZona,
 } from './huelgasZones';
+import {
+  createAreaId,
+  isHuelgaAreas,
+  mergeLegacyAreas,
+  type HuelgaArea,
+} from './huelgasAreas';
 
 const STORAGE_KEY = 'traccion.v1.huelgas.records';
 const PUESTO_RESPONSABLES_STORAGE_KEY = 'traccion.v1.huelgas.puestoResponsables';
 const ZONAS_STORAGE_KEY = 'traccion.v1.huelgas.zonas';
+const AREAS_STORAGE_KEY = 'traccion.v1.huelgas.areas';
 
 type HuelgaTipo = 'jornada-completa' | 'paros-parciales';
 
@@ -242,9 +249,13 @@ export function HuelgasPage() {
   const [importing, setImporting] = useState(false);
   const [puestoResponsables, setPuestoResponsables] = useState<HuelgaPuestoAsignacion[]>([]);
   const [zonas, setZonas] = useState<HuelgaZona[]>([]);
+  const [areas, setAreas] = useState<HuelgaArea[]>([]);
   const [zonesOpen, setZonesOpen] = useState(false);
   const [zoneDraft, setZoneDraft] = useState<HuelgaZona[]>([]);
+  const [areaDraft, setAreaDraft] = useState<HuelgaArea[]>([]);
   const [newZoneName, setNewZoneName] = useState('');
+  const [newAreaName, setNewAreaName] = useState('');
+  const [newAreaZoneId, setNewAreaZoneId] = useState('');
   const [savingZones, setSavingZones] = useState(false);
   const [assignmentTargetId, setAssignmentTargetId] = useState<string | null>(null);
   const [assignmentDraft, setAssignmentDraft] = useState<HuelgaPuestoAsignacion[]>([]);
@@ -262,14 +273,26 @@ export function HuelgasPage() {
     loadConfiguracion();
     loadEmployees();
     setHuelgas(readJsonStorage(STORAGE_KEY, [], isHuelgas));
-    setPuestoResponsables(
-      readJsonStorage(PUESTO_RESPONSABLES_STORAGE_KEY, [], isHuelgaPuestoAsignaciones),
+    const storedAssignments = readJsonStorage(
+      PUESTO_RESPONSABLES_STORAGE_KEY,
+      [],
+      isHuelgaPuestoAsignaciones,
     );
+    setPuestoResponsables(storedAssignments);
     const storedZonas = readJsonStorage(ZONAS_STORAGE_KEY, [], isHuelgaZonas);
     const nextZonas = ensureDefaultZonas(storedZonas);
     setZonas(nextZonas);
     if (nextZonas.length !== storedZonas.length) {
       void writeJsonStorageAsync(ZONAS_STORAGE_KEY, nextZonas);
+    }
+
+    const storedHuelgas = readJsonStorage(STORAGE_KEY, [], isHuelgas);
+    const historicalAssignments = storedHuelgas.flatMap((huelga) => huelga.asignacionesPuesto ?? []);
+    const storedAreas = readJsonStorage(AREAS_STORAGE_KEY, [], isHuelgaAreas);
+    const nextAreas = mergeLegacyAreas(storedAreas, [...storedAssignments, ...historicalAssignments]);
+    setAreas(nextAreas);
+    if (nextAreas.length !== storedAreas.length) {
+      void writeJsonStorageAsync(AREAS_STORAGE_KEY, nextAreas);
     }
   }, [loadConfiguracion, loadEmployees]);
 
@@ -443,6 +466,7 @@ export function HuelgasPage() {
       importTarget.asignacionesPuesto ?? [],
       puestoResponsables,
       zonas,
+      areas,
     );
     const next = huelgas.map((item) =>
       item.id === importTarget.id
@@ -553,6 +577,7 @@ export function HuelgasPage() {
         huelga.asignacionesPuesto ?? [],
         puestoResponsables,
         zonas,
+        areas,
       ),
     );
     setAssignmentSearch('');
@@ -595,42 +620,48 @@ export function HuelgasPage() {
   const updateAssignment = (
     residencia: string,
     puesto: string,
-    field: 'area' | 'zonaId',
+    field: 'areaId' | 'zonaId',
     value: string,
   ) => {
     const targetKey = asignacionKey(residencia, puesto);
-    const target = assignmentDraft.find((item) => asignacionKey(item.residencia, item.puesto) === targetKey);
+    const target = assignmentDraft.find(
+      (item) => asignacionKey(item.residencia, item.puesto) === targetKey,
+    );
     if (!target) return;
     const now = new Date().toISOString();
 
-    if (field === 'area') {
-      // Cambiar el nombre/área no debe modificar implícitamente la zona ya elegida.
-      // La zona solo cambia cuando el usuario actúa sobre el selector de Zona.
-      setAssignmentDraft((current) => current.map((item) => {
-        if (asignacionKey(item.residencia, item.puesto) !== targetKey) return item;
-        return {
-          ...item,
-          area: value,
-          updatedAt: now,
-        };
-      }));
+    if (field === 'zonaId') {
+      const zone = zonas.find((item) => item.id === value);
+      const currentArea = target.areaId ? areas.find((item) => item.id === target.areaId) : undefined;
+      const areaStillValid = Boolean(currentArea && currentArea.zonaId === value && currentArea.active);
+      setAssignmentDraft((current) =>
+        current.map((item) =>
+          asignacionKey(item.residencia, item.puesto) === targetKey
+            ? {
+                ...item,
+                zonaId: zone?.id ?? '',
+                zonaNombre: zone?.nombre ?? '',
+                zonaResponsableNombre: zone?.responsableNombre ?? '',
+                zonaResponsableEmail: zone?.responsableEmail ?? '',
+                areaId: areaStillValid ? item.areaId : '',
+                area: areaStillValid ? item.area : '',
+                updatedAt: now,
+              }
+            : item,
+        ),
+      );
       return;
     }
 
-    const zone = zonas.find((item) => item.id === value);
-    const areaKey = target.area.trim().toLocaleLowerCase('es-ES');
-    setAssignmentDraft((current) => current.map((item) => {
-      const sameArea = Boolean(areaKey) && item.area.trim().toLocaleLowerCase('es-ES') === areaKey;
-      if (!sameArea && asignacionKey(item.residencia, item.puesto) !== targetKey) return item;
-      return {
-        ...item,
-        zonaId: zone?.id ?? '',
-        zonaNombre: zone?.nombre ?? '',
-        zonaResponsableNombre: zone?.responsableNombre ?? '',
-        zonaResponsableEmail: zone?.responsableEmail ?? '',
-        updatedAt: now,
-      };
-    }));
+    const area = areas.find((item) => item.id === value);
+    if (!area || area.zonaId !== target.zonaId) return;
+    setAssignmentDraft((current) =>
+      current.map((item) =>
+        asignacionKey(item.residencia, item.puesto) === targetKey
+          ? { ...item, areaId: area.id, area: area.nombre, updatedAt: now }
+          : item,
+      ),
+    );
   };
 
   const openPersonDetail = (assignment: HuelgaPuestoAsignacion) => {
@@ -721,6 +752,7 @@ export function HuelgasPage() {
       assignmentDraft,
       puestoResponsables,
       zonas,
+      areas,
     );
     const nextHuelgas = huelgas.map((item) =>
       item.id === assignmentTarget.id
@@ -749,7 +781,10 @@ export function HuelgasPage() {
 
   const openZones = () => {
     setZoneDraft(ensureDefaultZonas(zonas));
+    setAreaDraft(areas);
     setNewZoneName('');
+    setNewAreaName('');
+    setNewAreaZoneId(zonas.find((zona) => zona.active)?.id ?? '');
     setZonesOpen(true);
   };
 
@@ -757,7 +792,10 @@ export function HuelgasPage() {
     if (savingZones) return;
     setZonesOpen(false);
     setZoneDraft([]);
+    setAreaDraft([]);
     setNewZoneName('');
+    setNewAreaName('');
+    setNewAreaZoneId('');
   };
 
   const addZone = () => {
@@ -775,42 +813,129 @@ export function HuelgasPage() {
     setZoneDraft((current) => current.map((zona) => zona.id === id ? { ...zona, [field]: value, updatedAt: new Date().toISOString() } : zona));
   };
 
+  const addArea = () => {
+    const nombre = newAreaName.trim();
+    if (!nombre || !newAreaZoneId) return;
+    const duplicated = areaDraft.some(
+      (area) =>
+        area.zonaId === newAreaZoneId &&
+        area.nombre.localeCompare(nombre, 'es', { sensitivity: 'base' }) === 0,
+    );
+    if (duplicated) return;
+    const now = new Date().toISOString();
+    setAreaDraft((current) =>
+      [...current, {
+        id: createAreaId(),
+        nombre,
+        zonaId: newAreaZoneId,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      }].sort((a, b) => {
+        const zoneOrder = a.zonaId.localeCompare(b.zonaId, 'es', { sensitivity: 'base' });
+        return zoneOrder || a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+      }),
+    );
+    setNewAreaName('');
+  };
+
+  const updateArea = (
+    id: string,
+    field: 'nombre' | 'zonaId' | 'active',
+    value: string | boolean,
+  ) => {
+    setAreaDraft((current) =>
+      current.map((area) =>
+        area.id === id ? { ...area, [field]: value, updatedAt: new Date().toISOString() } : area,
+      ),
+    );
+  };
+
   const saveZones = async () => {
-    const normalized = zoneDraft.map((zona) => ({ ...zona, nombre: zona.nombre.trim(), responsableNombre: zona.responsableNombre.trim(), responsableEmail: zona.responsableEmail.trim() }));
-    if (normalized.some((zona) => !zona.nombre)) {
+    const normalizedZones = zoneDraft.map((zona) => ({
+      ...zona,
+      nombre: zona.nombre.trim(),
+      responsableNombre: zona.responsableNombre.trim(),
+      responsableEmail: zona.responsableEmail.trim(),
+    }));
+    if (normalizedZones.some((zona) => !zona.nombre)) {
       await alert('Todas las zonas deben tener un nombre.', { title: 'Revisa las zonas', type: 'warning' });
       return;
     }
-    const names = new Set<string>();
-    for (const zona of normalized) {
+    const zoneNames = new Set<string>();
+    for (const zona of normalizedZones) {
       const key = zona.nombre.toLocaleLowerCase('es-ES');
-      if (names.has(key)) {
+      if (zoneNames.has(key)) {
         await alert(`La zona “${zona.nombre}” está duplicada.`, { title: 'Revisa las zonas', type: 'warning' });
         return;
       }
-      names.add(key);
+      zoneNames.add(key);
+    }
+
+    const normalizedAreas = areaDraft.map((area) => ({ ...area, nombre: area.nombre.trim() }));
+    if (normalizedAreas.some((area) => !area.nombre || !area.zonaId)) {
+      await alert('Todas las áreas deben tener nombre y una zona asignada.', { title: 'Revisa las áreas', type: 'warning' });
+      return;
+    }
+    const areaNames = new Set<string>();
+    for (const area of normalizedAreas) {
+      const key = `${area.zonaId}::${area.nombre.toLocaleLowerCase('es-ES')}`;
+      if (areaNames.has(key)) {
+        await alert(`El área “${area.nombre}” está duplicada dentro de la misma zona.`, { title: 'Revisa las áreas', type: 'warning' });
+        return;
+      }
+      areaNames.add(key);
     }
 
     setSavingZones(true);
-    const result = await writeJsonStorageAsync(ZONAS_STORAGE_KEY, normalized);
-    setSavingZones(false);
-    if (!result.ok) {
-      await alert(result.message || 'No se ha podido guardar el maestro de zonas.', { title: 'Error de guardado', type: 'error' });
+    const zoneResult = await writeJsonStorageAsync(ZONAS_STORAGE_KEY, normalizedZones);
+    if (!zoneResult.ok) {
+      setSavingZones(false);
+      await alert(zoneResult.message || 'No se ha podido guardar el maestro de zonas.', { title: 'Error de guardado', type: 'error' });
       return;
     }
-    setZonas(normalized);
-    setAssignmentDraft((current) => applyZoneSnapshots(current, normalized));
+    const areaResult = await writeJsonStorageAsync(AREAS_STORAGE_KEY, normalizedAreas);
+    setSavingZones(false);
+    if (!areaResult.ok) {
+      await alert(areaResult.message || 'No se ha podido guardar el maestro de áreas.', { title: 'Error de guardado', type: 'error' });
+      return;
+    }
+
+    setZonas(normalizedZones);
+    setAreas(normalizedAreas);
+    setAssignmentDraft((current) =>
+      applyZoneSnapshots(
+        current.map((assignment) => {
+          const masterArea = assignment.areaId
+            ? normalizedAreas.find((area) => area.id === assignment.areaId)
+            : undefined;
+          return masterArea
+            ? {
+                ...assignment,
+                area: masterArea.nombre,
+                zonaId: masterArea.zonaId,
+              }
+            : assignment;
+        }),
+        normalizedZones,
+      ),
+    );
     closeZones();
   };
 
   const saveAssignments = async () => {
     if (!assignmentTarget) return;
 
-    const normalized = applyZoneSnapshots(assignmentDraft.map((item) => ({
-      ...item,
-      area: item.area.trim(),
-      updatedAt: new Date().toISOString(),
-    })), zonas);
+    const normalized = applyZoneSnapshots(assignmentDraft.map((item) => {
+      const masterArea = item.areaId ? areas.find((area) => area.id === item.areaId) : undefined;
+      return {
+        ...item,
+        areaId: masterArea?.id ?? '',
+        area: masterArea?.nombre ?? '',
+        zonaId: masterArea?.zonaId ?? item.zonaId,
+        updatedAt: new Date().toISOString(),
+      };
+    }), zonas);
     const seenAssignmentKeys = new Set<string>();
     for (const item of normalized) {
       if (!item.residencia.trim()) {
@@ -882,11 +1007,12 @@ export function HuelgasPage() {
       huelga.asignacionesPuesto ?? [],
       puestoResponsables,
       zonas,
+      areas,
     );
     const pending = assignments.filter((item) => !isAsignacionCompleta(item));
     if (pending.length > 0) {
       await alert(
-        `Hay ${pending.length} combinaciones de residencia + puesto sin Área, Zona o responsable de Zona completo. Complétalas antes de generar los correos.`,
+        `Hay ${pending.length} combinaciones de residencia + puesto sin Zona, Área válida del maestro o responsable de Zona completo. Complétalas antes de generar los correos.`,
         { title: 'Áreas y zonas pendientes', type: 'warning' },
       );
       return;
@@ -984,7 +1110,7 @@ export function HuelgasPage() {
         title="Huelgas"
         actions={
           <div className="flex items-center gap-2">
-            <ActionButton variant="secondary" iconOnly={false} icon={MapPinned} onClick={openZones}>Zonas</ActionButton>
+            <ActionButton variant="secondary" iconOnly={false} icon={MapPinned} onClick={openZones}>Zonas y áreas</ActionButton>
             <ActionButton variant="add" iconOnly={false} onClick={openNew}>Nueva huelga</ActionButton>
           </div>
         }
@@ -1054,6 +1180,7 @@ export function HuelgasPage() {
                     huelga.asignacionesPuesto ?? [],
                     puestoResponsables,
                     zonas,
+                    areas,
                   );
                   const configuredAssignments = assignments.filter(isAsignacionCompleta).length;
                   return (
@@ -1162,7 +1289,7 @@ export function HuelgasPage() {
 
               {importPreview.length > 0 && (
                 <>
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-4">
                     <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Personas detectadas</p><strong className="mt-1 block text-xl text-metro-text">{importPreview.length}</strong></div>
                     <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Filas omitidas</p><strong className="mt-1 block text-xl text-metro-text">{importSkippedRows}</strong></div>
                     <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Actualmente importadas</p><strong className="mt-1 block text-xl text-metro-text">{importTarget.personalConTurno?.length ?? 0}</strong></div>
@@ -1236,11 +1363,11 @@ export function HuelgasPage() {
               <div>
                 <h2 id="huelga-assignment-title" className="text-lg font-semibold text-metro-text">Asignación de áreas y zonas</h2>
                 <p className="mt-1 text-sm text-metro-muted">
-                  {formatDate(assignmentTarget.fecha)} · Define o corrige la residencia, el área y la zona de trabajo de cada combinación residencia + puesto. El responsable y email se gestionan a nivel de zona.
+                  {formatDate(assignmentTarget.fecha)} · Define o corrige la residencia y asigna primero la zona; después selecciona una de las áreas disponibles en esa zona. El responsable y email se gestionan a nivel de zona.
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <ActionButton variant="secondary" size="sm" iconOnly={false} icon={MapPinned} onClick={openZones}>Gestionar zonas</ActionButton>
+                <ActionButton variant="secondary" size="sm" iconOnly={false} icon={MapPinned} onClick={openZones}>Gestionar zonas y áreas</ActionButton>
                 <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={closeAssignments} type="button" aria-label="Cerrar">×</button>
               </div>
             </div>
@@ -1292,8 +1419,8 @@ export function HuelgasPage() {
                           ['residencia', 'Residencia'],
                           ['puesto', 'Puesto'],
                           ['personas', 'Personas'],
-                          ['area', 'Área'],
                           ['zona', 'Zona'],
+                          ['area', 'Área'],
                           ['responsable', 'Responsable de zona'],
                           ['estado', 'Estado'],
                         ].map(([key, label]) => (
@@ -1309,8 +1436,8 @@ export function HuelgasPage() {
                         <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.residencia} onChange={(event) => updateAssignmentFilter('residencia', event.target.value)} /></th>
                         <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.puesto} onChange={(event) => updateAssignmentFilter('puesto', event.target.value)} /></th>
                         <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-center text-[11px] text-metro-text outline-none focus:border-metro-red" inputMode="numeric" placeholder="Nº" value={assignmentFilters.personas} onChange={(event) => updateAssignmentFilter('personas', event.target.value.replace(/\D/g, ''))} /></th>
-                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.area} onChange={(event) => updateAssignmentFilter('area', event.target.value)} /></th>
                         <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.zona} onChange={(event) => updateAssignmentFilter('zona', event.target.value)} /></th>
+                        <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.area} onChange={(event) => updateAssignmentFilter('area', event.target.value)} /></th>
                         <th className="px-2 pb-2"><input className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" placeholder="Filtrar…" value={assignmentFilters.responsable} onChange={(event) => updateAssignmentFilter('responsable', event.target.value)} /></th>
                         <th className="px-2 pb-2"><select className="h-8 w-full rounded-md border border-metro-border bg-metro-app px-2 text-[11px] text-metro-text outline-none focus:border-metro-red" value={assignmentFilters.estado} onChange={(event) => updateAssignmentFilter('estado', event.target.value)}><option value="">Todos</option><option value="configurado">Configurado</option><option value="pendiente">Pendiente</option></select></th>
                       </tr>
@@ -1344,14 +1471,6 @@ export function HuelgasPage() {
                               </button>
                             </td>
                             <td className="px-3 py-2">
-                              <input
-                                className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
-                                placeholder="Área"
-                                value={item.area}
-                                onChange={(event) => updateAssignment(item.residencia, item.puesto, 'area', event.target.value)}
-                              />
-                            </td>
-                            <td className="px-3 py-2">
                               <select
                                 className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red"
                                 value={item.zonaId}
@@ -1361,6 +1480,22 @@ export function HuelgasPage() {
                                 {zonas.filter((zona) => zona.active || zona.id === item.zonaId).map((zona) => (
                                   <option key={zona.id} value={zona.id}>{zona.nombre}{zona.active ? '' : ' (inactiva)'}</option>
                                 ))}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2">
+                              <select
+                                className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red disabled:cursor-not-allowed disabled:opacity-60"
+                                value={item.areaId ?? ''}
+                                disabled={!item.zonaId}
+                                onChange={(event) => updateAssignment(item.residencia, item.puesto, 'areaId', event.target.value)}
+                              >
+                                <option value="">{item.zonaId ? 'Seleccionar área…' : 'Selecciona primero una zona'}</option>
+                                {areas
+                                  .filter((area) => area.zonaId === item.zonaId && (area.active || area.id === item.areaId))
+                                  .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
+                                  .map((area) => (
+                                    <option key={area.id} value={area.id}>{area.nombre}{area.active ? '' : ' (inactiva)'}</option>
+                                  ))}
                               </select>
                             </td>
                             <td className="px-3 py-2">
@@ -1386,7 +1521,7 @@ export function HuelgasPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-metro-border bg-metro-app px-5 py-4">
               <p className="text-xs text-metro-muted">
-                Puedes guardar aunque queden combinaciones pendientes. Antes de generar los correos, cada combinación deberá tener Área y Zona, y cada Zona un responsable con email.
+                Puedes guardar aunque queden combinaciones pendientes. Antes de generar los correos, cada combinación deberá tener Zona y un Área válida del maestro, y cada Zona un responsable con email.
               </p>
               <div className="flex gap-2">
                 <ActionButton variant="secondary" iconOnly={false} onClick={closeAssignments}>Cancelar</ActionButton>
@@ -1520,14 +1655,15 @@ export function HuelgasPage() {
           <section className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-app shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="huelga-zones-title">
             <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
               <div>
-                <h2 id="huelga-zones-title" className="text-lg font-semibold text-metro-text">Zonas de trabajo</h2>
-                <p className="mt-1 text-sm text-metro-muted">Varias áreas pueden pertenecer a una misma zona. El responsable y email se definen una sola vez por zona.</p>
+                <h2 id="huelga-zones-title" className="text-lg font-semibold text-metro-text">Zonas y áreas de trabajo</h2>
+                <p className="mt-1 text-sm text-metro-muted">Gestiona las zonas, sus responsables y las áreas que pertenecen a cada una. Las asignaciones de huelga elegirán únicamente entre estas áreas.</p>
               </div>
               <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={closeZones} type="button" aria-label="Cerrar">×</button>
             </div>
             <div className="space-y-4 overflow-y-auto p-5">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Zonas</p><strong className="mt-1 block text-xl text-metro-text">{zoneDraft.length}</strong></div>
+                <div className="rounded-xl border border-metro-border bg-metro-panel/55 p-3"><p className="text-xs text-metro-muted">Áreas</p><strong className="mt-1 block text-xl text-metro-text">{areaDraft.length}</strong></div>
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"><p className="text-xs text-emerald-200/80">Activas completas</p><strong className="mt-1 block text-xl text-emerald-200">{zoneDraft.filter(isZonaCompleta).length}</strong></div>
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3"><p className="text-xs text-amber-200/80">Activas pendientes</p><strong className="mt-1 block text-xl text-amber-200">{zoneDraft.filter((zona) => zona.active && !isZonaCompleta(zona)).length}</strong></div>
               </div>
@@ -1556,11 +1692,50 @@ export function HuelgasPage() {
                   </table>
                 </div>
               </div>
-              <p className="text-xs leading-5 text-metro-muted">Dar de baja una zona la deja inactiva para nuevas asignaciones, pero no elimina su histórico ni las huelgas que ya la tenían asignada.</p>
+              <div className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/45 p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-metro-text">Áreas por zona</h3>
+                  <p className="mt-1 text-xs text-metro-muted">Cada área pertenece a una zona. Puedes darla de alta, moverla de zona o dejarla inactiva para futuras asignaciones.</p>
+                </div>
+                <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                  <select className="h-10 rounded-xl border border-metro-border bg-metro-app px-3 text-sm text-metro-text outline-none focus:border-metro-red" value={newAreaZoneId} onChange={(event) => setNewAreaZoneId(event.target.value)}>
+                    <option value="">Seleccionar zona…</option>
+                    {zoneDraft.filter((zona) => zona.active).map((zona) => <option key={zona.id} value={zona.id}>{zona.nombre}</option>)}
+                  </select>
+                  <input className="h-10 rounded-xl border border-metro-border bg-metro-app px-3 text-sm text-metro-text outline-none focus:border-metro-red" placeholder="Nueva área" value={newAreaName} onChange={(event) => setNewAreaName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addArea(); } }} />
+                  <ActionButton variant="add" iconOnly={false} icon={Plus} onClick={addArea}>Añadir área</ActionButton>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-metro-border">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[680px] text-left text-xs">
+                      <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted"><tr><th className="px-3 py-2.5 font-semibold">Área</th><th className="px-3 py-2.5 font-semibold">Zona</th><th className="w-28 px-3 py-2.5 font-semibold">Estado</th></tr></thead>
+                      <tbody className="divide-y divide-metro-border">
+                        {areaDraft
+                          .slice()
+                          .sort((a, b) => {
+                            const zoneA = zoneDraft.find((zona) => zona.id === a.zonaId)?.nombre ?? '';
+                            const zoneB = zoneDraft.find((zona) => zona.id === b.zonaId)?.nombre ?? '';
+                            const zoneOrder = zoneA.localeCompare(zoneB, 'es', { sensitivity: 'base' });
+                            return zoneOrder || a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+                          })
+                          .map((area) => (
+                            <tr key={area.id} className="align-top hover:bg-metro-raised/35">
+                              <td className="px-3 py-2"><input className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red" value={area.nombre} onChange={(event) => updateArea(area.id, 'nombre', event.target.value)} /></td>
+                              <td className="px-3 py-2"><select className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red" value={area.zonaId} onChange={(event) => updateArea(area.id, 'zonaId', event.target.value)}>{zoneDraft.map((zona) => <option key={zona.id} value={zona.id}>{zona.nombre}{zona.active ? '' : ' (inactiva)'}</option>)}</select></td>
+                              <td className="px-3 py-2"><button type="button" onClick={() => updateArea(area.id, 'active', !area.active)} className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${area.active ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200' : 'border-metro-border bg-metro-panel text-metro-muted'}`}>{area.active ? 'Activa' : 'Inactiva'}</button></td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs leading-5 text-metro-muted">Dar de baja una zona o área la deja inactiva para nuevas asignaciones, pero no elimina su histórico ni las huelgas que ya la tenían asignada.</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-metro-border bg-metro-app px-5 py-4">
               <ActionButton variant="secondary" iconOnly={false} onClick={closeZones}>Cancelar</ActionButton>
-              <ActionButton variant="save" iconOnly={false} loading={savingZones} onClick={() => void saveZones()}>Guardar zonas</ActionButton>
+              <ActionButton variant="save" iconOnly={false} loading={savingZones} onClick={() => void saveZones()}>Guardar zonas y áreas</ActionButton>
             </div>
           </section>
         </div>
