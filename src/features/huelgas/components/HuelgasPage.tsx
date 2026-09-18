@@ -19,7 +19,6 @@ import {
   applyZoneSnapshots,
   buildAsignacionesForPersonal,
   asignacionKey,
-  countPersonasByAsignacion,
   isAsignacionCompleta,
   isHuelgaPuestoAsignaciones,
   mergeAsignacionesIntoMaster,
