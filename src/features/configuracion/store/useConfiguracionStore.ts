@@ -24,6 +24,7 @@ interface ConfiguracionState {
   rutaPlantillaExcedencia: string;
   rutaPlantillaProrrogaExcedencia: string;
   rutaPlantillaVinculograma: string;
+  rutaExportacionLoteria: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
 }
@@ -36,6 +37,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaPlantillaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaProrrogaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaExportacionLoteria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -53,6 +55,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaPlantillaExcedencia: state.rutaPlantillaExcedencia,
     rutaPlantillaProrrogaExcedencia: state.rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
+    rutaExportacionLoteria: state.rutaExportacionLoteria,
     taskPhases: state.taskPhases,
     taskOrigins: state.taskOrigins,
   };
@@ -140,6 +143,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaPlantillaExcedencia: '',
     rutaPlantillaProrrogaExcedencia: '',
     rutaPlantillaVinculograma: '',
+    rutaExportacionLoteria: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
   };
@@ -177,6 +181,10 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
         ? (parsed as { rutaPlantillaVinculograma: string }).rutaPlantillaVinculograma
         : '',
     ),
+    rutaExportacionLoteria:
+      typeof (parsed as { rutaExportacionLoteria?: unknown }).rutaExportacionLoteria === 'string'
+        ? (parsed as { rutaExportacionLoteria: string }).rutaExportacionLoteria.trim()
+        : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
   };
@@ -254,6 +262,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaExcedencia: initialConfiguracion.rutaPlantillaExcedencia,
   rutaPlantillaProrrogaExcedencia: initialConfiguracion.rutaPlantillaProrrogaExcedencia,
   rutaPlantillaVinculograma: initialConfiguracion.rutaPlantillaVinculograma,
+  rutaExportacionLoteria: initialConfiguracion.rutaExportacionLoteria,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
   load: () => {
@@ -277,6 +286,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaPlantillaExcedencia,
         rutaPlantillaProrrogaExcedencia,
         rutaPlantillaVinculograma,
+        rutaExportacionLoteria,
         taskPhases,
         taskOrigins,
       } = get();
@@ -286,6 +296,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaPlantillaExcedencia,
         rutaPlantillaProrrogaExcedencia,
         rutaPlantillaVinculograma,
+        rutaExportacionLoteria,
         taskPhases,
         taskOrigins,
       };
@@ -343,6 +354,13 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     const configuracion: ConfiguracionState = {
       ...selectConfiguracionState(get()),
       rutaPlantillaVinculograma: normalizeTemplatePath(ruta),
+    };
+    return commitConfiguracion(set, configuracion);
+  },
+  setRutaExportacionLoteria: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
+      rutaExportacionLoteria: ruta.trim(),
     };
     return commitConfiguracion(set, configuracion);
   },

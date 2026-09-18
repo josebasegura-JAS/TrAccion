@@ -595,6 +595,13 @@ interface TraccionApi {
     expectedCampaignUpdatedAt: string | null;
     expectedRequestUpdatedAt: Record<string, string | null>;
   }) => Promise<TraccionLoteriaSaveResult>;
+  selectLoteriaExportDirectory?: () => Promise<string | null>;
+  saveLoteriaCampaignExcel?: (payload: {
+    year: number;
+    directoryTemplate: string;
+    fileName: string;
+    buffer: ArrayBuffer;
+  }) => Promise<{ ok: boolean; message: string; path: string | null }>;
   acquireRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   heartbeatRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;
   releaseRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;

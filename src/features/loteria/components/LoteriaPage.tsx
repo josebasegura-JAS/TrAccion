@@ -34,6 +34,7 @@ import {
   type LotteryRequest,
 } from '../domain/loteria';
 import { useLoteriaStore } from '../store/useLoteriaStore';
+import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useUnsavedChanges } from '../../../hooks/useUnsavedChanges';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../../../hooks/useRecoverableDraft';
 import {
@@ -51,6 +52,7 @@ import {
   employeeScore,
   createRequestId,
   buildLotteryAdministrationWorkbook,
+  buildCampaignWorkbook,
   exportCampaign,
   stockTone,
 } from './loteriaPage.utils';
@@ -62,6 +64,8 @@ export function LoteriaPage() {
   const load = useLoteriaStore((state) => state.load);
   const saveCampaign = useLoteriaStore((state) => state.saveCampaign);
   const employees = useEmployeeStore((state) => state.employees);
+  const rutaExportacionLoteria = useConfiguracionStore((state) => state.rutaExportacionLoteria);
+  const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const loadEmployees = useEmployeeStore((state) => state.load);
 
   const [draft, setDraft] = useState(campaign);
@@ -78,7 +82,8 @@ export function LoteriaPage() {
   useEffect(() => {
     load();
     loadEmployees();
-  }, [load, loadEmployees]);
+    loadConfiguracion();
+  }, [load, loadEmployees, loadConfiguracion]);
   useEffect(() => { setDraft(campaign); }, [campaign]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(campaign), [campaign, draft]);
@@ -201,8 +206,30 @@ export function LoteriaPage() {
 
   const persist = async (next = draft, success = 'Cambios guardados.') => {
     const result = await saveCampaign(next);
-    if (result.ok) clearRecoveryDraft();
-    setMessage(result.ok ? success : result.message);
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
+
+    clearRecoveryDraft();
+
+    if (!window.traccion?.saveLoteriaCampaignExcel) {
+      setMessage(`${success} El Excel automático solo está disponible en la aplicación de escritorio.`);
+      return;
+    }
+
+    try {
+      const workbook = await buildCampaignWorkbook(next);
+      const excelResult = await window.traccion.saveLoteriaCampaignExcel({
+        year: next.year,
+        directoryTemplate: rutaExportacionLoteria,
+        fileName: workbook.fileName,
+        buffer: workbook.buffer,
+      });
+      setMessage(excelResult.ok ? `${success} Excel de campaña actualizado.` : `${success} ${excelResult.message}`);
+    } catch (error) {
+      setMessage(`${success} No se ha podido actualizar el Excel de campaña: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const updateDraft = (updater: (current: LotteryCampaign) => LotteryCampaign) => {
