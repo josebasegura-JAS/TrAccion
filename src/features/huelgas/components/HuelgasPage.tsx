@@ -604,23 +604,13 @@ export function HuelgasPage() {
     const now = new Date().toISOString();
 
     if (field === 'area') {
-      const previousArea = target.area.trim().toLocaleLowerCase('es-ES');
-      const inferred = assignmentDraft.find(
-        (item) => item !== target && item.area.trim().toLocaleLowerCase('es-ES') === value.trim().toLocaleLowerCase('es-ES') && item.zonaId,
-      );
+      // Cambiar el nombre/área no debe modificar implícitamente la zona ya elegida.
+      // La zona solo cambia cuando el usuario actúa sobre el selector de Zona.
       setAssignmentDraft((current) => current.map((item) => {
         if (asignacionKey(item.residencia, item.puesto) !== targetKey) return item;
         return {
           ...item,
           area: value,
-          ...(inferred ? {
-            zonaId: inferred.zonaId,
-            zonaNombre: inferred.zonaNombre,
-            zonaResponsableNombre: inferred.zonaResponsableNombre,
-            zonaResponsableEmail: inferred.zonaResponsableEmail,
-          } : previousArea && previousArea !== value.trim().toLocaleLowerCase('es-ES') ? {
-            zonaId: '', zonaNombre: '', zonaResponsableNombre: '', zonaResponsableEmail: '',
-          } : {}),
           updatedAt: now,
         };
       }));
