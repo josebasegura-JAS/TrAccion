@@ -872,7 +872,8 @@ export function HuelgasPage() {
 
     setPuestoResponsables(nextMaster);
     setHuelgas(nextHuelgas);
-    closeAssignments();
+    setAssignmentDraft(normalized);
+    setAssignmentResidenceOverrides({});
   };
 
 
