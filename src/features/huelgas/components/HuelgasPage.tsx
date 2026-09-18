@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Clock3, FileSpreadsheet, MailPlus, MapPinned, Plus, Search, Settings2, Trash2, UsersRound } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { RichTextEditor } from '../../../components/ui/RichTextEditor';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
@@ -10,12 +11,15 @@ import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persis
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
 import { enrichPersonalWithPlantilla, type HuelgaPersonalPlantillaStats } from './huelgasPersonalPlantilla';
+import { buildCollectionGroups, type HuelgaCollectionGroup } from './huelgasCollectionExport';
 import {
-  buildCollectionGroups,
-  buildHuelgaCollectionMailHtml,
-  buildHuelgaCollectionSubject,
-  buildHuelgaCollectionWorkbook,
-} from './huelgasCollectionExport';
+  HUELGA_MAIL_MARKERS,
+  DEFAULT_HUELGA_MAIL_BODY,
+  DEFAULT_HUELGA_MAIL_SUBJECT,
+  defaultDeadlineForZone,
+  defaultMailEnabledForZone,
+  renderHuelgaMailTemplate,
+} from './huelgasMailTemplates';
 import {
   applyZoneSnapshots,
   buildAsignacionesForPersonal,
@@ -64,6 +68,7 @@ type Huelga = {
   personalConTurno?: HuelgaPersonalTurno[];
   personalImportadoAt?: string | null;
   asignacionesPuesto?: HuelgaPuestoAsignacion[];
+  instruccionesCorreoPorZona?: Record<string, string>;
 };
 
 type HuelgaDraft = Pick<Huelga, 'fecha' | 'sindicatos' | 'tipo' | 'tramos' | 'observaciones'>;
@@ -114,7 +119,8 @@ function isHuelga(value: unknown): value is Huelga {
     typeof candidate.updatedAt === 'string' &&
     (typeof candidate.personalConTurno === 'undefined' || Array.isArray(candidate.personalConTurno)) &&
     (typeof candidate.personalImportadoAt === 'undefined' || candidate.personalImportadoAt === null || typeof candidate.personalImportadoAt === 'string') &&
-    (typeof candidate.asignacionesPuesto === 'undefined' || isHuelgaPuestoAsignaciones(candidate.asignacionesPuesto))
+    (typeof candidate.asignacionesPuesto === 'undefined' || isHuelgaPuestoAsignaciones(candidate.asignacionesPuesto)) &&
+    (typeof candidate.instruccionesCorreoPorZona === 'undefined' || (candidate.instruccionesCorreoPorZona !== null && typeof candidate.instruccionesCorreoPorZona === 'object' && !Array.isArray(candidate.instruccionesCorreoPorZona)))
   );
 }
 
@@ -268,6 +274,10 @@ export function HuelgasPage() {
   const [personResidenceDrafts, setPersonResidenceDrafts] = useState<Record<string, string>>({});
   const [savingPersonId, setSavingPersonId] = useState<string | null>(null);
   const [generatingCollectionForId, setGeneratingCollectionForId] = useState<string | null>(null);
+  const [mailTargetId, setMailTargetId] = useState<string | null>(null);
+  const [mailSpecificNotes, setMailSpecificNotes] = useState<Record<string, string>>({});
+  const [mailPreviewZoneId, setMailPreviewZoneId] = useState<string | null>(null);
+  const [mailTemplateZoneId, setMailTemplateZoneId] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfiguracion();
@@ -282,7 +292,7 @@ export function HuelgasPage() {
     const storedZonas = readJsonStorage(ZONAS_STORAGE_KEY, [], isHuelgaZonas);
     const nextZonas = ensureDefaultZonas(storedZonas);
     setZonas(nextZonas);
-    if (nextZonas.length !== storedZonas.length) {
+    if (JSON.stringify(nextZonas) !== JSON.stringify(storedZonas)) {
       void writeJsonStorageAsync(ZONAS_STORAGE_KEY, nextZonas);
     }
 
@@ -317,6 +327,27 @@ export function HuelgasPage() {
         .sort((a, b) => a.fecha.localeCompare(b.fecha))[0] ?? null,
     [huelgas],
   );
+
+  const mailTarget = mailTargetId ? huelgas.find((item) => item.id === mailTargetId) ?? null : null;
+  const mailGroups = useMemo(() => {
+    if (!mailTarget) return [];
+    const assignments = buildAsignacionesForPersonal(
+      mailTarget.personalConTurno ?? [],
+      mailTarget.asignacionesPuesto ?? [],
+      puestoResponsables,
+      zonas,
+      areas,
+    );
+    return buildCollectionGroups(mailTarget.personalConTurno ?? [], assignments)
+      .filter((group) => zonas.find((zona) => zona.id === group.zonaId)?.correoActivo !== false);
+  }, [areas, mailTarget, puestoResponsables, zonas]);
+
+  const mailPreviewGroup = mailPreviewZoneId
+    ? mailGroups.find((group) => group.zonaId === mailPreviewZoneId) ?? null
+    : null;
+  const mailTemplateZone = mailTemplateZoneId
+    ? zoneDraft.find((zona) => zona.id === mailTemplateZoneId) ?? null
+    : null;
 
   const openNew = () => {
     setEditingId(null);
@@ -386,6 +417,7 @@ export function HuelgasPage() {
       personalConTurno: current?.personalConTurno,
       personalImportadoAt: current?.personalImportadoAt ?? null,
       asignacionesPuesto: current?.asignacionesPuesto,
+      instruccionesCorreoPorZona: current?.instruccionesCorreoPorZona,
     };
     const next = current
       ? huelgas.map((item) => (item.id === current.id ? record : item))
@@ -804,12 +836,15 @@ export function HuelgasPage() {
     if (zoneDraft.some((zona) => zona.nombre.localeCompare(nombre, 'es', { sensitivity: 'base' }) === 0)) return;
     const now = new Date().toISOString();
     setZoneDraft((current) => [...current, {
-      id: createZonaId(), nombre, responsableNombre: '', responsableEmail: '', active: true, createdAt: now, updatedAt: now,
+      id: createZonaId(), nombre, responsableNombre: '', responsableEmail: '',
+      correoActivo: defaultMailEnabledForZone(nombre), correoAsunto: DEFAULT_HUELGA_MAIL_SUBJECT,
+      correoCuerpoHtml: DEFAULT_HUELGA_MAIL_BODY, correoPlazos: defaultDeadlineForZone(nombre),
+      correoInstruccionesHabituales: '', active: true, createdAt: now, updatedAt: now,
     }].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })));
     setNewZoneName('');
   };
 
-  const updateZone = (id: string, field: 'nombre' | 'responsableNombre' | 'responsableEmail' | 'active', value: string | boolean) => {
+  const updateZone = (id: string, field: 'nombre' | 'responsableNombre' | 'responsableEmail' | 'correoActivo' | 'correoAsunto' | 'correoCuerpoHtml' | 'correoPlazos' | 'correoInstruccionesHabituales' | 'active', value: string | boolean) => {
     setZoneDraft((current) => current.map((zona) => zona.id === id ? { ...zona, [field]: value, updatedAt: new Date().toISOString() } : zona));
   };
 
@@ -857,6 +892,9 @@ export function HuelgasPage() {
       nombre: zona.nombre.trim(),
       responsableNombre: zona.responsableNombre.trim(),
       responsableEmail: zona.responsableEmail.trim(),
+      correoAsunto: zona.correoAsunto.trim(),
+      correoPlazos: zona.correoPlazos.trim(),
+      correoInstruccionesHabituales: zona.correoInstruccionesHabituales.trim(),
     }));
     if (normalizedZones.some((zona) => !zona.nombre)) {
       await alert('Todas las zonas deben tener un nombre.', { title: 'Revisa las zonas', type: 'warning' });
@@ -992,7 +1030,7 @@ export function HuelgasPage() {
   };
 
 
-  const generateCollectionMails = async (huelga: Huelga) => {
+  const openCollectionMails = async (huelga: Huelga) => {
     const personal = huelga.personalConTurno ?? [];
     if (personal.length === 0) {
       await alert('Importa primero el personal con turno de esta huelga.', {
@@ -1009,83 +1047,147 @@ export function HuelgasPage() {
       zonas,
       areas,
     );
-    const pending = assignments.filter((item) => !isAsignacionCompleta(item));
+    const pending = assignments.filter((item) => {
+      const zone = zonas.find((zona) => zona.id === item.zonaId);
+      return zone?.correoActivo !== false && !isAsignacionCompleta(item);
+    });
     if (pending.length > 0) {
       await alert(
-        `Hay ${pending.length} combinaciones de residencia + puesto sin Zona, Área válida del maestro o responsable de Zona completo. Complétalas antes de generar los correos.`,
+        `Hay ${pending.length} combinaciones de residencia + puesto pertenecientes a zonas con correo activo que no tienen Zona, Área válida o responsable/email completos. Complétalas antes de preparar los correos.`,
         { title: 'Áreas y zonas pendientes', type: 'warning' },
       );
       return;
     }
 
-    const groups = buildCollectionGroups(personal, assignments);
+    const groups = buildCollectionGroups(personal, assignments)
+      .filter((group) => zonas.find((zona) => zona.id === group.zonaId)?.correoActivo !== false);
     if (groups.length === 0) {
-      await alert('No se han podido formar grupos de recogida con los responsables configurados.', {
-        title: 'Sin destinatarios',
-        type: 'warning',
+      await alert('No hay zonas con correo activo y destinatario configurado para esta huelga.', {
+        title: 'Sin correos que generar',
+        type: 'info',
       });
       return;
     }
 
+    setMailSpecificNotes(huelga.instruccionesCorreoPorZona ?? {});
+    setMailPreviewZoneId(groups[0]?.zonaId ?? null);
+    setMailTargetId(huelga.id);
+  };
+
+  const closeCollectionMails = () => {
+    if (generatingCollectionForId) return;
+    setMailTargetId(null);
+    setMailPreviewZoneId(null);
+    setMailSpecificNotes({});
+  };
+
+  const saveMailSpecificNotes = async () => {
+    if (!mailTarget) return;
+    const now = new Date().toISOString();
+    const cleaned = Object.fromEntries(
+      Object.entries(mailSpecificNotes)
+        .map(([key, value]) => [key, value.trim()])
+        .filter(([, value]) => Boolean(value)),
+    );
+    const next = huelgas.map((item) => item.id === mailTarget.id
+      ? { ...item, instruccionesCorreoPorZona: cleaned, updatedAt: now }
+      : item,
+    );
+    const result = await writeJsonStorageAsync(STORAGE_KEY, next);
+    if (!result.ok) {
+      await alert(result.message || 'No se han podido guardar las instrucciones específicas.', {
+        title: 'Error de guardado',
+        type: 'error',
+      });
+      return;
+    }
+    setHuelgas(next);
+  };
+
+  const renderGroupMail = (group: HuelgaCollectionGroup) => {
+    if (!mailTarget) return null;
+    const zona = zonas.find((item) => item.id === group.zonaId);
+    if (!zona) return null;
+    return renderHuelgaMailTemplate({
+      fecha: mailTarget.fecha,
+      zona,
+      personal: group.personal,
+      asignaciones: group.asignaciones,
+      instruccionesEspecificas: mailSpecificNotes[group.zonaId] ?? '',
+    });
+  };
+
+  const createCollectionMail = async (group: HuelgaCollectionGroup): Promise<string | null> => {
     const api = window.traccion?.createOutlookDraft;
-    if (!api) {
-      await alert('La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.', {
-        title: 'Outlook no disponible',
-        type: 'warning',
-      });
-      return;
-    }
+    if (!api) return 'La generación de borradores de Outlook solo está disponible en la aplicación de escritorio.';
+    const zona = zonas.find((item) => item.id === group.zonaId);
+    if (!zona) return 'No se encuentra la zona configurada.';
+    if (!zona.correoActivo) return null;
+    if (!zona.responsableEmail.trim()) return 'La zona no tiene email de responsable.';
+    const rendered = renderGroupMail(group);
+    if (!rendered) return 'No se ha podido renderizar la plantilla.';
+    const result = await api({
+      subject: rendered.subject,
+      html: rendered.html,
+      to: [zona.responsableEmail.trim()],
+      cc: [],
+      bcc: [],
+      attachments: [],
+    });
+    return result.ok ? null : result.message;
+  };
 
+  const generateSingleCollectionMail = async (group: HuelgaCollectionGroup) => {
+    if (!mailTarget) return;
+    setGeneratingCollectionForId(mailTarget.id);
+    try {
+      const error = await createCollectionMail(group);
+      if (error) {
+        await alert(error, { title: `No se ha creado el correo de ${group.zonaNombre}`, type: 'warning' });
+        return;
+      }
+      await alert(`Borrador de Outlook preparado para ${group.zonaNombre}.`, {
+        title: 'Correo preparado',
+        type: 'info',
+      });
+    } finally {
+      setGeneratingCollectionForId(null);
+    }
+  };
+
+  const generateAllCollectionMails = async () => {
+    if (!mailTarget || mailGroups.length === 0) return;
     const accepted = await confirm(
-      `Se crearán ${groups.length} borrador${groups.length === 1 ? '' : 'es'} de Outlook, uno por Zona + Responsable, cada uno con su Excel de recogida adjunto. ¿Continuar?`,
-      { title: 'Generar correos de recogida', confirmLabel: 'Generar correos', cancelLabel: 'Cancelar' },
+      `Se crearán ${mailGroups.length} borrador${mailGroups.length === 1 ? '' : 'es'} de Outlook, uno por zona. En esta fase no se adjuntará ningún Excel. ¿Continuar?`,
+      { title: 'Generar correos por zona', confirmLabel: 'Generar correos', cancelLabel: 'Cancelar' },
     );
     if (!accepted) return;
 
-    setGeneratingCollectionForId(huelga.id);
+    await saveMailSpecificNotes();
+    setGeneratingCollectionForId(mailTarget.id);
     let created = 0;
     const failures: string[] = [];
-
     try {
-      for (const group of groups) {
-        try {
-          const attachment = await buildHuelgaCollectionWorkbook(huelga.id, huelga.fecha, group);
-          const result = await api({
-            subject: buildHuelgaCollectionSubject(huelga.fecha, group.zonaNombre),
-            html: buildHuelgaCollectionMailHtml({
-              fecha: huelga.fecha,
-              zonaNombre: group.zonaNombre,
-              responsableNombre: group.responsableNombre,
-              personal: group.personal,
-              asignaciones: group.asignaciones,
-            }),
-            to: [group.responsableEmail],
-            cc: [],
-            bcc: [],
-            attachments: [{ fileName: attachment.fileName, buffer: attachment.buffer }],
-          });
-          if (result.ok) created += 1;
-          else failures.push(`${group.zonaNombre}: ${result.message}`);
-        } catch (error) {
-          failures.push(`${group.zonaNombre}: ${error instanceof Error ? error.message : 'error no identificado'}`);
-        }
+      for (const group of mailGroups) {
+        const error = await createCollectionMail(group);
+        if (error) failures.push(`${group.zonaNombre}: ${error}`);
+        else created += 1;
       }
     } finally {
       setGeneratingCollectionForId(null);
     }
 
     if (failures.length > 0) {
-      await alert(
-        `Se han creado ${created} de ${groups.length} borradores. Problemas:\n${failures.join('\n')}`,
-        { title: 'Generación incompleta', type: 'warning' },
-      );
+      await alert(`Se han creado ${created} de ${mailGroups.length} borradores. Problemas:\n${failures.join('\n')}`, {
+        title: 'Generación incompleta',
+        type: 'warning',
+      });
       return;
     }
-
-    await alert(
-      `Se han creado ${created} borrador${created === 1 ? '' : 'es'} de Outlook con su Excel de recogida adjunto.`,
-      { title: 'Correos preparados', type: 'info' },
-    );
+    await alert(`Se han creado ${created} borrador${created === 1 ? '' : 'es'} de Outlook sin adjuntos.`, {
+      title: 'Correos preparados',
+      type: 'info',
+    });
   };
 
   const remove = async (huelga: Huelga) => {
@@ -1103,6 +1205,8 @@ export function HuelgasPage() {
     }
     setHuelgas(next);
   };
+
+  const currentMailPreview = mailPreviewGroup ? renderGroupMail(mailPreviewGroup) : null;
 
   return (
     <div className="space-y-4">
@@ -1234,7 +1338,7 @@ export function HuelgasPage() {
                             icon={MailPlus}
                             loading={generatingCollectionForId === huelga.id}
                             disabled={(huelga.personalConTurno?.length ?? 0) === 0 || configuredAssignments !== assignments.length}
-                            onClick={() => void generateCollectionMails(huelga)}
+                            onClick={() => void openCollectionMails(huelga)}
                             title={configuredAssignments !== assignments.length ? 'Completa primero todas las áreas, zonas y responsables de zona' : 'Generar borradores de Outlook con Excel de recogida'}
                           >
                             Correos
@@ -1676,13 +1780,18 @@ export function HuelgasPage() {
               <div className="overflow-hidden rounded-xl border border-metro-border">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-xs">
-                    <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted"><tr><th className="px-3 py-2.5 font-semibold">Zona</th><th className="px-3 py-2.5 font-semibold">Responsable</th><th className="px-3 py-2.5 font-semibold">Email</th><th className="w-28 px-3 py-2.5 font-semibold">Estado</th></tr></thead>
+                    <thead className="bg-metro-raised/75 text-[11px] uppercase tracking-wide text-metro-muted"><tr><th className="px-3 py-2.5 font-semibold">Zona</th><th className="px-3 py-2.5 font-semibold">Responsable</th><th className="px-3 py-2.5 font-semibold">Email</th><th className="px-3 py-2.5 font-semibold">Correo</th><th className="w-28 px-3 py-2.5 font-semibold">Estado</th></tr></thead>
                     <tbody className="divide-y divide-metro-border">
                       {zoneDraft.map((zona) => (
                         <tr key={zona.id} className="align-top hover:bg-metro-raised/35">
                           <td className="px-3 py-2"><input className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red" value={zona.nombre} onChange={(event) => updateZone(zona.id, 'nombre', event.target.value)} /></td>
                           <td className="px-3 py-2"><input className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red" placeholder="Nombre y apellidos" value={zona.responsableNombre} onChange={(event) => updateZone(zona.id, 'responsableNombre', event.target.value)} /></td>
                           <td className="px-3 py-2"><input className="h-9 w-full rounded-lg border border-metro-border bg-metro-app px-2.5 text-xs text-metro-text outline-none focus:border-metro-red" placeholder="correo@empresa.es" type="email" value={zona.responsableEmail} onChange={(event) => updateZone(zona.id, 'responsableEmail', event.target.value)} /></td>
+                          <td className="px-3 py-2">
+                            <button type="button" onClick={() => setMailTemplateZoneId(zona.id)} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${zona.correoActivo ? 'border-sky-500/35 bg-sky-500/10 text-sky-200' : 'border-metro-border bg-metro-panel text-metro-muted'}`}>
+                              <MailPlus size={13} /> {zona.correoActivo ? 'Editar plantilla' : 'Sin envío'}
+                            </button>
+                          </td>
                           <td className="px-3 py-2">
                             <button type="button" onClick={() => updateZone(zona.id, 'active', !zona.active)} className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${zona.active ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200' : 'border-metro-border bg-metro-panel text-metro-muted'}`}>{zona.active ? 'Activa' : 'Inactiva'}</button>
                           </td>
@@ -1736,6 +1845,185 @@ export function HuelgasPage() {
             <div className="flex justify-end gap-2 border-t border-metro-border bg-metro-app px-5 py-4">
               <ActionButton variant="secondary" iconOnly={false} onClick={closeZones}>Cancelar</ActionButton>
               <ActionButton variant="save" iconOnly={false} loading={savingZones} onClick={() => void saveZones()}>Guardar zonas y áreas</ActionButton>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {mailTemplateZone && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" role="presentation">
+          <section className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-app shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="huelga-mail-template-title">
+            <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
+              <div>
+                <h2 id="huelga-mail-template-title" className="text-lg font-semibold text-metro-text">Plantilla de correo · {mailTemplateZone.nombre}</h2>
+                <p className="mt-1 text-sm text-metro-muted">Configura el texto habitual de esta Zona. Las variables se sustituirán con los datos de cada huelga.</p>
+              </div>
+              <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={() => setMailTemplateZoneId(null)} type="button" aria-label="Cerrar">×</button>
+            </div>
+            <div className="space-y-4 overflow-y-auto p-5">
+              <label className="flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel/55 p-3 text-sm text-metro-text">
+                <input
+                  type="checkbox"
+                  checked={mailTemplateZone.correoActivo}
+                  onChange={(event) => updateZone(mailTemplateZone.id, 'correoActivo', event.target.checked)}
+                />
+                Generar correo para esta Zona
+                {!mailTemplateZone.correoActivo && <span className="text-xs text-metro-muted">No aparecerá en la preparación de correos.</span>}
+              </label>
+
+              <label className="block space-y-1.5 text-sm font-medium text-metro-text">
+                Asunto
+                <input
+                  className="h-10 w-full rounded-xl border border-metro-border bg-metro-panel px-3 text-sm text-metro-text outline-none focus:border-metro-red"
+                  value={mailTemplateZone.correoAsunto}
+                  onChange={(event) => updateZone(mailTemplateZone.id, 'correoAsunto', event.target.value)}
+                />
+              </label>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <label className="block space-y-1.5 text-sm font-medium text-metro-text">
+                  Plazos habituales
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                    placeholder="Ej. Antes de las 9:45 h los datos de mañana y antes de las 15:00 h los de tarde."
+                    value={mailTemplateZone.correoPlazos}
+                    onChange={(event) => updateZone(mailTemplateZone.id, 'correoPlazos', event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-1.5 text-sm font-medium text-metro-text">
+                  Instrucciones habituales de la Zona
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                    placeholder="Reglas que se repiten en todas las huelgas de esta Zona."
+                    value={mailTemplateZone.correoInstruccionesHabituales}
+                    onChange={(event) => updateZone(mailTemplateZone.id, 'correoInstruccionesHabituales', event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-metro-text">Cuerpo del correo</h3>
+                  <p className="mt-1 text-xs text-metro-muted">Puedes pegar texto desde Outlook o Word y aplicar negrita, cursiva y listas.</p>
+                </div>
+                <RichTextEditor
+                  value={mailTemplateZone.correoCuerpoHtml}
+                  onChange={(html) => updateZone(mailTemplateZone.id, 'correoCuerpoHtml', html)}
+                  placeholder="Plantilla de correo..."
+                  minHeightClassName="min-h-[300px]"
+                />
+              </div>
+
+              <div className="rounded-xl border border-metro-border bg-metro-panel/45 p-4">
+                <h3 className="text-sm font-semibold text-metro-text">Variables disponibles</h3>
+                <p className="mt-1 text-xs text-metro-muted">Escribe o copia cualquiera de estos marcadores dentro del asunto o del cuerpo.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {HUELGA_MAIL_MARKERS.map((markerValue) => (
+                    <button
+                      key={markerValue}
+                      className="rounded-lg border border-metro-border bg-metro-app px-2.5 py-1.5 font-mono text-[11px] text-metro-text hover:border-metro-red"
+                      type="button"
+                      onClick={() => void navigator.clipboard?.writeText(markerValue)}
+                      title="Copiar marcador"
+                    >
+                      {markerValue}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-metro-border bg-metro-app px-5 py-4">
+              <ActionButton variant="secondary" iconOnly={false} onClick={() => setMailTemplateZoneId(null)}>Volver</ActionButton>
+              <ActionButton variant="save" iconOnly={false} onClick={() => setMailTemplateZoneId(null)}>Aplicar a borrador</ActionButton>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {mailTarget && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-4" role="presentation">
+          <section className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-app shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="huelga-mails-title">
+            <div className="flex items-start justify-between gap-4 border-b border-metro-border px-5 py-4">
+              <div>
+                <h2 id="huelga-mails-title" className="text-lg font-semibold text-metro-text">Correos por Zona · {formatDate(mailTarget.fecha)}</h2>
+                <p className="mt-1 text-sm text-metro-muted">Revisa el texto real que recibirá cada responsable. SSCC y las zonas con correo desactivado quedan fuera.</p>
+              </div>
+              <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={closeCollectionMails} type="button" aria-label="Cerrar">×</button>
+            </div>
+
+            <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[320px_1fr]">
+              <aside className="overflow-y-auto border-r border-metro-border p-4">
+                <div className="space-y-2">
+                  {mailGroups.map((group) => {
+                    const zona = zonas.find((item) => item.id === group.zonaId);
+                    const selected = group.zonaId === mailPreviewZoneId;
+                    return (
+                      <button
+                        key={group.zonaId}
+                        className={`w-full rounded-xl border p-3 text-left transition ${selected ? 'border-metro-red bg-metro-red/10' : 'border-metro-border bg-metro-panel/45 hover:bg-metro-raised/40'}`}
+                        type="button"
+                        onClick={() => setMailPreviewZoneId(group.zonaId)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <strong className="text-sm text-metro-text">{group.zonaNombre}</strong>
+                          <span className="text-[11px] text-metro-muted">{group.personal.length} pers.</span>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-metro-muted">{zona?.responsableNombre || 'Sin responsable'}</p>
+                        <p className="truncate text-[11px] text-metro-muted">{zona?.responsableEmail || 'Sin email'}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </aside>
+
+              <div className="overflow-y-auto p-5">
+                {mailPreviewGroup && currentMailPreview ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-xl border border-metro-border bg-metro-panel/50 p-3">
+                        <p className="text-[11px] uppercase tracking-wide text-metro-muted">Para</p>
+                        <p className="mt-1 text-sm font-semibold text-metro-text">{zonas.find((item) => item.id === mailPreviewGroup.zonaId)?.responsableEmail || '—'}</p>
+                      </div>
+                      <div className="rounded-xl border border-metro-border bg-metro-panel/50 p-3">
+                        <p className="text-[11px] uppercase tracking-wide text-metro-muted">Personas con turno</p>
+                        <p className="mt-1 text-sm font-semibold text-metro-text">{mailPreviewGroup.personal.length}</p>
+                      </div>
+                    </div>
+
+                    <label className="block space-y-1.5 text-sm font-medium text-metro-text">
+                      Instrucciones específicas de esta huelga
+                      <textarea
+                        className="min-h-24 w-full resize-y rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
+                        placeholder="Excepciones o indicaciones válidas solo para esta huelga y esta Zona..."
+                        value={mailSpecificNotes[mailPreviewGroup.zonaId] ?? ''}
+                        onChange={(event) => setMailSpecificNotes((current) => ({ ...current, [mailPreviewGroup.zonaId]: event.target.value }))}
+                      />
+                    </label>
+
+                    <div className="rounded-xl border border-metro-border bg-white p-5 text-gray-900 shadow-inner">
+                      <div className="mb-4 border-b border-gray-200 pb-3 text-sm">
+                        <p><strong>Asunto:</strong> {currentMailPreview.subject}</p>
+                      </div>
+                      <div className="prose prose-sm max-w-none font-sans" dangerouslySetInnerHTML={{ __html: currentMailPreview.html }} />
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <ActionButton variant="secondary" iconOnly={false} onClick={() => void saveMailSpecificNotes()}>Guardar instrucciones</ActionButton>
+                      <ActionButton variant="primary" iconOnly={false} icon={MailPlus} loading={generatingCollectionForId === mailTarget.id} onClick={() => void generateSingleCollectionMail(mailPreviewGroup)}>Generar este correo</ActionButton>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-metro-border p-8 text-center text-sm text-metro-muted">Selecciona una Zona para revisar su correo.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-between gap-2 border-t border-metro-border bg-metro-app px-5 py-4">
+              <p className="self-center text-xs text-metro-muted">En esta fase los borradores se crean sin Excel adjunto.</p>
+              <div className="flex gap-2">
+                <ActionButton variant="secondary" iconOnly={false} onClick={closeCollectionMails}>Cerrar</ActionButton>
+                <ActionButton variant="primary" iconOnly={false} icon={MailPlus} loading={generatingCollectionForId === mailTarget.id} onClick={() => void generateAllCollectionMails()}>Generar todos</ActionButton>
+              </div>
             </div>
           </section>
         </div>

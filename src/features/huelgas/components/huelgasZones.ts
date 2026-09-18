@@ -1,8 +1,20 @@
+import {
+  DEFAULT_HUELGA_MAIL_BODY,
+  DEFAULT_HUELGA_MAIL_SUBJECT,
+  defaultDeadlineForZone,
+  defaultMailEnabledForZone,
+} from './huelgasMailTemplates';
+
 export type HuelgaZona = {
   id: string;
   nombre: string;
   responsableNombre: string;
   responsableEmail: string;
+  correoActivo: boolean;
+  correoAsunto: string;
+  correoCuerpoHtml: string;
+  correoPlazos: string;
+  correoInstruccionesHabituales: string;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -46,6 +58,11 @@ export function isHuelgaZona(value: unknown): value is HuelgaZona {
     typeof candidate.nombre === 'string' &&
     typeof candidate.responsableNombre === 'string' &&
     typeof candidate.responsableEmail === 'string' &&
+    (typeof candidate.correoActivo === 'undefined' || typeof candidate.correoActivo === 'boolean') &&
+    (typeof candidate.correoAsunto === 'undefined' || typeof candidate.correoAsunto === 'string') &&
+    (typeof candidate.correoCuerpoHtml === 'undefined' || typeof candidate.correoCuerpoHtml === 'string') &&
+    (typeof candidate.correoPlazos === 'undefined' || typeof candidate.correoPlazos === 'string') &&
+    (typeof candidate.correoInstruccionesHabituales === 'undefined' || typeof candidate.correoInstruccionesHabituales === 'string') &&
     typeof candidate.active === 'boolean' &&
     typeof candidate.createdAt === 'string' &&
     typeof candidate.updatedAt === 'string'
@@ -56,25 +73,44 @@ export function isHuelgaZonas(value: unknown): value is HuelgaZona[] {
   return Array.isArray(value) && value.every(isHuelgaZona);
 }
 
+function hydrateMailFields(zona: HuelgaZona): HuelgaZona {
+  return {
+    ...zona,
+    correoActivo: typeof zona.correoActivo === 'boolean' ? zona.correoActivo : defaultMailEnabledForZone(zona.nombre),
+    correoAsunto: zona.correoAsunto || DEFAULT_HUELGA_MAIL_SUBJECT,
+    correoCuerpoHtml: zona.correoCuerpoHtml || DEFAULT_HUELGA_MAIL_BODY,
+    correoPlazos: zona.correoPlazos || defaultDeadlineForZone(zona.nombre),
+    correoInstruccionesHabituales: zona.correoInstruccionesHabituales || '',
+  };
+}
+
 export function ensureDefaultZonas(current: HuelgaZona[]): HuelgaZona[] {
   const now = new Date().toISOString();
-  const existingNames = new Set(current.map((zona) => normalizeKey(zona.nombre)));
+  const hydratedCurrent = current.map(hydrateMailFields);
+  const existingNames = new Set(hydratedCurrent.map((zona) => normalizeKey(zona.nombre)));
   const missingDefaults = DEFAULT_HUELGA_ZONE_NAMES
     .filter((nombre) => !existingNames.has(normalizeKey(nombre)))
-    .map((nombre) => ({
+    .map((nombre) => hydrateMailFields({
       id: defaultId(nombre),
       nombre,
       responsableNombre: '',
       responsableEmail: '',
+      correoActivo: defaultMailEnabledForZone(nombre),
+      correoAsunto: DEFAULT_HUELGA_MAIL_SUBJECT,
+      correoCuerpoHtml: DEFAULT_HUELGA_MAIL_BODY,
+      correoPlazos: defaultDeadlineForZone(nombre),
+      correoInstruccionesHabituales: '',
       active: true,
       createdAt: now,
       updatedAt: now,
     }));
 
-  return [...current, ...missingDefaults]
+  return [...hydratedCurrent, ...missingDefaults]
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
 }
 
 export function isZonaCompleta(zona: HuelgaZona): boolean {
-  return Boolean(zona.active && normalize(zona.responsableNombre) && normalize(zona.responsableEmail));
+  if (!zona.active) return false;
+  if (!zona.correoActivo) return true;
+  return Boolean(normalize(zona.responsableNombre) && normalize(zona.responsableEmail));
 }
