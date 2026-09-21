@@ -443,6 +443,23 @@ export async function detectTeletrabajoWordMarkers(templateBuffer: ArrayBuffer):
   entries.forEach((entry) => {
     if (!/^word\/.*\.xml$/i.test(entry.name)) return;
     const xml = textDecoder.decode(entry.data);
+
+    const placeholderRegex = /\{\{\s*([^{}]+?)\s*\}\}/g;
+    let placeholderMatch = placeholderRegex.exec(xml);
+    while (placeholderMatch) {
+      const marker = placeholderMatch[1]?.trim();
+      if (marker) markers.add(marker);
+      placeholderMatch = placeholderRegex.exec(xml);
+    }
+
+    const bookmarkRegex = /<w:bookmarkStart\b[^>]*\bw:name=(?:"([^"]+)"|'([^']+)')[^>]*\/?\s*>/gi;
+    let bookmarkMatch = bookmarkRegex.exec(xml);
+    while (bookmarkMatch) {
+      const marker = (bookmarkMatch[1] ?? bookmarkMatch[2] ?? '').trim();
+      if (marker && !marker.startsWith('_')) markers.add(marker);
+      bookmarkMatch = bookmarkRegex.exec(xml);
+    }
+
     TELEWORK_AGREEMENT_MARKER_MAP.forEach(([marker]) => {
       if (xml.includes(marker)) markers.add(marker);
     });

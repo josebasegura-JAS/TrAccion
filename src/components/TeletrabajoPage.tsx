@@ -599,7 +599,7 @@ export function TeletrabajoPage({
       if (
         result.summary.imported === 0 &&
         result.summary.updated === 0 &&
-        result.summary.reactivated === 0
+        (result.summary.reactivated ?? 0) === 0
       ) {
         setImportSummary(
           `La importación terminó sin crear ni actualizar solicitudes: ${buildImportSummaryMessage({ ...result.summary, missingEmployees: result.diagnostics.missingEmployees })}. Revisa cabeceras, respuestas “Sí” y empleados de Plantilla.`,
@@ -703,7 +703,7 @@ export function TeletrabajoPage({
       if (
         result.summary.imported === 0 &&
         result.summary.updated === 0 &&
-        result.summary.reactivated === 0
+        (result.summary.reactivated ?? 0) === 0
       ) {
         setPendingEncuestaImport(null);
         setImportSummary(

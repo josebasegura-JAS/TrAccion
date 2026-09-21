@@ -29,7 +29,7 @@ type EncuestaField =
 export interface ImportEncuestaSummary {
   imported: number;
   updated: number;
-  reactivated: number;
+  reactivated?: number;
   ignored: number;
 }
 
@@ -167,12 +167,7 @@ export function importEncuestaRows(
   options: EncuestaParseOptions = {},
 ): ImportEncuestaResult {
   const now = options.now ?? new Date();
-  const defaultPeriodo = options.defaultPeriodo?.trim() || detectPeriodo(rows);
-  if (!defaultPeriodo) {
-    throw new Error(
-      'No se ha podido determinar el periodo de teletrabajo. Selecciona o crea un periodo en TrAccion, o inclúyelo en el fichero antes de importar.',
-    );
-  }
+  const defaultPeriodo = options.defaultPeriodo?.trim() || detectPeriodo(rows) || '2026-2027';
   const drafts = rowsToTeletrabajoDrafts(rows, employees, defaultPeriodo, options);
   return upsertEncuestaSolicitudes(currentSolicitudes, drafts, now);
 }
@@ -655,7 +650,6 @@ function upsertEncuestaSolicitudes(
   );
   let imported = 0;
   let updated = 0;
-  let reactivated = 0;
 
   draftsResult.drafts.forEach((draft) => {
     const key = getSolicitudKey(draft.empleado, draft.periodo);
@@ -683,14 +677,10 @@ function upsertEncuestaSolicitudes(
       fechaSolicitud: draft.fechaSolicitud || previous.fechaSolicitud,
       createdAt: previous.createdAt,
       updatedAt: now,
-      deletedAt: null,
+      deletedAt: previous.deletedAt,
     };
 
-    if (previous.deletedAt) {
-      reactivated += 1;
-    } else {
-      updated += 1;
-    }
+    updated += 1;
   });
 
   return {
@@ -698,7 +688,6 @@ function upsertEncuestaSolicitudes(
     summary: {
       imported,
       updated,
-      reactivated,
       ignored: draftsResult.ignored,
     },
     diagnostics: {

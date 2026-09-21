@@ -40,13 +40,13 @@ export function persistStoredPuestoAliases(aliases: Record<string, string>): voi
 export function buildImportSummaryMessage(summary: {
   imported: number;
   updated: number;
-  reactivated: number;
+  reactivated?: number;
   ignored: number;
   missingEmployees: number;
 }): string {
   const parts = [
     `${summary.imported} registros importados`,
-    `${summary.reactivated} registros reactivados`,
+    `${summary.reactivated ?? 0} registros reactivados`,
     `${summary.updated} registros actualizados`,
     `${summary.ignored} filas ignoradas`,
   ];
