@@ -27,6 +27,7 @@ interface ConfiguracionState {
   rutaExportacionLoteria: string;
   rutaExportacionLicencias: string;
   rutaExportacionVinculograma: string;
+  rutaAyudaEscolar: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
 }
@@ -42,6 +43,7 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaExportacionLoteria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionLicencias: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -62,6 +64,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaExportacionLoteria: state.rutaExportacionLoteria,
     rutaExportacionLicencias: state.rutaExportacionLicencias,
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
+    rutaAyudaEscolar: state.rutaAyudaEscolar,
     taskPhases: state.taskPhases,
     taskOrigins: state.taskOrigins,
   };
@@ -152,6 +155,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaExportacionLoteria: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
     rutaExportacionLicencias: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
     rutaExportacionVinculograma: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
+    rutaAyudaEscolar: '',
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
   };
@@ -201,6 +205,10 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
       typeof (parsed as { rutaExportacionVinculograma?: unknown }).rutaExportacionVinculograma === 'string'
         ? (parsed as { rutaExportacionVinculograma: string }).rutaExportacionVinculograma.trim()
         : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
+    rutaAyudaEscolar:
+      typeof (parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar === 'string'
+        ? (parsed as { rutaAyudaEscolar: string }).rutaAyudaEscolar.trim()
+        : '',
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
   };
@@ -281,6 +289,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaExportacionLoteria: initialConfiguracion.rutaExportacionLoteria,
   rutaExportacionLicencias: initialConfiguracion.rutaExportacionLicencias,
   rutaExportacionVinculograma: initialConfiguracion.rutaExportacionVinculograma,
+  rutaAyudaEscolar: initialConfiguracion.rutaAyudaEscolar,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
   load: () => {
@@ -307,7 +316,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaExportacionLoteria,
         rutaExportacionLicencias,
         rutaExportacionVinculograma,
-        taskPhases,
+        rutaAyudaEscolar,
+        taskPhases:
         taskOrigins,
       } = get();
       const current: ConfiguracionState = {
@@ -319,6 +329,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaExportacionLoteria,
         rutaExportacionLicencias,
         rutaExportacionVinculograma,
+        rutaAyudaEscolar,
         taskPhases,
         taskOrigins,
       };
@@ -397,6 +408,13 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     const configuracion: ConfiguracionState = {
       ...selectConfiguracionState(get()),
       rutaExportacionVinculograma: ruta.trim(),
+    };
+    return commitConfiguracion(set, configuracion);
+  },
+  setRutaAyudaEscolar: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
+      rutaAyudaEscolar: ruta.trim(),
     };
     return commitConfiguracion(set, configuracion);
   },
