@@ -317,6 +317,12 @@ export function EmployeeEditor({
                 <div className="rounded-xl border border-metro-border/80 bg-metro-surface/35 px-4 py-3 text-sm text-metro-muted">
                   <dl className="space-y-2">
                     <div className="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
+                      <dt className="font-bold text-metro-text">Correo electrónico</dt>
+                      <dd className="truncate" title={employee.email || '—'}>
+                        {employee.email || '—'}
+                      </dd>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
                       <dt className="font-bold text-metro-text">DNI</dt>
                       <dd className="truncate" title={employee.dni || '—'}>
                         <span className="inline-flex rounded-md bg-red-400/10 px-2 py-0.5 font-semibold text-red-200">
