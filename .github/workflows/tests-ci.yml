@@ -2,6 +2,9 @@ name: Tests CI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/ayuda-escolar-segura-v2
 
 jobs:
   tests:
