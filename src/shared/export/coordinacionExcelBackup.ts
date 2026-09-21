@@ -456,7 +456,7 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
 
   try {
     const { default: ExcelJS } = await import('exceljs');
-    const workbook = new ExcelJS.Workbook() as ExcelWorkbook;
+    const workbook = new ExcelJS.Workbook() as unknown as ExcelWorkbook;
     workbook.creator = 'TrAccion';
     workbook.subject = 'Histórico de Coordinación RRLL con Dirección';
     workbook.created = new Date();
