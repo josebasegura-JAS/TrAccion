@@ -12,6 +12,7 @@ import { useConfiguracionStore } from '../features/configuracion/store/useConfig
 import { AJUSTES_HELP_SECTIONS, formatBytesAsMb, noticeTone } from './ajustes/ajustesCommon';
 import { DatabaseSettingsSection } from './ajustes/DatabaseSettingsSection';
 import { DataIntegrityAuditSection } from './ajustes/DataIntegrityAuditSection';
+import { SchoolHelpSettingsSection } from './ajustes/SchoolHelpSettingsSection';
 
 export function AjustesPage() {
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
@@ -920,6 +921,8 @@ export function AjustesPage() {
             </div>
           </div>
         </section>
+
+        <SchoolHelpSettingsSection />
 
         <section className="scroll-mt-4 rounded-[1.3rem] border border-metro-border/80 bg-metro-panel/45 p-4" id="fases-tareas">
           <div className="mb-4 flex items-start gap-3">
