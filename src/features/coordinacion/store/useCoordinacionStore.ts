@@ -26,6 +26,8 @@ interface CoordinationStore extends CoordinationState {
     pointId: string,
     patch: Partial<Pick<CoordinationPoint, 'title' | 'detail' | 'result' | 'status'>>,
   ) => Promise<Result>;
+  deleteManualPoint: (meetingId: string, pointId: string) => Promise<Result>;
+  deleteMeeting: (meetingId: string) => Promise<Result>;
   closeMeeting: (meetingId: string) => Promise<Result>;
 }
 
@@ -144,6 +146,40 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         updatedAt: now,
         points: meeting.points.map((point) => point.id === pointId ? { ...point, ...patch, updatedAt: now } : point),
       } : meeting),
+    };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  deleteManualPoint: async (meetingId, pointId) => {
+    const current = get();
+    const meeting = current.meetings.find((item) => item.id === meetingId);
+    if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
+    const point = meeting.points.find((item) => item.id === pointId);
+    if (!point) return { ok: false, message: 'No se ha encontrado el punto.' };
+    if (point.origin !== 'manual') {
+      return { ok: false, message: 'Solo se pueden eliminar directamente los puntos añadidos manualmente.' };
+    }
+    const now = new Date().toISOString();
+    const next: CoordinationState = {
+      ...current,
+      meetings: current.meetings.map((item) => item.id === meetingId ? {
+        ...item,
+        updatedAt: now,
+        points: item.points.filter((candidate) => candidate.id !== pointId),
+      } : item),
+    };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  deleteMeeting: async (meetingId) => {
+    const current = get();
+    const exists = current.meetings.some((item) => item.id === meetingId);
+    if (!exists) return { ok: false, message: 'No se ha encontrado la reunión.' };
+    const next: CoordinationState = {
+      ...current,
+      meetings: current.meetings.filter((item) => item.id !== meetingId),
     };
     const result = await persist(next);
     if (result.ok) set(next);

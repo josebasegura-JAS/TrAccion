@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, UsersRound } from 'lucide-react';
+import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import type { Task, TaskDraft } from '../../tareas/domain/task';
@@ -6,6 +6,7 @@ import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { syncCoordinacionExcelBackup } from '../../../shared/export/coordinacionExcelBackup';
 import { formatCoordinationDate, type CoordinationMeeting, type CoordinationPointStatus } from '../domain/coordinacion';
 import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/useCoordinacionStore';
+import { useAppDialog } from '../../../hooks/useAppDialog';
 
 function todayIso(): string {
   const now = new Date();
@@ -60,6 +61,8 @@ export function CoordinacionPage() {
   const createMeeting = useCoordinacionStore((state) => state.createDirectionMeeting);
   const addManualPoint = useCoordinacionStore((state) => state.addManualPoint);
   const updatePoint = useCoordinacionStore((state) => state.updatePoint);
+  const deleteManualPoint = useCoordinacionStore((state) => state.deleteManualPoint);
+  const deleteMeeting = useCoordinacionStore((state) => state.deleteMeeting);
   const closeMeeting = useCoordinacionStore((state) => state.closeMeeting);
   const backupPath = useConfiguracionStore((state) => state.rutaExportacionCoordinacion);
   const loadConfig = useConfiguracionStore((state) => state.load);
@@ -68,6 +71,7 @@ export function CoordinacionPage() {
   const [date, setDate] = useState(todayIso());
   const [newPoint, setNewPoint] = useState('');
   const [status, setStatus] = useState('');
+  const { confirm, dialogNode } = useAppDialog();
 
   useEffect(() => { load(); loadTasks(); loadConfig(); }, [load, loadConfig, loadTasks]);
 
@@ -115,6 +119,46 @@ export function CoordinacionPage() {
     if (result.ok) await backup();
   };
 
+  const handleDeleteMeeting = async () => {
+    if (!selected) return;
+    const closedWarning = selected.status === 'closed'
+      ? '\n\nLos seguimientos ya registrados en las tareas vinculadas se conservarán.'
+      : '';
+    const confirmed = await confirm(
+      `Se eliminará la reunión del ${formatCoordinationDate(selected.date)} y todos sus puntos.${closedWarning}`,
+      {
+        title: 'Eliminar reunión',
+        confirmLabel: 'Eliminar reunión',
+        cancelLabel: 'Cancelar',
+        danger: true,
+      },
+    );
+    if (!confirmed) return;
+    const result = await deleteMeeting(selected.id);
+    setStatus(result.ok ? 'Reunión eliminada.' : result.message);
+    if (result.ok) {
+      setSelectedId(null);
+      await backup();
+    }
+  };
+
+  const handleDeleteManualPoint = async (pointId: string, title: string) => {
+    if (!selected) return;
+    const confirmed = await confirm(
+      `Se eliminará el punto manual “${title}”.`,
+      {
+        title: 'Eliminar punto manual',
+        confirmLabel: 'Eliminar',
+        cancelLabel: 'Cancelar',
+        danger: true,
+      },
+    );
+    if (!confirmed) return;
+    const result = await deleteManualPoint(selected.id, pointId);
+    setStatus(result.ok ? 'Punto manual eliminado.' : result.message);
+    if (result.ok) await backup();
+  };
+
   if (selected) {
     return (
       <section className="space-y-4">
@@ -124,8 +168,9 @@ export function CoordinacionPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Coordinación · Dirección</p>
             <h2 className="mt-1 text-2xl font-bold text-metro-text">Reunión {formatCoordinationDate(selected.date)}</h2>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text" onClick={() => void backup()} type="button"><FileSpreadsheet size={16}/>Actualizar Excel</button>
+            <button className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-950/20 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-950/35" onClick={() => void handleDeleteMeeting()} type="button"><Trash2 size={16}/>Eliminar reunión</button>
             {selected.status === 'open' && <button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" onClick={() => void handleClose()} type="button"><CheckCircle2 size={16}/>Cerrar reunión</button>}
           </div>
         </div>
@@ -137,7 +182,10 @@ export function CoordinacionPage() {
               <article className="rounded-xl border border-metro-border bg-metro-panel p-3" key={point.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span><h4 className="font-bold text-metro-text">{point.title}</h4>{point.origin === 'task' && <span className="rounded-full border border-sky-400/30 px-2 py-0.5 text-[11px] font-bold text-sky-200">Tarea</span>}</div>{point.detail && <p className="mt-2 text-sm leading-5 text-metro-muted">{point.detail}</p>}</div>
-                  <select className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-semibold text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => void updatePoint(selected.id, point.id, { status: event.target.value as CoordinationPointStatus }).then(() => backup())} value={point.status}><option value="pendiente">Pendiente</option><option value="tratado">Tratado</option><option value="volver">Volver a tratar</option></select>
+                  <div className="flex items-center gap-2">
+                    <select className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-semibold text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => void updatePoint(selected.id, point.id, { status: event.target.value as CoordinationPointStatus }).then(() => backup())} value={point.status}><option value="pendiente">Pendiente</option><option value="tratado">Tratado</option><option value="volver">Volver a tratar</option></select>
+                    {point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => void handleDeleteManualPoint(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}
+                  </div>
                 </div>
                 <label className="mt-3 block text-xs font-semibold text-metro-muted">Resultado / indicaciones de Dirección<textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" defaultValue={point.result} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { result: event.target.value }).then(() => backup())} placeholder="Decisión, criterio, actuación acordada..." /></label>
               </article>
@@ -147,6 +195,7 @@ export function CoordinacionPage() {
           {selected.status === 'open' && <div className="mt-4 flex gap-2"><input className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" onChange={(event) => setNewPoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleAddManual(); }} placeholder="Añadir punto menor al guion..." value={newPoint}/><button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white" onClick={() => void handleAddManual()} type="button"><Plus size={16}/>Crear punto</button></div>}
         </div>
         {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
+        {dialogNode}
       </section>
     );
   }
@@ -164,6 +213,7 @@ export function CoordinacionPage() {
         <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card"><h3 className="mb-3 font-bold text-metro-text">Reuniones de Dirección</h3><div className="space-y-2">{directionMeetings.map((meeting) => <button className="flex w-full items-center justify-between rounded-xl border border-metro-border bg-metro-panel px-3 py-3 text-left hover:border-metro-red" key={meeting.id} onClick={() => setSelectedId(meeting.id)} type="button"><span><strong className="block text-sm text-metro-text">{formatCoordinationDate(meeting.date)}</strong><span className="text-xs text-metro-muted">{meeting.points.length} puntos</span></span><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${meeting.status === 'closed' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</span></button>)}{directionMeetings.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">Todavía no hay reuniones registradas.</p>}</div></div>
       </div>}
       {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
+      {dialogNode}
     </section>
   );
 }
