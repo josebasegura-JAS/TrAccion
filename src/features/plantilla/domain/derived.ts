@@ -1,6 +1,7 @@
 import type { Employee, EmployeeDerivedFields, EmployeeDraft } from './employee';
 
 type LegacyEmployeeDraft = Omit<EmployeeDraft, 'unidad' | 'telefono1' | 'telefono2'> & {
+  email?: string;
   unidad?: string;
   telefono1?: string;
   telefono2?: string;
@@ -48,6 +49,7 @@ export function hydrateEmployee(draft: LegacyEmployeeDraft, deletedAt: string | 
 
   return {
     ...normalizedDraft,
+    email: typeof draft.email === 'string' ? draft.email.trim().toLowerCase() : '',
     puestoEus: normalizedDraft.puestoEus ?? '',
     ...getEmployeeDerivedFields(normalizedDraft),
     deletedAt,
