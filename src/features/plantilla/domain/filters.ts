@@ -19,7 +19,7 @@ export function filterEmployees(employees: Employee[], filters: EmployeeFilters)
 
   return employees.filter((employee) => {
     const matchesSearch = normalizedSearch
-      ? [employee.empleado, employee.nombreApellidos].join(' ').toLowerCase().includes(normalizedSearch)
+      ? [employee.empleado, employee.nombreApellidos, employee.email].join(' ').toLowerCase().includes(normalizedSearch)
       : true;
 
     return (
