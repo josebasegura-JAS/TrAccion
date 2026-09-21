@@ -143,8 +143,8 @@ interface SchoolHelpInspection {
   attachments: Array<{ name: string; size: number }>;
 }
 interface SchoolHelpInspectResult { ok: boolean; message: string; inspection?: SchoolHelpInspection; }
-interface SchoolHelpArchivePayload { fileName: string; buffer: ArrayBuffer; destinationDirectory: string; personName: string; employeeId: string; }
-interface SchoolHelpArchiveResult { ok: boolean; message: string; inspection?: SchoolHelpInspection; savedFiles?: string[]; }
+interface SchoolHelpArchivePayload { fileName: string; buffer: ArrayBuffer; basePath: string; employeeName: string; }
+interface SchoolHelpArchiveResult { ok: boolean; message: string; inspection?: SchoolHelpInspection; files?: Array<{ originalName: string; savedName: string; savedPath: string }>; }
 
 interface TraccionApi {
   notifyBootVisible?: () => void;
@@ -185,7 +185,7 @@ interface TraccionApi {
   loadLoteriaRecords?: () => Promise<TraccionLoteriaSnapshot>;
   saveLoteriaSnapshotIfUnchanged?: (payload: { year: number; campaignValue: string; requests: Array<{ id: string; value: string }>; expectedCampaignUpdatedAt: string | null; expectedRequestUpdatedAt: Record<string, string | null>; }) => Promise<TraccionLoteriaSaveResult>;
   selectLoteriaExportDirectory?: () => Promise<string | null>;
-  saveLoteriaCampaignExcel?: (payload: { year: number; directoryTemplate: string; fileName: string; cleanupPrefix: string; buffer: ArrayBuffer; }) => Promise<{ ok: boolean; message: string; path: string | null }>;
+  saveLoteriaCampaignExcel?: (payload: { year: number; directoryTemplate: string; fileName: string; buffer: ArrayBuffer; }) => Promise<{ ok: boolean; message: string; path: string | null }>;
   selectOperationalExcelBackupDirectory?: () => Promise<string | null>;
   saveOperationalExcelBackup?: (payload: { directory: string; fileName: string; cleanupPrefix: string; buffer: ArrayBuffer; }) => Promise<{ ok: boolean; message: string; path: string | null }>;
   acquireRecordLock?: (payload: TraccionRecordLockPayload) => Promise<TraccionRecordLockResult>;

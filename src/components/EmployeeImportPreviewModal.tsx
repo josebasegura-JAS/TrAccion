@@ -36,6 +36,7 @@ const FIELD_LABELS: Record<EmployeeField, string> = {
   nif: 'NIF',
   telefono1: 'Teléfono 1',
   telefono2: 'Teléfono 2',
+  email: 'Correo electrónico',
 };
 
 interface EmployeeImportPreviewModalProps {

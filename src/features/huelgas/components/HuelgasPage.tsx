@@ -219,6 +219,7 @@ function employeeToDraft(employee: Employee): EmployeeDraft {
     nif: employee.nif,
     telefono1: employee.telefono1,
     telefono2: employee.telefono2,
+    email: employee.email,
   };
 }
 
