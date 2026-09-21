@@ -18,6 +18,10 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Plantilla',
     subtitle: 'Gestión de personas, puestos, datos laborales y traducciones.',
   },
+  'ayuda-escolar': {
+    title: 'Ayuda escolar',
+    subtitle: 'Recepción, archivo y seguimiento de documentación recibida por Outlook.',
+  },
   tareas: {
     title: 'Tareas',
     subtitle: 'Seguimiento por fase, estado, prioridad y vencimiento.',
