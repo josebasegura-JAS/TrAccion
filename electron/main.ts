@@ -268,6 +268,7 @@ async function registerIpcHandlers(): Promise<void> {
     { registerLicenciasSinSueldoIpc },
     { registerSharedDocumentIpc },
     { registerLoteriaIpc },
+    { registerOperationalExcelBackupIpc },
   ] = await Promise.all([
     import('./ipc/registerCoreDatabaseIpc.js'),
     import('./ipc/registerSorteosIpc.js'),
@@ -284,6 +285,7 @@ async function registerIpcHandlers(): Promise<void> {
     import('./ipc/registerLicenciasSinSueldoIpc.js'),
     import('./ipc/registerSharedDocumentIpc.js'),
     import('./ipc/registerLoteriaIpc.js'),
+    import('./ipc/registerOperationalExcelBackupIpc.js'),
   ]);
 
   registerCoreDatabaseIpc();
@@ -301,6 +303,7 @@ async function registerIpcHandlers(): Promise<void> {
   registerLicenciasSinSueldoIpc();
   registerSharedDocumentIpc();
   registerLoteriaIpc();
+  registerOperationalExcelBackupIpc();
 }
 
 if (!app.requestSingleInstanceLock()) {

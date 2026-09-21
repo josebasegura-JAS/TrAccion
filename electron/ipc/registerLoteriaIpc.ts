@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { getSqliteStatus, loadLoteriaRecordsSnapshot, saveLoteriaSnapshotIfUnchanged } from '../sqlitePersistence.js';
@@ -81,6 +81,21 @@ export function registerLoteriaIpc(): void {
       const safeFileName = path.basename(candidate.fileName);
       const filePath = path.join(directory, safeFileName);
       await writeFile(filePath, Buffer.from(candidate.buffer));
+
+      // Lotería mantiene un único Excel espejo por campaña. El nombre refleja la
+      // fecha de la última actualización; al cambiar de día se elimina el anterior.
+      const campaignPrefix = `Loteria_${candidate.year}_`;
+      const legacyFileName = `Loteria_${candidate.year}.xlsx`;
+      const existingFiles = await readdir(directory);
+      const obsoleteFiles = existingFiles.filter((name) =>
+        name !== safeFileName &&
+        (name === legacyFileName ||
+          (name.startsWith(campaignPrefix) && name.toLowerCase().endsWith('.xlsx'))),
+      );
+      for (const obsoleteFile of obsoleteFiles) {
+        await unlink(path.join(directory, obsoleteFile)).catch(() => undefined);
+      }
+
       return { ok: true, message: `Excel actualizado en ${filePath}.`, path: filePath };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

@@ -227,6 +227,13 @@ export async function buildLotteryAdministrationWorkbook(
   };
 }
 
+
+function campaignFileDate(date = new Date()): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}-${month}-${date.getFullYear()}`;
+}
+
 export async function buildCampaignWorkbook(campaign: LotteryCampaign): Promise<{ fileName: string; buffer: ArrayBuffer }> {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
@@ -293,7 +300,7 @@ export async function buildCampaignWorkbook(campaign: LotteryCampaign): Promise<
   summary.getRow(1).font = { bold: true };
 
   const buffer = workbookBufferToArrayBuffer(await workbook.xlsx.writeBuffer());
-  return { fileName: `Loteria_${campaign.year}.xlsx`, buffer };
+  return { fileName: `Loteria_${campaign.year}_${campaignFileDate()}.xlsx`, buffer };
 }
 
 export async function exportCampaign(campaign: LotteryCampaign) {

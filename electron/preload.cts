@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('traccion', {
   selectLoteriaExportDirectory: () => ipcRenderer.invoke('loteria:select-export-directory'),
   saveLoteriaCampaignExcel: (payload: { year: number; directoryTemplate: string; fileName: string; buffer: ArrayBuffer }) =>
     ipcRenderer.invoke('loteria:save-campaign-excel', payload),
+  selectOperationalExcelBackupDirectory: () => ipcRenderer.invoke('operational-backup:select-directory'),
+  saveOperationalExcelBackup: (payload: { directory: string; fileName: string; cleanupPrefix: string; buffer: ArrayBuffer }) =>
+    ipcRenderer.invoke('operational-backup:save-excel', payload),
   acquireRecordLock: (payload: { module: string; recordId: string }) =>
     ipcRenderer.invoke('recordLock:acquire', payload),
   heartbeatRecordLock: (payload: { module: string; recordId: string }) =>

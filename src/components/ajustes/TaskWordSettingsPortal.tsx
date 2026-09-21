@@ -66,7 +66,7 @@ export function TaskWordSettingsCard() {
     const bridge = getBridge();
     if (!bridge) return;
     setBusy(true);
-    setStatus('Generando Tareas abiertas.xlsx…');
+    setStatus('Actualizando Excel de tareas abiertas…');
     try {
       const result = await bridge.refresh();
       setStatus(result.message);
@@ -85,7 +85,7 @@ export function TaskWordSettingsCard() {
           <p className="text-xs font-semibold text-metro-muted">Excel automático de tareas abiertas</p>
           <p className="mt-1 text-xs leading-relaxed text-metro-muted">
             Después de cada guardado correcto de una tarea, TrAccion actualiza automáticamente
-            <strong className="text-metro-text"> Tareas abiertas.xlsx</strong>. El libro contiene
+            <strong className="text-metro-text"> Tareas_abiertas_DD-MM-AAAA.xlsx</strong>. El libro contiene
             una hoja filtrable de tareas abiertas y otra con todos los registros de seguimiento.
           </p>
         </div>

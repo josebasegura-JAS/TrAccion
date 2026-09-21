@@ -28,6 +28,8 @@ export function AjustesPage() {
     (state) => state.rutaPlantillaVinculograma,
   );
   const rutaExportacionLoteria = useConfiguracionStore((state) => state.rutaExportacionLoteria);
+  const rutaExportacionLicencias = useConfiguracionStore((state) => state.rutaExportacionLicencias);
+  const rutaExportacionVinculograma = useConfiguracionStore((state) => state.rutaExportacionVinculograma);
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const addTaskPhase = useConfiguracionStore((state) => state.addTaskPhase);
   const updateTaskPhase = useConfiguracionStore((state) => state.updateTaskPhase);
@@ -49,12 +51,16 @@ export function AjustesPage() {
     (state) => state.setRutaPlantillaVinculograma,
   );
   const setRutaExportacionLoteria = useConfiguracionStore((state) => state.setRutaExportacionLoteria);
+  const setRutaExportacionLicencias = useConfiguracionStore((state) => state.setRutaExportacionLicencias);
+  const setRutaExportacionVinculograma = useConfiguracionStore((state) => state.setRutaExportacionVinculograma);
   const [status, setStatus] = useState('');
   const [licenciaTemplateStatus, setLicenciaTemplateStatus] = useState('');
   const [excedenciaTemplateStatus, setExcedenciaTemplateStatus] = useState('');
   const [prorrogaExcedenciaTemplateStatus, setProrrogaExcedenciaTemplateStatus] = useState('');
   const [vinculogramaTemplateStatus, setVinculogramaTemplateStatus] = useState('');
   const [loteriaExportStatus, setLoteriaExportStatus] = useState('');
+  const [licenciasExportStatus, setLicenciasExportStatus] = useState('');
+  const [vinculogramaExportStatus, setVinculogramaExportStatus] = useState('');
   const databaseStatus = useDatabaseStatus();
   const databaseBadge = buildDatabaseStatusBadge(databaseStatus);
   const [databaseActionStatus, setDatabaseActionStatus] = useState('');
@@ -555,6 +561,23 @@ export function AjustesPage() {
     setLoteriaExportStatus(result.ok ? 'Carpeta de exportación de Lotería guardada.' : result.message);
   };
 
+  const handleSelectOperationalBackupDirectory = async (
+    setter: (ruta: string) => Promise<{ ok: boolean; message: string }>,
+    setFeedback: (message: string) => void,
+    successMessage: string,
+  ) => {
+    setFeedback('');
+    if (!window.traccion?.selectOperationalExcelBackupDirectory) {
+      setFeedback('El selector de carpeta solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+    const selectedPath = await window.traccion.selectOperationalExcelBackupDirectory();
+    if (!selectedPath) return;
+    const result = await setter(selectedPath.replace(/[\\/]+$/, ''));
+    setFeedback(result.ok ? successMessage : result.message);
+  };
+
+
   const databasePhaseLabel = databaseStatus?.ready
     ? 'activa'
     : databaseStatus?.phase === 'locked'
@@ -864,13 +887,35 @@ export function AjustesPage() {
             </div>
 
             <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3 xl:col-span-2">
+              <h4 className="text-sm font-bold text-metro-text">Licencias sin sueldo y Excedencias · Excel automático</h4>
+              <p className="mt-1 text-xs text-metro-muted">Cada alta, modificación o eliminación confirmada actualiza un único Excel espejo. El nombre incluye la fecha de la última actualización; si cambia el día, TrAccion elimina el fichero anterior y lo sustituye por el nuevo.</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <input className={templateInputClass.replace('mt-1 ', '')} onChange={(event) => { void setRutaExportacionLicencias(event.target.value); }} placeholder="G:\\...\\Licencias sin sueldo y Excedencias" type="text" value={rutaExportacionLicencias} />
+                <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={() => void handleSelectOperationalBackupDirectory(setRutaExportacionLicencias, setLicenciasExportStatus, 'Carpeta del Excel automático de Licencias guardada.')} type="button"><FolderOpen size={14} />Seleccionar carpeta</button>
+              </div>
+              <p className="mt-2 text-[11px] text-metro-muted">Ejemplo: <strong>Licencias_y_Excedencias_21-09-2026.xlsx</strong>. Si la siguiente actualización es el 22/09/2026, pasa a llamarse <strong>Licencias_y_Excedencias_22-09-2026.xlsx</strong> y se elimina el anterior.</p>
+              {licenciasExportStatus && <div className="mt-2"><Notice tone={noticeTone(licenciasExportStatus)}>{licenciasExportStatus}</Notice></div>}
+            </div>
+
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3 xl:col-span-2">
+              <h4 className="text-sm font-bold text-metro-text">Vinculograma · Excel automático</h4>
+              <p className="mt-1 text-xs text-metro-muted">Cada cambio confirmado actualiza un único Excel espejo con las relaciones vigentes, vencidas y revocadas. La fecha del nombre siempre corresponde a la última actualización.</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <input className={templateInputClass.replace('mt-1 ', '')} onChange={(event) => { void setRutaExportacionVinculograma(event.target.value); }} placeholder="G:\\...\\Vinculograma" type="text" value={rutaExportacionVinculograma} />
+                <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={() => void handleSelectOperationalBackupDirectory(setRutaExportacionVinculograma, setVinculogramaExportStatus, 'Carpeta del Excel automático de Vinculograma guardada.')} type="button"><FolderOpen size={14} />Seleccionar carpeta</button>
+              </div>
+              <p className="mt-2 text-[11px] text-metro-muted">Ejemplo: <strong>Vinculograma_21-09-2026.xlsx</strong>. Al actualizar otro día, se crea el nombre con la nueva fecha y se elimina el fichero anterior.</p>
+              {vinculogramaExportStatus && <div className="mt-2"><Notice tone={noticeTone(vinculogramaExportStatus)}>{vinculogramaExportStatus}</Notice></div>}
+            </div>
+
+            <div className="rounded-xl border border-metro-border/80 bg-metro-surface/55 p-3 xl:col-span-2">
               <h4 className="text-sm font-bold text-metro-text">Lotería · Excel automático de campaña</h4>
-              <p className="mt-1 text-xs text-metro-muted">Cada guardado de Lotería actualiza un Excel espejo de la campaña. Usa <strong>{'{year}'}</strong> para que la carpeta cambie automáticamente con el año.</p>
+              <p className="mt-1 text-xs text-metro-muted">Cada guardado de Lotería actualiza un único Excel espejo de la campaña. El nombre refleja la fecha de la última actualización; si cambia el día, TrAccion elimina el fichero anterior. Usa <strong>{'{year}'}</strong> para que la carpeta cambie automáticamente con el año.</p>
               <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <input className={templateInputClass.replace('mt-1 ', '')} onChange={(event) => { void setRutaExportacionLoteria(event.target.value); }} placeholder="G:\\...\\Lotería\\Año {year}" type="text" value={rutaExportacionLoteria} />
                 <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/15" onClick={handleSelectLoteriaExportDirectory} type="button"><FolderOpen size={14} />Seleccionar carpeta base</button>
               </div>
-              <p className="mt-2 text-[11px] text-metro-muted">Ejemplo para 2026: la plantilla termina en <strong>Año {'{year}'}</strong> y TrAccion guardará <strong>Loteria_2026.xlsx</strong> en <strong>Año 2026</strong>.</p>
+              <p className="mt-2 text-[11px] text-metro-muted">Ejemplo para 2026: la plantilla termina en <strong>Año {'{year}'}</strong> y TrAccion guardará <strong>Loteria_2026_DD-MM-AAAA.xlsx</strong> en <strong>Año 2026</strong>.</p>
               {loteriaExportStatus && <div className="mt-2"><Notice tone={noticeTone(loteriaExportStatus)}>{loteriaExportStatus}</Notice></div>}
             </div>
           </div>

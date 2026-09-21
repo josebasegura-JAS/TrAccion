@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { appendBackupMessage, syncVinculogramaExcelBackup } from '../../../shared/export/operationalExcelBackups';
 import { readStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
@@ -152,7 +153,8 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
           : [...get().records, record];
         mirrorRecords(parsedRecords);
         set({ records: parsedRecords });
-        return { ok: true, message: result.message, recordId: record.id };
+        const backupMessage = await syncVinculogramaExcelBackup(parsedRecords);
+        return { ok: true, message: appendBackupMessage(result.message, backupMessage), recordId: record.id };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido crear el vínculo.';
         return { ok: false, message };
@@ -170,7 +172,8 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
       });
 
       set({ records: result.records });
-      return { ok: true, message: 'Vínculo creado.', recordId: result.newRecord.id };
+      const backupMessage = await syncVinculogramaExcelBackup(result.records);
+      return { ok: true, message: appendBackupMessage('Vínculo creado.', backupMessage), recordId: result.newRecord.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido crear el vínculo.';
       return { ok: false, message };
@@ -199,7 +202,8 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
           : get().records.map((current) => (current.id === id ? record : current));
         mirrorRecords(parsedRecords);
         set({ records: parsedRecords });
-        return { ok: true, message: result.message };
+        const backupMessage = await syncVinculogramaExcelBackup(parsedRecords);
+        return { ok: true, message: appendBackupMessage(result.message, backupMessage) };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido guardar el vínculo.';
         return { ok: false, message };
@@ -219,7 +223,8 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
         conflictMessage: 'Este vínculo ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
       set({ records: result.records });
-      return { ok: true, message: 'Vínculo guardado.' };
+      const backupMessage = await syncVinculogramaExcelBackup(result.records);
+      return { ok: true, message: appendBackupMessage('Vínculo guardado.', backupMessage) };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido guardar el vínculo.';
       return { ok: false, message };
@@ -247,7 +252,8 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
           : get().records.filter((record) => record.id !== id);
         mirrorRecords(parsedRecords);
         set({ records: parsedRecords });
-        return { ok: true, message: result.message };
+        const backupMessage = await syncVinculogramaExcelBackup(parsedRecords);
+        return { ok: true, message: appendBackupMessage(result.message, backupMessage) };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido eliminar el vínculo.';
         return { ok: false, message };
@@ -268,7 +274,8 @@ export const useVinculogramaStore = create<VinculogramaState>((set, get) => ({
         conflictMessage: 'Este vínculo ha sido modificado por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
       set({ records: result.records });
-      return { ok: true, message: 'Vínculo eliminado.' };
+      const backupMessage = await syncVinculogramaExcelBackup(result.records);
+      return { ok: true, message: appendBackupMessage('Vínculo eliminado.', backupMessage) };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido eliminar el vínculo.';
       return { ok: false, message };

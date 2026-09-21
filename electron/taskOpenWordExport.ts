@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { copyFile, mkdir, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { getOpenTasksWordDirectory } from './taskOpenWordPreferences.js';
 
@@ -496,6 +496,12 @@ function addTrackingWorksheet(
   };
 }
 
+function taskFileDate(date = new Date()): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}-${month}-${date.getFullYear()}`;
+}
+
 export async function exportOpenTasksWord(
   records: TaskWordRecord[],
 ): Promise<TaskWordExportResult> {
@@ -516,12 +522,14 @@ export async function exportOpenTasksWord(
       .filter((task): task is ExportableTask => task !== null),
   );
 
-  const finalPath = path.join(directoryPath, 'Tareas abiertas.xlsx');
+  const datedFileName = `Tareas_abiertas_${taskFileDate()}.xlsx`;
+  const finalPath = path.join(directoryPath, datedFileName);
   const tempPath = path.join(
     directoryPath,
-    `.Tareas abiertas.${process.pid}.${Date.now()}.tmp.xlsx`,
+    `.Tareas_abiertas.${process.pid}.${Date.now()}.tmp.xlsx`,
   );
   const legacyWordPath = path.join(directoryPath, 'Tareas abiertas.doc');
+  const legacyExcelPath = path.join(directoryPath, 'Tareas abiertas.xlsx');
 
   try {
     await mkdir(directoryPath, { recursive: true });
@@ -542,8 +550,21 @@ export async function exportOpenTasksWord(
     await copyFile(tempPath, finalPath);
     await unlink(tempPath).catch(() => undefined);
 
-    // El desarrollo anterior generaba un .doc. Una vez que el XLSX ha quedado
-    // escrito correctamente, se elimina el antiguo para evitar dos fuentes.
+    // Solo se conserva un Excel espejo de tareas. Si cambia el día, el fichero
+    // adopta la nueva fecha y se elimina cualquier espejo anterior.
+    const existingFiles = await readdir(directoryPath);
+    const obsoleteExcelFiles = existingFiles.filter((name) =>
+      name !== datedFileName &&
+      name.startsWith('Tareas_abiertas_') &&
+      name.toLowerCase().endsWith('.xlsx'),
+    );
+    for (const obsoleteFile of obsoleteExcelFiles) {
+      await unlink(path.join(directoryPath, obsoleteFile)).catch(() => undefined);
+    }
+
+    // Se retiran también los nombres usados por desarrollos anteriores para evitar
+    // que existan dos fuentes aparentemente válidas.
+    await unlink(legacyExcelPath).catch(() => undefined);
     await unlink(legacyWordPath).catch(() => undefined);
 
     const trackingCount = tasks.reduce((total, task) => total + task.seguimiento.length, 0);

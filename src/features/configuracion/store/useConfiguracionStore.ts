@@ -25,6 +25,8 @@ interface ConfiguracionState {
   rutaPlantillaProrrogaExcedencia: string;
   rutaPlantillaVinculograma: string;
   rutaExportacionLoteria: string;
+  rutaExportacionLicencias: string;
+  rutaExportacionVinculograma: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
 }
@@ -38,6 +40,8 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaPlantillaProrrogaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionLoteria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaExportacionLicencias: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaExportacionVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -56,6 +60,8 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaPlantillaProrrogaExcedencia: state.rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
     rutaExportacionLoteria: state.rutaExportacionLoteria,
+    rutaExportacionLicencias: state.rutaExportacionLicencias,
+    rutaExportacionVinculograma: state.rutaExportacionVinculograma,
     taskPhases: state.taskPhases,
     taskOrigins: state.taskOrigins,
   };
@@ -144,6 +150,8 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaPlantillaProrrogaExcedencia: '',
     rutaPlantillaVinculograma: '',
     rutaExportacionLoteria: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
+    rutaExportacionLicencias: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
+    rutaExportacionVinculograma: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
   };
@@ -185,6 +193,14 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
       typeof (parsed as { rutaExportacionLoteria?: unknown }).rutaExportacionLoteria === 'string'
         ? (parsed as { rutaExportacionLoteria: string }).rutaExportacionLoteria.trim()
         : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
+    rutaExportacionLicencias:
+      typeof (parsed as { rutaExportacionLicencias?: unknown }).rutaExportacionLicencias === 'string'
+        ? (parsed as { rutaExportacionLicencias: string }).rutaExportacionLicencias.trim()
+        : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
+    rutaExportacionVinculograma:
+      typeof (parsed as { rutaExportacionVinculograma?: unknown }).rutaExportacionVinculograma === 'string'
+        ? (parsed as { rutaExportacionVinculograma: string }).rutaExportacionVinculograma.trim()
+        : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
   };
@@ -263,6 +279,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaProrrogaExcedencia: initialConfiguracion.rutaPlantillaProrrogaExcedencia,
   rutaPlantillaVinculograma: initialConfiguracion.rutaPlantillaVinculograma,
   rutaExportacionLoteria: initialConfiguracion.rutaExportacionLoteria,
+  rutaExportacionLicencias: initialConfiguracion.rutaExportacionLicencias,
+  rutaExportacionVinculograma: initialConfiguracion.rutaExportacionVinculograma,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
   load: () => {
@@ -287,6 +305,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaPlantillaProrrogaExcedencia,
         rutaPlantillaVinculograma,
         rutaExportacionLoteria,
+        rutaExportacionLicencias,
+        rutaExportacionVinculograma,
         taskPhases,
         taskOrigins,
       } = get();
@@ -297,6 +317,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaPlantillaProrrogaExcedencia,
         rutaPlantillaVinculograma,
         rutaExportacionLoteria,
+        rutaExportacionLicencias,
+        rutaExportacionVinculograma,
         taskPhases,
         taskOrigins,
       };
@@ -361,6 +383,20 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     const configuracion: ConfiguracionState = {
       ...selectConfiguracionState(get()),
       rutaExportacionLoteria: ruta.trim(),
+    };
+    return commitConfiguracion(set, configuracion);
+  },
+  setRutaExportacionLicencias: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
+      rutaExportacionLicencias: ruta.trim(),
+    };
+    return commitConfiguracion(set, configuracion);
+  },
+  setRutaExportacionVinculograma: async (ruta: string): Promise<{ ok: boolean; message: string }> => {
+    const configuracion: ConfiguracionState = {
+      ...selectConfiguracionState(get()),
+      rutaExportacionVinculograma: ruta.trim(),
     };
     return commitConfiguracion(set, configuracion);
   },

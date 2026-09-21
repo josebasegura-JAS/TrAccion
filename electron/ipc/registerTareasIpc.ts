@@ -166,7 +166,7 @@ export function registerTareasIpc(): void {
   ipcMain.handle('tasks:select-open-word-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
-      title: 'Seleccionar carpeta para Tareas abiertas.xlsx',
+      title: 'Seleccionar carpeta para el Excel automático de tareas abiertas',
       properties: ['openDirectory', 'createDirectory'],
     };
     const result = browserWindow

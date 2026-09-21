@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { appendBackupMessage, syncLicenciasExcelBackup } from '../../../shared/export/operationalExcelBackups';
 import { readStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
@@ -249,7 +250,8 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
           ];
           mirrorRecords(parsedRecords);
           set({ records: parsedRecords });
-          return { ok: true, message: result.message, recordId: record.id };
+          const backupMessage = await syncLicenciasExcelBackup(parsedRecords);
+          return { ok: true, message: appendBackupMessage(result.message, backupMessage), recordId: record.id };
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
@@ -276,7 +278,8 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
       });
 
       set({ records: result.records });
-      return { ok: true, message: 'Solicitud creada.', recordId: result.newRecord.id };
+      const backupMessage = await syncLicenciasExcelBackup(result.records);
+      return { ok: true, message: appendBackupMessage('Solicitud creada.', backupMessage), recordId: result.newRecord.id };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido crear la solicitud.';
       return { ok: false, message };
@@ -321,7 +324,8 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
           );
           mirrorRecords(parsedRecords);
           set({ records: parsedRecords });
-          return { ok: true, message: result.message };
+          const backupMessage = await syncLicenciasExcelBackup(parsedRecords);
+          return { ok: true, message: appendBackupMessage(result.message, backupMessage) };
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
@@ -345,7 +349,8 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
         conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
       set({ records: result.records });
-      return { ok: true, message: 'Solicitud guardada.' };
+      const backupMessage = await syncLicenciasExcelBackup(result.records);
+      return { ok: true, message: appendBackupMessage('Solicitud guardada.', backupMessage) };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido guardar la solicitud.';
       return { ok: false, message };
@@ -396,7 +401,8 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
             .flatMap((sqliteRecord) => parseRecords(`[${sqliteRecord.value}]`));
           mirrorRecords(parsedRecords);
           set({ records: parsedRecords });
-          return { ok: true, message: result.message };
+          const backupMessage = await syncLicenciasExcelBackup(parsedRecords);
+          return { ok: true, message: appendBackupMessage(result.message, backupMessage) };
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
@@ -427,7 +433,8 @@ export const useLicenciasSinSueldoStore = create<LicenciasSinSueldoState>((set, 
         conflictMessage: 'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
       set({ records: result.records });
-      return { ok: true, message: 'Solicitud eliminada.' };
+      const backupMessage = await syncLicenciasExcelBackup(result.records);
+      return { ok: true, message: appendBackupMessage('Solicitud eliminada.', backupMessage) };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido eliminar la solicitud.';
       return { ok: false, message };
