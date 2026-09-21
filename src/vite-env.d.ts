@@ -600,7 +600,6 @@ interface TraccionApi {
     year: number;
     directoryTemplate: string;
     fileName: string;
-    cleanupPrefix: string;
     buffer: ArrayBuffer;
   }) => Promise<{ ok: boolean; message: string; path: string | null }>;
   selectOperationalExcelBackupDirectory?: () => Promise<string | null>;
