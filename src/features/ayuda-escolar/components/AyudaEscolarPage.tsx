@@ -154,7 +154,7 @@ export function AyudaEscolarPage() {
       ? activeEmployees.find(
           (employee) =>
             employee.empleado !== selectedEmployee.empleado &&
-            normalizeSchoolHelpEmail(employee.email) === senderEmail,
+            normalizeSchoolHelpEmail(employee.email ?? '') === senderEmail,
         )
       : undefined;
 
@@ -210,7 +210,7 @@ export function AyudaEscolarPage() {
       }
 
       let emailMessage = '';
-      const currentEmail = compactEmail(selectedEmployee.email);
+      const currentEmail = compactEmail(selectedEmployee.email ?? '');
       if (senderEmail && !currentEmail) {
         const updated: Employee = { ...selectedEmployee, email: senderEmail };
         const emailResult = await updateEmployee(
