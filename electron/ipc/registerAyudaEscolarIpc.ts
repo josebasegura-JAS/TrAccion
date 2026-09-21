@@ -148,7 +148,180 @@ try {
     $baseName = [IO.Path]::GetFileNameWithoutExtension($_.Name)
     if ($baseName -eq $stem) {
       $nextIndex = [Math]::Max($nextIndex, 2)
-    } elseif ($baseName -match ('^' + $escapedStem + ' (\d+)$')) {
+    } elseif ($baseName -match ('^' + $escapedStem + ' ([0-9]+)) {
+      $nextIndex = [Math]::Max($nextIndex, ([int]$Matches[1]) + 1)
+    }
+  }
+
+  for ($i = 1; $i -le $mail.Attachments.Count; $i++) {
+    $att = $mail.Attachments.Item($i)
+    $original = [string]$att.FileName
+    $ext = [IO.Path]::GetExtension($original)
+    if ($blocked -contains $ext.ToLowerInvariant()) {
+      continue
+    }
+
+    do {
+      $suffix = if ($nextIndex -eq 1) { '' } else { ' ' + $nextIndex }
+      $savedName = $stem + $suffix + $ext
+      $savedPath = Join-Path $basePath $savedName
+      $nextIndex++
+    } while (Test-Path -LiteralPath $savedPath)
+
+    $att.SaveAsFile($savedPath)
+    $saved += [PSCustomObject]@{
+      originalName = $original
+      savedName = $savedName
+      savedPath = $savedPath
+    }
+  }
+
+  $saved | ConvertTo-Json -Depth 4 -Compress
+} finally {
+  try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($mail) } catch {}
+  try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) } catch {}
+}
+`;
+
+async function withTemporaryMsg(
+  fileName: string,
+  payload: unknown,
+  action: (msgPath: string) => Promise<unknown>,
+): Promise<unknown> {
+  const buffer = normalizeBinaryPayload(payload);
+  if (!buffer?.length) throw new Error('El contenido del correo no es válido.');
+
+  const safeName = path.basename(fileName || 'correo.msg').replace(/[^A-Za-z0-9._ -]/g, '_');
+  if (path.extname(safeName).toLowerCase() !== '.msg') {
+    throw new Error('El correo debe estar en formato .msg.');
+  }
+
+  const tempDirectory = path.join(
+    tmpdir(),
+    `traccion-school-help-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`,
+  );
+  await mkdir(tempDirectory, { recursive: true });
+  const msgPath = path.join(tempDirectory, safeName);
+  await writeFile(msgPath, buffer);
+
+  try {
+    return await action(msgPath);
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+}
+
+async function inspectMessage(fileName: string, payload: unknown): Promise<SchoolHelpResult> {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: 'La lectura de Outlook solo está disponible en Windows.' };
+  }
+
+  try {
+    const data = await withTemporaryMsg(fileName, payload, (msgPath) =>
+      runPowerShellJson(INSPECT_SCRIPT, [msgPath]),
+    );
+    if (!data || typeof data !== 'object') {
+      throw new Error('Outlook no ha devuelto datos del mensaje.');
+    }
+
+    const raw = data as Record<string, unknown>;
+    const rawAttachments = raw.attachments;
+    const attachments = Array.isArray(rawAttachments)
+      ? rawAttachments
+      : rawAttachments
+        ? [rawAttachments]
+        : [];
+
+    return {
+      ok: true,
+      message: 'Correo leído correctamente.',
+      inspection: {
+        senderName: String(raw.senderName ?? '').trim(),
+        senderEmail: String(raw.senderEmail ?? '').trim().toLowerCase(),
+        subject: String(raw.subject ?? '').trim(),
+        receivedAt: String(raw.receivedAt ?? '').trim(),
+        attachments: attachments.map((item) => {
+          const attachment = item as Record<string, unknown>;
+          return {
+            name: String(attachment.name ?? 'adjunto'),
+            size: Number(attachment.size ?? 0),
+          };
+        }),
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido leer el correo de Outlook.',
+    };
+  }
+}
+
+async function archiveMessage(payload: SchoolHelpArchivePayload): Promise<SchoolHelpResult> {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: 'El archivado de Outlook solo está disponible en Windows.' };
+  }
+  if (
+    !payload ||
+    typeof payload.fileName !== 'string' ||
+    typeof payload.basePath !== 'string' ||
+    typeof payload.employeeName !== 'string'
+  ) {
+    return { ok: false, message: 'Datos de archivado no válidos.' };
+  }
+
+  const basePath = payload.basePath.trim();
+  if (!basePath) return { ok: false, message: 'Configura primero la carpeta de Ayuda escolar.' };
+
+  try {
+    const raw = await withTemporaryMsg(payload.fileName, payload.buffer, (msgPath) =>
+      runPowerShellJson(ARCHIVE_SCRIPT, [msgPath, basePath, sanitizeFileStem(payload.employeeName)]),
+    );
+    const list = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+    const files = list
+      .map((item) => {
+        const file = item as Record<string, unknown>;
+        return {
+          originalName: String(file.originalName ?? ''),
+          savedName: String(file.savedName ?? ''),
+          savedPath: String(file.savedPath ?? ''),
+        };
+      })
+      .filter((file) => file.savedPath);
+
+    return files.length
+      ? { ok: true, message: 'Documentación archivada correctamente.', files }
+      : { ok: false, message: 'El correo no contiene adjuntos archivables.' };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'No se ha podido guardar la documentación.',
+    };
+  }
+}
+
+export function registerAyudaEscolarIpc(): void {
+  ipcMain.handle('ayuda-escolar:select-folder', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar carpeta de Ayuda escolar',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle('ayuda-escolar:inspect-message', (_event, fileName: string, buffer: unknown) =>
+    inspectMessage(fileName, buffer),
+  );
+
+  ipcMain.handle('ayuda-escolar:archive-message', (_event, payload: SchoolHelpArchivePayload) =>
+    archiveMessage(payload),
+  );
+}
+)) {
       $nextIndex = [Math]::Max($nextIndex, ([int]$Matches[1]) + 1)
     }
   }
