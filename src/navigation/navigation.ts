@@ -6,6 +6,7 @@ import {
   Clover,
   ClipboardList,
   Gift,
+  GraduationCap,
   Laptop,
   Link2,
   MailPlus,
@@ -18,6 +19,7 @@ import {
 export type AppView =
   | 'dashboard'
   | 'plantilla'
+  | 'ayuda-escolar'
   | 'tareas'
   | 'comite'
   | 'actas'
@@ -89,6 +91,7 @@ export const navigationGroups: NavigationGroup[] = [
     icon: UsersRound,
     items: [
       { label: 'Plantilla', icon: UsersRound, view: 'plantilla' },
+      { label: 'Ayuda escolar', icon: GraduationCap, view: 'ayuda-escolar' },
       { label: 'Teletrabajo', icon: Laptop, view: 'teletrabajo' },
       { label: 'Licencias sin sueldo y Excedencias', icon: CalendarDays, view: 'licencias-sin-sueldo' },
       { label: 'Vinculograma', icon: Link2, view: 'vinculograma' },
