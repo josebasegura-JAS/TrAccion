@@ -7,6 +7,7 @@ export function AjustesPage() {
   const rutaPlantillaTeletrabajo = useConfiguracionStore((state) => state.rutaPlantillaTeletrabajo);
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const rutaAyudaEscolar = useConfiguracionStore((state) => state.rutaAyudaEscolar);
+  const rutaExportacionCoordinacion = useConfiguracionStore((state) => state.rutaExportacionCoordinacion);
   const addTaskPhase = useConfiguracionStore((state) => state.addTaskPhase);
   const updateTaskPhase = useConfiguracionStore((state) => state.updateTaskPhase);
   const toggleTaskPhase = useConfiguracionStore((state) => state.toggleTaskPhase);
@@ -15,6 +16,7 @@ export function AjustesPage() {
     (state) => state.setRutaPlantillaTeletrabajo,
   );
   const setRutaAyudaEscolar = useConfiguracionStore((state) => state.setRutaAyudaEscolar);
+  const setRutaExportacionCoordinacion = useConfiguracionStore((state) => state.setRutaExportacionCoordinacion);
   const [status, setStatus] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
 
@@ -133,6 +135,26 @@ export function AjustesPage() {
             Seleccionar carpeta
           </button>
         </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl border border-metro-border bg-metro-panel p-4">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-metro-text">Coordinación</h3>
+          <p className="mt-1 text-sm text-metro-muted">
+            Carpeta donde TrAccion mantendrá el Excel acumulativo de reuniones de Coordinación con Dirección.
+          </p>
+        </div>
+        <label className="block text-xs font-semibold text-metro-muted">
+          Carpeta de backup
+          <input
+            className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+            onChange={(event) => void setRutaExportacionCoordinacion(event.target.value)}
+            placeholder="G:\\Capital Humano\\...\\Coordinación"
+            type="text"
+            value={rutaExportacionCoordinacion}
+          />
+        </label>
+        <p className="mt-2 text-[11px] text-metro-muted">Puede incluir {'{year}'} en la ruta si quieres separar físicamente los backups por año.</p>
       </div>
 
       <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">

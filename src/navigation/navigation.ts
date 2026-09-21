@@ -5,6 +5,7 @@ import {
   Landmark,
   Clover,
   ClipboardList,
+  Handshake,
   Gift,
   GraduationCap,
   Laptop,
@@ -21,6 +22,7 @@ export type AppView =
   | 'plantilla'
   | 'ayuda-escolar'
   | 'tareas'
+  | 'coordinacion'
   | 'comite'
   | 'actas'
   | 'huelgas'
@@ -79,6 +81,7 @@ export const navigationGroups: NavigationGroup[] = [
     icon: ClipboardList,
     items: [
       { label: 'Tareas', icon: ClipboardList, view: 'tareas' },
+      { label: 'Coordinación', icon: Handshake, view: 'coordinacion' },
       { label: 'Comité / Paritaria', icon: CalendarDays, view: 'comite' },
       { label: 'Actas', icon: FileText, view: 'actas' },
       { label: 'Huelgas', icon: Megaphone, view: 'huelgas' },

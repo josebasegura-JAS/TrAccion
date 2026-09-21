@@ -25,6 +25,7 @@ import { AuditHistoryButton } from '../shared/audit/AuditHistoryButton';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { ModalDatabaseStatus } from './ModalDatabaseStatus';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { useCoordinacionStore } from '../features/coordinacion/store/useCoordinacionStore';
 import { parseOutlookMsg } from '../features/especiales/domain/especiales';
 import {
   EMPTY_TASK_DRAFT,
@@ -258,6 +259,9 @@ export function TaskEditor({
 }) {
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
+  const directionTaskIds = useCoordinacionStore((state) => state.directionTaskIds);
+  const loadCoordinacion = useCoordinacionStore((state) => state.load);
+  const setTaskForDirection = useCoordinacionStore((state) => state.setTaskForDirection);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const createTask = useTaskStore((state) => state.createWithConcurrencyCheck);
   const updateTask = useTaskStore((state) => state.updateWithConcurrencyCheck);
@@ -268,6 +272,7 @@ export function TaskEditor({
   const { confirm: confirmTrackingDelete, dialogNode: trackingDeleteDialogNode } = useAppDialog();
 
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
+  const [sendToDirection, setSendToDirection] = useState(() => task ? directionTaskIds.includes(task.id) : false);
   const [trackingText, setTrackingText] = useState('');
   const [trackingDate, setTrackingDate] = useState(todayIsoDate);
   const [trackingUser, setTrackingUser] = useState(getActiveUser);
@@ -303,7 +308,8 @@ export function TaskEditor({
 
   useEffect(() => {
     loadConfiguracion();
-  }, [loadConfiguracion]);
+    loadCoordinacion();
+  }, [loadConfiguracion, loadCoordinacion]);
 
   useEffect(() => {
     let mounted = true;
@@ -363,6 +369,7 @@ export function TaskEditor({
     const nextTrackingDate = todayIsoDate();
 
     setDraft(nextDraft);
+    setSendToDirection(task ? useCoordinacionStore.getState().directionTaskIds.includes(task.id) : false);
     setTrackingText('');
     setTrackingDate(nextTrackingDate);
     setRecoveryBaseline({
@@ -428,6 +435,14 @@ export function TaskEditor({
         setSaveStatusIsError(true);
         return;
       }
+      if (result.recordId) {
+        const coordinationResult = await setTaskForDirection(result.recordId, sendToDirection);
+        if (!coordinationResult.ok) {
+          setSaveStatus(`Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
+          setSaveStatusIsError(true);
+          return;
+        }
+      }
       clearRecoveryDraft();
       onDone();
       return;
@@ -448,6 +463,7 @@ export function TaskEditor({
       return;
     }
 
+    const coordinationResult = await setTaskForDirection(task.id, sendToDirection);
     const savedTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
     const nextTrackingDate = todayIsoDate();
 
@@ -471,8 +487,10 @@ export function TaskEditor({
     setTrackingText('');
     setTrackingDate(nextTrackingDate);
     clearRecoveryDraft();
-    setSaveStatus('Guardado correctamente. Puedes seguir editando la tarea.');
-    setSaveStatusIsError(false);
+    setSaveStatus(coordinationResult.ok
+      ? 'Guardado correctamente. Puedes seguir editando la tarea.'
+      : `Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
+    setSaveStatusIsError(!coordinationResult.ok);
   };
 
   useEditorShortcuts({
@@ -899,6 +917,10 @@ export function TaskEditor({
                   </label>
                   <label className="text-xs font-semibold text-metro-muted lg:col-span-3">Prioridad
                     <Select value={draft.prioridad} onChange={(e) => setDraft((c) => ({ ...c, prioridad: e.target.value as TaskDraft['prioridad'] }))}>{TASK_PRIORITIES.map((v) => <option key={v}>{v}</option>)}</Select>
+                  </label>
+                  <label className="flex min-h-9 items-center gap-2 rounded-lg border border-sky-300/15 bg-[#0a1b2e]/60 px-3 py-2 lg:col-span-3">
+                    <input checked={sendToDirection} className="h-4 w-4 accent-red-600" onChange={(event) => setSendToDirection(event.target.checked)} type="checkbox" />
+                    <span className="min-w-0"><strong className="block text-xs text-slate-200">Trasladar a Dirección</strong><span className="block text-[10px] font-medium text-slate-400">Se incluirá en el próximo guion de Coordinación.</span></span>
                   </label>
                 </div>
               </Section>

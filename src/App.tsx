@@ -33,6 +33,7 @@ const LoteriaPage = lazy(() => import('./features/loteria/components/LoteriaPage
 const PresupuestosPage = lazy(() => import('./features/presupuestos/components/PresupuestosPage').then((m) => ({ default: m.PresupuestosPage })));
 const PlantillaPage = lazy(() => import('./components/PlantillaPage').then((m) => ({ default: m.PlantillaPage })));
 const TareasPage = lazy(() => import('./components/TareasPage').then((m) => ({ default: m.TareasPage })));
+const CoordinacionPage = lazy(() => import('./features/coordinacion/components/CoordinacionPage').then((m) => ({ default: m.CoordinacionPage })));
 const TeletrabajoPage = lazy(() => import('./components/TeletrabajoPage').then((m) => ({ default: m.TeletrabajoPage })));
 const TicketRestaurantePage = lazy(() => import('./features/ticket-restaurante/components/TicketRestaurantePage').then((m) => ({ default: m.TicketRestaurantePage })));
 const VinculogramaPage = lazy(() => import('./features/vinculograma/components/VinculogramaPage').then((m) => ({ default: m.VinculogramaPage })));
@@ -69,6 +70,7 @@ const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   plantilla: 'Cargando Plantilla...',
   'ayuda-escolar': 'Cargando Ayuda escolar...',
   tareas: 'Cargando Tareas...',
+  coordinacion: 'Cargando Coordinación...',
   comite: 'Cargando Comité de Empresa...',
   actas: 'Cargando Actas...',
   huelgas: 'Cargando Huelgas...',
@@ -208,6 +210,7 @@ export function App() {
                     {activeView === 'plantilla' && <PlantillaPage />}
                     {activeView === 'ayuda-escolar' && <AyudaEscolarPage />}
                     {activeView === 'tareas' && <TareasPage initialTaskId={navigationTarget?.view === 'tareas' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'tareas' ? navigationTarget.nonce : undefined} />}
+                    {activeView === 'coordinacion' && <CoordinacionPage />}
                     {activeView === 'comite' && <ComitePage initialOrgan={navigationTarget ? resolveCommitteeOrganForNavigation(navigationTarget.view) : null} initialSessionId={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.recordId : null} navigationNonce={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.nonce : undefined} />}
                     {activeView === 'actas' && <ActasPage />}
                     {activeView === 'huelgas' && <HuelgasPage />}
