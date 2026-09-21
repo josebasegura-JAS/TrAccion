@@ -70,6 +70,7 @@ export function AyudaEscolarPage() {
     });
     const normalizedQuery = query.trim().toLowerCase();
     return visibleEmployees
+      .filter((employee) => latestByEmployee.has(employee.empleado))
       .filter((employee) =>
         !normalizedQuery ||
         employee.empleado.toLowerCase().includes(normalizedQuery) ||

@@ -144,6 +144,21 @@ function isConfiguracionState(value: unknown): value is ConfiguracionState {
   return typeof candidate.rutaPlantillaTeletrabajo === 'string';
 }
 
+function getDefaultAyudaEscolarPath(): string {
+  const year = new Date().getFullYear();
+  return `G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Ayuda Escolar\\${year}\\Documentación`;
+}
+
+function normalizeAyudaEscolarPath(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    return getDefaultAyudaEscolarPath();
+  }
+
+  const trimmed = value.trim();
+  const canonicalDefaultPattern = /^G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Ayuda Escolar\\\d{4}\\Documentación$/i;
+  return canonicalDefaultPattern.test(trimmed) ? getDefaultAyudaEscolarPath() : trimmed;
+}
+
 function defaultConfiguracion(): ConfiguracionState {
   return {
     rutaPlantillaTeletrabajo: '',
@@ -154,7 +169,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaExportacionLoteria: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
     rutaExportacionLicencias: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
     rutaExportacionVinculograma: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
-    rutaAyudaEscolar: '',
+    rutaAyudaEscolar: getDefaultAyudaEscolarPath(),
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
   };
@@ -204,10 +219,9 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
       typeof (parsed as { rutaExportacionVinculograma?: unknown }).rutaExportacionVinculograma === 'string'
         ? (parsed as { rutaExportacionVinculograma: string }).rutaExportacionVinculograma.trim()
         : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
-    rutaAyudaEscolar:
-      typeof (parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar === 'string'
-        ? (parsed as { rutaAyudaEscolar: string }).rutaAyudaEscolar.trim()
-        : '',
+    rutaAyudaEscolar: normalizeAyudaEscolarPath(
+      (parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar,
+    ),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
   };
