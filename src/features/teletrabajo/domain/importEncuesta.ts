@@ -506,7 +506,8 @@ export function rowsToTeletrabajoDrafts(
       observaciones: aportaciones,
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
-      validacionJefatura: EMPTY_TELETRABAJO_DRAFT.validacionJefatura,
+      // Las solicitudes importadas desde encuesta todavía no han sido validadas por jefatura.
+      validacionJefatura: false,
       validacionJefaturaRepetir: EMPTY_TELETRABAJO_DRAFT.validacionJefaturaRepetir,
       validacionDireccion: EMPTY_TELETRABAJO_DRAFT.validacionDireccion,
       revisado: EMPTY_TELETRABAJO_DRAFT.revisado,
