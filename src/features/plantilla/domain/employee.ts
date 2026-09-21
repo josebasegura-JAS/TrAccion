@@ -30,7 +30,7 @@ export interface EmployeeDerivedFields {
 
 export interface Employee extends EmployeePersistedFields, EmployeeDerivedFields {
   /** Correo aprendido desde fuentes fiables (p. ej. remitente confirmado en Ayuda escolar). */
-  email: string;
+  email?: string;
   deletedAt: string | null;
 }
 
