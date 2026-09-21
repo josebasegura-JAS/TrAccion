@@ -1,4 +1,4 @@
-import { FileCheck2, FolderOpen, Inbox, Paperclip, Search, UsersRound } from 'lucide-react';
+import { FileCheck2, FolderOpen, Inbox, Paperclip, Search, UsersRound, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -141,8 +141,11 @@ export function AyudaEscolarPage() {
         archivedAt: new Date().toISOString(),
         files: result.files,
       });
-      if (willLearnEmail) updateEmployeeEmail(employee.empleado, incomingEmail);
-      const learnedSuffix = willLearnEmail ? ` Correo ${incomingEmail} incorporado a Plantilla.` : '';
+      let learnedSuffix = '';
+      if (willLearnEmail) {
+        const emailResult = await updateEmployeeEmail(employee.empleado, incomingEmail);
+        learnedSuffix = emailResult.ok ? ` Correo ${incomingEmail} incorporado a Plantilla.` : ` ${emailResult.message}`;
+      }
       const conflictSuffix = emailConflict ? ` El correo de Plantilla (${employee.email}) se mantiene sin cambios.` : '';
       setStatus(`${result.files.length} archivo${result.files.length === 1 ? '' : 's'} guardado${result.files.length === 1 ? '' : 's'} correctamente.${learnedSuffix}${conflictSuffix}`);
       setMessageFile(null);
@@ -174,10 +177,14 @@ export function AyudaEscolarPage() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
-        {[['Personas', visibleEmployees.length, UsersRound], ['Documentación recibida', documentedPeople, FileCheck2], ['Pendientes', pendingPeople, Inbox]].map(([label, value, Icon]) => (
-          <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card" key={String(label)}>
-            <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wide text-metro-muted">{String(label)}</span><Icon className="text-metro-red" size={18} /></div>
-            <p className="mt-2 text-2xl font-bold text-metro-text">{String(value)}</p>
+        {([
+          { label: 'Personas', value: visibleEmployees.length, Icon: UsersRound },
+          { label: 'Documentación recibida', value: documentedPeople, Icon: FileCheck2 },
+          { label: 'Pendientes', value: pendingPeople, Icon: Inbox },
+        ] satisfies Array<{ label: string; value: number; Icon: LucideIcon }>).map(({ label, value, Icon }) => (
+          <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card" key={label}>
+            <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wide text-metro-muted">{label}</span><Icon className="text-metro-red" size={18} /></div>
+            <p className="mt-2 text-2xl font-bold text-metro-text">{value}</p>
           </div>
         ))}
       </div>

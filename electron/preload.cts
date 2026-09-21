@@ -310,6 +310,11 @@ contextBridge.exposeInMainWorld('traccion', {
   createOutlookCalendar,
   parseOutlookMsg,
   extractDocxText: (payload: ArrayBuffer) => ipcRenderer.invoke('docx:extract-text', payload),
+  selectSchoolHelpFolder: () => ipcRenderer.invoke('ayuda-escolar:select-folder'),
+  inspectSchoolHelpMessage: (fileName: string, buffer: ArrayBuffer) =>
+    ipcRenderer.invoke('ayuda-escolar:inspect-message', fileName, buffer),
+  archiveSchoolHelpMessage: (payload: unknown) =>
+    ipcRenderer.invoke('ayuda-escolar:archive-message', payload),
 });
 
 // Puente aislado para el Word automático de tareas abiertas.

@@ -1,60 +1,234 @@
-import { useState } from 'react';
-import { AjustesPage } from './components/AjustesPage';
-import { DashboardCards } from './components/DashboardCards';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
+import { AlertTriangle, LockKeyhole } from 'lucide-react';
+import { AppUpdateChecker } from './components/AppUpdateChecker';
+import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
+import { TooltipLayer } from './components/ui/TooltipLayer';
 import { Header } from './components/Header';
-import { CriteriosRrllPage } from './features/criterios-rrll/components/CriteriosRrllPage';
-import { EspecialesPage } from './features/especiales/components/EspecialesPage';
-import { SorteosPage } from './features/sorteos/components/SorteosPage';
-import { PlantillaPage } from './components/PlantillaPage';
-import { Sidebar, type AppView } from './components/Sidebar';
-import { TareasPage } from './components/TareasPage';
-import { TeletrabajoPage } from './components/TeletrabajoPage';
-import { TicketRestaurantePage } from './features/ticket-restaurante/components/TicketRestaurantePage';
-import { AyudaEscolarPage } from './features/ayuda-escolar/components/AyudaEscolarPage';
-import { VinculogramaPage } from './features/vinculograma/components/VinculogramaPage';
+import { Sidebar } from './components/Sidebar';
+import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
+import { startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
+import { useDatabaseStatus } from './services/databaseStatus';
+import { useEditingAvailability } from './services/editingAvailability';
+import { hasDirtyEditors } from './services/dirtyEditors';
+import { useAppDialog } from './hooks/useAppDialog';
+import {
+  bootstrapSqlitePersistence,
+  isTemporarySqliteLockMessage,
+  startDatabaseConnectivityIssueListener,
+  stopDatabaseConnectivityIssueListener,
+  subscribeToPersistenceFeedback,
+  type PersistenceFeedback,
+} from './services/persistence';
+
+const DashboardCards = lazy(() => import('./components/DashboardCards').then((m) => ({ default: m.DashboardCards })));
+const AjustesPage = lazy(() => import('./components/AjustesPage').then((m) => ({ default: m.AjustesPage })));
+const ActasPage = lazy(() => import('./features/actas/components/ActasPage').then((m) => ({ default: m.ActasPage })));
+const HuelgasPage = lazy(() => import('./features/huelgas/components/HuelgasPage').then((m) => ({ default: m.HuelgasPage })));
+const ComitePage = lazy(() => import('./features/comite/components/ComitePage').then((m) => ({ default: m.ComitePage })));
+const CriteriosRrllPage = lazy(() => import('./features/criterios-rrll/components/CriteriosRrllPage').then((m) => ({ default: m.CriteriosRrllPage })));
+const EspecialesPage = lazy(() => import('./features/especiales/components/EspecialesPage').then((m) => ({ default: m.EspecialesPage })));
+const LicenciasSinSueldoPage = lazy(() => import('./features/licencias-sin-sueldo/components/LicenciasSinSueldoPage').then((m) => ({ default: m.LicenciasSinSueldoPage })));
+const SorteosPage = lazy(() => import('./features/sorteos/components/SorteosPage').then((m) => ({ default: m.SorteosPage })));
+const LoteriaPage = lazy(() => import('./features/loteria/components/LoteriaPage').then((m) => ({ default: m.LoteriaPage })));
+const PresupuestosPage = lazy(() => import('./features/presupuestos/components/PresupuestosPage').then((m) => ({ default: m.PresupuestosPage })));
+const PlantillaPage = lazy(() => import('./components/PlantillaPage').then((m) => ({ default: m.PlantillaPage })));
+const TareasPage = lazy(() => import('./components/TareasPage').then((m) => ({ default: m.TareasPage })));
+const TeletrabajoPage = lazy(() => import('./components/TeletrabajoPage').then((m) => ({ default: m.TeletrabajoPage })));
+const TicketRestaurantePage = lazy(() => import('./features/ticket-restaurante/components/TicketRestaurantePage').then((m) => ({ default: m.TicketRestaurantePage })));
+const VinculogramaPage = lazy(() => import('./features/vinculograma/components/VinculogramaPage').then((m) => ({ default: m.VinculogramaPage })));
+const AyudaEscolarPage = lazy(() => import('./features/ayuda-escolar/components/AyudaEscolarPage').then((m) => ({ default: m.AyudaEscolarPage })));
+
+type NavigationTarget = { view: AppView; recordId?: string; nonce: number };
+interface ModuleErrorBoundaryProps { activeView: AppView; children: ReactNode; }
+interface ModuleErrorBoundaryState { error: Error | null; }
+
+class ModuleErrorBoundary extends Component<ModuleErrorBoundaryProps, ModuleErrorBoundaryState> {
+  state: ModuleErrorBoundaryState = { error: null };
+  static getDerivedStateFromError(error: Error): ModuleErrorBoundaryState { return { error }; }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void { console.error('Error renderizando el módulo activo.', error, errorInfo); }
+  componentDidUpdate(previousProps: ModuleErrorBoundaryProps): void {
+    if (previousProps.activeView !== this.props.activeView && this.state.error) this.setState({ error: null });
+  }
+  handleReload = (): void => window.location.reload();
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <section className="rounded-2xl border border-red-500/50 bg-red-950/30 p-5 text-red-100" role="alert">
+        <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 shrink-0" size={22} aria-hidden="true" />
+          <div className="space-y-2"><h2 className="text-base font-semibold">No se ha podido cargar este módulo</h2>
+            <p className="text-sm text-red-100/85">La aplicación ha evitado quedarse en pantalla negra. Revisa la consola o el log de Electron para ver el error exacto.</p>
+            <p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">{this.state.error.message}</p>
+            <button className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700" onClick={this.handleReload} type="button">Recargar aplicación</button>
+          </div></div>
+      </section>
+    );
+  }
+}
+
+const moduleLoadingLabels: Partial<Record<AppView, string>> = {
+  plantilla: 'Cargando Plantilla...',
+  'ayuda-escolar': 'Cargando Ayuda escolar...',
+  tareas: 'Cargando Tareas...',
+  comite: 'Cargando Comité de Empresa...',
+  actas: 'Cargando Actas...',
+  huelgas: 'Cargando Huelgas...',
+  paritaria: 'Cargando Comisión Paritaria...',
+  'criterios-rrll': 'Cargando Criterios...',
+  teletrabajo: 'Cargando Teletrabajo...',
+  'ticket-restaurante': 'Cargando Ticket Restaurante...',
+  presupuestos: 'Cargando Presupuestos...',
+  'licencias-sin-sueldo': 'Cargando Licencias...',
+  sorteos: 'Cargando Sorteos...',
+  loteria: 'Cargando Lotería...',
+  vinculograma: 'Cargando Vinculograma...',
+  especiales: 'Cargando Especiales...',
+  ajustes: 'Cargando Ajustes...',
+};
+
+function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
+  const [feedback, setFeedback] = useState<PersistenceFeedback | null>(null);
+  useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
+    if (nextFeedback.kind === 'error') setFeedback(nextFeedback);
+    else if (nextFeedback.kind === 'saved') {
+      setFeedback((current) => {
+        if (!current) return null;
+        const sameKey = !current.key || !nextFeedback.key || current.key === nextFeedback.key;
+        return sameKey ? null : current;
+      });
+    }
+  }), []);
+  if (!feedback) return null;
+  const isLockIssue = isTemporarySqliteLockMessage(feedback.message || '');
+  return (
+    <section className="persistence-error-banner" role="alert" aria-live="assertive"><AlertTriangle size={20} aria-hidden="true" />
+      <div><strong>Error de guardado</strong><p>{feedback.message || 'No se han podido guardar los últimos cambios. Revisa la conexión o la persistencia antes de continuar editando.'}</p>
+        {isLockIssue && <button className="persistence-error-banner__action" onClick={onGoToAjustes} type="button">Ver bloqueo en Ajustes</button>}
+      </div>
+    </section>
+  );
+}
+
+function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
+  const databaseStatus = useDatabaseStatus();
+  const editingAvailability = useEditingAvailability();
+  if (editingAvailability.allowed) return null;
+  const detail = editingAvailability.reason || databaseStatus?.message || (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
+  return (
+    <section className="sqlite-readonly-banner" role="alert" aria-live="assertive"><LockKeyhole size={20} aria-hidden="true" />
+      <div className="min-w-0 flex-1"><strong>Modo consulta: edición bloqueada</strong><p>{detail} No se permitirá ninguna modificación hasta confirmar la conexión con la base compartida.</p></div>
+      <button className="sqlite-readonly-banner__action" onClick={onGoToAjustes} type="button">Revisar en Ajustes</button>
+    </section>
+  );
+}
+
+function OperationalModuleGuard({ activeView, children }: { activeView: AppView; children: ReactNode }) {
+  const editingAvailability = useEditingAvailability();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const guardInteraction = !editingAvailability.allowed && activeView !== 'dashboard' && activeView !== 'ajustes';
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+    if (guardInteraction) element.setAttribute('inert', ''); else element.removeAttribute('inert');
+  }, [guardInteraction]);
+  return <div ref={contentRef} aria-disabled={guardInteraction || undefined} className={guardInteraction ? 'sqlite-readonly-content' : undefined}>{children}</div>;
+}
+
+function ModuleLoading({ activeView }: { activeView: AppView }) {
+  const title = moduleLoadingLabels[activeView] ?? 'Cargando módulo...';
+  return (
+    <section className="module-loading-skeleton" role="status" aria-live="polite" aria-label={title}>
+      <div className="module-loading-skeleton__header"><div className="module-loading-skeleton__title" /><div className="module-loading-skeleton__actions"><span /><span /></div></div>
+      <div className="module-loading-skeleton__filters"><span /><span /><span /></div>
+      <div className="module-loading-skeleton__table" aria-hidden="true"><div className="module-loading-skeleton__table-head"><span /><span /><span /><span /></div>
+        {Array.from({ length: 5 }).map((_, index) => <div className="module-loading-skeleton__table-row" key={index}><span /><span /><span /><span /></div>)}
+      </div><span className="sr-only">{title}</span>
+    </section>
+  );
+}
+
+class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErrorBoundaryState> {
+  state: ModuleErrorBoundaryState = { error: null };
+  static getDerivedStateFromError(error: Error): ModuleErrorBoundaryState { return { error }; }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void { console.error('Error renderizando la aplicación.', error, errorInfo); }
+  handleReset = (): void => window.location.reload();
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-metro-app p-6 text-metro-text"><section className="max-w-2xl rounded-2xl border border-red-500/50 bg-red-950/30 p-6 text-red-100 shadow-xl" role="alert">
+        <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 shrink-0" size={24} aria-hidden="true" /><div className="space-y-3"><div><h1 className="text-lg font-semibold">No se ha podido mostrar TrAccion</h1><p className="mt-1 text-sm text-red-100/85">Se ha capturado un error de render para evitar la pantalla gris. Reinicia al inicio y revisa el log si persiste.</p></div><p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">{this.state.error.message}</p><button className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700" onClick={this.handleReset} type="button">Reiniciar al inicio</button></div></div>
+      </section></div>
+    );
+  }
+}
 
 export function App() {
+  const { confirm, dialogNode } = useAppDialog();
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
+
+  useEffect(() => {
+    bootstrapSqlitePersistence();
+    startDatabaseConnectivityIssueListener();
+    const syncTimer = window.setTimeout(() => startExternalDataSyncPolling(), 1_500);
+    return () => { window.clearTimeout(syncTimer); stopExternalDataSyncPolling(); stopDatabaseConnectivityIssueListener(); };
+  }, []);
+
+  const changeActiveView = async (view: AppView): Promise<void> => {
+    const nextView = resolveActiveViewForNavigation(view);
+    if (nextView === activeView) return;
+    if (hasDirtyEditors()) {
+      const shouldLeave = await confirm('Hay cambios sin guardar en el formulario abierto. Si cambia de módulo ahora, el borrador se conservará para poder recuperarlo. ¿Desea continuar?', { title: 'Cambios sin guardar', confirmLabel: 'Cambiar de módulo', cancelLabel: 'Seguir editando' });
+      if (!shouldLeave) return;
+    }
+    setActiveView(nextView);
+  };
+
+  const resetToDashboard = (): void => window.location.reload();
+  const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string }) => {
+    setNavigationTarget({ ...target, nonce: Date.now() });
+    void changeActiveView(target.view);
+  };
 
   return (
-    <div className="flex min-h-screen bg-metro-app font-sans text-metro-text">
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
-      <div className="flex min-w-0 flex-1 flex-col bg-metro-app/95">
-        <Header />
-        <main className="min-w-0 flex-1 space-y-5 overflow-auto p-5">
-          {activeView === 'dashboard' && (
-            <>
-              <section className="rounded-3xl border border-metro-border bg-metro-surface/95 p-5 shadow-glow">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">
-                      RRLL
-                    </p>
-                    <h2 className="mt-1 text-2xl font-bold text-metro-text">
-                      Panel RRLL preparado para crecer
-                    </h2>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-metro-muted">
-                      Aplicación base Electron + React con primer módulo real de Plantilla: listado,
-                      búsqueda, filtros, alta manual, edición, borrado lógico e importación Excel.
-                    </p>
-                  </div>
-                </div>
-              </section>
-              <DashboardCards />
-            </>
-          )}
-          {activeView === 'plantilla' && <PlantillaPage />}
-          {activeView === 'tareas' && <TareasPage />}
-          {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
-          {activeView === 'teletrabajo' && <TeletrabajoPage />}
-          {activeView === 'ayuda-escolar' && <AyudaEscolarPage />}
-          {activeView === 'ticket-restaurante' && <TicketRestaurantePage />}
-          {activeView === 'sorteos' && <SorteosPage />}
-          {activeView === 'vinculograma' && <VinculogramaPage />}
-          {activeView === 'especiales' && <EspecialesPage />}
-          {activeView === 'ajustes' && <AjustesPage />}
-        </main>
+    <AppShellErrorBoundary>
+      <TooltipLayer /><AppUpdateChecker />
+      <div className="app-shell">
+        <Sidebar activeView={activeView} onDashboardReset={resetToDashboard} onViewChange={(view) => { setNavigationTarget(null); void changeActiveView(view); }} />
+        <div className="app-shell__main">
+          <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
+          <main className={`app-shell__content ${activeView === 'dashboard' ? 'app-shell__content--dashboard' : ''}`}>
+            <div className={`app-module-stage ${activeView === 'dashboard' ? 'app-module-stage--dashboard' : ''}`}>
+              <SqliteReadOnlyBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
+              <PersistenceErrorBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
+              <GlobalBusyIndicator />
+              <ModuleErrorBoundary activeView={activeView}>
+                <OperationalModuleGuard activeView={activeView}>
+                  <Suspense fallback={<ModuleLoading activeView={activeView} />}>
+                    {activeView === 'dashboard' && <DashboardCards onOpenRecord={handleDashboardOpenRecord} />}
+                    {activeView === 'plantilla' && <PlantillaPage />}
+                    {activeView === 'ayuda-escolar' && <AyudaEscolarPage />}
+                    {activeView === 'tareas' && <TareasPage initialTaskId={navigationTarget?.view === 'tareas' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'tareas' ? navigationTarget.nonce : undefined} />}
+                    {activeView === 'comite' && <ComitePage initialOrgan={navigationTarget ? resolveCommitteeOrganForNavigation(navigationTarget.view) : null} initialSessionId={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.recordId : null} navigationNonce={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.nonce : undefined} />}
+                    {activeView === 'actas' && <ActasPage />}
+                    {activeView === 'huelgas' && <HuelgasPage />}
+                    {activeView === 'criterios-rrll' && <CriteriosRrllPage />}
+                    {activeView === 'teletrabajo' && <TeletrabajoPage initialSolicitudId={navigationTarget?.view === 'teletrabajo' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'teletrabajo' ? navigationTarget.nonce : undefined} />}
+                    {activeView === 'ticket-restaurante' && <TicketRestaurantePage initialAbsenceId={navigationTarget?.view === 'ticket-restaurante' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'ticket-restaurante' ? navigationTarget.nonce : undefined} />}
+                    {activeView === 'licencias-sin-sueldo' && <LicenciasSinSueldoPage />}
+                    {activeView === 'presupuestos' && <PresupuestosPage />}
+                    {activeView === 'sorteos' && <SorteosPage />}
+                    {activeView === 'loteria' && <LoteriaPage />}
+                    {activeView === 'vinculograma' && <VinculogramaPage />}
+                    {activeView === 'especiales' && <EspecialesPage />}
+                    {activeView === 'ajustes' && <AjustesPage />}
+                  </Suspense>
+                </OperationalModuleGuard>
+              </ModuleErrorBoundary>
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+      {dialogNode}
+    </AppShellErrorBoundary>
   );
 }

@@ -46,6 +46,10 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Teletrabajo',
     subtitle: 'Solicitudes, validaciones, campañas y documentación asociada.',
   },
+  'ayuda-escolar': {
+    title: 'Ayuda escolar',
+    subtitle: 'Recepción, identificación y archivo de documentación recibida por correo.',
+  },
   'ticket-restaurante': {
     title: 'Ticket Restaurante',
     subtitle: 'Calendarios, ausencias, cálculo mensual y cotización.',

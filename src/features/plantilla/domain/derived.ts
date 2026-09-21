@@ -1,5 +1,15 @@
 import type { Employee, EmployeeDerivedFields, EmployeeDraft } from './employee';
 
+type LegacyEmployeeDraft = Omit<EmployeeDraft, 'email' | 'puestoEus' | 'unidad' | 'direccionOrganizativa' | 'antiguedadPuesto' | 'telefono1' | 'telefono2'> & {
+  email?: string;
+  puestoEus?: string;
+  unidad?: string;
+  direccionOrganizativa?: string;
+  antiguedadPuesto?: string;
+  telefono1?: string;
+  telefono2?: string;
+};
+
 const RESIDENCIA_EUS_MAP: Record<string, string> = {
   'Oficinas Centrales': 'Bulego Nagusiak',
   'Sopela Taller': 'Sopela Tailerra',
@@ -32,11 +42,22 @@ export function getEmployeeDerivedFields(employee: EmployeeDraft): EmployeeDeriv
   };
 }
 
-export function hydrateEmployee(draft: EmployeeDraft, deletedAt: string | null = null): Employee {
-  return {
+export function hydrateEmployee(draft: LegacyEmployeeDraft, deletedAt: string | null = null): Employee {
+  const normalizedDraft: EmployeeDraft = {
     ...draft,
     email: draft.email ?? '',
-    ...getEmployeeDerivedFields(draft),
+    puestoEus: draft.puestoEus ?? '',
+    unidad: draft.unidad ?? '',
+    direccionOrganizativa: draft.direccionOrganizativa ?? '',
+    antiguedadPuesto: draft.antiguedadPuesto ?? '',
+    telefono1: draft.telefono1 ?? '',
+    telefono2: draft.telefono2 ?? '',
+  };
+
+  return {
+    ...normalizedDraft,
+    puestoEus: normalizedDraft.puestoEus ?? '',
+    ...getEmployeeDerivedFields(normalizedDraft),
     deletedAt,
   };
 }

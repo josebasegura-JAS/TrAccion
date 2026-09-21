@@ -4,12 +4,14 @@ export interface EmployeeFilters {
   search: string;
   residencia: string;
   nivelRetributivo: string;
+  direccionOrganizativa: string;
 }
 
 export const EMPTY_EMPLOYEE_FILTERS: EmployeeFilters = {
   search: '',
   residencia: '',
   nivelRetributivo: '',
+  direccionOrganizativa: '',
 };
 
 export function filterEmployees(employees: Employee[], filters: EmployeeFilters): Employee[] {
@@ -24,7 +26,8 @@ export function filterEmployees(employees: Employee[], filters: EmployeeFilters)
       !employee.deletedAt &&
       matchesSearch &&
       (!filters.residencia || employee.residencia === filters.residencia) &&
-      (!filters.nivelRetributivo || employee.nivelRetributivo === filters.nivelRetributivo)
+      (!filters.nivelRetributivo || employee.nivelRetributivo === filters.nivelRetributivo) &&
+      (!filters.direccionOrganizativa || employee.direccionOrganizativa === filters.direccionOrganizativa)
     );
   });
 }
