@@ -112,6 +112,7 @@ function canonicalEmployeeSnapshot(employee: Employee): string {
   return JSON.stringify({
     empleado: employee.empleado,
     nombreApellidos: employee.nombreApellidos,
+    email: employee.email,
     puestoNomina: employee.puestoNomina,
     puestoOrganizativo: employee.puestoOrganizativo,
     puestoEus: employee.puestoEus,
@@ -419,7 +420,7 @@ function buildEmployeeImport(
 
     // Si una persona previamente eliminada vuelve a aparecer en la fuente
     // principal, se reactiva automáticamente.
-    const nextEmployee = hydrateEmployee(nextDraft, null);
+    const nextEmployee = hydrateEmployee({ ...nextDraft, email: previous?.email ?? '' }, null);
     if (previous?.deletedAt) {
       reactivated += 1;
     }
@@ -587,7 +588,11 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         if (!latestEmployee) {
           return { ok: false, message: 'La persona ya no existe en la base compartida. Recarga antes de continuar.' };
         }
-        const updatedEmployee = hydrateEmployee(draft, latestEmployee.deletedAt);
+        const draftEmail = (draft as EmployeeDraft & { email?: string }).email;
+        const updatedEmployee = hydrateEmployee(
+          { ...draft, email: draftEmail ?? latestEmployee.email },
+          latestEmployee.deletedAt,
+        );
         const directResult = await persistEmployeeDirectOrFallback(updatedEmployee, expectedSnapshot);
         if (directResult) {
           if (!directResult.ok) {
@@ -615,7 +620,13 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         parseRecords: parseEmployeesSnapshot,
         getRecordId: (employee) => employee.empleado,
         getRecordUpdatedAt: employeeSnapshot,
-        updateRecord: (latestEmployee) => hydrateEmployee(draft, latestEmployee.deletedAt),
+        updateRecord: (latestEmployee) => {
+          const draftEmail = (draft as EmployeeDraft & { email?: string }).email;
+          return hydrateEmployee(
+            { ...draft, email: draftEmail ?? latestEmployee.email },
+            latestEmployee.deletedAt,
+          );
+        },
         missingMessage: 'La persona ya no existe en la base compartida. Recarga antes de continuar.',
         conflictMessage: 'Esta persona ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
       });
