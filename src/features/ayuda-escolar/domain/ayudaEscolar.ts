@@ -42,7 +42,7 @@ export function findSchoolHelpEmployeeCandidates(
   const active = employees.filter((employee) => !employee.deletedAt);
   const email = normalizeSchoolHelpEmail(senderEmail);
   if (email) {
-    const byEmail = active.filter((employee) => normalizeSchoolHelpEmail(employee.email) === email);
+    const byEmail = active.filter((employee) => normalizeSchoolHelpEmail(employee.email ?? '') === email);
     if (byEmail.length) return byEmail;
   }
 
