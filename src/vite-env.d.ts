@@ -542,6 +542,21 @@ interface TraccionConditionalConfiguracionRecord {
   expectedUpdatedAt: string | null;
 }
 
+interface SchoolHelpInspection {
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+  receivedAt: string;
+  attachments: Array<{ name: string; size: number }>;
+}
+
+interface SchoolHelpArchiveResult {
+  ok: boolean;
+  message: string;
+  inspection?: SchoolHelpInspection;
+  files?: Array<{ originalName: string; savedName: string; savedPath: string }>;
+}
+
 interface TraccionApi {
   notifyBootVisible?: () => void;
   notifyRendererReady?: () => void;
@@ -602,6 +617,17 @@ interface TraccionApi {
     fileName: string;
     buffer: ArrayBuffer;
   }) => Promise<{ ok: boolean; message: string; path: string | null }>;
+  selectSchoolHelpFolder?: () => Promise<string | null>;
+  inspectSchoolHelpMessage?: (
+    fileName: string,
+    buffer: ArrayBuffer,
+  ) => Promise<SchoolHelpArchiveResult>;
+  archiveSchoolHelpMessage?: (payload: {
+    fileName: string;
+    buffer: ArrayBuffer;
+    basePath: string;
+    employeeName: string;
+  }) => Promise<SchoolHelpArchiveResult>;
   selectOperationalExcelBackupDirectory?: () => Promise<string | null>;
   saveOperationalExcelBackup?: (payload: {
     directory: string;
