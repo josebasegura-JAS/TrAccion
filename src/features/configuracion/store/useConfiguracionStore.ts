@@ -317,7 +317,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         rutaExportacionLicencias,
         rutaExportacionVinculograma,
         rutaAyudaEscolar,
-        taskPhases:
+        taskPhases,
         taskOrigins,
       } = get();
       const current: ConfiguracionState = {
