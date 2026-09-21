@@ -248,8 +248,11 @@ export function AyudaEscolarPage() {
         helpSections={[
           {
             title: 'Flujo',
-            content:
-              'Arrastra un correo .msg de Outlook, comprueba la persona identificada y archiva sus adjuntos. El correo del remitente se aprende en Plantilla cuando la ficha aún no lo tiene.',
+            items: [
+              'Arrastra un correo .msg de Outlook, comprueba la persona identificada y archiva sus adjuntos.',
+              'El correo del remitente se incorpora a Plantilla cuando la ficha aún no lo tiene.',
+              'Si ya existe un correo diferente, TrAccion no lo sobrescribe automáticamente.',
+            ],
           },
         ]}
         helpSubtitle="Recepción, identificación y archivo de documentación de ayuda escolar."
