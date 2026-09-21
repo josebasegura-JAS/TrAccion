@@ -1,5 +1,8 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
-import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
+import type { MenuItemConstructorOptions, OpenDialogOptions } from 'electron';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,27 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
-const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
-const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
-const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
-const splashMinimumVisibleMs = 800;
-const splashMaximumVisibleMs = 25_000;
-
-type SqlitePersistenceModule = typeof import('./sqlitePersistence.js');
-type ConnectivityIssueNotifier = Parameters<
-  SqlitePersistenceModule['setDatabaseConnectivityIssueNotifier']
->[0];
-
-let sqlitePersistenceModulePromise: Promise<SqlitePersistenceModule> | null = null;
-
-function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
-  sqlitePersistenceModulePromise ??= import('./sqlitePersistence.js');
-  return sqlitePersistenceModulePromise;
-}
-
-function logStartupPhase(startedAt: number, phase: string): void {
-  console.info(`[startup] ${phase}: ${Date.now() - startedAt} ms`);
-}
+const appIconPath = path.join(__dirname, '../build/icon/traccion-icon.ico');
 
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
@@ -43,121 +26,7 @@ function createContextMenu(mainWindow: BrowserWindow): void {
   });
 }
 
-function createSplashWindow(): BrowserWindow {
-  const splashWindow = new BrowserWindow({
-    width: 460,
-    height: 360,
-    resizable: false,
-    movable: true,
-    minimizable: false,
-    maximizable: false,
-    closable: true,
-    frame: false,
-    show: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    title: 'Cargando TrAccion',
-    backgroundColor: '#0F1F2A',
-    icon: appIconPath,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-
-  splashWindow.center();
-  splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
-
-  return splashWindow;
-}
-
-
-function createShutdownWindow(): BrowserWindow {
-  const shutdownWindow = new BrowserWindow({
-    width: 460,
-    height: 360,
-    resizable: false,
-    movable: true,
-    minimizable: false,
-    maximizable: false,
-    closable: false,
-    frame: false,
-    show: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    title: 'Cerrando TrAccion',
-    backgroundColor: '#0F1F2A',
-    icon: appIconPath,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-
-  shutdownWindow.center();
-  shutdownWindow.loadFile(shutdownHtmlPath).catch(() => undefined);
-  return shutdownWindow;
-}
-
-function waitForSplashPaint(splashWindow: BrowserWindow, timeoutMs = 700): Promise<void> {
-  if (splashWindow.isDestroyed()) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      setTimeout(resolve, 60);
-    };
-
-    const timeout = setTimeout(finish, timeoutMs);
-    splashWindow.webContents.once('did-finish-load', () => {
-      clearTimeout(timeout);
-      finish();
-    });
-    splashWindow.webContents.once('did-fail-load', () => {
-      clearTimeout(timeout);
-      finish();
-    });
-  });
-}
-
-function closeSplashAndShowMain(
-  splashWindow: BrowserWindow | null,
-  mainWindow: BrowserWindow,
-): void {
-  if (!mainWindow.isDestroyed()) {
-    mainWindow.show();
-    mainWindow.focus();
-  }
-
-  if (splashWindow && !splashWindow.isDestroyed()) {
-    splashWindow.close();
-  }
-}
-
-function showMainAfterSplash(
-  splashWindow: BrowserWindow | null,
-  mainWindow: BrowserWindow,
-  splashStartedAt: number,
-): void {
-  const elapsedMs = Date.now() - splashStartedAt;
-  const remainingMs = Math.max(0, splashMinimumVisibleMs - elapsedMs);
-
-  setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow), remainingMs);
-}
-
-function createWindow(
-  splashWindow: BrowserWindow | null = null,
-  splashStartedAt = Date.now(),
-  setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void,
-): BrowserWindow {
+function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1360,
     height: 860,
@@ -166,225 +35,412 @@ function createWindow(
     title: 'TrAccion',
     backgroundColor: '#D9EDF2',
     icon: appIconPath,
-    show: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
     },
-  });
-
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
-    const parsedUrl = new URL(navigationUrl);
-    const isAllowedDevNavigation = isDev && navigationUrl.startsWith(devServerUrl);
-    const isAllowedPackagedNavigation = !isDev && parsedUrl.protocol === 'file:';
-
-    if (!isAllowedDevNavigation && !isAllowedPackagedNavigation) {
-      event.preventDefault();
-    }
   });
 
   createContextMenu(mainWindow);
 
-  setConnectivityIssueNotifier?.((payload) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('database:connectivity-issue', payload);
-    }
-  });
-
-  let hasRequestedMainWindowShow = false;
-  const requestMainWindowShow = (): void => {
-    if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) {
-      return;
-    }
-
-    hasRequestedMainWindowShow = true;
-    clearTimeout(forceShowTimer);
-    showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
-  };
-
-  const forceShowTimer: ReturnType<typeof setTimeout> = setTimeout(
-    requestMainWindowShow,
-    splashMaximumVisibleMs,
-  );
-
-  const onBootVisible = (event: IpcMainEvent): void => {
-    if (event.sender !== mainWindow.webContents) {
-      return;
-    }
-
-    requestMainWindowShow();
-  };
-
-  const onRendererReady = (event: IpcMainEvent): void => {
-    if (event.sender !== mainWindow.webContents) {
-      return;
-    }
-
-    requestMainWindowShow();
-  };
-
-  ipcMain.on('app:boot-visible', onBootVisible);
-  ipcMain.on('app:renderer-ready', onRendererReady);
-
-  mainWindow.once('closed', () => {
-    clearTimeout(forceShowTimer);
-    ipcMain.removeListener('app:boot-visible', onBootVisible);
-    ipcMain.removeListener('app:renderer-ready', onRendererReady);
-    setConnectivityIssueNotifier?.(null);
-  });
-
   if (isDev) {
-    mainWindow.loadURL(devServerUrl).catch(() => {
-      clearTimeout(forceShowTimer);
-      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
-    });
+    mainWindow.loadURL(devServerUrl);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(() => {
-      clearTimeout(forceShowTimer);
-      showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
-    });
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+}
+
+interface OutlookDraftPayload {
+  subject: string;
+  html: string;
+  to: string[];
+  cc: string[];
+}
+
+interface OutlookDraftResult {
+  ok: boolean;
+  message: string;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isOutlookDraftPayload(value: unknown): value is OutlookDraftPayload {
+  if (!value || typeof value !== 'object') {
+    return false;
   }
 
-  return mainWindow;
+  const candidate = value as Partial<OutlookDraftPayload>;
+  return (
+    typeof candidate.subject === 'string' &&
+    typeof candidate.html === 'string' &&
+    isStringArray(candidate.to) &&
+    isStringArray(candidate.cc) &&
+    candidate.subject.length <= 255 &&
+    candidate.html.length <= 100_000 &&
+    candidate.to.length <= 200 &&
+    candidate.cc.length <= 200
+  );
 }
 
-async function registerIpcHandlers(): Promise<void> {
-  const [
-    { registerCoreDatabaseIpc },
-    { registerSorteosIpc },
-    { registerPlantillaIpc },
-    { registerTareasIpc },
-    { registerSesionesIpc },
-    { registerVinculogramaIpc },
-    { registerCriteriosRrllIpc },
-    { registerTicketRestauranteIpc },
-    { registerPresupuestosIpc },
-    { registerEspecialesIpc },
-    { registerTeletrabajoIpc },
-    { registerConfiguracionIpc },
-    { registerLicenciasSinSueldoIpc },
-    { registerSharedDocumentIpc },
-    { registerLoteriaIpc },
-    { registerOperationalExcelBackupIpc },
-  ] = await Promise.all([
-    import('./ipc/registerCoreDatabaseIpc.js'),
-    import('./ipc/registerSorteosIpc.js'),
-    import('./ipc/registerPlantillaIpc.js'),
-    import('./ipc/registerTareasIpc.js'),
-    import('./ipc/registerSesionesIpc.js'),
-    import('./ipc/registerVinculogramaIpc.js'),
-    import('./ipc/registerCriteriosRrllIpc.js'),
-    import('./ipc/registerTicketRestauranteIpc.js'),
-    import('./ipc/registerPresupuestosIpc.js'),
-    import('./ipc/registerEspecialesIpc.js'),
-    import('./ipc/registerTeletrabajoIpc.js'),
-    import('./ipc/registerConfiguracionIpc.js'),
-    import('./ipc/registerLicenciasSinSueldoIpc.js'),
-    import('./ipc/registerSharedDocumentIpc.js'),
-    import('./ipc/registerLoteriaIpc.js'),
-    import('./ipc/registerOperationalExcelBackupIpc.js'),
-  ]);
-
-  registerCoreDatabaseIpc();
-  registerSorteosIpc();
-  registerPlantillaIpc();
-  registerTareasIpc();
-  registerSesionesIpc();
-  registerVinculogramaIpc();
-  registerCriteriosRrllIpc();
-  registerTicketRestauranteIpc();
-  registerPresupuestosIpc();
-  registerEspecialesIpc();
-  registerTeletrabajoIpc();
-  registerConfiguracionIpc();
-  registerLicenciasSinSueldoIpc();
-  registerSharedDocumentIpc();
-  registerLoteriaIpc();
-  registerOperationalExcelBackupIpc();
+function sanitizeMailDraft(payload: OutlookDraftPayload): OutlookDraftPayload {
+  return {
+    subject: payload.subject.trim(),
+    html: payload.html,
+    to: payload.to.map((recipient) => recipient.trim()).filter(Boolean),
+    cc: payload.cc.map((recipient) => recipient.trim()).filter(Boolean),
+  };
 }
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    const windows = BrowserWindow.getAllWindows();
-    const mainWindow = windows[0];
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-      }
-      mainWindow.focus();
-    }
-  });
+async function createOutlookDraft(payload: unknown): Promise<OutlookDraftResult> {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: 'La automatización de Outlook solo está disponible en Windows.' };
+  }
 
-  app.whenReady().then(async () => {
-    const startupStartedAt = Date.now();
-    app.setAppUserModelId('com.metro.rrll.traccion');
-    Menu.setApplicationMenu(null);
+  if (!isOutlookDraftPayload(payload)) {
+    return { ok: false, message: 'Datos de correo no válidos.' };
+  }
 
-    const splashStartedAt = Date.now();
-    const splashWindow = createSplashWindow();
-    await waitForSplashPaint(splashWindow);
-    logStartupPhase(startupStartedAt, 'splash visible');
+  const safePayload = sanitizeMailDraft(payload);
+  const stamp = `${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
+  const jsonPath = path.join(tmpdir(), `traccion-especiales-${stamp}.json`);
+  const scriptPath = path.join(tmpdir(), `traccion-especiales-${stamp}.ps1`);
+  const script = `
+$ErrorActionPreference = 'Stop'
+$payload = Get-Content -Raw -LiteralPath $args[0] | ConvertFrom-Json
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.CreateItem(0)
+$mail.BodyFormat = 2
+$mail.Subject = [string]$payload.subject
+$mail.To = [string]::Join(';', @($payload.to))
+$mail.CC = [string]::Join(';', @($payload.cc))
+$mail.HTMLBody = [string]$payload.html
+$mail.Display()
+`;
 
-    const persistence = await loadSqlitePersistenceModule();
-    logStartupPhase(startupStartedAt, 'persistence module loaded');
+  try {
+    await writeFile(jsonPath, JSON.stringify(safePayload), 'utf8');
+    await writeFile(scriptPath, script, 'utf8');
 
-    await Promise.all([persistence.initializeSqlitePersistence(), registerIpcHandlers()]);
-    logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('powershell.exe', [
+        '-NoProfile',
+        '-STA',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        jsonPath,
+      ]);
+      let stderr = '';
+      let stdout = '';
 
-    createWindow(
-      splashWindow,
-      splashStartedAt,
-      persistence.setDatabaseConnectivityIssueNotifier,
-    );
-    logStartupPhase(startupStartedAt, 'main window loading');
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier);
-      }
-    });
-  });
-
-  let isQuitAfterSqlitePersistenceClosed = false;
-  let isShutdownInProgress = false;
-  let shutdownWindow: BrowserWindow | null = null;
-
-  app.on('before-quit', (event) => {
-    if (isQuitAfterSqlitePersistenceClosed) {
-      return;
-    }
-
-    event.preventDefault();
-    if (isShutdownInProgress) {
-      return;
-    }
-
-    isShutdownInProgress = true;
-    shutdownWindow = createShutdownWindow();
-
-    loadSqlitePersistenceModule()
-      .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
-      .catch((error: unknown) => {
-        console.warn('No se ha podido crear la copia de cierre antes de salir.', error);
-      })
-      .finally(() => {
-        isQuitAfterSqlitePersistenceClosed = true;
-        if (shutdownWindow && !shutdownWindow.isDestroyed()) {
-          shutdownWindow.destroy();
-        }
-        shutdownWindow = null;
-        app.quit();
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString('utf8');
       });
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString('utf8');
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              stderr.trim() ||
+                stdout.trim() ||
+                `PowerShell terminó con código ${code ?? 'desconocido'}.`,
+            ),
+          );
+        }
+      });
+    });
+
+    return { ok: true, message: 'Borrador creado en Outlook.' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error desconocido al abrir Outlook.';
+    return { ok: false, message };
+  } finally {
+    await Promise.allSettled([rm(jsonPath, { force: true }), rm(scriptPath, { force: true })]);
+  }
+}
+
+
+
+interface SchoolHelpInspection {
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+  receivedAt: string;
+  attachments: Array<{ name: string; size: number }>;
+}
+
+interface SchoolHelpResult {
+  ok: boolean;
+  message: string;
+  inspection?: SchoolHelpInspection;
+  files?: Array<{ originalName: string; savedName: string; savedPath: string }>;
+}
+
+interface SchoolHelpArchivePayload {
+  fileName: string;
+  buffer: ArrayBuffer;
+  basePath: string;
+  employeeName: string;
+}
+
+function sanitizeFileStem(value: string): string {
+  return value
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 120) || 'Persona';
+}
+
+function isArrayBufferLike(value: unknown): value is ArrayBuffer {
+  return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
+}
+
+async function runPowerShellJson(script: string, args: string[]): Promise<unknown> {
+  const stamp = `${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
+  const scriptPath = path.join(tmpdir(), `traccion-school-help-${stamp}.ps1`);
+  await writeFile(scriptPath, script, 'utf8');
+  try {
+    const output = await new Promise<string>((resolve, reject) => {
+      const child = spawn('powershell.exe', [
+        '-NoProfile',
+        '-STA',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        ...args,
+      ]);
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8'); });
+      child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout.trim());
+        else reject(new Error(stderr.trim() || stdout.trim() || `PowerShell terminó con código ${code ?? 'desconocido'}.`));
+      });
+    });
+    return output ? JSON.parse(output) : null;
+  } finally {
+    await rm(scriptPath, { force: true });
+  }
+}
+
+const SCHOOL_HELP_INSPECT_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+$msgPath = $args[0]
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.Session.OpenSharedItem($msgPath)
+try {
+  $smtp = [string]$mail.SenderEmailAddress
+  try {
+    if ([string]$mail.SenderEmailType -eq 'EX') {
+      $exUser = $mail.Sender.GetExchangeUser()
+      if ($null -ne $exUser -and $exUser.PrimarySmtpAddress) { $smtp = [string]$exUser.PrimarySmtpAddress }
+    }
+  } catch {}
+  $attachments = @()
+  for ($i = 1; $i -le $mail.Attachments.Count; $i++) {
+    $att = $mail.Attachments.Item($i)
+    $attachments += [PSCustomObject]@{ name = [string]$att.FileName; size = [int64]$att.Size }
+  }
+  [PSCustomObject]@{
+    senderName = [string]$mail.SenderName
+    senderEmail = $smtp
+    subject = [string]$mail.Subject
+    receivedAt = if ($mail.ReceivedTime) { $mail.ReceivedTime.ToString('o') } else { '' }
+    attachments = $attachments
+  } | ConvertTo-Json -Depth 5 -Compress
+} finally {
+  try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($mail) } catch {}
+  try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) } catch {}
+}
+`;
+
+const SCHOOL_HELP_ARCHIVE_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+$msgPath = $args[0]
+$basePath = $args[1]
+$stem = $args[2]
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.Session.OpenSharedItem($msgPath)
+try {
+  if (-not (Test-Path -LiteralPath $basePath)) { New-Item -ItemType Directory -Path $basePath -Force | Out-Null }
+  $blocked = @('.exe','.com','.bat','.cmd','.ps1','.vbs','.js','.jse','.msi','.scr','.pif')
+  $saved = @()
+  $nextIndex = 1
+  $escapedStem = [Regex]::Escape($stem)
+  Get-ChildItem -LiteralPath $basePath -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $baseName = [IO.Path]::GetFileNameWithoutExtension($_.Name)
+    if ($baseName -eq $stem) { $nextIndex = [Math]::Max($nextIndex, 2) }
+    elseif ($baseName -match ('^' + $escapedStem + ' (\d+)$')) {
+      $nextIndex = [Math]::Max($nextIndex, ([int]$Matches[1]) + 1)
+    }
+  }
+  for ($i = 1; $i -le $mail.Attachments.Count; $i++) {
+    $att = $mail.Attachments.Item($i)
+    $original = [string]$att.FileName
+    $ext = [IO.Path]::GetExtension($original)
+    if ($blocked -contains $ext.ToLowerInvariant()) { continue }
+    do {
+      $suffix = if ($nextIndex -eq 1) { '' } else { ' ' + $nextIndex }
+      $savedName = $stem + $suffix + $ext
+      $savedPath = Join-Path $basePath $savedName
+      $nextIndex++
+    } while (Test-Path -LiteralPath $savedPath)
+    $att.SaveAsFile($savedPath)
+    $saved += [PSCustomObject]@{ originalName = $original; savedName = $savedName; savedPath = $savedPath }
+  }
+  $saved | ConvertTo-Json -Depth 4 -Compress
+} finally {
+  try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($mail) } catch {}
+  try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($outlook) } catch {}
+}
+`;
+
+async function withTemporaryMsg(fileName: string, buffer: ArrayBuffer, action: (msgPath: string) => Promise<unknown>): Promise<unknown> {
+  const safeName = path.basename(fileName || 'correo.msg').replace(/[^A-Za-z0-9._ -]/g, '_');
+  if (path.extname(safeName).toLowerCase() !== '.msg') throw new Error('El correo debe estar en formato .msg.');
+  const tempDirectory = path.join(tmpdir(), `traccion-school-help-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`);
+  await mkdir(tempDirectory, { recursive: true });
+  const msgPath = path.join(tempDirectory, safeName);
+  await writeFile(msgPath, Buffer.from(buffer));
+  try { return await action(msgPath); }
+  finally { await rm(tempDirectory, { recursive: true, force: true }); }
+}
+
+async function inspectSchoolHelpMessage(fileName: string, buffer: ArrayBuffer): Promise<SchoolHelpResult> {
+  if (process.platform !== 'win32') return { ok: false, message: 'La lectura de Outlook solo está disponible en Windows.' };
+  if (!isArrayBufferLike(buffer)) return { ok: false, message: 'El contenido del correo no es válido.' };
+  try {
+    const data = await withTemporaryMsg(fileName, buffer, (msgPath) => runPowerShellJson(SCHOOL_HELP_INSPECT_SCRIPT, [msgPath]));
+    if (!data || typeof data !== 'object') throw new Error('Outlook no ha devuelto datos del mensaje.');
+    const raw = data as Record<string, unknown>;
+    const attachmentValue = raw.attachments;
+    const attachmentArray = Array.isArray(attachmentValue) ? attachmentValue : attachmentValue ? [attachmentValue] : [];
+    const inspection: SchoolHelpInspection = {
+      senderName: String(raw.senderName ?? '').trim(),
+      senderEmail: String(raw.senderEmail ?? '').trim(),
+      subject: String(raw.subject ?? '').trim(),
+      receivedAt: String(raw.receivedAt ?? '').trim(),
+      attachments: attachmentArray.map((item) => {
+        const attachment = item as Record<string, unknown>;
+        return { name: String(attachment.name ?? 'adjunto'), size: Number(attachment.size ?? 0) };
+      }),
+    };
+    return { ok: true, message: 'Correo leído correctamente.', inspection };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido leer el correo de Outlook.' };
+  }
+}
+
+async function archiveSchoolHelpMessage(payload: SchoolHelpArchivePayload): Promise<SchoolHelpResult> {
+  if (process.platform !== 'win32') return { ok: false, message: 'El archivado de Outlook solo está disponible en Windows.' };
+  if (!payload || typeof payload.fileName !== 'string' || !isArrayBufferLike(payload.buffer) || typeof payload.basePath !== 'string' || typeof payload.employeeName !== 'string') {
+    return { ok: false, message: 'Datos de archivado no válidos.' };
+  }
+  const basePath = payload.basePath.trim();
+  if (!basePath) return { ok: false, message: 'Configura primero la carpeta de Ayuda escolar.' };
+  const employeeName = sanitizeFileStem(payload.employeeName);
+  try {
+    const raw = await withTemporaryMsg(payload.fileName, payload.buffer, (msgPath) => runPowerShellJson(SCHOOL_HELP_ARCHIVE_SCRIPT, [msgPath, basePath, employeeName]));
+    const list = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+    const files = list.map((item) => {
+      const file = item as Record<string, unknown>;
+      return { originalName: String(file.originalName ?? ''), savedName: String(file.savedName ?? ''), savedPath: String(file.savedPath ?? '') };
+    }).filter((file) => file.savedPath);
+    if (!files.length) return { ok: false, message: 'El correo no contiene adjuntos archivables.' };
+    return { ok: true, message: 'Documentación archivada correctamente.', files };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar la documentación.' };
+  }
+}
+
+function assertDocxPath(filePath: string): void {
+  if (path.extname(filePath).toLowerCase() !== '.docx') {
+    throw new Error('La ruta configurada debe apuntar a un archivo DOCX.');
+  }
+}
+
+function registerIpcHandlers(): void {
+  ipcMain.handle('database:status', () => ({
+    ready: false,
+    engine: 'better-sqlite3',
+    phase: 'prepared',
+  }));
+
+  ipcMain.handle('teletrabajo:select-template', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: 'Seleccionar plantilla de Teletrabajo',
+      properties: ['openFile'],
+      filters: [{ name: 'Documento Word', extensions: ['docx'] }],
+    };
+    const result = browserWindow
+      ? await dialog.showOpenDialog(browserWindow, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0] ?? null;
   });
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-      app.quit();
+  ipcMain.handle('teletrabajo:read-template', async (_event, filePath: string) => {
+    assertDocxPath(filePath);
+    const fileBuffer = await readFile(filePath);
+    return fileBuffer.buffer.slice(
+      fileBuffer.byteOffset,
+      fileBuffer.byteOffset + fileBuffer.byteLength,
+    );
+  });
+
+  ipcMain.handle('especiales:create-outlook-draft', async (_event, payload: unknown) =>
+    createOutlookDraft(payload),
+  );
+
+  ipcMain.handle('ayuda-escolar:select-folder', async (event) => {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = { title: 'Seleccionar carpeta de Ayuda escolar', properties: ['openDirectory', 'createDirectory'] };
+    const result = browserWindow ? await dialog.showOpenDialog(browserWindow, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  });
+
+  ipcMain.handle('ayuda-escolar:inspect-message', async (_event, fileName: string, buffer: ArrayBuffer) =>
+    inspectSchoolHelpMessage(fileName, buffer),
+  );
+
+  ipcMain.handle('ayuda-escolar:archive-message', async (_event, payload: SchoolHelpArchivePayload) =>
+    archiveSchoolHelpMessage(payload),
+  );
+}
+
+app.whenReady().then(() => {
+  app.setAppUserModelId('com.metro.rrll.traccion');
+  Menu.setApplicationMenu(null);
+  registerIpcHandlers();
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
     }
   });
-}
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
