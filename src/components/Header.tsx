@@ -22,6 +22,10 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
     title: 'Tareas',
     subtitle: 'Seguimiento por fase, estado, prioridad y vencimiento.',
   },
+  coordinacion: {
+    title: 'Coordinación',
+    subtitle: 'Preparación y seguimiento de reuniones de coordinación con Dirección.',
+  },
   comite: {
     title: 'Comité / Paritaria',
     subtitle: 'Gestión unificada de sesiones, puntos y clasificación por órgano.',
