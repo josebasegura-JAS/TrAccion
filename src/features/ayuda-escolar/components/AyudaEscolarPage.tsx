@@ -39,6 +39,15 @@ export function AyudaEscolarPage() {
   }, [loadConfig, loadEmployees, loadRecords]);
 
   const visibleEmployees = useMemo(() => employees.filter((employee) => !employee.deletedAt), [employees]);
+  const alphabeticEmployees = useMemo(
+    () => [...visibleEmployees].sort((first, second) =>
+      first.nombreApellidos.localeCompare(second.nombreApellidos, 'es', {
+        sensitivity: 'base',
+        numeric: true,
+      }),
+    ),
+    [visibleEmployees],
+  );
   const candidates = useMemo(
     () => (inspection ? findEmployeeCandidates(inspection.senderName, visibleEmployees, inspection.senderEmail) : []),
     [inspection, visibleEmployees],
@@ -216,7 +225,7 @@ export function AyudaEscolarPage() {
             <label className="text-xs font-semibold text-metro-muted">Persona de Plantilla
               <select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
                 <option value="">Seleccionar persona…</option>
-                {visibleEmployees.map((employee) => <option key={employee.empleado} value={employee.empleado}>{employee.empleado} · {employee.nombreApellidos}</option>)}
+                {alphabeticEmployees.map((employee) => <option key={employee.empleado} value={employee.empleado}>{employee.empleado} · {employee.nombreApellidos}</option>)}
               </select>
               {candidates.length > 1 && !selectedEmployeeId && <span className="mt-1 block text-[11px] text-amber-600">Hay varias coincidencias posibles. Selecciona manualmente.</span>}
               {willLearnEmail && <span className="mt-1 block text-[11px] text-emerald-600">Al archivar se añadirá {incomingEmail} a la ficha de Plantilla.</span>}
