@@ -1,79 +1,67 @@
-export interface SchoolHelpRecord {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  senderName: string;
-  senderEmail: string;
-  subject: string;
-  receivedAt: string;
-  archivedAt: string;
-  files: SchoolHelpArchivedFile[];
-}
+import type { Employee } from '../../plantilla/domain/employee';
 
-export interface SchoolHelpArchivedFile {
+export interface SchoolHelpSavedFile {
   originalName: string;
   savedName: string;
   savedPath: string;
 }
 
-export interface OutlookMessageInspection {
-  senderName: string;
+export interface SchoolHelpRecord {
+  id: string;
+  empleado: string;
+  nombre: string;
   senderEmail: string;
   subject: string;
   receivedAt: string;
-  attachments: Array<{ name: string; size: number }>;
+  archivedAt: string;
+  files: SchoolHelpSavedFile[];
 }
 
-export interface SchoolHelpArchiveResult {
-  ok: boolean;
-  message: string;
-  inspection?: OutlookMessageInspection;
-  files?: SchoolHelpArchivedFile[];
+export function normalizeSchoolHelpEmail(value: string): string {
+  return value.trim().toLowerCase();
 }
 
-export function normalizePersonName(value: string): string {
+export function normalizeSchoolHelpName(value: string): string {
   return value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
-    .replace(/\s+/g, ' ');
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(' ');
 }
 
-export function normalizeEmail(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-export function findEmployeeCandidates<T extends { empleado: string; nombreApellidos: string; email?: string; deletedAt: string | null }>(
+export function findSchoolHelpEmployeeCandidates(
+  employees: Employee[],
   senderName: string,
-  employees: T[],
-  senderEmail = '',
-): T[] {
-  const normalizedSenderEmail = normalizeEmail(senderEmail);
-  if (normalizedSenderEmail) {
-    const emailMatches = employees.filter(
-      (employee) => !employee.deletedAt && normalizeEmail(employee.email ?? '') === normalizedSenderEmail,
-    );
-    if (emailMatches.length) return emailMatches;
+  senderEmail: string,
+): Employee[] {
+  const active = employees.filter((employee) => !employee.deletedAt);
+  const email = normalizeSchoolHelpEmail(senderEmail);
+  if (email) {
+    const byEmail = active.filter((employee) => normalizeSchoolHelpEmail(employee.email) === email);
+    if (byEmail.length) return byEmail;
   }
 
-  const sender = normalizePersonName(senderName);
-  if (!sender) return [];
-  const senderTokens = new Set(sender.split(' ').filter((token) => token.length > 1));
+  const name = normalizeSchoolHelpName(senderName);
+  if (!name) return [];
+  return active.filter((employee) => normalizeSchoolHelpName(employee.nombreApellidos) === name);
+}
 
-  return employees
-    .filter((employee) => !employee.deletedAt)
-    .map((employee) => {
-      const employeeName = normalizePersonName(employee.nombreApellidos);
-      const employeeTokens = new Set(employeeName.split(' ').filter((token) => token.length > 1));
-      const common = [...senderTokens].filter((token) => employeeTokens.has(token)).length;
-      const coverage = common / Math.max(1, Math.min(senderTokens.size, employeeTokens.size));
-      const exact = sender === employeeName;
-      return { employee, score: exact ? 2 : coverage };
-    })
-    .filter(({ score }) => score >= 0.66)
-    .sort((a, b) => b.score - a.score)
-    .filter((item, index, all) => index === 0 || item.score >= all[0].score - 0.15)
-    .map(({ employee }) => employee);
+export function countSchoolHelpFiles(records: SchoolHelpRecord[], empleado: string): number {
+  return records
+    .filter((record) => record.empleado === empleado)
+    .reduce((total, record) => total + record.files.length, 0);
+}
+
+export function latestSchoolHelpRecord(
+  records: SchoolHelpRecord[],
+  empleado: string,
+): SchoolHelpRecord | null {
+  const matches = records.filter((record) => record.empleado === empleado);
+  if (!matches.length) return null;
+  return [...matches].sort((a, b) => b.archivedAt.localeCompare(a.archivedAt))[0] ?? null;
 }
