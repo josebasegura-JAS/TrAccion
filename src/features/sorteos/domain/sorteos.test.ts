@@ -21,10 +21,10 @@ function employee(overrides: Partial<Employee> = {}): Employee {
   return {
     empleado: '1001',
     nombreApellidos: 'Ana García López',
-    email: '',
     puestoNomina: '',
     puestoOrganizativo: '',
     residencia: '',
+    unidad: '',
     nivelRetributivo: '',
     sexo: '',
     calle: '',
