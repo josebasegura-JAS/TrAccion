@@ -8,11 +8,12 @@ import { rowsToEmployeeDrafts } from './importExcel';
 const existingEmployee = hydrateEmployee({
   empleado: '100',
   nombreApellidos: 'Ane Bilbao',
-  email: 'ane.bilbao@empresa.es',
   puestoNomina: 'Técnica RRLL',
   puestoOrganizativo: 'Gestión Laboral',
   residencia: 'Oficinas Centrales',
   nivelRetributivo: '12',
+  direccionOrganizativa: 'Capital Humano',
+  antiguedadPuesto: '2020-01-01',
   sexo: 'F',
   calle: 'Gran Vía',
   numero: '12',
@@ -69,9 +70,11 @@ describe('plantilla import', () => {
           'Puesto Nómina',
           'Puesto organización',
           'Centro de trabajo',
+          'Unidad',
           'Grupo retributivo',
           'Género',
           'Dirección',
+          'Calle',
           'Número',
           'Planta',
           'Código Postal',
@@ -85,8 +88,10 @@ describe('plantilla import', () => {
           'Técnico RRLL',
           'Gestión Laboral',
           'Oficinas Centrales',
+          'Relaciones Laborales',
           '12',
           'M',
+          'Capital Humano',
           'Gran Vía',
           '14',
           '2ºB',
@@ -103,8 +108,10 @@ describe('plantilla import', () => {
         puestoNomina: 'Técnico RRLL',
         puestoOrganizativo: 'Gestión Laboral',
         residencia: 'Oficinas Centrales',
+        unidad: 'Relaciones Laborales',
         nivelRetributivo: '12',
         sexo: 'M',
+        direccionOrganizativa: 'Capital Humano',
         calle: 'Gran Vía',
         numero: '14',
         piso: '2ºB',
@@ -114,6 +121,26 @@ describe('plantilla import', () => {
         nif: 'es 44555111 a',
       }),
     ]);
+  });
+
+  it('importa Teléfono 1 y Teléfono 2 desde Excel', () => {
+    expect(
+      rowsToEmployeeDrafts([
+        ['Empleado', 'Nombre y apellidos', 'Teléfono 1', 'Teléfono 2'],
+        ['101', 'Iker Bilbao', '944123456', '600123456'],
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        empleado: '101',
+        nombreApellidos: 'Iker Bilbao',
+        telefono1: '944123456',
+        telefono2: '600123456',
+      }),
+    ]);
+  });
+
+  it('hidrata registros antiguos sin teléfonos asignando valores vacíos', () => {
+    expect(existingEmployee).toMatchObject({ telefono1: '', telefono2: '' });
   });
 
   it('ignora columnas desconocidas y descarta filas sin empleado', () => {
@@ -147,6 +174,50 @@ describe('plantilla import', () => {
     ]);
   });
 
+  it('reconoce antigüedad a secas y convierte fechas numéricas de Excel', () => {
+    expect(
+      rowsToEmployeeDrafts([
+        ['empleado', 'antigüedad'],
+        ['100', '45180'],
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        empleado: '100',
+        antiguedadPuesto: '2023-09-11',
+      }),
+    ]);
+  });
+
+  it('actualiza solo antigüedad cuando el fichero trae empleado y antigüedad sin vaciar el resto de datos', async () => {
+    const file: File = new NodeFile(
+      ['empleado;antigüedad\n100;2023-09-11\n999;2023-10-01'],
+      'antiguedad.csv',
+      { type: 'text/csv' },
+    );
+
+    const result = await useEmployeeStore.getState().importExcel(file);
+
+    expect(result).toEqual({
+      totalRows: 2,
+      updated: 1,
+      created: 0,
+      ignored: 1,
+      deactivated: 0,
+      reactivated: 0,
+      unchanged: 0,
+      mode: 'antiguedadPuesto',
+    });
+    expect(useEmployeeStore.getState().employees).toEqual([
+      expect.objectContaining({
+        empleado: '100',
+        nombreApellidos: 'Ane Bilbao',
+        puestoNomina: 'Técnica RRLL',
+        residencia: 'Oficinas Centrales',
+        antiguedadPuesto: '2023-09-11',
+      }),
+    ]);
+  });
+
   it('actualiza por empleado al importar sin duplicar registros y recalcula derivados', async () => {
     const file: File = new NodeFile(
       ['empleado;nombreApellidos;residencia;nif\n100;Ane Bilbao Actualizada;Sopela Taller;72451233H'],
@@ -162,7 +233,6 @@ describe('plantilla import', () => {
       expect.objectContaining({
         empleado: '100',
         nombreApellidos: 'Ane Bilbao Actualizada',
-        email: 'ane.bilbao@empresa.es',
         residencia: 'Sopela Taller',
         residenciaEus: 'Sopela Tailerra',
         dni: '72451233H',
