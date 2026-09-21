@@ -309,6 +309,15 @@ contextBridge.exposeInMainWorld('traccion', {
   createOutlookDraft,
   createOutlookCalendar,
   parseOutlookMsg,
+  selectSchoolHelpFolder: () => ipcRenderer.invoke('ayuda-escolar:select-folder'),
+  inspectSchoolHelpMessage: (fileName: string, buffer: ArrayBuffer) =>
+    ipcRenderer.invoke('ayuda-escolar:inspect-message', fileName, buffer),
+  archiveSchoolHelpMessage: (payload: {
+    fileName: string;
+    buffer: ArrayBuffer;
+    basePath: string;
+    employeeName: string;
+  }) => ipcRenderer.invoke('ayuda-escolar:archive-message', payload),
   extractDocxText: (payload: ArrayBuffer) => ipcRenderer.invoke('docx:extract-text', payload),
 });
 
