@@ -41,10 +41,23 @@ export function normalizePersonName(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
-export function findEmployeeCandidates<T extends { empleado: string; nombreApellidos: string; deletedAt: string | null }>(
+export function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function findEmployeeCandidates<T extends { empleado: string; nombreApellidos: string; email?: string; deletedAt: string | null }>(
   senderName: string,
   employees: T[],
+  senderEmail = '',
 ): T[] {
+  const normalizedSenderEmail = normalizeEmail(senderEmail);
+  if (normalizedSenderEmail) {
+    const emailMatches = employees.filter(
+      (employee) => !employee.deletedAt && normalizeEmail(employee.email ?? '') === normalizedSenderEmail,
+    );
+    if (emailMatches.length) return emailMatches;
+  }
+
   const sender = normalizePersonName(senderName);
   if (!sender) return [];
   const senderTokens = new Set(sender.split(' ').filter((token) => token.length > 1));

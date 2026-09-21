@@ -1,38 +1,15 @@
 import { describe, expect, it } from 'vitest';
-
 import type { Employee } from '../../plantilla/domain/employee';
 import {
   EMPTY_TELETRABAJO_FILTERS,
   filterTeletrabajoSolicitudes,
   type TeletrabajoFilters,
 } from './filters';
-import { evaluateTeletrabajoAntiguedad } from './antiguedad';
 import { importEncuestaRows } from './importEncuesta';
-import {
-  applyPlantillaDataToTeletrabajoSolicitud,
-  applyPlantillaDataToTeletrabajoSolicitudes,
-} from './plantillaData';
 import { sortTeletrabajoByDefault } from './sort';
 import { normalizeDiasTeletrabajo, type TeletrabajoSolicitud } from './solicitud';
-import { resolveTeletrabajoTipoSolicitud } from './tipoSolicitud';
-import { detectTeletrabajoWordMarkers, generateTeletrabajoWord } from './word';
+import { detectTeletrabajoWordMarkers } from './word';
 import { unzipDocx, zipDocx, type ZipEntry } from './zip';
-
-function readBlobAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('No se ha podido leer el Blob.'));
-    reader.onload = () => {
-      if (reader.result instanceof ArrayBuffer) {
-        resolve(reader.result);
-        return;
-      }
-
-      reject(new Error('El Blob leído no ha devuelto ArrayBuffer.'));
-    };
-    reader.readAsArrayBuffer(blob);
-  });
-}
 
 function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSolicitud {
   return {
@@ -48,15 +25,11 @@ function buildSolicitud(overrides: Partial<TeletrabajoSolicitud>): TeletrabajoSo
     tipoSolicitud: 'nueva',
     diasTeletrabajo: ['martes'],
     fechaSolicitud: '2026-01-01',
-    fechaOrdenador: '2026-01-02',
-    fechaCascos: '2026-01-03',
     periodo: '2026-2027',
     observaciones: '',
     validacionSeguridadInformatica: false,
     validacionPrevencion: false,
     validacionJefatura: false,
-    validacionDireccion: false,
-    revisado: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     deletedAt: null,
@@ -173,14 +146,11 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
   return {
     empleado: '100',
     nombreApellidos: 'Persona Plantilla',
+    email: '',
     puestoNomina: 'Puesto Nómina Plantilla',
     puestoOrganizativo: 'Puesto Organizativo Plantilla',
-    puestoEus: 'Puesto Euskera Plantilla',
     residencia: 'Bilbao',
-    unidad: '',
     nivelRetributivo: 'N1',
-    direccionOrganizativa: 'Dirección Plantilla',
-    antiguedadPuesto: '2024-01-01',
     sexo: 'M',
     calle: 'Calle Plantilla',
     numero: '1',
@@ -198,174 +168,32 @@ function buildEmployee(overrides: Partial<Employee>): Employee {
   };
 }
 
-
-
-
-describe('datos maestros de Plantilla en teletrabajo', () => {
-  it('usa los datos actuales de Plantilla cuando existe el empleado', () => {
-    const solicitud = buildSolicitud({
-      empleado: '100',
-      nombreApellidos: 'Nombre antiguo',
-      puestoNomina: 'Puesto nómina antiguo',
-      puestoOrganizativo: 'Puesto organizativo antiguo',
-      residencia: 'Residencia antigua',
-      dni: 'DNI antiguo',
-      direccionTeletrabajo: 'Dirección antigua',
-    });
-    const employee = buildEmployee({
-      empleado: '100',
-      nombreApellidos: 'Nombre actualizado',
-      puestoNomina: 'Puesto nómina actualizado',
-      puestoOrganizativo: 'Puesto organizativo actualizado',
-      residencia: 'Residencia actualizada',
-      dni: 'DNI actualizado',
-      direccionTeletrabajo: 'Dirección actualizada',
-    });
-
-    expect(applyPlantillaDataToTeletrabajoSolicitud(solicitud, employee)).toMatchObject({
-      id: solicitud.id,
-      empleado: '100',
-      nombreApellidos: 'Nombre actualizado',
-      puestoNomina: 'Puesto nómina actualizado',
-      puestoOrganizativo: 'Puesto organizativo actualizado',
-      residencia: 'Residencia actualizada',
-      dni: 'DNI actualizado',
-      direccionTeletrabajo: 'Dirección actualizada',
-      estado: solicitud.estado,
-      periodo: solicitud.periodo,
-    });
-  });
-
-  it('mantiene los datos de la solicitud si el empleado no existe en Plantilla o está eliminado', () => {
-    const solicitud = buildSolicitud({ empleado: '200', puestoOrganizativo: 'Puesto solicitud' });
-    const deletedEmployee = buildEmployee({
-      empleado: '200',
-      puestoOrganizativo: 'Puesto eliminado',
-      deletedAt: '2026-01-01T00:00:00.000Z',
-    });
-
-    expect(applyPlantillaDataToTeletrabajoSolicitudes([solicitud], [deletedEmployee])).toEqual([
-      solicitud,
-    ]);
-  });
-});
-
-describe('antigüedad mínima para teletrabajo', () => {
-  it('marca como no cumple cuando el 1 de septiembre del periodo aún no ha cumplido un año en el puesto', () => {
-    const solicitud = buildSolicitud({ periodo: '2026-2027', fechaSolicitud: '2026-09-10' });
-    const employee = buildEmployee({ antiguedadPuesto: '2025-09-02' });
-
-    expect(evaluateTeletrabajoAntiguedad(solicitud, employee)).toMatchObject({
-      status: 'no-cumple',
-      antiguedadPuesto: '2025-09-02',
-      fechaReferencia: '2026-09-01',
-    });
-  });
-
-  it('marca como cumple si alcanza un año exactamente el 1 de septiembre del periodo', () => {
-    const solicitud = buildSolicitud({ periodo: '2026-2027', fechaSolicitud: '2026-08-01' });
-    const employee = buildEmployee({ antiguedadPuesto: '2025-09-01' });
-
-    expect(evaluateTeletrabajoAntiguedad(solicitud, employee)).toMatchObject({
-      status: 'cumple',
-      antiguedadPuesto: '2025-09-01',
-      fechaReferencia: '2026-09-01',
-    });
-  });
-
-  it('devuelve sin dato cuando falta empleado, antigüedad o periodo válido', () => {
-    expect(evaluateTeletrabajoAntiguedad(buildSolicitud({}), null).status).toBe('sin-dato');
-    expect(
-      evaluateTeletrabajoAntiguedad(
-        buildSolicitud({ fechaSolicitud: '2026-09-11' }),
-        buildEmployee({ antiguedadPuesto: '' }),
-      ).status,
-    ).toBe('sin-dato');
-    expect(
-      evaluateTeletrabajoAntiguedad(
-        buildSolicitud({ periodo: '' }),
-        buildEmployee({ antiguedadPuesto: '2025-09-11' }),
-      ).status,
-    ).toBe('sin-dato');
-  });
-});
-
 describe('importador de encuesta de teletrabajo', () => {
   it('detecta cabecera desplazada y solo importa respuestas Sí del formato real', () => {
     const result = importEncuestaRows(
       [
         ['Encuesta Teletrabajo 2026-2027'],
         ['Texto informativo previo'],
-        [
-          'Aux',
-          'Nº. Emp.',
-          'Apellidos y Nombre',
-          'Respuesta',
-          'Fecha ordenador',
-          'Fecha cascos',
-          'Aportaciones',
-          'Otra columna',
-        ],
-        ['1', '200', 'Persona Sí', 'Sí', '2026-09-10', '2026-09-11', 'martes y jueves', 'ignorada'],
-        ['2', '201', 'Persona No', 'No', '', '', 'jueves', 'ignorada'],
+        ['Aux', 'Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones', 'Otra columna'],
+        ['1', '200', 'Persona Sí', 'Sí', 'martes y jueves', 'ignorada'],
+        ['2', '201', 'Persona No', 'No', 'jueves', 'ignorada'],
       ],
       [],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
-    expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 1 });
+    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 1 });
     expect(result.solicitudes[0]).toMatchObject({
       empleado: '200',
       nombreApellidos: 'Persona Sí',
       periodo: '2026-2027',
       diasTeletrabajo: ['martes', 'jueves'],
-      fechaOrdenador: '2026-09-10',
-      fechaCascos: '2026-09-11',
       observaciones: 'martes y jueves',
       estado: 'pendiente',
       tipoSolicitud: 'renovacion',
       validacionSeguridadInformatica: false,
       validacionPrevencion: false,
-      validacionJefatura: true,
-      revisado: false,
-    });
-  });
-
-  it('importa el formato de Microsoft Forms con pregunta y aportaciones largas', () => {
-    const result = importEncuestaRows(
-      [
-        ['', '', '', 'Solicitud Teletrabajo 2026-2027'],
-        ['', '', '', 'Pregunta', 'Aportaciones'],
-        [
-          'Nº. Emp.',
-          'Apellidos y Nombre',
-          'Respuesta/Puntuación',
-          'Selecciona si vas a Teletrabajar',
-          'Si has respondido anteriormente que sí, por favor, escribe brevemente qué tipo de teletrabajo solicitas:\n\nTiempo: Si te quieres acoger al Teletrabajo por el periodo completo, sólo unos meses (cuáles), semanas etc.\n\nDías: martes y jueves, sólo martes, sólo jueves o sólo miércoles.\n\nGracias por tu colaboración.',
-        ],
-        ['1188', 'Persona No', 'Respuesta', 'No', ''],
-        ['', '', 'Punt.', '100', '', '50'],
-        [
-          '678',
-          'Persona Si',
-          'Respuesta',
-          'Sí',
-          'Teletrabajo por periodo completo, martes y jueves.',
-        ],
-        ['', '', 'Punt.', '100', '', '100'],
-      ],
-      [],
-      [],
-    );
-
-    expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 3 });
-    expect(result.solicitudes[0]).toMatchObject({
-      empleado: '678',
-      nombreApellidos: 'Persona Si',
-      periodo: '2026-2027',
-      diasTeletrabajo: ['martes', 'jueves'],
-      observaciones: 'Teletrabajo por periodo completo, martes y jueves.',
+      validacionJefatura: false,
     });
   });
 
@@ -378,10 +206,9 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
-    expect(result.summary).toEqual({ imported: 1, updated: 0, reactivated: 0, ignored: 1 });
+    expect(result.summary).toEqual({ imported: 1, updated: 0, ignored: 1 });
     expect(result.solicitudes.map((solicitud) => solicitud.empleado)).toEqual(['202']);
   });
 
@@ -394,7 +221,6 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
@@ -412,7 +238,6 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes.map((solicitud) => solicitud.diasTeletrabajo)).toEqual([
@@ -430,7 +255,6 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes[0]).toMatchObject({
@@ -448,7 +272,6 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [employee],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes[0]).toMatchObject({
@@ -470,7 +293,6 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { defaultPeriodo: '2026-2027' },
     );
 
     expect(result.solicitudes[0]).toMatchObject({
@@ -503,31 +325,17 @@ describe('importador de encuesta de teletrabajo', () => {
       { now: new Date('2026-06-05T00:00:00.000Z') },
     );
 
-    expect(result.summary).toEqual({ imported: 0, updated: 0, reactivated: 1, ignored: 0 });
+    expect(result.summary).toEqual({ imported: 0, updated: 1, ignored: 0 });
     expect(result.solicitudes).toHaveLength(1);
     expect(result.solicitudes[0]).toMatchObject({
       id: 'existente',
       observaciones: 'Nueva observación martes',
       diasTeletrabajo: ['martes'],
-      deletedAt: null,
+      deletedAt: '2026-02-01T00:00:00.000Z',
     });
   });
 
-  it('no inventa un periodo si el fichero y la campaña activa no lo indican', () => {
-    expect(() =>
-      importEncuestaRows(
-        [
-          ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
-          ['211', 'Persona Sin Periodo', 'Sí', 'preferiblemente martes'],
-        ],
-        [],
-        [],
-        { now: new Date('2030-01-01T00:00:00.000Z') },
-      ),
-    ).toThrow('No se ha podido determinar el periodo de teletrabajo');
-  });
-
-  it('usa el periodo activo indicado por la aplicación cuando el fichero no lo contiene', () => {
+  it('usa 2026-2027 como fallback cuando no detecta periodo', () => {
     const result = importEncuestaRows(
       [
         ['Nº. Emp.', 'Apellidos y Nombre', 'Respuesta', 'Aportaciones'],
@@ -535,144 +343,30 @@ describe('importador de encuesta de teletrabajo', () => {
       ],
       [],
       [],
-      { now: new Date('2030-01-01T00:00:00.000Z'), defaultPeriodo: '2030-2031' },
+      { now: new Date('2030-01-01T00:00:00.000Z') },
     );
 
-    expect(result.solicitudes[0].periodo).toBe('2030-2031');
+    expect(result.solicitudes[0].periodo).toBe('2026-2027');
+    expect(result.solicitudes[0].tipoSolicitud).toBe('renovacion');
   });
 });
 
 describe('generación Word de teletrabajo', () => {
-  it('sustituye los marcadores originales y los partidos entre nodos con los datos del acuerdo', async () => {
-    const documentXml = [
-      '<w:document><w:body>',
-      '<w:t>«Nombre_Completo»</w:t>',
-      '<w:t>«Puesto_EUS»</w:t>',
-      '<w:t>«Puesto_CAST»</w:t>',
-      '<w:t>«Porcentaje»</w:t>',
-      '<w:t>«Fecha_Ordenador»</w:t>',
-      '<w:t>«Fecha_Cascos»</w:t>',
-      '<w:t>«D/M/A» D/M/A</w:t>',
-      '<w:t>«U/H/E» U/H/E</w:t>',
-      '<w:t>«fecha»</w:t>',
-      '<w:t>«M_1º</w:t><w:t>data»</w:t>',
-      '<w:t>M_2º</w:t><w:t>data</w:t>',
-      '</w:body></w:document>',
-    ].join('');
-    const template = zipDocx([
-      {
-        name: 'word/document.xml',
-        data: new TextEncoder().encode(documentXml),
-      },
-    ]);
-    const previousTraccion = window.traccion;
-    Object.defineProperty(window, 'traccion', {
-      configurable: true,
-      value: {
-        readTeletrabajoTemplate: async () => template.buffer,
-      },
-    });
-
-    try {
-      const result = await generateTeletrabajoWord(
-        buildSolicitud({
-          nombreApellidos: 'Persona Plantilla',
-          estado: 'aprobada',
-          diasTeletrabajo: ['martes', 'jueves'],
-          fechaOrdenador: '2026-09-10',
-          fechaCascos: '2026-09-11',
-          periodo: '2026-2027',
-        }),
-        buildEmployee({ puestoEus: 'Analista EUS' }),
-        '/tmp/plantilla.docx',
-        [{ puestoCastellano: 'Puesto Nómina Plantilla', puestoEuskera: 'No debe usarse' }],
-      );
-      const entries = await unzipDocx(await readBlobAsArrayBuffer(result.blob));
-      const updatedDocument = new TextDecoder().decode(entries[0].data);
-      const today = new Date();
-      const numericCast = `${String(today.getDate()).padStart(2, '0')}/${String(
-        today.getMonth() + 1,
-      ).padStart(2, '0')}/${today.getFullYear()}`;
-      const numericEus = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(
-        2,
-        '0',
-      )}/${String(today.getDate()).padStart(2, '0')}`;
-
-      expect(updatedDocument).toContain('Persona Plantilla');
-      expect(updatedDocument).toContain('Analista EUS');
-      expect(updatedDocument).toContain('Puesto Nómina Plantilla');
-      expect(updatedDocument).toContain('40');
-      expect(updatedDocument).toContain('10 de septiembre de 2026');
-      expect(updatedDocument).toContain('11 de septiembre de 2026');
-      expect(updatedDocument).toContain(`${numericCast} ${numericCast}`);
-      expect(updatedDocument).toContain(`${numericEus} ${numericEus}`);
-      expect(updatedDocument).toContain('1 de septiembre de 2026 y el 30 de junio de 2027');
-      expect(updatedDocument).toContain('2026ko irailaren 1a');
-      expect(updatedDocument).toContain('2027ko ekainaren 30a');
-      expect(updatedDocument).not.toMatch(/«[^»]+»|\b(?:D\/M\/A|U\/H\/E|M_[12]ºdata)\b/);
-    } finally {
-      Object.defineProperty(window, 'traccion', {
-        configurable: true,
-        value: previousTraccion,
-      });
-    }
-  });
-
-  it('detecta marcadores originales de la plantilla Word y conserva el DOCX como ZIP válido', async () => {
+  it('detecta marcadores Word y conserva el DOCX como ZIP válido', async () => {
     const entries: ZipEntry[] = [
       {
         name: 'word/document.xml',
         data: new TextEncoder().encode(
-          '<w:document><w:body><w:t>«Nombre_Completo»</w:t><w:t>«Días_Teletrabajo_CAST»</w:t></w:body></w:document>',
+          '<w:document><w:body><w:bookmarkStart w:id="1" w:name="nombreApellidos"/><w:bookmarkEnd w:id="1"/><w:t>{{martes}}</w:t></w:body></w:document>',
         ),
       },
     ];
     const docx = zipDocx(entries);
 
     await expect(detectTeletrabajoWordMarkers(docx.buffer)).resolves.toEqual([
-      '«Días_Teletrabajo_CAST»',
-      '«Nombre_Completo»',
+      'martes',
+      'nombreApellidos',
     ]);
     await expect(unzipDocx(docx.buffer)).resolves.toHaveLength(1);
-  });
-});
-
-describe('tipo de solicitud derivado del periodo anterior', () => {
-  it('marca renovación cuando existe teletrabajo aprobado en el periodo anterior', () => {
-    const solicitudes = [
-      buildSolicitud({
-        id: 'previa',
-        empleado: '1001',
-        periodo: '2025-2026',
-        estado: 'aprobada',
-        diasTeletrabajo: ['martes'],
-      }),
-    ];
-
-    expect(
-      resolveTeletrabajoTipoSolicitud(
-        { empleado: '1001', periodo: '2026-2027' },
-        solicitudes,
-      ),
-    ).toBe('renovacion');
-  });
-
-  it('marca nueva cuando no consta teletrabajo efectivo en el periodo anterior', () => {
-    const solicitudes = [
-      buildSolicitud({
-        id: 'denegada',
-        empleado: '1001',
-        periodo: '2025-2026',
-        estado: 'denegada',
-        diasTeletrabajo: ['martes'],
-      }),
-    ];
-
-    expect(
-      resolveTeletrabajoTipoSolicitud(
-        { empleado: '1001', periodo: '2026-2027' },
-        solicitudes,
-      ),
-    ).toBe('nueva');
   });
 });

@@ -4,6 +4,7 @@ import { useConfiguracionStore } from '../../configuracion/store/useConfiguracio
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
   findEmployeeCandidates,
+  normalizeEmail,
   type OutlookMessageInspection,
   type SchoolHelpArchiveResult,
 } from '../domain/ayudaEscolar';
@@ -15,6 +16,7 @@ const buttonClass =
 export function AyudaEscolarPage() {
   const employees = useEmployeeStore((state) => state.employees);
   const loadEmployees = useEmployeeStore((state) => state.load);
+  const updateEmployeeEmail = useEmployeeStore((state) => state.updateEmail);
   const records = useAyudaEscolarStore((state) => state.records);
   const loadRecords = useAyudaEscolarStore((state) => state.load);
   const addRecord = useAyudaEscolarStore((state) => state.add);
@@ -38,7 +40,7 @@ export function AyudaEscolarPage() {
 
   const visibleEmployees = useMemo(() => employees.filter((employee) => !employee.deletedAt), [employees]);
   const candidates = useMemo(
-    () => (inspection ? findEmployeeCandidates(inspection.senderName, visibleEmployees) : []),
+    () => (inspection ? findEmployeeCandidates(inspection.senderName, visibleEmployees, inspection.senderEmail) : []),
     [inspection, visibleEmployees],
   );
 
@@ -46,6 +48,20 @@ export function AyudaEscolarPage() {
     if (candidates.length === 1) setSelectedEmployeeId(candidates[0].empleado);
     else if (candidates.length !== 1) setSelectedEmployeeId('');
   }, [candidates]);
+
+  const selectedEmployee = useMemo(
+    () => visibleEmployees.find((employee) => employee.empleado === selectedEmployeeId) ?? null,
+    [selectedEmployeeId, visibleEmployees],
+  );
+  const incomingEmail = normalizeEmail(inspection?.senderEmail ?? '');
+  const selectedEmail = normalizeEmail(selectedEmployee?.email ?? '');
+  const emailOwner = useMemo(
+    () => incomingEmail ? visibleEmployees.find((employee) => normalizeEmail(employee.email ?? '') === incomingEmail) ?? null : null,
+    [incomingEmail, visibleEmployees],
+  );
+  const emailConflict = Boolean(incomingEmail && selectedEmployee && selectedEmail && selectedEmail !== incomingEmail);
+  const duplicateEmailConflict = Boolean(emailOwner && selectedEmployee && emailOwner.empleado !== selectedEmployee.empleado);
+  const willLearnEmail = Boolean(incomingEmail && selectedEmployee && !selectedEmail && !duplicateEmailConflict);
 
   const employeeRows = useMemo(() => {
     const latestByEmployee = new Map<string, (typeof records)[number]>();
@@ -57,7 +73,8 @@ export function AyudaEscolarPage() {
       .filter((employee) =>
         !normalizedQuery ||
         employee.empleado.toLowerCase().includes(normalizedQuery) ||
-        employee.nombreApellidos.toLowerCase().includes(normalizedQuery),
+        employee.nombreApellidos.toLowerCase().includes(normalizedQuery) ||
+        (employee.email ?? '').toLowerCase().includes(normalizedQuery),
       )
       .map((employee) => ({ employee, latest: latestByEmployee.get(employee.empleado), count: records.filter((record) => record.employeeId === employee.empleado).reduce((sum, record) => sum + record.files.length, 0) }));
   }, [query, records, visibleEmployees]);
@@ -95,8 +112,13 @@ export function AyudaEscolarPage() {
 
   const archive = async () => {
     if (!messageFile || !inspection || !selectedEmployeeId || !basePath) return;
-    const employee = visibleEmployees.find((item) => item.empleado === selectedEmployeeId);
+    const employee = selectedEmployee;
     if (!employee || !window.traccion?.archiveSchoolHelpMessage) return;
+    if (duplicateEmailConflict) {
+      setStatus(`El correo ${inspection.senderEmail} ya está asociado en Plantilla a ${emailOwner?.nombreApellidos}. Revisa la persona antes de continuar.`);
+      setIsError(true);
+      return;
+    }
     setIsBusy(true);
     setStatus('Guardando documentación…');
     setIsError(false);
@@ -119,7 +141,10 @@ export function AyudaEscolarPage() {
         archivedAt: new Date().toISOString(),
         files: result.files,
       });
-      setStatus(`${result.files.length} archivo${result.files.length === 1 ? '' : 's'} guardado${result.files.length === 1 ? '' : 's'} correctamente.`);
+      if (willLearnEmail) updateEmployeeEmail(employee.empleado, incomingEmail);
+      const learnedSuffix = willLearnEmail ? ` Correo ${incomingEmail} incorporado a Plantilla.` : '';
+      const conflictSuffix = emailConflict ? ` El correo de Plantilla (${employee.email}) se mantiene sin cambios.` : '';
+      setStatus(`${result.files.length} archivo${result.files.length === 1 ? '' : 's'} guardado${result.files.length === 1 ? '' : 's'} correctamente.${learnedSuffix}${conflictSuffix}`);
       setMessageFile(null);
       setInspection(null);
       setSelectedEmployeeId('');
@@ -186,8 +211,11 @@ export function AyudaEscolarPage() {
                 {visibleEmployees.map((employee) => <option key={employee.empleado} value={employee.empleado}>{employee.empleado} · {employee.nombreApellidos}</option>)}
               </select>
               {candidates.length > 1 && !selectedEmployeeId && <span className="mt-1 block text-[11px] text-amber-600">Hay varias coincidencias posibles. Selecciona manualmente.</span>}
+              {willLearnEmail && <span className="mt-1 block text-[11px] text-emerald-600">Al archivar se añadirá {incomingEmail} a la ficha de Plantilla.</span>}
+              {emailConflict && <span className="mt-1 block text-[11px] text-amber-600">La ficha ya contiene {selectedEmployee?.email}. No se sobrescribirá automáticamente.</span>}
+              {duplicateEmailConflict && <span className="mt-1 block text-[11px] text-red-600">Este correo ya pertenece a {emailOwner?.nombreApellidos}. Revisa la selección.</span>}
             </label>
-            <button className={buttonClass} disabled={isBusy || !basePath || !selectedEmployeeId || inspection.attachments.length === 0} onClick={() => void archive()} type="button"><FileCheck2 size={16}/> Archivar documentación</button>
+            <button className={buttonClass} disabled={isBusy || !basePath || !selectedEmployeeId || inspection.attachments.length === 0 || duplicateEmailConflict} onClick={() => void archive()} type="button"><FileCheck2 size={16}/> Archivar documentación</button>
             <div className="lg:col-span-3 text-xs text-metro-muted">Asunto: <span className="font-medium text-metro-text">{inspection.subject || 'Sin asunto'}</span> · Adjuntos: <span className="font-medium text-metro-text">{inspection.attachments.length}</span>{!basePath && <span className="ml-2 font-semibold text-metro-red">Configura primero la carpeta en Ajustes.</span>}</div>
           </div>
         )}

@@ -1,14 +1,11 @@
 export interface EmployeePersistedFields {
   empleado: string;
   nombreApellidos: string;
+  email: string;
   puestoNomina: string;
   puestoOrganizativo: string;
-  puestoEus: string;
   residencia: string;
-  unidad: string;
   nivelRetributivo: string;
-  direccionOrganizativa: string;
-  antiguedadPuesto: string;
   sexo: string;
   calle: string;
   numero: string;
@@ -17,8 +14,6 @@ export interface EmployeePersistedFields {
   poblacion: string;
   provincia: string;
   nif: string;
-  telefono1: string;
-  telefono2: string;
 }
 
 export interface EmployeeDerivedFields {
@@ -39,14 +34,11 @@ export type EmployeeField = keyof EmployeePersistedFields;
 export const EMPLOYEE_FIELDS: EmployeeField[] = [
   'empleado',
   'nombreApellidos',
+  'email',
   'puestoNomina',
   'puestoOrganizativo',
-  'puestoEus',
   'residencia',
-  'unidad',
   'nivelRetributivo',
-  'direccionOrganizativa',
-  'antiguedadPuesto',
   'sexo',
   'calle',
   'numero',
@@ -55,21 +47,16 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
   'poblacion',
   'provincia',
   'nif',
-  'telefono1',
-  'telefono2',
 ];
 
 export const EMPTY_EMPLOYEE_DRAFT: EmployeeDraft = {
   empleado: '',
   nombreApellidos: '',
+  email: '',
   puestoNomina: '',
   puestoOrganizativo: '',
-  puestoEus: '',
   residencia: '',
-  unidad: '',
   nivelRetributivo: '',
-  direccionOrganizativa: '',
-  antiguedadPuesto: '',
   sexo: '',
   calle: '',
   numero: '',
@@ -78,6 +65,4 @@ export const EMPTY_EMPLOYEE_DRAFT: EmployeeDraft = {
   poblacion: '',
   provincia: '',
   nif: '',
-  telefono1: '',
-  telefono2: '',
 };
