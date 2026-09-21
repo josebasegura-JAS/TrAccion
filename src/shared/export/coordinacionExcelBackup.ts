@@ -231,7 +231,7 @@ function buildDirectionSheet(workbook: ExcelWorkbook, meetings: CoordinationMeet
   sheet.getRow(tableStartRow).height = 25;
   sheet.autoFilter = { from: `A${tableStartRow}`, to: `F${Math.max(tableStartRow + 1, tableStartRow + points.length)}` };
 
-  let currentRow = tableStartRow + 1;
+  const currentRow = tableStartRow + 1;
   if (points.length === 0) {
     sheet.mergeCells(`A${currentRow}:F${currentRow}`);
     const cell = sheet.getCell(`A${currentRow}`);
@@ -329,7 +329,7 @@ function buildSummarySheet(workbook: ExcelWorkbook, meetings: CoordinationMeetin
   });
   sheet.autoFilter = { from: `A${startRow}`, to: `E${Math.max(startRow + 1, startRow + sorted.length)}` };
 
-  let rowNumber = startRow + 1;
+  const rowNumber = startRow + 1;
   if (sorted.length === 0) {
     sheet.mergeCells(`A${rowNumber}:E${rowNumber}`);
     const cell = sheet.getCell(`A${rowNumber}`);
@@ -412,7 +412,7 @@ function buildPendingSheet(workbook: ExcelWorkbook, meetings: CoordinationMeetin
   });
   sheet.autoFilter = { from: `A${startRow}`, to: `F${Math.max(startRow + 1, startRow + pendingPoints.length)}` };
 
-  let rowNumber = startRow + 1;
+  const rowNumber = startRow + 1;
   if (pendingPoints.length === 0) {
     sheet.mergeCells(`A${rowNumber}:F${rowNumber}`);
     const cell = sheet.getCell(`A${rowNumber}`);
@@ -456,7 +456,7 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
 
   try {
     const { default: ExcelJS } = await import('exceljs');
-    const workbook = new ExcelJS.Workbook() as unknown as ExcelWorkbook;
+    const workbook = new ExcelJS.Workbook() as ExcelWorkbook;
     workbook.creator = 'TrAccion';
     workbook.subject = 'Histórico de Coordinación RRLL con Dirección';
     workbook.created = new Date();
