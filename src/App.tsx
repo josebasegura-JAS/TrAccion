@@ -67,6 +67,11 @@ const PresupuestosPage = lazy(() =>
 const PlantillaPage = lazy(() =>
   import('./components/PlantillaPage').then((module) => ({ default: module.PlantillaPage })),
 );
+const AyudaEscolarPage = lazy(() =>
+  import('./features/ayuda-escolar/components/AyudaEscolarPage').then((module) => ({
+    default: module.AyudaEscolarPage,
+  })),
+);
 const TareasPage = lazy(() =>
   import('./components/TareasPage').then((module) => ({ default: module.TareasPage })),
 );
@@ -157,6 +162,7 @@ function readInitialActiveView(): AppView {
 
 const moduleLoadingLabels: Partial<Record<AppView, string>> = {
   plantilla: 'Cargando Plantilla...',
+  'ayuda-escolar': 'Cargando Ayuda escolar...',
   tareas: 'Cargando Tareas...',
   comite: 'Cargando Comité de Empresa...',
   actas: 'Cargando Actas...',
@@ -447,6 +453,7 @@ export function App() {
                 <DashboardCards onOpenRecord={handleDashboardOpenRecord} />
               )}
               {activeView === 'plantilla' && <PlantillaPage />}
+              {activeView === 'ayuda-escolar' && <AyudaEscolarPage />}
             {activeView === 'tareas' && (
               <TareasPage
                 initialTaskId={navigationTarget?.view === 'tareas' ? navigationTarget.recordId : null}
