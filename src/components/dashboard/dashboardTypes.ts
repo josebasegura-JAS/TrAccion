@@ -28,6 +28,7 @@ export type DashboardPopup = {
 export type DashboardNavigationTarget = {
   view: AppView;
   recordId?: string;
+  responsibleFilter?: string;
 };
 
 export type KpiCard = {

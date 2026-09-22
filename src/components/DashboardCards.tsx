@@ -27,6 +27,8 @@ import { useActasStore } from '../features/actas/store/useActasStore';
 import { useTeletrabajoStore } from '../features/teletrabajo/store/useTeletrabajoStore';
 import { useLicenciasSinSueldoStore } from '../features/licencias-sin-sueldo/store/useLicenciasSinSueldoStore';
 import { useLoteriaStore } from '../features/loteria/store/useLoteriaStore';
+import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { responsibleMatchesWindowsUser } from '../features/configuracion/domain/taskResponsibles';
 import { buildDashboardAttentionItems, type DashboardAttentionKind, type DashboardAttentionLevel } from './dashboard/dashboardAttention';
 import { DashboardRecordsModal } from './dashboard/DashboardUi';
 import { useModuleHelpRegistry } from '../services/moduleHelpRegistry';
@@ -285,6 +287,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dashboardPopup, setDashboardPopup] = useState<DashboardPopup | null>(null);
+  const [windowsUser, setWindowsUser] = useState('');
 
   const today = useMemo(() => new Date(), []);
   const todayIso = toIsoDate(today);
@@ -303,6 +306,8 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   const loadLicencias = useLicenciasSinSueldoStore((state) => state.load);
   const loteriaCampaign = useLoteriaStore((state) => state.campaign);
   const loadLoteria = useLoteriaStore((state) => state.load);
+  const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
+  const loadConfiguracion = useConfiguracionStore((state) => state.load);
 
   useEffect(() => {
     loadTasks();
@@ -312,7 +317,9 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     loadTeletrabajo();
     void loadLicencias();
     loadLoteria();
-  }, [loadActas, loadLicencias, loadLoteria, loadParitariaSessions, loadSessions, loadTasks, loadTeletrabajo]);
+    loadConfiguracion();
+    void window.traccion?.getWindowsUser?.().then((value) => setWindowsUser(value ?? '')).catch(() => setWindowsUser(''));
+  }, [loadActas, loadConfiguracion, loadLicencias, loadLoteria, loadParitariaSessions, loadSessions, loadTasks, loadTeletrabajo]);
 
   useEffect(() => {
     setModuleHelp({
@@ -440,14 +447,25 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     return activeTasks.filter((task) => task.fechaLimite && task.fechaLimite >= todayIso && task.fechaLimite <= cutoffIso)
       .sort((a, b) => a.fechaLimite.localeCompare(b.fechaLimite));
   }, [activeTasks, today, todayIso]);
-  const priorityTasks = useMemo(() => [...activeTasks].sort((a, b) => {
+  const currentResponsible = useMemo(
+    () => taskResponsibles.find((responsible) => responsible.active && responsibleMatchesWindowsUser(responsible, windowsUser)) ?? null,
+    [taskResponsibles, windowsUser],
+  );
+  const myTasks = useMemo(
+    () => currentResponsible
+      ? activeTasks.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === currentResponsible.nombre.trim().toLocaleLowerCase('es'))
+      : [],
+    [activeTasks, currentResponsible],
+  );
+  const unassignedTasks = useMemo(() => activeTasks.filter((task) => !task.responsable.trim()), [activeTasks]);
+  const priorityTasks = useMemo(() => [...myTasks].sort((a, b) => {
     const priorityDiff = priorityWeight[a.prioridad] - priorityWeight[b.prioridad];
     if (priorityDiff !== 0) return priorityDiff;
     if (a.fechaLimite && b.fechaLimite) return a.fechaLimite.localeCompare(b.fechaLimite);
     if (a.fechaLimite) return -1;
     if (b.fechaLimite) return 1;
     return b.updatedAt.localeCompare(a.updatedAt);
-  }).slice(0, 6), [activeTasks]);
+  }).slice(0, 6), [myTasks]);
 
   const taskSegments = useMemo(() => stateSegmentsFromTasks(nonDeletedTasks), [nonDeletedTasks]);
   const donutStyle = useMemo(() => miniDonutStyle(taskSegments), [taskSegments]);
@@ -689,7 +707,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
 
       <div className="grid min-h-0 grid-cols-[1.1fr_0.92fr_1.08fr] gap-2">
         <DashboardPanel className="flex flex-col">
-          <PanelTitle icon={ClipboardList} title="Mis tareas prioritarias" action={<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas' })} type="button">Ver todas</button>} />
+          <PanelTitle icon={ClipboardList} title="Mis tareas prioritarias" action={<div className="flex items-center gap-2">{currentResponsible && <span className="text-[10px] font-semibold text-slate-400">{myTasks.length} asignadas</span>}<button className="text-[10px] font-bold text-sky-300 hover:text-sky-200" onClick={() => openRecord({ view: 'tareas', responsibleFilter: currentResponsible?.nombre || '__mine__' })} type="button">Ver todas</button></div>} />
           <div className="grid min-h-0 flex-1 content-start divide-y divide-sky-200/7 overflow-hidden px-2">
             {priorityTasks.length ? priorityTasks.map((task, index) => (
               <button className={`grid grid-cols-[14px_minmax(0,1fr)_56px_42px] items-center gap-2 px-1 py-1.5 text-left hover:bg-white/[0.025] ${index >= 4 ? 'dashboard-pro__large-only' : ''}`} key={task.id} onClick={() => openRecord({ view: 'tareas', recordId: task.id })} type="button">
@@ -698,8 +716,9 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
                 <span className={`rounded-md border px-1.5 py-1 text-center text-[10px] font-bold ${priorityPill[task.prioridad]}`}>{priorityLabels[task.prioridad]}</span>
                 <span className="text-right text-[10px] font-semibold text-slate-300">{formatDisplayDate(task.fechaLimite)}</span>
               </button>
-            )) : <div className="grid h-full place-items-center text-[10px] text-slate-400">No hay tareas abiertas.</div>}
+            )) : <div className="grid h-full place-items-center px-3 text-center text-[10px] text-slate-400">{currentResponsible ? 'No tienes tareas abiertas asignadas.' : 'Tu usuario Windows no está vinculado a un responsable en Ajustes.'}</div>}
           </div>
+          {unassignedTasks.length > 0 && <button className="border-t border-sky-200/10 px-3 py-1.5 text-left text-[10px] font-semibold text-amber-200 hover:bg-white/[0.025]" onClick={() => openRecord({ view: 'tareas', responsibleFilter: '__unassigned__' })} type="button">{unassignedTasks.length} tarea{unassignedTasks.length === 1 ? '' : 's'} sin asignar</button>}
         </DashboardPanel>
 
         <DashboardPanel className="flex flex-col">

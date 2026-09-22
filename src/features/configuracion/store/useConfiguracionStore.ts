@@ -13,6 +13,13 @@ import {
   normalizeTaskOriginName,
   type TaskOriginConfig,
 } from '../domain/taskOrigins';
+import {
+  createTaskResponsibleIdFromName,
+  DEFAULT_TASK_RESPONSIBLES,
+  normalizeTaskResponsibleName,
+  normalizeWindowsUser,
+  type TaskResponsibleConfig,
+} from '../domain/taskResponsibles';
 
 const STORAGE_KEY = 'traccion.v1.configuracion';
 
@@ -32,6 +39,7 @@ interface ConfiguracionState {
   rutaAyudaEscolar: string;
   taskPhases: TaskPhaseConfig[];
   taskOrigins: TaskOriginConfig[];
+  taskResponsibles: TaskResponsibleConfig[];
 }
 
 type SharedRouteSettings = Pick<
@@ -71,6 +79,9 @@ interface ConfiguracionStore extends ConfiguracionState {
   updateTaskOrigin: (id: string, nombre: string, tipo: TaskOriginConfig['tipo']) => void;
   toggleTaskOrigin: (id: string) => void;
   deleteTaskOrigin: (id: string) => void;
+  addTaskResponsible: (nombre: string, windowsUser: string) => void;
+  updateTaskResponsible: (id: string, nombre: string, windowsUser: string) => void;
+  toggleTaskResponsible: (id: string) => void;
 }
 
 function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState {
@@ -88,7 +99,33 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaAyudaEscolar: state.rutaAyudaEscolar,
     taskPhases: state.taskPhases,
     taskOrigins: state.taskOrigins,
+    taskResponsibles: state.taskResponsibles,
   };
+}
+
+function isTaskResponsibleConfig(value: unknown): value is TaskResponsibleConfig {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<Record<keyof TaskResponsibleConfig, unknown>>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.nombre === 'string' &&
+    typeof candidate.windowsUser === 'string' &&
+    typeof candidate.active === 'boolean' &&
+    typeof candidate.createdAt === 'string' &&
+    typeof candidate.updatedAt === 'string'
+  );
+}
+
+function normalizeTaskResponsibles(value: unknown): TaskResponsibleConfig[] {
+  if (!Array.isArray(value)) return DEFAULT_TASK_RESPONSIBLES;
+  const responsibles = value.filter(isTaskResponsibleConfig).map((responsible) => ({
+    ...responsible,
+    nombre: normalizeTaskResponsibleName(responsible.nombre),
+    windowsUser: normalizeWindowsUser(responsible.windowsUser),
+  }));
+  const missingDefaults = DEFAULT_TASK_RESPONSIBLES.filter((defaultResponsible) =>
+    !responsibles.some((responsible) => responsible.id === defaultResponsible.id));
+  return [...responsibles, ...missingDefaults];
 }
 
 function isTaskOriginConfig(value: unknown): value is TaskOriginConfig {
@@ -164,6 +201,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaAyudaEscolar: getDefaultAyudaEscolarPath(),
     taskPhases: DEFAULT_TASK_PHASES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
+    taskResponsibles: DEFAULT_TASK_RESPONSIBLES,
   };
 }
 
@@ -186,6 +224,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaAyudaEscolar: normalizeAyudaEscolarPath((parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
+    taskResponsibles: normalizeTaskResponsibles((parsed as { taskResponsibles?: unknown }).taskResponsibles),
   };
 }
 
@@ -256,14 +295,15 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaAyudaEscolar: initialConfiguracion.rutaAyudaEscolar,
   taskPhases: initialConfiguracion.taskPhases,
   taskOrigins: initialConfiguracion.taskOrigins,
+  taskResponsibles: initialConfiguracion.taskResponsibles,
   load: () => {
     set(readConfiguracion());
     void readConfiguracionFromSqlite().then((configuracion) => { if (configuracion) set(configuracion); }).catch((error) => console.warn('Configuración no cargada desde SQLite.', error));
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins, taskResponsibles } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -328,6 +368,42 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   }),
   deleteTaskOrigin: (id) => set((state) => {
     const now = new Date().toISOString(); const configuracion = { ...state, taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, active: false, deletedAt: now, updatedAt: now } : origin) };
+    void commitConfiguracion(set, configuracion); return state;
+  }),
+  addTaskResponsible: (nombre, windowsUser) => set((state) => {
+    const normalizedName = normalizeTaskResponsibleName(nombre); if (!normalizedName) return state;
+    const now = new Date().toISOString();
+    const responsible: TaskResponsibleConfig = {
+      id: `${createTaskResponsibleIdFromName(normalizedName)}-${Date.now().toString(36)}`,
+      nombre: normalizedName,
+      windowsUser: normalizeWindowsUser(windowsUser),
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const configuracion = { ...state, taskResponsibles: [...state.taskResponsibles, responsible] };
+    void commitConfiguracion(set, configuracion); return state;
+  }),
+  updateTaskResponsible: (id, nombre, windowsUser) => set((state) => {
+    const normalizedName = normalizeTaskResponsibleName(nombre); if (!normalizedName) return state;
+    const now = new Date().toISOString();
+    const configuracion = {
+      ...state,
+      taskResponsibles: state.taskResponsibles.map((responsible) => responsible.id === id ? {
+        ...responsible,
+        nombre: normalizedName,
+        windowsUser: normalizeWindowsUser(windowsUser),
+        updatedAt: now,
+      } : responsible),
+    };
+    void commitConfiguracion(set, configuracion); return state;
+  }),
+  toggleTaskResponsible: (id) => set((state) => {
+    const now = new Date().toISOString();
+    const configuracion = {
+      ...state,
+      taskResponsibles: state.taskResponsibles.map((responsible) => responsible.id === id ? { ...responsible, active: !responsible.active, updatedAt: now } : responsible),
+    };
     void commitConfiguracion(set, configuracion); return state;
   }),
 }));

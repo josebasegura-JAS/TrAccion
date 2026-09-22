@@ -15,6 +15,7 @@ import { ActionButton } from './ui/ActionButton';
 import { PageHeader } from './ui/PageHeader';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { responsibleMatchesWindowsUser } from '../features/configuracion/domain/taskResponsibles';
 import { filterTasks } from '../features/tareas/domain/filters';
 import { CountBadge } from './ui/CountBadge';
 import {
@@ -250,9 +251,11 @@ const taskExportColumns: ExportColumn<Task>[] = [
 
 export function TareasPage({
   initialTaskId = null,
+  initialResponsibleFilter,
   navigationNonce,
 }: {
   initialTaskId?: string | null;
+  initialResponsibleFilter?: string;
   navigationNonce?: number;
 } = {}) {
   const {
@@ -268,6 +271,7 @@ export function TareasPage({
   } = useTaskStore();
   const { alert, dialogNode } = useAppDialog();
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
+  const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -281,6 +285,8 @@ export function TareasPage({
   const [historicPageSize, setHistoricPageSize] = useState<number>(DEFAULT_HISTORIC_PAGE_SIZE);
   const [isOriginsModalOpen, setIsOriginsModalOpen] = useState(false);
   const [isGeneratingOpenTasksExcel, setIsGeneratingOpenTasksExcel] = useState(false);
+  const [responsibleFilter, setResponsibleFilter] = useState<string>(initialResponsibleFilter ?? '');
+  const [windowsUser, setWindowsUser] = useState('');
   const processedNavigationNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -291,7 +297,12 @@ export function TareasPage({
     setFilter('estado', '');
     setFilter('prioridad', '');
     setFilter('origen', '');
+    void window.traccion?.getWindowsUser?.().then((value) => setWindowsUser(value ?? '')).catch(() => setWindowsUser(''));
   }, [load, loadConfiguracion, setFilter]);
+
+  useEffect(() => {
+    if (initialResponsibleFilter !== undefined) setResponsibleFilter(initialResponsibleFilter);
+  }, [initialResponsibleFilter, navigationNonce]);
 
   useEffect(() => {
     if (isHistoricOpen) {
@@ -329,18 +340,28 @@ export function TareasPage({
     };
   }, [activeTasks]);
 
-  const filteredTasks = useMemo(
-    () =>
-      filterTasks(tasks, {
+  const currentResponsible = useMemo(
+    () => taskResponsibles.find((responsible) => responsible.active && responsibleMatchesWindowsUser(responsible, windowsUser)) ?? null,
+    [taskResponsibles, windowsUser],
+  );
+
+  const filteredTasks = useMemo(() => {
+    const base = filterTasks(tasks, {
         ...filters,
         tipo: '',
         fase: '',
         estado: '',
         prioridad: '',
         origen: '',
-      }),
-    [filters, tasks],
-  );
+      });
+    if (!responsibleFilter) return base;
+    if (responsibleFilter === '__unassigned__') return base.filter((task) => !task.responsable.trim());
+    if (responsibleFilter === '__mine__') {
+      if (!currentResponsible) return [];
+      return base.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === currentResponsible.nombre.trim().toLocaleLowerCase('es'));
+    }
+    return base.filter((task) => task.responsable.trim().toLocaleLowerCase('es') === responsibleFilter.trim().toLocaleLowerCase('es'));
+  }, [currentResponsible, filters, responsibleFilter, tasks]);
 
   const historicTasks = useMemo(
     () => visibleTasks.filter((task) => isTaskClosed(task)),
@@ -669,6 +690,14 @@ export function TareasPage({
 
       <div className="overflow-hidden rounded-2xl border border-sky-300/[0.12] bg-[#0e2239]/70 shadow-[0_12px_30px_rgba(2,6,23,0.22)]">
         <div className="border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
+          <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5">
+            <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${!responsibleFilter ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('')} type="button">Todas</button>
+            <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__mine__' ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__mine__')} type="button">Mías{currentResponsible ? ` · ${currentResponsible.nombre}` : ''}</button>
+            {taskResponsibles.filter((responsible) => responsible.active).map((responsible) => (
+              <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === responsible.nombre ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} key={responsible.id} onClick={() => setResponsibleFilter(responsible.nombre)} type="button">{responsible.nombre}</button>
+            ))}
+            <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__unassigned__' ? 'border-amber-300/30 bg-amber-400/10 text-amber-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__unassigned__')} type="button">Sin asignar</button>
+          </div>
           <div className="grid min-w-0 items-center gap-3 xl:grid-cols-[auto_minmax(280px,1fr)_auto]">
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-metro-text">
               <ListChecks size={16} className="shrink-0 text-sky-300" />

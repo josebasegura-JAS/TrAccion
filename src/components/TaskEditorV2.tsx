@@ -275,6 +275,7 @@ export function TaskEditor({
 }) {
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
+  const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
   const directionTaskIds = useCoordinacionStore((state) => state.directionTaskIds);
   const unionTaskIds = useCoordinacionStore((state) => state.unionTaskIds);
   const loadCoordinacion = useCoordinacionStore((state) => state.load);
@@ -420,6 +421,13 @@ export function TaskEditor({
     const active = taskOrigins.filter((item) => item.active).map((item) => item.nombre);
     return draft.sindicato && !active.includes(draft.sindicato) ? [draft.sindicato, ...active] : active;
   }, [draft.sindicato, taskOrigins]);
+  const responsibleOptions = useMemo(() => {
+    const active = taskResponsibles.filter((item) => item.active).map((item) => item.nombre);
+    const isKnown = active.includes(draft.responsable) || draft.responsable.startsWith('Otros:');
+    return draft.responsable && !isKnown ? [draft.responsable, ...active] : active;
+  }, [draft.responsable, taskResponsibles]);
+  const responsibleSelectValue = draft.responsable.startsWith('Otros:') ? 'Otros' : draft.responsable;
+  const otherResponsibleValue = draft.responsable.startsWith('Otros:') ? draft.responsable.slice('Otros:'.length).trimStart() : '';
   const selectedUnionOrigin = useMemo(
     () => taskOrigins.find((origin) => origin.tipo === 'sindicato' && origin.active && !origin.deletedAt && origin.nombre === draft.sindicato) ?? null,
     [draft.sindicato, taskOrigins],
@@ -918,7 +926,21 @@ export function TaskEditor({
                   </label>
 
                   <label className="text-xs font-semibold text-metro-muted lg:col-span-4">Responsable
-                    <Input value={draft.responsable} onChange={(e) => setDraft((c) => ({ ...c, responsable: e.target.value }))} />
+                    <Select
+                      value={responsibleSelectValue}
+                      onChange={(e) => setDraft((c) => ({ ...c, responsable: e.target.value }))}
+                    >
+                      <option value="">Sin asignar</option>
+                      {responsibleOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                    </Select>
+                    {responsibleSelectValue === 'Otros' && (
+                      <Input
+                        className="mt-1"
+                        placeholder="Indica el responsable"
+                        value={otherResponsibleValue}
+                        onChange={(e) => setDraft((c) => ({ ...c, responsable: `Otros: ${e.target.value}` }))}
+                      />
+                    )}
                   </label>
                   <label className="text-xs font-semibold text-metro-muted lg:col-span-4">Detalle origen / solicitante
                     <Input value={draft.origen} onChange={(e) => setDraft((c) => ({ ...c, origen: e.target.value }))} />
