@@ -197,8 +197,15 @@ async function readConfiguracionFromSqlite(): Promise<ConfiguracionState | null>
   const loader = window.traccion?.loadConfiguracion;
   if (!loader) return null;
   const snapshot = await loader();
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active' || !snapshot.value) return null;
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active') return null;
+
+  // El token de concurrencia pertenece a la SQLite activa. Debe actualizarse
+  // incluso cuando una base recién seleccionada todavía no tiene registro de
+  // configuración; de lo contrario se reutilizaría el updatedAt de la base
+  // anterior y el primer guardado compartido fallaría por falso conflicto.
   latestConfiguracionUpdatedAt = snapshot.updatedAt;
+  if (!snapshot.value) return null;
+
   window.localStorage.setItem(STORAGE_KEY, snapshot.value);
   return parseConfiguracionValue(snapshot.value);
 }

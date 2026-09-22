@@ -1,5 +1,6 @@
 import {
   ChevronDown,
+  Database,
   FileSpreadsheet,
   FileText,
   FolderOpen,
@@ -9,10 +10,13 @@ import {
   Save,
   Settings2,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import type { TaskOriginConfig } from '../features/configuracion/domain/taskOrigins';
+import { DatabaseSettingsSection } from './ajustes/DatabaseSettingsSection';
+import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
+import { publishDatabaseStatus, refreshDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 
 type RouteDraft = {
   rutaPlantillaTeletrabajo: string;
@@ -216,9 +220,246 @@ export function AjustesPage() {
   const [newOriginName, setNewOriginName] = useState('');
   const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('empresa');
 
+  const databaseStatus = useDatabaseStatus();
+  const [databaseActionStatus, setDatabaseActionStatus] = useState('');
+  const [currentDatabaseLock, setCurrentDatabaseLock] = useState<TraccionDatabaseLockInfo | null>(null);
+  const [isCheckingDatabaseLock, setIsCheckingDatabaseLock] = useState(false);
+  const [databaseLockCheckError, setDatabaseLockCheckError] = useState('');
+  const [isForcingLockRelease, setIsForcingLockRelease] = useState(false);
+  const [localBackups, setLocalBackups] = useState<TraccionLocalBackupEntry[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [isCreatingManualBackup, setIsCreatingManualBackup] = useState(false);
+  const [secondaryBackupPath, setSecondaryBackupPath] = useState<string | null>(null);
+  const [secondaryBackupStatus, setSecondaryBackupStatus] = useState('');
+  const [updatesDirectoryPath, setUpdatesDirectoryPath] = useState<string | null>(null);
+  const [updatesDirectoryStatus, setUpdatesDirectoryStatus] = useState('');
+  const [updateCheckResult, setUpdateCheckResult] = useState<TraccionAppUpdateCheckResult | null>(null);
+  const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
+  const [dailyBackupSettings, setDailyBackupSettings] = useState<TraccionDailyLocalBackupSettings | null>(null);
+  const [dailyBackupStatus, setDailyBackupStatus] = useState('');
+  const [vacuumStatus, setVacuumStatus] = useState<TraccionVacuumStatus | null>(null);
+  const [isLoadingVacuumStatus, setIsLoadingVacuumStatus] = useState(false);
+  const [vacuumStatusError, setVacuumStatusError] = useState('');
+  const [isVacuuming, setIsVacuuming] = useState(false);
+  const [vacuumActionStatus, setVacuumActionStatus] = useState('');
+
+  const refreshCurrentDatabaseLock = useCallback(async () => {
+    if (!window.traccion?.getCurrentDatabaseLock) return;
+    setIsCheckingDatabaseLock(true);
+    setDatabaseLockCheckError('');
+    try {
+      setCurrentDatabaseLock(await window.traccion.getCurrentDatabaseLock());
+    } catch (error) {
+      setDatabaseLockCheckError(error instanceof Error ? error.message : 'No se ha podido comprobar el bloqueo SQLite.');
+    } finally {
+      setIsCheckingDatabaseLock(false);
+    }
+  }, []);
+
+  const refreshLocalBackups = useCallback(async () => {
+    if (!window.traccion?.listLocalBackups) return;
+    setIsLoadingBackups(true);
+    try {
+      setLocalBackups(await window.traccion.listLocalBackups());
+    } catch (error) {
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se han podido cargar las copias de respaldo.');
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  }, []);
+
+  const refreshVacuumStatus = useCallback(async () => {
+    if (!window.traccion?.getVacuumStatus) return;
+    setIsLoadingVacuumStatus(true);
+    setVacuumStatusError('');
+    try {
+      setVacuumStatus(await window.traccion.getVacuumStatus());
+    } catch (error) {
+      setVacuumStatusError(error instanceof Error ? error.message : 'No se ha podido leer el estado de mantenimiento.');
+    } finally {
+      setIsLoadingVacuumStatus(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDatabaseStatus();
+    void refreshCurrentDatabaseLock();
+    void refreshLocalBackups();
+    void refreshVacuumStatus();
+    void window.traccion?.getSecondaryBackupDirectory?.().then(setSecondaryBackupPath).catch(() => undefined);
+    void window.traccion?.getUpdatesDirectory?.().then(setUpdatesDirectoryPath).catch(() => undefined);
+    void window.traccion?.getDailyLocalBackupSettings?.().then(setDailyBackupSettings).catch(() => undefined);
+  }, [refreshCurrentDatabaseLock, refreshLocalBackups, refreshVacuumStatus]);
+
+  const applyDatabaseStatus = async (nextStatus: TraccionDatabaseStatus) => {
+    publishDatabaseStatus(nextStatus);
+    setDatabaseActionStatus(nextStatus.message ?? (nextStatus.ready ? 'Base de datos actualizada.' : 'No se ha podido activar SQLite.'));
+    await refreshCurrentDatabaseLock();
+    load();
+  };
+
+  const handleSelectDatabaseDirectory = async () => {
+    if (!window.traccion?.selectDatabaseDirectory) {
+      setDatabaseActionStatus('El cambio de ubicación SQLite solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+    try {
+      await applyDatabaseStatus(await window.traccion.selectDatabaseDirectory());
+    } catch (error) {
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido cambiar la ubicación SQLite.');
+    }
+  };
+
+  const handleResetDatabaseDirectory = async () => {
+    if (!window.traccion?.resetDatabaseDirectory) return;
+    try {
+      await applyDatabaseStatus(await window.traccion.resetDatabaseDirectory());
+    } catch (error) {
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido restaurar la ruta SQLite por defecto.');
+    }
+  };
+
+  const handleForceReleaseDatabaseLock = async () => {
+    if (!window.traccion?.forceReleaseDatabaseLock) return;
+    setIsForcingLockRelease(true);
+    try {
+      const result = await window.traccion.forceReleaseDatabaseLock();
+      publishDatabaseStatus(result.status);
+      setDatabaseActionStatus(result.message);
+      await refreshCurrentDatabaseLock();
+    } catch (error) {
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido liberar el bloqueo SQLite.');
+    } finally {
+      setIsForcingLockRelease(false);
+    }
+  };
+
+  const handleCreateManualBackup = async () => {
+    if (!window.traccion?.createManualBackup) return;
+    setIsCreatingManualBackup(true);
+    try {
+      const result = await window.traccion.createManualBackup();
+      setDatabaseActionStatus(result.ok ? 'Copia de respaldo creada.' : 'No se ha podido crear la copia de respaldo.');
+      await refreshLocalBackups();
+    } catch (error) {
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido crear la copia de respaldo.');
+    } finally {
+      setIsCreatingManualBackup(false);
+    }
+  };
+
+  const handleRestoreLocalBackup = async (backup: TraccionLocalBackupEntry) => {
+    if (!window.traccion?.restoreLocalBackup) return;
+    setIsRestoringBackup(true);
+    try {
+      const result = await window.traccion.restoreLocalBackup(backup.id);
+      publishDatabaseStatus(result.status);
+      setDatabaseActionStatus(result.message);
+    } catch (error) {
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido restaurar la copia.');
+    } finally {
+      setIsRestoringBackup(false);
+    }
+  };
+
+  const handleSetSecondaryBackupDirectory = async () => {
+    if (!window.traccion?.setSecondaryBackupDirectory) return;
+    try {
+      const result = await window.traccion.setSecondaryBackupDirectory();
+      setSecondaryBackupPath(result.path);
+      setSecondaryBackupStatus(result.ok ? 'Carpeta secundaria guardada.' : 'No se ha cambiado la carpeta secundaria.');
+    } catch (error) { setSecondaryBackupStatus(error instanceof Error ? error.message : 'No se ha podido guardar la carpeta secundaria.'); }
+  };
+  const handleClearSecondaryBackupDirectory = async () => {
+    if (!window.traccion?.clearSecondaryBackupDirectory) return;
+    await window.traccion.clearSecondaryBackupDirectory();
+    setSecondaryBackupPath(null);
+    setSecondaryBackupStatus('Carpeta secundaria eliminada.');
+  };
+  const handleSetUpdatesDirectory = async () => {
+    if (!window.traccion?.setUpdatesDirectory) return;
+    try {
+      const result = await window.traccion.setUpdatesDirectory();
+      setUpdatesDirectoryPath(result.path);
+      setUpdatesDirectoryStatus(result.ok ? 'Carpeta de actualizaciones guardada.' : 'No se ha cambiado la carpeta.');
+    } catch (error) { setUpdatesDirectoryStatus(error instanceof Error ? error.message : 'No se ha podido guardar la carpeta de actualizaciones.'); }
+  };
+  const handleClearUpdatesDirectory = async () => {
+    if (!window.traccion?.clearUpdatesDirectory) return;
+    await window.traccion.clearUpdatesDirectory();
+    setUpdatesDirectoryPath(null);
+    setUpdatesDirectoryStatus('Carpeta de actualizaciones eliminada.');
+  };
+  const handleCheckForUpdateNow = async () => {
+    if (!window.traccion?.checkForAppUpdate) return;
+    setIsCheckingForUpdate(true);
+    try { setUpdateCheckResult(await window.traccion.checkForAppUpdate()); }
+    finally { setIsCheckingForUpdate(false); }
+  };
+  const handleApplyUpdateNow = async () => {
+    if (!window.traccion?.applyAppUpdate) return;
+    setIsApplyingUpdate(true);
+    try {
+      const result = await window.traccion.applyAppUpdate();
+      setUpdatesDirectoryStatus(result.message);
+    } finally { setIsApplyingUpdate(false); }
+  };
+  const handleToggleDailyBackupEnabled = async () => {
+    if (!window.traccion?.setDailyLocalBackupEnabled) return;
+    try {
+      const next = await window.traccion.setDailyLocalBackupEnabled(!(dailyBackupSettings?.enabled ?? true));
+      setDailyBackupSettings(next);
+      setDailyBackupStatus(next.enabled ? 'Copia diaria automática activada.' : 'Copia diaria automática desactivada.');
+    } catch (error) { setDailyBackupStatus(error instanceof Error ? error.message : 'No se ha podido cambiar la copia diaria.'); }
+  };
+  const handleChangeDailyBackupRetentionDays = async (retentionDays: number) => {
+    if (!window.traccion?.setDailyLocalBackupRetentionDays) return;
+    try {
+      setDailyBackupSettings(await window.traccion.setDailyLocalBackupRetentionDays(retentionDays));
+      setDailyBackupStatus('Retención de copias actualizada.');
+    } catch (error) { setDailyBackupStatus(error instanceof Error ? error.message : 'No se ha podido cambiar la retención.'); }
+  };
+  const handleSetDailyBackupDirectory = async () => {
+    if (!window.traccion?.setDailyLocalBackupDirectory) return;
+    try {
+      const result = await window.traccion.setDailyLocalBackupDirectory();
+      setDailyBackupSettings(result.settings);
+      setDailyBackupStatus(result.ok ? 'Carpeta de copia diaria guardada.' : 'No se ha cambiado la carpeta.');
+    } catch (error) { setDailyBackupStatus(error instanceof Error ? error.message : 'No se ha podido guardar la carpeta de copia diaria.'); }
+  };
+  const handleClearDailyBackupDirectory = async () => {
+    if (!window.traccion?.clearDailyLocalBackupDirectory) return;
+    setDailyBackupSettings(await window.traccion.clearDailyLocalBackupDirectory());
+    setDailyBackupStatus('Carpeta personalizada de copia diaria eliminada.');
+  };
+  const handleVacuumNow = async () => {
+    if (!window.traccion?.vacuumDatabaseNow) return;
+    setIsVacuuming(true);
+    setVacuumActionStatus('');
+    try {
+      const result = await window.traccion.vacuumDatabaseNow();
+      setVacuumActionStatus(result.message);
+      await refreshVacuumStatus();
+    } catch (error) { setVacuumActionStatus(error instanceof Error ? error.message : 'No se ha podido compactar la base de datos.'); }
+    finally { setIsVacuuming(false); }
+  };
+
   useEffect(() => {
     load();
   }, [load]);
+
+  const databaseBadge = useMemo(() => buildDatabaseStatusBadge(databaseStatus), [databaseStatus]);
+  const databasePhaseLabel = databaseStatus?.ready
+    ? 'Activa y disponible'
+    : databaseStatus?.phase === 'locked'
+      ? 'Bloqueada temporalmente'
+      : databaseStatus?.phase === 'fallback'
+        ? 'Modo local / sin conexión SQLite'
+        : databaseStatus?.phase === 'error'
+          ? 'Error de conexión'
+          : 'No inicializada';
 
   const routesDirty = useMemo(
     () => (Object.keys(routes) as RouteKey[]).some((key) => routes[key] !== watchedRoutes[key]),
@@ -279,6 +520,11 @@ export function AjustesPage() {
     setSavingRoutes(true);
     setStatus('');
     try {
+      const liveStatus = await refreshDatabaseStatus();
+      if (!liveStatus?.ready || liveStatus.phase !== 'active') {
+        setStatus('No se han guardado las rutas: la SQLite compartida no está activa. Corrige primero la ruta de Base de datos para garantizar que el cambio llegue a todos los usuarios.');
+        return;
+      }
       for (const field of TEMPLATE_FIELDS) {
         const value = routes[field.key].trim();
         if (value && !isDocxPath(value)) {
@@ -410,7 +656,20 @@ export function AjustesPage() {
           <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-metro-muted">
             Accesos directos
           </p>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <button
+              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              onClick={() => openAndScroll('ajustes-base-datos')}
+              type="button"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+                <Database size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-metro-text">Base de datos</span>
+                <span className="block text-xs text-metro-muted">Ruta, bloqueos y copias</span>
+              </span>
+            </button>
             <button
               className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
               onClick={() => openAndScroll('ajustes-plantillas')}
@@ -455,6 +714,72 @@ export function AjustesPage() {
           </div>
         </div>
       </div>
+
+      <details
+        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        id="ajustes-base-datos"
+        open
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red"><Database size={17} /></span>
+            <div>
+              <h3 className="text-base font-bold text-metro-text">Base de datos y protecciones</h3>
+              <p className="mt-0.5 text-xs text-metro-muted">Ruta SQLite, desbloqueo, copias, actualizaciones y mantenimiento.</p>
+            </div>
+          </div>
+          <ChevronDown className="shrink-0 text-metro-muted transition-transform group-open:rotate-180" size={18} />
+        </summary>
+        <div className="border-t border-metro-border p-4">
+          <DatabaseSettingsSection
+            databaseStatus={databaseStatus}
+            databaseBadge={databaseBadge}
+            databasePhaseLabel={databasePhaseLabel}
+            databaseActionStatus={databaseActionStatus}
+            currentDatabaseLock={currentDatabaseLock}
+            isCheckingDatabaseLock={isCheckingDatabaseLock}
+            databaseLockCheckError={databaseLockCheckError}
+            isForcingLockRelease={isForcingLockRelease}
+            refreshCurrentDatabaseLock={refreshCurrentDatabaseLock}
+            handleForceReleaseDatabaseLock={handleForceReleaseDatabaseLock}
+            handleSelectDatabaseDirectory={handleSelectDatabaseDirectory}
+            handleResetDatabaseDirectory={handleResetDatabaseDirectory}
+            localBackups={localBackups}
+            isLoadingBackups={isLoadingBackups}
+            isRestoringBackup={isRestoringBackup}
+            isCreatingManualBackup={isCreatingManualBackup}
+            refreshLocalBackups={refreshLocalBackups}
+            handleCreateManualBackup={handleCreateManualBackup}
+            handleRestoreLocalBackup={handleRestoreLocalBackup}
+            secondaryBackupPath={secondaryBackupPath}
+            secondaryBackupStatus={secondaryBackupStatus}
+            handleSetSecondaryBackupDirectory={handleSetSecondaryBackupDirectory}
+            handleClearSecondaryBackupDirectory={handleClearSecondaryBackupDirectory}
+            updatesDirectoryPath={updatesDirectoryPath}
+            updatesDirectoryStatus={updatesDirectoryStatus}
+            updateCheckResult={updateCheckResult}
+            isCheckingForUpdate={isCheckingForUpdate}
+            isApplyingUpdate={isApplyingUpdate}
+            handleSetUpdatesDirectory={handleSetUpdatesDirectory}
+            handleClearUpdatesDirectory={handleClearUpdatesDirectory}
+            handleCheckForUpdateNow={handleCheckForUpdateNow}
+            handleApplyUpdateNow={handleApplyUpdateNow}
+            dailyBackupSettings={dailyBackupSettings}
+            dailyBackupStatus={dailyBackupStatus}
+            handleToggleDailyBackupEnabled={handleToggleDailyBackupEnabled}
+            handleChangeDailyBackupRetentionDays={handleChangeDailyBackupRetentionDays}
+            handleSetDailyBackupDirectory={handleSetDailyBackupDirectory}
+            handleClearDailyBackupDirectory={handleClearDailyBackupDirectory}
+            vacuumStatus={vacuumStatus}
+            isLoadingVacuumStatus={isLoadingVacuumStatus}
+            vacuumStatusError={vacuumStatusError}
+            onRetryVacuumStatus={refreshVacuumStatus}
+            isVacuuming={isVacuuming}
+            vacuumActionStatus={vacuumActionStatus}
+            handleVacuumNow={handleVacuumNow}
+          />
+        </div>
+      </details>
 
       <details
         className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
