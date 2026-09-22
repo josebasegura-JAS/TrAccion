@@ -1,7 +1,13 @@
 export type CoordinationArea = 'direccion' | 'otras-areas' | 'sindicatos';
 export type CoordinationMeetingStatus = 'open' | 'closed';
-export type CoordinationPointStatus = 'pendiente' | 'tratado' | 'volver';
+export type CoordinationPointStatus =
+  | 'pendiente'
+  | 'tratado'
+  | 'volver'
+  | 'pendiente-rrll'
+  | 'pendiente-sindicato';
 export type CoordinationPointOrigin = 'task' | 'manual';
+export type UnionMeetingType = 'ordinaria' | 'seguimiento' | 'urgente';
 
 export interface CoordinationPoint {
   id: string;
@@ -11,6 +17,8 @@ export interface CoordinationPoint {
   detail: string;
   result: string;
   status: CoordinationPointStatus;
+  responsible?: string;
+  dueDate?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +32,8 @@ export interface CoordinationMeeting {
   referenceTaskId?: string | null;
   interlocutors?: string;
   purpose?: string;
+  unionName?: string;
+  meetingType?: UnionMeetingType;
   date: string;
   status: CoordinationMeetingStatus;
   points: CoordinationPoint[];
@@ -35,11 +45,13 @@ export interface CoordinationMeeting {
 export interface CoordinationState {
   meetings: CoordinationMeeting[];
   directionTaskIds: string[];
+  unionTaskIds: Record<string, string[]>;
 }
 
 export const EMPTY_COORDINATION_STATE: CoordinationState = {
   meetings: [],
   directionTaskIds: [],
+  unionTaskIds: {},
 };
 
 export function createCoordinationId(prefix: string): string {

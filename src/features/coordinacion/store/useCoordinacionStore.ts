@@ -9,6 +9,7 @@ import {
   type CoordinationPoint,
   type CoordinationPointStatus,
   type CoordinationState,
+  type UnionMeetingType,
 } from '../domain/coordinacion';
 
 export const COORDINATION_STORAGE_KEY = 'traccion.v1.coordinacion.state';
@@ -19,6 +20,7 @@ interface CoordinationStore extends CoordinationState {
   load: () => void;
   reloadFromStorage: () => void;
   setTaskForDirection: (taskId: string, enabled: boolean) => Promise<Result>;
+  setTaskForUnion: (taskId: string, unionName: string | null) => Promise<Result>;
   createDirectionMeeting: (date: string, tasks: Task[]) => Promise<Result>;
   createOtherAreaMeeting: (
     date: string,
@@ -28,21 +30,35 @@ interface CoordinationStore extends CoordinationState {
     purpose: string,
     tasks: Task[],
   ) => Promise<Result>;
+  createUnionMeeting: (
+    date: string,
+    unionName: string,
+    meetingType: UnionMeetingType,
+    interlocutors: string,
+    purpose: string,
+    taskIds: string[],
+    tasks: Task[],
+  ) => Promise<Result>;
+  addTaskPoint: (meetingId: string, taskId: string, tasks: Task[]) => Promise<Result>;
   addManualPoint: (meetingId: string, title: string, detail?: string) => Promise<Result>;
   updatePoint: (
     meetingId: string,
     pointId: string,
-    patch: Partial<Pick<CoordinationPoint, 'title' | 'detail' | 'result' | 'status'>>,
+    patch: Partial<Pick<CoordinationPoint, 'title' | 'detail' | 'result' | 'status' | 'responsible' | 'dueDate'>>,
   ) => Promise<Result>;
   deleteManualPoint: (meetingId: string, pointId: string) => Promise<Result>;
   deleteMeeting: (meetingId: string) => Promise<Result>;
   closeMeeting: (meetingId: string) => Promise<Result>;
 }
 
-function isCoordinationState(value: unknown): value is CoordinationState {
-  if (!value || typeof value !== 'object') return false;
+function normalizeCoordinationState(value: unknown): CoordinationState | null {
+  if (!value || typeof value !== 'object') return null;
   const candidate = value as Partial<CoordinationState>;
-  return Array.isArray(candidate.meetings) && Array.isArray(candidate.directionTaskIds);
+  if (!Array.isArray(candidate.meetings) || !Array.isArray(candidate.directionTaskIds)) return null;
+  const unionTaskIds = candidate.unionTaskIds && typeof candidate.unionTaskIds === 'object'
+    ? Object.fromEntries(Object.entries(candidate.unionTaskIds).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((id) => typeof id === 'string')))
+    : {};
+  return { meetings: candidate.meetings, directionTaskIds: candidate.directionTaskIds, unionTaskIds };
 }
 
 function readState(): CoordinationState {
@@ -50,7 +66,7 @@ function readState(): CoordinationState {
   if (!stored) return EMPTY_COORDINATION_STATE;
   try {
     const parsed: unknown = JSON.parse(stored);
-    return isCoordinationState(parsed) ? parsed : EMPTY_COORDINATION_STATE;
+    return normalizeCoordinationState(parsed) ?? EMPTY_COORDINATION_STATE;
   } catch {
     return EMPTY_COORDINATION_STATE;
   }
@@ -70,7 +86,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   load: () => set(readState()),
   reloadFromStorage: () => {
     const next = readState();
-    if (JSON.stringify(next) !== JSON.stringify({ meetings: get().meetings, directionTaskIds: get().directionTaskIds })) {
+    if (JSON.stringify(next) !== JSON.stringify({ meetings: get().meetings, directionTaskIds: get().directionTaskIds, unionTaskIds: get().unionTaskIds })) {
       set(next);
     }
   },
@@ -78,7 +94,19 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const current = get();
     const ids = new Set(current.directionTaskIds);
     if (enabled) ids.add(taskId); else ids.delete(taskId);
-    const next: CoordinationState = { meetings: current.meetings, directionTaskIds: [...ids] };
+    const next: CoordinationState = { meetings: current.meetings, directionTaskIds: [...ids], unionTaskIds: current.unionTaskIds };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  setTaskForUnion: async (taskId, unionName) => {
+    const current = get();
+    const cleanUnion = unionName?.trim() || null;
+    const unionTaskIds = Object.fromEntries(
+      Object.entries(current.unionTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
+    );
+    if (cleanUnion) unionTaskIds[cleanUnion] = [...new Set([...(unionTaskIds[cleanUnion] ?? []), taskId])];
+    const next: CoordinationState = { ...current, unionTaskIds };
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
@@ -156,6 +184,61 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const result = await persist(next);
     if (result.ok) set(next);
     return { ...result, recordId: meeting.id };
+  },
+  createUnionMeeting: async (date, unionName, meetingType, interlocutors, purpose, taskIds, tasks) => {
+    const normalizedDate = date.trim();
+    const cleanUnion = unionName.trim();
+    if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
+    if (!cleanUnion) return { ok: false, message: 'Selecciona el sindicato.' };
+    const current = get();
+    const selectedIds = new Set([...(current.unionTaskIds[cleanUnion] ?? []), ...taskIds]);
+    const latestPrevious = current.meetings
+      .filter((meeting) => meeting.area === 'sindicatos' && meeting.unionName === cleanUnion && meeting.status === 'closed')
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    latestPrevious?.points.forEach((point) => {
+      if (point.taskId && point.status !== 'tratado') selectedIds.add(point.taskId);
+    });
+    const now = new Date().toISOString();
+    const points: CoordinationPoint[] = tasks
+      .filter((task) => selectedIds.has(task.id) && activeTask(task))
+      .map((task) => ({
+        id: createCoordinationId('union-point'), origin: 'task', taskId: task.id,
+        title: task.titulo, detail: task.descripcion, result: '', status: 'pendiente',
+        responsible: '', dueDate: '', createdAt: now, updatedAt: now,
+      }));
+    if (points.length === 0) return { ok: false, message: 'Selecciona al menos una tarea activa para el guion.' };
+    const meeting: CoordinationMeeting = {
+      id: createCoordinationId('union-meeting'), area: 'sindicatos', unionName: cleanUnion,
+      meetingType, interlocutors: interlocutors.trim(), purpose: purpose.trim(),
+      date: normalizedDate, status: 'open', points, createdAt: now, updatedAt: now, closedAt: null,
+    };
+    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return { ...result, recordId: meeting.id };
+  },
+  addTaskPoint: async (meetingId, taskId, tasks) => {
+    const current = get();
+    const meeting = current.meetings.find((item) => item.id === meetingId);
+    if (!meeting || meeting.status === 'closed') return { ok: false, message: 'La reunión no está disponible para edición.' };
+    if (meeting.points.some((point) => point.taskId === taskId)) return { ok: false, message: 'La tarea ya está incluida en el guion.' };
+    const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
+    if (!task) return { ok: false, message: 'La tarea seleccionada no está activa.' };
+    const now = new Date().toISOString();
+    const point: CoordinationPoint = {
+      id: createCoordinationId('task-point'), origin: 'task', taskId: task.id,
+      title: task.titulo, detail: task.descripcion, result: '', status: 'pendiente',
+      responsible: '', dueDate: '', createdAt: now, updatedAt: now,
+    };
+    const next: CoordinationState = {
+      ...current,
+      meetings: current.meetings.map((item) => item.id === meetingId
+        ? { ...item, points: [...item.points, point], updatedAt: now }
+        : item),
+    };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
   },
   addManualPoint: async (meetingId, title, detail = '') => {
     const cleanTitle = title.trim();
@@ -239,13 +322,23 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
     const now = new Date().toISOString();
     const directionTaskIds = new Set(current.directionTaskIds);
-    meeting.points.forEach((point) => {
+    const unionTaskIds = { ...current.unionTaskIds };
+    if (meeting.area === 'direccion') meeting.points.forEach((point) => {
       if (!point.taskId) return;
       if (point.status === 'tratado') directionTaskIds.delete(point.taskId);
       if (point.status === 'volver') directionTaskIds.add(point.taskId);
     });
+    if (meeting.area === 'sindicatos' && meeting.unionName) {
+      const ids = new Set(unionTaskIds[meeting.unionName] ?? []);
+      meeting.points.forEach((point) => {
+        if (!point.taskId) return;
+        if (point.status === 'tratado') ids.delete(point.taskId); else ids.add(point.taskId);
+      });
+      unionTaskIds[meeting.unionName] = [...ids];
+    }
     const next: CoordinationState = {
       directionTaskIds: [...directionTaskIds],
+      unionTaskIds,
       meetings: current.meetings.map((item) => item.id === meetingId ? {
         ...item,
         status: 'closed',
@@ -267,5 +360,7 @@ registerSyncableStore({
 export function coordinationPointStatusLabel(status: CoordinationPointStatus): string {
   if (status === 'tratado') return 'Tratado';
   if (status === 'volver') return 'Volver a tratar';
+  if (status === 'pendiente-rrll') return 'Pendiente de RRLL';
+  if (status === 'pendiente-sindicato') return 'Pendiente del sindicato';
   return 'Pendiente';
 }

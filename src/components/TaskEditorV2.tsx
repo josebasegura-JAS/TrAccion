@@ -260,8 +260,10 @@ export function TaskEditor({
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const directionTaskIds = useCoordinacionStore((state) => state.directionTaskIds);
+  const unionTaskIds = useCoordinacionStore((state) => state.unionTaskIds);
   const loadCoordinacion = useCoordinacionStore((state) => state.load);
   const setTaskForDirection = useCoordinacionStore((state) => state.setTaskForDirection);
+  const setTaskForUnion = useCoordinacionStore((state) => state.setTaskForUnion);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const createTask = useTaskStore((state) => state.createWithConcurrencyCheck);
   const updateTask = useTaskStore((state) => state.updateWithConcurrencyCheck);
@@ -273,6 +275,9 @@ export function TaskEditor({
 
   const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
   const [sendToDirection, setSendToDirection] = useState(() => task ? directionTaskIds.includes(task.id) : false);
+  const [sendToUnion, setSendToUnion] = useState(() => task
+    ? Object.values(unionTaskIds).some((ids) => ids.includes(task.id))
+    : false);
   const [trackingText, setTrackingText] = useState('');
   const [trackingDate, setTrackingDate] = useState(todayIsoDate);
   const [trackingUser, setTrackingUser] = useState(getActiveUser);
@@ -370,6 +375,9 @@ export function TaskEditor({
 
     setDraft(nextDraft);
     setSendToDirection(task ? useCoordinacionStore.getState().directionTaskIds.includes(task.id) : false);
+    setSendToUnion(task
+      ? Object.values(useCoordinacionStore.getState().unionTaskIds).some((ids) => ids.includes(task.id))
+      : false);
     setTrackingText('');
     setTrackingDate(nextTrackingDate);
     setRecoveryBaseline({
@@ -396,6 +404,16 @@ export function TaskEditor({
     const active = taskOrigins.filter((item) => item.active).map((item) => item.nombre);
     return draft.sindicato && !active.includes(draft.sindicato) ? [draft.sindicato, ...active] : active;
   }, [draft.sindicato, taskOrigins]);
+  const selectedUnionOrigin = useMemo(
+    () => taskOrigins.find((origin) => origin.tipo === 'sindicato' && origin.active && !origin.deletedAt && origin.nombre === draft.sindicato) ?? null,
+    [draft.sindicato, taskOrigins],
+  );
+
+  const updateCoordinationTargets = async (taskId: string) => {
+    const directionResult = await setTaskForDirection(taskId, sendToDirection);
+    if (!directionResult.ok) return directionResult;
+    return setTaskForUnion(taskId, sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null);
+  };
 
   const recoveryStorageKey = buildRecoverableDraftKey('tareas', task?.id ?? 'new');
   const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
@@ -436,7 +454,7 @@ export function TaskEditor({
         return;
       }
       if (result.recordId) {
-        const coordinationResult = await setTaskForDirection(result.recordId, sendToDirection);
+        const coordinationResult = await updateCoordinationTargets(result.recordId);
         if (!coordinationResult.ok) {
           setSaveStatus(`Tarea guardada, pero no se ha podido actualizar Coordinación: ${coordinationResult.message}`);
           setSaveStatusIsError(true);
@@ -463,7 +481,7 @@ export function TaskEditor({
       return;
     }
 
-    const coordinationResult = await setTaskForDirection(task.id, sendToDirection);
+    const coordinationResult = await updateCoordinationTargets(task.id);
     const savedTask = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
     const nextTrackingDate = todayIsoDate();
 
@@ -922,6 +940,10 @@ export function TaskEditor({
                     <input checked={sendToDirection} className="h-4 w-4 accent-red-600" onChange={(event) => setSendToDirection(event.target.checked)} type="checkbox" />
                     <span className="min-w-0"><strong className="block text-xs text-slate-200">Trasladar a Dirección</strong><span className="block text-[10px] font-medium text-slate-400">Se incluirá en el próximo guion de Coordinación.</span></span>
                   </label>
+                  {selectedUnionOrigin && <label className="flex min-h-9 items-center gap-2 rounded-lg border border-amber-300/15 bg-amber-950/15 px-3 py-2 lg:col-span-3">
+                    <input checked={sendToUnion} className="h-4 w-4 accent-red-600" onChange={(event) => setSendToUnion(event.target.checked)} type="checkbox" />
+                    <span className="min-w-0"><strong className="block truncate text-xs text-slate-200">Llevar a reunión con {selectedUnionOrigin.nombre}</strong><span className="block text-[10px] font-medium text-slate-400">Se incluirá en su próximo guion sindical.</span></span>
+                  </label>}
                 </div>
               </Section>
 
