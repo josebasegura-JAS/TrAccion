@@ -223,6 +223,16 @@ function toDraft(task: Task | null): TaskDraft {
   };
 }
 
+function createInitialDraft(task: Task | null, initialDraft?: Partial<TaskDraft>): TaskDraft {
+  const base = toDraft(task);
+  if (task || !initialDraft) return base;
+  return {
+    ...base,
+    ...initialDraft,
+    documentLinks: initialDraft.documentLinks ?? base.documentLinks,
+  };
+}
+
 function Section({
   icon: Icon,
   title,
@@ -252,10 +262,16 @@ export function TaskEditor({
   task,
   mode,
   onDone,
+  initialDraft,
+  initialTrackingText = '',
+  onCreated,
 }: {
   task: Task | null;
   mode: 'create' | 'edit';
   onDone: () => void;
+  initialDraft?: Partial<TaskDraft>;
+  initialTrackingText?: string;
+  onCreated?: (taskId: string) => void | Promise<void>;
 }) {
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
@@ -273,12 +289,12 @@ export function TaskEditor({
   const [criterionLinkReady, setCriterionLinkReady] = useState(false);
   const { confirm: confirmTrackingDelete, dialogNode: trackingDeleteDialogNode } = useAppDialog();
 
-  const [draft, setDraft] = useState<TaskDraft>(() => toDraft(task));
+  const [draft, setDraft] = useState<TaskDraft>(() => createInitialDraft(task, initialDraft));
   const [sendToDirection, setSendToDirection] = useState(() => task ? directionTaskIds.includes(task.id) : false);
   const [sendToUnion, setSendToUnion] = useState(() => task
     ? Object.values(unionTaskIds).some((ids) => ids.includes(task.id))
     : false);
-  const [trackingText, setTrackingText] = useState('');
+  const [trackingText, setTrackingText] = useState(initialTrackingText);
   const [trackingDate, setTrackingDate] = useState(todayIsoDate);
   const [trackingUser, setTrackingUser] = useState(getActiveUser);
   const [manualDocumentPath, setManualDocumentPath] = useState('');
@@ -293,8 +309,8 @@ export function TaskEditor({
   const [editingTrackingText, setEditingTrackingText] = useState('');
   const [isSavingTrackingEdit, setIsSavingTrackingEdit] = useState(false);
   const [recoveryBaseline, setRecoveryBaseline] = useState<TaskRecoveryValue>(() => ({
-    draft: toDraft(task),
-    trackingText: '',
+    draft: createInitialDraft(task, initialDraft),
+    trackingText: initialTrackingText,
     trackingDate: todayIsoDate(),
   }));
 
@@ -460,6 +476,7 @@ export function TaskEditor({
           setSaveStatusIsError(true);
           return;
         }
+        await onCreated?.(result.recordId);
       }
       clearRecoveryDraft();
       onDone();

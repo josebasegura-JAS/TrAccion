@@ -1,5 +1,6 @@
 import { Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { TaskEditor } from '../../../components/TaskEditor';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { syncCoordinacionExcelBackup } from '../../../shared/export/coordinacionExcelBackup';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
@@ -59,6 +60,7 @@ export function CoordinacionPage() {
   const createOtherAreaMeeting = useCoordinacionStore((state) => state.createOtherAreaMeeting);
   const addManualPoint = useCoordinacionStore((state) => state.addManualPoint);
   const addTaskPoint = useCoordinacionStore((state) => state.addTaskPoint);
+  const linkManualPointToTask = useCoordinacionStore((state) => state.linkManualPointToTask);
   const updatePoint = useCoordinacionStore((state) => state.updatePoint);
   const deleteManualPoint = useCoordinacionStore((state) => state.deleteManualPoint);
   const deleteMeeting = useCoordinacionStore((state) => state.deleteMeeting);
@@ -75,6 +77,8 @@ export function CoordinacionPage() {
   const [purpose, setPurpose] = useState('');
   const [newPoint, setNewPoint] = useState('');
   const [taskToAdd, setTaskToAdd] = useState('');
+  const [taskSearch, setTaskSearch] = useState('');
+  const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
   const [status, setStatus] = useState('');
   const { confirm, dialogNode } = useAppDialog();
 
@@ -114,7 +118,23 @@ export function CoordinacionPage() {
     if (!selected || !taskToAdd) return;
     const result = await addTaskPoint(selected.id, taskToAdd, tasks);
     setStatus(result.ok ? 'Tarea añadida al guion.' : result.message);
-    if (result.ok) setTaskToAdd('');
+    if (result.ok) {
+      setTaskToAdd('');
+      setTaskSearch('');
+      if (selected.area === 'direccion') await backup();
+    }
+  };
+
+  const handleCreatedTask = async (taskId: string) => {
+    if (!selected) return;
+    const currentTasks = useTaskStore.getState().tasks;
+    const result = taskCreation?.pointId
+      ? await linkManualPointToTask(selected.id, taskCreation.pointId, taskId, currentTasks)
+      : await addTaskPoint(selected.id, taskId, currentTasks);
+    setStatus(result.ok
+      ? taskCreation?.pointId ? 'Punto convertido en tarea y vinculado a la reunión.' : 'Tarea creada y añadida a la reunión.'
+      : `La tarea se ha creado, pero no ha podido vincularse a la reunión: ${result.message}`);
+    if (result.ok && selected.area === 'direccion') await backup();
   };
 
   const handleClose = async () => {
@@ -154,7 +174,27 @@ export function CoordinacionPage() {
   if (selected) {
     const isDirection = selected.area === 'direccion';
     const isUnion = selected.area === 'sindicatos';
-    const availableTasks = activeTasks.filter((task) => !selected.points.some((point) => point.taskId === task.id));
+    const normalizedTaskSearch = taskSearch.trim().toLocaleLowerCase('es');
+    const availableTasks = activeTasks.filter((task) =>
+      !selected.points.some((point) => point.taskId === task.id)
+      && (!normalizedTaskSearch
+        || task.titulo.toLocaleLowerCase('es').includes(normalizedTaskSearch)
+        || task.responsable.toLocaleLowerCase('es').includes(normalizedTaskSearch)
+        || task.sindicato.toLocaleLowerCase('es').includes(normalizedTaskSearch)),
+    );
+    const sourcePoint = taskCreation?.pointId
+      ? selected.points.find((point) => point.id === taskCreation.pointId) ?? null
+      : null;
+    const taskInitialDraft: Partial<TaskDraft> = {
+      titulo: sourcePoint?.title ?? '',
+      descripcion: sourcePoint?.detail ?? '',
+      responsable: sourcePoint?.responsible ?? '',
+      fechaLimite: sourcePoint?.dueDate ?? '',
+      origen: `Reunión con ${meetingContext(selected)}`,
+    };
+    const taskInitialTrackingText = sourcePoint
+      ? `Tarea creada durante la reunión con ${meetingContext(selected)} del ${formatCoordinationDate(selected.date)}, a partir del punto “${sourcePoint.title}”.`
+      : `Tarea creada durante la reunión con ${meetingContext(selected)} del ${formatCoordinationDate(selected.date)}.`;
     const exportPayload = {
       title: `Reunión con ${meetingContext(selected)} · ${formatCoordinationDate(selected.date)}`,
       filename: `reunion-${meetingContext(selected)}-${selected.date}`,
@@ -190,16 +230,30 @@ export function CoordinacionPage() {
           {selected.points.map((point, index) => <article className="rounded-xl border border-metro-border bg-metro-panel p-3" key={point.id}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span><h4 className="font-bold text-metro-text">{point.title}</h4>{point.origin === 'task' && <span className="rounded-full border border-sky-400/30 px-2 py-0.5 text-[11px] font-bold text-sky-200">Tarea de referencia</span>}</div>{point.detail && <p className="mt-2 text-sm leading-5 text-metro-muted">{point.detail}</p>}</div>
-              <div className="flex items-center gap-2"><select className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-semibold text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => void updatePoint(selected.id, point.id, { status: event.target.value as CoordinationPointStatus }).then(() => { if (isDirection) void backup(); })} value={point.status}><option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y cerrado</option><option value="volver">Volver a tratar</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}</select>{point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => void handleDeleteManualPoint(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}</div>
+              <div className="flex flex-wrap items-center justify-end gap-2"><select className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-semibold text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => void updatePoint(selected.id, point.id, { status: event.target.value as CoordinationPointStatus }).then(() => { if (isDirection) void backup(); })} value={point.status}><option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y cerrado</option><option value="volver">Volver a tratar</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}</select>{point.origin === 'manual' && isDirection && selected.status === 'open' && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => setTaskCreation({ pointId: point.id })} title="Crear una tarea conservando este punto" type="button"><Plus size={14}/>Convertir en tarea</button>}{point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => void handleDeleteManualPoint(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}</div>
             </div>
             <label className="mt-3 block text-xs font-semibold text-metro-muted">Resultado / acuerdos<textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" defaultValue={point.result} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { result: event.target.value }).then(() => { if (isDirection) void backup(); })} placeholder="Decisión, actuación acordada y siguiente paso..." /></label>
             {isUnion && <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-xs font-semibold text-metro-muted">Responsable del siguiente paso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" defaultValue={point.responsible ?? ''} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { responsible: event.target.value })}/></label><label className="text-xs font-semibold text-metro-muted">Fecha de compromiso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" defaultValue={point.dueDate ?? ''} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { dueDate: event.target.value })} type="date"/></label></div>}
           </article>)}
           {selected.points.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">La reunión todavía no tiene puntos.</p>}
         </div>
-        {selected.status === 'open' && <div className="mt-4 space-y-2"><div className="flex gap-2"><input className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" onChange={(event) => setNewPoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleAddManual(); }} placeholder="Añadir otro punto al guion..." value={newPoint}/><button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white" onClick={() => void handleAddManual()} type="button"><Plus size={16}/>Crear punto</button></div>{isUnion && <div className="flex gap-2"><select className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text" onChange={(event) => setTaskToAdd(event.target.value)} value={taskToAdd}><option value="">Añadir una tarea activa al guion...</option>{availableTasks.map((task) => <option key={task.id} value={task.id}>{task.titulo}</option>)}</select><button className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text disabled:opacity-50" disabled={!taskToAdd} onClick={() => void handleAddTask()} type="button">Añadir tarea</button></div>}</div>}
+        {selected.status === 'open' && <div className="mt-4 space-y-3">
+          <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" onChange={(event) => setNewPoint(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleAddManual(); }} placeholder="Añadir otro punto al guion..." value={newPoint}/><button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white" onClick={() => void handleAddManual()} type="button"><Plus size={16}/>Crear punto</button></div>
+          {(isDirection || isUnion) && <div className="rounded-xl border border-metro-border bg-metro-panel p-3">
+            <p className="text-xs font-bold text-metro-text">Añadir una tarea abierta</p>
+            <p className="mt-1 text-[11px] text-metro-muted">Puedes incorporar cualquier tarea activa aunque no estuviera marcada previamente para esta reunión.</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(160px,0.7fr)_minmax(220px,1.3fr)_auto]">
+              <input className="min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" onChange={(event) => { setTaskSearch(event.target.value); setTaskToAdd(''); }} placeholder="Buscar tarea..." value={taskSearch}/>
+              <select className="min-w-0 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" onChange={(event) => setTaskToAdd(event.target.value)} value={taskToAdd}><option value="">{availableTasks.length ? 'Selecciona una tarea activa' : 'No hay tareas coincidentes'}</option>{availableTasks.map((task) => <option key={task.id} value={task.id}>{task.titulo}{task.responsable ? ` · ${task.responsable}` : ''}</option>)}</select>
+              <button className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text disabled:opacity-50" disabled={!taskToAdd} onClick={() => void handleAddTask()} type="button">Añadir tarea</button>
+            </div>
+          </div>}
+          {isDirection && <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/15" onClick={() => setTaskCreation({ pointId: null })} type="button"><Plus size={16}/>Crear nueva tarea desde la reunión</button>}
+        </div>}
       </div>
-      {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}{dialogNode}
+      {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
+      {taskCreation && <TaskEditor initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
+      {dialogNode}
     </section>;
   }
 

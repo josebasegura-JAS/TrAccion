@@ -74,4 +74,41 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().directionTaskIds).toEqual(['t-1']);
     expect(useCoordinacionStore.getState().unionTaskIds).toEqual({});
   });
+
+  it('permite añadir a una reunión con Dirección una tarea activa no marcada previamente', async () => {
+    const tasks = [task('t-1', 'Asunto sobrevenido')];
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-22', tasks);
+
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
+
+    const result = await useCoordinacionStore.getState().addTaskPoint(created.recordId ?? '', 't-1', tasks);
+
+    expect(result.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings[0].points[0]).toMatchObject({
+      origin: 'task',
+      taskId: 't-1',
+      title: 'Asunto sobrevenido',
+    });
+    expect(useCoordinacionStore.getState().directionTaskIds).toEqual([]);
+  });
+
+  it('convierte un punto manual en tarea sin duplicar el punto de la reunión', async () => {
+    const tasks = [task('t-2', 'Tarea nacida en la reunión')];
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-22', tasks);
+    await useCoordinacionStore.getState().addManualPoint(created.recordId ?? '', 'Compromiso nuevo', 'Detalle acordado');
+    const manualPoint = useCoordinacionStore.getState().meetings[0].points[0];
+
+    const result = await useCoordinacionStore.getState().linkManualPointToTask(
+      created.recordId ?? '', manualPoint.id, 't-2', tasks,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(1);
+    expect(useCoordinacionStore.getState().meetings[0].points[0]).toMatchObject({
+      origin: 'task',
+      taskId: 't-2',
+      title: 'Compromiso nuevo',
+      detail: 'Detalle acordado',
+    });
+  });
 });

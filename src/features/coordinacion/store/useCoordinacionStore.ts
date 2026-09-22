@@ -40,6 +40,7 @@ interface CoordinationStore extends CoordinationState {
     tasks: Task[],
   ) => Promise<Result>;
   addTaskPoint: (meetingId: string, taskId: string, tasks: Task[]) => Promise<Result>;
+  linkManualPointToTask: (meetingId: string, pointId: string, taskId: string, tasks: Task[]) => Promise<Result>;
   addManualPoint: (meetingId: string, title: string, detail?: string) => Promise<Result>;
   updatePoint: (
     meetingId: string,
@@ -235,6 +236,35 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       meetings: current.meetings.map((item) => item.id === meetingId
         ? { ...item, points: [...item.points, point], updatedAt: now }
         : item),
+    };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  linkManualPointToTask: async (meetingId, pointId, taskId, tasks) => {
+    const current = get();
+    const meeting = current.meetings.find((item) => item.id === meetingId);
+    if (!meeting || meeting.status === 'closed') return { ok: false, message: 'La reunión no está disponible para edición.' };
+    const point = meeting.points.find((item) => item.id === pointId);
+    if (!point || point.origin !== 'manual') return { ok: false, message: 'El punto manual ya no está disponible.' };
+    if (meeting.points.some((item) => item.id !== pointId && item.taskId === taskId)) {
+      return { ok: false, message: 'La tarea ya está incluida en el guion.' };
+    }
+    const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
+    if (!task) return { ok: false, message: 'La tarea creada no está activa.' };
+    const now = new Date().toISOString();
+    const next: CoordinationState = {
+      ...current,
+      meetings: current.meetings.map((item) => item.id === meetingId ? {
+        ...item,
+        updatedAt: now,
+        points: item.points.map((candidate) => candidate.id === pointId ? {
+          ...candidate,
+          origin: 'task',
+          taskId: task.id,
+          updatedAt: now,
+        } : candidate),
+      } : item),
     };
     const result = await persist(next);
     if (result.ok) set(next);
