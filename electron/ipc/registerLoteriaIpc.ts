@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { getSqliteStatus, loadLoteriaRecordsSnapshot, saveLoteriaSnapshotIfUnchanged } from '../sqlitePersistence.js';
@@ -80,7 +80,16 @@ export function registerLoteriaIpc(): void {
       await mkdir(directory, { recursive: true });
       const safeFileName = path.basename(candidate.fileName);
       const filePath = path.join(directory, safeFileName);
-      await writeFile(filePath, Buffer.from(candidate.buffer));
+      const tempPath = path.join(
+        directory,
+        `.Loteria_${candidate.year}.${process.pid}.${Date.now()}.tmp.xlsx`,
+      );
+      await writeFile(tempPath, Buffer.from(candidate.buffer));
+      try {
+        await copyFile(tempPath, filePath);
+      } finally {
+        await unlink(tempPath).catch(() => undefined);
+      }
 
       // Lotería mantiene un único Excel espejo por campaña. El nombre refleja la
       // fecha de la última actualización; al cambiar de día se elimina el anterior.
@@ -99,7 +108,17 @@ export function registerLoteriaIpc(): void {
       return { ok: true, message: `Excel actualizado en ${filePath}.`, path: filePath };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      return { ok: false, message: `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático: ${detail}`, path: null };
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : '';
+      const locked = ['EBUSY', 'EPERM', 'EACCES'].includes(code);
+      return {
+        ok: false,
+        message: locked
+          ? `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático porque el archivo está abierto o bloqueado. Cierra el Excel y vuelve a guardar. Detalle: ${detail}`
+          : `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático: ${detail}`,
+        path: null,
+      };
     }
   });
 

@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
-import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export function registerOperationalExcelBackupIpc(): void {
@@ -37,10 +37,21 @@ export function registerOperationalExcelBackupIpc(): void {
       const safeFileName = path.basename(candidate.fileName);
       const safePrefix = path.basename(candidate.cleanupPrefix);
       const filePath = path.join(directory, safeFileName);
+      const tempPath = path.join(
+        directory,
+        `.${safePrefix}.${process.pid}.${Date.now()}.tmp.xlsx`,
+      );
 
-      // Debe existir un único espejo por módulo. Si cambia el día, el nombre cambia
-      // y se elimina el fichero anterior antes de escribir el nuevo. En el mismo día
-      // se conserva el mismo nombre y writeFile lo sobrescribe.
+      // Escritura segura: primero se genera un temporal. Solo si puede copiarse al
+      // destino definitivo se eliminan los espejos antiguos. Si Excel mantiene el
+      // fichero abierto, copyFile falla y se conserva intacta la última copia válida.
+      await writeFile(tempPath, Buffer.from(candidate.buffer));
+      try {
+        await copyFile(tempPath, filePath);
+      } finally {
+        await unlink(tempPath).catch(() => undefined);
+      }
+
       const existingFiles = await readdir(directory);
       const previousBackups = existingFiles.filter(
         (name) =>
@@ -49,14 +60,23 @@ export function registerOperationalExcelBackupIpc(): void {
           name.toLowerCase().endsWith('.xlsx'),
       );
       for (const previousFile of previousBackups) {
-        await unlink(path.join(directory, previousFile));
+        await unlink(path.join(directory, previousFile)).catch(() => undefined);
       }
 
-      await writeFile(filePath, Buffer.from(candidate.buffer));
       return { ok: true, message: `Excel automático actualizado en ${filePath}.`, path: filePath };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      return { ok: false, message: `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático: ${detail}`, path: null };
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : '';
+      const locked = ['EBUSY', 'EPERM', 'EACCES'].includes(code);
+      return {
+        ok: false,
+        message: locked
+          ? `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático porque el archivo está abierto o bloqueado. Cierra el Excel y vuelve a guardar. Detalle: ${detail}`
+          : `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático: ${detail}`,
+        path: null,
+      };
     }
   });
 }

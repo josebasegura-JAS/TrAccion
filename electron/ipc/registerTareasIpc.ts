@@ -37,6 +37,7 @@ const allowedTaskDocumentExtensions = new Set([
 ]);
 
 let openTasksWordTimer: ReturnType<typeof setTimeout> | null = null;
+let lastOpenTasksExcelFailureMessage: string | null = null;
 
 function assertAllowedTaskDocumentPath(filePath: string): void {
   if (!allowedTaskDocumentExtensions.has(path.extname(filePath).toLowerCase())) {
@@ -94,6 +95,28 @@ async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
   return exportOpenTasksWord(snapshot.records);
 }
 
+async function showOpenTasksExcelFailure(message: string): Promise<void> {
+  // Evita encadenar el mismo diálogo en cada guardado mientras el mismo Excel
+  // siga abierto. En cuanto una actualización tiene éxito, se rearma el aviso.
+  if (lastOpenTasksExcelFailureMessage === message) return;
+  lastOpenTasksExcelFailureMessage = message;
+
+  const browserWindow = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed());
+  const options = {
+    type: 'warning' as const,
+    title: 'Copia Excel de tareas no actualizada',
+    message: 'La tarea se ha guardado, pero la copia Excel no se ha actualizado.',
+    detail: `${message}\n\nSi el Excel está abierto, ciérralo y vuelve a guardar una tarea o pulsa «Excel compartido» para reintentar.`,
+    buttons: ['Aceptar'],
+    defaultId: 0,
+  };
+  if (browserWindow) {
+    await dialog.showMessageBox(browserWindow, options);
+  } else {
+    await dialog.showMessageBox(options);
+  }
+}
+
 function scheduleOpenTasksWordRefresh(): void {
   if (openTasksWordTimer) {
     clearTimeout(openTasksWordTimer);
@@ -105,10 +128,16 @@ function scheduleOpenTasksWordRefresh(): void {
       .then((result) => {
         if (!result.ok) {
           console.warn(`[tareas-excel] ${result.message}`);
+          void showOpenTasksExcelFailure(result.message);
+          return;
         }
+        lastOpenTasksExcelFailureMessage = null;
       })
       .catch((error: unknown) => {
-        console.warn('No se ha podido actualizar el Excel de tareas abiertas.', error);
+        const detail = error instanceof Error ? error.message : String(error);
+        const message = `No se ha podido actualizar el Excel de tareas abiertas: ${detail}`;
+        console.warn(message, error);
+        void showOpenTasksExcelFailure(message);
       });
   }, 1500);
 }
