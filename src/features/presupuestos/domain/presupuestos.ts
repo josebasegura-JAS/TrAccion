@@ -43,6 +43,16 @@ export interface BudgetScenario {
   deletedAt?: string | null;
 }
 
+export interface BudgetManualSubitem {
+  id: string;
+  concept: string;
+  unitPrice: number;
+  units: number;
+  notes: string;
+}
+
+export type BudgetManualCalculationMode = 'direct' | 'breakdown';
+
 export interface BudgetManualItem {
   id: string;
   scenarioId: string;
@@ -51,6 +61,8 @@ export interface BudgetManualItem {
   monthlyAmount: number;
   annualAmount: number;
   notes: string;
+  calculationMode?: BudgetManualCalculationMode;
+  subitems?: BudgetManualSubitem[];
   displayOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -197,7 +209,14 @@ export function normalizeBudgetRate(value: unknown): number {
   return Math.min(Math.max(parsed, 0), 1);
 }
 
-export function calculateBudgetManualItemYear(item: Pick<BudgetManualItem, 'monthlyAmount' | 'annualAmount'>): number {
+export function calculateBudgetManualSubitemTotal(item: Pick<BudgetManualSubitem, 'unitPrice' | 'units'>): number {
+  return roundBudgetCurrency(Math.max(0, normalizeBudgetNumber(item.unitPrice)) * Math.max(0, normalizeBudgetNumber(item.units)));
+}
+
+export function calculateBudgetManualItemYear(item: Pick<BudgetManualItem, 'monthlyAmount' | 'annualAmount' | 'calculationMode' | 'subitems'>): number {
+  if (item.calculationMode === 'breakdown') {
+    return roundBudgetCurrency((item.subitems ?? []).reduce((total, subitem) => total + calculateBudgetManualSubitemTotal(subitem), 0));
+  }
   const annualAmount = normalizeBudgetNumber(item.annualAmount);
   if (annualAmount > 0) {
     return roundBudgetCurrency(annualAmount);
@@ -205,7 +224,10 @@ export function calculateBudgetManualItemYear(item: Pick<BudgetManualItem, 'mont
   return roundBudgetCurrency(Math.max(0, normalizeBudgetNumber(item.monthlyAmount)) * 12);
 }
 
-export function calculateBudgetManualItemMonth(item: Pick<BudgetManualItem, 'monthlyAmount' | 'annualAmount'>): number {
+export function calculateBudgetManualItemMonth(item: Pick<BudgetManualItem, 'monthlyAmount' | 'annualAmount' | 'calculationMode' | 'subitems'>): number {
+  if (item.calculationMode === 'breakdown') {
+    return roundBudgetCurrency(calculateBudgetManualItemYear(item) / 12);
+  }
   const annualAmount = normalizeBudgetNumber(item.annualAmount);
   if (annualAmount > 0) {
     return roundBudgetCurrency(annualAmount / 12);
@@ -287,8 +309,8 @@ export function buildAutomaticTicketPlan(
     .filter((calendar) => !calendar.deletedAt && calendar.activo)
     .map((calendar) => {
       const basePeople = activePeople.filter((person) => person.calendarId === calendar.id).length;
-      const additionalPeople = Math.max(0, Math.trunc(normalizeBudgetNumber(extras[calendar.id] ?? 0)));
-      const totalPeople = basePeople + additionalPeople;
+      const additionalPeople = Math.trunc(normalizeBudgetNumber(extras[calendar.id] ?? 0));
+      const totalPeople = Math.max(0, basePeople + additionalPeople);
       const annualDays = BUDGET_MONTHS.reduce((total, month) => total + countTicketCalendarDays(calendar, year, month), 0);
       const theoreticalTickets = annualDays * totalPeople;
       const annualTicketsA = Math.round(theoreticalTickets * (1 - rateA));
@@ -339,9 +361,9 @@ function calculateAutomaticTicketMonth(
       .filter((calendar) => !calendar.deletedAt && calendar.activo)
       .reduce((total, calendar) => {
         const basePeople = activePeople.filter((person) => person.calendarId === calendar.id).length;
-        const additionalPeople = Math.max(0, Math.trunc(normalizeBudgetNumber(extras[calendar.id] ?? 0)));
+        const additionalPeople = Math.trunc(normalizeBudgetNumber(extras[calendar.id] ?? 0));
         const ticketDays = countTicketCalendarDays(calendar, year, month);
-        return total + ticketDays * (basePeople + additionalPeople) * (1 - rate) * ticketAmount;
+        return total + ticketDays * Math.max(0, basePeople + additionalPeople) * (1 - rate) * ticketAmount;
       }, 0),
   );
 }
@@ -570,12 +592,19 @@ export function validateBudgetScenario(
   return { valid: errors.length === 0, errors };
 }
 
-export function validateBudgetManualItem(item: Pick<BudgetManualItem, 'concept' | 'monthlyAmount' | 'annualAmount'>): BudgetValidationResult {
+export function validateBudgetManualItem(item: Pick<BudgetManualItem, 'concept' | 'monthlyAmount' | 'annualAmount' | 'calculationMode' | 'subitems'>): BudgetValidationResult {
   const errors: string[] = [];
   const monthlyAmount = normalizeBudgetNumber(item.monthlyAmount);
   const annualAmount = normalizeBudgetNumber(item.annualAmount);
+  const calculationMode = item.calculationMode ?? 'direct';
   if (!item.concept.trim()) errors.push('El concepto de partida es obligatorio.');
-  if (monthlyAmount <= 0 && annualAmount <= 0) errors.push('Debe existir importe mensual o anual.');
+  if (calculationMode === 'breakdown') {
+    if ((item.subitems ?? []).length === 0) errors.push('Añade al menos una subpartida para usar el desglose.');
+    (item.subitems ?? []).forEach((subitem) => {
+      if (!subitem.concept.trim()) errors.push('El concepto de cada subpartida es obligatorio.');
+      if (normalizeBudgetNumber(subitem.unitPrice) < 0 || normalizeBudgetNumber(subitem.units) < 0) errors.push('Precio y unidades de las subpartidas no pueden ser negativos.');
+    });
+  } else if (monthlyAmount <= 0 && annualAmount <= 0) errors.push('Debe existir importe mensual o anual.');
   if (monthlyAmount < 0 || annualAmount < 0) errors.push('Los importes no pueden ser negativos.');
   return { valid: errors.length === 0, errors };
 }

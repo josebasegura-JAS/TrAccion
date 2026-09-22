@@ -4,6 +4,7 @@ import type { TicketCalendar, TicketPerson } from '../../ticket-restaurante/doma
 import {
   buildAutomaticTicketPlan,
   calculateBudgetManualItemYear,
+  calculateBudgetManualSubitemTotal,
   calculateBudgetScenarioYear,
   roundBudgetCurrency,
   type BudgetManualItem,
@@ -47,6 +48,7 @@ type BudgetExportInput = {
 type BudgetExportLine = {
   budgetLine: string;
   concept: string;
+  notes: string;
   simulationAmount: number;
   finalAmount?: number;
 };
@@ -89,6 +91,7 @@ function buildExportLines({
     {
       budgetLine: 'Ticket Restaurante',
       concept: `Cálculo anual · absentismo ${ticketRate}%`,
+      notes: `Precio ticket ${scenario.ticketAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`,
       simulationAmount: calculated.ticketTotal,
       finalAmount: mode === 'final' ? ticketFinal : undefined,
     },
@@ -107,6 +110,7 @@ function buildExportLines({
     lines.push({
       budgetLine: item.category.trim() || 'Partidas manuales',
       concept: item.concept.trim() || 'Sin concepto',
+      notes: item.notes.trim(),
       simulationAmount,
       finalAmount: mode === 'final' ? finalAmount : undefined,
     });
@@ -179,13 +183,14 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   worksheet.properties.defaultRowHeight = 18;
   worksheet.getColumn('A').width = 28;
   worksheet.getColumn('B').width = 48;
-  worksheet.getColumn('C').width = mode === 'final' ? 18 : 22;
+  worksheet.getColumn('C').width = 42;
+  worksheet.getColumn('D').width = 18;
   if (mode === 'final') {
-    worksheet.getColumn('D').width = 18;
     worksheet.getColumn('E').width = 18;
+    worksheet.getColumn('F').width = 18;
   }
 
-  const lastColumn = mode === 'final' ? 'E' : 'C';
+  const lastColumn = mode === 'final' ? 'F' : 'D';
   worksheet.mergeCells(`A1:${lastColumn}1`);
   const titleCell = worksheet.getCell('A1');
   titleCell.value = `Presupuesto RRLL ${scenario.year}`;
@@ -222,13 +227,13 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   const difference = roundBudgetCurrency(finalTotal - calculated.total);
 
   if (mode === 'final') {
-    applyKpiBlock(worksheet, 'A5:A6', 'TOTAL DEFINITIVO', finalTotal);
-    applyKpiBlock(worksheet, 'C5:C6', 'SIMULACIÓN BASE', calculated.total);
-    applyKpiBlock(worksheet, 'E5:E6', 'DIFERENCIA', difference);
+    applyKpiBlock(worksheet, 'A5:B6', 'TOTAL DEFINITIVO', finalTotal);
+    applyKpiBlock(worksheet, 'C5:D6', 'SIMULACIÓN BASE', calculated.total);
+    applyKpiBlock(worksheet, 'E5:F6', 'DIFERENCIA', difference);
   } else {
     applyKpiBlock(worksheet, 'A5:A6', 'TOTAL SIMULACIÓN', calculated.total);
-    applyKpiBlock(worksheet, 'B5:B6', 'TICKET RESTAURANTE', calculated.ticketTotal);
-    applyKpiBlock(worksheet, 'C5:C6', 'OTRAS PARTIDAS', calculated.manualTotal);
+    applyKpiBlock(worksheet, 'B5:C6', 'TICKET RESTAURANTE', calculated.ticketTotal);
+    applyKpiBlock(worksheet, 'D5:D6', 'OTRAS PARTIDAS', calculated.manualTotal);
   }
   worksheet.getRow(5).height = 24;
   worksheet.getRow(6).height = 24;
@@ -236,14 +241,14 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   const headerRowNumber = 8;
   const headerRow = worksheet.getRow(headerRowNumber);
   const headers = mode === 'final'
-    ? ['Partida', 'Concepto', 'Simulación', 'Definitivo', 'Diferencia']
-    : ['Partida', 'Concepto', 'Importe anual'];
+    ? ['Partida', 'Concepto', 'Observaciones', 'Simulación', 'Definitivo', 'Diferencia']
+    : ['Partida', 'Concepto', 'Observaciones', 'Importe anual'];
   headers.forEach((header, index) => {
     const cell = headerRow.getCell(index + 1);
     cell.value = header;
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.header } };
     cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.text } };
-    cell.alignment = { horizontal: index >= 2 ? 'right' : 'left', vertical: 'middle' };
+    cell.alignment = { horizontal: index >= (mode === 'final' ? 3 : 3) ? 'right' : 'left', vertical: 'middle' };
     setThinBorder(cell);
   });
   headerRow.height = 24;
@@ -255,20 +260,23 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
     const isNewGroup = line.budgetLine !== previousGroup;
     row.getCell(1).value = line.budgetLine;
     row.getCell(2).value = line.concept;
-    applyMoneyCell(row.getCell(3), line.simulationAmount);
+    row.getCell(3).value = line.notes;
+    row.getCell(3).font = { name: 'Aptos', size: 9, color: { argb: COLORS.muted } };
+    row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    applyMoneyCell(row.getCell(4), line.simulationAmount);
     if (mode === 'final') {
       const finalAmount = line.finalAmount ?? line.simulationAmount;
-      applyMoneyCell(row.getCell(4), finalAmount, true);
+      applyMoneyCell(row.getCell(5), finalAmount, true);
       const rowDifference = roundBudgetCurrency(finalAmount - line.simulationAmount);
-      applyMoneyCell(row.getCell(5), rowDifference, rowDifference !== 0);
-      if (rowDifference > 0) row.getCell(5).font = { ...row.getCell(5).font, color: { argb: COLORS.negative } };
-      if (rowDifference < 0) row.getCell(5).font = { ...row.getCell(5).font, color: { argb: COLORS.positive } };
+      applyMoneyCell(row.getCell(6), rowDifference, rowDifference !== 0);
+      if (rowDifference > 0) row.getCell(6).font = { ...row.getCell(6).font, color: { argb: COLORS.negative } };
+      if (rowDifference < 0) row.getCell(6).font = { ...row.getCell(6).font, color: { argb: COLORS.positive } };
     }
 
     for (let column = 1; column <= headers.length; column += 1) {
       const cell = row.getCell(column);
       setThinBorder(cell);
-      if (column < 3) {
+      if (column < 4) {
         cell.font = {
           name: 'Aptos',
           size: 10,
@@ -288,7 +296,7 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   });
 
   const totalRow = worksheet.getRow(rowNumber);
-  worksheet.mergeCells(`A${rowNumber}:B${rowNumber}`);
+  worksheet.mergeCells(`A${rowNumber}:C${rowNumber}`);
   const totalLabel = totalRow.getCell(1);
   totalLabel.value = 'TOTAL GENERAL';
   totalLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
@@ -296,22 +304,22 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   totalLabel.alignment = { horizontal: 'left', vertical: 'middle' };
   setThinBorder(totalLabel);
 
-  applyMoneyCell(totalRow.getCell(3), calculated.total, true);
-  totalRow.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
-  totalRow.getCell(3).font = { ...totalRow.getCell(3).font, color: { argb: COLORS.redDark } };
-  setThinBorder(totalRow.getCell(3));
+  applyMoneyCell(totalRow.getCell(4), calculated.total, true);
+  totalRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
+  totalRow.getCell(4).font = { ...totalRow.getCell(4).font, color: { argb: COLORS.redDark } };
+  setThinBorder(totalRow.getCell(4));
   if (mode === 'final') {
-    applyMoneyCell(totalRow.getCell(4), finalTotal, true);
-    totalRow.getCell(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
-    totalRow.getCell(4).font = { ...totalRow.getCell(4).font, color: { argb: COLORS.redDark } };
-    setThinBorder(totalRow.getCell(4));
-    applyMoneyCell(totalRow.getCell(5), difference, true);
+    applyMoneyCell(totalRow.getCell(5), finalTotal, true);
     totalRow.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
-    totalRow.getCell(5).font = {
-      ...totalRow.getCell(5).font,
+    totalRow.getCell(5).font = { ...totalRow.getCell(5).font, color: { argb: COLORS.redDark } };
+    setThinBorder(totalRow.getCell(5));
+    applyMoneyCell(totalRow.getCell(6), difference, true);
+    totalRow.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
+    totalRow.getCell(6).font = {
+      ...totalRow.getCell(6).font,
       color: { argb: difference > 0 ? COLORS.negative : difference < 0 ? COLORS.positive : COLORS.redDark },
     };
-    setThinBorder(totalRow.getCell(5));
+    setThinBorder(totalRow.getCell(6));
   }
   totalRow.height = 26;
 
@@ -328,6 +336,80 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
     notesCell.font = { name: 'Aptos', size: 9, color: { argb: COLORS.muted } };
     notesCell.alignment = { vertical: 'top', wrapText: true };
     notesCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.group } };
+  }
+
+  const scenarioManualItems = visibleScenarioItems(scenario.id, manualItems);
+  if (scenarioManualItems.length > 0) {
+    const detailManual = workbook.addWorksheet('Detalle partidas', { views: [{ state: 'frozen', ySplit: 4 }] });
+    detailManual.columns = [
+      { width: 28 },
+      { width: 22 },
+      { width: 18 },
+      { width: 32 },
+      { width: 16 },
+      { width: 14 },
+      { width: 18 },
+      { width: 44 },
+    ];
+    detailManual.mergeCells('A1:H1');
+    detailManual.getCell('A1').value = `Detalle de partidas · ${scenario.name}`;
+    detailManual.getCell('A1').font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: COLORS.text } };
+    detailManual.mergeCells('A2:H2');
+    detailManual.getCell('A2').value = 'Los importes por desglose se calculan como precio unitario × unidades previstas.';
+    detailManual.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: COLORS.muted } };
+    const manualHeaders = ['Partida', 'Categoría', 'Tipo cálculo', 'Subpartida', 'Precio unitario', 'Unidades', 'Total', 'Observaciones'];
+    manualHeaders.forEach((header, index) => {
+      const cell = detailManual.getRow(4).getCell(index + 1);
+      cell.value = header;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.header } };
+      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.text } };
+      setThinBorder(cell);
+    });
+    let manualRowNumber = 5;
+    scenarioManualItems.forEach((item) => {
+      const subitems = item.calculationMode === 'breakdown' ? (item.subitems ?? []) : [];
+      if (subitems.length === 0) {
+        const row = detailManual.getRow(manualRowNumber);
+        row.values = [item.concept, item.category, 'Importe directo', '', '', '', calculateBudgetManualItemYear(item), item.notes];
+        applyMoneyCell(row.getCell(7), calculateBudgetManualItemYear(item), true);
+        for (let column = 1; column <= 8; column += 1) setThinBorder(row.getCell(column));
+        row.getCell(8).alignment = { wrapText: true, vertical: 'top' };
+        manualRowNumber += 1;
+        return;
+      }
+      subitems.forEach((subitem, subindex) => {
+        const row = detailManual.getRow(manualRowNumber);
+        row.values = [
+          subindex === 0 ? item.concept : '',
+          subindex === 0 ? item.category : '',
+          subindex === 0 ? 'Desglose' : '',
+          subitem.concept,
+          subitem.unitPrice,
+          subitem.units,
+          calculateBudgetManualSubitemTotal(subitem),
+          subitem.notes || (subindex === 0 ? item.notes : ''),
+        ];
+        applyMoneyCell(row.getCell(5), subitem.unitPrice);
+        row.getCell(6).numFmt = '#,##0.00';
+        applyMoneyCell(row.getCell(7), calculateBudgetManualSubitemTotal(subitem), subindex === subitems.length - 1);
+        for (let column = 1; column <= 8; column += 1) setThinBorder(row.getCell(column));
+        row.getCell(8).alignment = { wrapText: true, vertical: 'top' };
+        manualRowNumber += 1;
+      });
+      const totalRow = detailManual.getRow(manualRowNumber);
+      detailManual.mergeCells(`A${manualRowNumber}:F${manualRowNumber}`);
+      totalRow.getCell(1).value = `Total ${item.concept}`;
+      totalRow.getCell(1).font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.text } };
+      totalRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.group } };
+      applyMoneyCell(totalRow.getCell(7), calculateBudgetManualItemYear(item), true);
+      totalRow.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.group } };
+      for (let column = 1; column <= 8; column += 1) setThinBorder(totalRow.getCell(column));
+      manualRowNumber += 1;
+    });
+    detailManual.pageSetup = {
+      orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.35, bottom: 0.35, header: 0.15, footer: 0.15 },
+    };
   }
 
   if (scenario.ticketPlanningMode === 'automatic') {
@@ -350,7 +432,7 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
       detail.mergeCells('A2:F2');
       detail.getCell('A2').value = `Absentismo principal: ${Math.round(plan.rateA * 10000) / 100}% · Precio ticket: ${scenario.ticketAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`;
       detail.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: COLORS.muted } };
-      const detailHeaders = ['Calendario', 'Personas base', 'Adicionales', 'Total personas', 'Tickets anuales', 'Importe anual'];
+      const detailHeaders = ['Calendario', 'Personas base', 'Ajuste simulación', 'Total personas', 'Tickets anuales', 'Importe anual'];
       detailHeaders.forEach((header, index) => {
         const cell = detail.getRow(4).getCell(index + 1);
         cell.value = header;

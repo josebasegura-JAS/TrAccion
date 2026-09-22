@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Check, ChevronRight, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, Copy, FileSpreadsheet, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select } from '../../../components/ui/Field';
@@ -14,9 +14,11 @@ import {
   buildAutomaticTicketPlan,
   buildBudgetActualDashboardData,
   calculateBudgetManualItemYear,
+  calculateBudgetManualSubitemTotal,
   calculateBudgetScenarioYear,
   type BudgetActualBlock,
   type BudgetManualItem,
+  type BudgetManualSubitem,
   type BudgetScenario,
 } from '../domain/presupuestos';
 import {
@@ -37,7 +39,14 @@ import {
 
 type Stage = 'scenario' | 'simulate' | 'compare' | 'execute';
 
-type ManualEdit = Record<string, { concept: string; category: string; annualAmount: number }>;
+type ManualEdit = Record<string, {
+  concept: string;
+  category: string;
+  annualAmount: number;
+  notes: string;
+  calculationMode: 'direct' | 'breakdown';
+  subitems: BudgetManualSubitem[];
+}>;
 
 type StepProps = {
   number: number;
@@ -142,6 +151,7 @@ export function PresupuestosPage() {
     removeScenario,
     scenarios,
     selectScenarioForExecution,
+    saveScenarioSimulation,
     setActiveScenario,
     ticketGroups,
     upsertActual,
@@ -154,6 +164,7 @@ export function PresupuestosPage() {
   const [scenarioDraft, setScenarioDraft] = useState<BudgetScenarioDraft>(emptyScenarioDraft(currentYear));
   const [manualDraft, setManualDraft] = useState<BudgetManualItemDraft>(emptyManualDraft(''));
   const [manualEdits, setManualEdits] = useState<ManualEdit>({});
+  const [ticketAmount, setTicketAmount] = useState(0);
   const [ticketAbsenceA, setTicketAbsenceA] = useState(3);
   const [ticketAbsenceB, setTicketAbsenceB] = useState(6);
   const [ticketExtras, setTicketExtras] = useState<Record<string, number>>({});
@@ -192,6 +203,7 @@ export function PresupuestosPage() {
   useEffect(() => {
     if (!activeScenario) return;
     setComparisonYear(activeScenario.year);
+    setTicketAmount(activeScenario.ticketAmount);
     setTicketAbsenceA((activeScenario.ticketAbsenceRateA ?? 0.03) * 100);
     setTicketAbsenceB((activeScenario.ticketAbsenceRateB ?? 0.06) * 100);
     setTicketExtras(activeScenario.ticketExtraPeopleByCalendar ?? {});
@@ -204,7 +216,10 @@ export function PresupuestosPage() {
       next[item.id] = {
         concept: item.concept,
         category: item.category,
-        annualAmount: calculateBudgetManualItemYear(item),
+        annualAmount: item.calculationMode === 'breakdown' ? item.annualAmount : calculateBudgetManualItemYear(item),
+        notes: item.notes,
+        calculationMode: item.calculationMode ?? 'direct',
+        subitems: (item.subitems ?? []).map((subitem) => ({ ...subitem })),
       };
     });
     setManualEdits(next);
@@ -214,19 +229,20 @@ export function PresupuestosPage() {
     if (!activeScenario) return null;
     return {
       ...activeScenario,
+      ticketAmount: Math.max(0, ticketAmount),
       ticketPlanningMode: 'automatic',
       ticketAbsenceRateA: Math.max(0, Math.min(ticketAbsenceA, 100)) / 100,
       ticketAbsenceRateB: Math.max(0, Math.min(ticketAbsenceB, 100)) / 100,
       ticketExtraPeopleByCalendar: ticketExtras,
     };
-  }, [activeScenario, ticketAbsenceA, ticketAbsenceB, ticketExtras]);
+  }, [activeScenario, ticketAbsenceA, ticketAbsenceB, ticketAmount, ticketExtras]);
 
   const liveManualItems = useMemo<BudgetManualItem[]>(
     () =>
       manualItems.map((item) => {
         const edit = manualEdits[item.id];
         if (!edit || item.scenarioId !== activeScenarioIdResolved || item.deletedAt) return item;
-        return { ...item, concept: edit.concept, category: edit.category, monthlyAmount: 0, annualAmount: edit.annualAmount };
+        return { ...item, concept: edit.concept, category: edit.category, monthlyAmount: 0, annualAmount: edit.annualAmount, notes: edit.notes, calculationMode: edit.calculationMode, subitems: edit.subitems };
       }),
     [activeScenarioIdResolved, manualEdits, manualItems],
   );
@@ -309,40 +325,44 @@ export function PresupuestosPage() {
   };
 
   const saveSimulation = () => {
-    if (!activeScenario) return;
-    const scenarioResult = upsertScenario(
+    if (!activeScenario) return false;
+    const manualDrafts = activeManualItems.flatMap((item) => {
+      const edit = manualEdits[item.id];
+      if (!edit) return [];
+      return [{
+        id: item.id,
+        draft: {
+          scenarioId: item.scenarioId,
+          concept: edit.concept,
+          category: edit.category,
+          monthlyAmount: 0,
+          annualAmount: edit.annualAmount,
+          notes: edit.notes,
+          calculationMode: edit.calculationMode,
+          subitems: edit.subitems,
+        },
+      }];
+    });
+    const result = saveScenarioSimulation(
+      activeScenario.id,
       {
         name: activeScenario.name,
         year: activeScenario.year,
-        ticketAmount: activeScenario.ticketAmount,
+        ticketAmount: Math.max(0, ticketAmount),
         ticketPlanningMode: 'automatic',
         ticketAbsenceRateA: Math.max(0, Math.min(ticketAbsenceA, 100)) / 100,
         ticketAbsenceRateB: Math.max(0, Math.min(ticketAbsenceB, 100)) / 100,
         ticketExtraPeopleByCalendar: ticketExtras,
         notes: activeScenario.notes,
       },
-      activeScenario.id,
+      manualDrafts,
     );
-    if (!scenarioResult.valid) {
-      setMessage(scenarioResult.errors.join(' '));
-      return;
-    }
-    for (const item of activeManualItems) {
-      const edit = manualEdits[item.id];
-      if (!edit) continue;
-      upsertManualItem(
-        {
-          scenarioId: item.scenarioId,
-          concept: edit.concept,
-          category: edit.category,
-          monthlyAmount: 0,
-          annualAmount: edit.annualAmount,
-          notes: item.notes,
-        },
-        item.id,
-      );
+    if (!result.valid) {
+      setMessage(result.errors.join(' '));
+      return false;
     }
     setMessage('Simulación guardada. Los importes se recalculan automáticamente mientras editas.');
+    return true;
   };
 
   const addManualItem = () => {
@@ -547,12 +567,16 @@ export function PresupuestosPage() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <Panel title="Ticket Restaurante" subtitle="La base viene de Ticket Restaurante. Cualquier cambio aquí recalcula el escenario al momento.">
+              <Panel title="Ticket Restaurante" subtitle="La base real viene de Ticket Restaurante. Los ajustes de esta simulación no modifican la plantilla y todo se recalcula al momento.">
                 <div className="grid gap-2 sm:grid-cols-4">
-                  <Metric label="Personas fijas" value={String(liveTicketPlan.basePeople)} />
-                  <Metric label="Adicionales" value={`+${liveTicketPlan.additionalPeople}`} />
+                  <Metric label="Personas base" value={String(liveTicketPlan.basePeople)} />
+                  <Metric label="Ajuste simulación" value={`${liveTicketPlan.additionalPeople >= 0 ? '+' : ''}${liveTicketPlan.additionalPeople}`} />
                   <Metric label="Total personas" value={String(liveTicketPlan.totalPeople)} />
-                  <Metric label="Precio ticket" value={euro(activeScenario.ticketAmount)} />
+                  <div className="rounded-xl border border-metro-border bg-metro-surface/65 px-3.5 py-2.5 shadow-sm">
+                    <Field label="Precio ticket (€)">
+                      <Input className="mt-1 h-8 text-right font-bold" type="number" min="0" step="0.01" value={ticketAmount} onChange={(event) => setTicketAmount(Math.max(0, Number(event.target.value)))} />
+                    </Field>
+                  </div>
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <Field label="Absentismo A (%) · cálculo principal">
@@ -577,48 +601,90 @@ export function PresupuestosPage() {
                 <div className="mt-3 max-h-[240px] overflow-y-auto rounded-xl border border-metro-border">
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-metro-raised text-metro-muted">
-                      <tr><th className="px-3 py-2 text-left">Calendario</th><th className="px-2 py-2 text-right">Fijas</th><th className="px-2 py-2 text-right">Añadir</th><th className="px-3 py-2 text-right">Total</th></tr>
+                      <tr><th className="px-3 py-2 text-left">Calendario</th><th className="px-2 py-2 text-right">Base real</th><th className="px-2 py-2 text-right">Ajuste</th><th className="px-3 py-2 text-right">Total</th></tr>
                     </thead>
                     <tbody>
                       {liveTicketPlan.rows.map((row) => (
                         <tr key={row.calendarId} className="border-t border-metro-border/70">
                           <td className="px-3 py-2 font-semibold text-metro-text">{row.calendarName}</td>
                           <td className="px-2 py-2 text-right text-metro-muted">{row.basePeople}</td>
-                          <td className="px-2 py-1.5 text-right"><Input className="ml-auto h-8 w-20 text-right" type="number" min="0" step="1" value={ticketExtras[row.calendarId] ?? 0} onChange={(event) => setTicketExtras({ ...ticketExtras, [row.calendarId]: Math.max(0, Number(event.target.value)) })} /></td>
+                          <td className="px-2 py-1.5 text-right"><Input className="ml-auto h-8 w-20 text-right" type="number" min={-row.basePeople} step="1" value={ticketExtras[row.calendarId] ?? 0} onChange={(event) => setTicketExtras({ ...ticketExtras, [row.calendarId]: Math.max(-row.basePeople, Math.trunc(Number(event.target.value) || 0)) })} /></td>
                           <td className="px-3 py-2 text-right font-bold text-metro-text">{row.totalPeople}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                <div className="mt-3 flex justify-end">
+                  <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setTicketAmount(activeScenario.ticketAmount); setTicketAbsenceA((activeScenario.ticketAbsenceRateA ?? 0.03) * 100); setTicketAbsenceB((activeScenario.ticketAbsenceRateB ?? 0.06) * 100); setTicketExtras(activeScenario.ticketExtraPeopleByCalendar ?? {}); }}><RotateCcw size={14} /> Restablecer Ticket</ActionButton>
+                </div>
               </Panel>
 
-              <Panel title="Partidas manuales" subtitle="Edita directamente concepto e importe anual. El total superior cambia sin tener que pulsar Calcular.">
-                <div className="max-h-[335px] overflow-y-auto rounded-xl border border-metro-border">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-metro-raised text-metro-muted">
-                      <tr><th className="px-2 py-2 text-left">Partida</th><th className="px-2 py-2 text-left">Categoría</th><th className="px-2 py-2 text-right">Anual</th><th className="w-10" /></tr>
-                    </thead>
-                    <tbody>
-                      {activeManualItems.length === 0 ? <tr><td colSpan={4} className="px-3 py-6 text-center text-metro-muted">Añade la primera partida debajo.</td></tr> : null}
-                      {activeManualItems.map((item) => {
-                        const edit = manualEdits[item.id] ?? { concept: item.concept, category: item.category, annualAmount: calculateBudgetManualItemYear(item) };
-                        return (
-                          <tr key={item.id} className="border-t border-metro-border/70">
-                            <td className="p-1.5"><Input className="h-8" value={edit.concept} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, concept: event.target.value } })} /></td>
-                            <td className="p-1.5"><Input className="h-8" value={edit.category} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, category: event.target.value } })} /></td>
-                            <td className="p-1.5"><Input className="h-8 text-right" type="number" min="0" step="0.01" value={edit.annualAmount} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, annualAmount: Number(event.target.value) } })} /></td>
-                            <td className="p-1.5"><button className="grid h-8 w-8 place-items-center rounded-lg text-red-300 transition hover:bg-red-500/10" onClick={() => removeManualItem(item.id)} title="Eliminar partida" type="button"><Trash2 size={14} /></button></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              <Panel title="Partidas manuales" subtitle="Cada partida puede ser un importe directo o un desglose de subpartidas. Observaciones e importes se actualizan en la simulación al momento.">
+                <div className="max-h-[430px] space-y-2 overflow-y-auto pr-1">
+                  {activeManualItems.length === 0 ? <div className="rounded-xl border border-dashed border-metro-border px-3 py-6 text-center text-xs text-metro-muted">Añade la primera partida debajo.</div> : null}
+                  {activeManualItems.map((item) => {
+                    const edit = manualEdits[item.id] ?? {
+                      concept: item.concept,
+                      category: item.category,
+                      annualAmount: item.calculationMode === 'breakdown' ? item.annualAmount : calculateBudgetManualItemYear(item),
+                      notes: item.notes,
+                      calculationMode: item.calculationMode ?? 'direct',
+                      subitems: item.subitems ?? [],
+                    };
+                    const calculatedAmount = edit.calculationMode === 'breakdown'
+                      ? edit.subitems.reduce((sum, subitem) => sum + calculateBudgetManualSubitemTotal(subitem), 0)
+                      : Math.max(0, Number(edit.annualAmount) || 0);
+                    return (
+                      <div key={item.id} className="rounded-xl border border-metro-border bg-metro-surface/45 p-2.5">
+                        <div className="grid gap-2 sm:grid-cols-[1.15fr_0.8fr_0.72fr_0.65fr_auto]">
+                          <Input className="h-8" aria-label="Partida" value={edit.concept} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, concept: event.target.value } })} />
+                          <Input className="h-8" aria-label="Categoría" value={edit.category} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, category: event.target.value } })} />
+                          <Select className="h-8" aria-label="Tipo de cálculo" value={edit.calculationMode} onChange={(event) => {
+                            const mode = event.target.value as 'direct' | 'breakdown';
+                            if (mode === 'breakdown') {
+                              const subitems = edit.subitems.length > 0 ? edit.subitems : [{ id: `sub-${Date.now()}-${item.id}`, concept: 'Detalle', unitPrice: Math.max(0, edit.annualAmount), units: 1, notes: '' }];
+                              setManualEdits({ ...manualEdits, [item.id]: { ...edit, calculationMode: mode, subitems } });
+                            } else {
+                              const annualAmount = edit.subitems.length > 0 ? edit.subitems.reduce((sum, subitem) => sum + calculateBudgetManualSubitemTotal(subitem), 0) : edit.annualAmount;
+                              setManualEdits({ ...manualEdits, [item.id]: { ...edit, calculationMode: mode, annualAmount } });
+                            }
+                          }}><option value="direct">Importe directo</option><option value="breakdown">Desglose</option></Select>
+                          {edit.calculationMode === 'direct' ? (
+                            <Input className="h-8 text-right" aria-label="Importe anual" type="number" min="0" step="0.01" value={edit.annualAmount} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, annualAmount: Number(event.target.value) } })} />
+                          ) : (
+                            <div className="flex h-8 items-center justify-end rounded-lg border border-metro-border bg-metro-panel px-2 font-bold text-metro-text">{euro(calculatedAmount)}</div>
+                          )}
+                          <div className="flex h-8 items-center justify-end text-[11px] font-bold text-metro-muted">{edit.calculationMode === 'breakdown' ? `${edit.subitems.length} subpart.` : 'Anual'}</div>
+                          <button className="grid h-8 w-8 place-items-center rounded-lg text-red-300 transition hover:bg-red-500/10" onClick={() => removeManualItem(item.id)} title="Eliminar partida" type="button"><Trash2 size={14} /></button>
+                        </div>
+                        <Input className="mt-2 h-8" aria-label="Observaciones de la partida" placeholder="Observaciones (opcional)" value={edit.notes} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, notes: event.target.value } })} />
+                        {edit.calculationMode === 'breakdown' ? (
+                          <div className="mt-2 rounded-lg border border-metro-border/80 bg-metro-panel/60 p-2">
+                            <div className="mb-1.5 grid grid-cols-[1fr_0.45fr_0.34fr_0.5fr_64px] gap-1.5 px-1 text-[10px] font-bold uppercase tracking-wide text-metro-muted"><span>Subpartida</span><span className="text-right">Unitario</span><span className="text-right">Unidades</span><span className="text-right">Total</span><span /></div>
+                            <div className="space-y-1.5">
+                              {edit.subitems.map((subitem, subIndex) => (
+                                <div key={subitem.id} className="grid grid-cols-[1fr_0.45fr_0.34fr_0.5fr_64px] gap-1.5">
+                                  <div className="min-w-0"><Input className="h-8" aria-label={`Subpartida ${subIndex + 1}`} value={subitem.concept} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: edit.subitems.map((candidate) => candidate.id === subitem.id ? { ...candidate, concept: event.target.value } : candidate) } })} /><Input className="mt-1 h-7 text-[11px]" aria-label={`Observaciones subpartida ${subIndex + 1}`} placeholder="Observaciones" value={subitem.notes} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: edit.subitems.map((candidate) => candidate.id === subitem.id ? { ...candidate, notes: event.target.value } : candidate) } })} /></div>
+                                  <Input className="h-8 text-right" aria-label="Precio unitario" type="number" min="0" step="0.01" value={subitem.unitPrice} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: edit.subitems.map((candidate) => candidate.id === subitem.id ? { ...candidate, unitPrice: Math.max(0, Number(event.target.value)) } : candidate) } })} />
+                                  <Input className="h-8 text-right" aria-label="Unidades previstas" type="number" min="0" step="0.01" value={subitem.units} onChange={(event) => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: edit.subitems.map((candidate) => candidate.id === subitem.id ? { ...candidate, units: Math.max(0, Number(event.target.value)) } : candidate) } })} />
+                                  <div className="flex h-8 items-center justify-end rounded-lg border border-metro-border bg-metro-surface px-2 font-bold text-metro-text">{euro(calculateBudgetManualSubitemTotal(subitem))}</div>
+                                  <div className="flex gap-1"><button className="grid h-8 w-8 place-items-center rounded-lg text-metro-muted hover:bg-metro-raised hover:text-metro-text" title="Duplicar subpartida" type="button" onClick={() => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: [...edit.subitems.slice(0, subIndex + 1), { ...subitem, id: `sub-${Date.now()}-${subIndex}`, concept: `${subitem.concept} copia` }, ...edit.subitems.slice(subIndex + 1)] } })}><Copy size={13} /></button><button className="grid h-8 w-8 place-items-center rounded-lg text-red-300 hover:bg-red-500/10" title="Eliminar subpartida" type="button" onClick={() => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: edit.subitems.filter((candidate) => candidate.id !== subitem.id) } })}><Trash2 size={13} /></button></div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-2"><button className="inline-flex h-8 items-center gap-1 rounded-lg border border-metro-border px-2 text-xs font-bold text-metro-text hover:bg-metro-raised" type="button" onClick={() => setManualEdits({ ...manualEdits, [item.id]: { ...edit, subitems: [...edit.subitems, { id: `sub-${Date.now()}-${edit.subitems.length}`, concept: '', unitPrice: 0, units: 1, notes: '' }] } })}><Plus size={13} /> Añadir subpartida</button><span className="text-xs font-extrabold text-metro-text">Total partida: {euro(calculatedAmount)}</span></div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_0.8fr_0.7fr_auto]">
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_0.8fr_0.7fr_1fr_auto]">
                   <Input placeholder="Nueva partida" value={manualDraft.concept} onChange={(event) => setManualDraft({ ...manualDraft, concept: event.target.value })} />
                   <Input placeholder="Categoría" value={manualDraft.category} onChange={(event) => setManualDraft({ ...manualDraft, category: event.target.value })} />
                   <Input type="number" min="0" step="0.01" placeholder="Importe anual" value={manualDraft.annualAmount || ''} onChange={(event) => setManualDraft({ ...manualDraft, annualAmount: Number(event.target.value), monthlyAmount: 0 })} />
+                  <Input placeholder="Observaciones" value={manualDraft.notes} onChange={(event) => setManualDraft({ ...manualDraft, notes: event.target.value })} />
                   <ActionButton iconOnly={false} size="sm" variant="add" onClick={addManualItem}>Añadir</ActionButton>
                 </div>
               </Panel>
@@ -627,7 +693,7 @@ export function PresupuestosPage() {
             <div className="flex flex-wrap justify-end gap-2">
               <ActionButton iconOnly={false} variant="secondary" onClick={() => exportSimulation(activeScenario, true)}><FileSpreadsheet size={15} /> Exportar simulación</ActionButton>
               <ActionButton iconOnly={false} variant="save" onClick={saveSimulation}>Guardar simulación</ActionButton>
-              <ActionButton iconOnly={false} variant="primary" onClick={() => { saveSimulation(); setComparisonYear(activeScenario.year); setStage('compare'); }}>Comparar escenarios <ChevronRight size={15} /></ActionButton>
+              <ActionButton iconOnly={false} variant="primary" onClick={() => { if (saveSimulation()) { setComparisonYear(activeScenario.year); setStage('compare'); } }}>Comparar escenarios <ChevronRight size={15} /></ActionButton>
             </div>
           </div>
         )

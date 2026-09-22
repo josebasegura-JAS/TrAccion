@@ -27,7 +27,7 @@ export const BUDGET_TICKET_GROUPS_STORAGE_KEY = 'traccion.v1.presupuestos.ticket
 export const BUDGET_ACTUALS_STORAGE_KEY = 'traccion.v1.presupuestos.actuals';
 
 export type BudgetScenarioDraft = Pick<BudgetScenario, 'name' | 'year' | 'ticketAmount' | 'ticketPlanningMode' | 'ticketAbsenceRateA' | 'ticketAbsenceRateB' | 'ticketExtraPeopleByCalendar' | 'notes'>;
-export type BudgetManualItemDraft = Pick<BudgetManualItem, 'scenarioId' | 'concept' | 'category' | 'monthlyAmount' | 'annualAmount' | 'notes'>;
+export type BudgetManualItemDraft = Pick<BudgetManualItem, 'scenarioId' | 'concept' | 'category' | 'monthlyAmount' | 'annualAmount' | 'notes' | 'calculationMode' | 'subitems'>;
 export type BudgetTicketGroupDraft = Pick<BudgetTicketGroup, 'scenarioId' | 'name' | 'peopleCount' | 'ticketCalendar' | 'absenceRate' | 'ticketAmount' | 'calculationType' | 'manualTickets' | 'annualTickets' | 'manualMonthlyAmount' | 'notes'>;
 export type BudgetActualDraft = Pick<BudgetActual, 'year' | 'month' | 'block' | 'concept' | 'amount' | 'notes'>;
 
@@ -42,6 +42,7 @@ interface PresupuestosStoreState {
   reloadFromStorage: () => void;
   setActiveScenario: (scenarioId: string) => void;
   upsertScenario: (draft: BudgetScenarioDraft, scenarioId?: string) => BudgetValidationResult & { id?: string };
+  saveScenarioSimulation: (scenarioId: string, scenarioDraft: BudgetScenarioDraft, manualDrafts: Array<{ id: string; draft: BudgetManualItemDraft }>) => BudgetValidationResult;
   duplicateScenario: (scenarioId: string) => string | null;
   removeScenario: (scenarioId: string) => void;
   upsertManualItem: (draft: BudgetManualItemDraft, itemId?: string) => BudgetValidationResult & { id?: string };
@@ -154,7 +155,7 @@ function normalizeScenarioDraft(draft: BudgetScenarioDraft): BudgetScenarioDraft
     ticketExtraPeopleByCalendar: Object.fromEntries(
       Object.entries(draft.ticketExtraPeopleByCalendar ?? {}).map(([calendarId, count]) => [
         calendarId,
-        Math.max(0, Math.trunc(normalizeBudgetNumber(count))),
+        Math.trunc(normalizeBudgetNumber(count)),
       ]),
     ),
     notes: draft.notes.trim(),
@@ -169,6 +170,14 @@ function normalizeManualDraft(draft: BudgetManualItemDraft): BudgetManualItemDra
     monthlyAmount: normalizeBudgetNumber(draft.monthlyAmount),
     annualAmount: normalizeBudgetNumber(draft.annualAmount),
     notes: draft.notes.trim(),
+    calculationMode: draft.calculationMode ?? 'direct',
+    subitems: (draft.subitems ?? []).map((subitem) => ({
+      id: subitem.id,
+      concept: subitem.concept.trim(),
+      unitPrice: Math.max(0, normalizeBudgetNumber(subitem.unitPrice)),
+      units: Math.max(0, normalizeBudgetNumber(subitem.units)),
+      notes: subitem.notes.trim(),
+    })),
   };
 }
 
@@ -312,6 +321,43 @@ export const usePresupuestosStore = create<PresupuestosStoreState>((set, get) =>
       : [...state.scenarios, scenario];
     commitPresupuestosState(set, { ...state, scenarios }, { scenarios, activeScenarioId: id }, state.sqliteUpdatedAt);
     return { ...validation, id };
+  },
+  saveScenarioSimulation: (scenarioId, scenarioDraft, manualDrafts) => {
+    const normalizedScenario = normalizeScenarioDraft(scenarioDraft);
+    const scenarioValidation = validateBudgetScenario(normalizedScenario);
+    if (!scenarioValidation.valid) return scenarioValidation;
+
+    const normalizedManualDrafts = manualDrafts.map(({ id, draft }) => ({ id, draft: normalizeManualDraft(draft) }));
+    const manualErrors = normalizedManualDrafts.flatMap(({ draft }) => validateBudgetManualItem(draft).errors);
+    if (manualErrors.length > 0) return { valid: false, errors: manualErrors };
+
+    const state = get();
+    const previousScenario = state.scenarios.find((scenario) => scenario.id === scenarioId && !scenario.deletedAt);
+    if (!previousScenario) return { valid: false, errors: ['No se ha encontrado el escenario que se está simulando.'] };
+    const timestamp = nowIso();
+    const updatedScenario: BudgetScenario = {
+      ...previousScenario,
+      ...normalizedScenario,
+      updatedAt: timestamp,
+    };
+    const draftById = new Map(normalizedManualDrafts.map(({ id, draft }) => [id, draft]));
+    const manualItems = state.manualItems.map((item) => {
+      const draft = draftById.get(item.id);
+      if (!draft || item.scenarioId !== scenarioId || item.deletedAt) return item;
+      return {
+        ...item,
+        ...draft,
+        updatedAt: timestamp,
+      };
+    });
+    const scenarios = state.scenarios.map((scenario) => scenario.id === scenarioId ? updatedScenario : scenario);
+    commitPresupuestosState(
+      set,
+      { ...state, scenarios, manualItems },
+      { scenarios, manualItems, activeScenarioId: scenarioId },
+      state.sqliteUpdatedAt,
+    );
+    return { valid: true, errors: [] };
   },
   duplicateScenario: (scenarioId) => {
     const id = createId('budget-scenario');

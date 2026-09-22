@@ -29,15 +29,15 @@ export const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Simulación de Ticket Restaurante',
     items: [
       'La plantilla base se toma de las personas activas con ticket fijo y de sus calendarios configurados en Ticket Restaurante.',
-      'Puedes añadir personas previstas por calendario; el número se suma a la base detectada.',
+      'Puedes ajustar personas previstas por calendario con valores positivos o negativos; la base real permanece visible y no se modifica.',
       'Se mantienen dos hipótesis de absentismo editables, por defecto 3 % y 6 %. La hipótesis A alimenta el total principal y la B se muestra como sensibilidad.',
-      'Los cambios de absentismo y personas adicionales actualizan los importes de la simulación sin pulsar un botón de cálculo.',
+      'Los cambios de precio de ticket, absentismo y ajustes de personas actualizan los importes de la simulación sin pulsar un botón de cálculo.',
     ],
   },
   {
     title: 'Partidas y presupuesto definitivo',
     items: [
-      'Las partidas manuales se editan por concepto, categoría e importe anual dentro de la propia simulación.',
+      'Las partidas manuales admiten observaciones y pueden calcularse por importe directo o mediante subpartidas con precio unitario y unidades previstas.',
       'Solo puede existir un escenario seleccionado para ejecución por ejercicio.',
       'Tras seleccionarlo, cada partida —incluido Ticket Restaurante— puede recibir un importe definitivo distinto del simulado.',
       'Cuando se guarda como definitivo, el seguimiento contra gasto real utiliza esos importes definitivos.',
@@ -117,6 +117,8 @@ export const emptyManualDraft = (scenarioId: string): BudgetManualItemDraft => (
   monthlyAmount: 0,
   annualAmount: 0,
   notes: '',
+  calculationMode: 'direct',
+  subitems: [],
 });
 export const emptyTicketDraft = (
   scenarioId: string,
