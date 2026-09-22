@@ -22,6 +22,7 @@ interface TaskTrackingEntry {
 
 interface ExportableTrackingEntry {
   fechaHora: string;
+  fechaSeguimiento: string;
   usuario: string;
   texto: string;
 }
@@ -34,6 +35,8 @@ interface ExportableTask {
   estado: string;
   prioridad: string;
   fechaLimite: string;
+  responsable: string;
+  origen: string;
   sindicato: string;
   createdAt: string;
   seguimiento: ExportableTrackingEntry[];
@@ -85,6 +88,7 @@ function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry 
   if (!rawText.startsWith(TRACKING_META_PREFIX)) {
     return {
       fechaHora: entry.fechaHora,
+      fechaSeguimiento: entry.fechaHora,
       usuario: '',
       texto: rawText.trim(),
     };
@@ -94,6 +98,7 @@ function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry 
   if (metadataEnd < 0) {
     return {
       fechaHora: entry.fechaHora,
+      fechaSeguimiento: entry.fechaHora,
       usuario: '',
       texto: rawText.trim(),
     };
@@ -106,15 +111,18 @@ function decodeTrackingEntry(entry: TaskTrackingEntry): ExportableTrackingEntry 
     .trim();
 
   try {
-    const metadata = JSON.parse(metadataRaw) as { usuario?: unknown };
+    const metadata = JSON.parse(metadataRaw) as { fecha?: unknown; usuario?: unknown };
     return {
       fechaHora: entry.fechaHora,
+      fechaSeguimiento:
+        typeof metadata.fecha === 'string' && metadata.fecha.trim() ? metadata.fecha.trim() : entry.fechaHora,
       usuario: typeof metadata.usuario === 'string' ? metadata.usuario.trim() : '',
       texto: visibleText,
     };
   } catch {
     return {
       fechaHora: entry.fechaHora,
+      fechaSeguimiento: entry.fechaHora,
       usuario: '',
       texto: visibleText || rawText.trim(),
     };
@@ -159,6 +167,8 @@ function parseTask(value: string): ExportableTask | null {
       estado: task.estado ?? '',
       prioridad: task.prioridad ?? '',
       fechaLimite: task.fechaLimite ?? '',
+      responsable: typeof (task as { responsable?: unknown }).responsable === 'string' ? (task as { responsable: string }).responsable : '',
+      origen: typeof (task as { origen?: unknown }).origen === 'string' ? (task as { origen: string }).origen : '',
       sindicato: task.sindicato ?? '',
       createdAt: task.createdAt ?? '',
       seguimiento: parseTracking(task.seguimiento),
@@ -305,6 +315,83 @@ function styleTaskRows(
   });
 }
 
+function addTasksSummaryWorksheet(
+  workbook: ExcelJS.Workbook,
+  tasks: ExportableTask[],
+  generatedAt: string,
+): void {
+  const worksheet = workbook.addWorksheet('Resumen');
+  setTitle(
+    worksheet,
+    'Resumen de tareas abiertas',
+    `Actualizado ${generatedAt}`,
+    6,
+  );
+
+  const openCount = tasks.length;
+  const criticalCount = tasks.filter((task) => task.prioridad === 'critica').length;
+  const highCount = tasks.filter((task) => task.prioridad === 'alta').length;
+  const blockedCount = tasks.filter((task) => task.estado === 'bloqueada').length;
+  const overdueCount = tasks.filter((task) => {
+    if (!task.fechaLimite) return false;
+    const deadline = parseDate(task.fechaLimite);
+    if (!deadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadline.setHours(0, 0, 0, 0);
+    return deadline.getTime() < today.getTime();
+  }).length;
+  const trackingCount = tasks.reduce((total, task) => total + task.seguimiento.length, 0);
+
+  const kpis = [
+    ['Tareas abiertas', openCount, 'FFDDEBF7'],
+    ['Críticas', criticalCount, 'FFFDE8E8'],
+    ['Alta prioridad', highCount, 'FFFFF1E6'],
+    ['Bloqueadas', blockedCount, 'FFFDE8E8'],
+    ['Fuera de plazo', overdueCount, 'FFFFF2CC'],
+    ['Seguimientos', trackingCount, 'FFE8F7EE'],
+  ] as const;
+
+  kpis.forEach(([label, value, fill], index) => {
+    const column = index + 1;
+    const valueCell = worksheet.getCell(5, column);
+    const labelCell = worksheet.getCell(6, column);
+    valueCell.value = value;
+    valueCell.font = { bold: true, size: 16, color: { argb: 'FF17365D' } };
+    valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+    labelCell.value = label;
+    labelCell.font = { bold: true, size: 9, color: { argb: 'FF64748B' } };
+    labelCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+  });
+
+  for (let column = 1; column <= 6; column += 1) worksheet.getColumn(column).width = 20;
+  worksheet.getCell('A9').value = 'Distribución por estado';
+  worksheet.getCell('A9').font = { bold: true, size: 12, color: { argb: 'FF17365D' } };
+  worksheet.getCell('D9').value = 'Distribución por prioridad';
+  worksheet.getCell('D9').font = { bold: true, size: 12, color: { argb: 'FF17365D' } };
+
+  const states = ['pendiente', 'en curso', 'bloqueada', 'resuelta'] as const;
+  states.forEach((state, index) => {
+    worksheet.getCell(10 + index, 1).value = STATE_LABELS[state] ?? state;
+    worksheet.getCell(10 + index, 2).value = tasks.filter((task) => task.estado === state).length;
+  });
+  const priorities = ['critica', 'alta', 'media', 'baja'] as const;
+  priorities.forEach((priority, index) => {
+    worksheet.getCell(10 + index, 4).value = PRIORITY_LABELS[priority] ?? priority;
+    worksheet.getCell(10 + index, 5).value = tasks.filter((task) => task.prioridad === priority).length;
+  });
+
+  worksheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1,
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
+}
+
 function addTasksWorksheet(
   workbook: ExcelJS.Workbook,
   tasks: ExportableTask[],
@@ -318,7 +405,7 @@ function addTasksWorksheet(
     worksheet,
     'Tareas abiertas',
     `${tasks.length} tarea${tasks.length === 1 ? '' : 's'} · Actualizado ${generatedAt}`,
-    10,
+    12,
   );
 
   const tableRows: ExcelJS.CellValue[][] = tasks.map((task) => [
@@ -329,6 +416,8 @@ function addTasksWorksheet(
     STATE_LABELS[task.estado] ?? task.estado,
     PRIORITY_LABELS[task.prioridad] ?? task.prioridad,
     parseDate(task.fechaLimite),
+    task.responsable || '',
+    task.origen || '',
     task.sindicato || '',
     task.seguimiento.length,
     task.id,
@@ -354,7 +443,9 @@ function addTasksWorksheet(
       { name: 'Estado', filterButton: true },
       { name: 'Prioridad', filterButton: true },
       { name: 'Fecha límite', filterButton: true },
+      { name: 'Responsable', filterButton: true },
       { name: 'Origen', filterButton: true },
+      { name: 'Sindicato', filterButton: true },
       { name: 'Nº seguimientos', filterButton: true },
       { name: 'ID tarea', filterButton: true },
     ],
@@ -371,9 +462,11 @@ function addTasksWorksheet(
   worksheet.getColumn(6).width = 14;
   worksheet.getColumn(7).width = 15;
   worksheet.getColumn(8).width = 22;
-  worksheet.getColumn(9).width = 17;
-  worksheet.getColumn(10).width = 36;
-  worksheet.getColumn(10).hidden = true;
+  worksheet.getColumn(9).width = 22;
+  worksheet.getColumn(10).width = 18;
+  worksheet.getColumn(11).width = 17;
+  worksheet.getColumn(12).width = 36;
+  worksheet.getColumn(12).hidden = true;
 
   if (tasks.length > 0) {
     const firstDataRow = 5;
@@ -429,7 +522,7 @@ function addTrackingWorksheet(
     task.seguimiento.forEach((tracking) => {
       rows.push([
         task.titulo,
-        parseDate(tracking.fechaHora),
+        parseDate(tracking.fechaSeguimiento),
         tracking.usuario,
         tracking.texto,
         task.id,
@@ -543,6 +636,7 @@ export async function exportOpenTasksWord(
     workbook.modified = new Date();
 
     const generatedAt = new Date().toLocaleString('es-ES');
+    addTasksSummaryWorksheet(workbook, tasks, generatedAt);
     addTasksWorksheet(workbook, tasks, generatedAt);
     addTrackingWorksheet(workbook, tasks, generatedAt);
 

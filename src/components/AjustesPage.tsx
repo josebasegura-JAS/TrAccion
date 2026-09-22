@@ -5,6 +5,7 @@ import {
   FolderOpen,
   ListTodo,
   Plus,
+  RefreshCw,
   Save,
   Settings2,
 } from 'lucide-react';
@@ -210,6 +211,7 @@ export function AjustesPage() {
   const [routes, setRoutes] = useState<RouteDraft>(() => currentRoutes());
   const [status, setStatus] = useState('');
   const [savingRoutes, setSavingRoutes] = useState(false);
+  const [generatingTasksExcel, setGeneratingTasksExcel] = useState(false);
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const [newOriginName, setNewOriginName] = useState('');
   const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('empresa');
@@ -291,6 +293,35 @@ export function AjustesPage() {
     }
   };
 
+  const handleGenerateTasksExcel = async () => {
+    if (routes.rutaExportacionTareas.trim() !== watchedRoutes.rutaExportacionTareas.trim()) {
+      setStatus('Guarda primero las rutas compartidas antes de generar el Excel de tareas.');
+      return;
+    }
+
+    const bridge = (window as unknown as {
+      traccionTaskWord?: {
+        refresh?: () => Promise<{ ok: boolean; message: string }>;
+      };
+    }).traccionTaskWord;
+
+    if (!bridge?.refresh) {
+      setStatus('La generación manual del Excel de tareas solo está disponible en la aplicación de escritorio.');
+      return;
+    }
+
+    setGeneratingTasksExcel(true);
+    setStatus('Actualizando Excel de tareas abiertas…');
+    try {
+      const result = await bridge.refresh();
+      setStatus(result.message);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'No se ha podido actualizar el Excel de tareas.');
+    } finally {
+      setGeneratingTasksExcel(false);
+    }
+  };
+
   const handleAddTaskPhase = () => {
     addTaskPhase(newTaskPhase);
     setNewTaskPhase('');
@@ -325,6 +356,17 @@ export function AjustesPage() {
           >
             <FolderOpen size={14} />
             Seleccionar
+          </button>
+        )}
+        {field.key === 'rutaExportacionTareas' && (
+          <button
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={generatingTasksExcel || !routes.rutaExportacionTareas.trim()}
+            onClick={() => void handleGenerateTasksExcel()}
+            type="button"
+          >
+            <RefreshCw className={generatingTasksExcel ? 'animate-spin' : ''} size={14} />
+            {generatingTasksExcel ? 'Generando…' : 'Generar ahora'}
           </button>
         )}
       </div>

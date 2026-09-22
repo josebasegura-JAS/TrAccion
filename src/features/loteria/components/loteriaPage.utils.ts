@@ -237,67 +237,182 @@ function campaignFileDate(date = new Date()): string {
 export async function buildCampaignWorkbook(campaign: LotteryCampaign): Promise<{ fileName: string; buffer: ArrayBuffer }> {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(`Lotería ${campaign.year}`);
-  sheet.columns = [
-    { header: 'Nº empleado', key: 'empleado', width: 14 },
-    { header: 'Persona', key: 'nombre', width: 32 },
-    { header: 'Tipo', key: 'tipo', width: 14 },
-    { header: 'Email', key: 'email', width: 32 },
-    { header: 'Contacto / nota', key: 'contacto', width: 34 },
-    { header: `Décimos ${campaign.numero1 || 'Nº 1'}`, key: 'numero1', width: 16 },
-    { header: `Décimos ${campaign.numero2 || 'Nº 2'}`, key: 'numero2', width: 16 },
-    { header: 'Total décimos', key: 'totalDecimos', width: 14 },
-    { header: 'Importe', key: 'importe', width: 14 },
-    { header: 'Pagado', key: 'pagado', width: 12 },
-    { header: 'Fecha pago', key: 'fechaPago', width: 16 },
-    { header: 'Forma de pago', key: 'formaPago', width: 18 },
-    { header: 'Observaciones pago', key: 'observacionesPago', width: 36 },
+  workbook.creator = 'TrAccion';
+  workbook.subject = `Lotería de Navidad ${campaign.year}`;
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const colors = {
+    navy: '17365D',
+    red: 'D7193F',
+    white: 'FFFFFF',
+    paleBlue: 'DDEBF7',
+    green: 'E2F0D9',
+    greenText: '375623',
+    amber: 'FFF2CC',
+    amberText: '7F6000',
+    redSoft: 'FCE4D6',
+    redText: '9C0006',
+    border: 'D9E1F2',
+    muted: '64748B',
+    text: '1F2937',
+  };
+  const generatedAt = new Date().toLocaleString('es-ES');
+  const toExcelDate = (value: string | null): Date | null => {
+    if (!value) return null;
+    const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnly) {
+      return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+  const side = { style: 'thin' as const, color: { argb: `FF${colors.border}` } };
+  const border = { top: side, left: side, bottom: side, right: side };
+
+  const summary = workbook.addWorksheet('Resumen', { views: [{ state: 'frozen', ySplit: 4 }] });
+  summary.mergeCells('A1:F1');
+  summary.getCell('A1').value = 'TRACCION · RELACIONES LABORALES';
+  summary.getCell('A1').font = { bold: true, size: 10, color: { argb: `FF${colors.red}` } };
+  summary.mergeCells('A2:F2');
+  summary.getCell('A2').value = `Lotería de Navidad ${campaign.year}`;
+  summary.getCell('A2').font = { bold: true, size: 18, color: { argb: `FF${colors.navy}` } };
+  summary.getRow(2).height = 28;
+  summary.mergeCells('A3:F3');
+  summary.getCell('A3').value = `Actualizado ${generatedAt}`;
+  summary.getCell('A3').font = { size: 9, color: { argb: `FF${colors.muted}` } };
+  for (let column = 1; column <= 6; column += 1) summary.getColumn(column).width = 20;
+
+  const addKpi = (column: number, label: string, value: string | number, fill: string) => {
+    const valueCell = summary.getCell(5, column);
+    const labelCell = summary.getCell(6, column);
+    valueCell.value = value;
+    valueCell.font = { bold: true, size: 16, color: { argb: `FF${colors.navy}` } };
+    valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    labelCell.value = label;
+    labelCell.font = { bold: true, size: 9, color: { argb: `FF${colors.muted}` } };
+    labelCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    valueCell.fill = labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${fill}` } };
+    valueCell.border = labelCell.border = border;
+  };
+
+  addKpi(1, 'Décimos encargados', lotteryOrderedCount(campaign), colors.paleBlue);
+  addKpi(2, 'Décimos solicitados', lotteryRequestedCount(campaign), colors.paleBlue);
+  addKpi(3, 'Décimos disponibles', lotteryAvailableCount(campaign), lotteryAvailableCount(campaign) < 0 ? colors.redSoft : colors.green);
+  addKpi(4, 'Total cobrado', lotteryPaidTotal(campaign), colors.green);
+  summary.getCell('D5').numFmt = '#,##0.00 [$€-es-ES]';
+  addKpi(5, 'Pendiente de cobro', lotteryPendingPaymentAmount(campaign), lotteryPendingPaymentAmount(campaign) > 0 ? colors.amber : colors.green);
+  summary.getCell('E5').numFmt = '#,##0.00 [$€-es-ES]';
+  addKpi(6, 'Participantes', campaign.requests.length, colors.paleBlue);
+
+  summary.getCell('A9').value = 'Control por número';
+  summary.getCell('A9').font = { bold: true, size: 12, color: { argb: `FF${colors.navy}` } };
+  const numberRows = [
+    ['Número', 'Encargados', 'Solicitados', 'Disponibles', 'Precio/décimo', 'Situación'],
+    [campaign.numero1 || 'Nº 1', campaign.decimosNumero1, lotteryRequestedCountByNumber(campaign, 1), lotteryAvailableCountByNumber(campaign, 1), campaign.precioDecimo, lotteryAvailableCountByNumber(campaign, 1) < 0 ? 'Exceso solicitado' : 'Correcto'],
+    [campaign.numero2 || 'Nº 2', campaign.decimosNumero2, lotteryRequestedCountByNumber(campaign, 2), lotteryAvailableCountByNumber(campaign, 2), campaign.precioDecimo, lotteryAvailableCountByNumber(campaign, 2) < 0 ? 'Exceso solicitado' : 'Correcto'],
   ];
+  numberRows.forEach((values, rowIndex) => {
+    values.forEach((value, columnIndex) => {
+      const cell = summary.getCell(10 + rowIndex, 1 + columnIndex);
+      cell.value = value;
+      cell.border = border;
+      cell.alignment = { vertical: 'middle', horizontal: columnIndex === 0 ? 'left' : 'center' };
+      if (rowIndex === 0) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${colors.navy}` } };
+        cell.font = { bold: true, color: { argb: `FF${colors.white}` } };
+      }
+    });
+  });
+  summary.getCell('E11').numFmt = '#,##0.00 [$€-es-ES]';
+  summary.getCell('E12').numFmt = '#,##0.00 [$€-es-ES]';
 
-  campaign.requests.forEach((request) => sheet.addRow({
-    empleado: request.empleado ?? '',
-    nombre: request.nombre,
-    tipo: request.externa ? 'Externa' : 'Plantilla',
-    email: request.email,
-    contacto: request.contactoObservaciones,
-    numero1: request.decimosNumero1,
-    numero2: request.decimosNumero2,
-    totalDecimos: lotteryRequestTotalCount(request),
-    importe: lotteryRequestAmount(campaign, request),
-    pagado: request.pagado ? 'Sí' : 'No',
-    fechaPago: request.fechaPago ? new Date(request.fechaPago) : '',
-    formaPago: request.pagado ? (request.formaPago === 'bizum' ? 'Bizum' : 'Efectivo') : '',
-    observacionesPago: request.observacionesPago,
-  }));
+  summary.getCell('A15').value = 'Cobros';
+  summary.getCell('A15').font = { bold: true, size: 12, color: { argb: `FF${colors.navy}` } };
+  const paymentRows = [
+    ['Concepto', 'Importe'],
+    ['Efectivo / caja', lotteryCashOnHand(campaign)],
+    ['Bizum', lotteryBizumTotal(campaign)],
+    ['Pendiente', lotteryPendingPaymentAmount(campaign)],
+  ];
+  paymentRows.forEach((values, rowIndex) => {
+    values.forEach((value, columnIndex) => {
+      const cell = summary.getCell(16 + rowIndex, 1 + columnIndex);
+      cell.value = value;
+      cell.border = border;
+      if (rowIndex === 0) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${colors.navy}` } };
+        cell.font = { bold: true, color: { argb: `FF${colors.white}` } };
+      } else if (columnIndex === 1) {
+        cell.numFmt = '#,##0.00 [$€-es-ES]';
+      }
+    });
+  });
+  summary.pageSetup = {
+    orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1,
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
 
-  sheet.getColumn('importe').numFmt = '#,##0.00 [$€-es-ES]';
-  sheet.getRow(1).font = { bold: true };
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
-  sheet.autoFilter = { from: 'A1', to: 'M1' };
+  const sheet = workbook.addWorksheet(`Lotería ${campaign.year}`, { views: [{ state: 'frozen', ySplit: 5 }] });
+  sheet.mergeCells('A1:M1');
+  sheet.getCell('A1').value = 'TRACCION · RELACIONES LABORALES';
+  sheet.getCell('A1').font = { bold: true, size: 10, color: { argb: `FF${colors.red}` } };
+  sheet.mergeCells('A2:M2');
+  sheet.getCell('A2').value = `Detalle campaña Lotería de Navidad ${campaign.year}`;
+  sheet.getCell('A2').font = { bold: true, size: 18, color: { argb: `FF${colors.navy}` } };
+  sheet.getRow(2).height = 28;
+  sheet.mergeCells('A3:M3');
+  sheet.getCell('A3').value = `Actualizado ${generatedAt} · ${campaign.requests.length} participantes`;
+  sheet.getCell('A3').font = { size: 9, color: { argb: `FF${colors.muted}` } };
 
-  const summary = workbook.addWorksheet('Resumen');
-  summary.addRows([
-    ['Campaña', `Lotería de Navidad ${campaign.year}`],
-    ['Número 1', campaign.numero1 || '—'],
-    ['Décimos encargados nº 1', campaign.decimosNumero1],
-    ['Solicitados nº 1', lotteryRequestedCountByNumber(campaign, 1)],
-    ['Disponibles nº 1', lotteryAvailableCountByNumber(campaign, 1)],
-    ['Número 2', campaign.numero2 || '—'],
-    ['Décimos encargados nº 2', campaign.decimosNumero2],
-    ['Solicitados nº 2', lotteryRequestedCountByNumber(campaign, 2)],
-    ['Disponibles nº 2', lotteryAvailableCountByNumber(campaign, 2)],
-    ['Precio por décimo', campaign.precioDecimo],
-    ['Décimos encargados total', lotteryOrderedCount(campaign)],
-    ['Décimos solicitados total', lotteryRequestedCount(campaign)],
-    ['Décimos disponibles total', lotteryAvailableCount(campaign)],
-    ['Total cobrado', lotteryPaidTotal(campaign)],
-    ['Cobros en efectivo / caja', lotteryCashOnHand(campaign)],
-    ['Cobros por Bizum', lotteryBizumTotal(campaign)],
-    ['Pendiente de cobro', lotteryPendingPaymentAmount(campaign)],
-  ]);
-  summary.getColumn(1).width = 30;
-  summary.getColumn(2).width = 24;
-  summary.getRow(1).font = { bold: true };
+  const columns = [
+    { header: 'Nº empleado', width: 14 }, { header: 'Persona', width: 32 }, { header: 'Tipo', width: 14 },
+    { header: 'Email', width: 32 }, { header: 'Contacto / nota', width: 34 },
+    { header: `Décimos ${campaign.numero1 || 'Nº 1'}`, width: 16 }, { header: `Décimos ${campaign.numero2 || 'Nº 2'}`, width: 16 },
+    { header: 'Total décimos', width: 14 }, { header: 'Importe', width: 14 }, { header: 'Pagado', width: 12 },
+    { header: 'Fecha pago', width: 16 }, { header: 'Forma de pago', width: 18 }, { header: 'Observaciones pago', width: 36 },
+  ];
+  columns.forEach((column, index) => {
+    sheet.getColumn(index + 1).width = column.width;
+    sheet.getCell(5, index + 1).value = column.header;
+  });
+  sheet.getRow(5).height = 24;
+  sheet.getRow(5).eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${colors.navy}` } };
+    cell.font = { bold: true, color: { argb: `FF${colors.white}` }, size: 10 };
+    cell.alignment = { vertical: 'middle', wrapText: true };
+    cell.border = border;
+  });
+  sheet.autoFilter = { from: 'A5', to: 'M5' };
+
+  campaign.requests.forEach((request, index) => {
+    const rowNumber = 6 + index;
+    const date = toExcelDate(request.fechaPago);
+    const values: Array<string | number | Date | null> = [
+      request.empleado ?? '', request.nombre, request.externa ? 'Externa' : 'Plantilla', request.email,
+      request.contactoObservaciones, request.decimosNumero1, request.decimosNumero2,
+      lotteryRequestTotalCount(request), lotteryRequestAmount(campaign, request), request.pagado ? 'Sí' : 'No',
+      date,
+      request.pagado ? (request.formaPago === 'bizum' ? 'Bizum' : 'Efectivo') : '', request.observacionesPago,
+    ];
+    values.forEach((value, columnIndex) => {
+      const cell = sheet.getCell(rowNumber, columnIndex + 1);
+      cell.value = value;
+      cell.border = border;
+      cell.font = { size: 9, color: { argb: `FF${colors.text}` } };
+      cell.alignment = { vertical: 'top', wrapText: true };
+    });
+    sheet.getCell(rowNumber, 9).numFmt = '#,##0.00 [$€-es-ES]';
+    sheet.getCell(rowNumber, 11).numFmt = 'dd/mm/yyyy';
+    const paidCell = sheet.getCell(rowNumber, 10);
+    paidCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${request.pagado ? colors.green : colors.amber}` } };
+    paidCell.font = { bold: true, size: 9, color: { argb: `FF${request.pagado ? colors.greenText : colors.amberText}` } };
+  });
+
+  sheet.pageSetup = {
+    orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+  };
 
   const buffer = workbookBufferToArrayBuffer(await workbook.xlsx.writeBuffer());
   return { fileName: `Loteria_${campaign.year}_${campaignFileDate()}.xlsx`, buffer };

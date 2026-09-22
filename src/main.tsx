@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
 import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLockQuickActionsPortal';
 import { SafeSettingsLoadingIndicator } from './components/ajustes/SafeSettingsLoadingIndicator';
-import { TaskWordSettingsPortal } from './components/ajustes/TaskWordSettingsPortal';
 import { TaskCriterionBridge } from './features/criterios-rrll/components/TaskCriterionBridge';
 import {
   flushPendingSqliteWrites,
@@ -71,7 +70,6 @@ async function renderApp(): Promise<void> {
     <React.StrictMode>
       <>
         <App />
-        <TaskWordSettingsPortal />
         <DatabaseLockQuickActionsPortal />
         <SafeSettingsLoadingIndicator />
         <TaskCriterionBridge />
