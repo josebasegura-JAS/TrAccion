@@ -13,10 +13,12 @@ export function SindicatosCoordinationPanel({
   tasks,
   onOpenMeeting,
   onStatus,
+  onChanged,
 }: {
   tasks: Task[];
   onOpenMeeting: (meetingId: string) => void;
   onStatus: (message: string) => void;
+  onChanged: () => void | Promise<void>;
 }) {
   const meetings = useCoordinacionStore((state) => state.meetings);
   const unionTaskIds = useCoordinacionStore((state) => state.unionTaskIds);
@@ -61,6 +63,7 @@ export function SindicatosCoordinationPanel({
     if (!result.ok) { onStatus(result.message); return; }
     setInterlocutors('');
     setPurpose('');
+    await onChanged();
     if (result.recordId) onOpenMeeting(result.recordId);
   };
 
