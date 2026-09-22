@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Check, ChevronRight, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, FileSpreadsheet, Trash2 } from 'lucide-react';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select } from '../../../components/ui/Field';
@@ -7,6 +7,7 @@ import { Notice } from '../../../components/ui/Notice';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useTicketRestauranteStore } from '../../ticket-restaurante/store/useTicketRestauranteStore';
+import { exportPresupuestoScenarioToExcel } from '../domain/exportPresupuestoExcel';
 import {
   BUDGET_ACTUAL_BLOCKS,
   BUDGET_MONTHS,
@@ -416,6 +417,40 @@ export function PresupuestosPage() {
     setMessage('Importe ejecutado añadido.');
   };
 
+  const exportSimulation = async (scenario: BudgetScenario, useLiveValues = false) => {
+    try {
+      await exportPresupuestoScenarioToExcel({
+        scenario: useLiveValues && liveScenario ? liveScenario : scenario,
+        manualItems: useLiveValues ? liveManualItems : manualItems,
+        ticketGroups,
+        calendars,
+        people,
+        mode: 'simulation',
+      });
+      setMessage(`Simulación "${scenario.name}" exportada y abierta en Excel.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se ha podido exportar la simulación a Excel.');
+    }
+  };
+
+  const exportSelectedBudget = async () => {
+    if (!selectedScenario) return;
+    try {
+      await exportPresupuestoScenarioToExcel({
+        scenario: selectedScenario,
+        manualItems,
+        ticketGroups,
+        calendars,
+        people,
+        mode: 'final',
+        finalAmounts,
+      });
+      setMessage(`Presupuesto "${selectedScenario.name}" exportado y abierto en Excel.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se ha podido exportar el presupuesto a Excel.');
+    }
+  };
+
   const scenarioDone = visibleScenarios.length > 0;
   const simulationDone = Boolean(activeScenario && (activeManualItems.length > 0 || (liveTicketPlan?.totalPeople ?? 0) > 0));
   const comparisonDone = Boolean(selectedScenario);
@@ -590,6 +625,7 @@ export function PresupuestosPage() {
             </div>
 
             <div className="flex flex-wrap justify-end gap-2">
+              <ActionButton iconOnly={false} variant="secondary" onClick={() => exportSimulation(activeScenario, true)}><FileSpreadsheet size={15} /> Exportar simulación</ActionButton>
               <ActionButton iconOnly={false} variant="save" onClick={saveSimulation}>Guardar simulación</ActionButton>
               <ActionButton iconOnly={false} variant="primary" onClick={() => { saveSimulation(); setComparisonYear(activeScenario.year); setStage('compare'); }}>Comparar escenarios <ChevronRight size={15} /></ActionButton>
             </div>
@@ -623,6 +659,7 @@ export function PresupuestosPage() {
                     {ticketPlan ? <p className="mt-2 text-[11px] text-metro-muted">Sensibilidad con absentismo B: {euro(ticketPlan.annualAmountB + total.manualTotal)}</p> : null}
                     <div className="mt-3 flex flex-wrap gap-2">
                       <ActionButton size="sm" iconOnly={false} variant={scenario.selectedForExecution ? 'approve' : 'primary'} onClick={() => chooseScenario(scenario)}>{scenario.selectedForExecution ? 'Seleccionado' : 'Seleccionar'}</ActionButton>
+                      <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => exportSimulation(scenario)}><FileSpreadsheet size={14} /> Exportar</ActionButton>
                       <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setActiveScenario(scenario.id); setStage('simulate'); }}>Editar</ActionButton>
                       <ActionButton size="sm" iconOnly={false} variant="delete" onClick={() => confirmAndRemoveScenario(scenario)}>{scenario.finalizedAt ? 'Eliminar presupuesto' : 'Eliminar escenario'}</ActionButton>
                     </div>
@@ -661,6 +698,7 @@ export function PresupuestosPage() {
                 </table>
               </div>
               <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <ActionButton iconOnly={false} variant="secondary" onClick={exportSelectedBudget}><FileSpreadsheet size={15} /> Exportar presupuesto</ActionButton>
                 <ActionButton iconOnly={false} variant="delete" onClick={() => confirmAndRemoveScenario(selectedScenario)}>
                   {selectedScenario.finalizedAt ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario'}
                 </ActionButton>
