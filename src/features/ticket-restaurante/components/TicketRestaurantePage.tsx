@@ -1,4 +1,4 @@
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, RotateCcw, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTicketRestauranteWriteActions } from '../store/useTicketRestauranteWriteActions';
 import {
@@ -113,7 +113,6 @@ export function TicketRestaurantePage({
     updateCalendar,
     toggleCalendarActive,
     removeCalendar,
-    toggleDay,
     saveAbsences,
     removeAbsence,
     upsertPerson,
@@ -141,6 +140,10 @@ export function TicketRestaurantePage({
   const [personDraft, setPersonDraft] = useState<TicketPersonDraft>(EMPTY_TICKET_PERSON_DRAFT);
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
+  const [calendarDayDraft, setCalendarDayDraft] = useState<string[]>([]);
+  const [calendarDaysDirty, setCalendarDaysDirty] = useState(false);
+  const [isSavingCalendarDays, setIsSavingCalendarDays] = useState(false);
+  const calendarDayDraftIdRef = useRef<string | null>(null);
   const [previewRows, setPreviewRows] = useState<TicketRestaurantAbsencePreviewRow[]>([]);
   const [importMessage, setImportMessage] = useState('');
   const [peopleImportMessage, setPeopleImportMessage] = useState('');
@@ -182,8 +185,11 @@ export function TicketRestaurantePage({
     [selectedCalendarId, visibleCalendars],
   );
   const yearCalendar = useMemo(
-    () => (selectedCalendar ? buildYearCalendar(selectedCalendar, year) : []),
-    [selectedCalendar, year],
+    () =>
+      selectedCalendar
+        ? buildYearCalendar({ ...selectedCalendar, diasSinTicket: calendarDayDraft }, year)
+        : [],
+    [calendarDayDraft, selectedCalendar, year],
   );
   const visiblePeople = useMemo(
     () =>
@@ -382,6 +388,22 @@ export function TicketRestaurantePage({
     setSelectedCalendarId(visibleCalendars[0]?.id ?? '');
   }, [selectedCalendarId, visibleCalendars]);
 
+  useEffect(() => {
+    if (!selectedCalendar) {
+      calendarDayDraftIdRef.current = null;
+      setCalendarDayDraft([]);
+      setCalendarDaysDirty(false);
+      return;
+    }
+
+    const changedCalendar = calendarDayDraftIdRef.current !== selectedCalendar.id;
+    if (changedCalendar || !calendarDaysDirty) {
+      calendarDayDraftIdRef.current = selectedCalendar.id;
+      setCalendarDayDraft([...selectedCalendar.diasSinTicket]);
+      setCalendarDaysDirty(false);
+    }
+  }, [calendarDaysDirty, selectedCalendar]);
+
   const resetForm = () => {
     setCalendarDraft(EMPTY_TICKET_CALENDAR_DRAFT);
     setEditingCalendarId(null);
@@ -495,12 +517,61 @@ export function TicketRestaurantePage({
     }
   };
 
-  const handleToggleDay = (calendarId: string, fecha: string) => {
+  const handleToggleDay = (fecha: string) => {
+    setCalendarDayDraft((current) => {
+      const next = new Set(current);
+      if (next.has(fecha)) next.delete(fecha);
+      else next.add(fecha);
+      return Array.from(next).sort((first, second) => first.localeCompare(second));
+    });
+    setCalendarDaysDirty(true);
+  };
+
+  const saveCalendarDays = async () => {
+    if (!selectedCalendar || !calendarDaysDirty || isSavingCalendarDays) return;
+
+    setIsSavingCalendarDays(true);
+    const result = await updateCalendar(selectedCalendar.id, {
+      ...toCalendarDraft(selectedCalendar),
+      diasSinTicket: calendarDayDraft,
+    });
+    setIsSavingCalendarDays(false);
+
+    if (!result.ok) {
+      await alert(
+        result.message ??
+          'No se han podido guardar los cambios del calendario. Recarga antes de continuar.',
+      );
+      return;
+    }
+
+    setCalendarDaysDirty(false);
+  };
+
+  const discardCalendarDays = async () => {
+    if (!selectedCalendar || !calendarDaysDirty) return;
+    const confirmed = await confirm(
+      'Se perderán las fechas modificadas desde el último guardado. ¿Descartar cambios?',
+      { confirmLabel: 'Descartar', danger: true, title: 'Descartar cambios del calendario' },
+    );
+    if (!confirmed) return;
+
+    setCalendarDayDraft([...selectedCalendar.diasSinTicket]);
+    setCalendarDaysDirty(false);
+  };
+
+  const handleSelectedCalendarChange = (calendarId: string) => {
+    if (!calendarDaysDirty || calendarId === selectedCalendarId) {
+      setSelectedCalendarId(calendarId);
+      return;
+    }
+
     void (async () => {
-      const result = await toggleDay(calendarId, fecha);
-      if (!result.ok) {
-        await alert(result.message ?? 'No se ha podido actualizar el día del calendario.');
-      }
+      const confirmed = await confirm(
+        'Hay fechas del calendario sin guardar. Si cambias de calendario se perderán esos cambios. ¿Continuar?',
+        { confirmLabel: 'Cambiar sin guardar', danger: true, title: 'Cambios sin guardar' },
+      );
+      if (confirmed) setSelectedCalendarId(calendarId);
     })();
   };
 
@@ -1163,23 +1234,52 @@ export function TicketRestaurantePage({
             onYearChange={handleYearChange}
             selectedCalendar={selectedCalendar ?? undefined}
             selectedCalendarId={selectedCalendarId}
-            setSelectedCalendarId={setSelectedCalendarId}
+            setSelectedCalendarId={handleSelectedCalendarChange}
             setYear={setYear}
             year={year}
           />
 
           <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
-            <div className="mb-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="mb-2 flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <h3 className="flex items-center gap-2 text-base font-bold text-metro-text">
                   <CalendarDays className="h-4 w-4 text-metro-red" />
                   Vista anual {year}
                 </h3>
                 <p className="text-xs text-metro-muted">
-                  Pulsa un día para marcarlo o desmarcarlo como sin ticket.
+                  Selecciona todas las fechas necesarias y guarda una sola vez al terminar.
                 </p>
               </div>
-              <Legend />
+              <div className="flex flex-wrap items-center gap-2">
+                {calendarDaysDirty ? (
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-300">
+                    Cambios sin guardar
+                  </span>
+                ) : selectedCalendar ? (
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-300">
+                    Guardado
+                  </span>
+                ) : null}
+                <Legend />
+                <button
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-metro-border bg-metro-surface px-3 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!selectedCalendar || !calendarDaysDirty || isSavingCalendarDays}
+                  onClick={() => void discardCalendarDays()}
+                  type="button"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Descartar
+                </button>
+                <button
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-metro-red px-3 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!selectedCalendar || !calendarDaysDirty || isSavingCalendarDays}
+                  onClick={() => void saveCalendarDays()}
+                  type="button"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {isSavingCalendarDays ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              </div>
             </div>
 
             {selectedCalendar ? (
@@ -1190,7 +1290,7 @@ export function TicketRestaurantePage({
                     monthName={month.nombre}
                     leadingBlanks={month.blancosIniciales}
                     days={month.dias}
-                    onToggleDay={(fecha) => handleToggleDay(selectedCalendar.id, fecha)}
+                    onToggleDay={handleToggleDay}
                   />
                 ))}
               </div>
