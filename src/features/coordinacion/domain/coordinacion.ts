@@ -18,6 +18,12 @@ export interface CoordinationPoint {
 export interface CoordinationMeeting {
   id: string;
   area: CoordinationArea;
+  /** Nombre concreto del área cuando la reunión no es con Dirección. */
+  areaName?: string;
+  /** Tarea principal que da origen a la reunión con otra área. */
+  referenceTaskId?: string | null;
+  interlocutors?: string;
+  purpose?: string;
   date: string;
   status: CoordinationMeetingStatus;
   points: CoordinationPoint[];

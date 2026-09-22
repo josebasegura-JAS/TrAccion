@@ -142,6 +142,7 @@ export function AjustesPage() {
           <h3 className="text-base font-bold text-metro-text">Coordinación</h3>
           <p className="mt-1 text-sm text-metro-muted">
             Carpeta donde TrAccion mantendrá el Excel acumulativo de reuniones de Coordinación con Dirección.
+            Las reuniones con otras áreas se conservan en TrAccion y en el seguimiento de su tarea de referencia.
           </p>
         </div>
         <label className="block text-xs font-semibold text-metro-muted">

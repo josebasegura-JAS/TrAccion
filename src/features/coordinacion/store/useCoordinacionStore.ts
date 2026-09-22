@@ -20,6 +20,14 @@ interface CoordinationStore extends CoordinationState {
   reloadFromStorage: () => void;
   setTaskForDirection: (taskId: string, enabled: boolean) => Promise<Result>;
   createDirectionMeeting: (date: string, tasks: Task[]) => Promise<Result>;
+  createOtherAreaMeeting: (
+    date: string,
+    areaName: string,
+    referenceTaskId: string,
+    interlocutors: string,
+    purpose: string,
+    tasks: Task[],
+  ) => Promise<Result>;
   addManualPoint: (meetingId: string, title: string, detail?: string) => Promise<Result>;
   updatePoint: (
     meetingId: string,
@@ -100,6 +108,46 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       date: normalizedDate,
       status: 'open',
       points,
+      createdAt: now,
+      updatedAt: now,
+      closedAt: null,
+    };
+    const next: CoordinationState = { ...current, meetings: [meeting, ...current.meetings] };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return { ...result, recordId: meeting.id };
+  },
+  createOtherAreaMeeting: async (date, areaName, referenceTaskId, interlocutors, purpose, tasks) => {
+    const normalizedDate = date.trim();
+    const cleanAreaName = areaName.trim();
+    if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
+    if (!cleanAreaName) return { ok: false, message: 'Indica el área con la que se celebra la reunión.' };
+    if (!referenceTaskId) return { ok: false, message: 'Selecciona una tarea de referencia.' };
+    const task = tasks.find((candidate) => candidate.id === referenceTaskId && activeTask(candidate));
+    if (!task) return { ok: false, message: 'La tarea de referencia no existe o ya está cerrada.' };
+
+    const current = get();
+    const now = new Date().toISOString();
+    const meeting: CoordinationMeeting = {
+      id: createCoordinationId('area-meeting'),
+      area: 'otras-areas',
+      areaName: cleanAreaName,
+      referenceTaskId: task.id,
+      interlocutors: interlocutors.trim(),
+      purpose: purpose.trim(),
+      date: normalizedDate,
+      status: 'open',
+      points: [{
+        id: createCoordinationId('area-point'),
+        origin: 'task',
+        taskId: task.id,
+        title: task.titulo,
+        detail: purpose.trim() || task.descripcion,
+        result: '',
+        status: 'pendiente',
+        createdAt: now,
+        updatedAt: now,
+      }],
       createdAt: now,
       updatedAt: now,
       closedAt: null,

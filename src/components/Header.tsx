@@ -24,7 +24,7 @@ const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   },
   coordinacion: {
     title: 'Coordinación',
-    subtitle: 'Preparación y seguimiento de reuniones de coordinación con Dirección.',
+    subtitle: 'Preparación y seguimiento de reuniones con Dirección y otras áreas.',
   },
   comite: {
     title: 'Comité / Paritaria',
