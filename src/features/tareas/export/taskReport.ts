@@ -7,15 +7,15 @@ interface TaskReportData {
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function escapeXml(value: string): string {
-  return escapeHtml(value).replaceAll('\n', '&#10;').replaceAll('\r', '');
+  return escapeHtml(value).replace(/\n/g, '&#10;').replace(/\r/g, '');
 }
 
 function formatDate(value: string): string {
@@ -62,7 +62,7 @@ export function printTaskReport({ task, draft }: TaskReportData): void {
           (entry) => `
             <div class="timeline-item">
               <div class="timeline-date">${escapeHtml(formatDateTime(entry.fechaHora))}</div>
-              <div class="timeline-text">${escapeHtml(entry.texto).replaceAll('\n', '<br>')}</div>
+              <div class="timeline-text">${escapeHtml(entry.texto).replace(/\n/g, '<br>')}</div>
             </div>`,
         )
         .join('')
