@@ -151,32 +151,35 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const cleanAreaName = areaName.trim();
     if (!normalizedDate) return { ok: false, message: 'Selecciona la fecha de la reunión.' };
     if (!cleanAreaName) return { ok: false, message: 'Indica el área con la que se celebra la reunión.' };
-    if (!referenceTaskId) return { ok: false, message: 'Selecciona una tarea de referencia.' };
-    const task = tasks.find((candidate) => candidate.id === referenceTaskId && activeTask(candidate));
-    if (!task) return { ok: false, message: 'La tarea de referencia no existe o ya está cerrada.' };
+
+    const task = referenceTaskId
+      ? tasks.find((candidate) => candidate.id === referenceTaskId && activeTask(candidate))
+      : undefined;
+    if (referenceTaskId && !task) return { ok: false, message: 'La tarea inicial seleccionada no existe o ya está cerrada.' };
 
     const current = get();
     const now = new Date().toISOString();
+    const points: CoordinationPoint[] = task ? [{
+      id: createCoordinationId('area-point'),
+      origin: 'task',
+      taskId: task.id,
+      title: task.titulo,
+      detail: purpose.trim() || task.descripcion,
+      result: '',
+      status: 'pendiente',
+      createdAt: now,
+      updatedAt: now,
+    }] : [];
     const meeting: CoordinationMeeting = {
       id: createCoordinationId('area-meeting'),
       area: 'otras-areas',
       areaName: cleanAreaName,
-      referenceTaskId: task.id,
+      referenceTaskId: task?.id ?? null,
       interlocutors: interlocutors.trim(),
       purpose: purpose.trim(),
       date: normalizedDate,
       status: 'open',
-      points: [{
-        id: createCoordinationId('area-point'),
-        origin: 'task',
-        taskId: task.id,
-        title: task.titulo,
-        detail: purpose.trim() || task.descripcion,
-        result: '',
-        status: 'pendiente',
-        createdAt: now,
-        updatedAt: now,
-      }],
+      points,
       createdAt: now,
       updatedAt: now,
       closedAt: null,
@@ -207,7 +210,6 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         title: task.titulo, detail: task.descripcion, result: '', status: 'pendiente',
         responsible: '', dueDate: '', createdAt: now, updatedAt: now,
       }));
-    if (points.length === 0) return { ok: false, message: 'Selecciona al menos una tarea activa para el guion.' };
     const meeting: CoordinationMeeting = {
       id: createCoordinationId('union-meeting'), area: 'sindicatos', unionName: cleanUnion,
       meetingType, interlocutors: interlocutors.trim(), purpose: purpose.trim(),

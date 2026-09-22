@@ -111,4 +111,35 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
       detail: 'Detalle acordado',
     });
   });
+  it('permite crear una reunión con otra área sin tarea inicial y añadir asuntos después', async () => {
+    const tasks = [task('t-area', 'Seguimiento de cobertura', '')];
+    const created = await useCoordinacionStore.getState().createOtherAreaMeeting(
+      '2026-09-22', 'Operaciones', '', 'Responsable de área y RRLL', 'Revisión mensual', tasks,
+    );
+
+    expect(created.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings[0]).toMatchObject({
+      area: 'otras-areas', areaName: 'Operaciones', referenceTaskId: null,
+    });
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
+
+    const added = await useCoordinacionStore.getState().addManualPoint(created.recordId ?? '', 'Punto no inventariado');
+    expect(added.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings[0].points[0]).toMatchObject({
+      origin: 'manual', taskId: null, title: 'Punto no inventariado',
+    });
+  });
+
+  it('permite crear una reunión sindical sin tareas iniciales', async () => {
+    const result = await useCoordinacionStore.getState().createUnionMeeting(
+      '2026-09-22', 'ELA', 'ordinaria', 'Representación y RRLL', 'Asunto sobrevenido', [], [],
+    );
+
+    expect(result.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings[0]).toMatchObject({
+      area: 'sindicatos', unionName: 'ELA', meetingType: 'ordinaria',
+    });
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
+  });
+
 });
