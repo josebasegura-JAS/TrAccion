@@ -24,6 +24,7 @@ interface ConfiguracionState {
   rutaPlantillaExcedencia: string;
   rutaPlantillaProrrogaExcedencia: string;
   rutaPlantillaVinculograma: string;
+  rutaExportacionTareas: string;
   rutaExportacionLoteria: string;
   rutaExportacionLicencias: string;
   rutaExportacionVinculograma: string;
@@ -33,6 +34,21 @@ interface ConfiguracionState {
   taskOrigins: TaskOriginConfig[];
 }
 
+type SharedRouteSettings = Pick<
+  ConfiguracionState,
+  | 'rutaPlantillaTeletrabajo'
+  | 'rutaPlantillaLicenciaSinSueldo'
+  | 'rutaPlantillaExcedencia'
+  | 'rutaPlantillaProrrogaExcedencia'
+  | 'rutaPlantillaVinculograma'
+  | 'rutaExportacionTareas'
+  | 'rutaExportacionLoteria'
+  | 'rutaExportacionLicencias'
+  | 'rutaExportacionVinculograma'
+  | 'rutaExportacionCoordinacion'
+  | 'rutaAyudaEscolar'
+>;
+
 interface ConfiguracionStore extends ConfiguracionState {
   load: () => void;
   reloadFromStorage: () => void;
@@ -41,11 +57,13 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaPlantillaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaProrrogaExcedencia: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaPlantillaVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  setRutaExportacionTareas: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionLoteria: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionLicencias: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionVinculograma: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaExportacionCoordinacion: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
+  saveRutasCompartidas: (rutas: SharedRouteSettings) => Promise<{ ok: boolean; message: string }>;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -62,6 +80,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaPlantillaExcedencia: state.rutaPlantillaExcedencia,
     rutaPlantillaProrrogaExcedencia: state.rutaPlantillaProrrogaExcedencia,
     rutaPlantillaVinculograma: state.rutaPlantillaVinculograma,
+    rutaExportacionTareas: state.rutaExportacionTareas,
     rutaExportacionLoteria: state.rutaExportacionLoteria,
     rutaExportacionLicencias: state.rutaExportacionLicencias,
     rutaExportacionVinculograma: state.rutaExportacionVinculograma,
@@ -137,6 +156,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaPlantillaExcedencia: '',
     rutaPlantillaProrrogaExcedencia: '',
     rutaPlantillaVinculograma: '',
+    rutaExportacionTareas: '',
     rutaExportacionLoteria: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
     rutaExportacionLicencias: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
     rutaExportacionVinculograma: 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
@@ -158,6 +178,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaPlantillaExcedencia: normalizeTemplatePath(typeof (parsed as { rutaPlantillaExcedencia?: unknown }).rutaPlantillaExcedencia === 'string' ? (parsed as { rutaPlantillaExcedencia: string }).rutaPlantillaExcedencia : ''),
     rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(typeof (parsed as { rutaPlantillaProrrogaExcedencia?: unknown }).rutaPlantillaProrrogaExcedencia === 'string' ? (parsed as { rutaPlantillaProrrogaExcedencia: string }).rutaPlantillaProrrogaExcedencia : ''),
     rutaPlantillaVinculograma: normalizeTemplatePath(typeof (parsed as { rutaPlantillaVinculograma?: unknown }).rutaPlantillaVinculograma === 'string' ? (parsed as { rutaPlantillaVinculograma: string }).rutaPlantillaVinculograma : ''),
+    rutaExportacionTareas: typeof (parsed as { rutaExportacionTareas?: unknown }).rutaExportacionTareas === 'string' ? (parsed as { rutaExportacionTareas: string }).rutaExportacionTareas.trim() : '',
     rutaExportacionLoteria: typeof (parsed as { rutaExportacionLoteria?: unknown }).rutaExportacionLoteria === 'string' ? (parsed as { rutaExportacionLoteria: string }).rutaExportacionLoteria.trim() : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Lotería\\Año {year}',
     rutaExportacionLicencias: typeof (parsed as { rutaExportacionLicencias?: unknown }).rutaExportacionLicencias === 'string' ? (parsed as { rutaExportacionLicencias: string }).rutaExportacionLicencias.trim() : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Licencias sin sueldo y Excedencias',
     rutaExportacionVinculograma: typeof (parsed as { rutaExportacionVinculograma?: unknown }).rutaExportacionVinculograma === 'string' ? (parsed as { rutaExportacionVinculograma: string }).rutaExportacionVinculograma.trim() : 'G:\\Capital Humano\\Relaciones Laborales\\RRLL\\Jefatura RRLL\\Vinculograma',
@@ -220,6 +241,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaPlantillaExcedencia: initialConfiguracion.rutaPlantillaExcedencia,
   rutaPlantillaProrrogaExcedencia: initialConfiguracion.rutaPlantillaProrrogaExcedencia,
   rutaPlantillaVinculograma: initialConfiguracion.rutaPlantillaVinculograma,
+  rutaExportacionTareas: initialConfiguracion.rutaExportacionTareas,
   rutaExportacionLoteria: initialConfiguracion.rutaExportacionLoteria,
   rutaExportacionLicencias: initialConfiguracion.rutaExportacionLicencias,
   rutaExportacionVinculograma: initialConfiguracion.rutaExportacionVinculograma,
@@ -233,8 +255,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -248,11 +270,26 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   setRutaPlantillaExcedencia: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaExcedencia: normalizeTemplatePath(ruta) }),
   setRutaPlantillaProrrogaExcedencia: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(ruta) }),
   setRutaPlantillaVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaPlantillaVinculograma: normalizeTemplatePath(ruta) }),
+  setRutaExportacionTareas: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionTareas: ruta.trim() }),
   setRutaExportacionLoteria: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionLoteria: ruta.trim() }),
   setRutaExportacionLicencias: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionLicencias: ruta.trim() }),
   setRutaExportacionVinculograma: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionVinculograma: ruta.trim() }),
   setRutaExportacionCoordinacion: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaExportacionCoordinacion: ruta.trim() }),
   setRutaAyudaEscolar: async (ruta) => commitConfiguracion(set, { ...selectConfiguracionState(get()), rutaAyudaEscolar: ruta.trim() }),
+  saveRutasCompartidas: async (rutas) => commitConfiguracion(set, {
+    ...selectConfiguracionState(get()),
+    rutaPlantillaTeletrabajo: normalizeTemplatePath(rutas.rutaPlantillaTeletrabajo),
+    rutaPlantillaLicenciaSinSueldo: normalizeTemplatePath(rutas.rutaPlantillaLicenciaSinSueldo),
+    rutaPlantillaExcedencia: normalizeTemplatePath(rutas.rutaPlantillaExcedencia),
+    rutaPlantillaProrrogaExcedencia: normalizeTemplatePath(rutas.rutaPlantillaProrrogaExcedencia),
+    rutaPlantillaVinculograma: normalizeTemplatePath(rutas.rutaPlantillaVinculograma),
+    rutaExportacionTareas: rutas.rutaExportacionTareas.trim(),
+    rutaExportacionLoteria: rutas.rutaExportacionLoteria.trim(),
+    rutaExportacionLicencias: rutas.rutaExportacionLicencias.trim(),
+    rutaExportacionVinculograma: rutas.rutaExportacionVinculograma.trim(),
+    rutaExportacionCoordinacion: rutas.rutaExportacionCoordinacion.trim(),
+    rutaAyudaEscolar: rutas.rutaAyudaEscolar.trim(),
+  }),
   addTaskPhase: (nombre) => set((state) => {
     const normalizedName = normalizeTaskPhaseName(nombre); if (!normalizedName) return state;
     const now = new Date().toISOString();
