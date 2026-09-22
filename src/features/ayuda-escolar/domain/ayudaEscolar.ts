@@ -4,6 +4,7 @@ export interface SchoolHelpRecord {
   employeeName: string;
   senderName: string;
   senderEmail: string;
+  sentOnBehalfOfAnother?: boolean;
   subject: string;
   receivedAt: string;
   archivedAt: string;
@@ -32,11 +33,18 @@ export interface SchoolHelpArchiveResult {
 }
 
 export function normalizePersonName(value: string): string {
-  return value
+  // Protegemos la ñ antes de retirar diacríticos: NFD descompone "ñ" en "n" + virgulilla.
+  // Así las tildes dejan de afectar a la comparación sin confundir, por ejemplo, Peña con Pena.
+  const protectedEnye = value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/ñ/g, '\uE000');
+
+  return protectedEnye
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\uE000/g, 'ñ')
+    .replace(/[^a-z0-9ñ]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');
 }

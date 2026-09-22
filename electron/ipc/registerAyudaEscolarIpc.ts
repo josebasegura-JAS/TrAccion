@@ -70,6 +70,8 @@ async function runPowerShellJson(script: string, args: string[]): Promise<unknow
 
 const SCHOOL_HELP_INSPECT_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $msgPath = $args[0]
 $outlook = New-Object -ComObject Outlook.Application
 $mail = $outlook.Session.OpenSharedItem($msgPath)

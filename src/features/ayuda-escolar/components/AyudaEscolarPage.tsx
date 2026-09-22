@@ -25,6 +25,7 @@ export function AyudaEscolarPage() {
   const [messageFile, setMessageFile] = useState<File | null>(null);
   const [inspection, setInspection] = useState<OutlookMessageInspection | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [sentOnBehalfOfAnother, setSentOnBehalfOfAnother] = useState(false);
   const [status, setStatus] = useState('');
   const [isError, setIsError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
@@ -49,8 +50,8 @@ export function AyudaEscolarPage() {
     [visibleEmployees],
   );
   const candidates = useMemo(
-    () => (inspection ? findEmployeeCandidates(inspection.senderName, visibleEmployees, inspection.senderEmail) : []),
-    [inspection, visibleEmployees],
+    () => (inspection && !sentOnBehalfOfAnother ? findEmployeeCandidates(inspection.senderName, visibleEmployees, inspection.senderEmail) : []),
+    [inspection, sentOnBehalfOfAnother, visibleEmployees],
   );
 
   useEffect(() => {
@@ -68,9 +69,9 @@ export function AyudaEscolarPage() {
     () => incomingEmail ? visibleEmployees.find((employee) => normalizeEmail(employee.email ?? '') === incomingEmail) ?? null : null,
     [incomingEmail, visibleEmployees],
   );
-  const emailConflict = Boolean(incomingEmail && selectedEmployee && selectedEmail && selectedEmail !== incomingEmail);
-  const duplicateEmailConflict = Boolean(emailOwner && selectedEmployee && emailOwner.empleado !== selectedEmployee.empleado);
-  const willLearnEmail = Boolean(incomingEmail && selectedEmployee && !selectedEmail && !duplicateEmailConflict);
+  const emailConflict = Boolean(!sentOnBehalfOfAnother && incomingEmail && selectedEmployee && selectedEmail && selectedEmail !== incomingEmail);
+  const duplicateEmailConflict = Boolean(!sentOnBehalfOfAnother && emailOwner && selectedEmployee && emailOwner.empleado !== selectedEmployee.empleado);
+  const willLearnEmail = Boolean(!sentOnBehalfOfAnother && incomingEmail && selectedEmployee && !selectedEmail && !duplicateEmailConflict);
 
   const employeeRows = useMemo(() => {
     const latestByEmployee = new Map<string, (typeof records)[number]>();
@@ -93,6 +94,7 @@ export function AyudaEscolarPage() {
     setMessageFile(file);
     setInspection(null);
     setSelectedEmployeeId('');
+    setSentOnBehalfOfAnother(false);
     if (!/\.msg$/i.test(file.name)) {
       setStatus('El archivo debe ser un correo de Outlook en formato .msg.');
       setIsError(true);
@@ -146,6 +148,7 @@ export function AyudaEscolarPage() {
         employeeName: employee.nombreApellidos,
         senderName: inspection.senderName,
         senderEmail: inspection.senderEmail,
+        sentOnBehalfOfAnother,
         subject: inspection.subject,
         receivedAt: inspection.receivedAt,
         archivedAt: new Date().toISOString(),
@@ -161,6 +164,7 @@ export function AyudaEscolarPage() {
       setMessageFile(null);
       setInspection(null);
       setSelectedEmployeeId('');
+      setSentOnBehalfOfAnother(false);
       setIsError(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'No se ha podido archivar la documentación.');
@@ -222,16 +226,35 @@ export function AyudaEscolarPage() {
         {inspection && (
           <div className="mt-4 grid gap-4 rounded-xl border border-metro-border bg-metro-panel p-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
             <div><p className="text-xs font-semibold uppercase text-metro-muted">Remitente detectado</p><p className="mt-1 font-semibold text-metro-text">{inspection.senderName || 'Sin nombre detectado'}</p><p className="text-xs text-metro-muted">{inspection.senderEmail}</p></div>
-            <label className="text-xs font-semibold text-metro-muted">Persona de Plantilla
-              <select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
-                <option value="">Seleccionar persona…</option>
-                {alphabeticEmployees.map((employee) => <option key={employee.empleado} value={employee.empleado}>{employee.empleado} · {employee.nombreApellidos}</option>)}
-              </select>
+            <div>
+              <label className="text-xs font-semibold text-metro-muted">Persona de Plantilla
+                <select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
+                  <option value="">Seleccionar persona…</option>
+                  {alphabeticEmployees.map((employee) => <option key={employee.empleado} value={employee.empleado}>{employee.empleado} · {employee.nombreApellidos}</option>)}
+                </select>
+              </label>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs text-metro-text">
+                <input
+                  className="mt-0.5 h-4 w-4 accent-metro-red"
+                  checked={sentOnBehalfOfAnother}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSentOnBehalfOfAnother(checked);
+                    if (checked) setSelectedEmployeeId('');
+                  }}
+                  type="checkbox"
+                />
+                <span>
+                  <span className="font-semibold">Envía en nombre de otra persona</span>
+                  <span className="mt-0.5 block text-[11px] text-metro-muted">El email del remitente no se incorporará ni modificará en Plantilla. Los archivos se guardarán con el nombre de la persona seleccionada.</span>
+                </span>
+              </label>
               {candidates.length > 1 && !selectedEmployeeId && <span className="mt-1 block text-[11px] text-amber-600">Hay varias coincidencias posibles. Selecciona manualmente.</span>}
+              {sentOnBehalfOfAnother && !selectedEmployeeId && <span className="mt-1 block text-[11px] text-amber-600">Selecciona la persona a la que corresponde realmente la documentación.</span>}
               {willLearnEmail && <span className="mt-1 block text-[11px] text-emerald-600">Al archivar se añadirá {incomingEmail} a la ficha de Plantilla.</span>}
               {emailConflict && <span className="mt-1 block text-[11px] text-amber-600">La ficha ya contiene {selectedEmployee?.email}. No se sobrescribirá automáticamente.</span>}
               {duplicateEmailConflict && <span className="mt-1 block text-[11px] text-red-600">Este correo ya pertenece a {emailOwner?.nombreApellidos}. Revisa la selección.</span>}
-            </label>
+            </div>
             <button className={buttonClass} disabled={isBusy || !basePath || !selectedEmployeeId || inspection.attachments.length === 0 || duplicateEmailConflict} onClick={() => void archive()} type="button"><FileCheck2 size={16}/> Archivar documentación</button>
             <div className="lg:col-span-3 text-xs text-metro-muted">Asunto: <span className="font-medium text-metro-text">{inspection.subject || 'Sin asunto'}</span> · Adjuntos: <span className="font-medium text-metro-text">{inspection.attachments.length}</span>{!basePath && <span className="ml-2 font-semibold text-metro-red">Configura primero la carpeta en Ajustes.</span>}</div>
           </div>
