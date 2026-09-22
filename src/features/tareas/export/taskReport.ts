@@ -1,9 +1,15 @@
-import type { Task, TaskDraft } from '../domain/task';
+import type { Task, TaskDraft, TaskSeguimientoEntry } from '../domain/task';
+import { openWorkbookInExcel } from '../../../shared/export/tableExport';
 
 interface TaskReportData {
   task: Task;
   draft: TaskDraft;
 }
+
+const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
+const TRACKING_META_SUFFIX = ']]';
+
+type TrackingMeta = { fecha?: string; usuario?: string };
 
 function escapeHtml(value: string): string {
   return value
@@ -14,19 +20,16 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#039;');
 }
 
-function escapeXml(value: string): string {
-  return escapeHtml(value).replace(/\n/g, '&#10;').replace(/\r/g, '');
-}
-
 function formatDate(value: string): string {
   if (!value) return '—';
-  const parsed = new Date(`${value}T00:00:00`);
+  const normalized = value.length === 10 ? `${value}T00:00:00` : value;
+  const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime())
     ? value
     : new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(parsed);
 }
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—';
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
@@ -55,240 +58,299 @@ function safeFileName(value: string): string {
     .slice(0, 80) || 'tarea';
 }
 
-export function printTaskReport({ task, draft }: TaskReportData): void {
-  const seguimiento = task.seguimiento.length
-    ? task.seguimiento
-        .map(
-          (entry) => `
-            <div class="timeline-item">
-              <div class="timeline-date">${escapeHtml(formatDateTime(entry.fechaHora))}</div>
-              <div class="timeline-text">${escapeHtml(entry.texto).replace(/\n/g, '<br>')}</div>
-            </div>`,
-        )
-        .join('')
-    : '<div class="empty">Sin seguimientos registrados.</div>';
-
-  const html = `<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<title>Detalle de tarea - ${escapeHtml(draft.titulo)}</title>
-<style>
-  @page { size: A4; margin: 14mm; }
-  * { box-sizing: border-box; }
-  body { margin: 0; color: #222; font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; background: #fff; }
-  .report { max-width: 180mm; margin: 0 auto; }
-  .topline { height: 5px; background: #c8102e; margin-bottom: 16px; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; border-bottom: 1px solid #d7d9dd; padding-bottom: 12px; }
-  .eyebrow { color: #c8102e; font-size: 8pt; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
-  h1 { margin: 5px 0 0; font-size: 19pt; line-height: 1.15; color: #17191d; }
-  .meta { text-align: right; color: #62666d; font-size: 8.5pt; white-space: nowrap; }
-  .status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
-  .status { border: 1px solid #dadde1; border-radius: 7px; padding: 8px 9px; background: #f7f8fa; }
-  .status span, .field-label { display: block; color: #6d7178; text-transform: uppercase; font-size: 7.5pt; font-weight: 700; letter-spacing: .5px; margin-bottom: 3px; }
-  .status strong { color: #202328; font-size: 10pt; }
-  .section { margin-top: 14px; page-break-inside: avoid; }
-  .section-title { font-size: 10pt; font-weight: 700; color: #c8102e; border-bottom: 1px solid #e1e3e6; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
-  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 18px; }
-  .field { min-height: 34px; }
-  .field-value { font-weight: 600; color: #22252a; white-space: pre-wrap; }
-  .text-box { border: 1px solid #e0e2e5; border-radius: 7px; padding: 10px; min-height: 46px; white-space: pre-wrap; line-height: 1.45; }
-  .timeline-item { position: relative; padding: 0 0 10px 16px; margin-left: 4px; border-left: 2px solid #e2e4e7; page-break-inside: avoid; }
-  .timeline-item:before { content: ''; position: absolute; left: -5px; top: 3px; width: 8px; height: 8px; border-radius: 50%; background: #c8102e; }
-  .timeline-date { font-size: 8pt; font-weight: 700; color: #5d6168; margin-bottom: 3px; }
-  .timeline-text { line-height: 1.45; white-space: pre-wrap; }
-  .empty { color: #777b82; font-style: italic; }
-  .footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #dedfe2; color: #777b82; font-size: 7.5pt; display: flex; justify-content: space-between; }
-  @media print { .report { max-width: none; } }
-</style>
-</head>
-<body>
-  <main class="report">
-    <div class="topline"></div>
-    <header class="header">
-      <div>
-        <div class="eyebrow">TrAccion · Relaciones Laborales</div>
-        <h1>${escapeHtml(draft.titulo || 'Tarea sin título')}</h1>
-      </div>
-      <div class="meta">
-        <div><strong>ID:</strong> ${escapeHtml(task.id)}</div>
-        <div><strong>Actualizada:</strong> ${escapeHtml(formatDateTime(task.updatedAt))}</div>
-      </div>
-    </header>
-
-    <section class="status-grid">
-      <div class="status"><span>Estado</span><strong>${escapeHtml(label(draft.estado))}</strong></div>
-      <div class="status"><span>Prioridad</span><strong>${escapeHtml(label(draft.prioridad))}</strong></div>
-      <div class="status"><span>Tipo</span><strong>${escapeHtml(label(draft.tipo))}</strong></div>
-      <div class="status"><span>Fase</span><strong>${escapeHtml(label(draft.fase))}</strong></div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Datos de la tarea</div>
-      <div class="fields">
-        <div class="field"><span class="field-label">Responsable</span><div class="field-value">${escapeHtml(draft.responsable || '—')}</div></div>
-        <div class="field"><span class="field-label">Fecha límite</span><div class="field-value">${escapeHtml(formatDate(draft.fechaLimite))}</div></div>
-        <div class="field"><span class="field-label">Origen</span><div class="field-value">${escapeHtml(draft.origen || '—')}</div></div>
-        <div class="field"><span class="field-label">Sindicato</span><div class="field-value">${escapeHtml(draft.sindicato || '—')}</div></div>
-        <div class="field"><span class="field-label">Creada</span><div class="field-value">${escapeHtml(formatDateTime(task.createdAt))}</div></div>
-        <div class="field"><span class="field-label">Cerrada</span><div class="field-value">${escapeHtml(formatDateTime(task.closedAt))}</div></div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Descripción</div>
-      <div class="text-box">${escapeHtml(draft.descripcion || 'Sin descripción.')}</div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Seguimiento</div>
-      ${seguimiento}
-    </section>
-
-    <section class="section">
-      <div class="section-title">Observaciones</div>
-      <div class="text-box">${escapeHtml(draft.observaciones || 'Sin observaciones.')}</div>
-    </section>
-
-    <footer class="footer">
-      <span>Informe de detalle de tarea</span>
-      <span>Generado ${escapeHtml(formatDateTime(new Date().toISOString()))}</span>
-    </footer>
-  </main>
-  <script>window.addEventListener('load', () => { window.print(); });</script>
-</body>
-</html>`;
-
-  const reportWindow = window.open('', '_blank');
-  if (!reportWindow) {
-    throw new Error('No se ha podido abrir la vista de impresión.');
+function decodeTracking(entry: TaskSeguimientoEntry): { text: string; date: string; user: string } {
+  const text = entry.texto ?? '';
+  if (!text.startsWith(TRACKING_META_PREFIX)) {
+    return { text, date: entry.fechaHora, user: '—' };
   }
-  reportWindow.opener = null;
-  reportWindow.document.open();
-  reportWindow.document.write(html);
-  reportWindow.document.close();
+
+  const end = text.indexOf(TRACKING_META_SUFFIX);
+  if (end < 0) {
+    return { text, date: entry.fechaHora, user: '—' };
+  }
+
+  const raw = text.slice(TRACKING_META_PREFIX.length, end);
+  try {
+    const parsed = JSON.parse(raw) as TrackingMeta;
+    return {
+      text: text.slice(end + TRACKING_META_SUFFIX.length).replace(/^\s*\n?/, ''),
+      date: parsed.fecha || entry.fechaHora,
+      user: parsed.usuario || '—',
+    };
+  } catch {
+    return { text, date: entry.fechaHora, user: '—' };
+  }
 }
 
-function excelCell(value: string, styleId = 'Body', mergeAcross?: number): string {
-  const merge = mergeAcross ? ` ss:MergeAcross="${mergeAcross}"` : '';
-  return `<Cell ss:StyleID="${styleId}"${merge}><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
+function estimateRowHeight(text: string, charsPerLine: number, minimum = 22): number {
+  const normalized = text || '';
+  const explicitLines = normalized.split(/\r?\n/);
+  const lines = explicitLines.reduce(
+    (total, line) => total + Math.max(1, Math.ceil(line.length / charsPerLine)),
+    0,
+  );
+  return Math.max(minimum, Math.min(180, 8 + lines * 15));
 }
 
-export function exportTaskReportToExcel({ task, draft }: TaskReportData): void {
-  const rows: string[] = [];
-  const addRow = (...cells: string[]) => rows.push(`<Row>${cells.join('')}</Row>`);
+export function buildTaskReportHtml({ task, draft }: TaskReportData): string {
+  const trackingRows = task.seguimiento.length
+    ? task.seguimiento
+        .map((entry) => {
+          const decoded = decodeTracking(entry);
+          return `<tr>
+            <td>${escapeHtml(formatDate(decoded.date))}</td>
+            <td>${escapeHtml(decoded.user)}</td>
+            <td>${escapeHtml(decoded.text || '—')}</td>
+          </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="3" class="task-report-empty">Sin seguimientos registrados.</td></tr>';
 
-  addRow(excelCell('TRACCION · RELACIONES LABORALES', 'Brand', 3));
-  addRow(excelCell('DETALLE DE TAREA', 'Title', 3));
-  addRow(excelCell(draft.titulo || 'Tarea sin título', 'TaskTitle', 3));
-  addRow(excelCell('', 'Spacer', 3));
+  return `<style>
+.task-report-title{margin:0;font-size:26px;line-height:1.15;color:#fff;text-transform:none!important}
+.task-report-subtitle{margin:7px 0 0;color:#dbeafe;font-size:13px;font-weight:600}
+.task-report-section{padding:8px 34px 18px}
+.task-report-section h2{margin:0 0 9px;padding-bottom:6px;border-bottom:1px solid #dbe3ef;color:#c8102e;font-size:13px;letter-spacing:.04em;text-transform:uppercase}
+.task-report-text{margin:0;border:1px solid #dbe3ef;border-radius:12px;background:#fff;padding:12px 14px;white-space:pre-wrap;line-height:1.5;font-size:11px;min-height:44px}
+.task-report-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:20px 34px 12px}
+.task-report-card{border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc;padding:10px 12px;min-height:60px}
+.task-report-card span{display:block;color:#64748b;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.task-report-card strong{display:block;color:#0f172a;font-size:11px;line-height:1.35;white-space:pre-wrap}
+.task-report-table{width:100%;border-collapse:collapse;border:1px solid #dbe3ef;border-radius:12px;overflow:hidden;font-size:10.5px}
+.task-report-table th{background:#343a40;color:#fff;text-align:left;padding:8px 9px;font-size:9px;text-transform:uppercase;letter-spacing:.04em}
+.task-report-table td{border-top:1px solid #e5e7eb;padding:8px 9px;vertical-align:top;white-space:pre-wrap;line-height:1.4}
+.task-report-table tbody tr:nth-child(even) td{background:#f8fafc}
+.task-report-table th:nth-child(1),.task-report-table td:nth-child(1){width:16%}
+.task-report-table th:nth-child(2),.task-report-table td:nth-child(2){width:18%}
+.task-report-empty{text-align:center!important;color:#64748b;font-style:italic;padding:18px!important}
+@media print{
+ .task-report-grid{padding:14px 24px 8px;gap:7px}
+ .task-report-section{padding:6px 24px 12px}
+ .task-report-card{min-height:48px;padding:8px 9px}
+ .task-report-text{padding:9px 10px}
+ .task-report-table th,.task-report-table td{padding:6px 7px}
+}
+</style>
+<article class="print-document">
+  <header class="print-report-header">
+    <div>
+      <p class="print-eyebrow">TrAccion · Relaciones Laborales</p>
+      <h1 class="task-report-title">Detalle de tarea</h1>
+      <p class="task-report-subtitle">${escapeHtml(draft.titulo || 'Tarea sin título')}</p>
+    </div>
+    <div class="print-header-pill">${escapeHtml(label(draft.estado))}</div>
+  </header>
 
-  addRow(
-    excelCell('Estado', 'Header'),
-    excelCell(label(draft.estado), 'Value'),
-    excelCell('Prioridad', 'Header'),
-    excelCell(label(draft.prioridad), 'Value'),
-  );
-  addRow(
-    excelCell('Tipo', 'Header'),
-    excelCell(label(draft.tipo), 'Value'),
-    excelCell('Fase', 'Header'),
-    excelCell(label(draft.fase), 'Value'),
-  );
-  addRow(
-    excelCell('Responsable', 'Header'),
-    excelCell(draft.responsable || '—', 'Value'),
-    excelCell('Fecha límite', 'Header'),
-    excelCell(formatDate(draft.fechaLimite), 'Value'),
-  );
-  addRow(
-    excelCell('Origen', 'Header'),
-    excelCell(draft.origen || '—', 'Value'),
-    excelCell('Sindicato', 'Header'),
-    excelCell(draft.sindicato || '—', 'Value'),
-  );
-  addRow(
-    excelCell('Creada', 'Header'),
-    excelCell(formatDateTime(task.createdAt), 'Value'),
-    excelCell('Actualizada', 'Header'),
-    excelCell(formatDateTime(task.updatedAt), 'Value'),
-  );
-  addRow(
-    excelCell('Cerrada', 'Header'),
-    excelCell(formatDateTime(task.closedAt), 'Value'),
-    excelCell('ID', 'Header'),
-    excelCell(task.id, 'Value'),
-  );
+  <section class="task-report-grid">
+    <div class="task-report-card"><span>Estado</span><strong>${escapeHtml(label(draft.estado))}</strong></div>
+    <div class="task-report-card"><span>Prioridad</span><strong>${escapeHtml(label(draft.prioridad))}</strong></div>
+    <div class="task-report-card"><span>Tipo</span><strong>${escapeHtml(label(draft.tipo))}</strong></div>
+    <div class="task-report-card"><span>Fase</span><strong>${escapeHtml(label(draft.fase))}</strong></div>
+    <div class="task-report-card"><span>Responsable</span><strong>${escapeHtml(draft.responsable || '—')}</strong></div>
+    <div class="task-report-card"><span>Fecha límite</span><strong>${escapeHtml(formatDate(draft.fechaLimite))}</strong></div>
+    <div class="task-report-card"><span>Origen</span><strong>${escapeHtml(draft.origen || '—')}</strong></div>
+    <div class="task-report-card"><span>Sindicato</span><strong>${escapeHtml(draft.sindicato || '—')}</strong></div>
+    <div class="task-report-card"><span>Creada</span><strong>${escapeHtml(formatDateTime(task.createdAt))}</strong></div>
+    <div class="task-report-card"><span>Actualizada</span><strong>${escapeHtml(formatDateTime(task.updatedAt))}</strong></div>
+    <div class="task-report-card"><span>Cerrada</span><strong>${escapeHtml(formatDateTime(task.closedAt))}</strong></div>
+    <div class="task-report-card"><span>ID</span><strong>${escapeHtml(task.id)}</strong></div>
+  </section>
 
-  addRow(excelCell('', 'Spacer', 3));
-  addRow(excelCell('DESCRIPCIÓN', 'Section', 3));
-  addRow(excelCell(draft.descripcion || 'Sin descripción.', 'LongText', 3));
-  addRow(excelCell('', 'Spacer', 3));
-  addRow(excelCell('SEGUIMIENTO', 'Section', 3));
-  addRow(excelCell('Fecha y hora', 'TableHeader'), excelCell('Detalle', 'TableHeader', 2));
+  <section class="task-report-section">
+    <h2>Descripción</h2>
+    <p class="task-report-text">${escapeHtml(draft.descripcion || 'Sin descripción.')}</p>
+  </section>
+
+  <section class="task-report-section">
+    <h2>Seguimiento</h2>
+    <table class="task-report-table">
+      <thead><tr><th>Fecha</th><th>Usuario</th><th>Detalle</th></tr></thead>
+      <tbody>${trackingRows}</tbody>
+    </table>
+  </section>
+
+  <section class="task-report-section">
+    <h2>Observaciones</h2>
+    <p class="task-report-text">${escapeHtml(draft.observaciones || 'Sin observaciones.')}</p>
+  </section>
+
+  <footer class="print-footer">
+    <span>Informe de detalle de tarea</span>
+    <span>Generado ${escapeHtml(formatDateTime(new Date().toISOString()))}</span>
+  </footer>
+</article>`;
+}
+
+export async function exportTaskReportToExcel({ task, draft }: TaskReportData): Promise<void> {
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  const generatedAt = new Date();
+  workbook.creator = 'TrAccion';
+  workbook.created = generatedAt;
+  workbook.modified = generatedAt;
+
+  const sheet = workbook.addWorksheet('Detalle tarea', {
+    views: [{ state: 'frozen', ySplit: 3 }],
+    pageSetup: {
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.35, right: 0.35, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 },
+    },
+  });
+
+  const red = 'FFE30613';
+  const redDark = 'FFB20B16';
+  const dark = 'FF202328';
+  const muted = 'FF5C6168';
+  const light = 'FFF1F3F5';
+  const border = 'FFD9DDE1';
+  const white = 'FFFFFFFF';
+  const headerDark = 'FF3F434A';
+
+  sheet.columns = [
+    { width: 20 },
+    { width: 30 },
+    { width: 20 },
+    { width: 44 },
+  ];
+
+  const thinBorder = {
+    top: { style: 'thin' as const, color: { argb: border } },
+    bottom: { style: 'thin' as const, color: { argb: border } },
+    left: { style: 'thin' as const, color: { argb: border } },
+    right: { style: 'thin' as const, color: { argb: border } },
+  };
+
+  const mergeValueRow = (rowNumber: number, value: string, height: number) => {
+    sheet.mergeCells(rowNumber, 1, rowNumber, 4);
+    const cell = sheet.getCell(rowNumber, 1);
+    cell.value = value;
+    cell.font = { name: 'Arial', size: 10, color: { argb: dark } };
+    cell.alignment = { vertical: 'top', wrapText: true };
+    cell.border = thinBorder;
+    sheet.getRow(rowNumber).height = height;
+  };
+
+  sheet.mergeCells('A1:D1');
+  sheet.getCell('A1').value = 'TRACCION · RELACIONES LABORALES';
+  sheet.getCell('A1').font = { name: 'Arial', size: 9, bold: true, color: { argb: redDark } };
+  sheet.getRow(1).height = 18;
+
+  sheet.mergeCells('A2:D2');
+  sheet.getCell('A2').value = 'DETALLE DE TAREA';
+  sheet.getCell('A2').font = { name: 'Arial', size: 18, bold: true, color: { argb: dark } };
+  sheet.getRow(2).height = 28;
+
+  sheet.mergeCells('A3:D3');
+  sheet.getCell('A3').value = draft.titulo || 'Tarea sin título';
+  sheet.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: red } };
+  sheet.getCell('A3').font = { name: 'Arial', size: 12, bold: true, color: { argb: white } };
+  sheet.getCell('A3').alignment = { vertical: 'middle', wrapText: true };
+  sheet.getRow(3).height = estimateRowHeight(draft.titulo, 95, 28);
+
+  const pairs: Array<[string, string, string, string]> = [
+    ['Estado', label(draft.estado), 'Prioridad', label(draft.prioridad)],
+    ['Tipo', label(draft.tipo), 'Fase', label(draft.fase)],
+    ['Responsable', draft.responsable || '—', 'Fecha límite', formatDate(draft.fechaLimite)],
+    ['Origen', draft.origen || '—', 'Sindicato', draft.sindicato || '—'],
+    ['Creada', formatDateTime(task.createdAt), 'Actualizada', formatDateTime(task.updatedAt)],
+    ['Cerrada', formatDateTime(task.closedAt), 'ID', task.id],
+  ];
+
+  let rowNumber = 5;
+  pairs.forEach(([labelA, valueA, labelB, valueB]) => {
+    const row = sheet.getRow(rowNumber);
+    row.values = [labelA, valueA, labelB, valueB];
+    [1, 3].forEach((column) => {
+      const cell = row.getCell(column);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: light } };
+      cell.font = { name: 'Arial', size: 9, bold: true, color: { argb: muted } };
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', wrapText: true };
+    });
+    [2, 4].forEach((column) => {
+      const cell = row.getCell(column);
+      cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: dark } };
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', wrapText: true };
+    });
+    row.height = Math.max(20, estimateRowHeight(`${valueA} ${valueB}`, 60, 20));
+    rowNumber += 1;
+  });
+
+  rowNumber += 1;
+  sheet.mergeCells(rowNumber, 1, rowNumber, 4);
+  sheet.getCell(rowNumber, 1).value = 'DESCRIPCIÓN';
+  sheet.getCell(rowNumber, 1).font = { name: 'Arial', size: 10, bold: true, color: { argb: redDark } };
+  rowNumber += 1;
+  mergeValueRow(rowNumber, draft.descripcion || 'Sin descripción.', estimateRowHeight(draft.descripcion, 100, 34));
+
+  rowNumber += 2;
+  sheet.mergeCells(rowNumber, 1, rowNumber, 4);
+  sheet.getCell(rowNumber, 1).value = 'SEGUIMIENTO';
+  sheet.getCell(rowNumber, 1).font = { name: 'Arial', size: 10, bold: true, color: { argb: redDark } };
+  rowNumber += 1;
+
+  const trackingHeader = sheet.getRow(rowNumber);
+  trackingHeader.values = ['Fecha', 'Usuario', 'Detalle', ''];
+  sheet.mergeCells(rowNumber, 3, rowNumber, 4);
+  [1, 2, 3].forEach((column) => {
+    const cell = trackingHeader.getCell(column);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerDark } };
+    cell.font = { name: 'Arial', size: 9, bold: true, color: { argb: white } };
+    cell.alignment = { vertical: 'middle', wrapText: true };
+    cell.border = thinBorder;
+  });
+  trackingHeader.height = 22;
+  rowNumber += 1;
 
   if (task.seguimiento.length === 0) {
-    addRow(excelCell('—', 'Muted'), excelCell('Sin seguimientos registrados.', 'Muted', 2));
+    sheet.mergeCells(rowNumber, 1, rowNumber, 4);
+    const cell = sheet.getCell(rowNumber, 1);
+    cell.value = 'Sin seguimientos registrados.';
+    cell.font = { name: 'Arial', size: 9, italic: true, color: { argb: muted } };
+    cell.alignment = { vertical: 'middle' };
+    cell.border = thinBorder;
+    sheet.getRow(rowNumber).height = 22;
+    rowNumber += 1;
   } else {
     task.seguimiento.forEach((entry) => {
-      addRow(
-        excelCell(formatDateTime(entry.fechaHora), 'TimelineDate'),
-        excelCell(entry.texto, 'LongText', 2),
-      );
+      const decoded = decodeTracking(entry);
+      const row = sheet.getRow(rowNumber);
+      row.getCell(1).value = formatDate(decoded.date);
+      row.getCell(2).value = decoded.user;
+      row.getCell(3).value = decoded.text || '—';
+      sheet.mergeCells(rowNumber, 3, rowNumber, 4);
+      [1, 2, 3].forEach((column) => {
+        const cell = row.getCell(column);
+        cell.font = { name: 'Arial', size: column === 1 ? 9 : 10, color: { argb: column === 1 ? muted : dark }, bold: column === 1 };
+        cell.alignment = { vertical: 'top', wrapText: true };
+        cell.border = thinBorder;
+      });
+      row.height = estimateRowHeight(decoded.text, 65, 24);
+      rowNumber += 1;
     });
   }
 
-  addRow(excelCell('', 'Spacer', 3));
-  addRow(excelCell('OBSERVACIONES', 'Section', 3));
-  addRow(excelCell(draft.observaciones || 'Sin observaciones.', 'LongText', 3));
-  addRow(excelCell('', 'Spacer', 3));
-  addRow(
-    excelCell(`Generado ${formatDateTime(new Date().toISOString())}`, 'Footer', 3),
-  );
+  rowNumber += 1;
+  sheet.mergeCells(rowNumber, 1, rowNumber, 4);
+  sheet.getCell(rowNumber, 1).value = 'OBSERVACIONES';
+  sheet.getCell(rowNumber, 1).font = { name: 'Arial', size: 10, bold: true, color: { argb: redDark } };
+  rowNumber += 1;
+  mergeValueRow(rowNumber, draft.observaciones || 'Sin observaciones.', estimateRowHeight(draft.observaciones, 100, 34));
 
-  const workbook = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="10"/></Style>
-  <Style ss:ID="Brand"><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#C8102E"/><Alignment ss:Vertical="Center"/><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
-  <Style ss:ID="Title"><Font ss:FontName="Arial" ss:Size="18" ss:Bold="1" ss:Color="#202328"/><Alignment ss:Vertical="Center"/></Style>
-  <Style ss:ID="TaskTitle"><Font ss:FontName="Arial" ss:Size="13" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#C8102E" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:WrapText="1"/></Style>
-  <Style ss:ID="Header"><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#5C6168"/><Interior ss:Color="#EEF0F2" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D9DDE1"/></Borders></Style>
-  <Style ss:ID="Value"><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#202328"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E5E7E9"/></Borders><Alignment ss:WrapText="1"/></Style>
-  <Style ss:ID="Section"><Font ss:FontName="Arial" ss:Size="10" ss:Bold="1" ss:Color="#C8102E"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D9DDE1"/></Borders></Style>
-  <Style ss:ID="TableHeader"><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#3F434A" ss:Pattern="Solid"/><Alignment ss:WrapText="1"/></Style>
-  <Style ss:ID="Body"><Font ss:FontName="Arial" ss:Size="10"/><Alignment ss:WrapText="1" ss:Vertical="Top"/></Style>
-  <Style ss:ID="LongText"><Font ss:FontName="Arial" ss:Size="10"/><Alignment ss:WrapText="1" ss:Vertical="Top"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E7E8EA"/></Borders></Style>
-  <Style ss:ID="TimelineDate"><Font ss:FontName="Arial" ss:Size="9" ss:Bold="1" ss:Color="#5C6168"/><Alignment ss:Vertical="Top"/></Style>
-  <Style ss:ID="Muted"><Font ss:FontName="Arial" ss:Size="9" ss:Italic="1" ss:Color="#7A7E84"/><Alignment ss:WrapText="1"/></Style>
-  <Style ss:ID="Footer"><Font ss:FontName="Arial" ss:Size="8" ss:Color="#7A7E84"/><Alignment ss:Horizontal="Right"/></Style>
-  <Style ss:ID="Spacer"><Font ss:FontName="Arial" ss:Size="5"/></Style>
- </Styles>
- <Worksheet ss:Name="Detalle tarea">
-  <Table ss:DefaultRowHeight="18">
-   <Column ss:Width="105"/><Column ss:Width="185"/><Column ss:Width="105"/><Column ss:Width="185"/>
-   ${rows.join('\n   ')}
-  </Table>
-  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-   <PageSetup><Layout x:Orientation="Landscape"/><PageMargins x:Bottom="0.5" x:Left="0.4" x:Right="0.4" x:Top="0.5"/></PageSetup>
-   <Print><FitWidth>1</FitWidth><ValidPrinterInfo/></Print>
-   <Selected/>
-   <FreezePanes/><FrozenNoSplit/><SplitHorizontal>3</SplitHorizontal><TopRowBottomPane>3</TopRowBottomPane><ActivePane>2</ActivePane>
-  </WorksheetOptions>
- </Worksheet>
-</Workbook>`;
+  rowNumber += 2;
+  sheet.mergeCells(rowNumber, 1, rowNumber, 4);
+  const footer = sheet.getCell(rowNumber, 1);
+  footer.value = `Generado ${formatDateTime(generatedAt.toISOString())}`;
+  footer.font = { name: 'Arial', size: 8, color: { argb: muted } };
+  footer.alignment = { horizontal: 'right' };
 
-  const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `Tarea_${safeFileName(draft.titulo)}.xls`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  sheet.pageSetup.printArea = `A1:D${rowNumber}`;
+  sheet.headerFooter.oddFooter = '&LTrAccion · Detalle de tarea&C&P / &N';
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  await openWorkbookInExcel(buffer, `Tarea_${safeFileName(draft.titulo)}.xlsx`);
 }

@@ -9,18 +9,47 @@ interface PrintPreviewModalProps {
 
 export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalProps) {
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
 
-    if (!printWindow) {
+    const removeFrame = () => {
+      window.setTimeout(() => iframe.remove(), 500);
+    };
+
+    iframe.onload = () => {
+      const printWindow = iframe.contentWindow;
+      if (!printWindow) {
+        removeFrame();
+        return;
+      }
+
+      printWindow.focus();
+      printWindow.addEventListener('afterprint', removeFrame, { once: true });
+      window.setTimeout(() => {
+        printWindow.print();
+        window.setTimeout(removeFrame, 2000);
+      }, 50);
+    };
+
+    document.body.appendChild(iframe);
+    const printDocument = iframe.contentDocument;
+    if (!printDocument) {
+      removeFrame();
       return;
     }
 
-    printWindow.document.write(
+    printDocument.open();
+    printDocument.write(
       `<!doctype html><html><head><meta charset="utf-8" /><title>${title}</title>${printStyles}</head><body>${html}</body></html>`,
     );
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    printDocument.close();
   };
 
   return (

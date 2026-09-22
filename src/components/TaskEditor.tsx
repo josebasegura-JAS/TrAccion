@@ -40,7 +40,8 @@ import {
   type TaskSeguimientoEntry,
 } from '../features/tareas/domain/task';
 import { useTaskStore } from '../features/tareas/store/useTaskStore';
-import { exportTaskReportToExcel, printTaskReport } from '../features/tareas/export/taskReport';
+import { buildTaskReportHtml, exportTaskReportToExcel } from '../features/tareas/export/taskReport';
+import { PrintPreviewModal } from '../shared/print/PrintPreviewModal';
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts';
 import { buildRecoverableDraftKey, useRecoverableDraft } from '../hooks/useRecoverableDraft';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
@@ -291,6 +292,7 @@ export function TaskEditor({
   const [linkedCriterionId, setLinkedCriterionId] = useState<string | null>(null);
   const [criterionLinkReady, setCriterionLinkReady] = useState(false);
   const { confirm: confirmTrackingDelete, dialogNode: trackingDeleteDialogNode } = useAppDialog();
+  const [taskPrintPreviewHtml, setTaskPrintPreviewHtml] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<TaskDraft>(() => createInitialDraft(task, initialDraft));
   const [sendToDirection, setSendToDirection] = useState(() => task ? directionTaskIds.includes(task.id) : false);
@@ -1141,7 +1143,7 @@ export function TaskEditor({
                   <ActionButton
                     icon={Printer}
                     iconOnly={false}
-                    onClick={() => printTaskReport({ task, draft })}
+                    onClick={() => setTaskPrintPreviewHtml(buildTaskReportHtml({ task, draft }))}
                     type="button"
                     variant="secondary"
                   >
@@ -1150,7 +1152,10 @@ export function TaskEditor({
                   <ActionButton
                     icon={FileSpreadsheet}
                     iconOnly={false}
-                    onClick={() => exportTaskReportToExcel({ task, draft })}
+                    onClick={() => void exportTaskReportToExcel({ task, draft }).catch((error) => {
+                      setSaveStatus(error instanceof Error ? error.message : 'No se ha podido generar el Excel.');
+                      setSaveStatusIsError(true);
+                    })}
                     type="button"
                     variant="secondary"
                   >
@@ -1190,6 +1195,13 @@ export function TaskEditor({
       {dialogNode}
       {recoveryDialogNode}
       {trackingDeleteDialogNode}
+      {taskPrintPreviewHtml && (
+        <PrintPreviewModal
+          html={taskPrintPreviewHtml}
+          onClose={() => setTaskPrintPreviewHtml(null)}
+          title="Detalle de tarea"
+        />
+      )}
     </>
   );
 }
