@@ -1,4 +1,13 @@
-import { FolderOpen, Plus, Save, Settings2 } from 'lucide-react';
+import {
+  ChevronDown,
+  FileSpreadsheet,
+  FileText,
+  FolderOpen,
+  ListTodo,
+  Plus,
+  Save,
+  Settings2,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
@@ -322,123 +331,324 @@ export function AjustesPage() {
     </div>
   );
 
+  const openAndScroll = (id: string) => {
+    const section = document.getElementById(id);
+    if (section instanceof HTMLDetailsElement) {
+      section.open = true;
+    }
+    section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Ajustes</p>
-            <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración compartida</h2>
+            <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración de TrAccion</h2>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-metro-muted">
-              Estas rutas se guardan en la SQLite compartida y son comunes para todos los usuarios de TrAccion.
-              Al tener todos la unidad de red mapeada de la misma forma, basta con configurarlas una sola vez.
+              Configuración común para RRLL. Las rutas se guardan en la SQLite compartida y se aplican
+              a todos los usuarios que trabajan con la misma base de datos.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">
+
+          <div
+            className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${
+              routesDirty
+                ? 'border-amber-400/30 bg-amber-500/10 text-amber-100'
+                : 'border-metro-border bg-metro-panel text-metro-muted'
+            }`}
+          >
             <Settings2 size={15} />
-            {routesDirty ? 'Cambios sin guardar' : 'Configuración guardada'}
+            {routesDirty ? 'Cambios de rutas sin guardar' : 'Configuración de rutas guardada'}
           </div>
         </div>
-      </div>
 
-      <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
-        <h3 className="text-base font-bold text-metro-text">Plantillas Word</h3>
-        <p className="mt-1 text-sm text-metro-muted">Rutas de los DOCX externos usados por los distintos módulos.</p>
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">{TEMPLATE_FIELDS.map(renderRouteField)}</div>
-      </div>
-
-      <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
-        <h3 className="text-base font-bold text-metro-text">Copias Excel y documentación</h3>
-        <p className="mt-1 text-sm text-metro-muted">Carpetas compartidas donde TrAccion mantiene copias automáticas o archiva documentación.</p>
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">{EXPORT_FIELDS.map(renderRouteField)}</div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-metro-border pt-4">
-          <button
-            className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!routesDirty || savingRoutes}
-            onClick={() => void handleSaveRoutes()}
-            type="button"
-          >
-            <Save size={16} />
-            {savingRoutes ? 'Guardando…' : 'Guardar rutas compartidas'}
-          </button>
-          {status && <p className={`text-xs font-semibold ${/no se ha podido|debe ser|conflicto|error/i.test(status) ? 'text-amber-300' : 'text-metro-success'}`}>{status}</p>}
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
-          <h3 className="text-base font-bold text-metro-text">Fases de tareas</h3>
-          <p className="mt-1 text-sm text-metro-muted">Desactivar una fase impide nuevas selecciones, pero conserva el histórico.</p>
-          <div className="my-3 flex flex-col gap-2 sm:flex-row">
-            <input
-              className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => setNewTaskPhase(event.target.value)}
-              placeholder="Nueva fase"
-              type="text"
-              value={newTaskPhase}
-            />
+        <div className="mt-5 border-t border-metro-border pt-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-metro-muted">
+            Accesos directos
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
             <button
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:opacity-50"
-              disabled={!newTaskPhase.trim()}
-              onClick={handleAddTaskPhase}
+              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              onClick={() => openAndScroll('ajustes-plantillas')}
               type="button"
             >
-              <Plus size={16} /> Añadir
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+                <FileText size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-metro-text">Plantillas Word</span>
+                <span className="block text-xs text-metro-muted">{TEMPLATE_FIELDS.length} rutas DOCX</span>
+              </span>
             </button>
-          </div>
-          <div className="space-y-2">
-            {taskPhases.map((phase) => (
-              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 sm:grid-cols-[minmax(0,1fr)_auto]" key={phase.id}>
-                <input
-                  className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-                  onChange={(event) => updateTaskPhase(phase.id, event.target.value)}
-                  type="text"
-                  value={phase.nombre}
-                />
-                <button className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red" onClick={() => toggleTaskPhase(phase.id)} type="button">
-                  {phase.active ? 'Desactivar' : 'Activar'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        <div className="rounded-2xl border border-metro-border bg-metro-panel p-4">
-          <h3 className="text-base font-bold text-metro-text">Orígenes de tareas</h3>
-          <p className="mt-1 text-sm text-metro-muted">Sindicatos, áreas de empresa u otros orígenes disponibles en el detalle de una tarea.</p>
-          <div className="my-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px_auto]">
-            <input
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
-              onChange={(event) => setNewOriginName(event.target.value)}
-              placeholder="Nuevo origen"
-              type="text"
-              value={newOriginName}
-            />
-            <select className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text" onChange={(event) => setNewOriginType(event.target.value as TaskOriginConfig['tipo'])} value={newOriginType}>
-              <option value="empresa">Empresa</option>
-              <option value="sindicato">Sindicato</option>
-              <option value="otro">Otro</option>
-            </select>
-            <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:opacity-50" disabled={!newOriginName.trim()} onClick={handleAddOrigin} type="button">
-              <Plus size={16} /> Añadir
+            <button
+              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              onClick={() => openAndScroll('ajustes-exportaciones')}
+              type="button"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+                <FileSpreadsheet size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-metro-text">Copias y documentación</span>
+                <span className="block text-xs text-metro-muted">{EXPORT_FIELDS.length} carpetas compartidas</span>
+              </span>
             </button>
-          </div>
-          <div className="space-y-2">
-            {taskOrigins.filter((origin) => !origin.deletedAt).map((origin) => (
-              <div className="grid gap-2 rounded-xl border border-metro-border bg-metro-surface p-2 sm:grid-cols-[minmax(0,1fr)_120px_auto_auto]" key={origin.id}>
-                <input className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red" onChange={(event) => updateTaskOrigin(origin.id, event.target.value, origin.tipo)} type="text" value={origin.nombre} />
-                <select className="rounded-lg border border-metro-border bg-metro-panel px-2 py-2 text-xs font-semibold text-metro-text" onChange={(event) => updateTaskOrigin(origin.id, origin.nombre, event.target.value as TaskOriginConfig['tipo'])} value={origin.tipo}>
-                  <option value="empresa">Empresa</option>
-                  <option value="sindicato">Sindicato</option>
-                  <option value="otro">Otro</option>
-                </select>
-                <button className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red" onClick={() => toggleTaskOrigin(origin.id)} type="button">{origin.active ? 'Desactivar' : 'Activar'}</button>
-                <button className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text" onClick={() => deleteTaskOrigin(origin.id)} type="button">Eliminar</button>
-              </div>
-            ))}
+
+            <button
+              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              onClick={() => openAndScroll('ajustes-tareas')}
+              type="button"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+                <ListTodo size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-metro-text">Tareas</span>
+                <span className="block text-xs text-metro-muted">Fases y orígenes</span>
+              </span>
+            </button>
           </div>
         </div>
       </div>
+
+      <details
+        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        id="ajustes-plantillas"
+        open
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <FileText size={17} />
+            </span>
+            <div>
+              <h3 className="text-base font-bold text-metro-text">Plantillas Word</h3>
+              <p className="mt-0.5 text-xs text-metro-muted">
+                Documentos DOCX externos usados para generar escritos desde TrAccion.
+              </p>
+            </div>
+          </div>
+          <ChevronDown className="shrink-0 text-metro-muted transition-transform group-open:rotate-180" size={18} />
+        </summary>
+
+        <div className="border-t border-metro-border p-4">
+          <div className="grid gap-3 xl:grid-cols-2">{TEMPLATE_FIELDS.map(renderRouteField)}</div>
+        </div>
+      </details>
+
+      <details
+        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        id="ajustes-exportaciones"
+        open
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <FileSpreadsheet size={17} />
+            </span>
+            <div>
+              <h3 className="text-base font-bold text-metro-text">Copias Excel y documentación</h3>
+              <p className="mt-0.5 text-xs text-metro-muted">
+                Destinos compartidos de copias automáticas, exportaciones y documentación archivada.
+              </p>
+            </div>
+          </div>
+          <ChevronDown className="shrink-0 text-metro-muted transition-transform group-open:rotate-180" size={18} />
+        </summary>
+
+        <div className="border-t border-metro-border p-4">
+          <div className="grid gap-3 xl:grid-cols-2">{EXPORT_FIELDS.map(renderRouteField)}</div>
+
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-metro-border bg-metro-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-metro-text">
+                {routesDirty ? 'Hay cambios pendientes en las rutas' : 'Rutas compartidas actualizadas'}
+              </p>
+              <p className="mt-0.5 text-xs text-metro-muted">
+                El guardado se realiza una sola vez para evitar escrituras continuas en la base compartida.
+              </p>
+            </div>
+            <button
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-metro-red px-4 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!routesDirty || savingRoutes}
+              onClick={() => void handleSaveRoutes()}
+              type="button"
+            >
+              <Save size={16} />
+              {savingRoutes ? 'Guardando…' : 'Guardar rutas compartidas'}
+            </button>
+          </div>
+
+          {status && (
+            <p
+              className={`mt-3 text-xs font-semibold ${
+                /no se ha podido|debe ser|conflicto|error/i.test(status)
+                  ? 'text-amber-300'
+                  : 'text-metro-success'
+              }`}
+            >
+              {status}
+            </p>
+          )}
+        </div>
+      </details>
+
+      <details
+        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        id="ajustes-tareas"
+        open
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <ListTodo size={17} />
+            </span>
+            <div>
+              <h3 className="text-base font-bold text-metro-text">Configuración de tareas</h3>
+              <p className="mt-0.5 text-xs text-metro-muted">
+                Catálogos utilizados en el alta y seguimiento de tareas.
+              </p>
+            </div>
+          </div>
+          <ChevronDown className="shrink-0 text-metro-muted transition-transform group-open:rotate-180" size={18} />
+        </summary>
+
+        <div className="grid gap-4 border-t border-metro-border p-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <div className="mb-3">
+              <h4 className="text-sm font-bold text-metro-text">Fases</h4>
+              <p className="mt-1 text-xs leading-5 text-metro-muted">
+                Desactivar una fase evita nuevas selecciones, pero conserva el histórico.
+              </p>
+            </div>
+
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => setNewTaskPhase(event.target.value)}
+                placeholder="Nueva fase"
+                type="text"
+                value={newTaskPhase}
+              />
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:opacity-50"
+                disabled={!newTaskPhase.trim()}
+                onClick={handleAddTaskPhase}
+                type="button"
+              >
+                <Plus size={16} /> Añadir
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {taskPhases.map((phase) => (
+                <div
+                  className="grid gap-2 rounded-lg border border-metro-border bg-metro-panel p-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+                  key={phase.id}
+                >
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateTaskPhase(phase.id, event.target.value)}
+                    type="text"
+                    value={phase.nombre}
+                  />
+                  <button
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
+                    onClick={() => toggleTaskPhase(phase.id)}
+                    type="button"
+                  >
+                    {phase.active ? 'Desactivar' : 'Activar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <div className="mb-3">
+              <h4 className="text-sm font-bold text-metro-text">Orígenes</h4>
+              <p className="mt-1 text-xs leading-5 text-metro-muted">
+                Sindicatos, áreas de empresa u otros orígenes disponibles en una tarea.
+              </p>
+            </div>
+
+            <div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_125px_auto]">
+              <input
+                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                onChange={(event) => setNewOriginName(event.target.value)}
+                placeholder="Nuevo origen"
+                type="text"
+                value={newOriginName}
+              />
+              <select
+                className="rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text"
+                onChange={(event) => setNewOriginType(event.target.value as TaskOriginConfig['tipo'])}
+                value={newOriginType}
+              >
+                <option value="empresa">Empresa</option>
+                <option value="sindicato">Sindicato</option>
+                <option value="otro">Otro</option>
+              </select>
+              <button
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:opacity-50"
+                disabled={!newOriginName.trim()}
+                onClick={handleAddOrigin}
+                type="button"
+              >
+                <Plus size={16} /> Añadir
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {taskOrigins.filter((origin) => !origin.deletedAt).map((origin) => (
+                <div
+                  className="grid gap-2 rounded-lg border border-metro-border bg-metro-panel p-2 sm:grid-cols-[minmax(0,1fr)_115px_auto_auto]"
+                  key={origin.id}
+                >
+                  <input
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red"
+                    onChange={(event) => updateTaskOrigin(origin.id, event.target.value, origin.tipo)}
+                    type="text"
+                    value={origin.nombre}
+                  />
+                  <select
+                    className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-semibold text-metro-text"
+                    onChange={(event) =>
+                      updateTaskOrigin(
+                        origin.id,
+                        origin.nombre,
+                        event.target.value as TaskOriginConfig['tipo'],
+                      )
+                    }
+                    value={origin.tipo}
+                  >
+                    <option value="empresa">Empresa</option>
+                    <option value="sindicato">Sindicato</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                  <button
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red"
+                    onClick={() => toggleTaskOrigin(origin.id)}
+                    type="button"
+                  >
+                    {origin.active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button
+                    className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                    onClick={() => deleteTaskOrigin(origin.id)}
+                    type="button"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
   );
 }
