@@ -32,7 +32,6 @@ import {
 import { enqueueAuditEvent } from '../../../shared/audit/auditTrail';
 import { type TeletrabajoDraft, type TeletrabajoSolicitud } from '../domain/solicitud';
 import {
-  STORAGE_KEY,
   areSolicitudesEquivalent,
   buildSolicitudesForNewPeriodo,
   buildTeletrabajoState,
