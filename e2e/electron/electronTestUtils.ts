@@ -118,6 +118,36 @@ export async function launchTraccionElectron(
   };
 }
 
+
+export async function launchTraccionElectronWithIsolatedSharedDatabase(
+  options: Omit<LaunchTraccionElectronOptions, 'sharedDatabaseDirectory'> = {},
+): Promise<ElectronTestApp> {
+  const sharedDatabaseDirectory = await createSharedDatabaseDirectory();
+  try {
+    const launched = await launchTraccionElectron({
+      ...options,
+      sharedDatabaseDirectory,
+    });
+
+    const originalClose = launched.close;
+    const originalCleanup = launched.cleanup;
+    return {
+      ...launched,
+      close: async () => {
+        await originalClose();
+        await rm(sharedDatabaseDirectory, { recursive: true, force: true }).catch(() => undefined);
+      },
+      cleanup: async () => {
+        await originalCleanup();
+        await rm(sharedDatabaseDirectory, { recursive: true, force: true }).catch(() => undefined);
+      },
+    };
+  } catch (error) {
+    await rm(sharedDatabaseDirectory, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function expectNoAppShellError(page: Page): Promise<void> {
   await expect(page.getByText('No se ha podido mostrar TrAccion')).toHaveCount(0);
 }

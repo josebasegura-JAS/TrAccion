@@ -9,7 +9,7 @@ export interface DatabaseStatusBadgeViewModel {
 }
 
 function fallbackPath(status: TraccionDatabaseStatus | null): string {
-  return status?.path ?? 'localStorage local';
+  return status?.path ?? 'ruta SQLite no confirmada';
 }
 
 export function buildDatabaseStatusBadge(
@@ -17,9 +17,9 @@ export function buildDatabaseStatusBadge(
 ): DatabaseStatusBadgeViewModel {
   if (!status) {
     return {
-      label: 'Fallback localStorage',
-      detail: 'Estado SQLite no disponible',
-      title: 'Base de datos: fallback localStorage. No se ha podido leer el estado SQLite.',
+      label: 'SQLite no disponible',
+      detail: 'edición bloqueada',
+      title: 'Base de datos: estado SQLite no disponible. La edición permanece bloqueada hasta recuperar la base compartida.',
       tone: 'unknown',
       requiresAttention: true,
     };
@@ -72,9 +72,9 @@ export function buildDatabaseStatusBadge(
 
   if (status.phase === 'fallback') {
     return {
-      label: 'Fallback localStorage',
+      label: 'SQLite no disponible',
       detail: status.message ?? 'SQLite no activo',
-      title: `Base de datos: fallback localStorage. Ruta prevista: ${fallbackPath(status)}. ${status.message ?? ''}`,
+      title: `Base de datos: SQLite no disponible. Edición bloqueada. Ruta prevista: ${fallbackPath(status)}. ${status.message ?? ''}`,
       tone: 'warning',
       requiresAttention: true,
     };

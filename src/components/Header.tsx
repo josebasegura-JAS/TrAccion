@@ -108,7 +108,7 @@ function buildHeaderSyncVisual(
 ): HeaderSyncVisual {
   if (!databaseReady) {
     return {
-      label: 'Modo local',
+      label: 'Edición bloqueada',
       dotClass: 'bg-orange-400',
       chipClass: 'border-orange-400/20 bg-orange-500/10 text-orange-200',
     };

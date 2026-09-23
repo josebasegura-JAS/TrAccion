@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { launchTraccionElectron, navigateToModule } from './electronTestUtils';
+import { launchTraccionElectron, launchTraccionElectronWithIsolatedSharedDatabase, navigateToModule } from './electronTestUtils';
 
 test('arranca en Inicio y muestra estructura principal sin error de render', async () => {
   const { page, close } = await launchTraccionElectron();
@@ -15,15 +15,35 @@ test('arranca en Inicio y muestra estructura principal sin error de render', asy
   }
 });
 
-test('permite navegar por los módulos principales desde el menú lateral', async () => {
+test('sin SQLite compartida mantiene la aplicación en modo consulta y bloquea la edición', async () => {
   const { page, close } = await launchTraccionElectron();
+
+  try {
+    await expect(page.getByRole('alert').filter({ hasText: 'Base compartida no disponible: edición bloqueada' })).toBeVisible();
+    await navigateToModule(page, 'Operativa diaria', 'Tareas');
+    await expect(page.locator('[aria-disabled="true"]').first()).toBeVisible();
+    const taskButton = page.getByRole('button', { name: /Nueva tarea/ });
+    await expect(taskButton).toBeVisible();
+    await expect(taskButton.locator('xpath=ancestor::*[@inert][1]')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Ajustes' }).click();
+    await expect(page.getByRole('heading', { name: 'Ajustes' })).toBeVisible();
+  } finally {
+    await close();
+  }
+});
+
+test('permite navegar por los módulos principales desde el menú lateral', async () => {
+  const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
 
   try {
     const modules = [
       ['Operativa diaria', 'Tareas'],
+      ['Operativa diaria', 'Coordinación'],
       ['Operativa diaria', 'Comité / Paritaria'],
+      ['Operativa diaria', 'Huelgas'],
       ['Operativa diaria', 'Actas'],
       ['Personas', 'Plantilla'],
+      ['Personas', 'Ayuda escolar'],
       ['Personas', 'Teletrabajo'],
       ['Personas', 'Licencias sin sueldo'],
       ['Personas', 'Vinculograma'],
@@ -47,7 +67,7 @@ test('permite navegar por los módulos principales desde el menú lateral', asyn
 });
 
 test('abre modales críticos de Tareas y Actas', async () => {
-  const { page, close } = await launchTraccionElectron();
+  const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
 
   try {
     await navigateToModule(page, 'Operativa diaria', 'Tareas');
@@ -73,14 +93,17 @@ test('abre modales críticos de Tareas y Actas', async () => {
 // Su objetivo es bloquear regresiones gruesas de render, navegación y modales.
 
 test('las ayudas de todos los módulos abren como diálogo y no desbordan horizontalmente', async () => {
-  const { page, close } = await launchTraccionElectron();
+  const { page, close } = await launchTraccionElectronWithIsolatedSharedDatabase();
 
   try {
     const modules = [
       ['Operativa diaria', 'Tareas'],
+      ['Operativa diaria', 'Coordinación'],
       ['Operativa diaria', 'Comité / Paritaria'],
+      ['Operativa diaria', 'Huelgas'],
       ['Operativa diaria', 'Actas'],
       ['Personas', 'Plantilla'],
+      ['Personas', 'Ayuda escolar'],
       ['Personas', 'Teletrabajo'],
       ['Personas', 'Licencias sin sueldo'],
       ['Personas', 'Vinculograma'],

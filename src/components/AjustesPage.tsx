@@ -463,7 +463,7 @@ export function AjustesPage() {
     : databaseStatus?.phase === 'locked'
       ? 'Bloqueada temporalmente'
       : databaseStatus?.phase === 'fallback'
-        ? 'Modo local / sin conexión SQLite'
+        ? 'Modo consulta / sin conexión SQLite'
         : databaseStatus?.phase === 'error'
           ? 'Error de conexión'
           : 'No inicializada';

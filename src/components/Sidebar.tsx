@@ -66,11 +66,11 @@ const buildDatabaseIndicatorViewModel = (
   syncStatusText: string,
 ): DatabaseIndicatorViewModel => {
   const hydrationMetadata = typeof window === 'undefined' ? null : readHydrationMetadata();
-  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'localStorage local';
+  const routeText = databaseStatus?.path ?? hydrationMetadata?.sqlitePath ?? 'ruta SQLite no confirmada';
   const lastSyncText = formatDatabaseTimestamp(hydrationMetadata?.lastUpdatedAt);
 
   if (!databaseStatus) {
-    return { label: 'Local', statusText: 'fallback localStorage', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
+    return { label: 'Sin SQLite', statusText: 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
   }
   if (databaseStatus.phase === 'locked') {
     return { label: 'Bloq.', statusText: databaseStatus.message ?? 'base bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-slate-400 ring-slate-300/25', textClassName: 'text-slate-200', icon: 'lock', requiresAttention: true };
@@ -85,7 +85,7 @@ const buildDatabaseIndicatorViewModel = (
     return { label: 'Revisar', statusText: 'ruta local no permitida; configura la base compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', icon: 'database', requiresAttention: true };
   }
   if (databaseStatus.phase === 'fallback') {
-    return { label: 'Local', statusText: databaseStatus.message ?? 'fallback localStorage', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
+    return { label: 'Sin SQLite', statusText: databaseStatus.message ?? 'edición bloqueada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };
   }
   return { label: 'Revisar', statusText: databaseStatus.message ?? 'ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
 };
