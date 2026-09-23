@@ -23,7 +23,7 @@ export function AppUpdateChecker() {
       try {
         result = await checker();
       } catch (error) {
-        console.warn('No se ha podido comprobar si hay una actualización de TrAccion.', error);
+        console.warn('No se ha podido comprobar si hay una actualización de TrAcción.', error);
         return;
       }
 
@@ -32,7 +32,7 @@ export function AppUpdateChecker() {
       const details = result.notes ? `\n\n${result.notes}` : '';
       const mandatoryText = result.mandatory ? '\n\nEsta actualización está marcada como obligatoria.' : '';
       const wantsToUpdate = await confirm(
-        `Hay una versión nueva de TrAccion disponible (V${result.latestVersion}, la tuya es V${result.currentVersion}).` +
+        `Hay una versión nueva de TrAcción disponible (V${result.latestVersion}, la tuya es V${result.currentVersion}).` +
           `${details}${mandatoryText}\n\nLa aplicación se cerrará y se reabrirá automáticamente. ¿Actualizar ahora?`,
         {
           title: result.mandatory ? 'Actualización obligatoria' : 'Actualización disponible',

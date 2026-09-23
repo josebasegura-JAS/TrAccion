@@ -79,8 +79,8 @@ export const LICENCIAS_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Generación Word',
     items: [
       'Cuando una Licencia sin sueldo o una Excedencia está Pendiente de firma, el Word puede generarse tanto desde la tabla como desde la ficha de detalle.',
-      'Para Excedencia se utiliza su plantilla DOCX configurada en Ajustes y, al aprobarla, TrAccion intenta generar automáticamente el documento.',
-      'Los datos personales necesarios se obtienen de Plantilla por número de empleado. Si falta información obligatoria o la plantilla no es válida, TrAccion avisa antes de generar un documento incompleto.',
+      'Para Excedencia se utiliza su plantilla DOCX configurada en Ajustes y, al aprobarla, TrAcción intenta generar automáticamente el documento.',
+      'Los datos personales necesarios se obtienen de Plantilla por número de empleado. Si falta información obligatoria o la plantilla no es válida, TrAcción avisa antes de generar un documento incompleto.',
       'Las prórrogas de Excedencia conservan su generación Word específica cuando corresponda.',
     ],
   },

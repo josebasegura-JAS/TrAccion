@@ -38,8 +38,8 @@ export function openSqliteDatabase(
   if (existingVersion > CURRENT_SCHEMA_VERSION) {
     db.close();
     throw new Error(
-      `La base de datos tiene schema v${existingVersion} pero esta versión de TrAccion solo soporta hasta v${CURRENT_SCHEMA_VERSION}. ` +
-      'Actualiza TrAccion antes de continuar.',
+      `La base de datos tiene schema v${existingVersion} pero esta versión de TrAcción solo soporta hasta v${CURRENT_SCHEMA_VERSION}. ` +
+      'Actualiza TrAcción antes de continuar.',
     );
   }
 

@@ -372,7 +372,7 @@ export function EspecialesPage() {
       const outlookApi = getOutlookDraftApi();
       if (!outlookApi) {
         throw new Error(
-          'API Outlook no disponible. Abre TrAccion desde Electron, no desde el navegador.',
+          'API Outlook no disponible. Abre TrAcción desde Electron, no desde el navegador.',
         );
       }
       const result = await outlookApi.createDraft(payload);

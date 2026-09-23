@@ -75,7 +75,7 @@ export function registerCoreDatabaseIpc(): void {
   ipcMain.handle('database:select-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
-      title: 'Seleccionar carpeta para la base SQLite de TrAccion',
+      title: 'Seleccionar carpeta para la base SQLite de TrAcción',
       properties: ['openDirectory', 'createDirectory'],
     };
     const result = browserWindow
@@ -124,7 +124,7 @@ export function registerCoreDatabaseIpc(): void {
   ipcMain.handle('app-update:set-updates-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {
-      title: 'Seleccionar carpeta de actualizaciones de TrAccion',
+      title: 'Seleccionar carpeta de actualizaciones de TrAcción',
       properties: ['openDirectory', 'createDirectory'],
     };
     const result = browserWindow

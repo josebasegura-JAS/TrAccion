@@ -5,11 +5,11 @@ test('arranca en Inicio y muestra estructura principal sin error de render', asy
   const { page, close } = await launchTraccionElectron();
 
   try {
-    await expect(page).toHaveTitle(/TrAccion/);
+    await expect(page).toHaveTitle(/TrAcción/);
     await expect(page.getByRole('heading', { name: 'Dashboard RRLL' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('button', { name: /Estado de base de datos:/ })).toBeVisible();
-    await expect(page.getByText('No se ha podido mostrar TrAccion')).toHaveCount(0);
+    await expect(page.getByText('No se ha podido mostrar TrAcción')).toHaveCount(0);
   } finally {
     await close();
   }

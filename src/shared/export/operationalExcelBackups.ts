@@ -296,7 +296,7 @@ export async function syncLicenciasExcelBackup(records: LicenciaSinSueldoRecord[
     const buffer = workbookBufferToArrayBuffer(raw as ArrayBuffer | Uint8Array);
     return await saveWorkbook(directory, `Licencias_y_Excedencias_${fileDate()}.xlsx`, 'Licencias_y_Excedencias_', buffer);
   } catch (error) {
-    return `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático de Licencias: ${error instanceof Error ? error.message : String(error)}`;
+    return `Datos guardados en TrAcción, pero no se ha podido actualizar el Excel automático de Licencias: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -372,7 +372,7 @@ export async function syncVinculogramaExcelBackup(records: Vinculograma[]): Prom
     const buffer = workbookBufferToArrayBuffer(raw as ArrayBuffer | Uint8Array);
     return await saveWorkbook(directory, `Vinculograma_${fileDate()}.xlsx`, 'Vinculograma_', buffer);
   } catch (error) {
-    return `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático de Vinculograma: ${error instanceof Error ? error.message : String(error)}`;
+    return `Datos guardados en TrAcción, pero no se ha podido actualizar el Excel automático de Vinculograma: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 

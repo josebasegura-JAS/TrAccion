@@ -267,7 +267,7 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
       {
         title: 'Enviar borrador',
         action: 'Pulsa “Generar Outlook”. Se abre el correo bilingüe de borrador para sindicatos y Dirección.',
-        check: 'TrAccion cambia automáticamente el estado a Pendiente de alegaciones y fija una fecha límite de 21 días desde la fecha de generación.',
+        check: 'TrAcción cambia automáticamente el estado a Pendiente de alegaciones y fija una fecha límite de 21 días desde la fecha de generación.',
         result: 'Comienza el periodo de alegaciones sin tener que cambiar el estado manualmente.',
       },
       {
@@ -289,7 +289,7 @@ export const ACTAS_HELP_SECTIONS: ModuleHelpSection[] = [
       'El asunto se genera como “Akta Zirriborroa/Borrador Acta - {nombre del acta}”.',
       'El cuerpo se crea en dos columnas, euskera y castellano, con el nombre del acta y la fecha de sesión.',
       'La fecha tope para recibir aportaciones se calcula como fecha del sistema + 21 días.',
-      'Al abrir correctamente el borrador de Outlook, TrAccion guarda automáticamente el cambio a “Pendiente de alegaciones” con esa fecha límite.',
+      'Al abrir correctamente el borrador de Outlook, TrAcción guarda automáticamente el cambio a “Pendiente de alegaciones” con esa fecha límite.',
       'Los destinatarios quedan para completar manualmente y Outlook no envía el mensaje de forma automática.',
     ],
   },

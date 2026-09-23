@@ -106,7 +106,7 @@ function DatabaseLockQuickActions() {
 
     const confirmed = await confirm(
       `Vas a eliminar manualmente el bloqueo de ${ownerDescription}. ` +
-        'Hazlo únicamente si estás seguro de que ese equipo ya no está trabajando realmente en TrAccion. ' +
+        'Hazlo únicamente si estás seguro de que ese equipo ya no está trabajando realmente en TrAcción. ' +
         'Si sigue activo, podríais escribir simultáneamente durante unos segundos. ¿Continuar?',
       {
         confirmLabel: 'Forzar liberación',
@@ -134,7 +134,7 @@ function DatabaseLockQuickActions() {
 
       setCurrentLock(null);
       setCheckState('ready');
-      setStatusMessage('Bloqueo liberado. Reiniciando TrAccion…');
+      setStatusMessage('Bloqueo liberado. Reiniciando TrAcción…');
 
       window.setTimeout(() => {
         window.location.reload();
@@ -202,7 +202,7 @@ function DatabaseLockQuickActions() {
               </div>
 
               <p className="mt-1 text-sm text-metro-muted">
-                Permite detectar y liberar un lock abandonado por otro equipo si TrAccion quedó
+                Permite detectar y liberar un lock abandonado por otro equipo si TrAcción quedó
                 bloqueado tras un cierre, caída de red o equipo apagado.
               </p>
 
@@ -262,7 +262,7 @@ function DatabaseLockQuickActions() {
         </div>
 
         <p className="mt-3 border-t border-metro-border/60 pt-3 text-[11px] leading-relaxed text-metro-muted">
-          Seguridad: TrAccion solo habilita la liberación cuando puede identificar un lock real.
+          Seguridad: TrAcción solo habilita la liberación cuando puede identificar un lock real.
           Si la red impide leerlo, no se borra a ciegas.
         </p>
       </section>

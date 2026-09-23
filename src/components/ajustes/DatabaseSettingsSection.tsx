@@ -119,7 +119,7 @@ export function DatabaseSettingsSection({
           <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
           <p className="mt-1 text-sm text-metro-muted">
             SQLite es la base principal. La app mantiene una caché local y una copia de respaldo en
-            este equipo. Selecciona una carpeta local o compartida; TrAccion usará dentro el fichero
+            este equipo. Selecciona una carpeta local o compartida; TrAcción usará dentro el fichero
             traccion.sqlite sin sobrescribir bases existentes.
           </p>
         </div>
@@ -246,7 +246,7 @@ export function DatabaseSettingsSection({
               Copias locales de respaldo
             </p>
             <p className="mt-1 text-xs text-metro-muted">
-              Restaurar una copia crea antes un backup de la base activa y recarga TrAccion para
+              Restaurar una copia crea antes un backup de la base activa y recarga TrAcción para
               aplicar los datos.
             </p>
             <p className="mt-1 text-xs text-metro-muted">
@@ -296,7 +296,7 @@ export function DatabaseSettingsSection({
           Carpeta de respaldo secundario
         </p>
         <p className="mt-1 text-xs text-metro-muted">
-          TrAccion copiará los respaldos automáticos también a esta carpeta (red, USB u otro
+          TrAcción copiará los respaldos automáticos también a esta carpeta (red, USB u otro
           equipo). Protege frente a pérdida del equipo principal.
         </p>
         {secondaryBackupPath ? (
@@ -339,8 +339,8 @@ export function DatabaseSettingsSection({
           Carpeta de actualizaciones
         </p>
         <p className="mt-1 text-xs text-metro-muted">
-          Carpeta de red donde se publican las nuevas versiones de TrAccion (TrAccion.piz junto a
-          version.json). Al arrancar, TrAccion comprueba aquí si hay una versión más nueva y, si la
+          Carpeta de red donde se publican las nuevas versiones de TrAcción (TrAcción.piz junto a
+          version.json). Al arrancar, TrAcción comprueba aquí si hay una versión más nueva y, si la
           hay, pregunta antes de actualizarse. El .piz se copia al equipo, se verifica y se instala
           localmente sin tocar la base de datos.
         </p>
@@ -504,7 +504,7 @@ export function DatabaseSettingsSection({
             <p className="mt-1 max-w-xl text-xs text-metro-muted">
               Libera en disco el espacio de filas ya borradas (p. ej. tras podar copias internas
               antiguas). Se ejecuta automáticamente como máximo una vez por semana al cerrar
-              TrAccion. Puede tardar varios segundos y bloquea brevemente la escritura para el resto
+              TrAcción. Puede tardar varios segundos y bloquea brevemente la escritura para el resto
               de equipos.
             </p>
           </div>

@@ -115,8 +115,8 @@ export function registerLoteriaIpc(): void {
       return {
         ok: false,
         message: locked
-          ? `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático porque el archivo está abierto o bloqueado. Cierra el Excel y vuelve a guardar. Detalle: ${detail}`
-          : `Datos guardados en TrAccion, pero no se ha podido actualizar el Excel automático: ${detail}`,
+          ? `Datos guardados en TrAcción, pero no se ha podido actualizar el Excel automático porque el archivo está abierto o bloqueado. Cierra el Excel y vuelve a guardar. Detalle: ${detail}`
+          : `Datos guardados en TrAcción, pero no se ha podido actualizar el Excel automático: ${detail}`,
         path: null,
       };
     }

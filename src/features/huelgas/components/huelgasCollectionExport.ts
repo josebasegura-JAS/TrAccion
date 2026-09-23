@@ -157,7 +157,7 @@ export function buildHuelgaCollectionMailHtml(context: HuelgaMailContext): strin
     <p>Es <strong>muy importante</strong> disponer <strong>antes de las 9:45 horas</strong> de los datos del personal que ha trabajado. Una vez cumplimentado, remite el archivo a <strong>RELACIONES_LABORALES@metrobilbao.eus</strong>.</p>
     <p>El fichero incluye las personas que tienen turno ya precargadas. Debes revisar y completar:</p>
     <ol>
-      <li><strong>Personas con turno:</strong> vienen precargadas por TrAccion.</li>
+      <li><strong>Personas con turno:</strong> vienen precargadas por TrAcción.</li>
       <li><strong>Servicios mínimos:</strong> marca Sí/No cuando se publique la orden correspondiente.</li>
       <li><strong>Situación:</strong> indica si la persona hace <strong>HUELGA</strong> o <strong>TRABAJA</strong>.</li>
       <li><strong>Observaciones:</strong> utiliza este campo para cualquier incidencia que debamos conocer.</li>

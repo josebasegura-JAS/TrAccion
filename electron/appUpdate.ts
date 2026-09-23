@@ -286,6 +286,6 @@ export async function applyAppUpdate(
 
   return {
     ok: true,
-    message: `Actualización a V${manifest.version} preparada. TrAccion se cerrará, sustituirá el ejecutable anterior y volverá a abrir automáticamente.`,
+    message: `Actualización a V${manifest.version} preparada. TrAcción se cerrará, sustituirá el ejecutable anterior y volverá a abrir automáticamente.`,
   };
 }

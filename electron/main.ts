@@ -31,13 +31,13 @@ function createContextMenu(mainWindow: BrowserWindow): void {
   });
 }
 function createSplashWindow(): BrowserWindow {
-  const splashWindow = new BrowserWindow({ width: 460, height: 360, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAccion', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const splashWindow = new BrowserWindow({ width: 460, height: 360, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   splashWindow.center();
   splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
   return splashWindow;
 }
 function createShutdownWindow(): BrowserWindow {
-  const shutdownWindow = new BrowserWindow({ width: 460, height: 360, resizable: false, movable: true, minimizable: false, maximizable: false, closable: false, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cerrando TrAccion', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const shutdownWindow = new BrowserWindow({ width: 460, height: 360, resizable: false, movable: true, minimizable: false, maximizable: false, closable: false, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cerrando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   shutdownWindow.center();
   shutdownWindow.loadFile(shutdownHtmlPath).catch(() => undefined);
   return shutdownWindow;
@@ -61,7 +61,7 @@ function showMainAfterSplash(splashWindow: BrowserWindow | null, mainWindow: Bro
   setTimeout(() => closeSplashAndShowMain(splashWindow, mainWindow), remainingMs);
 }
 function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt = Date.now(), setConnectivityIssueNotifier?: (notifier: ConnectivityIssueNotifier) => void): BrowserWindow {
-  const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: 'TrAccion', backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const mainWindow = new BrowserWindow({ width: 1360, height: 860, minWidth: 1180, minHeight: 720, title: 'TrAcción', backgroundColor: '#D9EDF2', icon: appIconPath, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl);

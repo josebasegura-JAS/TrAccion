@@ -44,7 +44,7 @@ export const LOTERIA_HELP_SECTIONS: ModuleHelpSection[] = [
     title: 'Campaña y existencias',
     items: [
       'La campaña que se carga corresponde automáticamente al año actual. Los datos de años anteriores quedan archivados y al cambiar de año se inicia una campaña nueva.',
-      'Al generar el Outlook del encargo al lotero, TrAccion adjunta automáticamente un Excel de Administración con todos los números consecutivos desde el 1 hasta el mayor nº de empleado activo de Plantilla, distribuido en tres bloques y con los dos números de lotería como cabeceras.',
+      'Al generar el Outlook del encargo al lotero, TrAcción adjunta automáticamente un Excel de Administración con todos los números consecutivos desde el 1 hasta el mayor nº de empleado activo de Plantilla, distribuido en tres bloques y con los dos números de lotería como cabeceras.',
       'Se controlan por separado los décimos encargados y disponibles de cada uno de los dos números.',
       'Cuando la disponibilidad baja de 30 décimos, el indicador se muestra en tono de aviso para llamar la atención.',
       'El importe de cada persona se calcula con el número total de décimos solicitados multiplicado por el precio por décimo de la campaña.',

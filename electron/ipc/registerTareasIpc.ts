@@ -41,7 +41,7 @@ let lastOpenTasksExcelFailureMessage: string | null = null;
 
 function assertAllowedTaskDocumentPath(filePath: string): void {
   if (!allowedTaskDocumentExtensions.has(path.extname(filePath).toLowerCase())) {
-    throw new Error('Tipo de documento no permitido para abrir desde TrAccion.');
+    throw new Error('Tipo de documento no permitido para abrir desde TrAcción.');
   }
 }
 

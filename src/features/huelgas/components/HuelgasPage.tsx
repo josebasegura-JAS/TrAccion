@@ -1375,7 +1375,7 @@ export function HuelgasPage() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300"><FileSpreadsheet size={20} /></div>
                     <div>
                       <p className="text-sm font-semibold text-metro-text">Excel de personal por día</p>
-                      <p className="mt-1 text-xs text-metro-muted">Columnas esperadas: Resi./Estac., Inicio, Salida, Entrada, Fin, Nombre y Apellidos, Puesto y Turno. La residencia se contrastará con la Plantilla de TrAccion.</p>
+                      <p className="mt-1 text-xs text-metro-muted">Columnas esperadas: Resi./Estac., Inicio, Salida, Entrada, Fin, Nombre y Apellidos, Puesto y Turno. La residencia se contrastará con la Plantilla de TrAcción.</p>
                     </div>
                   </div>
                   <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-metro-border bg-metro-panel px-3.5 text-sm font-semibold text-metro-text transition hover:border-metro-red hover:bg-metro-raised">

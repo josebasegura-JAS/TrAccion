@@ -205,7 +205,7 @@ function ZerkosImportPreviewModal({
 
         {allConflicts.length > 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
-            <span className="text-xs text-metro-muted">Las diferencias conservan por defecto el dato actual de TrAccion.</span>
+            <span className="text-xs text-metro-muted">Las diferencias conservan por defecto el dato actual de TrAcción.</span>
             <div className="flex flex-wrap gap-2">
               <ActionButton iconOnly={false} onClick={() => setAllResolutions('keep')} size="sm" variant="secondary">Mantener todos los actuales</ActionButton>
               <ActionButton iconOnly={false} onClick={() => setAllResolutions('source')} size="sm" variant="secondary">Usar todos los de Zerkos</ActionButton>
@@ -276,7 +276,7 @@ function ZerkosImportPreviewModal({
           <PreviewDetails
             title="Bajas detectadas"
             count={summary.deactivated.length}
-            emptyText="Todas las personas activas de TrAccion siguen apareciendo en Zerkos."
+            emptyText="Todas las personas activas de TrAcción siguen apareciendo en Zerkos."
             icon={<UserMinus size={14} />}
             warning={summary.deactivated.length > 0}
           >
@@ -307,7 +307,7 @@ function ZerkosImportPreviewModal({
 
       <ModalFooter className="justify-between">
         <span className="text-xs text-metro-muted">
-          Puesto EUS, antigüedad en puesto y otros datos propios de TrAccion se conservan.
+          Puesto EUS, antigüedad en puesto y otros datos propios de TrAcción se conservan.
         </span>
         <div className="flex items-center gap-2">
           <ActionButton iconOnly={false} onClick={onClose} size="sm" variant="secondary">Cancelar</ActionButton>

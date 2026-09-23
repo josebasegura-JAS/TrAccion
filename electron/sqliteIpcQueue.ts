@@ -51,7 +51,7 @@ export function isSqliteIpcReadOnlyOperation(operationName: string): boolean {
     return true;
   }
 
-  // Convención de los handlers de TrAccion:
+  // Convención de los handlers de TrAcción:
   //   * get/load/list/status => consulta
   //   * save/set/create/update/delete/migrate/restore/vacuum/... => escritura
   //
@@ -97,7 +97,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, operationName: string):
         ? setTimeout(() => {
             console.warn(
               `[sqlite-ipc-queue] ${operationName} lleva más de ${SLOW_NETWORK_WARNING_MS} ms. ` +
-                'La conexión SMB parece lenta; TrAccion seguirá esperando antes de darla por fallida.',
+                'La conexión SMB parece lenta; TrAcción seguirá esperando antes de darla por fallida.',
             );
           }, SLOW_NETWORK_WARNING_MS)
         : null;

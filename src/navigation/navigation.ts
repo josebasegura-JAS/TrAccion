@@ -150,5 +150,5 @@ export const getNavigationBreadcrumb = (view: AppView): string => {
   );
   const item = group?.items.find((navigationItem) => navigationItem.view === view);
 
-  return group && item ? `${group.label} › ${item.label}` : 'TrAccion';
+  return group && item ? `${group.label} › ${item.label}` : 'TrAcción';
 };

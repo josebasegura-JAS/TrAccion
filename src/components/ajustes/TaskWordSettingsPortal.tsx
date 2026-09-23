@@ -84,7 +84,7 @@ export function TaskWordSettingsCard() {
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-metro-muted">Excel automático de tareas abiertas</p>
           <p className="mt-1 text-xs leading-relaxed text-metro-muted">
-            Después de cada guardado correcto de una tarea, TrAccion actualiza automáticamente
+            Después de cada guardado correcto de una tarea, TrAcción actualiza automáticamente
             <strong className="text-metro-text"> Tareas_abiertas_DD-MM-AAAA.xlsx</strong>. El libro contiene
             una hoja filtrable de tareas abiertas y otra con todos los registros de seguimiento.
           </p>

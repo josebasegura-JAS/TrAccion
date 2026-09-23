@@ -626,13 +626,13 @@ async function activateDatabase(
   const databasePath = getDatabasePathForDirectory(directoryPath);
   const lockPath = getLockPath(databasePath);
 
-  // TrAccion es una aplicación multiusuario: una SQLite local nunca puede ser
+  // TrAcción es una aplicación multiusuario: una SQLite local nunca puede ser
   // una base operativa válida. Si falta la configuración compartida, se mantiene
   // el acceso a Ajustes pero toda edición debe quedar bloqueada.
   if (isDefaultPath) {
     throw new Error(
       'No hay una base de datos compartida configurada. Selecciona en Ajustes la carpeta que contiene traccion.sqlite. ' +
-        'TrAccion permanecerá en modo consulta y no guardará cambios en una base local.',
+        'TrAcción permanecerá en modo consulta y no guardará cambios en una base local.',
     );
   }
 
@@ -653,7 +653,7 @@ async function activateDatabase(
     if (!isDefaultPath && sourceDatabasePath === null && !(await fileExists(databasePath))) {
       throw new Error(
         `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
-          'TrAccion permanecerá bloqueado hasta recuperar esa base o corregir la ruta en Ajustes.',
+          'TrAcción permanecerá bloqueado hasta recuperar esa base o corregir la ruta en Ajustes.',
       );
     }
 
@@ -1996,7 +1996,7 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
       isDefaultPath: true,
       lockPath: getLockPath(fallbackPath),
       message:
-        'Se ha quitado la ruta de base de datos compartida. TrAccion queda en modo consulta hasta seleccionar en Ajustes la carpeta que contiene traccion.sqlite.',
+        'Se ha quitado la ruta de base de datos compartida. TrAcción queda en modo consulta hasta seleccionar en Ajustes la carpeta que contiene traccion.sqlite.',
     };
     return status;
   } catch (error) {

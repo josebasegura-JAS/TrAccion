@@ -11,7 +11,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       {
         title: 'Preparar la base',
         action: 'Revisa calendarios, personas con derecho y precio vigente del ticket.',
-        check: 'TrAccion comprueba que exista al menos un calendario activo, personas activas y un precio aplicable al mes.',
+        check: 'TrAcción comprueba que exista al menos un calendario activo, personas activas y un precio aplicable al mes.',
         result: 'La base queda preparada para calcular el pedido mensual.',
       },
       {
@@ -23,7 +23,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
       {
         title: 'Cargar manutenciones',
         action: 'Importa o añade manualmente las notas de gasto y confirma el mes al que deben imputarse.',
-        check: 'TrAccion valida la persona y si el gasto afecta realmente a un día que generaría ticket.',
+        check: 'TrAcción valida la persona y si el gasto afecta realmente a un día que generaría ticket.',
         result: 'Las manutenciones aplicables descuentan en el Cómputo mensual del mes de imputación.',
       },
       {
@@ -65,7 +65,7 @@ export const TICKET_RESTAURANTE_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'Se gestionan dentro de Cómputo mensual para excepciones que no deben formar parte de la base ordinaria con calendario.',
       'Los tickets se almacenan específicamente para el mes de trabajo (AAAA-MM). Introducir 17 tickets en septiembre no genera 17 tickets en octubre.',
-      'Si la persona existe en Plantilla, TrAccion puede completar nombre, DNI y área; si algún dato antiguo de Plantilla no existe, el módulo lo trata como vacío en lugar de bloquearse.',
+      'Si la persona existe en Plantilla, TrAcción puede completar nombre, DNI y área; si algún dato antiguo de Plantilla no existe, el módulo lo trata como vacío en lugar de bloquearse.',
       'Puedes decidir de forma independiente si esa persona manual debe aparecer también en Cómputo cotización.',
     ],
   },

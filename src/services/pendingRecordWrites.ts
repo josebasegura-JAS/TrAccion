@@ -199,7 +199,7 @@ export interface SaveRecordWithPendingFallbackOptions {
 
 /**
  * Envuelve la función de guardado de un repositorio de módulo. Si el fallo es
- * de conectividad, rechaza el cambio. TrAccion no admite trabajo offline: una
+ * de conectividad, rechaza el cambio. TrAcción no admite trabajo offline: una
  * modificación solo se considera válida cuando SQLite compartida la confirma.
  * Las colas antiguas se conservan únicamente para poder sincronizar cambios
  * creados por versiones anteriores de la aplicación.

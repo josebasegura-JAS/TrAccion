@@ -162,7 +162,7 @@ function configureSheet(sheet: ExcelWorksheet, widths: number[], frozenRows: num
     orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
     margins: { left: 0.25, right: 0.25, top: 0.45, bottom: 0.4, header: 0.2, footer: 0.2 },
   };
-  sheet.headerFooter = { oddFooter: '&LTrAccion · Coordinación RRLL&RPágina &P de &N' };
+  sheet.headerFooter = { oddFooter: '&LTrAcción · Coordinación RRLL&RPágina &P de &N' };
 }
 
 function formatUpdatedAt(value: Date): string {
@@ -508,8 +508,8 @@ function createWorkbook(
 
 export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[]): Promise<string | null> {
   const template = useConfiguracionStore.getState().rutaExportacionCoordinacion;
-  if (!template.trim()) return 'Datos guardados en TrAccion. Configura en Ajustes la ruta del backup Excel de Coordinación.';
-  if (!window.traccion?.saveOperationalExcelBackup) return 'Datos guardados en TrAccion, pero el backup Excel solo está disponible en la aplicación de escritorio.';
+  if (!template.trim()) return 'Datos guardados en TrAcción. Configura en Ajustes la ruta del backup Excel de Coordinación.';
+  if (!window.traccion?.saveOperationalExcelBackup) return 'Datos guardados en TrAcción, pero el backup Excel solo está disponible en la aplicación de escritorio.';
 
   try {
     const { default: ExcelJS } = await import('exceljs');
@@ -531,9 +531,9 @@ export async function syncCoordinacionExcelBackup(meetings: CoordinationMeeting[
       if (!result.ok) failures.push(`${definition.fileName}: ${result.message}`);
     }
     return failures.length > 0
-      ? `Datos guardados en TrAccion, pero no se han podido actualizar todos los Excel de Coordinación: ${failures.join(' | ')}`
+      ? `Datos guardados en TrAcción, pero no se han podido actualizar todos los Excel de Coordinación: ${failures.join(' | ')}`
       : null;
   } catch (error) {
-    return `Datos guardados en TrAccion, pero no se han podido actualizar los Excel de Coordinación: ${error instanceof Error ? error.message : String(error)}`;
+    return `Datos guardados en TrAcción, pero no se han podido actualizar los Excel de Coordinación: ${error instanceof Error ? error.message : String(error)}`;
   }
 }

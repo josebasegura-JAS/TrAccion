@@ -468,7 +468,7 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
     to: { row: Math.max(rowNumber - 1, headerRowNumber), column: headers.length },
   };
   worksheet.pageSetup.printArea = `A1:${lastColumn}${rowNumber + 1}`;
-  worksheet.headerFooter.oddFooter = '&LTrAccion · Relaciones Laborales&C&P / &N&RGenerado &D';
+  worksheet.headerFooter.oddFooter = '&LTrAcción · Relaciones Laborales&C&P / &N&RGenerado &D';
 
   const kind = mode === 'final' ? 'presupuesto' : 'simulacion';
   const fileName = `${kind}_rrll_${scenario.year}_${safeFileLabel(scenario.name)}.xlsx`;

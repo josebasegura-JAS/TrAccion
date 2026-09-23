@@ -648,7 +648,7 @@ export function AjustesPage() {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Ajustes</p>
-            <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración de TrAccion</h2>
+            <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración de TrAcción</h2>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-metro-muted">
               Configuración común para RRLL. Las rutas se guardan en la SQLite compartida y se aplican
               a todos los usuarios que trabajan con la misma base de datos.
@@ -809,7 +809,7 @@ export function AjustesPage() {
             <div>
               <h3 className="text-base font-bold text-metro-text">Plantillas Word</h3>
               <p className="mt-0.5 text-xs text-metro-muted">
-                Documentos DOCX externos usados para generar escritos desde TrAccion.
+                Documentos DOCX externos usados para generar escritos desde TrAcción.
               </p>
             </div>
           </div>

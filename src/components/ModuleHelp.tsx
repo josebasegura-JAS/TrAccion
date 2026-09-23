@@ -125,7 +125,7 @@ function FlowSection({ section }: { section: ModuleHelpSection }) {
           </div>
           {activeStep.check ? (
             <div className="min-w-0">
-              <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-metro-muted">Qué controla TrAccion</p>
+              <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-metro-muted">Qué controla TrAcción</p>
               <p className="break-words text-metro-text">{activeStep.check}</p>
             </div>
           ) : null}

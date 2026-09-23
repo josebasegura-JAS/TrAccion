@@ -28,7 +28,7 @@ function useAppVersion(): string | null {
           setVersion(result.currentVersion);
         }
       } catch (error) {
-        console.warn('No se ha podido leer la versión de TrAccion.', error);
+        console.warn('No se ha podido leer la versión de TrAcción.', error);
       }
     })();
 
@@ -105,7 +105,7 @@ export function Footer() {
 
   return (
     <footer className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
-      <span className="shrink-0">TrAccion {appVersion ? `V${appVersion}` : ''}</span>
+      <span className="shrink-0">TrAcción {appVersion ? `V${appVersion}` : ''}</span>
       <div className="flex min-w-0 items-center gap-3">
         {pendingCount > 0 && (
           <StatusBadge

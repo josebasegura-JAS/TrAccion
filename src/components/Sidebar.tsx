@@ -174,8 +174,8 @@ export function Sidebar({
     <aside className={`relative z-30 h-screen shrink-0 transition-[width] duration-300 ease-out ${shouldShowPanel && isPinned ? 'w-[22rem]' : 'w-[4.5rem]'}`}>
       <div className="fixed inset-y-0 left-0 z-40 flex w-[4.5rem] flex-col border-r border-white/10 bg-gradient-to-b from-metro-navy via-metro-topbar to-[#08111F] text-white shadow-2xl shadow-slate-950/40">
         <div className="flex h-16 items-center justify-center border-b border-white/10 px-2">
-          <button aria-label="Reiniciar TrAccion" className="rounded-xl p-1 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-metro-red/60" data-tip="Reiniciar TrAccion" onClick={handleLogoSelect} type="button">
-            <img alt="TrAccion" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
+          <button aria-label="Reiniciar TrAcción" className="rounded-xl p-1 transition hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-metro-red/60" data-tip="Reiniciar TrAcción" onClick={handleLogoSelect} type="button">
+            <img alt="TrAcción" className="h-11 w-11 object-contain" src={traccionLogoSrc} />
           </button>
         </div>
         <nav aria-label="Grupos principales" className="flex flex-1 flex-col items-center px-2 py-4">
@@ -224,7 +224,7 @@ export function Sidebar({
       {shouldShowPanel && (
         <div className="fixed inset-y-0 left-[4.5rem] z-30 flex w-[17.5rem] flex-col border-r border-slate-700/80 bg-gradient-to-b from-[#0f172a] via-[#101b30] to-[#0b1425] text-white shadow-2xl shadow-slate-950/45 backdrop-blur-xl transition-transform duration-300 ease-out">
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
-            <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-red">TrAccion 1.1</p><h2 className="truncate text-base font-semibold text-metro-text">{activeGroup.label}</h2></div>
+            <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-red">TrAcción 1.1</p><h2 className="truncate text-base font-semibold text-metro-text">{activeGroup.label}</h2></div>
             <div className="flex items-center gap-1">
               <button aria-label={isPinned ? 'Desfijar panel' : 'Fijar panel'} className={`rounded-full border p-2 transition ${isPinned ? 'border-red-400/30 bg-red-500/10 text-red-100 hover:bg-red-500/15' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'}`} data-tip={isPinned ? 'Desfijar panel' : 'Fijar panel'} onClick={handlePinToggle} type="button">{isPinned ? <Pin size={15} /> : <PinOff size={15} />}</button>
               <button aria-label="Cerrar panel" className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition hover:bg-white/[0.08] hover:text-white" data-tip="Cerrar panel" onClick={() => setIsPanelOpen(false)} type="button"><X size={15} /></button>

@@ -420,7 +420,7 @@ export function SessionManagementPage({
           const atomicClose = window.traccion?.closeSessionWorkflowAtomically;
           if (!atomicClose) {
             throw new Error(
-              'El cierre transaccional no está disponible en esta versión. Reinicia TrAccion antes de continuar.',
+              'El cierre transaccional no está disponible en esta versión. Reinicia TrAcción antes de continuar.',
             );
           }
 

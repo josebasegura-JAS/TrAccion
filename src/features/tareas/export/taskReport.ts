@@ -134,7 +134,7 @@ export function buildTaskReportHtml({ task, draft }: TaskReportData): string {
 <article class="print-document">
   <header class="print-report-header">
     <div>
-      <p class="print-eyebrow">TrAccion · Relaciones Laborales</p>
+      <p class="print-eyebrow">TrAcción · Relaciones Laborales</p>
       <h1 class="task-report-title">Detalle de tarea</h1>
       <p class="task-report-subtitle">${escapeHtml(draft.titulo || 'Tarea sin título')}</p>
     </div>
@@ -349,7 +349,7 @@ export async function exportTaskReportToExcel({ task, draft }: TaskReportData): 
   footer.alignment = { horizontal: 'right' };
 
   sheet.pageSetup.printArea = `A1:D${rowNumber}`;
-  sheet.headerFooter.oddFooter = '&LTrAccion · Detalle de tarea&C&P / &N';
+  sheet.headerFooter.oddFooter = '&LTrAcción · Detalle de tarea&C&P / &N';
 
   const buffer = await workbook.xlsx.writeBuffer();
   await openWorkbookInExcel(buffer, `Tarea_${safeFileName(draft.titulo)}.xlsx`);

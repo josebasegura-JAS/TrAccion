@@ -41,7 +41,7 @@ function renderFatalError(error: unknown): void {
     <React.StrictMode>
       <div className="flex min-h-screen items-center justify-center bg-metro-app p-6 text-metro-text">
         <section className="max-w-2xl rounded-2xl border border-red-500/50 bg-red-950/30 p-6 text-red-100 shadow-xl" role="alert">
-          <h1 className="mb-2 text-lg font-semibold">No se ha podido arrancar TrAccion</h1>
+          <h1 className="mb-2 text-lg font-semibold">No se ha podido arrancar TrAcción</h1>
           <p className="mb-3 text-sm text-red-100/85">
             La aplicación ha evitado quedarse en pantalla negra. Revisa la consola o el log de Electron para ver el detalle completo.
           </p>
@@ -98,9 +98,9 @@ startApp().catch((error: unknown) => {
     'No se ha podido completar el arranque SQLite; se renderiza en modo bloqueado.',
     error,
   );
-  renderBootScreen('SQLite no disponible. Abriendo TrAccion en modo bloqueado...');
+  renderBootScreen('SQLite no disponible. Abriendo TrAcción en modo bloqueado...');
   renderApp().catch((renderError: unknown) => {
-    console.error('No se ha podido arrancar TrAccion.', renderError);
+    console.error('No se ha podido arrancar TrAcción.', renderError);
     renderFatalError(renderError);
   });
 });

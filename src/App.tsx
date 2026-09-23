@@ -117,7 +117,7 @@ function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) 
   const detail = editingAvailability.reason || databaseStatus?.message || (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
   return (
     <section className="sqlite-readonly-banner" role="alert" aria-live="assertive"><LockKeyhole size={20} aria-hidden="true" />
-      <div className="min-w-0 flex-1"><strong>Base compartida no disponible: edición bloqueada</strong><p>{detail} TrAccion no permite trabajar en local. No se guardará ninguna modificación hasta confirmar la conexión con la base compartida.</p></div>
+      <div className="min-w-0 flex-1"><strong>Base compartida no disponible: edición bloqueada</strong><p>{detail} TrAcción no permite trabajar en local. No se guardará ninguna modificación hasta confirmar la conexión con la base compartida.</p></div>
       <button className="sqlite-readonly-banner__action" onClick={onGoToAjustes} type="button">Revisar en Ajustes</button>
     </section>
   );
@@ -157,7 +157,7 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
     if (!this.state.error) return this.props.children;
     return (
       <div className="flex min-h-screen items-center justify-center bg-metro-app p-6 text-metro-text"><section className="max-w-2xl rounded-2xl border border-red-500/50 bg-red-950/30 p-6 text-red-100 shadow-xl" role="alert">
-        <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 shrink-0" size={24} aria-hidden="true" /><div className="space-y-3"><div><h1 className="text-lg font-semibold">No se ha podido mostrar TrAccion</h1><p className="mt-1 text-sm text-red-100/85">Se ha capturado un error de render para evitar la pantalla gris. Reinicia al inicio y revisa el log si persiste.</p></div><p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">{this.state.error.message}</p><button className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700" onClick={this.handleReset} type="button">Reiniciar al inicio</button></div></div>
+        <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 shrink-0" size={24} aria-hidden="true" /><div className="space-y-3"><div><h1 className="text-lg font-semibold">No se ha podido mostrar TrAcción</h1><p className="mt-1 text-sm text-red-100/85">Se ha capturado un error de render para evitar la pantalla gris. Reinicia al inicio y revisa el log si persiste.</p></div><p className="rounded-lg bg-black/20 px-3 py-2 text-xs text-red-50/80">{this.state.error.message}</p><button className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700" onClick={this.handleReset} type="button">Reiniciar al inicio</button></div></div>
       </section></div>
     );
   }

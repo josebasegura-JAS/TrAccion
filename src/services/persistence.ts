@@ -394,7 +394,7 @@ export async function flushPendingSqliteWrites(): Promise<number> {
           updatedAt: new Date().toISOString(),
           key: pendingWrite.key,
           message: isConcurrencyConflictMessage(message)
-            ? `Conflicto al sincronizar cambio pendiente — otro usuario modificó el mismo dato. Se reintentará la próxima vez que se recargue TrAccion. Clave: ${pendingWrite.key}.`
+            ? `Conflicto al sincronizar cambio pendiente — otro usuario modificó el mismo dato. Se reintentará la próxima vez que se recargue TrAcción. Clave: ${pendingWrite.key}.`
             : `SQLite pendiente: ${message}`,
         });
       }
@@ -835,7 +835,7 @@ export function reportStartupHydrationResult(result: HydrationResult): void {
   emitPersistenceFeedback({
     kind: 'error',
     updatedAt: new Date().toISOString(),
-    message: `SQLite compartida no disponible: ${result.reason} TrAccion ha bloqueado la edición. No se guardará ningún cambio local mientras la base compartida no esté activa.`,
+    message: `SQLite compartida no disponible: ${result.reason} TrAcción ha bloqueado la edición. No se guardará ningún cambio local mientras la base compartida no esté activa.`,
   });
 }
 
