@@ -25,8 +25,8 @@ export const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Carpeta de actualizaciones',
     items: [
-      'Es la carpeta de red donde se publican las nuevas versiones del .exe de TrAccion junto a un version.txt.',
-      'Al arrancar, la app comprueba esa carpeta y, si hay una versión más nueva, pregunta antes de actualizarse.',
+      'Es la carpeta de red donde se publican TrAccion.piz y version.json. El .piz es el portable de TrAccion renombrado para poder almacenarlo en la red corporativa.',
+      'Al arrancar, la app comprueba esa carpeta y, si hay una versión más nueva, pregunta antes de actualizarse. Antes de instalarla valida su SHA-256 y la copia a una carpeta temporal local.',
     ],
   },
   {

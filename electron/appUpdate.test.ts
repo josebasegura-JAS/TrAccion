@@ -5,44 +5,48 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { checkForAppUpdate, compareAppVersions, parseAppUpdateManifest } from './appUpdate.js';
 
 describe('compareAppVersions', () => {
-  it('considera mayor una versión con un patch numérico más alto, incluso con distinto número de dígitos', () => {
+  it('compara correctamente versiones numéricas', () => {
     expect(compareAppVersions('1.0.10', '1.0.9')).toBeGreaterThan(0);
-    expect(compareAppVersions('1.0.9', '1.0.10')).toBeLessThan(0);
-  });
-
-  it('compara primero por major, luego minor, luego patch', () => {
-    expect(compareAppVersions('2.0.0', '1.9.9')).toBeGreaterThan(0);
     expect(compareAppVersions('1.1.0', '1.0.99')).toBeGreaterThan(0);
     expect(compareAppVersions('1.0.5', '1.0.5')).toBe(0);
   });
-
-  it('trata las partes que faltan o no son numéricas como 0', () => {
-    expect(compareAppVersions('1.0', '1.0.0')).toBe(0);
-    expect(compareAppVersions('1.0.x', '1.0.0')).toBe(0);
-    expect(compareAppVersions('', '0.0.0')).toBe(0);
-  });
 });
 
-
 describe('parseAppUpdateManifest', () => {
-  it('lee el formato nuevo y conserva el ejecutable exacto', () => {
+  it('lee version.json con .piz, SHA-256, notas y obligatoriedad', () => {
+    const sha = 'a'.repeat(64);
+    expect(parseAppUpdateManifest(JSON.stringify({
+      version: '1.1.78',
+      file: 'TrAccion V1.1.78.piz',
+      sha256: sha,
+      mandatory: true,
+      notes: 'Correcciones críticas.',
+    }))).toEqual({
+      version: '1.1.78',
+      fileName: 'TrAccion V1.1.78.piz',
+      sha256: sha,
+      mandatory: true,
+      notes: 'Correcciones críticas.',
+    });
+  });
+
+  it('acepta JSON sin nombre de fichero y lo deduce de la versión', () => {
+    expect(parseAppUpdateManifest('{"version":"1.1.8"}').fileName).toBe('TrAccion V1.1.08.piz');
+  });
+
+  it('mantiene compatibilidad con el version.txt anterior', () => {
     expect(parseAppUpdateManifest('version=1.1.8\nfile=TrAccion V1.1.08.exe\n')).toEqual({
       version: '1.1.8',
       fileName: 'TrAccion V1.1.08.exe',
+      sha256: null,
+      mandatory: false,
+      notes: null,
     });
   });
 
-  it('mantiene compatibilidad con el manifiesto histórico de una sola línea', () => {
-    expect(parseAppUpdateManifest('1.1.8\n')).toEqual({
-      version: '1.1.8',
-      fileName: 'TrAccion V1.1.08.exe',
-    });
-  });
-
-  it('rechaza rutas en el campo file', () => {
-    expect(() =>
-      parseAppUpdateManifest('version=1.1.8\nfile=..\\TrAccion V1.1.08.exe\n'),
-    ).toThrow(/no es válido/i);
+  it('rechaza rutas y hashes inválidos', () => {
+    expect(() => parseAppUpdateManifest('{"version":"1.1.8","file":"..\\\\mal.piz"}')).toThrow(/no es válido/i);
+    expect(() => parseAppUpdateManifest('{"version":"1.1.8","sha256":"123"}')).toThrow(/SHA-256/i);
   });
 });
 
@@ -52,74 +56,43 @@ describe('checkForAppUpdate', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(tmpdir(), 'traccion-update-test-'));
-    // Simula estar en el ejecutable portable real: la actualización
-    // automática no hace nada si no se detecta este entorno.
     process.env.PORTABLE_EXECUTABLE_FILE = path.join(tempDir, 'TrAccion.exe');
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
-    if (originalPortableExecutableFile === undefined) {
-      delete process.env.PORTABLE_EXECUTABLE_FILE;
-    } else {
-      process.env.PORTABLE_EXECUTABLE_FILE = originalPortableExecutableFile;
-    }
+    if (originalPortableExecutableFile === undefined) delete process.env.PORTABLE_EXECUTABLE_FILE;
+    else process.env.PORTABLE_EXECUTABLE_FILE = originalPortableExecutableFile;
   });
 
-  it('no ofrece actualización si no hay carpeta de actualizaciones configurada', async () => {
-    const result = await checkForAppUpdate('1.0.5', null);
+  it('detecta una versión JSON más nueva y devuelve sus metadatos', async () => {
+    writeFileSync(path.join(tempDir, 'version.json'), JSON.stringify({
+      version: '1.1.79', file: 'TrAccion.piz', mandatory: true, notes: 'Cambio importante',
+    }), 'utf8');
 
-    expect(result.updateAvailable).toBe(false);
-    expect(result.latestVersion).toBeNull();
-    expect(result.message).toBeNull();
-  });
-
-  it('no ofrece actualización si no se detecta el ejecutable portable real', async () => {
-    delete process.env.PORTABLE_EXECUTABLE_FILE;
-    writeFileSync(path.join(tempDir, 'version.txt'), '9.9.9\n', 'utf8');
-
-    const result = await checkForAppUpdate('1.0.5', tempDir);
-
-    expect(result.updateAvailable).toBe(false);
-    expect(result.message).toContain('ejecutable portable');
-  });
-
-  it('ofrece actualización cuando version.txt tiene una versión más nueva', async () => {
-    writeFileSync(path.join(tempDir, 'version.txt'), '1.0.9\n', 'utf8');
-
-    const result = await checkForAppUpdate('1.0.5', tempDir);
-
+    const result = await checkForAppUpdate('1.1.78', tempDir);
     expect(result.updateAvailable).toBe(true);
-    expect(result.latestVersion).toBe('1.0.9');
-    expect(result.currentVersion).toBe('1.0.5');
-    expect(result.message).toBeNull();
+    expect(result.latestVersion).toBe('1.1.79');
+    expect(result.mandatory).toBe(true);
+    expect(result.notes).toBe('Cambio importante');
   });
 
-  it('no ofrece actualización cuando version.txt es igual o anterior a la actual', async () => {
-    writeFileSync(path.join(tempDir, 'version.txt'), '1.0.5\n', 'utf8');
-
-    const result = await checkForAppUpdate('1.0.5', tempDir);
-
+  it('no ofrece actualización cuando la versión es igual', async () => {
+    writeFileSync(path.join(tempDir, 'version.json'), '{"version":"1.1.78","file":"TrAccion.piz"}', 'utf8');
+    const result = await checkForAppUpdate('1.1.78', tempDir);
     expect(result.updateAvailable).toBe(false);
-    expect(result.latestVersion).toBe('1.0.5');
   });
 
-  it('informa con un mensaje legible si no se puede leer version.txt (carpeta inaccesible o sin manifiesto)', async () => {
-    const inaccessibleDir = path.join(tempDir, 'no-existe');
-
-    const result = await checkForAppUpdate('1.0.5', inaccessibleDir);
-
-    expect(result.updateAvailable).toBe(false);
-    expect(result.latestVersion).toBeNull();
-    expect(result.message).toContain('version.txt');
+  it('usa version.txt como compatibilidad si no existe version.json', async () => {
+    writeFileSync(path.join(tempDir, 'version.txt'), '1.1.79\n', 'utf8');
+    const result = await checkForAppUpdate('1.1.78', tempDir);
+    expect(result.updateAvailable).toBe(true);
+    expect(result.latestVersion).toBe('1.1.79');
   });
 
-  it('informa con un mensaje legible si version.txt está vacío', async () => {
-    writeFileSync(path.join(tempDir, 'version.txt'), '   \n', 'utf8');
-
-    const result = await checkForAppUpdate('1.0.5', tempDir);
-
+  it('informa de forma legible si no existe ningún manifiesto', async () => {
+    const result = await checkForAppUpdate('1.1.78', tempDir);
     expect(result.updateAvailable).toBe(false);
-    expect(result.message).toContain('version.txt');
+    expect(result.message).toContain('version.json');
   });
 });

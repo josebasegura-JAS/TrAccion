@@ -148,7 +148,7 @@ export function registerCoreDatabaseIpc(): void {
   });
   ipcMain.handle('app-update:apply', async () => {
     const updatesDirectoryPath = await getUpdatesDirectory();
-    const result = await applyAppUpdate(updatesDirectoryPath);
+    const result = await applyAppUpdate(app.getVersion(), updatesDirectoryPath);
     if (result.ok) {
       // app.quit() dispara el cierre ordenado habitual (copia de seguridad
       // de SQLite incluida vía el listener de before-quit ya existente); el

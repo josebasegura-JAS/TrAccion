@@ -2,31 +2,24 @@ import { useEffect, useRef } from 'react';
 import { useAppDialog } from '../hooks/useAppDialog';
 
 /**
- * Al montar, comprueba una sola vez si hay una versión de TrAccion más
- * nueva en la carpeta de actualizaciones configurada (Ajustes >
- * Actualizaciones). Si la hay, pregunta antes de aplicarla: nunca se
- * actualiza sola sin que la persona lo confirme. Si la carpeta no está
- * configurada, o la app no es el ejecutable portable real (desarrollo,
- * otros sistemas operativos), no hace nada y no muestra ningún aviso: la
- * actualización automática es opcional, su ausencia no es un error.
+ * Comprueba una vez al arrancar si existe una versión más nueva en la carpeta
+ * configurada. El usuario siempre confirma la instalación; el manifiesto
+ * puede marcar una versión como obligatoria para destacarla, pero no se
+ * instala silenciosamente.
  */
 export function AppUpdateChecker() {
   const { alert, confirm, dialogNode } = useAppDialog();
   const hasCheckedRef = useRef(false);
 
   useEffect(() => {
-    if (hasCheckedRef.current) {
-      return;
-    }
+    if (hasCheckedRef.current) return;
     hasCheckedRef.current = true;
 
     void (async () => {
       const checker = window.traccion?.checkForAppUpdate;
-      if (!checker) {
-        return;
-      }
+      if (!checker) return;
 
-      let result;
+      let result: TraccionAppUpdateCheckResult;
       try {
         result = await checker();
       } catch (error) {
@@ -34,32 +27,29 @@ export function AppUpdateChecker() {
         return;
       }
 
-      if (!result.updateAvailable || !result.latestVersion) {
-        return;
-      }
+      if (!result.updateAvailable || !result.latestVersion) return;
 
+      const details = result.notes ? `\n\n${result.notes}` : '';
+      const mandatoryText = result.mandatory ? '\n\nEsta actualización está marcada como obligatoria.' : '';
       const wantsToUpdate = await confirm(
-        `Hay una versión nueva de TrAccion disponible (V${result.latestVersion}, la tuya es V${result.currentVersion}). ` +
-          'La aplicación se cerrará y se reabrirá automáticamente con la nueva versión. ¿Actualizar ahora?',
-        { title: 'Actualización disponible', confirmLabel: 'Actualizar ahora', cancelLabel: 'Más tarde' },
+        `Hay una versión nueva de TrAccion disponible (V${result.latestVersion}, la tuya es V${result.currentVersion}).` +
+          `${details}${mandatoryText}\n\nLa aplicación se cerrará y se reabrirá automáticamente. ¿Actualizar ahora?`,
+        {
+          title: result.mandatory ? 'Actualización obligatoria' : 'Actualización disponible',
+          confirmLabel: 'Actualizar ahora',
+          cancelLabel: 'Más tarde',
+        },
       );
 
-      if (!wantsToUpdate) {
-        return;
-      }
+      if (!wantsToUpdate) return;
 
       const applier = window.traccion?.applyAppUpdate;
-      if (!applier) {
-        return;
-      }
+      if (!applier) return;
 
       const applyResult = await applier();
       if (!applyResult.ok) {
         await alert(`No se ha podido aplicar la actualización: ${applyResult.message}`, { type: 'error' });
       }
-      // Si applyResult.ok, la app va a cerrarse por su cuenta en segundo
-      // plano (app.quit() ya lanzado desde el proceso principal); no hace
-      // falta hacer nada más aquí.
     })();
   }, [alert, confirm]);
 

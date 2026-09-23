@@ -1,19 +1,19 @@
-import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 
-const UPDATE_MANIFEST_FILE_NAME = 'version.txt';
+const UPDATE_MANIFEST_FILE_NAME = 'version.json';
+const LEGACY_UPDATE_MANIFEST_FILE_NAME = 'version.txt';
 
 export interface AppUpdateCheckResult {
   updateAvailable: boolean;
   currentVersion: string;
-  /** Versión encontrada en la carpeta de actualizaciones, si se pudo leer. */
   latestVersion: string | null;
-  /** Motivo legible si no se ha podido comprobar (carpeta no configurada, no
-   * accesible, manifiesto ilegible, etc.). null si la comprobación fue bien
-   * (haya o no actualización disponible). */
   message: string | null;
+  mandatory: boolean;
+  notes: string | null;
 }
 
 export interface AppUpdateApplyResult {
@@ -21,12 +21,14 @@ export interface AppUpdateApplyResult {
   message: string;
 }
 
-/**
- * Compara dos versiones "X.Y.Z" por partes numéricas, no como texto, para
- * que "1.0.9" se entienda como anterior a "1.0.10". Devuelve >0 si `a` es
- * más nueva que `b`, <0 si es más antigua, 0 si son iguales. Las partes que
- * falten o no sean numéricas se tratan como 0.
- */
+export interface AppUpdateManifest {
+  version: string;
+  fileName: string;
+  sha256: string | null;
+  mandatory: boolean;
+  notes: string | null;
+}
+
 export function compareAppVersions(a: string, b: string): number {
   const partsA = a.trim().split('.').map((part) => Number.parseInt(part, 10) || 0);
   const partsB = b.trim().split('.').map((part) => Number.parseInt(part, 10) || 0);
@@ -35,11 +37,8 @@ export function compareAppVersions(a: string, b: string): number {
   for (let index = 0; index < length; index += 1) {
     const valueA = partsA[index] ?? 0;
     const valueB = partsB[index] ?? 0;
-    if (valueA !== valueB) {
-      return valueA - valueB;
-    }
+    if (valueA !== valueB) return valueA - valueB;
   }
-
   return 0;
 }
 
@@ -47,45 +46,71 @@ function isPortableExecutable(): boolean {
   return Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
 }
 
-/**
- * Ruta del .exe que el usuario realmente ejecuta. Solo está disponible en
- * el build portable real (electron-builder la define antes de lanzar el
- * runtime de Electron); en desarrollo o en otros targets no existe, y la
- * actualización automática no tiene sentido ahí.
- */
 function getPortableExecutablePath(): string | null {
   return process.env.PORTABLE_EXECUTABLE_FILE ?? null;
 }
 
-export interface AppUpdateManifest {
-  version: string;
-  fileName: string;
+function buildPortableUpdateNameFromVersion(version: string): string | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return null;
+  const [, major, minor, patch] = match;
+  return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
 }
 
-function buildPortableExeNameFromVersion(version: string): string | null {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
-  if (!match) {
-    return null;
+function validateUpdateFileName(fileName: string): string {
+  const normalized = fileName.trim();
+  const lower = normalized.toLowerCase();
+  if (
+    !normalized ||
+    normalized.includes('/') ||
+    normalized.includes('\\') ||
+    path.basename(normalized) !== normalized ||
+    (!lower.endsWith('.piz') && !lower.endsWith('.exe'))
+  ) {
+    throw new Error('El nombre del fichero de actualización no es válido.');
   }
-
-  const [, major, minor, patch] = match;
-  return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.exe`;
+  return normalized;
 }
 
 export function parseAppUpdateManifest(raw: string): AppUpdateManifest {
   const trimmed = raw.trim();
-  if (!trimmed) {
-    throw new Error('El manifiesto de versión está vacío.');
+  if (!trimmed) throw new Error('El manifiesto de versión está vacío.');
+
+  // Formato actual: JSON. Se conserva compatibilidad con version.txt para
+  // instalaciones que ya hubieran empezado a usar el sistema anterior.
+  if (trimmed.startsWith('{')) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      throw new Error('El manifiesto JSON no es válido.');
+    }
+    const candidate = parsed as Record<string, unknown>;
+    const version = typeof candidate.version === 'string' ? candidate.version.trim() : '';
+    if (!version) throw new Error('El manifiesto no contiene una versión.');
+
+    const fallbackFileName = buildPortableUpdateNameFromVersion(version);
+    const rawFileName = typeof candidate.file === 'string' ? candidate.file : fallbackFileName;
+    if (!rawFileName) throw new Error(`No se puede determinar el fichero para la versión ${version}.`);
+
+    const rawSha = typeof candidate.sha256 === 'string' ? candidate.sha256.trim().toLowerCase() : '';
+    if (rawSha && !/^[a-f0-9]{64}$/.test(rawSha)) {
+      throw new Error('El SHA-256 indicado en el manifiesto no es válido.');
+    }
+
+    return {
+      version,
+      fileName: validateUpdateFileName(rawFileName),
+      sha256: rawSha || null,
+      mandatory: candidate.mandatory === true,
+      notes: typeof candidate.notes === 'string' && candidate.notes.trim() ? candidate.notes.trim() : null,
+    };
   }
 
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
+  // Formato histórico: version=... / file=... o una sola línea con versión.
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   let version = '';
   let fileName = '';
-
   if (lines.some((line) => line.includes('='))) {
     for (const line of lines) {
       const separatorIndex = line.indexOf('=');
@@ -96,163 +121,146 @@ export function parseAppUpdateManifest(raw: string): AppUpdateManifest {
       if (key === 'file') fileName = value;
     }
   } else {
-    // Compatibilidad con manifiestos históricos de una sola línea: "1.1.5".
     version = lines[0] ?? '';
   }
+  if (!version) throw new Error('El manifiesto no contiene una versión.');
 
-  if (!version) {
-    throw new Error('El manifiesto no contiene una versión.');
-  }
+  const resolvedFileName = fileName || buildPortableUpdateNameFromVersion(version)?.replace(/\.piz$/i, '.exe');
+  if (!resolvedFileName) throw new Error(`No se puede determinar el ejecutable para la versión ${version}.`);
 
-  const resolvedFileName = fileName || buildPortableExeNameFromVersion(version);
-  if (!resolvedFileName) {
-    throw new Error(`No se puede determinar el ejecutable para la versión ${version}.`);
-  }
-
-  if (
-    resolvedFileName.includes('/') ||
-    resolvedFileName.includes('\\') ||
-    path.basename(resolvedFileName) !== resolvedFileName ||
-    !resolvedFileName.toLowerCase().endsWith('.exe')
-  ) {
-    throw new Error('El nombre de ejecutable del manifiesto no es válido.');
-  }
-
-  return { version, fileName: resolvedFileName };
+  return {
+    version,
+    fileName: validateUpdateFileName(resolvedFileName),
+    sha256: null,
+    mandatory: false,
+    notes: null,
+  };
 }
 
 async function readUpdateManifest(updatesDirectoryPath: string): Promise<AppUpdateManifest> {
-  const manifestPath = path.join(updatesDirectoryPath, UPDATE_MANIFEST_FILE_NAME);
-  const raw = await readFile(manifestPath, 'utf8');
-  return parseAppUpdateManifest(raw);
+  try {
+    return parseAppUpdateManifest(await readFile(path.join(updatesDirectoryPath, UPDATE_MANIFEST_FILE_NAME), 'utf8'));
+  } catch (jsonError) {
+    try {
+      return parseAppUpdateManifest(await readFile(path.join(updatesDirectoryPath, LEGACY_UPDATE_MANIFEST_FILE_NAME), 'utf8'));
+    } catch {
+      throw jsonError;
+    }
+  }
+}
+
+async function calculateSha256(filePath: string): Promise<string> {
+  const buffer = await readFile(filePath);
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+async function verifySha256(filePath: string, expectedSha256: string | null): Promise<void> {
+  if (!expectedSha256) return;
+  const actual = await calculateSha256(filePath);
+  if (actual.toLowerCase() !== expectedSha256.toLowerCase()) {
+    throw new Error('La comprobación SHA-256 ha fallado. El fichero puede estar incompleto o haber sido modificado.');
+  }
 }
 
 export async function checkForAppUpdate(
   currentVersion: string,
   updatesDirectoryPath: string | null,
 ): Promise<AppUpdateCheckResult> {
+  const baseResult = {
+    currentVersion,
+    mandatory: false,
+    notes: null as string | null,
+  };
+
   if (!isPortableExecutable()) {
     return {
+      ...baseResult,
       updateAvailable: false,
-      currentVersion,
       latestVersion: null,
       message: 'La actualización automática solo está disponible en el ejecutable portable de Windows.',
     };
   }
-
   if (!updatesDirectoryPath) {
-    return {
-      updateAvailable: false,
-      currentVersion,
-      latestVersion: null,
-      message: null,
-    };
+    return { ...baseResult, updateAvailable: false, latestVersion: null, message: null };
   }
 
-  let manifest: AppUpdateManifest;
   try {
-    manifest = await readUpdateManifest(updatesDirectoryPath);
+    const manifest = await readUpdateManifest(updatesDirectoryPath);
+    return {
+      updateAvailable: compareAppVersions(manifest.version, currentVersion) > 0,
+      currentVersion,
+      latestVersion: manifest.version,
+      message: null,
+      mandatory: manifest.mandatory,
+      notes: manifest.notes,
+    };
   } catch (error) {
     return {
+      ...baseResult,
       updateAvailable: false,
-      currentVersion,
       latestVersion: null,
       message: `No se ha podido leer ${UPDATE_MANIFEST_FILE_NAME} en la carpeta de actualizaciones: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };
   }
-
-  const updateAvailable = compareAppVersions(manifest.version, currentVersion) > 0;
-
-  return {
-    updateAvailable,
-    currentVersion,
-    latestVersion: manifest.version,
-    message: null,
-  };
 }
 
 /**
- * Copia el .exe nuevo a una carpeta temporal local, genera un script .bat
- * que espera a que esta instancia se cierre del todo, sustituye el .exe
- * original por el nuevo, relanza la app desde ahí y se autoborra; lanza ese
- * script en segundo plano (detached) y devuelve sin esperar a que termine.
- * Quien llama a esta función debe cerrar la app (app.quit()) justo después,
- * para que el cierre ordenado habitual (copia de seguridad de SQLite
- * incluida) se ejecute antes de que el .bat intente sustituir el .exe.
+ * Copia el .piz (un portable .exe renombrado) a TEMP, verifica su SHA-256,
+ * lo deja allí con extensión .exe y genera un .bat temporal. El .bat espera
+ * a que TrAccion cierre, conserva una copia .previous.exe del ejecutable
+ * anterior, instala la nueva versión y vuelve a abrirla.
  */
-export async function applyAppUpdate(updatesDirectoryPath: string | null): Promise<AppUpdateApplyResult> {
+export async function applyAppUpdate(
+  currentVersion: string,
+  updatesDirectoryPath: string | null,
+): Promise<AppUpdateApplyResult> {
   if (!isPortableExecutable()) {
-    return {
-      ok: false,
-      message: 'La actualización automática solo está disponible en el ejecutable portable de Windows.',
-    };
+    return { ok: false, message: 'La actualización automática solo está disponible en el ejecutable portable de Windows.' };
   }
-
-  if (!updatesDirectoryPath) {
-    return { ok: false, message: 'No hay configurada ninguna carpeta de actualizaciones.' };
-  }
+  if (!updatesDirectoryPath) return { ok: false, message: 'No hay configurada ninguna carpeta de actualizaciones.' };
 
   const targetExePath = getPortableExecutablePath();
-  if (!targetExePath) {
-    return {
-      ok: false,
-      message: 'No se ha podido determinar la ruta del ejecutable actual.',
-    };
-  }
+  if (!targetExePath) return { ok: false, message: 'No se ha podido determinar la ruta del ejecutable actual.' };
 
-  let newExeFileName: string;
+  let manifest: AppUpdateManifest;
   try {
-    const manifest = await readUpdateManifest(updatesDirectoryPath);
-    const entries = await readdir(updatesDirectoryPath);
-    const found = entries.find(
-      (entry) => entry.toLocaleLowerCase('es') === manifest.fileName.toLocaleLowerCase('es'),
-    );
-    if (!found) {
-      return {
-        ok: false,
-        message: `No se ha encontrado el ejecutable exacto ${manifest.fileName} indicado por ${UPDATE_MANIFEST_FILE_NAME}.`,
-      };
+    manifest = await readUpdateManifest(updatesDirectoryPath);
+    if (compareAppVersions(manifest.version, currentVersion) <= 0) {
+      return { ok: false, message: `La versión disponible (${manifest.version}) no es más reciente que la instalada (${currentVersion}).` };
     }
-    newExeFileName = found;
   } catch (error) {
-    return {
-      ok: false,
-      message: `No se ha podido preparar la actualización: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    };
+    return { ok: false, message: `No se ha podido preparar la actualización: ${error instanceof Error ? error.message : String(error)}` };
   }
 
-  const sourceExePath = path.join(updatesDirectoryPath, newExeFileName);
+  const sourcePath = path.join(updatesDirectoryPath, manifest.fileName);
   const stagingDir = path.join(tmpdir(), 'traccion-update-staging');
-  const stagedExePath = path.join(stagingDir, newExeFileName);
+  const stagedDownloadPath = path.join(stagingDir, manifest.fileName);
+  const stagedExePath = path.join(stagingDir, 'TrAccion-nueva.exe');
 
   try {
+    await rm(stagingDir, { recursive: true, force: true });
     await mkdir(stagingDir, { recursive: true });
-    await copyFile(sourceExePath, stagedExePath);
+    await copyFile(sourcePath, stagedDownloadPath);
+    await verifySha256(stagedDownloadPath, manifest.sha256);
+    await rename(stagedDownloadPath, stagedExePath);
   } catch (error) {
     return {
       ok: false,
-      message: `No se ha podido copiar el ejecutable nuevo a una carpeta temporal: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      message: `No se ha podido copiar o verificar la nueva versión: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 
-  const scriptPath = path.join(stagingDir, 'traccion-apply-update.bat');
+  const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
+  const previousExePath = `${targetExePath}.previous.exe`;
   const currentPid = process.pid;
-
-  // El bucle de espera comprueba cada 1s si el PID actual sigue vivo
-  // (tasklist), con un tope de ~120s. Una vez muerto, copia el .exe nuevo
-  // sobre el original, lo relanza, y se autoborra (start "" para no dejar
-  // una ventana de consola colgada).
   const batScript = [
     '@echo off',
     'setlocal',
     `set "TARGET=${targetExePath}"`,
     `set "SOURCE=${stagedExePath}"`,
+    `set "PREVIOUS=${previousExePath}"`,
     `set "PID=${currentPid}"`,
     'set "ATTEMPTS=0"',
     ':waitloop',
@@ -263,47 +271,32 @@ export async function applyAppUpdate(updatesDirectoryPath: string | null): Promi
     '  timeout /t 1 /nobreak >NUL',
     '  goto :waitloop',
     ')',
-    'copy /Y "%SOURCE%" "%TARGET%" >NUL',
+    'del /Q "%PREVIOUS%" >NUL 2>&1',
+    'move /Y "%TARGET%" "%PREVIOUS%" >NUL',
     'if errorlevel 1 goto :giveup',
+    'copy /Y "%SOURCE%" "%TARGET%" >NUL',
+    'if errorlevel 1 goto :rollback',
+    'start "" "%TARGET%"',
+    'goto :cleanup',
+    ':rollback',
+    'move /Y "%PREVIOUS%" "%TARGET%" >NUL 2>&1',
     'start "" "%TARGET%"',
     'goto :cleanup',
     ':giveup',
-    'rem No se ha podido completar la actualizacion; el ejecutable original no se ha tocado o el proceso no llego a cerrarse a tiempo.',
+    'rem No se ha podido completar la actualización; se conserva la versión actual.',
     ':cleanup',
-    'del "%SOURCE%" >NUL 2>&1',
+    'del /Q "%SOURCE%" >NUL 2>&1',
     '(goto) 2>nul & del "%~f0"',
     '',
   ].join('\r\n');
 
   try {
     await writeFile(scriptPath, batScript, 'utf8');
-  } catch (error) {
-    return {
-      ok: false,
-      message: `No se ha podido preparar el script de actualización: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    };
-  }
-
-  try {
-    const child = spawn('cmd.exe', ['/c', scriptPath], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
+    const child = spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true });
     child.unref();
   } catch (error) {
-    return {
-      ok: false,
-      message: `No se ha podido iniciar el proceso de actualización: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    };
+    return { ok: false, message: `No se ha podido iniciar el proceso de actualización: ${error instanceof Error ? error.message : String(error)}` };
   }
 
-  return {
-    ok: true,
-    message: 'Actualización en curso: la aplicación se cerrará y se reabrirá con la nueva versión.',
-  };
+  return { ok: true, message: `Actualización a V${manifest.version} preparada. TrAccion se cerrará y volverá a abrir automáticamente.` };
 }

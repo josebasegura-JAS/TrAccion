@@ -39,7 +39,7 @@ interface TraccionDocxTextResult { ok: boolean; text?: string; message?: string;
 
 interface TraccionDatabaseLockInfo { ownerId: string; username: string; hostname: string; pid: number; createdAt: string; updatedAt: string; }
 interface TraccionDatabaseStatus { ready: boolean; engine: string; phase: string; path?: string; schemaVersion?: number; isDefaultPath?: boolean; lockPath?: string; lock?: TraccionDatabaseLockInfo; message?: string; }
-interface TraccionAppUpdateCheckResult { updateAvailable: boolean; currentVersion: string; latestVersion: string | null; message: string | null; }
+interface TraccionAppUpdateCheckResult { updateAvailable: boolean; currentVersion: string; latestVersion: string | null; message: string | null; mandatory: boolean; notes: string | null; }
 interface TraccionAppUpdateApplyResult { ok: boolean; message: string; }
 interface TraccionStorageRecord { key: string; value: string; }
 interface TraccionStorageRecordSnapshot extends TraccionStorageRecord { updatedAt: string; }

@@ -339,9 +339,10 @@ export function DatabaseSettingsSection({
           Carpeta de actualizaciones
         </p>
         <p className="mt-1 text-xs text-metro-muted">
-          Carpeta de red donde se publican las nuevas versiones de TrAccion (el .exe nuevo junto a
-          version.txt). Al arrancar, TrAccion comprueba aquí si hay una versión más nueva y, si la
-          hay, pregunta antes de actualizarse.
+          Carpeta de red donde se publican las nuevas versiones de TrAccion (TrAccion.piz junto a
+          version.json). Al arrancar, TrAccion comprueba aquí si hay una versión más nueva y, si la
+          hay, pregunta antes de actualizarse. El .piz se copia al equipo, se verifica y se instala
+          localmente sin tocar la base de datos.
         </p>
         {updatesDirectoryPath ? (
           <p className="mt-2 break-all text-xs font-medium text-metro-text">
@@ -394,6 +395,12 @@ export function DatabaseSettingsSection({
                   Hay una versión nueva disponible: V{updateCheckResult.latestVersion} (la tuya es V
                   {updateCheckResult.currentVersion}).
                 </p>
+                {updateCheckResult.notes && (
+                  <p className="mt-1 text-metro-muted">{updateCheckResult.notes}</p>
+                )}
+                {updateCheckResult.mandatory && (
+                  <p className="mt-1 font-semibold text-metro-red">Actualización marcada como obligatoria.</p>
+                )}
                 <button
                   className="mt-2 inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-xs font-semibold text-white hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={isApplyingUpdate}

@@ -9,7 +9,7 @@
 // de la actualización automática añadida en 2026, el patch de
 // package.json.version pasa a ser exactamente el mismo contador de build:
 // es la fuente de verdad que lee app.getVersion() en tiempo de ejecución
-// para que la app pueda compararse contra el manifiesto version.txt de la
+// para que la app pueda compararse contra el manifiesto version.json de la
 // carpeta de actualizaciones y saber si hay una versión más nueva
 // disponible). major y minor de package.json no cambian con este script;
 // solo se incrementan a mano si se decide un cambio de versión mayor.
