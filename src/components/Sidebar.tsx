@@ -78,11 +78,11 @@ const buildDatabaseIndicatorViewModel = (
   if (databaseStatus.phase === 'error') {
     return { label: 'Error', statusText: databaseStatus.message ?? 'error o ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
   }
-  if (databaseStatus.ready && !databaseStatus.isDefaultPath) {
+  if (databaseStatus.ready && databaseStatus.isDefaultPath === false) {
     return { label: 'SQLite', statusText: 'SQLite activa en ruta compartida/personalizada', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-emerald-400 ring-emerald-300/25', textClassName: 'text-emerald-100', icon: 'database', requiresAttention: false };
   }
   if (databaseStatus.ready) {
-    return { label: 'SQLite', statusText: 'SQLite activa en ruta local por defecto', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-sky-400 ring-sky-300/25', textClassName: 'text-sky-100', icon: 'database', requiresAttention: false };
+    return { label: 'Revisar', statusText: 'ruta local no permitida; configura la base compartida', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-amber-400 ring-amber-300/25', textClassName: 'text-amber-100', icon: 'database', requiresAttention: true };
   }
   if (databaseStatus.phase === 'fallback') {
     return { label: 'Local', statusText: databaseStatus.message ?? 'fallback localStorage', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-orange-400 ring-orange-300/25', textClassName: 'text-orange-100', icon: 'database', requiresAttention: true };

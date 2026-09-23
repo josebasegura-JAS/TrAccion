@@ -217,7 +217,7 @@ export function DatabaseSettingsSection({
           type="button"
         >
           <RotateCcw size={16} />
-          Restaurar ruta por defecto
+          Quitar ruta configurada
         </button>
         <button
           className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"

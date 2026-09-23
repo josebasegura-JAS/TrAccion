@@ -5,6 +5,7 @@ const activeStatus = {
   ready: true,
   phase: 'active',
   message: 'SQLite activa',
+  isDefaultPath: false,
 } as TraccionDatabaseStatus;
 
 describe('editingAvailability', () => {
@@ -14,6 +15,17 @@ describe('editingAvailability', () => {
       hasPersistenceIpc: true,
       connectivityBlocked: false,
     }).allowed).toBe(true);
+  });
+
+
+  it('bloquea aunque SQLite figure activa si apunta a la ruta local por defecto', () => {
+    const result = deriveEditingAvailability({
+      status: { ...activeStatus, isDefaultPath: true },
+      hasPersistenceIpc: true,
+      connectivityBlocked: false,
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('base de datos compartida');
   });
 
   it.each(['fallback', 'locked', 'error'] as const)(

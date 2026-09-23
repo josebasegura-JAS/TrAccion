@@ -26,7 +26,17 @@ export function buildDatabaseStatusBadge(
   }
 
   if (status.ready) {
-    const routeKind = status.isDefaultPath ? 'ruta local por defecto' : 'ruta personalizada/compartida';
+    if (status.isDefaultPath !== false) {
+      return {
+        label: 'SQLite no compartida',
+        detail: 'ruta local no permitida',
+        title: `Base de datos: la ruta local no es válida para trabajar. Configura la SQLite compartida en Ajustes. Ruta detectada: ${fallbackPath(status)}`,
+        tone: 'warning',
+        requiresAttention: true,
+      };
+    }
+
+    const routeKind = 'ruta personalizada/compartida';
 
     if (status.message?.toLowerCase().includes('bloquean nuevas escrituras')) {
       return {

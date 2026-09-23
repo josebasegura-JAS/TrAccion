@@ -625,6 +625,17 @@ async function activateDatabase(
 ): Promise<DatabaseStatus> {
   const databasePath = getDatabasePathForDirectory(directoryPath);
   const lockPath = getLockPath(databasePath);
+
+  // TrAccion es una aplicación multiusuario: una SQLite local nunca puede ser
+  // una base operativa válida. Si falta la configuración compartida, se mantiene
+  // el acceso a Ajustes pero toda edición debe quedar bloqueada.
+  if (isDefaultPath) {
+    throw new Error(
+      'No hay una base de datos compartida configurada. Selecciona en Ajustes la carpeta que contiene traccion.sqlite. ' +
+        'TrAccion permanecerá en modo consulta y no guardará cambios en una base local.',
+    );
+  }
+
   await ensureDirectoryIsUsable(directoryPath);
 
   // Bloqueo temporal solo para la fase delicada de arranque: creación inicial,
@@ -1960,8 +1971,8 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
 
 export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
   const previousStatus = getSqliteStatus();
-  const previousDatabasePath = database ? previousStatus.path : null;
   const defaultDirectory = getDefaultDatabaseDirectory();
+  const fallbackPath = getDatabasePathForDirectory(defaultDirectory);
 
   try {
     if (database) {
@@ -1969,28 +1980,42 @@ export async function resetSqliteDirectory(): Promise<DatabaseStatus> {
         await backupExistingDatabase(previousStatus.path);
       });
     }
+
     await closeDatabaseAndReleaseLock();
-    const nextStatus = await activateDatabase(defaultDirectory, true, previousDatabasePath);
     await writeDatabasePreferences({
       ...(await readDatabasePreferences()),
       customDirectoryPath: null,
     });
-    return nextStatus;
+
+    status = {
+      ready: false,
+      engine: 'better-sqlite3',
+      phase: 'fallback',
+      path: fallbackPath,
+      schemaVersion: 0,
+      isDefaultPath: true,
+      lockPath: getLockPath(fallbackPath),
+      message:
+        'Se ha quitado la ruta de base de datos compartida. TrAccion queda en modo consulta hasta seleccionar en Ajustes la carpeta que contiene traccion.sqlite.',
+    };
+    return status;
   } catch (error) {
+    // Si no se ha podido completar el cambio, intentar recuperar la base compartida
+    // previa para no dejar la sesión en un estado peor.
     try {
-      if (previousStatus.ready) {
+      if (previousStatus.ready && !previousStatus.isDefaultPath) {
         const restoredStatus = await activateDatabase(
           path.dirname(previousStatus.path),
-          previousStatus.isDefaultPath,
+          false,
           null,
         );
         status = { ...restoredStatus, message: errorMessage(error) };
         return status;
       }
     } catch {
-      // Mantener el fallback existente.
+      // Mantener el estado de error existente.
     }
-    status = { ...previousStatus, message: errorMessage(error) };
+    status = { ...previousStatus, ready: false, phase: 'fallback', message: errorMessage(error) };
     return status;
   }
 }

@@ -76,6 +76,14 @@ export function deriveEditingAvailability(options: {
     };
   }
 
+  if (options.status.isDefaultPath !== false) {
+    return {
+      allowed: false,
+      reason: 'No hay una base de datos compartida configurada. Selecciona la ruta de traccion.sqlite en Ajustes.',
+      connectivityBlocked: false,
+    };
+  }
+
   return { allowed: true, reason: '', connectivityBlocked: false };
 }
 

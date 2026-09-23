@@ -441,6 +441,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
 
     const configuredDirectory = await getConfiguredDatabaseDirectory();
+    if (configuredDirectory.isDefaultPath) {
+      return {
+        ok: false,
+        status: currentStatus,
+        message:
+          'No se puede restaurar una copia SQLite sin una base compartida configurada. Selecciona primero su ubicación en Ajustes.',
+      };
+    }
     const targetDatabasePath = getDatabasePathForDirectory(configuredDirectory.directoryPath);
 
     try {

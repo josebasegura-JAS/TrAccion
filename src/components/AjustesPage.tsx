@@ -324,7 +324,7 @@ export function AjustesPage() {
     try {
       await applyDatabaseStatus(await window.traccion.resetDatabaseDirectory());
     } catch (error) {
-      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido restaurar la ruta SQLite por defecto.');
+      setDatabaseActionStatus(error instanceof Error ? error.message : 'No se ha podido quitar la ruta SQLite configurada.');
     }
   };
 
