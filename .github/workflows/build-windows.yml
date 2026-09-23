@@ -102,7 +102,7 @@ jobs:
 
           exit $LASTEXITCODE
 
-      - name: Create auto-update package
+      - name: Create auto-update manifest
         run: npm run update-manifest:write
 
       - name: Commit updated build counter
@@ -122,12 +122,11 @@ jobs:
             Write-Host "Sin cambios en el contador de build; nada que commitear."
           }
 
-      - name: Upload EXE and auto-update package
+      - name: Upload EXE and update manifest
         uses: actions/upload-artifact@v4
         with:
           name: TrAccion-V1-windows-portable
           path: |
-            release/*.exe
-            release/*portable*.exe
-            release/TrAccion-update-V*.zip
+            release/TrAccion V*.exe
+            release/version.json
           if-no-files-found: error
