@@ -3,7 +3,6 @@ import { EMPTY_TELETRABAJO_FILTERS } from '../domain/filters';
 import { EMPTY_TELETRABAJO_DRAFT, type TeletrabajoDraft, type TeletrabajoSolicitud } from '../domain/solicitud';
 import { useTeletrabajoStore } from './useTeletrabajoStore';
 
-const STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
 const PUESTOS_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos';
 const timestamp = '2026-06-17T08:00:00.000Z';
 
@@ -27,59 +26,88 @@ function draft(overrides: Partial<TeletrabajoDraft> = {}): TeletrabajoDraft {
   };
 }
 
-function readPersistedSolicitudes(): TeletrabajoSolicitud[] {
-  return JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '[]') as TeletrabajoSolicitud[];
+interface FakeSqliteRecord {
+  id: string;
+  value: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+interface FakeTeletrabajoBackend {
+  solicitudes: Map<string, FakeSqliteRecord>;
+  puestos: Map<string, FakeSqliteRecord>;
+  grupos: Map<string, FakeSqliteRecord>;
 }
 
 /**
- * createWithConcurrencyCheck/updateWithConcurrencyCheck/removeWithConcurrencyCheck ya no
- * caen a un modo "solo localStorage": el camino sin SQLite (window.traccion ausente) sigue
- * pasando por saveNewSharedArrayRecord/saveSharedArrayRecord, que a su vez requieren
- * window.traccion.getPersistedRecord / saveLocalStorageRecordIfUnchanged (el key-value
- * genérico de SQLite con control de concurrencia). Este fake reproduce ese backend en
- * memoria para poder probar los métodos reales sin depender de Electron.
+ * Los tests de persistencia deben reproducir la arquitectura actual: Teletrabajo
+ * solo trabaja con los repositorios SQLite nativos. localStorage puede seguir
+ * actuando como caché de puestos/grupos, pero nunca como fuente de verdad de las
+ * solicitudes. Este fake implementa los tres repositorios SQLite en memoria y
+ * conserva el control optimista por updatedAt.
  */
-function installFakePersistedRecordsBackend(): void {
-  const store = new Map<string, { value: string; updatedAt: string }>();
+function installFakeTeletrabajoSqliteBackend(): FakeTeletrabajoBackend {
+  const solicitudes = new Map<string, FakeSqliteRecord>();
+  const puestos = new Map<string, FakeSqliteRecord>();
+  const grupos = new Map<string, FakeSqliteRecord>();
   const status = {
     ready: true,
     engine: 'better-sqlite3' as const,
     phase: 'active' as const,
-    path: '/x.sqlite',
+    path: '/shared/traccion.sqlite',
     schemaVersion: 17,
     isDefaultPath: false,
-    lockPath: '/x.lockdir',
+    lockPath: '/shared/traccion.sqlite.lockdir',
+  };
+
+  const saveRecord = async (
+    target: Map<string, FakeSqliteRecord>,
+    record: { id: string; value: string; expectedUpdatedAt: string | null },
+  ) => {
+    const current = target.get(record.id);
+    const currentUpdatedAt = current?.updatedAt ?? null;
+    if (currentUpdatedAt !== record.expectedUpdatedAt) {
+      return { ok: false, status, currentUpdatedAt, message: 'Conflicto de concurrencia.' };
+    }
+
+    const updatedAt = new Date().toISOString();
+    target.set(record.id, {
+      id: record.id,
+      value: record.value,
+      createdAt: current?.createdAt ?? updatedAt,
+      updatedAt,
+      deletedAt: null,
+    });
+    return { ok: true, status, currentUpdatedAt: updatedAt, message: 'Guardado.' };
   };
 
   (window as { traccion?: unknown }).traccion = {
-    getPersistedRecord: vi.fn(async (key: string) => {
-      const entry = store.get(key);
-      return {
-        status,
-        record: entry ? { key, value: entry.value, updatedAt: entry.updatedAt } : null,
-      };
-    }),
-    saveLocalStorageRecordIfUnchanged: vi.fn(
-      async ({
-        key,
-        value,
-        expectedUpdatedAt,
-      }: {
-        key: string;
-        value: string;
-        expectedUpdatedAt: string | null;
-      }) => {
-        const entry = store.get(key);
-        const currentUpdatedAt = entry?.updatedAt ?? null;
-        if (currentUpdatedAt !== expectedUpdatedAt) {
-          return { ok: false, status, currentUpdatedAt, message: 'Conflicto de concurrencia.' };
-        }
-        const updatedAt = new Date().toISOString();
-        store.set(key, { value, updatedAt });
-        return { ok: true, status, currentUpdatedAt: updatedAt, message: 'Guardado.' };
-      },
+    loadTeletrabajoRecords: vi.fn(async () => ({ status, records: Array.from(solicitudes.values()) })),
+    saveTeletrabajoRecordIfUnchanged: vi.fn(
+      async (record: { id: string; value: string; expectedUpdatedAt: string | null }) =>
+        saveRecord(solicitudes, record),
+    ),
+    loadTeletrabajoPuestoRecords: vi.fn(async () => ({ status, records: Array.from(puestos.values()) })),
+    saveTeletrabajoPuestoRecordIfUnchanged: vi.fn(
+      async (record: { id: string; value: string; expectedUpdatedAt: string | null }) =>
+        saveRecord(puestos, record),
+    ),
+    loadTeletrabajoGrupoCoberturaRecords: vi.fn(async () => ({ status, records: Array.from(grupos.values()) })),
+    saveTeletrabajoGrupoCoberturaRecordIfUnchanged: vi.fn(
+      async (record: { id: string; value: string; expectedUpdatedAt: string | null }) =>
+        saveRecord(grupos, record),
     ),
   };
+
+  return { solicitudes, puestos, grupos };
+}
+
+async function flushStoreLoad(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('useTeletrabajoStore persistence', () => {
@@ -88,8 +116,10 @@ describe('useTeletrabajoStore persistence', () => {
     delete (window as { traccion?: unknown }).traccion;
   });
 
+  let fakeBackend: FakeTeletrabajoBackend;
+
   beforeEach(() => {
-    installFakePersistedRecordsBackend();
+    fakeBackend = installFakeTeletrabajoSqliteBackend();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(timestamp));
     window.localStorage.clear();
@@ -123,10 +153,11 @@ describe('useTeletrabajoStore persistence', () => {
       deletedAt: null,
     });
     expect(useTeletrabajoStore.getState().selectedSolicitudId).toBe(created.id);
-    expect(readPersistedSolicitudes()[0].id).toBe(created.id);
+    expect(JSON.parse(fakeBackend.solicitudes.get(created.id)?.value ?? 'null')).toMatchObject({ id: created.id });
 
     useTeletrabajoStore.setState({ solicitudes: [], selectedSolicitudId: '' });
     useTeletrabajoStore.getState().load();
+    await flushStoreLoad();
 
     expect(useTeletrabajoStore.getState().solicitudes[0].id).toBe(created.id);
     expect(useTeletrabajoStore.getState().selectedSolicitudId).toBe(created.id);
@@ -169,6 +200,7 @@ describe('useTeletrabajoStore persistence', () => {
 
     useTeletrabajoStore.setState({ solicitudes: [], selectedSolicitudId: '' });
     useTeletrabajoStore.getState().load();
+    await flushStoreLoad();
 
     expect(useTeletrabajoStore.getState().solicitudes[0]).toMatchObject({
       id: original.id,
@@ -186,11 +218,12 @@ describe('useTeletrabajoStore persistence', () => {
     await useTeletrabajoStore.getState().removeWithConcurrencyCheck(first.id, first.updatedAt);
 
     const removed = useTeletrabajoStore.getState().solicitudes.find((solicitud) => solicitud.id === first.id);
-    expect(removed).toMatchObject({ deletedAt: '2026-06-19T10:00:00.000Z' });
+    expect(removed).toBeUndefined();
     expect(useTeletrabajoStore.getState().selectedSolicitudId).toBe(second.id);
-    expect(readPersistedSolicitudes().find((solicitud) => solicitud.id === first.id)?.deletedAt).toBe(
-      '2026-06-19T10:00:00.000Z',
-    );
+    expect(JSON.parse(fakeBackend.solicitudes.get(first.id)?.value ?? 'null')).toMatchObject({
+      id: first.id,
+      deletedAt: '2026-06-19T10:00:00.000Z',
+    });
   });
 
   it('importa puestos por borrador deduplicando por puesto normalizado', async () => {
