@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { UserRound } from 'lucide-react';
+import { AlertTriangle, UserRound } from 'lucide-react';
 import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { ModuleHelpButton } from './ModuleHelp';
@@ -8,6 +8,13 @@ import { useDatabaseStatus } from '../services/databaseStatus';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import { subscribeToAppNavigation } from '../services/appNavigationBus';
+import { useTaskStore } from '../features/tareas/store/useTaskStore';
+import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
+import { responsibleMatchesWindowsUser } from '../features/configuracion/domain/taskResponsibles';
+import {
+  getUnseenTaskAssignments,
+  markTaskAssignmentsSeen,
+} from '../features/tareas/domain/taskAssignmentNotifications';
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: {
@@ -143,7 +150,7 @@ export function Header({
   onViewChange,
 }: {
   activeView: AppView;
-  onViewChange: (target: { view: AppView; recordId?: string }) => void;
+  onViewChange: (target: { view: AppView; recordId?: string; responsibleFilter?: string }) => void;
 }) {
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
@@ -152,9 +159,35 @@ export function Header({
   const dbStatus = useDatabaseStatus();
   const syncStatus = useExternalDataSyncStatus();
 
+  const tasks = useTaskStore((state) => state.tasks);
+  const loadTasks = useTaskStore((state) => state.load);
+  const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
+  const loadConfiguracion = useConfiguracionStore((state) => state.load);
+  const [assignmentNoticeRevision, setAssignmentNoticeRevision] = useState(0);
+
+  const currentResponsible = useMemo(
+    () => taskResponsibles.find(
+      (responsible) => responsible.active && responsibleMatchesWindowsUser(responsible, windowsUserName),
+    ) ?? null,
+    [taskResponsibles, windowsUserName],
+  );
+  const unseenAssignments = useMemo(
+    () => currentResponsible
+      ? getUnseenTaskAssignments(tasks, currentResponsible.nombre, windowsUserName)
+      : [],
+    [assignmentNoticeRevision, currentResponsible, tasks, windowsUserName],
+  );
+
   const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus);
 
   useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);
+
+  useEffect(() => {
+    loadConfiguracion();
+    loadTasks();
+    const interval = window.setInterval(() => loadTasks(), 60_000);
+    return () => window.clearInterval(interval);
+  }, [loadConfiguracion, loadTasks]);
 
   useEffect(() => {
     let isMounted = true;
@@ -180,6 +213,13 @@ export function Header({
       isMounted = false;
     };
   }, []);
+
+  const handleOpenNewAssignments = () => {
+    if (unseenAssignments.length === 0) return;
+    markTaskAssignmentsSeen(windowsUserName, unseenAssignments);
+    setAssignmentNoticeRevision((current) => current + 1);
+    onViewChange({ view: 'tareas', responsibleFilter: '__mine__' });
+  };
 
   return (
     <header className="border-b border-sky-300/[0.07] px-3 pb-2 pt-2.5 sm:px-4">
@@ -211,7 +251,20 @@ export function Header({
           <GlobalSearch onNavigate={onViewChange} />
         </div>
 
-        <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:w-[300px] lg:justify-start">
+        <div className="flex min-w-0 items-center gap-2 lg:justify-end">
+          {unseenAssignments.length > 0 && (
+            <button
+              aria-label={`${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-2.5 py-2 text-[11px] font-bold text-amber-200 shadow-sm hover:border-amber-300/50 hover:bg-amber-400/15"
+              onClick={handleOpenNewAssignments}
+              title="Abrir nuevas tareas asignadas"
+              type="button"
+            >
+              <AlertTriangle size={15} />
+              <span>{unseenAssignments.length} nueva{unseenAssignments.length === 1 ? '' : 's'}</span>
+            </button>
+          )}
+          <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:w-[300px] lg:justify-start">
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-metro-red/10 text-metro-red ring-1 ring-metro-red/20">
             <UserRound size={17} />
             <span
@@ -235,6 +288,7 @@ export function Header({
               </span>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </header>

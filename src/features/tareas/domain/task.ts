@@ -39,6 +39,10 @@ export interface Task {
   prioridad: TaskPriority;
   fechaLimite: string;
   responsable: string;
+  /** Identificador de la asignación actual. Solo se crea para asignaciones nuevas. */
+  assignmentNoticeId?: string;
+  /** Momento en que se realizó la asignación que originó el aviso. */
+  assignmentNoticeAt?: string;
   origen: string;
   sindicato: string;
   observaciones: string;

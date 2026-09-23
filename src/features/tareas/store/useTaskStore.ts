@@ -430,6 +430,14 @@ function normalizeTask(task: Task): Task {
     prioridad: task.prioridad,
     fechaLimite: task.fechaLimite ?? EMPTY_TASK_DRAFT.fechaLimite,
     responsable: task.responsable ?? EMPTY_TASK_DRAFT.responsable,
+    assignmentNoticeId:
+      typeof task.assignmentNoticeId === 'string' && task.assignmentNoticeId.trim()
+        ? task.assignmentNoticeId
+        : undefined,
+    assignmentNoticeAt:
+      typeof task.assignmentNoticeAt === 'string' && task.assignmentNoticeAt.trim()
+        ? task.assignmentNoticeAt
+        : undefined,
     origen:
       task.origen ??
       (hasStringProperty(task, 'origenSindicato') ? task.origenSindicato : EMPTY_TASK_DRAFT.origen),
@@ -604,6 +612,39 @@ function createTaskId(): string {
   return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function normalizeResponsibleForAssignment(value: string | undefined): string {
+  return (value ?? '').trim().toLocaleLowerCase('es');
+}
+
+function createAssignmentNoticeId(taskId: string, assignedAt: string): string {
+  return `${taskId}:${assignedAt}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildAssignmentNoticeFields(
+  taskId: string,
+  previousResponsible: string | undefined,
+  nextResponsible: string | undefined,
+  assignedAt: string,
+  previousNoticeId?: string,
+  previousNoticeAt?: string,
+): Pick<Task, 'assignmentNoticeId' | 'assignmentNoticeAt'> {
+  const previous = normalizeResponsibleForAssignment(previousResponsible);
+  const next = normalizeResponsibleForAssignment(nextResponsible);
+
+  if (previous === next) {
+    return { assignmentNoticeId: previousNoticeId, assignmentNoticeAt: previousNoticeAt };
+  }
+
+  if (!next) {
+    return { assignmentNoticeId: undefined, assignmentNoticeAt: undefined };
+  }
+
+  return {
+    assignmentNoticeId: createAssignmentNoticeId(taskId, assignedAt),
+    assignmentNoticeAt: assignedAt,
+  };
+}
+
 function buildSeguimiento(text: string | undefined, fechaHora: string): TaskSeguimientoEntry[] {
   const trimmedText = text?.trim();
   return trimmedText ? [{ fechaHora, texto: trimmedText }] : [];
@@ -624,6 +665,14 @@ function buildUpdatedTask(task: Task, draft: TaskDraft, seguimientoText: string 
   return {
     ...task,
     ...draft,
+    ...buildAssignmentNoticeFields(
+      task.id,
+      task.responsable,
+      draft.responsable,
+      now,
+      task.assignmentNoticeId,
+      task.assignmentNoticeAt,
+    ),
     seguimiento: [...buildSeguimiento(seguimientoText, now), ...task.seguimiento],
     closedAt: resolveClosedAt(task, draft, now),
     updatedAt: now,
@@ -708,9 +757,11 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
   createWithConcurrencyCheck: async (draft, seguimientoText) => {
     const now = new Date().toISOString();
+    const taskId = createTaskId();
     const task: Task = {
-      id: createTaskId(),
+      id: taskId,
       ...draft,
+      ...buildAssignmentNoticeFields(taskId, '', draft.responsable, now),
       sessionDocumentCode: '',
       sessionModule: '',
       sessionDate: '',
