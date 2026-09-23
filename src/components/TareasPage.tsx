@@ -692,8 +692,11 @@ export function TareasPage({
         <div className="border-b border-sky-300/10 bg-[linear-gradient(180deg,rgba(20,43,68,0.94),rgba(15,35,57,0.92))] px-4 py-3">
           <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5">
             <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${!responsibleFilter ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('')} type="button">Todas</button>
-            <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__mine__' ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__mine__')} type="button">Mías{currentResponsible ? ` · ${currentResponsible.nombre}` : ''}</button>
-            {taskResponsibles.filter((responsible) => responsible.active).map((responsible) => (
+            <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__mine__' ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__mine__')} type="button">Mías</button>
+            {taskResponsibles
+              .filter((responsible) => responsible.active)
+              .filter((responsible) => !currentResponsible || responsible.id !== currentResponsible.id)
+              .map((responsible) => (
               <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === responsible.nombre ? 'border-sky-300/30 bg-sky-400/15 text-sky-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} key={responsible.id} onClick={() => setResponsibleFilter(responsible.nombre)} type="button">{responsible.nombre}</button>
             ))}
             <button className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${responsibleFilter === '__unassigned__' ? 'border-amber-300/30 bg-amber-400/10 text-amber-100' : 'border-sky-300/10 bg-white/[0.025] text-slate-400 hover:text-slate-200'}`} onClick={() => setResponsibleFilter('__unassigned__')} type="button">Sin asignar</button>
