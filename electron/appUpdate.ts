@@ -178,8 +178,8 @@ export async function checkForAppUpdate(
 /**
  * Copia el .piz (un portable .exe renombrado) a TEMP, verifica su SHA-256,
  * lo deja allí con extensión .exe y genera un .bat temporal. El .bat espera
- * a que TrAccion cierre, conserva una copia .previous.exe del ejecutable
- * anterior, instala la nueva versión y vuelve a abrirla.
+ * a que TrAccion cierre, sustituye directamente el ejecutable actual por la
+ * nueva versión y vuelve a abrirla. No conserva copias del ejecutable anterior.
  */
 export async function applyAppUpdate(
   currentVersion: string,
@@ -222,33 +222,20 @@ export async function applyAppUpdate(
   }
 
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
-  const previousExePath = `${targetExePath}.previous.exe`;
-  const currentPid = process.pid;
   const batScript = [
     '@echo off',
-    'setlocal',
+    'setlocal EnableExtensions EnableDelayedExpansion',
     `set "TARGET=${targetExePath}"`,
     `set "SOURCE=${stagedExePath}"`,
-    `set "PREVIOUS=${previousExePath}"`,
-    `set "PID=${currentPid}"`,
-    'set "ATTEMPTS=0"',
-    ':waitloop',
-    'tasklist /FI "PID eq %PID%" 2>NUL | find /I "%PID%" >NUL',
-    'if not errorlevel 1 (',
-    '  set /a ATTEMPTS+=1',
-    '  if %ATTEMPTS% GEQ 120 goto :giveup',
+    'set /a ATTEMPTS=0',
+    ':replace',
+    'set /a ATTEMPTS+=1',
+    'copy /Y "%SOURCE%" "%TARGET%" >NUL 2>&1',
+    'if errorlevel 1 (',
+    '  if !ATTEMPTS! GEQ 120 goto :giveup',
     '  timeout /t 1 /nobreak >NUL',
-    '  goto :waitloop',
+    '  goto :replace',
     ')',
-    'del /Q "%PREVIOUS%" >NUL 2>&1',
-    'move /Y "%TARGET%" "%PREVIOUS%" >NUL',
-    'if errorlevel 1 goto :giveup',
-    'copy /Y "%SOURCE%" "%TARGET%" >NUL',
-    'if errorlevel 1 goto :rollback',
-    'start "" "%TARGET%"',
-    'goto :cleanup',
-    ':rollback',
-    'move /Y "%PREVIOUS%" "%TARGET%" >NUL 2>&1',
     'start "" "%TARGET%"',
     'goto :cleanup',
     ':giveup',
