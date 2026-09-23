@@ -5,7 +5,6 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 
 const UPDATE_MANIFEST_FILE_NAME = 'version.json';
-const LEGACY_UPDATE_MANIFEST_FILE_NAME = 'version.txt';
 
 export interface AppUpdateCheckResult {
   updateAvailable: boolean;
@@ -24,7 +23,7 @@ export interface AppUpdateApplyResult {
 export interface AppUpdateManifest {
   version: string;
   fileName: string;
-  sha256: string | null;
+  sha256: string;
   mandatory: boolean;
   notes: string | null;
 }
@@ -57,17 +56,21 @@ function buildPortableUpdateNameFromVersion(version: string): string | null {
   return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
 }
 
-function validateUpdateFileName(fileName: string): string {
+function validateUpdateFileName(fileName: string, version: string): string {
   const normalized = fileName.trim();
-  const lower = normalized.toLowerCase();
   if (
     !normalized ||
     normalized.includes('/') ||
     normalized.includes('\\') ||
     path.basename(normalized) !== normalized ||
-    (!lower.endsWith('.piz') && !lower.endsWith('.exe'))
+    !/^TrAccion V\d+\.\d+\.\d+\.piz$/i.test(normalized)
   ) {
-    throw new Error('El nombre del fichero de actualización no es válido.');
+    throw new Error('El nombre del fichero de actualización no es válido. Debe ser TrAccion Vx.y.zz.piz.');
+  }
+
+  const expected = buildPortableUpdateNameFromVersion(version);
+  if (!expected || normalized.toLowerCase() !== expected.toLowerCase()) {
+    throw new Error(`El fichero de actualización no corresponde a la versión ${version}.`);
   }
   return normalized;
 }
@@ -76,77 +79,44 @@ export function parseAppUpdateManifest(raw: string): AppUpdateManifest {
   const trimmed = raw.trim();
   if (!trimmed) throw new Error('El manifiesto de versión está vacío.');
 
-  // Formato actual: JSON. Se conserva compatibilidad con version.txt para
-  // instalaciones que ya hubieran empezado a usar el sistema anterior.
-  if (trimmed.startsWith('{')) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      throw new Error('El manifiesto JSON no es válido.');
-    }
-    const candidate = parsed as Record<string, unknown>;
-    const version = typeof candidate.version === 'string' ? candidate.version.trim() : '';
-    if (!version) throw new Error('El manifiesto no contiene una versión.');
-
-    const fallbackFileName = buildPortableUpdateNameFromVersion(version);
-    const rawFileName = typeof candidate.file === 'string' ? candidate.file : fallbackFileName;
-    if (!rawFileName) throw new Error(`No se puede determinar el fichero para la versión ${version}.`);
-
-    const rawSha = typeof candidate.sha256 === 'string' ? candidate.sha256.trim().toLowerCase() : '';
-    if (rawSha && !/^[a-f0-9]{64}$/.test(rawSha)) {
-      throw new Error('El SHA-256 indicado en el manifiesto no es válido.');
-    }
-
-    return {
-      version,
-      fileName: validateUpdateFileName(rawFileName),
-      sha256: rawSha || null,
-      mandatory: candidate.mandatory === true,
-      notes: typeof candidate.notes === 'string' && candidate.notes.trim() ? candidate.notes.trim() : null,
-    };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error('version.json no contiene JSON válido.');
   }
 
-  // Formato histórico: version=... / file=... o una sola línea con versión.
-  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  let version = '';
-  let fileName = '';
-  if (lines.some((line) => line.includes('='))) {
-    for (const line of lines) {
-      const separatorIndex = line.indexOf('=');
-      if (separatorIndex <= 0) continue;
-      const key = line.slice(0, separatorIndex).trim().toLowerCase();
-      const value = line.slice(separatorIndex + 1).trim();
-      if (key === 'version') version = value;
-      if (key === 'file') fileName = value;
-    }
-  } else {
-    version = lines[0] ?? '';
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('version.json no tiene el formato esperado.');
   }
-  if (!version) throw new Error('El manifiesto no contiene una versión.');
 
-  const resolvedFileName = fileName || buildPortableUpdateNameFromVersion(version)?.replace(/\.piz$/i, '.exe');
-  if (!resolvedFileName) throw new Error(`No se puede determinar el ejecutable para la versión ${version}.`);
+  const candidate = parsed as Record<string, unknown>;
+  const version = typeof candidate.version === 'string' ? candidate.version.trim() : '';
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error('El manifiesto no contiene una versión válida.');
+  }
+
+  const rawFileName = typeof candidate.file === 'string' ? candidate.file.trim() : '';
+  if (!rawFileName) throw new Error('El manifiesto no contiene el fichero de actualización.');
+
+  const rawSha = typeof candidate.sha256 === 'string' ? candidate.sha256.trim().toLowerCase() : '';
+  if (!/^[a-f0-9]{64}$/.test(rawSha)) {
+    throw new Error('El manifiesto debe contener un SHA-256 válido.');
+  }
 
   return {
     version,
-    fileName: validateUpdateFileName(resolvedFileName),
-    sha256: null,
-    mandatory: false,
-    notes: null,
+    fileName: validateUpdateFileName(rawFileName, version),
+    sha256: rawSha,
+    mandatory: candidate.mandatory === true,
+    notes: typeof candidate.notes === 'string' && candidate.notes.trim() ? candidate.notes.trim() : null,
   };
 }
 
 async function readUpdateManifest(updatesDirectoryPath: string): Promise<AppUpdateManifest> {
-  try {
-    return parseAppUpdateManifest(await readFile(path.join(updatesDirectoryPath, UPDATE_MANIFEST_FILE_NAME), 'utf8'));
-  } catch (jsonError) {
-    try {
-      return parseAppUpdateManifest(await readFile(path.join(updatesDirectoryPath, LEGACY_UPDATE_MANIFEST_FILE_NAME), 'utf8'));
-    } catch {
-      throw jsonError;
-    }
-  }
+  return parseAppUpdateManifest(
+    await readFile(path.join(updatesDirectoryPath, UPDATE_MANIFEST_FILE_NAME), 'utf8'),
+  );
 }
 
 async function calculateSha256(filePath: string): Promise<string> {
@@ -154,8 +124,7 @@ async function calculateSha256(filePath: string): Promise<string> {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
-async function verifySha256(filePath: string, expectedSha256: string | null): Promise<void> {
-  if (!expectedSha256) return;
+async function verifySha256(filePath: string, expectedSha256: string): Promise<void> {
   const actual = await calculateSha256(filePath);
   if (actual.toLowerCase() !== expectedSha256.toLowerCase()) {
     throw new Error('La comprobación SHA-256 ha fallado. El fichero puede estar incompleto o haber sido modificado.');
