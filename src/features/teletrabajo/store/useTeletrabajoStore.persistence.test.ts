@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_TELETRABAJO_FILTERS } from '../domain/filters';
-import { EMPTY_TELETRABAJO_DRAFT, type TeletrabajoDraft, type TeletrabajoSolicitud } from '../domain/solicitud';
+import { EMPTY_TELETRABAJO_DRAFT, type TeletrabajoDraft } from '../domain/solicitud';
 import { useTeletrabajoStore } from './useTeletrabajoStore';
 
 const PUESTOS_STORAGE_KEY = 'traccion.v1.teletrabajo.puestos';
