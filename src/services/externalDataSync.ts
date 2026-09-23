@@ -33,6 +33,7 @@ const LEGACY_STORAGE_STORE_IDS: Record<string, string> = {
   'traccion.v1.actas.types': 'actas',
   'traccion.v1.actas.outlookTemplate': 'actas',
   'traccion.v1.actas.table': 'actas',
+  'traccion.v1.ayuda-escolar.records': 'ayuda-escolar',
   'traccion.v1.comite.sessions': 'comite-sesiones',
   'traccion.v1.paritaria.sessions': 'paritaria-sesiones',
   'traccion.v1.licenciasSinSueldo.records': 'licencias-sin-sueldo',

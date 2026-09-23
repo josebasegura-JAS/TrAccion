@@ -142,7 +142,7 @@ export function AyudaEscolarPage() {
         employeeName: employee.nombreApellidos,
       });
       if (!result.ok || !result.files) throw new Error(result.message);
-      addRecord({
+      const recordResult = await addRecord({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         employeeId: employee.empleado,
         employeeName: employee.nombreApellidos,
@@ -154,6 +154,11 @@ export function AyudaEscolarPage() {
         archivedAt: new Date().toISOString(),
         files: result.files,
       });
+      if (!recordResult.ok) {
+        throw new Error(
+          `Los archivos se han archivado, pero no se ha podido registrar el seguimiento en la base compartida: ${recordResult.message}`,
+        );
+      }
       let learnedSuffix = '';
       if (willLearnEmail) {
         const emailResult = await updateEmployeeEmail(employee.empleado, incomingEmail);

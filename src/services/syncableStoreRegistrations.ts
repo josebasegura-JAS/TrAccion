@@ -1,4 +1,5 @@
 import { useActasStore } from '../features/actas/store/useActasStore';
+import { useAyudaEscolarStore } from '../features/ayuda-escolar/store/useAyudaEscolarStore';
 import { useCommitteeSessionStore } from '../features/comite/store/useCommitteeSessionStore';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { useCriteriosRrllStore } from '../features/criterios-rrll/store/useCriteriosRrllStore';
@@ -15,6 +16,10 @@ import { useTicketRestauranteStore } from '../features/ticket-restaurante/store/
 import { useVinculogramaStore } from '../features/vinculograma/store/useVinculogramaStore';
 import { registerSyncableStore } from './syncableStoreRegistry';
 
+registerSyncableStore({
+  id: 'ayuda-escolar',
+  reloadFromStorage: () => useAyudaEscolarStore.getState().reloadFromStorage(),
+});
 registerSyncableStore({
   id: 'tareas',
   reloadFromStorage: () => useTaskStore.getState().reloadFromStorage(),

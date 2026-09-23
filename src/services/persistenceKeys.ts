@@ -21,6 +21,7 @@ export const PERSISTED_STORAGE_KEYS = [
   'traccion.v1.huelgas.puestoResponsables',
   'traccion.v1.huelgas.zonas',
   'traccion.v1.huelgas.areas',
+  'traccion.v1.ayuda-escolar.records',
   'traccion.v1.paritaria.sessions',
   'traccion.v1.ticketRestaurante.calendars',
   'traccion.v1.ticketRestaurante.absences',
