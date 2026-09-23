@@ -9,14 +9,14 @@ import { PrintPreviewModal } from './PrintPreviewModal';
 interface ExportPrintButtonsProps<T> {
   payload: ExportTablePayload<T>;
   htmlBuilder?: () => string;
-  /** 'sm' para usarlo junto a otras acciones compactas de cabecera de módulo. Por defecto 'md'. */
+  /** Tamaño de las acciones. Por defecto 'sm' para mantener compactas las cabeceras de módulo. */
   size?: 'sm' | 'md';
 }
 
 export function ExportPrintButtons<T>({
   payload,
   htmlBuilder,
-  size = 'md',
+  size = 'sm',
 }: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const { alert, dialogNode } = useAppDialog();
@@ -29,6 +29,7 @@ export function ExportPrintButtons<T>({
             void alert(message, { type: 'error' });
           })
         }
+        iconOnly={false}
         size={size}
         variant="excel"
       >
@@ -43,6 +44,7 @@ export function ExportPrintButtons<T>({
               : buildPrintableTableHtml({ ...payload, generatedAt: new Date() }),
           )
         }
+        iconOnly={false}
         size={size}
         variant="print"
       >
