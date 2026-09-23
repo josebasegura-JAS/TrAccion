@@ -2,13 +2,39 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkForAppUpdate, compareAppVersions, parseAppUpdateManifest } from './appUpdate.js';
+import {
+  buildInstalledExecutableNameFromVersion,
+  buildInstalledExecutablePath,
+  checkForAppUpdate,
+  compareAppVersions,
+  parseAppUpdateManifest,
+} from './appUpdate.js';
 
 describe('compareAppVersions', () => {
   it('compara correctamente versiones numéricas', () => {
     expect(compareAppVersions('1.0.10', '1.0.9')).toBeGreaterThan(0);
     expect(compareAppVersions('1.1.0', '1.0.99')).toBeGreaterThan(0);
     expect(compareAppVersions('1.0.5', '1.0.5')).toBe(0);
+  });
+});
+
+describe('nombre local estable del ejecutable', () => {
+  it('usa major.minor y no la versión exacta del build', () => {
+    expect(buildInstalledExecutableNameFromVersion('1.1.82')).toBe('TrAccion V1.1.exe');
+    expect(buildInstalledExecutableNameFromVersion('1.2.01')).toBe('TrAccion V1.2.exe');
+    expect(buildInstalledExecutableNameFromVersion('2.0.7')).toBe('TrAccion V2.0.exe');
+  });
+
+  it('instala la nueva versión en la misma carpeta que el ejecutable arrancado', () => {
+    const current = path.win32.join('C:\\', 'Users', 'usuario', 'Desktop', 'TrAccion V1.1.81.exe');
+    expect(path.win32.normalize(buildInstalledExecutablePath(current, '1.1.82') ?? '')).toBe(
+      path.win32.join('C:\\', 'Users', 'usuario', 'Desktop', 'TrAccion V1.1.exe'),
+    );
+  });
+
+  it('rechaza versiones con formato no soportado', () => {
+    expect(buildInstalledExecutableNameFromVersion('1.2')).toBeNull();
+    expect(buildInstalledExecutablePath('C:\\TrAccion.exe', '1.2')).toBeNull();
   });
 });
 

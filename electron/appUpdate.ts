@@ -56,6 +56,19 @@ function buildPortableUpdateNameFromVersion(version: string): string | null {
   return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
 }
 
+export function buildInstalledExecutableNameFromVersion(version: string): string | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return null;
+  const [, major, minor] = match;
+  return `TrAccion V${major}.${minor}.exe`;
+}
+
+export function buildInstalledExecutablePath(currentExecutablePath: string, version: string): string | null {
+  const fileName = buildInstalledExecutableNameFromVersion(version);
+  if (!fileName) return null;
+  return path.join(path.dirname(currentExecutablePath), fileName);
+}
+
 function validateUpdateFileName(fileName: string, version: string): string {
   const normalized = fileName.trim();
   if (
@@ -176,10 +189,10 @@ export async function checkForAppUpdate(
 }
 
 /**
- * Copia el .piz (un portable .exe renombrado) a TEMP, verifica su SHA-256,
- * lo deja allí con extensión .exe y genera un .bat temporal. El .bat espera
- * a que TrAccion cierre, sustituye directamente el ejecutable actual por la
- * nueva versión y vuelve a abrirla. No conserva copias del ejecutable anterior.
+ * Copia el .piz a TEMP, verifica su SHA-256 y genera un .cmd temporal.
+ * La instalación local usa un nombre estable por rama mayor/menor
+ * (por ejemplo, "TrAccion V1.1.exe" o "TrAccion V1.2.exe"), mientras
+ * version.json conserva la versión exacta (1.1.82, 1.2.01, etc.).
  */
 export async function applyAppUpdate(
   currentVersion: string,
@@ -190,8 +203,8 @@ export async function applyAppUpdate(
   }
   if (!updatesDirectoryPath) return { ok: false, message: 'No hay configurada ninguna carpeta de actualizaciones.' };
 
-  const targetExePath = getPortableExecutablePath();
-  if (!targetExePath) return { ok: false, message: 'No se ha podido determinar la ruta del ejecutable actual.' };
+  const currentExePath = getPortableExecutablePath();
+  if (!currentExePath) return { ok: false, message: 'No se ha podido determinar la ruta del ejecutable actual.' };
 
   let manifest: AppUpdateManifest;
   try {
@@ -201,6 +214,11 @@ export async function applyAppUpdate(
     }
   } catch (error) {
     return { ok: false, message: `No se ha podido preparar la actualización: ${error instanceof Error ? error.message : String(error)}` };
+  }
+
+  const targetExePath = buildInstalledExecutablePath(currentExePath, manifest.version);
+  if (!targetExePath) {
+    return { ok: false, message: `No se ha podido calcular el nombre local para la versión ${manifest.version}.` };
   }
 
   const sourcePath = path.join(updatesDirectoryPath, manifest.fileName);
@@ -225,17 +243,29 @@ export async function applyAppUpdate(
   const batScript = [
     '@echo off',
     'setlocal EnableExtensions EnableDelayedExpansion',
+    `set "CURRENT=${currentExePath}"`,
     `set "TARGET=${targetExePath}"`,
     `set "SOURCE=${stagedExePath}"`,
     'set /a ATTEMPTS=0',
-    ':replace',
+    ':copy_new',
     'set /a ATTEMPTS+=1',
     'copy /Y "%SOURCE%" "%TARGET%" >NUL 2>&1',
     'if errorlevel 1 (',
     '  if !ATTEMPTS! GEQ 120 goto :giveup',
     '  timeout /t 1 /nobreak >NUL',
-    '  goto :replace',
+    '  goto :copy_new',
     ')',
+    'if /I "%CURRENT%"=="%TARGET%" goto :launch',
+    'set /a ATTEMPTS=0',
+    ':remove_old',
+    'set /a ATTEMPTS+=1',
+    'del /Q "%CURRENT%" >NUL 2>&1',
+    'if exist "%CURRENT%" (',
+    '  if !ATTEMPTS! GEQ 120 goto :launch',
+    '  timeout /t 1 /nobreak >NUL',
+    '  goto :remove_old',
+    ')',
+    ':launch',
     'start "" "%TARGET%"',
     'goto :cleanup',
     ':giveup',
@@ -254,5 +284,8 @@ export async function applyAppUpdate(
     return { ok: false, message: `No se ha podido iniciar el proceso de actualización: ${error instanceof Error ? error.message : String(error)}` };
   }
 
-  return { ok: true, message: `Actualización a V${manifest.version} preparada. TrAccion se cerrará y volverá a abrir automáticamente.` };
+  return {
+    ok: true,
+    message: `Actualización a V${manifest.version} preparada. TrAccion se cerrará, sustituirá el ejecutable anterior y volverá a abrir automáticamente.`,
+  };
 }
