@@ -193,8 +193,8 @@ describe('useTeletrabajoStore persistence', () => {
     );
   });
 
-  it('importa puestos por borrador deduplicando por puesto normalizado', () => {
-    const count = useTeletrabajoStore.getState().importPuestosTeletrabajoDrafts([
+  it('importa puestos por borrador deduplicando por puesto normalizado', async () => {
+    const count = await useTeletrabajoStore.getState().importPuestosTeletrabajoDrafts([
       {
         draft: { puesto: ' Técnico RRLL ', maxSolicitudes: 2, dotacionComputable: 0, grupoCoberturaId: null, observaciones: 'Inicial' },
         grupoCoberturaNombre: '',

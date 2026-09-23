@@ -298,11 +298,16 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     [removePuestoTeletrabajo],
   );
 
-  const applyResolvedImport = (rows: readonly TeletrabajoPuestoImportRow[]) => {
-    const count = importPuestosTeletrabajoDrafts(rows);
-    setPendingImport(null);
-    setError('');
-    setStatus(`Importación completada: ${count} puestos procesados.`);
+  const applyResolvedImport = async (rows: readonly TeletrabajoPuestoImportRow[]) => {
+    try {
+      const count = await importPuestosTeletrabajoDrafts(rows);
+      setPendingImport(null);
+      setError('');
+      setStatus(`Importación completada: ${count} puestos procesados.`);
+    } catch (error) {
+      setStatus('');
+      setError(error instanceof Error ? error.message : 'No se ha podido guardar la importación en SQLite compartido.');
+    }
   };
 
   const handleImport = async (file: File) => {
@@ -337,7 +342,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
       });
 
       if (unknownByKey.size === 0) {
-        applyResolvedImport(
+        await applyResolvedImport(
           rows.map((row) => {
             const alias = mapping[normalizeTeletrabajoPuesto(row.draft.puesto)];
             return alias ? { ...row, draft: { ...row.draft, puesto: alias } } : row;
@@ -463,7 +468,7 @@ export function TeletrabajoPuestosModal({ onClose }: TeletrabajoPuestosModalProp
     });
 
     persistStoredAliases(aliases);
-    applyResolvedImport(resolvedRows);
+    void applyResolvedImport(resolvedRows);
   };
 
   const {

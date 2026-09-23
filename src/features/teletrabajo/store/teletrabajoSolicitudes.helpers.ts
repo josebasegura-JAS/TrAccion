@@ -343,14 +343,16 @@ export function buildTeletrabajoState(
 }
 
 export async function loadSolicitudesFromSqliteOrStorage(): Promise<TeletrabajoSolicitud[]> {
-  if (hasTeletrabajoSqliteRepository()) {
-    const sqliteSolicitudes = await loadTeletrabajoSolicitudesFromSqlite(parseSolicitudes);
-    if (sqliteSolicitudes !== null) {
-      return sqliteSolicitudes;
-    }
+  if (!hasTeletrabajoSqliteRepository()) {
+    throw new Error('SQLite compartido no disponible. Teletrabajo no puede usar datos locales como fuente de verdad.');
   }
 
-  return readSolicitudes();
+  const sqliteSolicitudes = await loadTeletrabajoSolicitudesFromSqlite(parseSolicitudes);
+  if (sqliteSolicitudes === null) {
+    throw new Error('SQLite compartido no está activo. Teletrabajo permanece en modo consulta.');
+  }
+
+  return sqliteSolicitudes;
 }
 
 export function areSolicitudesEquivalent(

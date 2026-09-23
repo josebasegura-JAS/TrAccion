@@ -3,7 +3,7 @@ import {
   normalizeGrupoCoberturaDraft,
   type GrupoCobertura,
 } from '../domain/gruposCobertura';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem } from '../../../services/persistence';
 
 export const GRUPOS_COBERTURA_STORAGE_KEY = 'traccion.v1.teletrabajo.gruposCobertura';
 
@@ -61,6 +61,26 @@ export async function readGruposCoberturaFromSqlite(): Promise<GrupoCobertura[] 
     snapshot.records.map((record) => [record.id, record.updatedAt]),
   );
 
+  if (snapshot.records.length === 0) {
+    const legacyGrupos = readGruposCobertura();
+    if (legacyGrupos.length > 0) {
+      const saver = window.traccion?.saveTeletrabajoGrupoCoberturaRecordIfUnchanged;
+      if (!saver) {
+        throw new Error('SQLite compartido no disponible para migrar los grupos de cobertura legacy.');
+      }
+      for (const grupo of legacyGrupos) {
+        const result = await saver({ id: grupo.id, value: JSON.stringify(grupo), expectedUpdatedAt: null });
+        if (!result.ok) {
+          throw new Error(result.message);
+        }
+        if (result.currentUpdatedAt) {
+          latestGruposCoberturaUpdatedAtById.set(grupo.id, result.currentUpdatedAt);
+        }
+      }
+      return legacyGrupos;
+    }
+  }
+
   return snapshot.records
     .map((record): GrupoCobertura | null => {
       try {
@@ -104,16 +124,12 @@ async function persistGruposCoberturaInSqlite(gruposCobertura: GrupoCobertura[])
  * modal: ahí se debe usar persistGrupoCoberturaRecord, que guarda solo ese
  * registro y permite avisar al usuario si hay conflicto.
  */
-export function persistGruposCobertura(gruposCobertura: GrupoCobertura[]): void {
-  writeStorageItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(gruposCobertura));
-
-  void (async () => {
-    try {
-      await persistGruposCoberturaInSqlite(gruposCobertura);
-    } catch (error) {
-      console.warn('Grupos de cobertura no guardados en SQLite.', error);
-    }
-  })();
+export async function persistGruposCobertura(gruposCobertura: GrupoCobertura[]): Promise<void> {
+  const saved = await persistGruposCoberturaInSqlite(gruposCobertura);
+  if (!saved) {
+    throw new Error('SQLite compartido no disponible. No se permite guardar grupos de cobertura en local.');
+  }
+  window.localStorage.setItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(gruposCobertura));
 }
 
 /**
@@ -126,11 +142,12 @@ export async function persistGrupoCoberturaRecord(
   allGrupos: GrupoCobertura[],
   grupo: GrupoCobertura,
 ): Promise<{ ok: boolean; message: string }> {
-  writeStorageItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(allGrupos));
-
   const saver = window.traccion?.saveTeletrabajoGrupoCoberturaRecordIfUnchanged;
   if (!saver) {
-    return { ok: true, message: '' };
+    return {
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite guardar grupos de cobertura en local.',
+    };
   }
 
   try {
@@ -150,6 +167,7 @@ export async function persistGrupoCoberturaRecord(
     if (result.currentUpdatedAt) {
       latestGruposCoberturaUpdatedAtById.set(grupo.id, result.currentUpdatedAt);
     }
+    window.localStorage.setItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(allGrupos));
     return { ok: true, message: '' };
   } catch (error) {
     return {
@@ -161,7 +179,10 @@ export async function persistGrupoCoberturaRecord(
 
 export async function loadGruposCoberturaFromSqliteOrStorage(): Promise<GrupoCobertura[]> {
   const sqliteGrupos = await readGruposCoberturaFromSqlite();
-  return sqliteGrupos ?? readGruposCobertura();
+  if (sqliteGrupos === null) {
+    throw new Error('SQLite compartido no está activo. No se usarán grupos de cobertura locales.');
+  }
+  return sqliteGrupos;
 }
 
 export function areGruposCoberturaEquivalent(left: GrupoCobertura[], right: GrupoCobertura[]): boolean {

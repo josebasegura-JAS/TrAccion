@@ -5,7 +5,7 @@ import {
   type TeletrabajoPuestoDraft,
 } from '../domain/puestosTeletrabajo';
 import { normalizeGrupoCoberturaNombre, type GrupoCobertura } from '../domain/gruposCobertura';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem } from '../../../services/persistence';
 import {
   createGrupoCoberturaId,
   loadGruposCoberturaFromSqliteOrStorage,
@@ -226,16 +226,12 @@ async function persistPuestosTeletrabajoInSqlite(
  * solo puesto desde el modal: ahí se debe usar persistPuestoTeletrabajoRecord,
  * que guarda solo ese registro y permite avisar al usuario si hay conflicto.
  */
-export function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): void {
-  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
-
-  void (async () => {
-    try {
-      await persistPuestosTeletrabajoInSqlite(puestosTeletrabajo);
-    } catch (error) {
-      console.warn('Puestos teletrabajables no guardados en SQLite.', error);
-    }
-  })();
+export async function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoPuesto[]): Promise<void> {
+  const saved = await persistPuestosTeletrabajoInSqlite(puestosTeletrabajo);
+  if (!saved) {
+    throw new Error('SQLite compartido no disponible. No se permite guardar puestos de Teletrabajo en local.');
+  }
+  window.localStorage.setItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
 }
 
 /**
@@ -248,11 +244,12 @@ export async function persistPuestoTeletrabajoRecord(
   allPuestos: TeletrabajoPuesto[],
   puesto: TeletrabajoPuesto,
 ): Promise<{ ok: boolean; message: string }> {
-  writeStorageItem(PUESTOS_STORAGE_KEY, JSON.stringify(allPuestos));
-
   const saver = window.traccion?.saveTeletrabajoPuestoRecordIfUnchanged;
   if (!saver) {
-    return { ok: true, message: '' };
+    return {
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite guardar puestos de Teletrabajo en local.',
+    };
   }
 
   try {
@@ -272,6 +269,7 @@ export async function persistPuestoTeletrabajoRecord(
     if (result.currentUpdatedAt) {
       latestPuestosTeletrabajoUpdatedAtById.set(puesto.id, result.currentUpdatedAt);
     }
+    window.localStorage.setItem(PUESTOS_STORAGE_KEY, JSON.stringify(allPuestos));
     return { ok: true, message: '' };
   } catch (error) {
     return {
@@ -376,9 +374,13 @@ export async function loadPuestosYGruposConMigracion(): Promise<{
   gruposCobertura: GrupoCobertura[];
 }> {
   const [puestosResult, gruposCobertura] = await Promise.all([
-    readPuestosTeletrabajoFromSqlite().then((result) => result ?? readPuestosTeletrabajo()),
+    readPuestosTeletrabajoFromSqlite(),
     loadGruposCoberturaFromSqliteOrStorage(),
   ]);
+
+  if (!puestosResult) {
+    throw new Error('SQLite compartido no está activo. No se usarán puestos locales de Teletrabajo.');
+  }
 
   const migrated = migrateLegacyGruposCobertura(
     puestosResult.rawRecords,
@@ -388,8 +390,8 @@ export async function loadPuestosYGruposConMigracion(): Promise<{
 
   if (migrated.migrated) {
     const gruposNuevosCount = migrated.gruposCobertura.length - gruposCobertura.length;
-    persistGruposCobertura(migrated.gruposCobertura);
-    persistPuestosTeletrabajo(migrated.puestos);
+    await persistGruposCobertura(migrated.gruposCobertura);
+    await persistPuestosTeletrabajo(migrated.puestos);
     console.warn(
       `Migrados ${gruposNuevosCount} grupo(s) de cobertura desde el campo de texto libre legacy.`,
     );

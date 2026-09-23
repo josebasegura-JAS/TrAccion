@@ -23,10 +23,6 @@ import {
   type TeletrabajoPuestoImportRow,
 } from '../domain/puestosTeletrabajo';
 import {
-  saveNewSharedArrayRecord,
-  saveSharedArrayRecord,
-} from '../../../services/sharedRecordPersistence';
-import {
   deleteTeletrabajoSolicitudInSqlite,
   hasTeletrabajoSqliteRepository,
   loadTeletrabajoRecordsFromSqlite,
@@ -48,8 +44,6 @@ import {
   normalizeDraft,
   parseSingleSolicitud,
   parseSolicitudes,
-  persistSolicitudes,
-  readSolicitudes,
   registerTeletrabajoUpdateAudit,
   withTeletrabajoBusy,
   type CreateTeletrabajoPeriodoOptions,
@@ -59,7 +53,6 @@ import {
   loadPuestosYGruposConMigracion,
   persistPuestoTeletrabajoRecord,
   persistPuestosTeletrabajo,
-  readPuestosTeletrabajo,
   resolveGrupoCoberturaNombresToIds,
   upsertPuestosTeletrabajo,
 } from './teletrabajoPuestos.helpers';
@@ -68,7 +61,6 @@ import {
   createGrupoCoberturaId,
   persistGrupoCoberturaRecord,
   persistGruposCobertura,
-  readGruposCobertura,
 } from './teletrabajoGruposCobertura.helpers';
 
 interface TeletrabajoUpdateResult {
@@ -123,7 +115,7 @@ interface TeletrabajoStateStore {
   ) => Promise<TeletrabajoUpdateResult>;
   removePuestoTeletrabajo: (id: string) => Promise<TeletrabajoUpdateResult>;
   importPuestosTeletrabajo: (file: File) => Promise<number>;
-  importPuestosTeletrabajoDrafts: (rows: readonly TeletrabajoPuestoImportRow[]) => number;
+  importPuestosTeletrabajoDrafts: (rows: readonly TeletrabajoPuestoImportRow[]) => Promise<number>;
   createGrupoCobertura: (draft: GrupoCoberturaDraft) => Promise<TeletrabajoUpdateResult>;
   updateGrupoCobertura: (
     id: string,
@@ -150,10 +142,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
   filters: EMPTY_TELETRABAJO_FILTERS,
   pendingHistoricoImport: null,
   load: () => {
-    const solicitudes = readSolicitudes();
-    const puestosTeletrabajo = readPuestosTeletrabajo().puestos;
-    const gruposCobertura = readGruposCobertura();
-    set(buildTeletrabajoState(solicitudes, puestosTeletrabajo, gruposCobertura));
+    set(buildTeletrabajoState([], [], []));
     void loadPuestosYGruposConMigracion()
       .then(({ puestos, gruposCobertura: nextGruposCobertura }) => {
         set((state) =>
@@ -260,25 +249,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           }
         }
 
-        const result = await saveNewSharedArrayRecord<TeletrabajoSolicitud>({
-          storageKey: STORAGE_KEY,
-          newRecord: solicitud,
-          parseRecords: parseSolicitudes,
-          getRecordId: (record) => record.id,
-          duplicateMessage:
-            'La solicitud ya existe en la base compartida. Recarga antes de continuar.',
-        });
-
-        enqueueAuditEvent({
-          module: 'teletrabajo',
-          entityId: result.newRecord.id,
-          action: 'created',
-          summary: 'Registro creado',
-          changes: [],
-        });
-
-        set({ solicitudes: result.records, selectedSolicitudId: result.newRecord.id });
-        return { ok: true, message: 'Solicitud creada.', recordId: result.newRecord.id };
+        throw new Error('SQLite compartido no está activo. No se permite crear solicitudes de Teletrabajo sin base compartida.');
       });
     } catch (error) {
       const message =
@@ -337,28 +308,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           }
         }
 
-        const result = await saveSharedArrayRecord<TeletrabajoSolicitud>({
-          storageKey: STORAGE_KEY,
-          recordId: id,
-          expectedUpdatedAt,
-          parseRecords: parseSolicitudes,
-          getRecordId: (solicitud) => solicitud.id,
-          getRecordUpdatedAt: (solicitud) => solicitud.updatedAt,
-          updateRecord: (latestSolicitud) => {
-            registerTeletrabajoUpdateAudit(latestSolicitud, normalizedDraft);
-            return {
-              ...latestSolicitud,
-              ...normalizedDraft,
-              updatedAt: new Date().toISOString(),
-            };
-          },
-          missingMessage:
-            'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
-          conflictMessage:
-            'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
-        });
-        set({ solicitudes: result.records, selectedSolicitudId: id });
-        return { ok: true, message: 'Solicitud guardada.' };
+        throw new Error('SQLite compartido no está activo. No se permite guardar solicitudes de Teletrabajo sin base compartida.');
       });
     } catch (error) {
       const message =
@@ -399,14 +349,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       }
     }
 
-    set(() => {
-      persistSolicitudes(result.solicitudes);
-      return {
-        solicitudes: result.solicitudes,
-        selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
-      };
-    });
-    return result;
+    throw new Error('SQLite compartido no está activo. No se permite importar la encuesta sin base compartida.');
   },
   previewImportHistorico: async (file, employees) => {
     const baseSolicitudes = await loadSolicitudesFromSqliteOrStorage();
@@ -478,16 +421,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         }
       }
 
-      set(() => {
-        persistSolicitudes(result.solicitudes);
-        return {
-          solicitudes: result.solicitudes,
-          selectedSolicitudId: firstVisibleSolicitudId(result.solicitudes),
-          filters: { ...get().filters, periodo: result.periodo },
-          pendingHistoricoImport: null,
-        };
-      });
-      return result;
+      throw new Error('SQLite compartido no está activo. No se permite importar el histórico sin base compartida.');
     });
   },
   createPeriodo: async (options) => {
@@ -556,31 +490,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           }
         }
 
-        const solicitudes = [...baseSolicitudes, ...created];
-        persistSolicitudes(solicitudes);
-        created.forEach((solicitud) => {
-          enqueueAuditEvent({
-            module: 'teletrabajo',
-            entityId: solicitud.id,
-            action: 'created',
-            summary: `Registro creado para el periodo ${periodo}`,
-            changes: [],
-          });
-        });
-        set((state) => ({
-          solicitudes,
-          selectedSolicitudId: created[0]?.id ?? state.selectedSolicitudId,
-          filters: { ...state.filters, periodo },
-        }));
-        return {
-          ok: true,
-          message:
-            created.length > 0
-              ? `Periodo ${periodo} creado con ${created.length} solicitud${created.length === 1 ? '' : 'es'} renovada${created.length === 1 ? '' : 's'}.`
-              : `Periodo ${periodo} preparado. Crea nuevas solicitudes manuales con ese periodo.`,
-          created: created.length,
-          ignored,
-        };
+        throw new Error('SQLite compartido no está activo. No se permite crear periodos de Teletrabajo sin base compartida.');
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se ha podido crear el periodo.';
@@ -593,8 +503,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       (puesto) =>
         normalizeTeletrabajoPuesto(puesto.puesto) === normalizeTeletrabajoPuesto(draft.puesto),
     );
-    set({ puestosTeletrabajo });
-
     if (!created) {
       return { ok: true, message: 'Puesto teletrabajable añadido.' };
     }
@@ -603,6 +511,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
+    set({ puestosTeletrabajo });
     return { ok: true, message: 'Puesto teletrabajable añadido.', recordId: created.id };
   },
   updatePuestoTeletrabajo: async (id, draft) => {
@@ -615,7 +524,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       .sort((first, second) =>
         first.puesto.localeCompare(second.puesto, 'es', { numeric: true, sensitivity: 'base' }),
       );
-    set({ puestosTeletrabajo });
 
     const updated = puestosTeletrabajo.find((puesto) => puesto.id === id);
     if (!updated) {
@@ -626,6 +534,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
+    set({ puestosTeletrabajo });
     return { ok: true, message: 'Puesto teletrabajable actualizado.', recordId: id };
   },
   removePuestoTeletrabajo: async (id) => {
@@ -633,7 +542,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     const puestosTeletrabajo = get().puestosTeletrabajo.map((puesto) =>
       puesto.id === id ? { ...puesto, deletedAt: now, updatedAt: now } : puesto,
     );
-    set({ puestosTeletrabajo });
 
     const removed = puestosTeletrabajo.find((puesto) => puesto.id === id);
     if (!removed) {
@@ -644,52 +552,49 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
+    set({ puestosTeletrabajo });
     return { ok: true, message: 'Puesto teletrabajable eliminado.', recordId: id };
   },
   importPuestosTeletrabajo: async (file) => {
     const rows = await importTeletrabajoPuestosFromFile(file);
-    set((state) => {
-      const { gruposCobertura, idByNombreKey } = resolveGrupoCoberturaNombresToIds(
-        rows.map((row) => row.grupoCoberturaNombre),
-        state.gruposCobertura,
-      );
-      const draftsConGrupo = rows.map((row) => ({
+    const state = get();
+    const { gruposCobertura, idByNombreKey } = resolveGrupoCoberturaNombresToIds(
+      rows.map((row) => row.grupoCoberturaNombre),
+      state.gruposCobertura,
+    );
+    const draftsConGrupo = rows.map((row) => ({
+      ...row.draft,
+      grupoCoberturaId:
+        idByNombreKey.get(normalizeGrupoCoberturaNombre(row.grupoCoberturaNombre)) ?? null,
+    }));
+    const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, draftsConGrupo);
+
+    await persistGruposCobertura(gruposCobertura);
+    await persistPuestosTeletrabajo(puestosTeletrabajo);
+    set({ puestosTeletrabajo, gruposCobertura });
+    return rows.length;
+  },
+  importPuestosTeletrabajoDrafts: async (rows) => {
+    const state = get();
+    const { gruposCobertura, idByNombreKey } = resolveGrupoCoberturaNombresToIds(
+      rows.map((row) => row.grupoCoberturaNombre),
+      state.gruposCobertura,
+    );
+    const normalizedDrafts = rows.map((row) =>
+      normalizeTeletrabajoPuestoDraft({
         ...row.draft,
         grupoCoberturaId:
           idByNombreKey.get(normalizeGrupoCoberturaNombre(row.grupoCoberturaNombre)) ?? null,
-      }));
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(state.puestosTeletrabajo, draftsConGrupo);
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      if (gruposCobertura !== state.gruposCobertura) {
-        persistGruposCobertura(gruposCobertura);
-      }
-      return { puestosTeletrabajo, gruposCobertura };
-    });
-    return rows.length;
-  },
-  importPuestosTeletrabajoDrafts: (rows) => {
-    set((state) => {
-      const { gruposCobertura, idByNombreKey } = resolveGrupoCoberturaNombresToIds(
-        rows.map((row) => row.grupoCoberturaNombre),
-        state.gruposCobertura,
-      );
-      const normalizedDrafts = rows.map((row) =>
-        normalizeTeletrabajoPuestoDraft({
-          ...row.draft,
-          grupoCoberturaId:
-            idByNombreKey.get(normalizeGrupoCoberturaNombre(row.grupoCoberturaNombre)) ?? null,
-        }),
-      );
-      const puestosTeletrabajo = upsertPuestosTeletrabajo(
-        state.puestosTeletrabajo,
-        normalizedDrafts,
-      );
-      persistPuestosTeletrabajo(puestosTeletrabajo);
-      if (gruposCobertura !== state.gruposCobertura) {
-        persistGruposCobertura(gruposCobertura);
-      }
-      return { puestosTeletrabajo, gruposCobertura };
-    });
+      }),
+    );
+    const puestosTeletrabajo = upsertPuestosTeletrabajo(
+      state.puestosTeletrabajo,
+      normalizedDrafts,
+    );
+
+    await persistGruposCobertura(gruposCobertura);
+    await persistPuestosTeletrabajo(puestosTeletrabajo);
+    set({ puestosTeletrabajo, gruposCobertura });
     return rows.filter((row) => row.draft.puesto.trim()).length;
   },
   createGrupoCobertura: async (draft) => {
@@ -706,12 +611,12 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     const gruposCobertura = [...get().gruposCobertura, nuevoGrupo].sort((first, second) =>
       first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
     );
-    set({ gruposCobertura });
 
     const result = await persistGrupoCoberturaRecord(gruposCobertura, nuevoGrupo);
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
+    set({ gruposCobertura });
     return { ok: true, message: 'Grupo de cobertura creado.', recordId: id };
   },
   updateGrupoCobertura: async (id, draft) => {
@@ -724,7 +629,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       .sort((first, second) =>
         first.nombre.localeCompare(second.nombre, 'es', { numeric: true, sensitivity: 'base' }),
       );
-    set({ gruposCobertura });
 
     const updated = gruposCobertura.find((grupo) => grupo.id === id);
     if (!updated) {
@@ -735,6 +639,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
+    set({ gruposCobertura });
     return { ok: true, message: 'Grupo de cobertura actualizado.', recordId: id };
   },
   removeGrupoCobertura: async (id) => {
@@ -750,7 +655,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
         ? { ...puesto, grupoCoberturaId: null, updatedAt: now }
         : puesto,
     );
-    set({ gruposCobertura, puestosTeletrabajo });
 
     const removedGrupo = gruposCobertura.find((grupo) => grupo.id === id);
     const grupoResult = removedGrupo
@@ -776,6 +680,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
       }
     }
 
+    set({ gruposCobertura, puestosTeletrabajo });
     return { ok: true, message: 'Grupo de cobertura eliminado.', recordId: id };
   },
   setPuestoGrupoCobertura: async (puestoId, grupoCoberturaId) => {
@@ -783,7 +688,6 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     const puestosTeletrabajo = get().puestosTeletrabajo.map((puesto) =>
       puesto.id === puestoId ? { ...puesto, grupoCoberturaId, updatedAt: now } : puesto,
     );
-    set({ puestosTeletrabajo });
 
     const updated = puestosTeletrabajo.find((puesto) => puesto.id === puestoId);
     if (!updated) {
@@ -794,6 +698,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
     if (!result.ok) {
       return { ok: false, message: result.message };
     }
+    set({ puestosTeletrabajo });
     return { ok: true, message: 'Puesto actualizado.', recordId: puestoId };
   },
   removeWithConcurrencyCheck: async (id, expectedUpdatedAt) => {
@@ -845,34 +750,7 @@ export const useTeletrabajoStore = create<TeletrabajoStateStore>((set, get) => (
           }
         }
 
-        const deletedAt = new Date().toISOString();
-        const result = await saveSharedArrayRecord<TeletrabajoSolicitud>({
-          storageKey: STORAGE_KEY,
-          recordId: id,
-          expectedUpdatedAt,
-          parseRecords: parseSolicitudes,
-          getRecordId: (solicitud) => solicitud.id,
-          getRecordUpdatedAt: (solicitud) => solicitud.updatedAt,
-          updateRecord: (latestSolicitud) => {
-            enqueueAuditEvent({
-              module: 'teletrabajo',
-              entityId: latestSolicitud.id,
-              action: 'deleted',
-              summary: 'Registro eliminado',
-              changes: [],
-            });
-            return { ...latestSolicitud, deletedAt, updatedAt: deletedAt };
-          },
-          missingMessage:
-            'La solicitud ya no existe en la base compartida. Recarga antes de continuar.',
-          conflictMessage:
-            'Esta solicitud ha sido modificada por otro usuario. Cierra y vuelve a abrir el detalle para no sobrescribir cambios.',
-        });
-        set({
-          solicitudes: result.records,
-          selectedSolicitudId: firstVisibleSolicitudId(result.records),
-        });
-        return { ok: true, message: 'Solicitud eliminada.' };
+        throw new Error('SQLite compartido no está activo. No se permite eliminar solicitudes de Teletrabajo sin base compartida.');
       });
     } catch (error) {
       const message =
