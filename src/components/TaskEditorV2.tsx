@@ -346,9 +346,9 @@ export function TaskEditor({
 
     setCriterionLinkReady(false);
     void loadCriteriosRrll()
-      .then(() => {
+      .then(async () => {
         if (!mounted) return;
-        const linkedId = getCriterionIdForTask(task.id);
+        const linkedId = await getCriterionIdForTask(task.id);
         if (!linkedId) {
           setLinkedCriterionId(null);
           return;
@@ -359,12 +359,22 @@ export function TaskEditor({
           .criterios.some((criterio) => criterio.id === linkedId && !criterio.deletedAt);
 
         if (!exists) {
-          unlinkTaskCriterion(task.id);
+          await unlinkTaskCriterion(task.id);
           setLinkedCriterionId(null);
           return;
         }
 
         setLinkedCriterionId(linkedId);
+      })
+      .catch((error: unknown) => {
+        if (!mounted) return;
+        setLinkedCriterionId(null);
+        setSaveStatus(
+          error instanceof Error
+            ? `No se ha podido consultar el vínculo con Criterios RRLL: ${error.message}`
+            : 'No se ha podido consultar el vínculo con Criterios RRLL.',
+        );
+        setSaveStatusIsError(true);
       })
       .finally(() => {
         if (mounted) setCriterionLinkReady(true);
@@ -829,7 +839,7 @@ export function TaskEditor({
     try {
       await loadCriteriosRrll();
 
-      const storedLinkedId = getCriterionIdForTask(task.id);
+      const storedLinkedId = await getCriterionIdForTask(task.id);
       const currentCriterios = useCriteriosRrllStore.getState().criterios;
       const linkedCriterio = storedLinkedId
         ? currentCriterios.find(
@@ -838,7 +848,7 @@ export function TaskEditor({
         : null;
 
       if (storedLinkedId && !linkedCriterio) {
-        unlinkTaskCriterion(task.id);
+        await unlinkTaskCriterion(task.id);
       }
 
       const originReference = draft.sindicato.trim() || draft.origen.trim();

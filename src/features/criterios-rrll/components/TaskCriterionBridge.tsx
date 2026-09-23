@@ -151,7 +151,7 @@ function TaskCriterionCreateEditor({
             void (async () => {
               setSaveError('');
 
-              const existingCriterionId = getCriterionIdForTask(request.taskId);
+              const existingCriterionId = await getCriterionIdForTask(request.taskId);
               if (existingCriterionId) {
                 setSaveError(
                   'Esta tarea ya tiene un criterio RRLL asociado. Cierra este alta y usa “Ver criterio RRLL”.',
@@ -165,7 +165,16 @@ function TaskCriterionCreateEditor({
                 return;
               }
 
-              linkTaskToCriterion(request.taskId, result.recordId);
+              try {
+                await linkTaskToCriterion(request.taskId, result.recordId);
+              } catch (error) {
+                setSaveError(
+                  error instanceof Error
+                    ? `El criterio se ha creado, pero no se ha podido confirmar su vínculo con la tarea: ${error.message}`
+                    : 'El criterio se ha creado, pero no se ha podido confirmar su vínculo con la tarea.',
+                );
+                return;
+              }
               onDone();
             })();
           }}
