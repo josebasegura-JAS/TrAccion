@@ -27,7 +27,7 @@ export interface PendingRecordWriteSaveResult {
 }
 
 export interface PendingRecordWriteResult extends PendingRecordWriteSaveResult {
-  /** true si el fallo fue de conectividad y el cambio ha quedado encolado para reintento automático. */
+  /** Compatibilidad: true solo para colas creadas por versiones antiguas; los cambios nuevos nunca se encolan offline. */
   queued?: boolean;
 }
 
@@ -199,16 +199,14 @@ export interface SaveRecordWithPendingFallbackOptions {
 
 /**
  * Envuelve la función de guardado de un repositorio de módulo. Si el fallo es
- * de conectividad, encola el cambio en localStorage para reintento automático
- * (al reconectar o en el siguiente ciclo de polling) en vez de descartarlo.
- * Si es un rechazo real (conflicto OCC, etc.) no se encola: se devuelve tal
- * cual para que el módulo lo muestre como hoy.
+ * de conectividad, rechaza el cambio. TrAccion no admite trabajo offline: una
+ * modificación solo se considera válida cuando SQLite compartida la confirma.
+ * Las colas antiguas se conservan únicamente para poder sincronizar cambios
+ * creados por versiones anteriores de la aplicación.
  */
 export async function saveRecordWithPendingFallback({
   module,
   recordId,
-  value,
-  expectedUpdatedAt,
   save,
 }: SaveRecordWithPendingFallbackOptions): Promise<PendingRecordWriteResult> {
   try {
@@ -217,7 +215,7 @@ export async function saveRecordWithPendingFallback({
     if (result === null) {
       return {
         ok: false,
-        message: 'Repositorio SQLite no disponible.',
+        message: 'Repositorio SQLite no disponible. El cambio no se ha guardado.',
         currentUpdatedAt: null,
       };
     }
@@ -228,23 +226,21 @@ export async function saveRecordWithPendingFallback({
     }
 
     if (isConnectivityFailureMessage(result.message)) {
-      upsertPendingRecordWrite(module, recordId, value, expectedUpdatedAt, result.message);
       return {
         ...result,
-        message: `${result.message} El cambio ha quedado en cola local y se sincronizará automáticamente en cuanto vuelva la conexión con SQLite.`,
-        queued: true,
+        message: `${result.message} El cambio NO se ha guardado localmente. Recupera la conexión con SQLite antes de continuar.`,
+        queued: false,
       };
     }
 
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error de conexión con SQLite.';
-    upsertPendingRecordWrite(module, recordId, value, expectedUpdatedAt, message);
     return {
       ok: false,
-      message: `${message} El cambio ha quedado en cola local y se sincronizará automáticamente en cuanto vuelva la conexión con SQLite.`,
+      message: `${message} El cambio NO se ha guardado localmente. Recupera la conexión con SQLite antes de continuar.`,
       currentUpdatedAt: null,
-      queued: true,
+      queued: false,
     };
   }
 }

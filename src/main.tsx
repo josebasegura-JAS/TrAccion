@@ -95,10 +95,10 @@ async function startApp(): Promise<void> {
 
 startApp().catch((error: unknown) => {
   console.warn(
-    'No se ha podido completar el arranque hidratado; se renderiza con localStorage.',
+    'No se ha podido completar el arranque SQLite; se renderiza en modo bloqueado.',
     error,
   );
-  renderBootScreen('Preparando arranque alternativo...');
+  renderBootScreen('SQLite no disponible. Abriendo TrAccion en modo bloqueado...');
   renderApp().catch((renderError: unknown) => {
     console.error('No se ha podido arrancar TrAccion.', renderError);
     renderFatalError(renderError);

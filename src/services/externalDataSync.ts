@@ -208,7 +208,7 @@ async function pollOnce(): Promise<void> {
   if (!window.traccion?.getPersistedRecordsToken || !window.traccion.loadPersistedRecords) {
     setState({
       status: 'disabled',
-      message: 'Sincronización SQLite no disponible; usando localStorage.',
+      message: 'SQLite compartida no disponible; edición bloqueada.',
       lastError: null,
     });
     stopExternalDataSyncPolling();
@@ -234,7 +234,7 @@ async function pollOnce(): Promise<void> {
     if (!canPollStatus(tokenSnapshot.status)) {
       setState({
         status: tokenSnapshot.status.phase === 'locked' ? 'disabled' : 'error',
-        message: tokenSnapshot.status.message ?? 'SQLite no disponible; se mantiene localStorage.',
+        message: tokenSnapshot.status.message ?? 'SQLite no disponible; edición bloqueada.',
         lastError: tokenSnapshot.status.message ?? null,
       });
       stopExternalDataSyncPolling();
@@ -287,7 +287,7 @@ async function pollOnce(): Promise<void> {
     if (!canPollStatus(snapshot.status)) {
       setState({
         status: snapshot.status.phase === 'locked' ? 'disabled' : 'error',
-        message: snapshot.status.message ?? 'SQLite no disponible; se mantiene localStorage.',
+        message: snapshot.status.message ?? 'SQLite no disponible; edición bloqueada.',
         lastError: snapshot.status.message ?? null,
       });
       stopExternalDataSyncPolling();

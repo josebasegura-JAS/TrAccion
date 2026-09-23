@@ -8,6 +8,7 @@ import {
 import path from 'node:path';
 import {
   ensureDirectoryIsUsable,
+  fileExists,
   prepareDatabaseFile,
 } from './persistence/databaseFileSystem.js';
 import {
@@ -634,6 +635,17 @@ async function activateDatabase(
   const startupLockHeartbeat = startDatabaseLockHeartbeat(lockPath, startupLock);
 
   try {
+    // Una ruta SQLite personalizada representa la base compartida de trabajo.
+    // Si el fichero ha desaparecido, no debemos permitir que better-sqlite3 cree
+    // silenciosamente una base vacía: eso haría que el usuario trabajase aislado.
+    // Al cambiar expresamente de ruta sí se permite crearla copiando la base origen.
+    if (!isDefaultPath && sourceDatabasePath === null && !(await fileExists(databasePath))) {
+      throw new Error(
+        `No se encuentra la base de datos compartida configurada: ${databasePath}. ` +
+          'TrAccion permanecerá bloqueado hasta recuperar esa base o corregir la ruta en Ajustes.',
+      );
+    }
+
     await prepareDatabaseFile(databasePath, sourceDatabasePath);
     const db = openDatabase(databasePath);
     // Limpiar los editing_locks que este proceso dejó sin liberar en un reinicio

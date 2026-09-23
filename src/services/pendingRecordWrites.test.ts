@@ -5,6 +5,7 @@ import {
   registerPendingWriteReplayer,
   saveRecordWithPendingFallback,
 } from './pendingRecordWrites';
+import { SQLITE_PENDING_RECORD_WRITES_KEY } from './persistenceKeys';
 
 const TEST_MODULE = 'test-module';
 
@@ -28,7 +29,7 @@ describe('pendingRecordWrites', () => {
     expect(getPendingRecordWriteCount()).toBe(0);
   });
 
-  it('encola el cambio cuando el fallo es de conectividad (SQLite no activo) y no lo pierde', async () => {
+  it('rechaza el cambio y no lo encola cuando SQLite no está activa', async () => {
     const save = vi.fn(async () => ({
       ok: false,
       message: 'SQLite no está activo. No se permite guardar sin base compartida.',
@@ -44,12 +45,12 @@ describe('pendingRecordWrites', () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.queued).toBe(true);
-    expect(result.message).toContain('ha quedado en cola local');
-    expect(getPendingRecordWriteCount()).toBe(1);
+    expect(result.queued).toBe(false);
+    expect(result.message).toContain('NO se ha guardado localmente');
+    expect(getPendingRecordWriteCount()).toBe(0);
   });
 
-  it('encola el cambio cuando la llamada de guardado lanza una excepción (p.ej. IPC caído)', async () => {
+  it('rechaza el cambio sin encolarlo cuando la llamada de guardado lanza una excepción', async () => {
     const save = vi.fn(async () => {
       throw new Error('No se ha podido contactar con el proceso principal.');
     });
@@ -63,8 +64,9 @@ describe('pendingRecordWrites', () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.queued).toBe(true);
-    expect(getPendingRecordWriteCount()).toBe(1);
+    expect(result.queued).toBe(false);
+    expect(result.message).toContain('NO se ha guardado localmente');
+    expect(getPendingRecordWriteCount()).toBe(0);
   });
 
   it('NO encola un conflicto real de concurrencia (otro usuario ya modificó el registro)', async () => {
@@ -96,19 +98,15 @@ describe('pendingRecordWrites', () => {
     }));
     registerPendingWriteReplayer(flushModule, replay);
 
-    const failingSave = vi.fn(async () => ({
-      ok: false,
-      message: 'base ocupada temporalmente',
-      currentUpdatedAt: null,
-    }));
-
-    await saveRecordWithPendingFallback({
+    window.localStorage.setItem(SQLITE_PENDING_RECORD_WRITES_KEY, JSON.stringify([{
       module: flushModule,
       recordId: 'rec-5',
       value: '{"a":5}',
       expectedUpdatedAt: null,
-      save: failingSave,
-    });
+      queuedAt: new Date().toISOString(),
+      attempts: 1,
+      lastError: 'base ocupada temporalmente',
+    }]));
     expect(getPendingRecordWriteCount()).toBe(1);
 
     const flushedCount = await flushPendingRecordWrites();
@@ -127,13 +125,15 @@ describe('pendingRecordWrites', () => {
     }));
     registerPendingWriteReplayer(retryModule, replay);
 
-    await saveRecordWithPendingFallback({
+    window.localStorage.setItem(SQLITE_PENDING_RECORD_WRITES_KEY, JSON.stringify([{
       module: retryModule,
       recordId: 'rec-6',
       value: '{"a":6}',
       expectedUpdatedAt: null,
-      save: async () => ({ ok: false, message: 'base ocupada temporalmente', currentUpdatedAt: null }),
-    });
+      queuedAt: new Date().toISOString(),
+      attempts: 1,
+      lastError: 'base ocupada temporalmente',
+    }]));
     expect(getPendingRecordWriteCount()).toBe(1);
 
     const flushedCount = await flushPendingRecordWrites();

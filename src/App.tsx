@@ -117,7 +117,7 @@ function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) 
   const detail = editingAvailability.reason || databaseStatus?.message || (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
   return (
     <section className="sqlite-readonly-banner" role="alert" aria-live="assertive"><LockKeyhole size={20} aria-hidden="true" />
-      <div className="min-w-0 flex-1"><strong>Modo consulta: edición bloqueada</strong><p>{detail} No se permitirá ninguna modificación hasta confirmar la conexión con la base compartida.</p></div>
+      <div className="min-w-0 flex-1"><strong>Base compartida no disponible: edición bloqueada</strong><p>{detail} TrAccion no permite trabajar en local. No se guardará ninguna modificación hasta confirmar la conexión con la base compartida.</p></div>
       <button className="sqlite-readonly-banner__action" onClick={onGoToAjustes} type="button">Revisar en Ajustes</button>
     </section>
   );
@@ -126,7 +126,7 @@ function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) 
 function OperationalModuleGuard({ activeView, children }: { activeView: AppView; children: ReactNode }) {
   const editingAvailability = useEditingAvailability();
   const contentRef = useRef<HTMLDivElement>(null);
-  const guardInteraction = !editingAvailability.allowed && activeView !== 'dashboard' && activeView !== 'ajustes';
+  const guardInteraction = !editingAvailability.allowed && activeView !== 'ajustes';
   useEffect(() => {
     const element = contentRef.current;
     if (!element) return;

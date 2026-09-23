@@ -835,7 +835,7 @@ export function reportStartupHydrationResult(result: HydrationResult): void {
   emitPersistenceFeedback({
     kind: 'error',
     updatedAt: new Date().toISOString(),
-    message: `Arranque sin SQLite activo: ${result.reason} Los cambios pueden quedar solo en caché local hasta recuperar la persistencia.`,
+    message: `SQLite compartida no disponible: ${result.reason} TrAccion ha bloqueado la edición. No se guardará ningún cambio local mientras la base compartida no esté activa.`,
   });
 }
 
