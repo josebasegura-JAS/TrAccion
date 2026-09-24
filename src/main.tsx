@@ -5,12 +5,9 @@ import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLoc
 import { SafeSettingsLoadingIndicator } from './components/ajustes/SafeSettingsLoadingIndicator';
 import { TaskCriterionBridge } from './features/criterios-rrll/components/TaskCriterionBridge';
 import {
-  flushPendingSqliteWrites,
-  getPendingSqliteWriteCount,
   hydrateLocalStorageFromSqlite,
   reportStartupHydrationResult,
 } from './services/persistence';
-import { flushPendingRecordWrites, getPendingRecordWriteCount } from './services/pendingRecordWrites';
 import { getDirtyEditorCount } from './services/dirtyEditors';
 import './styles.css';
 import './dashboard-overrides.css';
@@ -89,8 +86,6 @@ async function startApp(): Promise<void> {
   reportStartupHydrationResult(hydrationResult);
   renderBootScreen('Preparando módulos...');
   await renderApp();
-  void flushPendingSqliteWrites().catch(() => undefined);
-  void flushPendingRecordWrites().catch(() => undefined);
 }
 
 startApp().catch((error: unknown) => {
@@ -106,19 +101,11 @@ startApp().catch((error: unknown) => {
 });
 
 window.addEventListener('beforeunload', (event) => {
-  const pending = getPendingSqliteWriteCount() + getPendingRecordWriteCount();
   const dirtyEditors = getDirtyEditorCount();
-  if (pending === 0 && dirtyEditors === 0) {
+  if (dirtyEditors === 0) {
     return;
   }
 
-  if (pending > 0) {
-    void flushPendingSqliteWrites().catch(() => undefined);
-    void flushPendingRecordWrites().catch(() => undefined);
-  }
-
   event.preventDefault();
-  event.returnValue = dirtyEditors > 0
-    ? `Hay ${dirtyEditors} formulario${dirtyEditors > 1 ? 's' : ''} con cambios sin guardar. ¿Cerrar de todas formas?`
-    : `Hay ${pending} cambio${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''} de sincronizar con la base de datos compartida. ¿Cerrar de todas formas?`;
+  event.returnValue = `Hay ${dirtyEditors} formulario${dirtyEditors > 1 ? 's' : ''} con cambios sin guardar. ¿Cerrar de todas formas?`;
 });

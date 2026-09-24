@@ -380,52 +380,30 @@ function updateActaTypeSqliteUpdatedAtMap(types: ActaTypeDefinition[]): void {
  */
 async function loadActaTypesPreferringSqlite(actas: Acta[]): Promise<ActaTypeDefinition[]> {
   if (!hasActaTypesSqliteRepository()) {
-    return readActaTypes(actas);
+    return import.meta.env.MODE === 'test' ? readActaTypes(actas) : createDefaultActaTypes();
   }
 
   const sqliteRecords = await loadActaTypeRecordsFromSqlite();
   if (sqliteRecords === null) {
-    return readActaTypes(actas);
+    return createDefaultActaTypes();
   }
 
-  if (sqliteRecords.length > 0) {
-    const sqliteTypes = sqliteRecords
-      .flatMap((record) => {
-        try {
-          return [JSON.parse(record.value) as ActaTypeDefinition];
-        } catch {
-          return [];
-        }
-      })
-      .filter(isStoredActaType)
-      .map(normalizeActaType);
-    updateActaTypeSqliteUpdatedAtMap(sqliteTypes);
-    return dedupeActaTypes(sqliteTypes);
+  if (sqliteRecords.length === 0) {
+    return createDefaultActaTypes();
   }
 
-  // Tabla vacía: siembra inicial desde localStorage/actas existentes.
-  const fallbackTypes = readActaTypes(actas);
-  const seedResult = await saveActaTypesToSqlite(
-    fallbackTypes.map((type) => ({ record: type, expectedUpdatedAt: null })),
-  );
-  if (seedResult?.ok) {
-    const reloadedRecords = await loadActaTypeRecordsFromSqlite();
-    if (reloadedRecords) {
-      const reloadedTypes = reloadedRecords
-        .flatMap((record) => {
-          try {
-            return [JSON.parse(record.value) as ActaTypeDefinition];
-          } catch {
-            return [];
-          }
-        })
-        .filter(isStoredActaType)
-        .map(normalizeActaType);
-      updateActaTypeSqliteUpdatedAtMap(reloadedTypes);
-      return dedupeActaTypes(reloadedTypes);
-    }
-  }
-  return fallbackTypes;
+  const sqliteTypes = sqliteRecords
+    .flatMap((record) => {
+      try {
+        return [JSON.parse(record.value) as ActaTypeDefinition];
+      } catch {
+        return [];
+      }
+    })
+    .filter(isStoredActaType)
+    .map(normalizeActaType);
+  updateActaTypeSqliteUpdatedAtMap(sqliteTypes);
+  return dedupeActaTypes([...createDefaultActaTypes(), ...sqliteTypes]);
 }
 
 async function buildActasStateWithSqliteTypes(

@@ -57,34 +57,6 @@ export interface HydrationResult {
   reason: string;
 }
 
-interface PendingSqliteWrite {
-  key: string;
-  value: string;
-  updatedAt: string;
-  expectedUpdatedAt: string | null;
-  attempts: number;
-  lastError: string | null;
-}
-
-function isPendingSqliteWrite(value: unknown): value is PendingSqliteWrite {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<PendingSqliteWrite>;
-  return (
-    typeof candidate.key === 'string' &&
-    typeof candidate.value === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.expectedUpdatedAt === 'string' ||
-      candidate.expectedUpdatedAt === null ||
-      typeof candidate.expectedUpdatedAt === 'undefined') &&
-    typeof candidate.attempts === 'number' &&
-    Number.isFinite(candidate.attempts) &&
-    (typeof candidate.lastError === 'string' || candidate.lastError === null)
-  );
-}
-
 type SqliteRecordMetadata = Record<string, string | null>;
 
 function readSqliteRecordMetadata(): SqliteRecordMetadata {
@@ -141,99 +113,6 @@ function isConcurrencyConflictMessage(message: string): boolean {
   return message.toLowerCase().includes('han cambiado mientras guardabas');
 }
 
-function readPendingSqliteWrites(): PendingSqliteWrite[] {
-  const stored = window.localStorage.getItem(SQLITE_PENDING_WRITES_KEY);
-  if (!stored) {
-    return [];
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(stored);
-    return Array.isArray(parsed)
-      ? parsed.filter(isPendingSqliteWrite).map((write) => ({
-          ...write,
-          expectedUpdatedAt:
-            typeof write.expectedUpdatedAt === 'undefined' ? null : write.expectedUpdatedAt,
-        }))
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function writePendingSqliteWrites(writes: PendingSqliteWrite[]): void {
-  if (writes.length === 0) {
-    window.localStorage.removeItem(SQLITE_PENDING_WRITES_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(SQLITE_PENDING_WRITES_KEY, JSON.stringify(writes));
-}
-
-const MAX_PENDING_WRITE_ATTEMPTS = 20;
-
-function upsertPendingSqliteWrite(
-  key: string,
-  value: string,
-  lastError: string,
-  expectedUpdatedAt: string | null,
-): void {
-  if (!isPersistedStorageKey(key)) {
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const writes = readPendingSqliteWrites();
-  const existingIndex = writes.findIndex((write) => write.key === key);
-  const attempts = existingIndex >= 0 ? writes[existingIndex].attempts + 1 : 1;
-
-  // Si supera el límite de reintentos, descartar el write pendiente para no
-  // acumular ruido indefinidamente. Puede ocurrir si la clave ya no existe en
-  // el schema o si hay un conflicto persistente que no se puede resolver.
-  if (attempts > MAX_PENDING_WRITE_ATTEMPTS) {
-    const discardMessage = `No se ha podido sincronizar un cambio tras ${attempts} intentos y se ha descartado. Revisa y vuelve a aplicar el cambio si sigue siendo necesario. Clave: ${key}.`;
-    console.warn(
-      `[pending-writes] Descartando write pendiente tras ${attempts} intentos fallidos. Clave: ${key}. Último error: ${lastError}`,
-    );
-    emitPersistenceFeedback({
-      kind: 'error',
-      updatedAt: now,
-      key,
-      message: discardMessage,
-    });
-    if (existingIndex >= 0) {
-      writes.splice(existingIndex, 1);
-      writePendingSqliteWrites(writes);
-    }
-    return;
-  }
-
-  const nextWrite: PendingSqliteWrite = {
-    key,
-    value,
-    updatedAt: now,
-    expectedUpdatedAt,
-    attempts,
-    lastError,
-  };
-
-  if (existingIndex >= 0) {
-    writes[existingIndex] = nextWrite;
-  } else {
-    writes.push(nextWrite);
-  }
-
-  writePendingSqliteWrites(writes);
-}
-
-function removePendingSqliteWrite(key: string): void {
-  const writes = readPendingSqliteWrites().filter((write) => write.key !== key);
-  writePendingSqliteWrites(writes);
-}
-
-export function getPendingSqliteWriteCount(): number {
-  return readPendingSqliteWrites().length;
-}
 
 async function saveRecordToSqlite(record: TraccionStorageRecord): Promise<boolean> {
   const saveLocalStorageRecord = window.traccion?.saveLocalStorageRecord;
@@ -243,7 +122,7 @@ async function saveRecordToSqlite(record: TraccionStorageRecord): Promise<boolea
 
   const status = await saveLocalStorageRecord(record);
   publishDatabaseStatus(status);
-  if (!status.ready || status.phase !== 'active') {
+  if (!status.ready || status.phase !== 'active' || status.isDefaultPath !== false) {
     throw new Error(
       status.message ?? 'SQLite no está activo; el cambio queda pendiente de sincronización.',
     );
@@ -268,7 +147,7 @@ async function saveRecordToSqliteIfUnchanged(
   });
   publishDatabaseStatus(result.status);
 
-  if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
+  if (!result.ok || !result.status.ready || result.status.phase !== 'active' || result.status.isDefaultPath !== false) {
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
 
@@ -288,7 +167,7 @@ async function resolveExpectedUpdatedAtForWrite(
   if (getPersistedRecord) {
     const snapshot = await getPersistedRecord(key);
     publishDatabaseStatus(snapshot.status);
-    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {
       throw new Error(
         snapshot.status.message ??
           'SQLite no está activo. No se permite guardar sin base compartida.',
@@ -315,7 +194,7 @@ async function resolveExpectedUpdatedAtForWrite(
 
   const snapshot = await loadPersistedRecords();
   publishDatabaseStatus(snapshot.status);
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {
     throw new Error(
       snapshot.status.message ??
         'SQLite no está activo. No se permite guardar sin base compartida.',
@@ -336,80 +215,23 @@ async function resolveExpectedUpdatedAtForWrite(
   return latestRecord.updatedAt;
 }
 
+
+function clearLegacyPendingSqliteWrites(): void {
+  window.localStorage.removeItem(SQLITE_PENDING_WRITES_KEY);
+}
+
+export function getPendingSqliteWriteCount(): number {
+  clearLegacyPendingSqliteWrites();
+  return 0;
+}
+
+/**
+ * TrAcción ya no reproduce escrituras offline. Las colas heredadas se purgan
+ * para evitar aplicar cambios obsoletos al recuperar conectividad.
+ */
 export async function flushPendingSqliteWrites(): Promise<number> {
-  const pendingWrites = readPendingSqliteWrites();
-  if (pendingWrites.length === 0) {
-    return 0;
-  }
-
-  // Lanzar todas las escrituras en paralelo. La cola enqueueSqliteIpc del proceso
-  // principal las serializa internamente, así que no hay riesgo de corrupción.
-  // El beneficio es visible cuando hay N claves pendientes tras una desconexión
-  // SMB breve: en lugar de esperar N round-trips en serie, se solapan.
-  const sorted = pendingWrites.sort(
-    (left, right) => Date.parse(left.updatedAt) - Date.parse(right.updatedAt),
-  );
-
-  const results = await Promise.allSettled(
-    sorted.map(async (pendingWrite) => {
-      const savedUpdatedAt = await saveRecordToSqliteIfUnchanged(
-        { key: pendingWrite.key, value: pendingWrite.value },
-        pendingWrite.expectedUpdatedAt,
-      );
-      updateSqliteRecordMetadata(pendingWrite.key, savedUpdatedAt);
-      window.localStorage.setItem(pendingWrite.key, pendingWrite.value);
-      writeHydrationMetadata({
-        lastUpdatedAt: new Date().toISOString(),
-        sqlitePath: null,
-        refreshToken: null,
-        strategy: 'sqlite',
-      });
-      removePendingSqliteWrite(pendingWrite.key);
-      return pendingWrite.key;
-    }),
-  );
-
-  let flushedCount = 0;
-  for (let i = 0; i < results.length; i += 1) {
-    const result = results[i];
-    const pendingWrite = sorted[i];
-    if (result.status === 'fulfilled') {
-      flushedCount += 1;
-    } else {
-      const message =
-        result.reason instanceof Error
-          ? result.reason.message
-          : 'No se ha podido sincronizar un cambio pendiente.';
-      // Tanto conflictos de concurrencia como errores de red se mantienen en la cola
-      // para reintentarlos en el siguiente ciclo.
-      upsertPendingSqliteWrite(
-        pendingWrite.key,
-        pendingWrite.value,
-        message,
-        pendingWrite.expectedUpdatedAt,
-      );
-      if (!isTemporarySqliteLockMessage(message)) {
-        emitPersistenceFeedback({
-          kind: 'error',
-          updatedAt: new Date().toISOString(),
-          key: pendingWrite.key,
-          message: isConcurrencyConflictMessage(message)
-            ? `Conflicto al sincronizar cambio pendiente — otro usuario modificó el mismo dato. Se reintentará la próxima vez que se recargue TrAcción. Clave: ${pendingWrite.key}.`
-            : `SQLite pendiente: ${message}`,
-        });
-      }
-    }
-  }
-
-  if (flushedCount > 0) {
-    emitPersistenceFeedback({
-      kind: 'saved',
-      updatedAt: new Date().toISOString(),
-      message: `Sincronizados ${flushedCount} cambios pendientes en SQLite ${formatPersistenceTime()}`,
-    });
-  }
-
-  return flushedCount;
+  clearLegacyPendingSqliteWrites();
+  return 0;
 }
 
 export function isPersistedStorageKey(key: string): key is PersistedStorageKey {
@@ -533,7 +355,6 @@ export async function writeSharedStorageItemAsync(
     const expectedUpdatedAt = await resolveExpectedUpdatedAtForWrite(key, previousValue);
     const savedUpdatedAt = await saveRecordToSqliteIfUnchanged({ key, value }, expectedUpdatedAt);
     updateSqliteRecordMetadata(key, savedUpdatedAt);
-    removePendingSqliteWrite(key);
     writeLocalStorageCache(key, value, 'sqlite');
     const message = `Guardado en SQLite ${formatPersistenceTime()}`;
     emitPersistenceFeedback({
@@ -655,9 +476,6 @@ function hasFreshHydrationCache(tokenSnapshot: TraccionPersistedRecordsTokenSnap
     return false;
   }
 
-  if (readPendingSqliteWrites().length > 0) {
-    return false;
-  }
 
   const sqlitePath = tokenSnapshot.status.path ?? null;
   if (metadata.sqlitePath !== sqlitePath) {
@@ -684,6 +502,14 @@ export function applyPersistedRecordsSnapshotToLocalStorage(
   let removed = 0;
 
   replaceSqliteRecordMetadata(sqliteRecords);
+
+  const sqliteKeys = new Set(sqliteRecords.map((record) => record.key));
+  for (const key of PERSISTED_STORAGE_KEYS) {
+    if (!sqliteKeys.has(key) && window.localStorage.getItem(key) !== null) {
+      window.localStorage.removeItem(key);
+      removed += 1;
+    }
+  }
 
   for (const record of sqliteRecords) {
     if (!isRecoverablePersistedValue(record.key, record.value, 'sqlite')) {
@@ -733,7 +559,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     if (window.traccion.getPersistedRecordsToken) {
       const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
       publishDatabaseStatus(tokenSnapshot.status);
-      if (!tokenSnapshot.status.ready || tokenSnapshot.status.phase === 'locked') {
+      if (!tokenSnapshot.status.ready || tokenSnapshot.status.phase !== 'active' || tokenSnapshot.status.isDefaultPath !== false) {
         return {
           status: 'sqlite-unavailable',
           reason: tokenSnapshot.status.message ?? 'SQLite no preparado.',
@@ -761,7 +587,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
 
     const snapshot = await window.traccion.loadPersistedRecords();
     publishDatabaseStatus(snapshot.status);
-    if (!snapshot.status.ready || snapshot.status.phase === 'locked') {
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {
       return {
         status: 'sqlite-unavailable',
         reason: snapshot.status.message ?? 'SQLite no preparado.',
@@ -778,14 +604,21 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     replaceSqliteRecordMetadata(sqliteRecords);
 
     if (sqliteRecords.length === 0) {
-      if (localRecords.length > 0) {
-        await window.traccion.backupLocalStorage?.(localRecords);
-        await window.traccion.migrateLocalStorage?.(localRecords);
-        await flushPendingSqliteWrites();
+      // SQLite compartida es la única fuente de verdad. Una base vacía no se
+      // rellena nunca de forma implícita con datos conservados en este equipo.
+      for (const key of PERSISTED_STORAGE_KEYS) {
+        window.localStorage.removeItem(key);
       }
+      replaceSqliteRecordMetadata([]);
+      writeHydrationMetadata({
+        lastUpdatedAt: snapshot.latestUpdatedAt ?? new Date().toISOString(),
+        sqlitePath: snapshot.status.path ?? null,
+        refreshToken: snapshot.refreshToken,
+        strategy: 'sqlite',
+      });
       return {
-        status: 'kept-localStorage',
-        reason: 'SQLite está vacío; se mantiene caché local y se respalda en SQLite.',
+        status: 'hydrated-from-sqlite',
+        reason: 'SQLite compartida está vacía; se ha descartado cualquier caché local de negocio.',
       };
     }
 
@@ -806,7 +639,6 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       removed: applyStats.removed,
       elapsedMs: Math.round(performance.now() - applyStartedAt),
     });
-    await flushPendingSqliteWrites();
 
     return {
       status: 'hydrated-from-sqlite',
@@ -822,7 +654,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       status: 'sqlite-unavailable',
       reason: detail
         ? `Error leyendo SQLite: ${detail}`
-        : 'Error leyendo SQLite; se mantiene localStorage.',
+        : 'Error leyendo SQLite; TrAcción permanece bloqueada.',
     };
   }
 }
@@ -839,25 +671,8 @@ export function reportStartupHydrationResult(result: HydrationResult): void {
   });
 }
 
-export function bootstrapSqlitePersistence(force = false): void {
-  if (!window.traccion?.migrateLocalStorage) {
-    return;
-  }
-
-  if (!force && window.localStorage.getItem(SQLITE_MIGRATION_FLAG_KEY) === 'true') {
-    return;
-  }
-
-  const records = currentLocalRecords();
-
-  window.traccion
-    .migrateLocalStorage(records)
-    .then((status) => {
-      if (status.ready) {
-        window.localStorage.setItem(SQLITE_MIGRATION_FLAG_KEY, 'true');
-      }
-    })
-    .catch((error: unknown) => {
-      console.warn('No se ha podido crear el backup inicial SQLite de localStorage.', error);
-    });
+export function bootstrapSqlitePersistence(_force = false): void {
+  // Deshabilitado: una SQLite vacía o nueva nunca debe sembrarse automáticamente
+  // desde datos locales de un puesto. La inicialización debe ser explícita.
+  window.localStorage.removeItem(SQLITE_MIGRATION_FLAG_KEY);
 }

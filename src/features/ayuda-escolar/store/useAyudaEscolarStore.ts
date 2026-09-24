@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
 import { saveNewSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import type { SchoolHelpArchivedFile, SchoolHelpRecord } from '../domain/ayudaEscolar';
 
@@ -65,10 +64,6 @@ function parseRecords(storageValue: string | null): SchoolHelpRecord[] {
   }
 }
 
-function readLocalRecords(): SchoolHelpRecord[] {
-  return parseRecords(readStorageItem(STORAGE_KEY));
-}
-
 function mirrorRecords(records: SchoolHelpRecord[]): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
 }
@@ -78,7 +73,7 @@ async function loadSharedRecords(): Promise<SchoolHelpRecord[] | null> {
   if (getPersistedRecord) {
     const snapshot = await getPersistedRecord(STORAGE_KEY);
     publishDatabaseStatus(snapshot.status);
-    if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+    if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {
       throw new Error(snapshot.status.message ?? 'SQLite compartida no disponible.');
     }
     return snapshot.record ? parseRecords(snapshot.record.value) : null;
@@ -89,7 +84,7 @@ async function loadSharedRecords(): Promise<SchoolHelpRecord[] | null> {
 
   const snapshot = await loadPersistedRecords();
   publishDatabaseStatus(snapshot.status);
-  if (!snapshot.status.ready || snapshot.status.phase !== 'active') {
+  if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {
     throw new Error(snapshot.status.message ?? 'SQLite compartida no disponible.');
   }
 
@@ -98,30 +93,17 @@ async function loadSharedRecords(): Promise<SchoolHelpRecord[] | null> {
 }
 
 async function loadAndMigrateLegacyRecords(): Promise<SchoolHelpRecord[]> {
-  const localRecords = readLocalRecords();
-
   try {
     const sharedRecords = await loadSharedRecords();
     if (sharedRecords !== null) {
       mirrorRecords(sharedRecords);
       return sharedRecords;
     }
-
-    // Compatibilidad con instalaciones que ya habían usado Ayuda Escolar cuando
-    // su seguimiento solo vivía en localStorage. Si SQLite todavía no tiene la
-    // clave, se migra una única vez el histórico local a la base compartida.
-    if (localRecords.length > 0) {
-      const migration = await writeStorageItem(STORAGE_KEY, JSON.stringify(localRecords));
-      if (migration.ok) {
-        mirrorRecords(localRecords);
-      }
-    }
-  } catch {
-    // El bloqueo global de edición gestiona una SQLite no disponible. Se conserva
-    // la caché local únicamente para poder visualizar/recuperar un histórico legacy.
+  } catch (error) {
+    console.error('No se ha podido cargar Ayuda Escolar desde SQLite; no se usa fallback local.', error);
   }
 
-  return localRecords;
+  return [];
 }
 
 export const useAyudaEscolarStore = create<SchoolHelpState>((set, get) => ({

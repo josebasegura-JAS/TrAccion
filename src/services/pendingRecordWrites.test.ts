@@ -89,56 +89,30 @@ describe('pendingRecordWrites', () => {
     expect(getPendingRecordWriteCount()).toBe(0);
   });
 
-  it('flushPendingRecordWrites reintenta contra el repositorio registrado y limpia la cola al tener éxito', async () => {
-    const flushModule = 'flush-module';
+  it('purga una cola heredada sin reproducirla contra el repositorio', async () => {
     const replay = vi.fn(async () => ({
       ok: true,
       message: 'Sincronizado.',
       currentUpdatedAt: 't2',
     }));
-    registerPendingWriteReplayer(flushModule, replay);
+    registerPendingWriteReplayer('legacy-module', replay);
 
     window.localStorage.setItem(SQLITE_PENDING_RECORD_WRITES_KEY, JSON.stringify([{
-      module: flushModule,
+      module: 'legacy-module',
       recordId: 'rec-5',
       value: '{"a":5}',
       expectedUpdatedAt: null,
       queuedAt: new Date().toISOString(),
       attempts: 1,
-      lastError: 'base ocupada temporalmente',
+      lastError: 'offline',
     }]));
-    expect(getPendingRecordWriteCount()).toBe(1);
-
-    const flushedCount = await flushPendingRecordWrites();
-
-    expect(flushedCount).toBe(1);
-    expect(replay).toHaveBeenCalledWith('rec-5', '{"a":5}', null);
-    expect(getPendingRecordWriteCount()).toBe(0);
-  });
-
-  it('flushPendingRecordWrites re-encola (no descarta) si el reintento vuelve a fallar por conectividad', async () => {
-    const retryModule = 'retry-module';
-    const replay = vi.fn(async () => ({
-      ok: false,
-      message: 'base ocupada temporalmente',
-      currentUpdatedAt: null,
-    }));
-    registerPendingWriteReplayer(retryModule, replay);
-
-    window.localStorage.setItem(SQLITE_PENDING_RECORD_WRITES_KEY, JSON.stringify([{
-      module: retryModule,
-      recordId: 'rec-6',
-      value: '{"a":6}',
-      expectedUpdatedAt: null,
-      queuedAt: new Date().toISOString(),
-      attempts: 1,
-      lastError: 'base ocupada temporalmente',
-    }]));
-    expect(getPendingRecordWriteCount()).toBe(1);
 
     const flushedCount = await flushPendingRecordWrites();
 
     expect(flushedCount).toBe(0);
-    expect(getPendingRecordWriteCount()).toBe(1);
+    expect(replay).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(SQLITE_PENDING_RECORD_WRITES_KEY)).toBeNull();
+    expect(getPendingRecordWriteCount()).toBe(0);
   });
+
 });

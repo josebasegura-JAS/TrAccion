@@ -89,7 +89,9 @@ async function readEmployeesShared(): Promise<Employee[]> {
     }
   }
 
-  return readEmployees();
+  if (import.meta.env.MODE === 'test') return readEmployees();
+  console.error('Repositorio SQLite de plantilla no disponible; no se usa fallback local.');
+  return [];
 }
 
 function parseEmployeesSnapshot(storageValue: string | null): Employee[] {

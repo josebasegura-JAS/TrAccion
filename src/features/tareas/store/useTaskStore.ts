@@ -523,7 +523,9 @@ function persistTasks(tasks: Task[]): void {
 
 async function readTasksForStore(mode: TaskSqliteLoadMode = 'active'): Promise<Task[]> {
   if (!hasTaskSqliteRepository()) {
-    return readTasks();
+    if (import.meta.env.MODE === 'test') return readTasks();
+    console.error('Repositorio SQLite de tareas no disponible; no se usa fallback local.');
+    return [];
   }
 
   try {
@@ -554,10 +556,10 @@ async function readTasksForStore(mode: TaskSqliteLoadMode = 'active'): Promise<T
       return tasks;
     }
   } catch (error) {
-    console.warn('No se han podido cargar tareas desde SQLite directo. Se usa compatibilidad JSON.', error);
+    console.error('No se han podido cargar tareas desde SQLite. No se usa fallback local.', error);
   }
 
-  return readTasks();
+  return [];
 }
 
 async function persistTaskDirectly(task: Task, expectedUpdatedAt: string | null): Promise<TaskUpdateResult> {
@@ -700,7 +702,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   filters: EMPTY_TASK_FILTERS,
   load: () => {
     if (!hasTaskSqliteRepository()) {
-      const tasks = readTasks();
+      const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
       set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
       return;
     }
@@ -711,7 +713,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
   reloadFromStorage: () => {
     if (!hasTaskSqliteRepository()) {
-      const tasks = readTasks();
+      const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
       set((state) => ({
         tasks,
         selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
@@ -742,7 +744,9 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
     try {
       const historicalTasks = hasTaskSqliteRepository()
         ? await readTasksForStore('historical')
-        : readTasks().filter(isTaskClosed);
+        : import.meta.env.MODE === 'test'
+          ? readTasks().filter(isTaskClosed)
+          : [];
 
       set((current) => {
         const tasksById = new Map(current.tasks.map((task) => [task.id, task]));

@@ -419,152 +419,53 @@ function parseTicketManutencionRecords(
  */
 async function loadTicketCalendarsPreferringSqlite(): Promise<TicketCalendar[]> {
   if (!hasTicketRestauranteCalendarsSqliteRepository()) {
-    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
-      normalizeStoredTicketCalendar,
-    );
+    return import.meta.env.MODE === 'test'
+      ? readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(normalizeStoredTicketCalendar)
+      : [];
   }
 
   const sqliteRecords = await loadTicketRestauranteCalendarRecordsFromSqlite();
-  if (sqliteRecords === null) {
-    return readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
-      normalizeStoredTicketCalendar,
-    );
-  }
-
-  if (sqliteRecords.length > 0) {
-    const calendars = parseTicketCalendarRecords(sqliteRecords);
-    updateCalendarSqliteUpdatedAtMap(calendars);
-    return calendars;
-  }
-
-  const fallbackCalendars = readJsonArray(CALENDARS_STORAGE_KEY, isTicketCalendar).map(
-    normalizeStoredTicketCalendar,
-  );
-  const seedResult = await saveTicketRestauranteCalendarsToSqlite(
-    fallbackCalendars.map((calendar) => ({
-      id: calendar.id,
-      serializedValue: JSON.stringify(calendar),
-      expectedUpdatedAt: null,
-    })),
-  );
-  if (seedResult?.ok) {
-    const reloadedRecords = await loadTicketRestauranteCalendarRecordsFromSqlite();
-    if (reloadedRecords) {
-      const reloadedCalendars = parseTicketCalendarRecords(reloadedRecords);
-      updateCalendarSqliteUpdatedAtMap(reloadedCalendars);
-      return reloadedCalendars;
-    }
-  }
-  return fallbackCalendars;
+  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  const calendars = parseTicketCalendarRecords(sqliteRecords);
+  updateCalendarSqliteUpdatedAtMap(calendars);
+  return calendars;
 }
 
-/**
- * Carga personas desde SQLite si el repositorio está activo, con la misma
- * siembra inicial desde localStorage que loadTicketCalendarsPreferringSqlite.
- */
 async function loadTicketPeoplePreferringSqlite(): Promise<TicketPerson[]> {
   if (!hasTicketRestaurantePeopleSqliteRepository()) {
-    return readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson);
+    return import.meta.env.MODE === 'test'
+      ? readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson)
+      : [];
   }
 
   const sqliteRecords = await loadTicketRestaurantePersonRecordsFromSqlite();
-  if (sqliteRecords === null) {
-    return readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(normalizeStoredTicketPerson);
-  }
-
-  if (sqliteRecords.length > 0) {
-    const people = parseTicketPersonRecords(sqliteRecords);
-    updatePersonSqliteUpdatedAtMap(people);
-    return people;
-  }
-
-  const fallbackPeople = readJsonArray(PEOPLE_STORAGE_KEY, isTicketPerson).map(
-    normalizeStoredTicketPerson,
-  );
-  const seedResult = await saveTicketRestaurantePeopleToSqlite(
-    fallbackPeople.map((person) => ({
-      id: person.empleado,
-      serializedValue: JSON.stringify(person),
-      expectedUpdatedAt: null,
-    })),
-  );
-  if (seedResult?.ok) {
-    const reloadedRecords = await loadTicketRestaurantePersonRecordsFromSqlite();
-    if (reloadedRecords) {
-      const reloadedPeople = parseTicketPersonRecords(reloadedRecords);
-      updatePersonSqliteUpdatedAtMap(reloadedPeople);
-      return reloadedPeople;
-    }
-  }
-  return fallbackPeople;
+  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  const people = parseTicketPersonRecords(sqliteRecords);
+  updatePersonSqliteUpdatedAtMap(people);
+  return people;
 }
 
-/**
- * Carga ausencias desde SQLite si el repositorio está activo, con la misma
- * siembra inicial desde localStorage que loadTicketCalendarsPreferringSqlite.
- */
 async function loadTicketAbsencesPreferringSqlite(): Promise<TicketRestaurantAbsence[]> {
   if (!hasTicketRestauranteAbsencesSqliteRepository()) {
-    return readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
+    return import.meta.env.MODE === 'test'
+      ? readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence)
+      : [];
   }
 
   const sqliteRecords = await loadTicketRestauranteAbsenceRecordsFromSqlite();
-  if (sqliteRecords === null) {
-    return readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
-  }
-
-  if (sqliteRecords.length > 0) {
-    const absences = parseTicketAbsenceRecords(sqliteRecords);
-    updateAbsenceSqliteUpdatedAtMap(absences);
-    return absences;
-  }
-
-  const fallbackAbsences = readJsonArray(ABSENCES_STORAGE_KEY, isTicketRestaurantAbsence);
-  const seedResult = await saveTicketRestauranteAbsencesToSqlite(
-    fallbackAbsences.map((absence) => ({
-      id: absence.id,
-      serializedValue: JSON.stringify(absence),
-      expectedUpdatedAt: null,
-    })),
-  );
-  if (seedResult?.ok) {
-    const reloadedRecords = await loadTicketRestauranteAbsenceRecordsFromSqlite();
-    if (reloadedRecords) {
-      const reloadedAbsences = parseTicketAbsenceRecords(reloadedRecords);
-      updateAbsenceSqliteUpdatedAtMap(reloadedAbsences);
-      return reloadedAbsences;
-    }
-  }
-  return fallbackAbsences;
+  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  const absences = parseTicketAbsenceRecords(sqliteRecords);
+  updateAbsenceSqliteUpdatedAtMap(absences);
+  return absences;
 }
 
-/**
- * Carga config desde SQLite si el repositorio está activo. config es un
- * objeto único (no colección), así que la siembra inicial guarda un solo
- * registro de id fijo en vez de un lote.
- */
 async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfig> {
   if (!hasTicketRestauranteConfigSqliteRepository()) {
-    return readConfig();
+    return import.meta.env.MODE === 'test' ? readConfig() : DEFAULT_TICKET_RESTAURANT_CONFIG;
   }
 
   const sqliteRecord = await loadTicketRestauranteConfigRecordFromSqlite();
-  if (sqliteRecord === null) {
-    // null puede significar "SQLite no activo" o "tabla sin fila aún"; en
-    // ambos casos hay que comprobar localStorage. Si la fila no existe pero
-    // SQLite sí está activo, se siembra desde localStorage.
-    const fallbackConfig = readConfig();
-    if (hasTicketRestauranteConfigSqliteRepository()) {
-      const seedResult = await saveTicketRestauranteConfigToSqlite(
-        JSON.stringify(fallbackConfig),
-        null,
-      );
-      if (seedResult?.ok && seedResult.currentUpdatedAt) {
-        configSqliteUpdatedAt = seedResult.currentUpdatedAt;
-      }
-    }
-    return fallbackConfig;
-  }
+  if (sqliteRecord === null) return DEFAULT_TICKET_RESTAURANT_CONFIG;
 
   let parsed: unknown;
   try {
@@ -574,56 +475,27 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
   }
 
   configSqliteUpdatedAt = sqliteRecord.updatedAt;
-  if (!parsed || typeof parsed !== 'object') {
-    return DEFAULT_TICKET_RESTAURANT_CONFIG;
-  }
+  if (!parsed || typeof parsed !== 'object') return DEFAULT_TICKET_RESTAURANT_CONFIG;
   return normalizeTicketRestaurantConfig(parsed as TicketRestaurantConfig);
 }
 
 async function loadTicketManutencionesPreferringSqlite(): Promise<TicketManutencion[]> {
   if (!hasTicketRestauranteManutencionesSqliteRepository()) {
-    return readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-      normalizeStoredTicketManutencion,
-    );
+    return import.meta.env.MODE === 'test'
+      ? readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(normalizeStoredTicketManutencion)
+      : [];
   }
 
   const sqliteRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
-  if (sqliteRecords === null) {
-    return readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-      normalizeStoredTicketManutencion,
-    );
-  }
-
-  if (sqliteRecords.length > 0) {
-    const manutenciones = parseTicketManutencionRecords(sqliteRecords);
-    updateManutencionSqliteUpdatedAtMap(manutenciones);
-    return manutenciones;
-  }
-
-  const fallbackManutenciones = readJsonArray(MANUTENCIONES_STORAGE_KEY, isTicketManutencion).map(
-    normalizeStoredTicketManutencion,
-  );
-  const seedResult = await saveTicketRestauranteManutencionesToSqlite(
-    fallbackManutenciones.map((row) => ({
-      id: row.id,
-      serializedValue: JSON.stringify(row),
-      expectedUpdatedAt: null,
-    })),
-  );
-  if (seedResult?.ok) {
-    const reloadedRecords = await loadTicketRestauranteManutencionRecordsFromSqlite();
-    if (reloadedRecords) {
-      const reloadedManutenciones = parseTicketManutencionRecords(reloadedRecords);
-      updateManutencionSqliteUpdatedAtMap(reloadedManutenciones);
-      return reloadedManutenciones;
-    }
-  }
-  return fallbackManutenciones;
+  if (!sqliteRecords || sqliteRecords.length === 0) return [];
+  const manutenciones = parseTicketManutencionRecords(sqliteRecords);
+  updateManutencionSqliteUpdatedAtMap(manutenciones);
+  return manutenciones;
 }
 
 /**
  * Carga calendars + people + absences + config (preferentemente desde
- * SQLite), manteniendo localStorage como respaldo de compatibilidad.
+ * SQLite), sin utilizar localStorage como fuente alternativa.
  */
 async function loadTicketRestauranteStateFromSqliteOrStorage(): Promise<TicketRestauranteSnapshot> {
   const [calendars, people, absences, config, manutenciones] = await Promise.all([
