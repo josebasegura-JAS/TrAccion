@@ -4,6 +4,7 @@ const readyStatus: TraccionDatabaseStatus = {
   ready: true,
   engine: 'sqlite',
   phase: 'active',
+  isDefaultPath: false,
 };
 
 type TestModule = typeof import('./externalDataSync');
