@@ -134,7 +134,11 @@ export async function saveEmployeesToSqlite(
 ): Promise<{ ok: boolean; message: string; saved: number } | null> {
   const saver = window.traccion?.saveEmployeeRecordsIfUnchanged;
   if (!saver) {
-    return null;
+    return {
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite importar la plantilla sin base compartida.',
+      saved: 0,
+    };
   }
 
   publishPersistenceBusy(EMPLOYEES_DIRECT_STORAGE_KEY, `Importando ${employees.length} personas en SQLite…`);

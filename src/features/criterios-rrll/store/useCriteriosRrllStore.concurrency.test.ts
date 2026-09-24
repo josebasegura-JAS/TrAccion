@@ -170,4 +170,29 @@ describe('useCriteriosRrllStore concurrencia multiusuario', () => {
     expect(useCriteriosRrllStore.getState().criterios).toHaveLength(2);
     expect(useCriteriosRrllStore.getState().selectedCriterioId).toBe(existingCriterio.id);
   });
+
+  it('bloquea la importación de criterios sin SQLite y no altera el estado local', async () => {
+    const existingCriterio = criterio();
+    useCriteriosRrllStore.setState({
+      criterios: [existingCriterio],
+      selectedCriterioId: existingCriterio.id,
+    });
+
+    await expect(
+      useCriteriosRrllStore.getState().importDrafts([
+        {
+          tema: 'Permisos',
+          criterio: 'Criterio importado',
+          estado: 'vigente',
+          sentido: 'sin clasificar',
+          fecha: '2026-06-02',
+          responsable: 'RRLL',
+          observaciones: '',
+        },
+      ]),
+    ).rejects.toThrow(/SQLite compartido no está activo/i);
+
+    expect(useCriteriosRrllStore.getState().criterios).toEqual([existingCriterio]);
+    expect(window.localStorage.getItem('traccion.v1.criterios-rrll.criterios')).toBeNull();
+  });
 });

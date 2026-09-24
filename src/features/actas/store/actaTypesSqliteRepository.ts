@@ -177,7 +177,10 @@ export async function saveActaTypesToSqlite(
 ): Promise<ActaTypeBatchSaveResult | null> {
   const saver = window.traccion?.saveActaTypeRecordsIfUnchanged;
   if (!saver) {
-    return null;
+    return {
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite importar tipos de acta sin base compartida.',
+    };
   }
 
   if (records.length === 0) {

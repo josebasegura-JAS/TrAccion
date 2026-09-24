@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   deleteCriterioRrllInSqlite,
@@ -108,10 +108,6 @@ function buildCriterioFromDraft(draft: CriterioRrllDraft, now: string, id = crea
     updatedAt: now,
     deletedAt: previous?.deletedAt ?? null,
   };
-}
-
-function persistCriteriosRrll(criterios: CriterioRrll[]): void {
-  writeStorageItem(STORAGE_KEY, JSON.stringify(criterios));
 }
 
 function mirrorCriteriosRrll(criterios: CriterioRrll[]): void {
@@ -380,8 +376,9 @@ export const useCriteriosRrllStore = create<CriteriosRrllStateStore>((set, get) 
       return;
     }
 
-    persistCriteriosRrll(criterios);
-    set({ criterios, selectedCriterioId: firstActiveCriterioId(criterios) });
+    throw new Error(
+      'SQLite compartido no está activo. No se permite importar criterios sin base compartida.',
+    );
   },
   selectCriterio: (criterioId) => set({ selectedCriterioId: criterioId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),

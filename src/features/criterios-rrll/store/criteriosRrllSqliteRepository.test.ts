@@ -195,10 +195,13 @@ describe('criteriosRrllSqliteRepository', () => {
     expect(result).toEqual({ ok: true, message: 'Nada que importar.' });
   });
 
-  it('devuelve null si no existe saver SQLite de lote para escritura', async () => {
+  it('devuelve un error explícito si no existe saver SQLite de lote para escritura', async () => {
     await expect(
       saveCriteriosRrllToSqlite([{ record: criterio(), expectedUpdatedAt: null }]),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite importar criterios sin base compartida.',
+    });
   });
 
   it('propaga el conflicto de concurrencia de un registro del lote junto a su id', async () => {

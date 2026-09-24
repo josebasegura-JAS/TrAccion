@@ -740,9 +740,9 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       return importResult;
     }
 
-    await persistEmployeesConfirmed(employees);
-    set({ employees, selectedEmployeeId: firstVisibleEmployeeId(employees) });
-    return importResult;
+    throw new Error(
+      'SQLite compartido no está activo. No se permite importar la plantilla sin base compartida.',
+    );
   },
   importJobPositionTranslations: async (file) => {
     const importedTranslations = await importJobPositionTranslationsFromFile(file);

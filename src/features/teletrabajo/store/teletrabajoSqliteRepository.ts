@@ -194,7 +194,10 @@ export async function saveTeletrabajoSolicitudesToSqlite(
 ): Promise<TeletrabajoBatchSaveResult | null> {
   const saver = window.traccion?.saveTeletrabajoRecordsIfUnchanged;
   if (!saver) {
-    return null;
+    return {
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite importar Teletrabajo sin base compartida.',
+    };
   }
 
   if (items.length === 0) {

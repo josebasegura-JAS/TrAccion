@@ -179,7 +179,10 @@ export async function saveCriteriosRrllToSqlite(
 ): Promise<CriterioRrllBatchSaveResult | null> {
   const saver = window.traccion?.saveCriteriosRrllRecordsIfUnchanged;
   if (!saver) {
-    return null;
+    return {
+      ok: false,
+      message: 'SQLite compartido no disponible. No se permite importar criterios sin base compartida.',
+    };
   }
 
   if (records.length === 0) {
