@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { appendBackupMessage, syncVinculogramaExcelBackup } from '../../../shared/export/operationalExcelBackups';
-import { readStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildVinculograma,
@@ -80,7 +80,7 @@ function readRecords(): Vinculograma[] {
 }
 
 function mirrorRecords(records: Vinculograma[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  writeRendererStorageCache(STORAGE_KEY, JSON.stringify(records), 'sqlite');
 }
 
 function nowIso(): string {

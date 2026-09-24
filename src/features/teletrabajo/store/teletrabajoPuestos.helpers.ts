@@ -5,7 +5,7 @@ import {
   type TeletrabajoPuestoDraft,
 } from '../domain/puestosTeletrabajo';
 import { normalizeGrupoCoberturaNombre, type GrupoCobertura } from '../domain/gruposCobertura';
-import { readStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import {
   createGrupoCoberturaId,
   loadGruposCoberturaFromSqliteOrStorage,
@@ -231,7 +231,7 @@ export async function persistPuestosTeletrabajo(puestosTeletrabajo: TeletrabajoP
   if (!saved) {
     throw new Error('SQLite compartido no disponible. No se permite guardar puestos de Teletrabajo en local.');
   }
-  window.localStorage.setItem(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo));
+  writeRendererStorageCache(PUESTOS_STORAGE_KEY, JSON.stringify(puestosTeletrabajo), 'sqlite');
 }
 
 /**
@@ -269,7 +269,7 @@ export async function persistPuestoTeletrabajoRecord(
     if (result.currentUpdatedAt) {
       latestPuestosTeletrabajoUpdatedAtById.set(puesto.id, result.currentUpdatedAt);
     }
-    window.localStorage.setItem(PUESTOS_STORAGE_KEY, JSON.stringify(allPuestos));
+    writeRendererStorageCache(PUESTOS_STORAGE_KEY, JSON.stringify(allPuestos), 'sqlite');
     return { ok: true, message: '' };
   } catch (error) {
     return {

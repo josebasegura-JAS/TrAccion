@@ -1,3 +1,4 @@
+import { writeRendererStorageCache } from './persistence';
 import { publishDatabaseStatus } from './databaseStatus';
 
 async function loadSharedStorageRecord(
@@ -103,7 +104,7 @@ export async function saveSharedArrayRecord<TRecord>({
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
 
-  window.localStorage.setItem(storageKey, serialized);
+  writeRendererStorageCache(storageKey, serialized, 'sqlite');
   return { records: nextRecords, updatedRecord };
 }
 
@@ -155,7 +156,7 @@ export async function saveNewSharedArrayRecord<TRecord>({
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
 
-  window.localStorage.setItem(storageKey, serialized);
+  writeRendererStorageCache(storageKey, serialized, 'sqlite');
   return { records: nextRecords, newRecord };
 }
 
@@ -198,7 +199,7 @@ export async function saveSharedArrayMutation<TRecord>({
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
 
-  window.localStorage.setItem(storageKey, serialized);
+  writeRendererStorageCache(storageKey, serialized, 'sqlite');
   return { records: nextRecords };
 }
 
@@ -260,6 +261,6 @@ export async function deleteSharedArrayRecord<TRecord>({
     throw new Error(result.message ?? 'No se ha confirmado la eliminación en SQLite compartido.');
   }
 
-  window.localStorage.setItem(storageKey, serialized);
+  writeRendererStorageCache(storageKey, serialized, 'sqlite');
   return { records: nextRecords };
 }

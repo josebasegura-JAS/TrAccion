@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { appendBackupMessage, syncLicenciasExcelBackup } from '../../../shared/export/operationalExcelBackups';
-import { readStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   deleteLicenciaSinSueldoInSqlite,
@@ -152,7 +152,7 @@ function readRecords(): LicenciaSinSueldoRecord[] {
 }
 
 function mirrorRecords(records: LicenciaSinSueldoRecord[]): void {
-  window.localStorage.setItem(LICENCIA_SIN_SUELDO_STORAGE_KEY, JSON.stringify(records));
+  writeRendererStorageCache(LICENCIA_SIN_SUELDO_STORAGE_KEY, JSON.stringify(records), 'sqlite');
 }
 
 function nowIso(): string {

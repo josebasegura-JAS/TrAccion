@@ -3,7 +3,7 @@ import {
   normalizeGrupoCoberturaDraft,
   type GrupoCobertura,
 } from '../domain/gruposCobertura';
-import { readStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 
 export const GRUPOS_COBERTURA_STORAGE_KEY = 'traccion.v1.teletrabajo.gruposCobertura';
 
@@ -129,7 +129,7 @@ export async function persistGruposCobertura(gruposCobertura: GrupoCobertura[]):
   if (!saved) {
     throw new Error('SQLite compartido no disponible. No se permite guardar grupos de cobertura en local.');
   }
-  window.localStorage.setItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(gruposCobertura));
+  writeRendererStorageCache(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(gruposCobertura), 'sqlite');
 }
 
 /**
@@ -167,7 +167,7 @@ export async function persistGrupoCoberturaRecord(
     if (result.currentUpdatedAt) {
       latestGruposCoberturaUpdatedAtById.set(grupo.id, result.currentUpdatedAt);
     }
-    window.localStorage.setItem(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(allGrupos));
+    writeRendererStorageCache(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(allGrupos), 'sqlite');
     return { ok: true, message: '' };
   } catch (error) {
     return {

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import { writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import type { SchoolHelpArchivedFile, SchoolHelpRecord } from '../domain/ayudaEscolar';
 
@@ -65,7 +66,7 @@ function parseRecords(storageValue: string | null): SchoolHelpRecord[] {
 }
 
 function mirrorRecords(records: SchoolHelpRecord[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  writeRendererStorageCache(STORAGE_KEY, JSON.stringify(records), 'sqlite');
 }
 
 async function loadSharedRecords(): Promise<SchoolHelpRecord[] | null> {

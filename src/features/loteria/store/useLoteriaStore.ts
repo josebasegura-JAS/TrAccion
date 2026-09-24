@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
   createDefaultLotteryCampaign,
@@ -222,7 +222,7 @@ async function loadCampaignFromSqlite(): Promise<{
 function writeLocalArchiveCache(campaign: LotteryCampaign): void {
   try {
     const archive = buildArchiveWithCampaign(campaign);
-    window.localStorage.setItem(LOTTERY_STORAGE_KEY, JSON.stringify(archive));
+    writeRendererStorageCache(LOTTERY_STORAGE_KEY, JSON.stringify(archive), 'sqlite');
   } catch {
     // La caché local es secundaria; SQLite sigue siendo la fuente de verdad.
   }

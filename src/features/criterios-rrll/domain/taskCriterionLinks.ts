@@ -1,5 +1,5 @@
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
-import { readStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveSharedArrayMutation } from '../../../services/sharedRecordPersistence';
 
 export const TASK_CRITERION_LINKS_STORAGE_KEY = 'traccion.v1.tareas.criterios-rrll.links';
@@ -49,7 +49,7 @@ async function loadLinks(): Promise<TaskCriterionLink[]> {
 
   const value = snapshot.record?.value ?? null;
   if (value !== null) {
-    window.localStorage.setItem(TASK_CRITERION_LINKS_STORAGE_KEY, value);
+    writeRendererStorageCache(TASK_CRITERION_LINKS_STORAGE_KEY, value, 'sqlite');
     return parseLinks(value);
   }
 
@@ -73,7 +73,7 @@ async function mutateLinks(
 ): Promise<TaskCriterionLink[]> {
   if (import.meta.env.MODE === 'test') {
     const next = updateRecords(readCachedLinks());
-    window.localStorage.setItem(TASK_CRITERION_LINKS_STORAGE_KEY, JSON.stringify(next));
+    writeRendererStorageCache(TASK_CRITERION_LINKS_STORAGE_KEY, JSON.stringify(next), 'sqlite');
     return next;
   }
 

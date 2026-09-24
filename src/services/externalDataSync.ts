@@ -5,6 +5,7 @@ import {
   applyPersistedRecordsSnapshotToLocalStorage,
   isPersistenceFeedbackSilent,
   readHydrationMetadata,
+  readStorageItem,
   subscribeToPersistenceFeedback,
 } from './persistence';
 
@@ -153,7 +154,7 @@ function collectChangedLegacyStores(snapshot: TraccionPersistedRecordsSnapshot):
 
   for (const record of snapshot.records) {
     const storeId = LEGACY_STORAGE_STORE_IDS[record.key];
-    const localValue = window.localStorage.getItem(record.key);
+    const localValue = readStorageItem(record.key);
 
     if (localValue === record.value) {
       continue;
@@ -313,7 +314,7 @@ export async function forceExternalDataRefreshAfterRecovery(): Promise<void> {
   updateSeenTokens(snapshot);
 
   // Todos los stores se fuerzan a releer su fuente SQLite. Algunos módulos
-  // mantienen una copia de representación en localStorage, pero nunca se usa
+  // mantienen una copia efímera de representación en sessionStorage, pero nunca se usa
   // como fuente autoritativa para recuperar una caída.
   reloadIntegratedStores();
 
@@ -354,7 +355,7 @@ export function startExternalDataSyncPolling(): void {
 
   const metadata = readHydrationMetadata();
   lastSeenRefreshToken = metadata?.refreshToken ?? null;
-  // Si la hidratación fue satisfactoria (refreshToken presente), el localStorage
+  // Si la hidratación fue satisfactoria (refreshToken presente), la caché efímera de sesión
   // ya está al día. Inicializar los tokens de tareas/sorteos a un valor centinela
   // distinto de null para que el primer poll no los recargue si no han cambiado.
   // El valor real se actualiza en el primer updateSeenTokens.

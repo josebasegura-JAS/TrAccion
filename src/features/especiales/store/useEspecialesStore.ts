@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   buildEspecialRecipient,
@@ -94,7 +94,7 @@ function parseRecipientsSnapshot(storageValue: string | null): EspecialRecipient
 }
 
 function mirrorRecipients(recipients: EspecialRecipient[]): void {
-  window.localStorage.setItem(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients));
+  writeRendererStorageCache(RECIPIENTS_STORAGE_KEY, JSON.stringify(recipients), 'sqlite');
 }
 
 function hasEspecialesSqliteRepository(): boolean {

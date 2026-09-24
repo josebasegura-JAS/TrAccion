@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import {
   deleteCriterioRrllInSqlite,
@@ -115,7 +115,7 @@ function persistCriteriosRrll(criterios: CriterioRrll[]): void {
 }
 
 function mirrorCriteriosRrll(criterios: CriterioRrll[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(criterios));
+  writeRendererStorageCache(STORAGE_KEY, JSON.stringify(criterios), 'sqlite');
 }
 
 function firstActiveCriterioId(criterios: CriterioRrll[]): string {

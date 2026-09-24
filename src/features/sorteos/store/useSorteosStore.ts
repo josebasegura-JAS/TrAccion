@@ -5,6 +5,7 @@ import {
   readStorageItem,
   waitForNextPaint,
   writeStorageItem,
+  writeRendererStorageCache,
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import { saveNewSharedArrayRecord } from '../../../services/sharedRecordPersistence';
@@ -203,8 +204,8 @@ function parseSorteosRecordArray<T>(
 }
 
 function mirrorSorteosSnapshot(draws: SorteosDraw[], exclusions: SorteosExclusion[]): void {
-  window.localStorage.setItem(DRAWS_STORAGE_KEY, JSON.stringify(draws));
-  window.localStorage.setItem(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions));
+  writeRendererStorageCache(DRAWS_STORAGE_KEY, JSON.stringify(draws), 'sqlite');
+  writeRendererStorageCache(EXCLUSIONS_STORAGE_KEY, JSON.stringify(exclusions), 'sqlite');
 }
 
 async function loadDirectSorteosSnapshot(): Promise<SharedSorteosSnapshot | null> {
@@ -389,7 +390,7 @@ async function saveSharedArray(
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
     throw new Error(result.message ?? 'No se ha confirmado el guardado en SQLite compartido.');
   }
-  window.localStorage.setItem(storageKey, value);
+  writeRendererStorageCache(storageKey, value, 'sqlite');
 }
 
 function persist(draws: SorteosDraw[], exclusions: SorteosExclusion[]): void {

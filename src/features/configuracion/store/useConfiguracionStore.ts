@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { normalizeTemplatePath } from '../domain/teletrabajoTemplate';
-import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
+import { readStorageItem, writeJsonStorageAsync, writeRendererStorageCache } from '../../../services/persistence';
 import {
   createTaskPhaseIdFromName,
   DEFAULT_TASK_PHASES,
@@ -245,7 +245,7 @@ async function readConfiguracionFromSqlite(): Promise<ConfiguracionState | null>
   latestConfiguracionUpdatedAt = snapshot.updatedAt;
   if (!snapshot.value) return null;
 
-  window.localStorage.setItem(STORAGE_KEY, snapshot.value);
+  writeRendererStorageCache(STORAGE_KEY, snapshot.value, 'sqlite');
   return parseConfiguracionValue(snapshot.value);
 }
 
@@ -257,7 +257,7 @@ async function persistConfiguracionConfirmed(configuracion: ConfiguracionState):
     const result = await sqliteSaver({ value, expectedUpdatedAt: latestConfiguracionUpdatedAt });
     if (!result.ok) throw new Error(result.message);
     latestConfiguracionUpdatedAt = result.currentUpdatedAt;
-    window.localStorage.setItem(STORAGE_KEY, value);
+    writeRendererStorageCache(STORAGE_KEY, value, 'sqlite');
     return;
   }
   const result = await writeJsonStorageAsync(STORAGE_KEY, configuracion);
