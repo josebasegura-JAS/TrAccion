@@ -610,7 +610,7 @@ export function SessionManagementPage({
               ...task,
               closedAt: closedAtByTaskExternalKey.get(task.externalKey) ?? null,
             }));
-          const taskIdsByExternalKey = createManyFromImport(importableTasks);
+          const taskIdsByExternalKey = await createManyFromImport(importableTasks);
           const importedSessionsResult = await importSessionsWithConcurrencyCheck(
             importableSessions.map((session) => ({
               externalKey: session.externalKey,

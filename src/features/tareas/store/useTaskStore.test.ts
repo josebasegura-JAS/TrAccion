@@ -104,15 +104,15 @@ describe('useTaskStore', () => {
     expect(readPersistedTasks()[0].id).toBe(tasks[0].id);
   });
 
-  it('createManyFromImport deduplica por ImportKey y devuelve el id ya existente', () => {
-    const firstIds = useTaskStore
+  it('createManyFromImport deduplica por ImportKey y devuelve el id ya existente', async () => {
+    const firstIds = await useTaskStore
       .getState()
       .createManyFromImport([
         { externalKey: 'comite:2025-01-01:1', draft: draft({ titulo: 'Punto importado' }) },
       ]);
     const firstTaskId = firstIds['comite:2025-01-01:1'];
 
-    const secondIds = useTaskStore
+    const secondIds = await useTaskStore
       .getState()
       .createManyFromImport([
         { externalKey: 'comite:2025-01-01:1', draft: draft({ titulo: 'Duplicado' }) },
@@ -123,8 +123,8 @@ describe('useTaskStore', () => {
     expect(readPersistedTasks()).toHaveLength(1);
   });
 
-  it('createManyFromImport normaliza importaciones históricas anteriores a 2026 como cerradas', () => {
-    useTaskStore.getState().createManyFromImport([
+  it('createManyFromImport normaliza importaciones históricas anteriores a 2026 como cerradas', async () => {
+    await useTaskStore.getState().createManyFromImport([
       {
         externalKey: 'comite:2025-05-21:1',
         closedAt: '2025-05-21T00:00:00.000Z',

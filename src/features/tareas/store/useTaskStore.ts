@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
-import { readStorageItem, writeStorageItem } from '../../../services/persistence';
+import {
+  emitPersistenceFeedback,
+  readStorageItem,
+  writeStorageItem,
+} from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { hasTaskSqliteRepository, loadTasksFromSqlite, saveTaskToSqlite, type TaskSqliteLoadMode } from './taskSqliteRepository';
 import { enqueueAuditEvent, buildAuditChanges, buildUpdateSummary } from '../../../shared/audit/auditTrail';
@@ -136,7 +140,7 @@ interface TaskStateStore {
   createWithConcurrencyCheck: (draft: TaskDraft, seguimientoText?: string) => Promise<TaskUpdateResult>;
   createManyFromImport: (
     drafts: Array<{ externalKey: string; draft: TaskDraft; closedAt?: string | null }>,
-  ) => Record<string, string>;
+  ) => Promise<Record<string, string>>;
   updateWithConcurrencyCheck: (
     id: string,
     draft: TaskDraft,
@@ -833,76 +837,100 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
       };
     }
   },
-  createManyFromImport: (drafts) => {
+  createManyFromImport: async (drafts) => {
+    const state = useTaskStore.getState();
+    const now = new Date().toISOString();
     const createdIds: Record<string, string> = {};
-    set((state) => {
-      const now = new Date().toISOString();
-      const existingImportKeys = new Set(
-        state.tasks
-          .map((task) => task.observaciones.match(/ImportKey:([^\s]+)/)?.[1])
-          .filter((value): value is string => Boolean(value)),
-      );
-      const importedTasks: Task[] = [];
-      const tasksWithNormalizedExistingImports = state.tasks.map((task) => normalizeTask(task));
-      const changedExistingTasks = tasksWithNormalizedExistingImports.some(
-        (task, index) => JSON.stringify(task) !== JSON.stringify(state.tasks[index]),
-      );
+    const existingImportKeys = new Set(
+      state.tasks
+        .map((task) => task.observaciones.match(/ImportKey:([^\s]+)/)?.[1])
+        .filter((value): value is string => Boolean(value)),
+    );
+    const importedTasks: Task[] = [];
+    const tasksWithNormalizedExistingImports = state.tasks.map((task) => normalizeTask(task));
+    const changedExistingTasks = tasksWithNormalizedExistingImports.some(
+      (task, index) => JSON.stringify(task) !== JSON.stringify(state.tasks[index]),
+    );
 
-      drafts.forEach(({ externalKey, draft, closedAt }) => {
-        if (existingImportKeys.has(externalKey)) {
-          const existingTask = tasksWithNormalizedExistingImports.find((task) =>
-            task.observaciones.includes(`ImportKey:${externalKey}`),
-          );
-          if (existingTask) {
-            createdIds[externalKey] = existingTask.id;
-          }
-          return;
+    drafts.forEach(({ externalKey, draft, closedAt }) => {
+      if (existingImportKeys.has(externalKey)) {
+        const existingTask = tasksWithNormalizedExistingImports.find((task) =>
+          task.observaciones.includes(`ImportKey:${externalKey}`),
+        );
+        if (existingTask) {
+          createdIds[externalKey] = existingTask.id;
         }
+        return;
+      }
 
-        const task: Task = normalizeTask({
-          id: createTaskId(),
-          ...draft,
-          sessionDocumentCode: '',
-          sessionModule: '',
-          sessionDate: '',
-          observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
-          seguimiento: buildSeguimiento(
-            'Tarea importada desde resumen histórico de Comité/Paritaria.',
-            now,
-          ),
-          createdAt: closedAt ?? now,
-          updatedAt: now,
-          deletedAt: null,
-          closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
-        });
-        createdIds[externalKey] = task.id;
-        importedTasks.push(task);
+      const task: Task = normalizeTask({
+        id: createTaskId(),
+        ...draft,
+        sessionDocumentCode: '',
+        sessionModule: '',
+        sessionDate: '',
+        observaciones: `${draft.observaciones ? `${draft.observaciones} ` : ''}ImportKey:${externalKey}`,
+        seguimiento: buildSeguimiento(
+          'Tarea importada desde resumen histórico de Comité/Paritaria.',
+          now,
+        ),
+        createdAt: closedAt ?? now,
+        updatedAt: now,
+        deletedAt: null,
+        closedAt: isTaskClosed(draft) ? (closedAt ?? now) : null,
       });
-
-      if (importedTasks.length === 0 && !changedExistingTasks) {
-        return state;
-      }
-
-      const tasks = [...tasksWithNormalizedExistingImports, ...importedTasks];
-      if (hasTaskSqliteRepository()) {
-        importedTasks.forEach((task) => {
-          void persistTaskDirectly(task, null).catch((error: unknown) => {
-            console.warn('No se ha podido guardar una tarea importada en SQLite directo.', error);
-          });
-        });
-        if (changedExistingTasks) {
-          tasksWithNormalizedExistingImports.forEach((task) => {
-            void persistTaskDirectly(task, task.updatedAt).catch((error: unknown) => {
-              console.warn('No se ha podido normalizar una tarea existente en SQLite directo.', error);
-            });
-          });
-        }
-      } else {
-        persistTasks(tasks);
-      }
-      return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
+      createdIds[externalKey] = task.id;
+      importedTasks.push(task);
     });
 
+    if (importedTasks.length === 0 && !changedExistingTasks) {
+      return createdIds;
+    }
+
+    const tasks = [...tasksWithNormalizedExistingImports, ...importedTasks];
+
+    if (hasTaskSqliteRepository()) {
+      try {
+        for (const task of importedTasks) {
+          const result = await persistTaskDirectly(task, null);
+          if (!result.ok) {
+            throw new Error(result.message);
+          }
+        }
+
+        if (changedExistingTasks) {
+          for (let index = 0; index < tasksWithNormalizedExistingImports.length; index += 1) {
+            const task = tasksWithNormalizedExistingImports[index];
+            const previousTask = state.tasks[index];
+            if (!previousTask || !tasksDiffer(previousTask, task)) {
+              continue;
+            }
+
+            const result = await persistTaskDirectly(task, previousTask.updatedAt);
+            if (!result.ok) {
+              throw new Error(result.message);
+            }
+          }
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'No se han podido guardar las tareas importadas.';
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key: TASKS_STORAGE_KEY,
+          message,
+        });
+        useTaskStore.getState().reloadFromStorage();
+        throw error;
+      }
+    } else {
+      persistTasks(tasks);
+    }
+
+    set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
     return createdIds;
   },
   updateWithConcurrencyCheck: async (id, draft, seguimientoText, expectedUpdatedAt) => {
@@ -1055,49 +1083,32 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
     useTaskStore.getState().closeTasksFromSession(taskIds, 'Comité de Empresa', sessionLabel);
   },
   closeTasksFromSession: (taskIds, moduleLabel, sessionLabel) => {
-    set((state) => {
-      const now = new Date().toISOString();
-      const taskIdSet = new Set(taskIds);
-      const seguimiento = buildSeguimiento(`Tratada en ${moduleLabel} (${sessionLabel}).`, now);
-      const tasks = state.tasks.map((task) => {
-        if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
-          return task;
+    void useTaskStore
+      .getState()
+      .closeTasksFromSessionWithConcurrencyCheck(taskIds, moduleLabel, sessionLabel)
+      .then((result) => {
+        if (result.ok) {
+          return;
         }
-
-        enqueueAuditEvent({
-          module: 'tareas',
-          entityId: task.id,
-          action: 'status_changed',
-          summary: `Estado cambiado: ${task.estado} → cerrada`,
-          changes: [
-            { field: 'estado', label: 'Estado', before: task.estado, after: 'cerrada' },
-            { field: 'fase', label: 'Fase', before: task.fase, after: CLOSED_TASK_PHASE },
-          ],
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key: TASKS_STORAGE_KEY,
+          message: result.message,
         });
-
-        return {
-          ...task,
-          estado: 'cerrada' as const,
-          fase: CLOSED_TASK_PHASE,
-          seguimiento: [...seguimiento, ...task.seguimiento],
-          closedAt: task.closedAt ?? now,
-          updatedAt: now,
-        };
+      })
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'No se han podido cerrar las tareas de la sesión.';
+        emitPersistenceFeedback({
+          kind: 'error',
+          updatedAt: new Date().toISOString(),
+          key: TASKS_STORAGE_KEY,
+          message,
+        });
       });
-      if (hasTaskSqliteRepository()) {
-        tasks.forEach((task) => {
-          const previousTask = state.tasks.find((candidate) => candidate.id === task.id);
-          if (previousTask && previousTask.updatedAt !== task.updatedAt) {
-            void persistTaskDirectly(task, previousTask.updatedAt).catch((error: unknown) => {
-              console.warn('No se ha podido cerrar una tarea de sesión en SQLite directo.', error);
-            });
-          }
-        });
-      } else {
-        persistTasks(tasks);
-      }
-      return { tasks, selectedTaskId: firstActiveTaskId(tasks) };
-    });
   },
 
   closeTasksFromSessionWithConcurrencyCheck: async (taskIds, moduleLabel, sessionLabel) => {
