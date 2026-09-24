@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ChevronRight, X, UserRound } from 'lucide-react';
 import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { ModuleHelpButton } from './ModuleHelp';
@@ -15,6 +15,7 @@ import {
   getUnseenTaskAssignments,
   markTaskAssignmentsSeen,
 } from '../features/tareas/domain/taskAssignmentNotifications';
+import type { Task } from '../features/tareas/domain/task';
 
 const viewHeaderCopy: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: {
@@ -163,7 +164,11 @@ export function Header({
   const loadTasks = useTaskStore((state) => state.load);
   const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
-  const [assignmentNoticeRevision, setAssignmentNoticeRevision] = useState(0);
+  const [openedAssignmentIds, setOpenedAssignmentIds] = useState<Set<string>>(() => new Set());
+  const [isAssignmentNoticeOpen, setIsAssignmentNoticeOpen] = useState(false);
+  const [isWindowsUserResolved, setIsWindowsUserResolved] = useState(false);
+  const announcedAssignmentIds = useRef(new Set<string>());
+  const assignmentNoticeRef = useRef<HTMLDivElement>(null);
 
   const currentResponsible = useMemo(
     () => taskResponsibles.find(
@@ -174,11 +179,42 @@ export function Header({
   const unseenAssignments = useMemo(
     () => currentResponsible
       ? getUnseenTaskAssignments(tasks, currentResponsible.nombre, windowsUserName)
+        .filter((task) => !task.assignmentNoticeId || !openedAssignmentIds.has(task.assignmentNoticeId))
       : [],
-    [assignmentNoticeRevision, currentResponsible, tasks, windowsUserName],
+    [currentResponsible, openedAssignmentIds, tasks, windowsUserName],
   );
 
   const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus);
+
+  useEffect(() => {
+    if (!dbStatus?.ready || !isWindowsUserResolved || !currentResponsible) return;
+    const newlyAssigned = unseenAssignments.filter(
+      (task) => task.assignmentNoticeId && !announcedAssignmentIds.current.has(task.assignmentNoticeId),
+    );
+    if (newlyAssigned.length === 0) return;
+    newlyAssigned.forEach((task) => announcedAssignmentIds.current.add(task.assignmentNoticeId!));
+    setIsAssignmentNoticeOpen(true);
+  }, [currentResponsible, dbStatus?.ready, isWindowsUserResolved, unseenAssignments]);
+
+  useEffect(() => {
+    if (unseenAssignments.length === 0) setIsAssignmentNoticeOpen(false);
+  }, [unseenAssignments.length]);
+
+  useEffect(() => {
+    if (!isAssignmentNoticeOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!assignmentNoticeRef.current?.contains(event.target as Node)) setIsAssignmentNoticeOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsAssignmentNoticeOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAssignmentNoticeOpen]);
 
   useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);
 
@@ -201,11 +237,13 @@ export function Header({
         }
 
         setWindowsUserName(normalizedUserName);
+        setIsWindowsUserResolved(true);
         writeStorageItem('traccion.header.username', normalizedUserName);
       })
       .catch(() => {
         if (isMounted) {
           setWindowsUserName('Usuario local');
+          setIsWindowsUserResolved(true);
         }
       });
 
@@ -214,15 +252,23 @@ export function Header({
     };
   }, []);
 
+  const handleOpenAssignment = (task: Task) => {
+    markTaskAssignmentsSeen(windowsUserName, [task]);
+    if (task.assignmentNoticeId) setOpenedAssignmentIds((current) => new Set(current).add(task.assignmentNoticeId!));
+    setIsAssignmentNoticeOpen(false);
+    onViewChange({ view: 'tareas', recordId: task.id, responsibleFilter: '__mine__' });
+  };
+
   const handleOpenNewAssignments = () => {
     if (unseenAssignments.length === 0) return;
     markTaskAssignmentsSeen(windowsUserName, unseenAssignments);
-    setAssignmentNoticeRevision((current) => current + 1);
+    setOpenedAssignmentIds((current) => new Set([...current, ...unseenAssignments.map((task) => task.assignmentNoticeId).filter((id): id is string => Boolean(id))]));
+    setIsAssignmentNoticeOpen(false);
     onViewChange({ view: 'tareas', responsibleFilter: '__mine__' });
   };
 
   return (
-    <header className="border-b border-sky-300/[0.07] px-3 pb-2 pt-2.5 sm:px-4">
+    <header className="relative z-40 border-b border-sky-300/[0.07] px-3 pb-2 pt-2.5 sm:px-4">
       <div className="grid min-w-0 gap-2 rounded-[22px] border border-white/10 bg-gradient-to-r from-metro-topbar via-metro-navy to-metro-topbar px-4 py-3 shadow-[0_14px_32px_rgba(2,6,23,0.22)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,430px)_auto] lg:items-center lg:gap-4">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
@@ -253,16 +299,52 @@ export function Header({
 
         <div className="flex min-w-0 items-center gap-2 lg:justify-end">
           {unseenAssignments.length > 0 && (
-            <button
-              aria-label={`${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-400/30 bg-amber-400/10 px-2.5 py-2 text-[11px] font-bold text-amber-200 shadow-sm hover:border-amber-300/50 hover:bg-amber-400/15"
-              onClick={handleOpenNewAssignments}
-              title="Abrir nuevas tareas asignadas"
-              type="button"
-            >
-              <AlertTriangle size={15} />
-              <span>{unseenAssignments.length} nueva{unseenAssignments.length === 1 ? '' : 's'}</span>
-            </button>
+            <div className="relative shrink-0" ref={assignmentNoticeRef}>
+              <button
+                aria-controls="task-assignment-notice"
+                aria-expanded={isAssignmentNoticeOpen}
+                aria-haspopup="dialog"
+                aria-label={`${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-[11px] font-bold text-amber-200 shadow-sm transition hover:border-amber-300/70 hover:bg-amber-400/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+                onClick={() => setIsAssignmentNoticeOpen((open) => !open)}
+                title="Consultar nuevas tareas asignadas"
+                type="button"
+              >
+                <AlertTriangle size={16} aria-hidden="true" />
+                <span>{unseenAssignments.length} nueva{unseenAssignments.length === 1 ? '' : 's'}</span>
+              </button>
+              {isAssignmentNoticeOpen && (
+                <section
+                  aria-label="Nuevas tareas asignadas"
+                  className="absolute right-0 top-[calc(100%+12px)] z-50 w-[min(22rem,calc(100vw-6rem))] overflow-hidden rounded-2xl border border-amber-400/25 bg-metro-surface text-metro-text shadow-[0_22px_55px_rgba(2,6,23,0.6)]"
+                  id="task-assignment-notice"
+                  role="dialog"
+                >
+                  <div className="flex items-start gap-3 border-b border-white/10 bg-metro-panel px-4 py-3">
+                    <span className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-2 text-amber-300"><AlertTriangle size={19} aria-hidden="true" /></span>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-sm font-bold">{unseenAssignments.length === 1 ? 'Nueva tarea asignada' : 'Nuevas tareas asignadas'}</h2>
+                      <p className="mt-0.5 text-xs text-metro-muted">Tienes {unseenAssignments.length} tarea{unseenAssignments.length === 1 ? '' : 's'} nueva{unseenAssignments.length === 1 ? '' : 's'}</p>
+                    </div>
+                    <button aria-label="Más tarde" className="rounded-lg p-1 text-metro-muted hover:bg-white/10 hover:text-metro-text" onClick={() => setIsAssignmentNoticeOpen(false)} type="button"><X size={17} /></button>
+                  </div>
+                  <div className="max-h-60 space-y-1 overflow-y-auto p-2">
+                    {unseenAssignments.slice(0, 3).map((task) => (
+                      <button className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition hover:border-metro-border hover:bg-metro-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400" key={task.assignmentNoticeId} onClick={() => handleOpenAssignment(task)} title={`Ver tarea: ${task.titulo}`} type="button">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{task.titulo}</span><span className="block text-xs text-metro-muted">Prioridad {task.prioridad === 'critica' ? 'crítica' : task.prioridad}</span></span>
+                        <ChevronRight className="shrink-0 text-amber-300" size={17} aria-hidden="true" />
+                      </button>
+                    ))}
+                    {unseenAssignments.length > 3 && <p className="px-3 py-1 text-xs text-metro-muted">Y {unseenAssignments.length - 3} más</p>}
+                  </div>
+                  <div className="flex items-center gap-2 border-t border-white/10 px-3 py-2.5">
+                    <button className="flex-1 rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white transition hover:bg-metro-dark" onClick={() => unseenAssignments.length === 1 ? handleOpenAssignment(unseenAssignments[0]) : handleOpenNewAssignments()} type="button">{unseenAssignments.length === 1 ? 'Ver tarea' : 'Ver todas mis tareas'}</button>
+                    <button className="rounded-lg px-3 py-2 text-xs font-semibold text-metro-secondary hover:bg-white/10" onClick={() => setIsAssignmentNoticeOpen(false)} type="button">Más tarde</button>
+                  </div>
+                </section>
+              )}
+            </div>
           )}
           <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:w-[300px] lg:justify-start">
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-metro-red/10 text-metro-red ring-1 ring-metro-red/20">
