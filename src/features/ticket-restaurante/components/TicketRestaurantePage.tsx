@@ -1129,7 +1129,7 @@ export function TicketRestaurantePage({
 
   return (
     <section
-      className="space-y-2"
+      className="ui3-ticket-restaurante space-y-2"
       id="ticket-restaurante"
     >
       <PageHeader

@@ -768,6 +768,7 @@ export function TareasPage({
           rows={activeTaskRows}
           sort={preferences.sort}
           strongZebra
+          preserveScrollOnRowsChange
         />
       </div>
 

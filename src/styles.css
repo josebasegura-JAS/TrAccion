@@ -1006,3 +1006,67 @@ body {
 .app-module-stage > :where(div)[class*='rounded-'][class*='border'] {
   box-shadow: 0 4px 14px rgba(2, 6, 23, 0.08);
 }
+
+
+/* -----------------------------------------------------------
+   UI Fase 3 · remate operativo
+   Homogeneiza módulos densos, estados vacíos y paneles sin
+   aumentar el consumo de espacio ni alterar la lógica.
+   ----------------------------------------------------------- */
+.ui3-operational-card {
+  box-shadow: 0 3px 12px rgba(2, 6, 23, 0.07);
+}
+
+.ui3-empty-state {
+  color: rgb(148 163 184);
+}
+
+.ui3-huelgas :where(table) thead {
+  background: rgba(51, 65, 85, 0.42);
+}
+
+.ui3-huelgas :where(table) th {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 11px;
+  letter-spacing: 0.035em;
+}
+
+.ui3-huelgas :where(table) td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.ui3-huelgas :where(.shadow-sm, .shadow-card) {
+  box-shadow: 0 3px 12px rgba(2, 6, 23, 0.07);
+}
+
+.ui3-ticket-restaurante {
+  --ui3-ticket-gap: 10px;
+}
+
+.ui3-ticket-restaurante :where(section, article)[class*='rounded-2xl'][class*='border'],
+.ui3-ticket-restaurante :where(div)[class*='rounded-2xl'][class*='border'] {
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(2, 6, 23, 0.065);
+}
+
+.ui3-ticket-restaurante :where(.shadow-card) {
+  box-shadow: 0 3px 12px rgba(2, 6, 23, 0.065);
+}
+
+.ui3-ticket-restaurante :where(.p-4) {
+  padding: 12px;
+}
+
+.ui3-ticket-restaurante :where(.mb-4) {
+  margin-bottom: var(--ui3-ticket-gap);
+}
+
+.ui3-ticket-restaurante :where(.gap-4) {
+  gap: var(--ui3-ticket-gap);
+}
+
+.ui3-ticket-restaurante :where([class*='border-dashed']) {
+  background: rgba(15, 23, 42, 0.22);
+}

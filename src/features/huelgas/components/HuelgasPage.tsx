@@ -1210,7 +1210,7 @@ export function HuelgasPage() {
   const currentMailPreview = mailPreviewGroup ? renderGroupMail(mailPreviewGroup) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="ui3-huelgas space-y-3">
       <PageHeader
         title="Huelgas"
         actions={
@@ -1222,7 +1222,7 @@ export function HuelgasPage() {
       />
 
       {nextHuelga ? (
-        <section className="rounded-2xl border border-metro-border bg-metro-panel/75 p-4 shadow-sm">
+        <section className="ui3-operational-card rounded-xl border border-metro-border bg-metro-panel/75 p-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-metro-red/15 text-metro-red">
@@ -1241,12 +1241,12 @@ export function HuelgasPage() {
           </div>
         </section>
       ) : (
-        <section className="rounded-2xl border border-dashed border-metro-border bg-metro-panel/40 px-5 py-4 text-sm text-metro-muted">
+        <section className="ui3-empty-state rounded-xl border border-dashed border-metro-border bg-metro-panel/35 px-4 py-3 text-sm text-metro-muted">
           No hay próximas convocatorias registradas.
         </section>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-metro-border bg-metro-panel/75 shadow-sm">
+      <section className="ui3-operational-card overflow-hidden rounded-xl border border-metro-border bg-metro-panel/75">
         <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-metro-text">Convocatorias</h3>
@@ -1255,7 +1255,7 @@ export function HuelgasPage() {
         </div>
 
         {sortedHuelgas.length === 0 ? (
-          <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+          <div className="ui3-empty-state flex min-h-36 flex-col items-center justify-center gap-2.5 px-5 py-7 text-center">
             <CalendarDays className="text-metro-muted" size={32} />
             <div>
               <p className="font-medium text-metro-text">Todavía no hay huelgas registradas</p>
