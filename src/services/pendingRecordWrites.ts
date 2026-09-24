@@ -69,7 +69,16 @@ export async function saveRecordWithPendingFallback({
       return result;
     }
 
-    if (result.message.toLowerCase().includes('modificado por otro usuario')) {
+    const normalizedMessage = result.message.toLowerCase();
+    const isConcurrencyConflict =
+      result.currentUpdatedAt !== null ||
+      normalizedMessage.includes('modificado por otro usuario') ||
+      normalizedMessage.includes('modificada por otro usuario');
+
+    // Los conflictos OCC son rechazos válidos de SQLite, no fallos de conexión.
+    // Deben propagarse intactos para que el store pueda pedir una recarga y,
+    // sobre todo, no etiquetarlos erróneamente como una escritura offline.
+    if (isConcurrencyConflict) {
       return result;
     }
 

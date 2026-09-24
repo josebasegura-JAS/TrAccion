@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const readyStatus: TraccionDatabaseStatus = {
   ready: true,
   engine: 'sqlite',
-  phase: 'ready',
+  phase: 'active',
 };
 
 type TestModule = typeof import('./externalDataSync');
@@ -64,6 +64,7 @@ async function loadExternalDataSyncTestContext(): Promise<TestContext> {
     applyPersistedRecordsSnapshotToLocalStorage,
     flushPendingSqliteWrites,
     readHydrationMetadata,
+    readStorageItem: (key: string) => window.localStorage.getItem(key),
     subscribeToPersistenceFeedback: () => () => undefined,
   }));
 

@@ -465,7 +465,35 @@ async function loadTicketConfigPreferringSqlite(): Promise<TicketRestaurantConfi
   }
 
   const sqliteRecord = await loadTicketRestauranteConfigRecordFromSqlite();
-  if (sqliteRecord === null) return DEFAULT_TICKET_RESTAURANT_CONFIG;
+  if (sqliteRecord === null) {
+    // La configuración es un singleton y necesita existir también en SQLite
+    // para disponer de token OCC desde el primer guardado. Si la tabla está
+    // vacía (base nueva o migración), sembramos el valor por defecto en la
+    // fuente autoritativa compartida en lugar de depender de localStorage.
+    const seedResult = await saveTicketRestauranteConfigToSqlite(
+      JSON.stringify(DEFAULT_TICKET_RESTAURANT_CONFIG),
+      null,
+    );
+    if (seedResult?.ok && seedResult.currentUpdatedAt) {
+      configSqliteUpdatedAt = seedResult.currentUpdatedAt;
+      return DEFAULT_TICKET_RESTAURANT_CONFIG;
+    }
+
+    // Si otro equipo ganó la carrera de inicialización, releemos para tomar
+    // su token y contenido en vez de caer a una copia local.
+    const seededRecord = await loadTicketRestauranteConfigRecordFromSqlite();
+    if (seededRecord) {
+      configSqliteUpdatedAt = seededRecord.updatedAt;
+      try {
+        const seededParsed = JSON.parse(seededRecord.value) as TicketRestaurantConfig;
+        return normalizeTicketRestaurantConfig(seededParsed);
+      } catch {
+        return DEFAULT_TICKET_RESTAURANT_CONFIG;
+      }
+    }
+
+    return DEFAULT_TICKET_RESTAURANT_CONFIG;
+  }
 
   let parsed: unknown;
   try {

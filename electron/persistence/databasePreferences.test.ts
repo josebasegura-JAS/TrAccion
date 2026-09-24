@@ -64,6 +64,7 @@ describe('databasePreferences', () => {
       dailyLocalBackupRetentionDays: 7,
       dailyLocalBackupDirectoryPath: null,
       updatesDirectoryPath: null,
+      expectedDatabaseUuid: null,
     });
   });
 
@@ -75,6 +76,7 @@ describe('databasePreferences', () => {
       dailyLocalBackupRetentionDays: 3,
       dailyLocalBackupDirectoryPath: '/red/diario',
       updatesDirectoryPath: '/red/updates',
+      expectedDatabaseUuid: null,
     });
 
     const preferences = await readDatabasePreferences();
@@ -86,6 +88,7 @@ describe('databasePreferences', () => {
       dailyLocalBackupRetentionDays: 3,
       dailyLocalBackupDirectoryPath: '/red/diario',
       updatesDirectoryPath: '/red/updates',
+      expectedDatabaseUuid: null,
     });
   });
 
