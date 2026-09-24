@@ -20,7 +20,9 @@ type PendingWriteReplayer = (
  * Compatibilidad de API para repositorios ya migrados. TrAcción no admite
  * escrituras offline: no se registra ni reproduce ninguna cola local.
  */
-export function registerPendingWriteReplayer(_module: string, _replayer: PendingWriteReplayer): void {
+export function registerPendingWriteReplayer(module: string, replayer: PendingWriteReplayer): void {
+  void module;
+  void replayer;
   // Intencionadamente vacío. Se conserva temporalmente para evitar un refactor
   // masivo de repositorios en esta entrega de robustez.
 }

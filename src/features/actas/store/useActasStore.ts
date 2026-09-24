@@ -19,7 +19,6 @@ import {
   hasActaTypesSqliteRepository,
   loadActaTypeRecordsFromSqlite,
   saveActaTypeToSqlite,
-  saveActaTypesToSqlite,
 } from './actaTypesSqliteRepository';
 import {
   ACTA_STATES,

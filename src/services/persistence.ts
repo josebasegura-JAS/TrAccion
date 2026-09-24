@@ -661,7 +661,8 @@ export function reportStartupHydrationResult(result: HydrationResult): void {
   });
 }
 
-export function bootstrapSqlitePersistence(_force = false): void {
+export function bootstrapSqlitePersistence(force = false): void {
+  void force;
   // Deshabilitado: una SQLite vacía o nueva nunca debe sembrarse automáticamente
   // desde datos locales de un puesto. La inicialización debe ser explícita.
   window.localStorage.removeItem(SQLITE_MIGRATION_FLAG_KEY);
