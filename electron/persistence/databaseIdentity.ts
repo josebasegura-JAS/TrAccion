@@ -1,9 +1,14 @@
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
-import type { Database, DatabaseConstructor } from 'better-sqlite3';
+import type { Database } from 'better-sqlite3';
 import { CURRENT_SCHEMA_VERSION, readCurrentSchemaVersion } from './schemaMigrations.js';
 
 const require = createRequire(import.meta.url);
+
+type BetterSqlite3Constructor = new (
+  filename: string,
+  options?: { readonly?: boolean; fileMustExist?: boolean },
+) => Database;
 
 export const TRACCION_APPLICATION_ID = 'TrAccion';
 export const TRACCION_DATABASE_ENVIRONMENT = 'production';
@@ -78,7 +83,7 @@ export function inspectAndEnsureDatabaseIdentity(
   databasePath: string,
   options: InspectDatabaseIdentityOptions = {},
 ): DatabaseIdentityInspection {
-  const BetterSqlite3 = require('better-sqlite3') as DatabaseConstructor;
+  const BetterSqlite3 = require('better-sqlite3') as BetterSqlite3Constructor;
   const db = new BetterSqlite3(databasePath, { readonly: false, fileMustExist: true });
 
   try {
@@ -96,7 +101,7 @@ export function inspectAndEnsureDatabaseIdentity(
       );
     }
 
-    if (hasCompleteIdentity) {
+    if (applicationId && databaseUuid && createdAt && environment) {
       if (applicationId !== TRACCION_APPLICATION_ID) {
         throw new Error(
           `La SQLite seleccionada pertenece a otra aplicación (${applicationId}). No se ha modificado el fichero.`,
