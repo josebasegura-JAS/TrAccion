@@ -712,43 +712,43 @@ export function SessionManagementPage({
       />
 
       {isCreateOpen && (
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel p-3">
+        <div className="ui-section mb-3 p-3">
           <div className="grid grid-cols-[150px_180px_minmax(220px,1fr)] gap-2 overflow-x-auto">
             <input
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              className="ui-control"
               onChange={(event) => updateDraft('date', event.target.value)}
               type="date"
               value={draft.date}
             />
             <input
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              className="ui-control"
               onChange={(event) => updateDraft('code', event.target.value)}
               placeholder="Código documento"
               value={draft.code}
             />
             <input
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              className="ui-control"
               onChange={(event) => updateDraft('title', event.target.value)}
               placeholder="Título / referencia de la sesión"
               value={draft.title}
             />
           </div>
           <textarea
-            className="mt-2 min-h-[82px] w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+            className="ui-control mt-2 min-h-[72px] w-full resize-y"
             onChange={(event) => updateDraft('notes', event.target.value)}
             placeholder="Notas de la sesión, documentación asociada, observaciones, etc."
             value={draft.notes}
           />
           <div className="mt-2 flex flex-wrap justify-end gap-2">
             <button
-              className="rounded-xl border border-metro-border px-3 py-2 text-sm font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+              className="ui-button ui-button--secondary"
               onClick={() => setIsCreateOpen(false)}
               type="button"
             >
               Cancelar
             </button>
             <button
-              className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
+              className="ui-button ui-button--primary"
               onClick={handleCreate}
               type="button"
             >
@@ -759,7 +759,7 @@ export function SessionManagementPage({
       )}
 
       {!showSearchInHeader && (
-        <div className="mb-4 rounded-xl border border-metro-border bg-metro-panel/80 p-3">
+        <div className="ui-section mb-3 p-3">
           <label
             className="flex items-center gap-2 text-xs font-bold text-metro-muted"
             htmlFor={`${config.moduleId}-session-search`}
@@ -768,7 +768,7 @@ export function SessionManagementPage({
           </label>
           <div className="mt-2 flex flex-row flex-wrap items-center gap-2">
             <input
-              className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red"
+              className="ui-control min-w-0 flex-1"
               id={`${config.moduleId}-session-search`}
               onChange={(event) => setSessionSearch(event.target.value)}
               placeholder="Buscar por sesión, fecha, código, punto, sindicato, responsable, descripción..."
@@ -780,7 +780,7 @@ export function SessionManagementPage({
             </span>
             {sessionSearch && (
               <button
-                className="rounded-lg border border-metro-border px-3 py-2 text-xs font-semibold text-metro-muted hover:border-metro-red hover:text-metro-text"
+                className="ui-button ui-button--secondary ui-button--compact"
                 onClick={() => setSessionSearch('')}
                 type="button"
               >

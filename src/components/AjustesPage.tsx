@@ -644,12 +644,12 @@ export function AjustesPage() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-3xl border border-metro-border bg-metro-surface p-5 shadow-card">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div className="ui-section ui-section--hero">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Ajustes</p>
-            <h2 className="mt-1 text-2xl font-bold text-metro-text">Configuración de TrAcción</h2>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-metro-muted">
+            <p className="ui-eyebrow">Ajustes</p>
+            <h2 className="mt-1 text-xl font-bold text-metro-text">Configuración de TrAcción</h2>
+            <p className="mt-1 max-w-4xl text-sm leading-5 text-metro-muted">
               Configuración común para RRLL. Las rutas se guardan en la SQLite compartida y se aplican
               a todos los usuarios que trabajan con la misma base de datos.
             </p>
@@ -667,17 +667,17 @@ export function AjustesPage() {
           </div>
         </div>
 
-        <div className="mt-5 border-t border-metro-border pt-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-metro-muted">
+        <div className="mt-4 border-t border-metro-border/80 pt-3">
+          <p className="ui-eyebrow mb-2 text-metro-muted">
             Accesos directos
           </p>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <button
-              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              className="ui-shortcut-card"
               onClick={() => openAndScroll('ajustes-base-datos')}
               type="button"
             >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <span className="ui-shortcut-card__icon">
                 <Database size={17} />
               </span>
               <span className="min-w-0">
@@ -686,11 +686,11 @@ export function AjustesPage() {
               </span>
             </button>
             <button
-              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              className="ui-shortcut-card"
               onClick={() => openAndScroll('ajustes-plantillas')}
               type="button"
             >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <span className="ui-shortcut-card__icon">
                 <FileText size={17} />
               </span>
               <span className="min-w-0">
@@ -700,11 +700,11 @@ export function AjustesPage() {
             </button>
 
             <button
-              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              className="ui-shortcut-card"
               onClick={() => openAndScroll('ajustes-exportaciones')}
               type="button"
             >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <span className="ui-shortcut-card__icon">
                 <FileSpreadsheet size={17} />
               </span>
               <span className="min-w-0">
@@ -714,11 +714,11 @@ export function AjustesPage() {
             </button>
 
             <button
-              className="group flex items-center gap-3 rounded-xl border border-metro-border bg-metro-panel p-3 text-left transition hover:border-metro-red"
+              className="ui-shortcut-card"
               onClick={() => openAndScroll('ajustes-tareas')}
               type="button"
             >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+              <span className="ui-shortcut-card__icon">
                 <ListTodo size={17} />
               </span>
               <span className="min-w-0">
@@ -731,13 +731,13 @@ export function AjustesPage() {
       </div>
 
       <details
-        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        className="ui-accordion group scroll-mt-4"
         id="ajustes-base-datos"
         open
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+        <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red"><Database size={17} /></span>
+            <span className="ui-shortcut-card__icon"><Database size={17} /></span>
             <div>
               <h3 className="text-base font-bold text-metro-text">Base de datos y protecciones</h3>
               <p className="mt-0.5 text-xs text-metro-muted">Ruta SQLite, desbloqueo, copias, actualizaciones y mantenimiento.</p>
@@ -797,13 +797,13 @@ export function AjustesPage() {
       </details>
 
       <details
-        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        className="ui-accordion group scroll-mt-4"
         id="ajustes-plantillas"
         open
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+        <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+            <span className="ui-shortcut-card__icon">
               <FileText size={17} />
             </span>
             <div>
@@ -822,13 +822,13 @@ export function AjustesPage() {
       </details>
 
       <details
-        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        className="ui-accordion group scroll-mt-4"
         id="ajustes-exportaciones"
         open
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+        <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+            <span className="ui-shortcut-card__icon">
               <FileSpreadsheet size={17} />
             </span>
             <div>
@@ -879,13 +879,13 @@ export function AjustesPage() {
       </details>
 
       <details
-        className="group scroll-mt-4 overflow-hidden rounded-2xl border border-metro-border bg-metro-panel"
+        className="ui-accordion group scroll-mt-4"
         id="ajustes-tareas"
         open
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+        <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-red">
+            <span className="ui-shortcut-card__icon">
               <ListTodo size={17} />
             </span>
             <div>
