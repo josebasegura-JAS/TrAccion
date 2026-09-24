@@ -17,6 +17,7 @@ export interface DatabasePreferences {
   dailyLocalBackupRetentionDays: number;
   dailyLocalBackupDirectoryPath: string | null;
   updatesDirectoryPath: string | null;
+  expectedDatabaseUuid?: string | null;
 }
 
 export function getDefaultDatabaseDirectory(): string {
@@ -39,6 +40,7 @@ export async function readDatabasePreferences(): Promise<DatabasePreferences> {
     dailyLocalBackupRetentionDays: DAILY_LOCAL_BACKUP_DEFAULT_RETENTION_DAYS,
     dailyLocalBackupDirectoryPath: null,
     updatesDirectoryPath: null,
+    expectedDatabaseUuid: null,
   };
 
   try {
@@ -81,6 +83,10 @@ export async function readDatabasePreferences(): Promise<DatabasePreferences> {
       updatesDirectoryPath:
         typeof candidate.updatesDirectoryPath === 'string' && candidate.updatesDirectoryPath.trim()
           ? candidate.updatesDirectoryPath
+          : null,
+      expectedDatabaseUuid:
+        typeof candidate.expectedDatabaseUuid === 'string' && candidate.expectedDatabaseUuid.trim()
+          ? candidate.expectedDatabaseUuid
           : null,
     };
   } catch {

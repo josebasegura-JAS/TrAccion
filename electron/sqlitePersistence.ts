@@ -91,6 +91,10 @@ import {
 } from './persistence/databaseLockManager.js';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 import {
+  inspectAndEnsureDatabaseIdentity,
+  readDatabaseIdentity,
+} from './persistence/databaseIdentity.js';
+import {
   SQLITE_BUSY_RETRY_DELAYS_MS,
   isSqliteBusyOrLockedError,
   isSqliteCorruptionError,
@@ -272,6 +276,10 @@ export interface DatabaseStatus {
   lockPath: string;
   lock?: DatabaseLockInfo;
   message?: string;
+  applicationId?: string;
+  databaseUuid?: string;
+  databaseCreatedAt?: string;
+  environment?: string;
 }
 
 export interface DatabaseHealthCheckResult {
@@ -666,7 +674,23 @@ async function activateDatabase(
     }
 
     await prepareDatabaseFile(databasePath, sourceDatabasePath);
+
+    // Antes de aplicar ninguna migración, demostrar que el fichero pertenece a
+    // TrAcción. Las bases legacy válidas reciben identidad una única vez. Si el
+    // equipo ya estaba vinculado a un UUID, una base distinta se rechaza.
+    const preferences = await readDatabasePreferences();
+    const configuredDirectoryMatches = Boolean(
+      preferences.customDirectoryPath &&
+        path.resolve(preferences.customDirectoryPath) === path.resolve(directoryPath),
+    );
+    const allowLegacyBootstrap =
+      !preferences.expectedDatabaseUuid || sourceDatabasePath !== null || configuredDirectoryMatches;
+    const identityInspection = inspectAndEnsureDatabaseIdentity(databasePath, {
+      expectedDatabaseUuid: preferences.expectedDatabaseUuid ?? null,
+      allowLegacyBootstrap,
+    });
     const db = openDatabase(databasePath);
+    const identity = readDatabaseIdentity(db) ?? identityInspection.identity;
     // Limpiar los editing_locks que este proceso dejó sin liberar en un reinicio
     // o crash anterior. Al tener ownerId estable, podemos eliminarlos activamente
     // sin esperar al TTL de 30s.
@@ -684,7 +708,18 @@ async function activateDatabase(
       schemaVersion: CURRENT_SCHEMA_VERSION,
       isDefaultPath,
       lockPath,
+      applicationId: identity.applicationId,
+      databaseUuid: identity.databaseUuid,
+      databaseCreatedAt: identity.createdAt,
+      environment: identity.environment,
     };
+
+    if (!preferences.expectedDatabaseUuid) {
+      await writeDatabasePreferences({
+        ...preferences,
+        expectedDatabaseUuid: identity.databaseUuid,
+      });
+    }
     clearInterval(startupLockHeartbeat);
     await releaseLock(lockPath, startupLock);
     return status;
@@ -831,6 +866,14 @@ export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
       throw new Error(
         `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
       );
+    }
+
+    const identity = readDatabaseIdentity(db);
+    if (!identity || !currentStatus.databaseUuid || identity.databaseUuid !== currentStatus.databaseUuid) {
+      throw new Error('La identidad de la base SQLite ha cambiado durante la sesión.');
+    }
+    if (identity.applicationId !== currentStatus.applicationId || identity.environment !== currentStatus.environment) {
+      throw new Error('Los metadatos de la base SQLite ya no coinciden con la base validada al iniciar.');
     }
 
     return {
@@ -1997,6 +2040,7 @@ export async function changeSqliteDirectory(directoryPath: string): Promise<Data
       await writeDatabasePreferences({
         ...(await readDatabasePreferences()),
         customDirectoryPath: normalizedDirectoryPath,
+        expectedDatabaseUuid: nextStatus.databaseUuid ?? null,
       });
       return nextStatus;
     } catch (changeError) {

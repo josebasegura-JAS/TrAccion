@@ -118,9 +118,9 @@ export function DatabaseSettingsSection({
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-bold text-metro-text">Base de datos</h3>
           <p className="mt-1 text-sm text-metro-muted">
-            SQLite es la base principal. La app mantiene una caché local y una copia de respaldo en
-            este equipo. Selecciona una carpeta local o compartida; TrAcción usará dentro el fichero
-            traccion.sqlite sin sobrescribir bases existentes.
+            SQLite compartida es la única fuente de datos operativa. Si deja de estar disponible,
+            TrAcción bloquea la edición. La identidad de la base se valida antes de abrirla para evitar
+            trabajar por error sobre otra SQLite o sobre una base distinta.
           </p>
         </div>
         <StatusBadge
@@ -149,6 +149,25 @@ export function DatabaseSettingsSection({
           <p className="mt-1 text-xs text-metro-muted">{databaseBadge.detail}</p>
         </div>
       </div>
+
+      {databaseStatus?.ready && databaseStatus.databaseUuid && (
+        <div className="mt-3 grid gap-3 text-sm text-metro-text md:grid-cols-3">
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <p className="text-xs font-semibold text-metro-muted">Identidad</p>
+            <p className="mt-1 font-medium">TrAcción · {databaseStatus.environment === 'production' ? 'Producción' : (databaseStatus.environment ?? 'Producción')}</p>
+          </div>
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <p className="text-xs font-semibold text-metro-muted">ID de base</p>
+            <p className="mt-1 font-mono text-xs" title={databaseStatus.databaseUuid}>
+              {databaseStatus.databaseUuid.slice(0, 8)}…
+            </p>
+          </div>
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <p className="text-xs font-semibold text-metro-muted">Schema</p>
+            <p className="mt-1 font-medium">v{databaseStatus.schemaVersion ?? '—'}</p>
+          </div>
+        </div>
+      )}
 
       {databaseLockCheckError && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
