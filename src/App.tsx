@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
 import { startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
+import { startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
 import { hasDirtyEditors } from './services/dirtyEditors';
@@ -172,7 +173,14 @@ export function App() {
     bootstrapSqlitePersistence();
     startDatabaseConnectivityIssueListener();
     const syncTimer = window.setTimeout(() => startExternalDataSyncPolling(), 1_500);
-    return () => { window.clearTimeout(syncTimer); stopExternalDataSyncPolling(); stopDatabaseConnectivityIssueListener(); };
+    const healthTimer = window.setTimeout(() => startDatabaseHealthMonitor(), 2_500);
+    return () => {
+      window.clearTimeout(syncTimer);
+      window.clearTimeout(healthTimer);
+      stopDatabaseHealthMonitor();
+      stopExternalDataSyncPolling();
+      stopDatabaseConnectivityIssueListener();
+    };
   }, []);
 
   const changeActiveView = async (view: AppView): Promise<void> => {

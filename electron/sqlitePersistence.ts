@@ -24,6 +24,7 @@ import { pruneLocalStorageBackups } from './persistence/maintenanceQueries.js';
 import {
   CONFIGURACION_STATE_ID,
   CURRENT_SCHEMA_VERSION,
+  readCurrentSchemaVersion,
   isConfiguracionStateRow,
 } from './persistence/schemaMigrations.js';
 import {
@@ -271,6 +272,13 @@ export interface DatabaseStatus {
   lockPath: string;
   lock?: DatabaseLockInfo;
   message?: string;
+}
+
+export interface DatabaseHealthCheckResult {
+  ok: boolean;
+  status: DatabaseStatus;
+  checkedAt: string;
+  message: string;
 }
 
 let ownerId = createVolatileOwnerId();
@@ -791,6 +799,58 @@ async function safeDatabaseOperation<T>(
 
   // Inalcanzable: el bucle siempre retorna o lanza en la última iteración.
   throw new Error('safeDatabaseOperation: estado inesperado.');
+}
+
+export async function checkSqliteHealth(): Promise<DatabaseHealthCheckResult> {
+  const currentStatus = getSqliteStatus();
+  const checkedAt = new Date().toISOString();
+
+  if (!currentStatus.ready || currentStatus.phase !== 'active' || currentStatus.isDefaultPath) {
+    return {
+      ok: false,
+      status: currentStatus,
+      checkedAt,
+      message:
+        currentStatus.message ??
+        (currentStatus.isDefaultPath
+          ? 'No hay una base SQLite compartida activa.'
+          : 'SQLite no está activa.'),
+    };
+  }
+
+  try {
+    const databaseStats = await stat(currentStatus.path);
+    if (!databaseStats.isFile()) {
+      throw new Error('La ruta configurada ya no apunta a un fichero SQLite.');
+    }
+
+    const db = requireDatabase();
+    db.prepare('SELECT 1 AS ok').get();
+    const schemaVersion = readCurrentSchemaVersion(db);
+    if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
+      throw new Error(
+        `Schema SQLite inesperado: v${schemaVersion}; se esperaba v${CURRENT_SCHEMA_VERSION}.`,
+      );
+    }
+
+    return {
+      ok: true,
+      status: getSqliteStatus(),
+      checkedAt,
+      message: 'Conexión con la base compartida verificada.',
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? `No se puede verificar la base SQLite compartida: ${error.message}`
+        : 'No se puede verificar la base SQLite compartida.';
+    return {
+      ok: false,
+      status: getSqliteStatus(),
+      checkedAt,
+      message,
+    };
+  }
 }
 
 export function getSqliteStatus(): DatabaseStatus {

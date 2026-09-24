@@ -39,6 +39,7 @@ interface TraccionDocxTextResult { ok: boolean; text?: string; message?: string;
 
 interface TraccionDatabaseLockInfo { ownerId: string; username: string; hostname: string; pid: number; createdAt: string; updatedAt: string; }
 interface TraccionDatabaseStatus { ready: boolean; engine: string; phase: string; path?: string; schemaVersion?: number; isDefaultPath?: boolean; lockPath?: string; lock?: TraccionDatabaseLockInfo; message?: string; }
+interface TraccionDatabaseHealthCheckResult { ok: boolean; status: TraccionDatabaseStatus; checkedAt: string; message: string; }
 interface TraccionAppUpdateCheckResult { updateAvailable: boolean; currentVersion: string; latestVersion: string | null; message: string | null; mandatory: boolean; notes: string | null; }
 interface TraccionAppUpdateApplyResult { ok: boolean; message: string; }
 interface TraccionStorageRecord { key: string; value: string; }
@@ -151,6 +152,7 @@ interface TraccionApi {
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
+  databaseHealthCheck: () => Promise<TraccionDatabaseHealthCheckResult>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   getSecondaryBackupDirectory?: () => Promise<string | null>;

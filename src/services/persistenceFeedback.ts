@@ -45,7 +45,7 @@ export function startDatabaseConnectivityIssueListener(): void {
       return;
     }
 
-    publishDatabaseConnectivityBlock(payload.blocked, payload.message);
+    publishDatabaseConnectivityBlock(payload.blocked, payload.message, 'lock-heartbeat');
     emitPersistenceFeedback({
       kind: payload.blocked ? 'error' : 'saved',
       updatedAt: payload.updatedAt,

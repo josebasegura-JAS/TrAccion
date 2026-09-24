@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('traccion', {
   notifyRendererReady: () => ipcRenderer.send('app:renderer-ready'),
   getWindowsUser: () => ipcRenderer.invoke('app:get-windows-user'),
   databaseStatus: () => ipcRenderer.invoke('database:status'),
+  databaseHealthCheck: () => ipcRenderer.invoke('database:health-check'),
   selectDatabaseDirectory: () => ipcRenderer.invoke('database:select-directory'),
   resetDatabaseDirectory: () => ipcRenderer.invoke('database:reset-directory'),
   getSecondaryBackupDirectory: () => ipcRenderer.invoke('database:get-secondary-backup-directory'),

@@ -10,6 +10,7 @@ export interface EditingAvailability {
   connectivityBlocked: boolean;
 }
 
+const connectivityBlocks = new Map<string, string | null>();
 let connectivityBlocked = false;
 let connectivityMessage: string | null = null;
 const listeners = new Set<() => void>();
@@ -18,19 +19,39 @@ function notify(): void {
   listeners.forEach((listener) => listener());
 }
 
-export function publishDatabaseConnectivityBlock(blocked: boolean, message?: string): void {
-  const nextMessage = message?.trim() || null;
-  if (connectivityBlocked === blocked && connectivityMessage === nextMessage) {
+function recomputeConnectivityBlock(): void {
+  const nextBlocked = connectivityBlocks.size > 0;
+  const messages = Array.from(connectivityBlocks.values()).filter(
+    (message): message is string => Boolean(message),
+  );
+  const nextMessage = messages.at(-1) ?? null;
+  if (connectivityBlocked === nextBlocked && connectivityMessage === nextMessage) {
     return;
   }
-
-  connectivityBlocked = blocked;
+  connectivityBlocked = nextBlocked;
   connectivityMessage = nextMessage;
   notify();
 }
 
+export function publishDatabaseConnectivityBlock(
+  blocked: boolean,
+  message?: string,
+  source = 'general',
+): void {
+  if (blocked) {
+    connectivityBlocks.set(source, message?.trim() || null);
+  } else {
+    connectivityBlocks.delete(source);
+  }
+  recomputeConnectivityBlock();
+}
+
 export function resetDatabaseConnectivityBlock(): void {
-  publishDatabaseConnectivityBlock(false);
+  if (connectivityBlocks.size === 0) {
+    return;
+  }
+  connectivityBlocks.clear();
+  recomputeConnectivityBlock();
 }
 
 export function deriveEditingAvailability(options: {

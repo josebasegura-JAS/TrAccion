@@ -16,6 +16,7 @@ import {
   getPersistedRecordSnapshot,
   getRecordLock,
   getSqliteStatus,
+  checkSqliteHealth,
   heartbeatRecordLock,
   listLocalBackups,
   loadPersistedRecordsSnapshot,
@@ -72,6 +73,7 @@ export function registerCoreDatabaseIpc(): void {
     }
   });
   ipcMain.handle('database:status', () => getSqliteStatus());
+  ipcMain.handle('database:health-check', () => checkSqliteHealth());
   ipcMain.handle('database:select-directory', async (event) => {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     const options: OpenDialogOptions = {

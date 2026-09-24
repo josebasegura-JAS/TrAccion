@@ -297,6 +297,42 @@ async function pollOnce(): Promise<void> {
   }
 }
 
+export async function forceExternalDataRefreshAfterRecovery(): Promise<void> {
+  if (!window.traccion?.loadPersistedRecords || !window.traccion?.getPersistedRecordsToken) {
+    throw new Error('IPC de persistencia no disponible para refrescar datos tras la reconexión.');
+  }
+
+  await ensureSyncableStoresRegistered();
+
+  const snapshot = await window.traccion.loadPersistedRecords();
+  if (!canPollStatus(snapshot.status)) {
+    throw new Error(snapshot.status.message ?? 'SQLite no está operativa tras recuperar la conexión.');
+  }
+
+  applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+  updateSeenTokens(snapshot);
+
+  // Todos los stores se fuerzan a releer su fuente SQLite. Algunos módulos
+  // mantienen una copia de representación en localStorage, pero nunca se usa
+  // como fuente autoritativa para recuperar una caída.
+  reloadIntegratedStores();
+
+  const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
+  if (!canPollStatus(tokenSnapshot.status)) {
+    throw new Error(tokenSnapshot.status.message ?? 'SQLite dejó de estar disponible durante el refresco.');
+  }
+  updateSeenTokens(tokenSnapshot);
+
+  const now = new Date().toISOString();
+  setState({
+    status: 'applied',
+    message: 'Conexión recuperada; datos compartidos refrescados.',
+    lastCheckedAt: now,
+    lastAppliedAt: now,
+    lastError: null,
+  });
+}
+
 function handleDatabaseConnectivityRecovered(): void {
   void pollOnce();
 }
