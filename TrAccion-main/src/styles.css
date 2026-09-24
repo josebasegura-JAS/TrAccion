@@ -1,0 +1,841 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /*
+   * Estas variables son un alias semántico de la paleta "metro" definida en
+   * tailwind.config.ts (única fuente de verdad para los colores de marca).
+   * Se usan aquí porque este CSS necesita valores fuera del sistema de clases
+   * de utilidad de Tailwind (gradientes, sombras, degradados de scrollbar...).
+   * Si cambia un color de marca, basta con tocar tailwind.config.ts: estas
+   * variables se recalculan solas en el siguiente build.
+   */
+  --app-bg: theme('colors.metro.app');
+  --sidebar-bg: theme('colors.metro.navy');
+  --sidebar-bg-soft: theme('colors.metro.slate');
+  --topbar-bg: theme('colors.metro.topbar');
+  --surface: theme('colors.metro.surface');
+  --surface-soft: theme('colors.metro.panel');
+  --surface-raised: theme('colors.metro.raised');
+  --border: theme('colors.metro.bluegray');
+  --border-soft: theme('colors.metro.border');
+  --text-primary: theme('colors.metro.text');
+  --text-secondary: theme('colors.metro.secondary');
+  --text-muted: theme('colors.metro.muted');
+  --accent-red: theme('colors.metro.red');
+  --accent-red-soft: rgba(220, 38, 38, 0.14);
+  --accent-blue: theme('colors.metro.info');
+  --accent-green: theme('colors.metro.success');
+  --accent-amber: theme('colors.metro.warning');
+
+  /* Sistema visual común: una escala pequeña y estable evita que cada módulo
+     invente densidades, radios y separaciones distintas. */
+  --ui-space-xs: 0.5rem;
+  --ui-space-sm: 0.75rem;
+  --ui-space-md: 1rem;
+  --ui-radius-control: 0.625rem;
+  --ui-radius-card: 0.875rem;
+  --ui-radius-stage: 1.25rem;
+  color: var(--text-primary);
+  background: var(--app-bg);
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--app-bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 32rem),
+    linear-gradient(135deg, #374151 0%, #273548 48%, #1f2937 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/*
+ * Los menús nativos de <select> no siempre heredan correctamente la paleta
+ * oscura en Electron/Chromium. Fijamos colores explícitos para que las
+ * opciones sean legibles en todos los formularios que usan el Select común.
+ */
+select option {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+select option:disabled {
+  color: var(--text-muted);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(148, 163, 184, 0.72);
+}
+
+button,
+input,
+select,
+textarea,
+a {
+  outline-color: var(--accent-red);
+}
+
+::selection {
+  background: var(--accent-red-soft);
+  color: var(--text-primary);
+}
+
+/*
+ * Tooltip global rápido (ver src/components/ui/TooltipLayer.tsx).
+ * Estética alineada con los rótulos flotantes del sidebar.
+ */
+.ui-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 300px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.95);
+  box-shadow: 0 14px 36px rgba(2, 6, 23, 0.5);
+  color: #e2e8f0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.ui-tooltip--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-tooltip {
+    transition: none;
+  }
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.36);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.32);
+  border: 2px solid rgba(15, 23, 42, 0.36);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.app-boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at top, rgba(220, 38, 38, 0.18), transparent 34%),
+    linear-gradient(135deg, #07131d 0%, #102532 52%, #07131d 100%);
+  color: #f8fafc;
+}
+
+.app-boot-screen__card {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 34px 36px 30px;
+  border: 1px solid rgba(226, 232, 240, 0.14);
+  border-radius: 28px;
+  background: rgba(15, 31, 42, 0.88);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+  text-align: center;
+}
+
+.app-boot-screen__logo {
+  width: 168px;
+  max-width: 72%;
+  height: auto;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.35));
+}
+
+.app-boot-screen__title {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.app-boot-screen__subtitle {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.app-boot-screen__loader {
+  width: 190px;
+  height: 4px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.app-boot-screen__loader::after {
+  content: '';
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: #dc2626;
+  animation: appBootLoader 1.08s ease-in-out infinite;
+}
+
+.app-boot-screen__message {
+  min-height: 20px;
+  margin-top: 4px;
+  color: rgba(248, 250, 252, 0.86);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+
+.persistence-error-banner {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  pointer-events: none;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  border-radius: 16px;
+  background: rgba(127, 29, 29, 0.94);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+  color: #fee2e2;
+  padding: 14px 16px;
+}
+
+.persistence-error-banner strong {
+  display: block;
+  color: #ffffff;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.persistence-error-banner p {
+  margin: 4px 0 0;
+  color: rgba(254, 226, 226, 0.92);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.persistence-error-banner__action {
+  /* El banner tiene pointer-events: none para no bloquear el contenido de
+     debajo; este botón necesita reactivarlo explícitamente para ser clicable. */
+  pointer-events: auto;
+  margin-top: 10px;
+  border: 1px solid rgba(254, 226, 226, 0.45);
+  border-radius: 10px;
+  background: rgba(254, 226, 226, 0.12);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.persistence-error-banner__action:hover {
+  background: rgba(254, 226, 226, 0.22);
+}
+
+.module-loading-skeleton {
+  display: flex;
+  min-height: 320px;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.42);
+  padding: 20px;
+  overflow: hidden;
+}
+
+.module-loading-skeleton__header,
+.module-loading-skeleton__filters,
+.module-loading-skeleton__table-head,
+.module-loading-skeleton__table-row {
+  display: grid;
+  gap: 12px;
+}
+
+.module-loading-skeleton__header {
+  grid-template-columns: minmax(180px, 0.34fr) auto;
+  align-items: center;
+}
+
+.module-loading-skeleton__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.module-loading-skeleton__filters {
+  grid-template-columns: minmax(160px, 0.32fr) minmax(130px, 0.22fr) minmax(120px, 0.18fr);
+}
+
+.module-loading-skeleton__table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.34);
+  padding: 12px;
+}
+
+.module-loading-skeleton__table-head,
+.module-loading-skeleton__table-row {
+  grid-template-columns: minmax(180px, 1.35fr) minmax(120px, 0.8fr) minmax(140px, 1fr) minmax(90px, 0.5fr);
+}
+
+.module-loading-skeleton__title,
+.module-loading-skeleton__actions span,
+.module-loading-skeleton__filters span,
+.module-loading-skeleton__table-head span,
+.module-loading-skeleton__table-row span {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.module-loading-skeleton__title {
+  height: 26px;
+}
+
+.module-loading-skeleton__actions span {
+  width: 96px;
+  height: 32px;
+}
+
+.module-loading-skeleton__filters span {
+  height: 34px;
+}
+
+.module-loading-skeleton__table-head span {
+  height: 18px;
+}
+
+.module-loading-skeleton__table-row span {
+  height: 30px;
+}
+
+.module-loading-skeleton__title::after,
+.module-loading-skeleton__actions span::after,
+.module-loading-skeleton__filters span::after,
+.module-loading-skeleton__table-head span::after,
+.module-loading-skeleton__table-row span::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(226, 232, 240, 0.16),
+    transparent
+  );
+  animation: moduleSkeletonPulse 1.25s ease-in-out infinite;
+  transform: translateX(-100%);
+}
+
+@keyframes moduleSkeletonPulse {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes appBootLoader {
+  0% {
+    transform: translateX(-120%);
+  }
+  50% {
+    transform: translateX(70%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes moduleLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.inline-save-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  color: #86efac;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px) scale(0.98);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.inline-save-feedback--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.global-busy-indicator {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: rgba(2, 6, 23, 0.18);
+  backdrop-filter: blur(1px);
+}
+
+.global-busy-indicator__panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.35);
+  color: #e5e7eb;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 10px 16px;
+}
+
+.global-busy-indicator__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(226, 232, 240, 0.28);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: globalBusySpin 0.8s linear infinite;
+}
+
+@keyframes globalBusySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+.sqlite-readonly-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid rgb(245 158 11 / 0.55);
+  border-radius: 0.75rem;
+  background: rgb(120 53 15 / 0.28);
+  padding: 0.75rem 1rem;
+  color: rgb(254 243 199);
+}
+
+.sqlite-readonly-banner strong {
+  display: block;
+  font-size: 0.875rem;
+}
+
+.sqlite-readonly-banner p {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: rgb(254 243 199 / 0.82);
+}
+
+.sqlite-readonly-banner__action {
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  background: rgb(217 119 6);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+}
+
+.sqlite-readonly-banner__action:hover {
+  background: rgb(180 83 9);
+}
+
+.sqlite-readonly-content {
+  opacity: 0.68;
+  filter: saturate(0.72);
+}
+
+/* -----------------------------------------------------------
+   v1.1 visual refresh shell
+   ----------------------------------------------------------- */
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(220, 38, 38, 0.12), transparent 24rem),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 28rem),
+    linear-gradient(145deg, #0a1220 0%, #101a2e 36%, #141f36 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  color: var(--text-primary);
+}
+
+.app-shell__main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+  background: transparent;
+}
+
+.app-shell__content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 16px;
+}
+
+.app-shell__content--dashboard {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.app-module-stage {
+  display: flex;
+  min-height: calc(100vh - 118px);
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.96) 0%, rgba(31, 41, 55, 0.94) 100%);
+  box-shadow:
+    0 24px 70px rgba(2, 6, 23, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.app-module-stage--dashboard {
+  min-height: calc(100vh - 118px);
+  overflow: visible;
+}
+
+.persistence-error-banner,
+.sqlite-readonly-banner {
+  margin-bottom: 2px;
+}
+
+/* Skeleton */
+.module-loading-skeleton {
+  display: flex;
+  min-height: 420px;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.82);
+  padding: 18px;
+}
+
+.module-loading-skeleton__header,
+.module-loading-skeleton__filters,
+.module-loading-skeleton__table-head,
+.module-loading-skeleton__table-row {
+  display: grid;
+  gap: 10px;
+}
+
+.module-loading-skeleton__header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.module-loading-skeleton__actions,
+.module-loading-skeleton__filters,
+.module-loading-skeleton__table-head,
+.module-loading-skeleton__table-row {
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.module-loading-skeleton__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.module-loading-skeleton__title,
+.module-loading-skeleton__actions span,
+.module-loading-skeleton__filters span,
+.module-loading-skeleton__table-head span,
+.module-loading-skeleton__table-row span {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(51, 65, 85, 0.75) 0%, rgba(71, 85, 105, 0.9) 45%, rgba(51, 65, 85, 0.75) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.module-loading-skeleton__title {
+  height: 22px;
+  width: min(280px, 60%);
+}
+
+.module-loading-skeleton__actions span {
+  width: 108px;
+  height: 36px;
+}
+
+.module-loading-skeleton__filters span {
+  height: 34px;
+}
+
+.module-loading-skeleton__table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.module-loading-skeleton__table-head span {
+  height: 12px;
+}
+
+.module-loading-skeleton__table-row span {
+  height: 46px;
+  border-radius: 16px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* -----------------------------------------------------------
+   v1.1 mockup-aligned visual system
+   Este bloque es la capa visual sobre la estructura base del shell anterior;
+   evita redefinir layout funcional y concentra aquí solo los overrides visuales.
+   La lógica de negocio no cambia: este bloque solo homogeneiza
+   jerarquía, superficies, densidad y estados visuales.
+   ----------------------------------------------------------- */
+
+.app-shell {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(220, 38, 38, 0.08), transparent 26rem),
+    linear-gradient(145deg, #070f1c 0%, #0c1628 46%, #111b2d 100%);
+}
+
+.app-shell__main {
+  background: linear-gradient(180deg, rgba(8, 17, 31, 0.8), rgba(17, 24, 39, 0.92));
+}
+
+.app-shell__content {
+  padding: 0 12px 12px;
+}
+
+.app-module-stage {
+  min-height: calc(100vh - 124px);
+  border-radius: var(--ui-radius-stage);
+  border-color: rgba(148, 163, 184, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.035), transparent 24rem),
+    linear-gradient(180deg, rgba(31, 41, 55, 0.96), rgba(24, 34, 49, 0.98));
+  box-shadow:
+    0 22px 54px rgba(2, 6, 23, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  padding: 10px;
+}
+
+/* Tarjetas internas: aspecto de panel de producto, no de formulario plano. */
+.app-module-stage :where(section, article)[class*='rounded-'][class*='border'],
+.app-module-stage > :where(div)[class*='rounded-'][class*='border'] {
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.09);
+}
+
+.app-module-stage table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.app-module-stage tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app-module-stage button:not(:disabled),
+.app-module-stage a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-module-stage button:not(:disabled):active {
+  transform: translateY(0.5px);
+}
+
+/* Reduce el ruido visual de las barras horizontales y deja que los controles
+   salten de línea, como en el mockup, en vez de generar scroll lateral. */
+.app-module-stage .overflow-x-auto {
+  scrollbar-width: thin;
+}
+
+/* El borde rojo de foco queda visible pero fino. */
+.app-module-stage :where(button, input, select, textarea):focus-visible {
+  outline: 2px solid rgba(220, 38, 38, 0.52);
+  outline-offset: 2px;
+}
+
+/* Tablas compactas con cabecera elevada. */
+.app-module-stage thead th:first-child {
+  border-top-left-radius: 14px;
+}
+
+.app-module-stage thead th:last-child {
+  border-top-right-radius: 14px;
+}
+
+/* Scrollbar más discreto dentro del área de trabajo. */
+.app-module-stage ::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.app-module-stage ::-webkit-scrollbar-thumb {
+  border-width: 2px;
+  background: rgba(148, 163, 184, 0.26);
+}
+
+@media (max-width: 1180px) {
+  .app-shell__content {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .app-module-stage {
+    border-radius: 18px;
+    padding: 10px;
+  }
+}
+
+/* Dashboard profesional 1.1: composición densa para portátiles de 14" (1366×768). */
+.app-module-stage--dashboard {
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 4px 4px;
+}
+
+.app-shell__content--dashboard {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+
+.dashboard-pro {
+  min-height: 0;
+}
+
+@media (max-height: 820px) {
+  .app-shell__content--dashboard {
+    padding-bottom: 6px;
+  }
+
+  .app-module-stage--dashboard {
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .dashboard-pro {
+    font-size: 0.95em;
+  }
+}
+
+/* Dashboard fase 5: densidad prioritaria en portátil y expansión útil en escritorio. */
+.dashboard-pro__large-only {
+  display: none !important;
+}
+
+.dashboard-attention-row + .dashboard-attention-row {
+  border-top: 1px solid rgba(125, 211, 252, 0.055);
+}
+
+/* 14" / 1366×768: se conserva la composición compacta sin scroll. */
+@media (max-height: 820px) {
+  .dashboard-pro {
+    grid-template-rows: 44px 104px minmax(0, 1fr) minmax(0, 0.88fr);
+    gap: 8px;
+  }
+}
+
+/* Pantallas grandes: usamos la altura extra para mostrar más información real,
+ * no para crear huecos vacíos. */
+@media (min-width: 1600px) and (min-height: 880px) {
+  .dashboard-pro {
+    grid-template-rows: 46px 104px minmax(0, 1.06fr) minmax(0, 0.94fr);
+    gap: 10px;
+  }
+
+  .dashboard-pro__large-only {
+    display: grid !important;
+  }
+
+  .dashboard-attention-row {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+}
+
+@media (min-width: 1900px) and (min-height: 1000px) {
+  .dashboard-pro {
+    grid-template-rows: 48px 108px minmax(0, 1.08fr) minmax(0, 0.96fr);
+    gap: 12px;
+  }
+}
