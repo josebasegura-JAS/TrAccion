@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ActionButton } from '../../components/ui/ActionButton';
-import { useToast } from '../../components/ui/Toast';
+import { useToast } from '../../components/ui/useToast';
 import { exportTableToExcel } from '../export/tableExport';
 import type { ExportTablePayload } from '../export/types';
 import { buildPrintableTableHtml } from './buildPrintableTableHtml';

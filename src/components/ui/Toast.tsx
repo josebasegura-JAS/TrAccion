@@ -6,42 +6,18 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-
-type ToastTone = 'success' | 'error' | 'warning' | 'info';
-
-type ToastOptions = {
-  durationMs?: number;
-  title?: string;
-};
-
-type ToastItem = {
-  id: number;
-  message: string;
-  options?: ToastOptions;
-  tone: ToastTone;
-};
-
-type ToastApi = {
-  dismiss: (id: number) => void;
-  error: (message: string, options?: ToastOptions) => number;
-  info: (message: string, options?: ToastOptions) => number;
-  success: (message: string, options?: ToastOptions) => number;
-  warning: (message: string, options?: ToastOptions) => number;
-};
+import { ToastContext, type ToastApi, type ToastItem, type ToastTone } from './toastContext';
 
 const DEFAULT_DURATION_MS = 4_500;
 const MAX_VISIBLE_TOASTS = 4;
 
-const ToastContext = createContext<ToastApi | null>(null);
 
 const toneClassName: Record<ToastTone, string> = {
   error: 'border-red-400/40 bg-red-950/95 text-red-50',
@@ -134,12 +110,4 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       </div>
     </ToastContext.Provider>
   );
-}
-
-export function useToast(): ToastApi {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast debe usarse dentro de ToastProvider.');
-  }
-  return context;
 }

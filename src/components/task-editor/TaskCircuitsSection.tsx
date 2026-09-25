@@ -4,7 +4,7 @@ import type { TaskOriginConfig } from '../../features/configuracion/domain/taskO
 import type { TaskDraft } from '../../features/tareas/domain/task';
 
 export function TaskCircuitsSection({
-  draft, setDraft, sendToDirection, setSendToDirection, sendToUnion, setSendToUnion,
+  setDraft, sendToDirection, setSendToDirection, sendToUnion, setSendToUnion,
   selectedAreaTarget, setSelectedAreaTarget, showCircuitPicker, setShowCircuitPicker,
   customAreaTarget, setCustomAreaTarget, selectedUnionOrigin, unionCircuitOptions,
   areaCircuitOptions, isCommitteeCircuit, isParitariaCircuit,
