@@ -50,7 +50,7 @@ interface TaskStateStore {
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
 
-export const useTaskStore = create<TaskStateStore>((set) => ({
+export const useTaskStore = create<TaskStateStore>((set, get) => ({
   tasks: [],
   selectedTaskId: '',
   historicalTasksLoaded: false,
@@ -91,7 +91,7 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
 
   loadHistoricalTasks: async () => {
-    const state = useTaskStore.getState();
+    const state = get();
     if (state.historicalTasksLoaded || state.isLoadingHistoricalTasks) {
       return;
     }
@@ -118,19 +118,18 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   createWithConcurrencyCheck: (draft, seguimientoText) =>
     createTaskWithConcurrencyCheck(draft, seguimientoText, set),
   createManyFromImport: (drafts) =>
-    createManyTasksFromImport(drafts, useTaskStore.getState(), set, () =>
-      useTaskStore.getState().reloadFromStorage(),
+    createManyTasksFromImport(drafts, get(), set, () =>
+      get().reloadFromStorage(),
     ),
   updateWithConcurrencyCheck: (id, draft, seguimientoText, expectedUpdatedAt) =>
     updateTaskWithConcurrencyCheck(id, draft, seguimientoText, expectedUpdatedAt, set),
   removeWithConcurrencyCheck: (id, expectedUpdatedAt) =>
     removeTaskWithConcurrencyCheck(id, expectedUpdatedAt, set),
   closeTasksFromCommittee: (taskIds, sessionLabel) => {
-    useTaskStore.getState().closeTasksFromSession(taskIds, 'Comité de Empresa', sessionLabel);
+    get().closeTasksFromSession(taskIds, 'Comité de Empresa', sessionLabel);
   },
   closeTasksFromSession: (taskIds, moduleLabel, sessionLabel) => {
-    void useTaskStore
-      .getState()
+    void get()
       .closeTasksFromSessionWithConcurrencyCheck(taskIds, moduleLabel, sessionLabel)
       .then((result) => {
         if (result.ok) {
