@@ -3,7 +3,7 @@ import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
 import { emitPersistenceFeedback } from '../../../services/persistence';
 import { hasTaskSqliteRepository } from './taskSqliteRepository';
 import { isTaskClosed, type Task, type TaskDraft } from '../domain/task';
-import { firstActiveTaskId, normalizeTask, parseTasksSnapshot } from './taskNormalization';
+import { firstActiveTaskId, normalizeTask } from './taskNormalization';
 import { readTasks, readTasksForStore, TASKS_STORAGE_KEY, type TaskUpdateResult } from './taskPersistence';
 import { closeTasksFromSessionPersisted } from './taskSessionClosure';
 import {
