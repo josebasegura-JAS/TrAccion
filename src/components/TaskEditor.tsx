@@ -951,19 +951,20 @@ export function TaskEditor({
 
             <fieldset disabled={isFormReadOnly} className="space-y-3 disabled:opacity-70">
               <Section icon={FileText} title="Datos de la tarea">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-12">
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-3">Tipo
-                    <Select value={draft.tipo} onChange={(e) => setDraft((c) => ({ ...c, tipo: e.target.value as TaskDraft['tipo'] }))}>{TASK_TYPES.map((v) => <option key={v}>{v}</option>)}</Select>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-12">
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Tipo
+                    <Select className="h-8 rounded-lg px-2 text-xs" value={draft.tipo} onChange={(e) => setDraft((c) => ({ ...c, tipo: e.target.value as TaskDraft['tipo'] }))}>{TASK_TYPES.map((v) => <option key={v}>{v}</option>)}</Select>
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-3">Fase
-                    <Select value={draft.fase} onChange={(e) => setDraft((c) => ({ ...c, fase: e.target.value }))}>{phaseOptions.map((v) => <option key={v}>{v}</option>)}</Select>
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Fase
+                    <Select className="h-8 rounded-lg px-2 text-xs" value={draft.fase} onChange={(e) => setDraft((c) => ({ ...c, fase: e.target.value }))}>{phaseOptions.map((v) => <option key={v}>{v}</option>)}</Select>
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-6">Título <span className="text-metro-red">*</span>
-                    <Input required value={draft.titulo} onChange={(e) => setDraft((c) => ({ ...c, titulo: e.target.value }))} />
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-4">Título <span className="text-metro-red">*</span>
+                    <Input className="h-8 rounded-lg px-2 text-xs" required value={draft.titulo} onChange={(e) => setDraft((c) => ({ ...c, titulo: e.target.value }))} />
                   </label>
 
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-4">Responsable
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Responsable
                     <Select
+                      className="h-8 rounded-lg px-2 text-xs"
                       value={responsibleSelectValue}
                       onChange={(e) => setDraft((c) => ({ ...c, responsable: e.target.value }))}
                     >
@@ -972,18 +973,22 @@ export function TaskEditor({
                     </Select>
                     {responsibleSelectValue === 'Otros' && (
                       <Input
-                        className="mt-1"
+                        className="mt-1 h-8 rounded-lg px-2 text-xs"
                         placeholder="Indica el responsable"
                         value={otherResponsibleValue}
                         onChange={(e) => setDraft((c) => ({ ...c, responsable: `Otros: ${e.target.value}` }))}
                       />
                     )}
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-4">Detalle origen / solicitante
-                    <Input value={draft.origen} onChange={(e) => setDraft((c) => ({ ...c, origen: e.target.value }))} />
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Estado
+                    <Select className="h-8 rounded-lg px-2 text-xs" value={draft.estado} onChange={(e) => setDraft((c) => ({ ...c, estado: e.target.value as TaskDraft['estado'] }))}>{TASK_STATES.map((v) => <option key={v}>{v}</option>)}</Select>
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-2">Fecha de creación
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-4">Detalle origen / solicitante
+                    <Input className="h-8 rounded-lg px-2 text-xs" value={draft.origen} onChange={(e) => setDraft((c) => ({ ...c, origen: e.target.value }))} />
+                  </label>
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Fecha de creación
                     <Input
+                      className="h-8 rounded-lg px-2 text-xs"
                       type="date"
                       value={creationDate}
                       onChange={(e) => {
@@ -997,42 +1002,19 @@ export function TaskEditor({
                       }}
                     />
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-2">Fecha límite
-                    <Input type="date" value={draft.fechaLimite} onChange={(e) => setDraft((c) => ({ ...c, fechaLimite: e.target.value }))} />
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Fecha límite
+                    <Input className="h-8 rounded-lg px-2 text-xs" type="date" value={draft.fechaLimite} onChange={(e) => setDraft((c) => ({ ...c, fechaLimite: e.target.value }))} />
                   </label>
 
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-3">Origen
-                    <Select value={draft.sindicato} onChange={(e) => setDraft((c) => ({ ...c, sindicato: e.target.value }))}>
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Origen
+                    <Select className="h-8 rounded-lg px-2 text-xs" value={draft.sindicato} onChange={(e) => setDraft((c) => ({ ...c, sindicato: e.target.value }))}>
                       <option value="">Sin origen</option>{originOptions.map((v) => <option key={v}>{v}</option>)}
                     </Select>
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-3">Estado
-                    <Select value={draft.estado} onChange={(e) => setDraft((c) => ({ ...c, estado: e.target.value as TaskDraft['estado'] }))}>{TASK_STATES.map((v) => <option key={v}>{v}</option>)}</Select>
+                  <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Prioridad
+                    <Select className="h-8 rounded-lg px-2 text-xs" value={draft.prioridad} onChange={(e) => setDraft((c) => ({ ...c, prioridad: e.target.value as TaskDraft['prioridad'] }))}>{TASK_PRIORITIES.map((v) => <option key={v}>{v}</option>)}</Select>
                   </label>
-                  <label className="text-xs font-semibold text-metro-muted lg:col-span-3">Prioridad
-                    <Select value={draft.prioridad} onChange={(e) => setDraft((c) => ({ ...c, prioridad: e.target.value as TaskDraft['prioridad'] }))}>{TASK_PRIORITIES.map((v) => <option key={v}>{v}</option>)}</Select>
-                  </label>
-                  <div className="lg:col-span-12 rounded-xl border border-sky-300/15 bg-[#0a1b2e]/55 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div><strong className="block text-xs text-slate-100">Circuitos</strong><span className="text-[10px] font-medium text-slate-400">Indica dónde debe tratarse este asunto. Los cambios se aplican al guardar la tarea.</span></div>
-                      <button className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300/25 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-bold text-sky-100 hover:bg-sky-500/15" onClick={() => setShowCircuitPicker((current) => !current)} type="button"><Plus size={13}/>Llevar a…</button>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {sendToDirection && <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-100">Dirección<button aria-label="Quitar Dirección" className="text-sky-200/70 hover:text-white" onClick={() => setSendToDirection(false)} type="button"><X size={12}/></button></span>}
-                      {isCommitteeCircuit && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">Comité<button aria-label="Quitar Comité" className="text-amber-200/70 hover:text-white" onClick={() => setDraft((current) => ({ ...current, fase: 'tarea' }))} type="button"><X size={12}/></button></span>}
-                      {isParitariaCircuit && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">Paritaria<button aria-label="Quitar Paritaria" className="text-amber-200/70 hover:text-white" onClick={() => setDraft((current) => ({ ...current, fase: 'tarea' }))} type="button"><X size={12}/></button></span>}
-                      {sendToUnion && selectedUnionOrigin && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">{selectedUnionOrigin.nombre}<button aria-label={`Quitar ${selectedUnionOrigin.nombre}`} className="text-amber-200/70 hover:text-white" onClick={() => setSendToUnion(false)} type="button"><X size={12}/></button></span>}
-                      {selectedAreaTarget && <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100">{selectedAreaTarget}<button aria-label={`Quitar ${selectedAreaTarget}`} className="text-violet-200/70 hover:text-white" onClick={() => setSelectedAreaTarget('')} type="button"><X size={12}/></button></span>}
-                      {!sendToDirection && !isCommitteeCircuit && !isParitariaCircuit && !(sendToUnion && selectedUnionOrigin) && !selectedAreaTarget && <span className="text-[11px] text-slate-500">Sin circuitos pendientes.</span>}
-                    </div>
-                    {showCircuitPicker && <div className="mt-3 grid gap-2 border-t border-sky-300/10 pt-3 md:grid-cols-2">
-                      <button className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${sendToDirection ? 'border-sky-400/35 bg-sky-500/15 text-sky-100' : 'border-metro-border bg-metro-surface/70 text-metro-text hover:bg-sky-500/10'}`} onClick={() => setSendToDirection(true)} type="button">Dirección<span className="mt-0.5 block text-[10px] font-normal text-metro-muted">Próximo guion de Coordinación.</span></button>
-                      <button className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${isCommitteeCircuit ? 'border-amber-400/35 bg-amber-500/15 text-amber-100' : 'border-metro-border bg-metro-surface/70 text-metro-text hover:bg-amber-500/10'}`} onClick={() => setDraft((current) => ({ ...current, fase: 'comite' }))} type="button">Comité<span className="mt-0.5 block text-[10px] font-normal text-metro-muted">Quedará disponible para asignar a una sesión.</span></button>
-                      <button className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${isParitariaCircuit ? 'border-amber-400/35 bg-amber-500/15 text-amber-100' : 'border-metro-border bg-metro-surface/70 text-metro-text hover:bg-amber-500/10'}`} onClick={() => setDraft((current) => ({ ...current, fase: 'paritaria' }))} type="button">Paritaria<span className="mt-0.5 block text-[10px] font-normal text-metro-muted">Quedará disponible para asignar a una sesión.</span></button>
-                      <label className="rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 text-xs font-semibold text-metro-text">Sindicato<select className="mt-1 w-full rounded-md border border-metro-border bg-metro-panel px-2 py-1.5 text-xs text-metro-text" onChange={(event) => { const value = event.target.value; if (!value) return; setDraft((current) => ({ ...current, sindicato: value })); setSendToUnion(true); }} value={sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : ''}><option value="">Selecciona sindicato…</option>{unionCircuitOptions.map((origin) => <option key={origin.id} value={origin.nombre}>{origin.nombre}</option>)}</select></label>
-                      <label className="rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 text-xs font-semibold text-metro-text md:col-span-2">Otra área<div className="mt-1 grid gap-2 sm:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto]"><select className="rounded-md border border-metro-border bg-metro-panel px-2 py-1.5 text-xs text-metro-text" onChange={(event) => { if (event.target.value) { setSelectedAreaTarget(event.target.value); setCustomAreaTarget(''); } }} value={areaCircuitOptions.some((origin) => origin.nombre === selectedAreaTarget) ? selectedAreaTarget : ''}><option value="">Selecciona un área…</option>{areaCircuitOptions.map((origin) => <option key={origin.id} value={origin.nombre}>{origin.nombre}</option>)}</select><input className="rounded-md border border-metro-border bg-metro-panel px-2 py-1.5 text-xs text-metro-text outline-none focus:border-metro-red" onChange={(event) => setCustomAreaTarget(event.target.value)} placeholder="Otra área…" value={customAreaTarget}/><button className="rounded-md border border-metro-border px-2.5 py-1.5 text-[11px] font-bold text-metro-text disabled:opacity-40" disabled={!customAreaTarget.trim()} onClick={() => { setSelectedAreaTarget(customAreaTarget.trim()); setCustomAreaTarget(''); }} type="button">Añadir</button></div></label>
-                    </div>}
-                  </div>
+
                 </div>
               </Section>
 
@@ -1040,32 +1022,11 @@ export function TaskEditor({
                 <Textarea className="min-h-20" value={draft.descripcion} onChange={(e) => setDraft((c) => ({ ...c, descripcion: e.target.value }))} />
               </Section>
 
-              {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
-
               <Section
                 icon={MessageSquare}
                 title="Seguimiento"
                 action={<CountBadge tone="muted">{trackingItems.length} seguimientos</CountBadge>}
               >
-                <div className="grid grid-cols-1 gap-2 lg:grid-cols-[180px_180px_minmax(0,1fr)]">
-                  <label className="text-xs font-semibold text-metro-muted">Fecha del cambio
-                    <Input type="date" value={trackingDate} onChange={(e) => setTrackingDate(e.target.value)} />
-                  </label>
-                  <label className="text-xs font-semibold text-metro-muted">Usuario
-                    <div className="mt-1 flex h-9 items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 text-sm font-semibold text-slate-200">
-                      <UserRound size={14} className="text-sky-200" />{trackingUser}
-                    </div>
-                  </label>
-                  <div className="flex items-end pb-1 text-[11px] font-medium text-slate-400">
-                    <Info className="mr-1.5 shrink-0 text-sky-300" size={14} />
-                    La fecha se propone con la del sistema, pero puedes corregirla antes de guardar.
-                  </div>
-                </div>
-                <label className="mt-2 block text-xs font-semibold text-metro-muted">Registrar seguimiento
-                  <Textarea className="min-h-20" placeholder="Escribe aquí el seguimiento de la tarea..." value={trackingText} onChange={(e) => setTrackingText(e.target.value)} />
-                </label>
-                {trackingText.trim() && <p className="mt-1 text-[11px] font-semibold text-sky-300">Este seguimiento se añadirá al pulsar Guardar.</p>}
-
                 {trackingItems.length > 0 && (
                   <div className="mt-3 overflow-hidden rounded-lg border border-sky-300/10 bg-[#0a1b2e]/70">
                     {trackingItems.map((entry, index) => {
@@ -1166,7 +1127,57 @@ export function TaskEditor({
                     })}
                   </div>
                 )}
+
+                <div className={trackingItems.length > 0 ? "mt-3 border-t border-sky-300/10 pt-3" : ""}>
+                  <div className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-200">
+                    <Plus size={13} className="text-sky-300" />
+                    Añadir nuevo seguimiento
+                  </div>
+                <div className="grid grid-cols-1 gap-2 lg:grid-cols-[180px_180px_minmax(0,1fr)]">
+                  <label className="text-xs font-semibold text-metro-muted">Fecha del cambio
+                    <Input type="date" value={trackingDate} onChange={(e) => setTrackingDate(e.target.value)} />
+                  </label>
+                  <label className="text-xs font-semibold text-metro-muted">Usuario
+                    <div className="mt-1 flex h-9 items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 text-sm font-semibold text-slate-200">
+                      <UserRound size={14} className="text-sky-200" />{trackingUser}
+                    </div>
+                  </label>
+                  <div className="flex items-end pb-1 text-[11px] font-medium text-slate-400">
+                    <Info className="mr-1.5 shrink-0 text-sky-300" size={14} />
+                    La fecha se propone con la del sistema, pero puedes corregirla antes de guardar.
+                  </div>
+                </div>
+                <label className="mt-2 block text-xs font-semibold text-metro-muted">Registrar seguimiento
+                  <Textarea className="min-h-20" placeholder="Escribe aquí el seguimiento de la tarea..." value={trackingText} onChange={(e) => setTrackingText(e.target.value)} />
+                </label>
+                {trackingText.trim() && <p className="mt-1 text-[11px] font-semibold text-sky-300">Este seguimiento se añadirá al pulsar Guardar.</p>}
+
+                </div>
               </Section>
+
+              {!isCreate && task && <TaskLinksSection task={liveTask ?? task} />}
+
+                  <div className="rounded-xl border border-sky-300/15 bg-[#0a1b2e]/55 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div><strong className="block text-xs text-slate-100">Circuitos</strong><span className="text-[10px] font-medium text-slate-400">Indica dónde debe tratarse este asunto. Los cambios se aplican al guardar la tarea.</span></div>
+                      <button className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300/25 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-bold text-sky-100 hover:bg-sky-500/15" onClick={() => setShowCircuitPicker((current) => !current)} type="button"><Plus size={13}/>Llevar a…</button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {sendToDirection && <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-100">Dirección<button aria-label="Quitar Dirección" className="text-sky-200/70 hover:text-white" onClick={() => setSendToDirection(false)} type="button"><X size={12}/></button></span>}
+                      {isCommitteeCircuit && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">Comité<button aria-label="Quitar Comité" className="text-amber-200/70 hover:text-white" onClick={() => setDraft((current) => ({ ...current, fase: 'tarea' }))} type="button"><X size={12}/></button></span>}
+                      {isParitariaCircuit && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">Paritaria<button aria-label="Quitar Paritaria" className="text-amber-200/70 hover:text-white" onClick={() => setDraft((current) => ({ ...current, fase: 'tarea' }))} type="button"><X size={12}/></button></span>}
+                      {sendToUnion && selectedUnionOrigin && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">{selectedUnionOrigin.nombre}<button aria-label={`Quitar ${selectedUnionOrigin.nombre}`} className="text-amber-200/70 hover:text-white" onClick={() => setSendToUnion(false)} type="button"><X size={12}/></button></span>}
+                      {selectedAreaTarget && <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/20 bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100">{selectedAreaTarget}<button aria-label={`Quitar ${selectedAreaTarget}`} className="text-violet-200/70 hover:text-white" onClick={() => setSelectedAreaTarget('')} type="button"><X size={12}/></button></span>}
+                      {!sendToDirection && !isCommitteeCircuit && !isParitariaCircuit && !(sendToUnion && selectedUnionOrigin) && !selectedAreaTarget && <span className="text-[11px] text-slate-500">Sin circuitos pendientes.</span>}
+                    </div>
+                    {showCircuitPicker && <div className="mt-3 grid gap-2 border-t border-sky-300/10 pt-3 md:grid-cols-2">
+                      <button className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${sendToDirection ? 'border-sky-400/35 bg-sky-500/15 text-sky-100' : 'border-metro-border bg-metro-surface/70 text-metro-text hover:bg-sky-500/10'}`} onClick={() => setSendToDirection(true)} type="button">Dirección<span className="mt-0.5 block text-[10px] font-normal text-metro-muted">Próximo guion de Coordinación.</span></button>
+                      <button className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${isCommitteeCircuit ? 'border-amber-400/35 bg-amber-500/15 text-amber-100' : 'border-metro-border bg-metro-surface/70 text-metro-text hover:bg-amber-500/10'}`} onClick={() => setDraft((current) => ({ ...current, fase: 'comite' }))} type="button">Comité<span className="mt-0.5 block text-[10px] font-normal text-metro-muted">Quedará disponible para asignar a una sesión.</span></button>
+                      <button className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold ${isParitariaCircuit ? 'border-amber-400/35 bg-amber-500/15 text-amber-100' : 'border-metro-border bg-metro-surface/70 text-metro-text hover:bg-amber-500/10'}`} onClick={() => setDraft((current) => ({ ...current, fase: 'paritaria' }))} type="button">Paritaria<span className="mt-0.5 block text-[10px] font-normal text-metro-muted">Quedará disponible para asignar a una sesión.</span></button>
+                      <label className="rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 text-xs font-semibold text-metro-text">Sindicato<select className="mt-1 w-full rounded-md border border-metro-border bg-metro-panel px-2 py-1.5 text-xs text-metro-text" onChange={(event) => { const value = event.target.value; if (!value) return; setDraft((current) => ({ ...current, sindicato: value })); setSendToUnion(true); }} value={sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : ''}><option value="">Selecciona sindicato…</option>{unionCircuitOptions.map((origin) => <option key={origin.id} value={origin.nombre}>{origin.nombre}</option>)}</select></label>
+                      <label className="rounded-lg border border-metro-border bg-metro-surface/70 px-3 py-2 text-xs font-semibold text-metro-text md:col-span-2">Otra área<div className="mt-1 grid gap-2 sm:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto]"><select className="rounded-md border border-metro-border bg-metro-panel px-2 py-1.5 text-xs text-metro-text" onChange={(event) => { if (event.target.value) { setSelectedAreaTarget(event.target.value); setCustomAreaTarget(''); } }} value={areaCircuitOptions.some((origin) => origin.nombre === selectedAreaTarget) ? selectedAreaTarget : ''}><option value="">Selecciona un área…</option>{areaCircuitOptions.map((origin) => <option key={origin.id} value={origin.nombre}>{origin.nombre}</option>)}</select><input className="rounded-md border border-metro-border bg-metro-panel px-2 py-1.5 text-xs text-metro-text outline-none focus:border-metro-red" onChange={(event) => setCustomAreaTarget(event.target.value)} placeholder="Otra área…" value={customAreaTarget}/><button className="rounded-md border border-metro-border px-2.5 py-1.5 text-[11px] font-bold text-metro-text disabled:opacity-40" disabled={!customAreaTarget.trim()} onClick={() => { setSelectedAreaTarget(customAreaTarget.trim()); setCustomAreaTarget(''); }} type="button">Añadir</button></div></label>
+                    </div>}
+                  </div>
 
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <Section icon={Paperclip} title="Documentos vinculados">
