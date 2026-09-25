@@ -73,6 +73,7 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     useCoordinacionStore.getState().load();
     expect(useCoordinacionStore.getState().directionTaskIds).toEqual(['t-1']);
     expect(useCoordinacionStore.getState().unionTaskIds).toEqual({});
+    expect(useCoordinacionStore.getState().areaTaskIds).toEqual({});
   });
 
   it('permite añadir a una reunión con Dirección una tarea activa no marcada previamente', async () => {
@@ -128,6 +129,28 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().meetings[0].points[0]).toMatchObject({
       origin: 'manual', taskId: null, title: 'Punto no inventariado',
     });
+  });
+
+
+  it('precarga en otra área las tareas marcadas y conserva sólo las pendientes al cerrar', async () => {
+    const tasks = [task('t-area-1', 'Prevención 1', ''), task('t-area-2', 'Prevención 2', '')];
+    await useCoordinacionStore.getState().setTaskForArea('t-area-1', 'Prevención');
+    await useCoordinacionStore.getState().setTaskForArea('t-area-2', 'Prevención');
+
+    const created = await useCoordinacionStore.getState().createOtherAreaMeeting(
+      '2026-09-25', 'prevencion', '', 'Prevención y RRLL', 'Seguimiento', tasks,
+    );
+
+    expect(created.ok).toBe(true);
+    const meeting = useCoordinacionStore.getState().meetings[0];
+    expect(meeting.areaName).toBe('Prevención');
+    expect(meeting.points.map((point) => point.taskId)).toEqual(['t-area-1', 't-area-2']);
+
+    await useCoordinacionStore.getState().updatePoint(meeting.id, meeting.points[0].id, { status: 'tratado' });
+    await useCoordinacionStore.getState().updatePoint(meeting.id, meeting.points[1].id, { status: 'volver' });
+    await useCoordinacionStore.getState().closeMeeting(meeting.id);
+
+    expect(useCoordinacionStore.getState().areaTaskIds.Prevención).toEqual(['t-area-2']);
   });
 
   it('permite crear una reunión sindical sin tareas iniciales', async () => {

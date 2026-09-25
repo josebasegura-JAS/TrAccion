@@ -21,6 +21,7 @@ interface CoordinationStore extends CoordinationState {
   reloadFromStorage: () => void;
   setTaskForDirection: (taskId: string, enabled: boolean) => Promise<Result>;
   setTaskForUnion: (taskId: string, unionName: string | null) => Promise<Result>;
+  setTaskForArea: (taskId: string, areaName: string | null) => Promise<Result>;
   createDirectionMeeting: (date: string, tasks: Task[]) => Promise<Result>;
   createOtherAreaMeeting: (
     date: string,
@@ -59,7 +60,10 @@ function normalizeCoordinationState(value: unknown): CoordinationState | null {
   const unionTaskIds = candidate.unionTaskIds && typeof candidate.unionTaskIds === 'object'
     ? Object.fromEntries(Object.entries(candidate.unionTaskIds).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((id) => typeof id === 'string')))
     : {};
-  return { meetings: candidate.meetings, directionTaskIds: candidate.directionTaskIds, unionTaskIds };
+  const areaTaskIds = candidate.areaTaskIds && typeof candidate.areaTaskIds === 'object'
+    ? Object.fromEntries(Object.entries(candidate.areaTaskIds).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((id) => typeof id === 'string')))
+    : {};
+  return { meetings: candidate.meetings, directionTaskIds: candidate.directionTaskIds, unionTaskIds, areaTaskIds };
 }
 
 function readState(): CoordinationState {
@@ -82,12 +86,16 @@ function activeTask(task: Task): boolean {
   return !task.deletedAt && task.estado !== 'cerrada' && task.fase.trim().toLowerCase() !== 'cerrada';
 }
 
+function normalizedName(value: string): string {
+  return value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   ...readState(),
   load: () => set(readState()),
   reloadFromStorage: () => {
     const next = readState();
-    if (JSON.stringify(next) !== JSON.stringify({ meetings: get().meetings, directionTaskIds: get().directionTaskIds, unionTaskIds: get().unionTaskIds })) {
+    if (JSON.stringify(next) !== JSON.stringify({ meetings: get().meetings, directionTaskIds: get().directionTaskIds, unionTaskIds: get().unionTaskIds, areaTaskIds: get().areaTaskIds })) {
       set(next);
     }
   },
@@ -95,7 +103,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const current = get();
     const ids = new Set(current.directionTaskIds);
     if (enabled) ids.add(taskId); else ids.delete(taskId);
-    const next: CoordinationState = { meetings: current.meetings, directionTaskIds: [...ids], unionTaskIds: current.unionTaskIds };
+    const next: CoordinationState = { meetings: current.meetings, directionTaskIds: [...ids], unionTaskIds: current.unionTaskIds, areaTaskIds: current.areaTaskIds };
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
@@ -108,6 +116,18 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     );
     if (cleanUnion) unionTaskIds[cleanUnion] = [...new Set([...(unionTaskIds[cleanUnion] ?? []), taskId])];
     const next: CoordinationState = { ...current, unionTaskIds };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  setTaskForArea: async (taskId, areaName) => {
+    const current = get();
+    const cleanArea = areaName?.trim() || null;
+    const areaTaskIds = Object.fromEntries(
+      Object.entries(current.areaTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
+    );
+    if (cleanArea) areaTaskIds[cleanArea] = [...new Set([...(areaTaskIds[cleanArea] ?? []), taskId])];
+    const next: CoordinationState = { ...current, areaTaskIds };
     const result = await persist(next);
     if (result.ok) set(next);
     return result;
@@ -158,22 +178,28 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (referenceTaskId && !task) return { ok: false, message: 'La tarea inicial seleccionada no existe o ya está cerrada.' };
 
     const current = get();
+    const queuedArea = Object.entries(current.areaTaskIds).find(([name]) => normalizedName(name) === normalizedName(cleanAreaName));
+    const resolvedAreaName = queuedArea?.[0] ?? cleanAreaName;
+    const selectedIds = new Set(queuedArea?.[1] ?? []);
+    if (task) selectedIds.add(task.id);
     const now = new Date().toISOString();
-    const points: CoordinationPoint[] = task ? [{
-      id: createCoordinationId('area-point'),
-      origin: 'task',
-      taskId: task.id,
-      title: task.titulo,
-      detail: purpose.trim() || task.descripcion,
-      result: '',
-      status: 'pendiente',
-      createdAt: now,
-      updatedAt: now,
-    }] : [];
+    const points: CoordinationPoint[] = tasks
+      .filter((candidate) => selectedIds.has(candidate.id) && activeTask(candidate))
+      .map((candidate) => ({
+        id: createCoordinationId('area-point'),
+        origin: 'task',
+        taskId: candidate.id,
+        title: candidate.titulo,
+        detail: candidate.id === task?.id && purpose.trim() ? purpose.trim() : candidate.descripcion,
+        result: '',
+        status: 'pendiente',
+        createdAt: now,
+        updatedAt: now,
+      }));
     const meeting: CoordinationMeeting = {
       id: createCoordinationId('area-meeting'),
       area: 'otras-areas',
-      areaName: cleanAreaName,
+      areaName: resolvedAreaName,
       referenceTaskId: task?.id ?? null,
       interlocutors: interlocutors.trim(),
       purpose: purpose.trim(),
@@ -355,6 +381,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const now = new Date().toISOString();
     const directionTaskIds = new Set(current.directionTaskIds);
     const unionTaskIds = { ...current.unionTaskIds };
+    const areaTaskIds = { ...current.areaTaskIds };
     if (meeting.area === 'direccion') meeting.points.forEach((point) => {
       if (!point.taskId) return;
       if (point.status === 'tratado') directionTaskIds.delete(point.taskId);
@@ -368,9 +395,18 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       });
       unionTaskIds[meeting.unionName] = [...ids];
     }
+    if (meeting.area === 'otras-areas' && meeting.areaName) {
+      const ids = new Set(areaTaskIds[meeting.areaName] ?? []);
+      meeting.points.forEach((point) => {
+        if (!point.taskId) return;
+        if (point.status === 'tratado') ids.delete(point.taskId); else ids.add(point.taskId);
+      });
+      areaTaskIds[meeting.areaName] = [...ids];
+    }
     const next: CoordinationState = {
       directionTaskIds: [...directionTaskIds],
       unionTaskIds,
+      areaTaskIds,
       meetings: current.meetings.map((item) => item.id === meetingId ? {
         ...item,
         status: 'closed',

@@ -43,6 +43,7 @@ export function TaskLinksSection({ task }: { task: Task }) {
   const meetings = useCoordinacionStore((state) => state.meetings);
   const directionTaskIds = useCoordinacionStore((state) => state.directionTaskIds);
   const unionTaskIds = useCoordinacionStore((state) => state.unionTaskIds);
+  const areaTaskIds = useCoordinacionStore((state) => state.areaTaskIds);
   const loadCoordination = useCoordinacionStore((state) => state.load);
   const committeeSessions = useCommitteeSessionStore((state) => state.sessions);
   const loadCommittee = useCommitteeSessionStore((state) => state.loadHistoricalSessions);
@@ -148,8 +149,23 @@ export function TaskLinksSection({ task }: { task: Task }) {
       }
     }
 
+    for (const [areaName, taskIds] of Object.entries(areaTaskIds)) {
+      if (!taskIds.includes(task.id)) continue;
+      const alreadyOpen = meetings.some((meeting) => meeting.status === 'open' && meeting.area === 'otras-areas' && meeting.areaName === areaName && meeting.points.some((point) => point.taskId === task.id));
+      if (!alreadyOpen) {
+        result.push({
+          id: `area:${areaName}:pending`,
+          label: areaName,
+          detail: 'Pendiente de próxima reunión con el área',
+          status: 'pending',
+          target: { view: 'coordinacion' },
+          icon: 'meeting',
+        });
+      }
+    }
+
     return result;
-  }, [committeeSessions, directionTaskIds, meetings, paritariaSessions, task.fase, task.id, unionTaskIds]);
+  }, [areaTaskIds, committeeSessions, directionTaskIds, meetings, paritariaSessions, task.fase, task.id, unionTaskIds]);
 
   return (
     <section className="rounded-xl border border-metro-border bg-metro-panel/55 p-3">

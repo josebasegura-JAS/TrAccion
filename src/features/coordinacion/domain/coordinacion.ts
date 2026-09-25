@@ -46,12 +46,15 @@ export interface CoordinationState {
   meetings: CoordinationMeeting[];
   directionTaskIds: string[];
   unionTaskIds: Record<string, string[]>;
+  /** Tareas pendientes de tratar en la siguiente reunión con cada área. */
+  areaTaskIds: Record<string, string[]>;
 }
 
 export const EMPTY_COORDINATION_STATE: CoordinationState = {
   meetings: [],
   directionTaskIds: [],
   unionTaskIds: {},
+  areaTaskIds: {},
 };
 
 export function createCoordinationId(prefix: string): string {
