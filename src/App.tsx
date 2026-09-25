@@ -218,7 +218,7 @@ export function App() {
                     {activeView === 'plantilla' && <PlantillaPage />}
                     {activeView === 'ayuda-escolar' && <AyudaEscolarPage />}
                     {activeView === 'tareas' && <TareasPage initialTaskId={navigationTarget?.view === 'tareas' ? navigationTarget.recordId : null} initialResponsibleFilter={navigationTarget?.view === 'tareas' ? navigationTarget.responsibleFilter : undefined} navigationNonce={navigationTarget?.view === 'tareas' ? navigationTarget.nonce : undefined} />}
-                    {activeView === 'coordinacion' && <CoordinacionPage />}
+                    {activeView === 'coordinacion' && <CoordinacionPage initialMeetingId={navigationTarget?.view === 'coordinacion' ? navigationTarget.recordId : null} navigationNonce={navigationTarget?.view === 'coordinacion' ? navigationTarget.nonce : undefined} />}
                     {activeView === 'comite' && <ComitePage initialOrgan={navigationTarget ? resolveCommitteeOrganForNavigation(navigationTarget.view) : null} initialSessionId={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.recordId : null} navigationNonce={navigationTarget && resolveCommitteeOrganForNavigation(navigationTarget.view) ? navigationTarget.nonce : undefined} />}
                     {activeView === 'actas' && <ActasPage />}
                     {activeView === 'huelgas' && <HuelgasPage />}

@@ -52,6 +52,7 @@ import {
 } from '../features/criterios-rrll/domain/taskCriterionLinks';
 import { requestTaskCriterionEditor } from '../features/criterios-rrll/domain/taskCriterionEditorBus';
 import { navigateInApp } from '../services/appNavigationBus';
+import { TaskLinksSection } from '../features/task-links/components/TaskLinksSection';
 
 const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
 const TRACKING_META_SUFFIX = ']]';
@@ -999,6 +1000,8 @@ export function TaskEditor({
               <Section icon={FileText} title="Descripción">
                 <Textarea className="min-h-20" value={draft.descripcion} onChange={(e) => setDraft((c) => ({ ...c, descripcion: e.target.value }))} />
               </Section>
+
+              {!isCreate && task && <TaskLinksSection task={task} />}
 
               <Section
                 icon={MessageSquare}

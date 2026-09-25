@@ -188,13 +188,16 @@ export function SessionManagementPage({
 
     const targetSession = sessions.find((session) => session.id === initialSessionId);
     if (!targetSession) {
+      if (!hasLoadedHistoricalSessions) {
+        loadHistoricalSessions();
+      }
       return;
     }
 
     setOpenPanel(targetSession.status === 'closed' ? 'history' : 'open');
     setExpandedSessionId(targetSession.id);
     processedNavigationNonceRef.current = navigationNonce;
-  }, [initialSessionId, navigationNonce, sessions]);
+  }, [hasLoadedHistoricalSessions, initialSessionId, loadHistoricalSessions, navigationNonce, sessions]);
 
   const updateDraft = <K extends keyof ManagedSessionDraft>(
     key: K,
