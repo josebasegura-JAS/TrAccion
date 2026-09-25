@@ -1,6 +1,6 @@
 import type ExcelJS from 'exceljs';
 import { openWorkbookInExcel, sanitizeFilenamePart } from '../../../shared/export/tableExport';
-import type { TicketCalendar, TicketPerson } from '../../ticket-restaurante/domain/ticketRestaurante';
+import { countTicketCalendarDays, type TicketCalendar, type TicketPerson } from '../../ticket-restaurante/domain/ticketRestaurante';
 import {
   buildAutomaticTicketPlan,
   calculateBudgetManualItemYear,
@@ -89,8 +89,8 @@ function buildExportLines({
 
   const lines: BudgetExportLine[] = [
     {
-      budgetLine: 'Ticket Restaurante',
-      concept: `Cálculo anual · absentismo ${ticketRate}%`,
+      budgetLine: `Cálculo anual · absentismo ${ticketRate}%`,
+      concept: 'Ticket Restaurante',
       notes: `Precio ticket ${scenario.ticketAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`,
       simulationAmount: calculated.ticketTotal,
       finalAmount: mode === 'final' ? ticketFinal : undefined,
@@ -108,8 +108,8 @@ function buildExportLines({
       ) || 0,
     );
     lines.push({
-      budgetLine: item.category.trim() || 'Partidas manuales',
-      concept: item.concept.trim() || 'Sin concepto',
+      budgetLine: item.concept.trim() || 'Sin partida',
+      concept: item.category.trim() || 'Partidas manuales',
       notes: item.notes.trim(),
       simulationAmount,
       finalAmount: mode === 'final' ? finalAmount : undefined,
@@ -181,8 +181,8 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   });
 
   worksheet.properties.defaultRowHeight = 18;
-  worksheet.getColumn('A').width = 28;
-  worksheet.getColumn('B').width = 48;
+  worksheet.getColumn('A').width = 48;
+  worksheet.getColumn('B').width = 28;
   worksheet.getColumn('C').width = 42;
   worksheet.getColumn('D').width = 18;
   if (mode === 'final') {
@@ -254,10 +254,9 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
   headerRow.height = 24;
 
   let rowNumber = headerRowNumber + 1;
-  let previousGroup = '';
-  lines.forEach((line) => {
+  lines.forEach((line, lineIndex) => {
     const row = worksheet.getRow(rowNumber);
-    const isNewGroup = line.budgetLine !== previousGroup;
+    const isTicketLine = lineIndex === 0;
     row.getCell(1).value = line.budgetLine;
     row.getCell(2).value = line.concept;
     row.getCell(3).value = line.notes;
@@ -281,17 +280,15 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
           name: 'Aptos',
           size: 10,
           color: { argb: COLORS.text },
-          bold: column === 1 && isNewGroup,
+          bold: column === 1,
         };
         cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
       }
-      if (isNewGroup) {
+      if (isTicketLine) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.group } };
       }
     }
-    if (!isNewGroup) row.getCell(1).value = '';
     row.height = 22;
-    previousGroup = line.budgetLine;
     rowNumber += 1;
   });
 
@@ -414,53 +411,168 @@ export async function exportPresupuestoScenarioToExcel(input: BudgetExportInput)
 
   if (scenario.ticketPlanningMode === 'automatic') {
     const plan = buildAutomaticTicketPlan(scenario, scenario.year, calendars, people);
-    workbook.addWorksheet('Detalle Ticket');
-    const detail = workbook.getWorksheet('Detalle Ticket');
-    if (detail) {
-      detail.views = [{ state: 'frozen', ySplit: 4 }];
-      detail.columns = [
-        { width: 30 },
-        { width: 14 },
-        { width: 14 },
-        { width: 14 },
-        { width: 16 },
-        { width: 16 },
-      ];
-      detail.mergeCells('A1:F1');
-      detail.getCell('A1').value = `Detalle Ticket Restaurante · ${scenario.name}`;
-      detail.getCell('A1').font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: COLORS.text } };
-      detail.mergeCells('A2:F2');
-      detail.getCell('A2').value = `Absentismo principal: ${Math.round(plan.rateA * 10000) / 100}% · Precio ticket: ${scenario.ticketAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`;
-      detail.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: COLORS.muted } };
-      const detailHeaders = ['Calendario', 'Personas base', 'Ajuste simulación', 'Total personas', 'Tickets anuales', 'Importe anual'];
-      detailHeaders.forEach((header, index) => {
-        const cell = detail.getRow(4).getCell(index + 1);
+    const activeCalendars = calendars.filter((calendar) => !calendar.deletedAt && calendar.activo);
+    const activePeople = people.filter((person) => !person.deletedAt && person.activo);
+    const extras = scenario.ticketExtraPeopleByCalendar ?? {};
+    const monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ];
+    const detail = workbook.addWorksheet('Detalle Ticket', { views: [{ state: 'frozen', ySplit: 5 }] });
+    detail.columns = [
+      { width: 28 }, // Calendario
+      { width: 14 }, // Mes
+      { width: 14 }, // Personas base
+      { width: 16 }, // Ajuste
+      { width: 14 }, // Total personas
+      { width: 13 }, // Días ticket
+      { width: 13 }, // Absentismo
+      { width: 18 }, // Personas computables
+      { width: 18 }, // Tickets calculados
+      { width: 14 }, // Precio ticket
+      { width: 18 }, // Importe mes
+    ];
+
+    detail.mergeCells('A1:K1');
+    detail.getCell('A1').value = `Detalle Ticket Restaurante · ${scenario.name}`;
+    detail.getCell('A1').font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: COLORS.text } };
+    detail.mergeCells('A2:K2');
+    detail.getCell('A2').value = `Cálculo real por calendario y mes · Absentismo: ${Math.round(plan.rateA * 10000) / 100}% · Precio ticket: ${scenario.ticketAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`;
+    detail.getCell('A2').font = { name: 'Aptos', size: 10, color: { argb: COLORS.muted } };
+    detail.mergeCells('A3:K3');
+    detail.getCell('A3').value = 'Fórmula: total personas × (1 − absentismo) × días de ticket del calendario × precio del ticket.';
+    detail.getCell('A3').font = { name: 'Aptos', size: 9, italic: true, color: { argb: COLORS.muted } };
+
+    const detailHeaders = [
+      'Calendario', 'Mes', 'Personas base', 'Ajuste simulación', 'Total personas',
+      'Días ticket', 'Absentismo', 'Personas computables', 'Tickets calculados',
+      'Precio ticket', 'Importe mes',
+    ];
+    detailHeaders.forEach((header, index) => {
+      const cell = detail.getRow(5).getCell(index + 1);
+      cell.value = header;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.header } };
+      cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.text } };
+      cell.alignment = { horizontal: index >= 2 ? 'right' : 'left', vertical: 'middle', wrapText: true };
+      setThinBorder(cell);
+    });
+    detail.getRow(5).height = 30;
+
+    let detailRowNumber = 6;
+    const monthRows = new Map<number, number[]>();
+    let annualTotalRowNumber: number | null = null;
+    let previousCalendar = '';
+
+    activeCalendars.forEach((calendar) => {
+      const basePeople = activePeople.filter((person) => person.calendarId === calendar.id).length;
+      const additionalPeople = Math.trunc(Number(extras[calendar.id] ?? 0) || 0);
+      const totalPeople = Math.max(0, basePeople + additionalPeople);
+      if (totalPeople <= 0) return;
+
+      for (let month = 1; month <= 12; month += 1) {
+        const ticketDays = countTicketCalendarDays(calendar, scenario.year, month);
+        const row = detail.getRow(detailRowNumber);
+        const isNewCalendar = calendar.nombre !== previousCalendar;
+        row.getCell(1).value = calendar.nombre;
+        row.getCell(2).value = monthNames[month - 1];
+        row.getCell(3).value = basePeople;
+        row.getCell(4).value = additionalPeople;
+        row.getCell(5).value = totalPeople;
+        row.getCell(6).value = ticketDays;
+        row.getCell(7).value = plan.rateA;
+        row.getCell(8).value = { formula: `E${detailRowNumber}*(1-G${detailRowNumber})` };
+        row.getCell(9).value = { formula: `F${detailRowNumber}*H${detailRowNumber}` };
+        row.getCell(10).value = scenario.ticketAmount;
+        row.getCell(11).value = { formula: `I${detailRowNumber}*J${detailRowNumber}` };
+
+        row.getCell(7).numFmt = '0.00%';
+        row.getCell(8).numFmt = '#,##0.00';
+        row.getCell(9).numFmt = '#,##0.00';
+        row.getCell(10).numFmt = MONEY_FORMAT;
+        row.getCell(11).numFmt = MONEY_FORMAT;
+        for (let column = 1; column <= 11; column += 1) {
+          const cell = row.getCell(column);
+          setThinBorder(cell);
+          if (isNewCalendar) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.group } };
+          cell.font = { name: 'Aptos', size: 9.5, color: { argb: COLORS.text }, bold: column === 1 && isNewCalendar };
+          cell.alignment = { horizontal: column >= 3 ? 'right' : 'left', vertical: 'middle' };
+        }
+        monthRows.set(month, [...(monthRows.get(month) ?? []), detailRowNumber]);
+        previousCalendar = calendar.nombre;
+        detailRowNumber += 1;
+      }
+    });
+
+    const detailLastDataRow = detailRowNumber - 1;
+    if (detailLastDataRow >= 6) {
+      annualTotalRowNumber = detailRowNumber;
+      const totalRow = detail.getRow(detailRowNumber);
+      detail.mergeCells(`A${detailRowNumber}:J${detailRowNumber}`);
+      totalRow.getCell(1).value = 'TOTAL ANUAL TICKET RESTAURANTE';
+      totalRow.getCell(1).font = { name: 'Aptos', size: 11, bold: true, color: { argb: COLORS.redDark } };
+      totalRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
+      totalRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+      totalRow.getCell(11).value = calculated.ticketTotal;
+      totalRow.getCell(11).numFmt = MONEY_FORMAT;
+      totalRow.getCell(11).font = { name: 'Aptos', size: 11, bold: true, color: { argb: COLORS.redDark } };
+      totalRow.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
+      for (let column = 1; column <= 11; column += 1) setThinBorder(totalRow.getCell(column));
+      detailRowNumber += 3;
+
+      detail.mergeCells(`A${detailRowNumber}:K${detailRowNumber}`);
+      detail.getCell(`A${detailRowNumber}`).value = 'Resumen mensual';
+      detail.getCell(`A${detailRowNumber}`).font = { name: 'Aptos Display', size: 14, bold: true, color: { argb: COLORS.text } };
+      detailRowNumber += 1;
+
+      const summaryHeaders = ['Mes', 'Importe total'];
+      summaryHeaders.forEach((header, index) => {
+        const cell = detail.getRow(detailRowNumber).getCell(index + 1);
         cell.value = header;
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.header } };
         cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.text } };
         setThinBorder(cell);
       });
-      plan.rows.forEach((planRow, index) => {
-        const row = detail.getRow(5 + index);
-        row.values = [
-          planRow.calendarName,
-          planRow.basePeople,
-          planRow.additionalPeople,
-          planRow.totalPeople,
-          planRow.annualTicketsA,
-          planRow.annualAmountA,
-        ];
-        for (let column = 1; column <= 6; column += 1) setThinBorder(row.getCell(column));
-        row.getCell(6).numFmt = MONEY_FORMAT;
-      });
-      detail.pageSetup = {
-        orientation: 'landscape',
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-        margins: { left: 0.25, right: 0.25, top: 0.35, bottom: 0.35, header: 0.15, footer: 0.15 },
-      };
+      detailRowNumber += 1;
+      const summaryStartRow = detailRowNumber;
+      for (let month = 1; month <= 12; month += 1) {
+        const rows = monthRows.get(month) ?? [];
+        const row = detail.getRow(detailRowNumber);
+        row.getCell(1).value = monthNames[month - 1];
+        row.getCell(2).value = rows.length > 0
+          ? { formula: `ROUND(${rows.map((rowNumber) => `K${rowNumber}`).join('+')},2)` }
+          : 0;
+        row.getCell(2).numFmt = MONEY_FORMAT;
+        setThinBorder(row.getCell(1));
+        setThinBorder(row.getCell(2));
+        detailRowNumber += 1;
+      }
+      const summaryTotal = detail.getRow(detailRowNumber);
+      summaryTotal.getCell(1).value = 'TOTAL';
+      summaryTotal.getCell(2).value = { formula: `SUM(B${summaryStartRow}:B${detailRowNumber - 1})` };
+      summaryTotal.getCell(2).numFmt = MONEY_FORMAT;
+      summaryTotal.getCell(1).font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.redDark } };
+      summaryTotal.getCell(2).font = { name: 'Aptos', size: 10, bold: true, color: { argb: COLORS.redDark } };
+      summaryTotal.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
+      summaryTotal.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.redSoft } };
+      setThinBorder(summaryTotal.getCell(1));
+      setThinBorder(summaryTotal.getCell(2));
+      if (annualTotalRowNumber !== null) {
+        detail.getRow(annualTotalRowNumber).getCell(11).value = { formula: `B${detailRowNumber}` };
+      }
     }
+
+    detail.autoFilter = {
+      from: { row: 5, column: 1 },
+      to: { row: Math.max(detailLastDataRow, 5), column: 11 },
+    };
+    detail.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.35, bottom: 0.35, header: 0.15, footer: 0.15 },
+    };
+    detail.headerFooter.oddFooter = '&LTrAcción · Relaciones Laborales&C&P / &N&RGenerado &D';
   }
 
   worksheet.autoFilter = {
