@@ -103,6 +103,16 @@ import {
 import {
   getDirectStoreUpdatedAtSnapshot,
 } from './persistence/directStoreUpdatedAt.js';
+import {
+  isCountRow,
+  isJsonObjectWithStringId,
+  isMetadataRow,
+  isUpdatedAtRow,
+  largestPersistedRecordSizes,
+  logSqliteMetric,
+  readAllPersistedRecords,
+  readPersistedRecordByKey,
+} from './persistence/sqlitePersistenceHelpers.js';
 
 export {
   clearDailyLocalBackupDirectory,
@@ -301,29 +311,6 @@ export interface DatabaseConnectivityIssuePayload {
   message: string;
   failedHeartbeatCount: number;
   updatedAt: string;
-}
-
-function logSqliteMetric(message: string, data?: Record<string, unknown>): void {
-  if (process.env.NODE_ENV === 'production') {
-    return;
-  }
-
-  if (data) {
-    console.info(`[sqlite] ${message}`, data);
-    return;
-  }
-
-  console.info(`[sqlite] ${message}`);
-}
-
-function largestPersistedRecordSizes(records: PersistedStorageRecordSnapshot[]): Array<{
-  key: string;
-  bytes: number;
-}> {
-  return records
-    .map((record) => ({ key: record.key, bytes: Buffer.byteLength(record.value, 'utf8') }))
-    .sort((left, right) => right.bytes - left.bytes)
-    .slice(0, 10);
 }
 
 // --- Mantenimiento de la base: VACUUM ---------------------------------
@@ -917,100 +904,6 @@ export function getSqliteStatus(): DatabaseStatus {
       lockPath: getLockPath(fallbackPath),
     }
   );
-}
-
-interface PersistedRecordRow {
-  key: string;
-  value_json: string;
-  updated_at: string;
-}
-
-interface MetadataRow {
-  value: string;
-}
-
-interface UpdatedAtRow {
-  updated_at: string;
-}
-
-interface CountRow {
-  count: number;
-}
-
-function isPersistedRecordRow(value: unknown): value is PersistedRecordRow {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<PersistedRecordRow>;
-  return (
-    typeof candidate.key === 'string' &&
-    typeof candidate.value_json === 'string' &&
-    typeof candidate.updated_at === 'string'
-  );
-}
-
-function isCountRow(value: unknown): value is CountRow {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<CountRow>;
-  return typeof candidate.count === 'number';
-}
-
-function isJsonObjectWithStringId(
-  value: unknown,
-): value is { id: string; createdAt?: unknown; updatedAt?: unknown; deletedAt?: unknown } {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as { id?: unknown };
-  return typeof candidate.id === 'string' && candidate.id.trim().length > 0;
-}
-
-function isMetadataRow(value: unknown): value is MetadataRow {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<MetadataRow>;
-  return typeof candidate.value === 'string';
-}
-
-function isUpdatedAtRow(value: unknown): value is UpdatedAtRow {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<UpdatedAtRow>;
-  return typeof candidate.updated_at === 'string';
-}
-
-function readPersistedRecordByKey(
-  db: Database,
-  key: string,
-): PersistedStorageRecordSnapshot | null {
-  const row = db
-    .prepare('SELECT key, value_json, updated_at FROM persisted_records WHERE key = ?')
-    .get(key);
-
-  return isPersistedRecordRow(row)
-    ? { key: row.key, value: row.value_json, updatedAt: row.updated_at }
-    : null;
-}
-
-function readAllPersistedRecords(db: Database): PersistedStorageRecordSnapshot[] {
-  return db
-    .prepare('SELECT key, value_json, updated_at FROM persisted_records ORDER BY key')
-    .all()
-    .filter(isPersistedRecordRow)
-    .map((row) => ({
-      key: row.key,
-      value: row.value_json,
-      updatedAt: row.updated_at,
-    }));
 }
 
 function enqueueLocalBackup(reason: string): void {
