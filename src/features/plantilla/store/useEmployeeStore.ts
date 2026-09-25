@@ -702,7 +702,7 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     }
 
     const currentEmployees = get().employees;
-    const { employees, changedEmployees, result: importResult } = buildEmployeeImport(
+    const { changedEmployees, result: importResult } = buildEmployeeImport(
       currentEmployees,
       drafts,
       new Set(importedFields),
