@@ -1,47 +1,39 @@
 import { create } from 'zustand';
 import { EMPTY_TASK_FILTERS, type TaskFilters } from '../domain/filters';
-import {
-  emitPersistenceFeedback,
-  readStorageItem,
-  writeStorageItem,
-} from '../../../services/persistence';
-import { saveNewSharedArrayRecord, saveSharedArrayMutation, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
-import { hasTaskSqliteRepository, loadTasksFromSqlite, saveTaskToSqlite, type TaskSqliteLoadMode } from './taskSqliteRepository';
+import { emitPersistenceFeedback } from '../../../services/persistence';
+import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
+import { hasTaskSqliteRepository } from './taskSqliteRepository';
 import { enqueueAuditEvent } from '../../../shared/audit/auditTrail';
 import {
-  CLOSED_TASK_PHASE,
   isTaskClosed,
-  migratePeticionToTask,
   type Task,
   type TaskDraft,
 } from '../domain/task';
 import {
   firstActiveTaskId,
-  isLegacyPeticion,
-  isTask,
   normalizeTask,
   parseTasksSnapshot,
   tasksDiffer,
 } from './taskNormalization';
-import { reconcileTasksWithClosedSessions } from './taskSessionReconciliation';
 import {
   buildAssignmentNoticeFields,
   buildSeguimiento,
   buildUpdatedTask,
   createTaskId,
 } from './taskMutations';
+import {
+  persistTaskDirectly,
+  persistTasks,
+  readTasks,
+  readTasksForStore,
+  TASKS_STORAGE_KEY,
+  type TaskUpdateResult,
+} from './taskPersistence';
+import { closeTasksFromSessionPersisted } from './taskSessionClosure';
 
-export const TASKS_STORAGE_KEY = 'traccion.v1.tareas.tasks';
-const LEGACY_PETICIONES_STORAGE_KEY = 'traccion.v1.peticiones.peticiones';
-const PETICIONES_MIGRATION_FLAG_KEY = 'traccion.v1.tareas.peticionesMigrated';
+export { TASKS_STORAGE_KEY } from './taskPersistence';
 
-
-
-interface TaskUpdateResult {
-  ok: boolean;
-  message: string;
-  recordId?: string;
-}
+export { parseTasksSnapshot } from './taskNormalization';
 
 interface TaskStateStore {
   tasks: Task[];
@@ -76,137 +68,6 @@ interface TaskStateStore {
   ) => Promise<TaskUpdateResult>;
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
-
-function readStoredArray(storageKey: string): unknown[] {
-  const stored = readStorageItem(storageKey);
-  if (!stored) {
-    return [];
-  }
-
-  const parsed: unknown = JSON.parse(stored);
-  return Array.isArray(parsed) ? parsed : [];
-}
-
-function readMigratedPeticiones(): Task[] {
-  if (readStorageItem(PETICIONES_MIGRATION_FLAG_KEY) === 'true') {
-    return [];
-  }
-
-  return readStoredArray(LEGACY_PETICIONES_STORAGE_KEY)
-    .filter(isLegacyPeticion)
-    .map(migratePeticionToTask)
-    .map(normalizeTask);
-}
-
-function readTasks(): Task[] {
-  const rawCurrentTasks = readStoredArray(TASKS_STORAGE_KEY).filter(isTask);
-  const currentTasks = reconcileTasksWithClosedSessions(rawCurrentTasks.map(normalizeTask));
-  const migratedTasks = readMigratedPeticiones().filter(
-    (migratedTask) => !currentTasks.some((task) => task.id === migratedTask.id),
-  );
-  const currentTasksChanged = currentTasks.some(
-    (task, index) => JSON.stringify(task) !== JSON.stringify(rawCurrentTasks[index]),
-  );
-
-  if (migratedTasks.length === 0) {
-    if (currentTasksChanged) {
-      persistTasks(currentTasks);
-    }
-    return currentTasks;
-  }
-
-  const tasks = reconcileTasksWithClosedSessions([...currentTasks, ...migratedTasks]);
-  persistTasks(tasks);
-  writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
-  return tasks;
-}
-
-function persistTasks(tasks: Task[]): void {
-  writeStorageItem(TASKS_STORAGE_KEY, JSON.stringify(tasks.map(normalizeTask)));
-}
-
-async function readTasksForStore(mode: TaskSqliteLoadMode = 'active'): Promise<Task[]> {
-  if (!hasTaskSqliteRepository()) {
-    if (import.meta.env.MODE === 'test') return readTasks();
-    console.error('Repositorio SQLite de tareas no disponible; no se usa fallback local.');
-    return [];
-  }
-
-  try {
-    const sqliteTasks = await loadTasksFromSqlite(parseTasksSnapshot, mode);
-    if (sqliteTasks) {
-      const normalizedSqliteTasks = sqliteTasks.map(normalizeTask);
-      const reconciledSqliteTasks = reconcileTasksWithClosedSessions(normalizedSqliteTasks);
-      const previousTasksById = new Map(normalizedSqliteTasks.map((task) => [task.id, task]));
-      const migratedPeticiones = mode === 'active'
-        ? readMigratedPeticiones().filter(
-            (migratedTask) =>
-              !isTaskClosed(migratedTask) &&
-              !reconciledSqliteTasks.some((task) => task.id === migratedTask.id),
-          )
-        : [];
-      const tasks = [...reconciledSqliteTasks, ...migratedPeticiones].map(normalizeTask);
-
-      const normalizationPersisted = await persistTaskChangesBestEffort(
-        tasks,
-        previousTasksById,
-        'normalización o migración de tareas',
-      );
-
-      if (migratedPeticiones.length > 0 && normalizationPersisted) {
-        writeStorageItem(PETICIONES_MIGRATION_FLAG_KEY, 'true');
-      }
-
-      return tasks;
-    }
-  } catch (error) {
-    console.error('No se han podido cargar tareas desde SQLite. No se usa fallback local.', error);
-  }
-
-  return [];
-}
-
-async function persistTaskDirectly(task: Task, expectedUpdatedAt: string | null): Promise<TaskUpdateResult> {
-  if (!hasTaskSqliteRepository()) {
-    return { ok: false, message: 'Repositorio SQLite directo de tareas no disponible.' };
-  }
-
-  const result = await saveTaskToSqlite(normalizeTask(task), expectedUpdatedAt);
-  if (!result) {
-    return { ok: false, message: 'Repositorio SQLite directo de tareas no disponible.' };
-  }
-
-  return { ok: result.ok, message: result.message, recordId: task.id };
-}
-
-async function persistTaskChangesBestEffort(
-  tasks: Task[],
-  previousTasksById: Map<string, Task>,
-  context: string,
-): Promise<boolean> {
-  if (!hasTaskSqliteRepository()) {
-    return false;
-  }
-
-  let allPersisted = true;
-  for (const task of tasks) {
-    const previousTask = previousTasksById.get(task.id);
-    const expectedUpdatedAt = previousTask?.updatedAt ?? null;
-    if (previousTask && !tasksDiffer(previousTask, task)) {
-      continue;
-    }
-
-    const result = await persistTaskDirectly(task, expectedUpdatedAt);
-    if (!result.ok) {
-      allPersisted = false;
-      console.warn(`[tareas] No se ha podido persistir ${context}.`, result.message);
-    }
-  }
-
-  return allPersisted;
-}
-
-export { parseTasksSnapshot } from './taskNormalization';
 
 export const useTaskStore = create<TaskStateStore>((set) => ({
   tasks: [],
@@ -622,97 +483,11 @@ export const useTaskStore = create<TaskStateStore>((set) => ({
   },
 
   closeTasksFromSessionWithConcurrencyCheck: async (taskIds, moduleLabel, sessionLabel) => {
-    try {
-      const now = new Date().toISOString();
-      const taskIdSet = new Set(taskIds);
-      const seguimiento = buildSeguimiento(`Tratada en ${moduleLabel} (${sessionLabel}).`, now);
-
-      if (hasTaskSqliteRepository()) {
-        const latestTasks = await readTasksForStore('all');
-        const updatedTasks = latestTasks.map((task) => {
-          if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
-            return task;
-          }
-
-          enqueueAuditEvent({
-            module: 'tareas',
-            entityId: task.id,
-            action: 'status_changed',
-            summary: `Estado cambiado: ${task.estado} → cerrada`,
-            changes: [
-              { field: 'estado', label: 'Estado', before: task.estado, after: 'cerrada' },
-              { field: 'fase', label: 'Fase', before: task.fase, after: CLOSED_TASK_PHASE },
-            ],
-          });
-
-          return normalizeTask({
-            ...task,
-            estado: 'cerrada' as const,
-            fase: CLOSED_TASK_PHASE,
-            seguimiento: [...seguimiento, ...task.seguimiento],
-            closedAt: task.closedAt ?? now,
-            updatedAt: now,
-          });
-        });
-
-        const saveResults = await Promise.all(
-          updatedTasks.map((task) => {
-            const previousTask = latestTasks.find((candidate) => candidate.id === task.id);
-            if (!previousTask || previousTask.updatedAt === task.updatedAt) {
-              return Promise.resolve({ ok: true, message: 'Sin cambios.' });
-            }
-
-            return persistTaskDirectly(task, previousTask.updatedAt);
-          }),
-        );
-        const failedSave = saveResults.find((result) => !result.ok);
-        if (failedSave) {
-          return { ok: false, message: failedSave.message };
-        }
-
-        set({ tasks: updatedTasks, selectedTaskId: firstActiveTaskId(updatedTasks) });
-        return { ok: true, message: 'Puntos tratados cerrados.' };
-      }
-
-      const result = await saveSharedArrayMutation<Task>({
-        storageKey: TASKS_STORAGE_KEY,
-        parseRecords: parseTasksSnapshot,
-        updateRecords: (latestTasks) =>
-          latestTasks.map((task) => {
-            if (!taskIdSet.has(task.id) || task.deletedAt || isTaskClosed(task)) {
-              return task;
-            }
-
-            enqueueAuditEvent({
-              module: 'tareas',
-              entityId: task.id,
-              action: 'status_changed',
-              summary: `Estado cambiado: ${task.estado} → cerrada`,
-              changes: [
-                { field: 'estado', label: 'Estado', before: task.estado, after: 'cerrada' },
-                { field: 'fase', label: 'Fase', before: task.fase, after: CLOSED_TASK_PHASE },
-              ],
-            });
-
-            return normalizeTask({
-              ...task,
-              estado: 'cerrada' as const,
-              fase: CLOSED_TASK_PHASE,
-              seguimiento: [...seguimiento, ...task.seguimiento],
-              closedAt: task.closedAt ?? now,
-              updatedAt: now,
-            });
-          }),
-      });
-      const normalizedTasks = result.records.map(normalizeTask);
-      set({ tasks: normalizedTasks, selectedTaskId: firstActiveTaskId(normalizedTasks) });
-      return { ok: true, message: 'Puntos tratados cerrados.' };
-    } catch (error) {
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : 'No se han podido cerrar los puntos tratados.',
-      };
+    const result = await closeTasksFromSessionPersisted(taskIds, moduleLabel, sessionLabel);
+    if (result.ok && result.tasks && result.selectedTaskId !== undefined) {
+      set({ tasks: result.tasks, selectedTaskId: result.selectedTaskId });
     }
+    return { ok: result.ok, message: result.message };
   },
   selectTask: (taskId) => set({ selectedTaskId: taskId }),
   setFilter: (key, value) => set((state) => ({ filters: { ...state.filters, [key]: value } })),
