@@ -30,6 +30,7 @@ export function SessionCloseModal({
   tasksById: Map<string, Task>;
 }) {
   const titleId = 'session-close-modal-title';
+  const hasUnclassifiedPoints = closingSession.items.some((taskId) => !pointResults[taskId]);
 
   return (
     <ModalShell labelledBy={titleId} maxWidthClassName="max-w-3xl" onClose={onCancel}>
@@ -72,8 +73,9 @@ export function SessionCloseModal({
                       [taskId]: event.target.value as ManagedSessionTaskResult,
                     }))
                   }
-                  value={pointResults[taskId] ?? 'resolved'}
+                  value={pointResults[taskId] ?? ''}
                 >
+                  <option disabled value="">Seleccionar resultado…</option>
                   <option value="resolved">Tratado y resuelto</option>
                   <option value="followup">Tratado · requiere seguimiento</option>
                   <option value="return">Volver a próxima sesión</option>
@@ -88,7 +90,7 @@ export function SessionCloseModal({
         <ActionButton iconOnly={false} onClick={onCancel} variant="secondary">
           Cancelar
         </ActionButton>
-        <ActionButton iconOnly={false} onClick={onConfirm} variant="save">
+        <ActionButton disabled={hasUnclassifiedPoints} iconOnly={false} onClick={onConfirm} variant="save">
           Confirmar cierre
         </ActionButton>
       </ModalFooter>

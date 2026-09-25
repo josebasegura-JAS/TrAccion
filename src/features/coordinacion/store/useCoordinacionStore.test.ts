@@ -179,6 +179,40 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().areaTaskIds['Prevención']).toEqual(['t-v', 't-n']);
   });
 
+
+  it('mantiene en la siguiente reunión de Dirección los puntos marcados como no tratados', async () => {
+    const tasks = [task('t-dir', 'Asunto Dirección', '')];
+    await useCoordinacionStore.getState().setTaskForDirection('t-dir', true);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-09-25', tasks);
+    const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
+    expect(meeting).toBeTruthy();
+    if (!meeting) return;
+
+    await useCoordinacionStore.getState().updatePoint(meeting.id, meeting.points[0].id, { status: 'no-tratado' });
+    await useCoordinacionStore.getState().closeMeeting(meeting.id);
+
+    expect(useCoordinacionStore.getState().directionTaskIds).toEqual(['t-dir']);
+  });
+
+  it('no arrastra a la siguiente reunión sindical un punto ya tratado con seguimiento', async () => {
+    const tasks = [task('t-follow', 'Asunto con seguimiento')];
+    const created = await useCoordinacionStore.getState().createUnionMeeting(
+      '2026-09-01', 'ELA', 'ordinaria', '', '', ['t-follow'], tasks,
+    );
+    const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
+    expect(meeting).toBeTruthy();
+    if (!meeting) return;
+
+    await useCoordinacionStore.getState().updatePoint(meeting.id, meeting.points[0].id, { status: 'seguimiento' });
+    await useCoordinacionStore.getState().closeMeeting(meeting.id);
+    expect(useCoordinacionStore.getState().unionTaskIds.ELA ?? []).toEqual([]);
+
+    await useCoordinacionStore.getState().createUnionMeeting(
+      '2026-10-01', 'ELA', 'seguimiento', '', '', [], tasks,
+    );
+    expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
+  });
+
   it('permite crear una reunión sindical sin tareas iniciales', async () => {
     const result = await useCoordinacionStore.getState().createUnionMeeting(
       '2026-09-22', 'ELA', 'ordinaria', 'Representación y RRLL', 'Asunto sobrevenido', [], [],

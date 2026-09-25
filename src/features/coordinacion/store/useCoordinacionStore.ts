@@ -226,7 +226,10 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       .filter((meeting) => meeting.area === 'sindicatos' && meeting.unionName === cleanUnion && meeting.status === 'closed')
       .sort((a, b) => b.date.localeCompare(a.date))[0];
     latestPrevious?.points.forEach((point) => {
-      if (point.taskId && point.status !== 'tratado') selectedIds.add(point.taskId);
+      if (!point.taskId) return;
+      if (['pendiente', 'volver', 'no-tratado', 'pendiente-rrll', 'pendiente-sindicato'].includes(point.status)) {
+        selectedIds.add(point.taskId);
+      }
     });
     const now = new Date().toISOString();
     const points: CoordinationPoint[] = tasks
@@ -385,7 +388,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     if (meeting.area === 'direccion') meeting.points.forEach((point) => {
       if (!point.taskId) return;
       if (point.status === 'tratado' || point.status === 'seguimiento') directionTaskIds.delete(point.taskId);
-      if (point.status === 'volver' || point.status === 'pendiente') directionTaskIds.add(point.taskId);
+      if (['volver', 'pendiente', 'no-tratado'].includes(point.status)) directionTaskIds.add(point.taskId);
     });
     if (meeting.area === 'sindicatos' && meeting.unionName) {
       const ids = new Set(unionTaskIds[meeting.unionName] ?? []);

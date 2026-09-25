@@ -240,7 +240,7 @@ export function SessionManagementPage({
   };
 
   const openCloseModal = (session: ManagedSession) => {
-    setPointResults(Object.fromEntries(session.items.map((taskId) => [taskId, 'resolved' as const])));
+    setPointResults({});
     setClosingSessionId(session.id);
   };
 
@@ -403,8 +403,14 @@ export function SessionManagementPage({
     }
 
     try {
-      const resolvedIds = closingSession.items.filter((taskId) => (pointResults[taskId] ?? 'resolved') === 'resolved');
-      const handledIds = closingSession.items.filter((taskId) => ['resolved', 'followup'].includes(pointResults[taskId] ?? 'resolved'));
+      const unclassifiedIds = closingSession.items.filter((taskId) => !pointResults[taskId]);
+      if (unclassifiedIds.length > 0) {
+        await alert('Clasifica el resultado de todos los puntos antes de cerrar la sesión.', { type: 'warning' });
+        return;
+      }
+
+      const resolvedIds = closingSession.items.filter((taskId) => pointResults[taskId] === 'resolved');
+      const handledIds = closingSession.items.filter((taskId) => ['resolved', 'followup'].includes(pointResults[taskId]));
       const treatedTasks = handledIds.flatMap((taskId) => {
         const task = tasksById.get(taskId);
         return task ? [task] : [];
@@ -437,7 +443,7 @@ export function SessionManagementPage({
             treatedTaskIds: closingSession.items.filter((taskId) => handledSet.has(taskId)),
             untreatedTaskIds: closingSession.items.filter((taskId) => !handledSet.has(taskId)),
             taskResults: Object.fromEntries(
-              closingSession.items.map((taskId) => [taskId, pointResults[taskId] ?? 'resolved']),
+              closingSession.items.map((taskId) => [taskId, pointResults[taskId] as ManagedSessionTaskResult]),
             ),
             updatedAt: now,
             closedAt: now,

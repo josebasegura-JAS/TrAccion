@@ -8,7 +8,7 @@ import type { Task } from '../../tareas/domain/task';
 import { formatManagedSessionDate, getManagedSessionTaskResult } from '../../../shared/sessions/session';
 import { navigateInApp } from '../../../services/appNavigationBus';
 
-type LinkStatus = 'pending' | 'scheduled' | 'treated' | 'followup' | 'return' | 'not-treated';
+type LinkStatus = 'pending' | 'scheduled' | 'treated' | 'followup' | 'return' | 'not-treated' | 'pending-rrll' | 'pending-union';
 
 type TaskLink = {
   id: string;
@@ -22,7 +22,7 @@ type TaskLink = {
 function statusClasses(status: LinkStatus): string {
   if (status === 'treated') return 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200';
   if (status === 'scheduled') return 'border-sky-400/20 bg-sky-500/10 text-sky-200';
-  if (status === 'followup' || status === 'return' || status === 'not-treated') return 'border-amber-400/20 bg-amber-500/10 text-amber-200';
+  if (status === 'followup' || status === 'return' || status === 'not-treated' || status === 'pending-rrll' || status === 'pending-union') return 'border-amber-400/20 bg-amber-500/10 text-amber-200';
   return 'border-amber-400/20 bg-amber-500/10 text-amber-200';
 }
 
@@ -32,6 +32,8 @@ function statusLabel(status: LinkStatus): string {
   if (status === 'followup') return 'Requiere seguimiento';
   if (status === 'return') return 'Volver a próxima';
   if (status === 'not-treated') return 'No tratado';
+  if (status === 'pending-rrll') return 'Pendiente de RRLL';
+  if (status === 'pending-union') return 'Pendiente del sindicato';
   return 'Pendiente';
 }
 
@@ -126,7 +128,11 @@ export function TaskLinksSection({ task }: { task: Task }) {
               ? 'followup'
               : point.status === 'volver'
                 ? 'return'
-                : 'not-treated';
+                : point.status === 'pendiente-rrll'
+                  ? 'pending-rrll'
+                  : point.status === 'pendiente-sindicato'
+                    ? 'pending-union'
+                    : 'not-treated';
         result.push({
           id: `coord:${meeting.id}`,
           label,
