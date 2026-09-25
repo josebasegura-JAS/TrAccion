@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock3, FileSpreadsheet, MailPlus, MapPinned, Plus, Search, Settings2, Trash2, UsersRound } from 'lucide-react';
+import { FileSpreadsheet, MailPlus, Plus, Search } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { RichTextEditor } from '../../../components/ui/RichTextEditor';
-import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
-import type { Employee, EmployeeDraft } from '../../plantilla/domain/employee';
+import type { Employee } from '../../plantilla/domain/employee';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
 import { parseXlsxRows } from '../../../shared/import/xlsxParser';
 import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
@@ -42,197 +41,28 @@ import {
   mergeLegacyAreas,
   type HuelgaArea,
 } from './huelgasAreas';
-
-const STORAGE_KEY = 'traccion.v1.huelgas.records';
-const PUESTO_RESPONSABLES_STORAGE_KEY = 'traccion.v1.huelgas.puestoResponsables';
-const ZONAS_STORAGE_KEY = 'traccion.v1.huelgas.zonas';
-const AREAS_STORAGE_KEY = 'traccion.v1.huelgas.areas';
-
-type HuelgaTipo = 'jornada-completa' | 'paros-parciales';
-
-type HuelgaTramo = {
-  id: string;
-  inicio: string;
-  fin: string;
-};
-
-type Huelga = {
-  id: string;
-  fecha: string;
-  sindicatos: string[];
-  tipo: HuelgaTipo;
-  tramos: HuelgaTramo[];
-  observaciones: string;
-  createdAt: string;
-  updatedAt: string;
-  personalConTurno?: HuelgaPersonalTurno[];
-  personalImportadoAt?: string | null;
-  asignacionesPuesto?: HuelgaPuestoAsignacion[];
-  instruccionesCorreoPorZona?: Record<string, string>;
-};
-
-type HuelgaDraft = Pick<Huelga, 'fecha' | 'sindicatos' | 'tipo' | 'tramos' | 'observaciones'>;
-type AssignmentSortKey = 'residencia' | 'puesto' | 'personas' | 'area' | 'zona' | 'responsable' | 'estado';
-type AssignmentSortDirection = 'asc' | 'desc';
-
-type AssignmentFilters = {
-  residencia: string;
-  puesto: string;
-  personas: string;
-  area: string;
-  zona: string;
-  responsable: string;
-  estado: string;
-};
-
-const EMPTY_ASSIGNMENT_FILTERS: AssignmentFilters = {
-  residencia: '',
-  puesto: '',
-  personas: '',
-  area: '',
-  zona: '',
-  responsable: '',
-  estado: '',
-};
-
-
-const EMPTY_DRAFT: HuelgaDraft = {
-  fecha: '',
-  sindicatos: [],
-  tipo: 'jornada-completa',
-  tramos: [],
-  observaciones: '',
-};
-
-function isHuelga(value: unknown): value is Huelga {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<Huelga>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.fecha === 'string' &&
-    Array.isArray(candidate.sindicatos) &&
-    candidate.sindicatos.every((item) => typeof item === 'string') &&
-    (candidate.tipo === 'jornada-completa' || candidate.tipo === 'paros-parciales') &&
-    Array.isArray(candidate.tramos) &&
-    typeof candidate.observaciones === 'string' &&
-    typeof candidate.createdAt === 'string' &&
-    typeof candidate.updatedAt === 'string' &&
-    (typeof candidate.personalConTurno === 'undefined' || Array.isArray(candidate.personalConTurno)) &&
-    (typeof candidate.personalImportadoAt === 'undefined' || candidate.personalImportadoAt === null || typeof candidate.personalImportadoAt === 'string') &&
-    (typeof candidate.asignacionesPuesto === 'undefined' || isHuelgaPuestoAsignaciones(candidate.asignacionesPuesto)) &&
-    (typeof candidate.instruccionesCorreoPorZona === 'undefined' || (candidate.instruccionesCorreoPorZona !== null && typeof candidate.instruccionesCorreoPorZona === 'object' && !Array.isArray(candidate.instruccionesCorreoPorZona)))
-  );
-}
-
-function isHuelgas(value: unknown): value is Huelga[] {
-  return Array.isArray(value) && value.every(isHuelga);
-}
-
-function createId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function todayIso(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset();
-  return new Date(now.getTime() - offset * 60_000).toISOString().slice(0, 10);
-}
-
-function formatDate(value: string): string {
-  if (!value) return '—';
-  const [year, month, day] = value.split('-').map(Number);
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(year, month - 1, day));
-}
-
-function huelgaStatus(fecha: string): 'Hoy' | 'Próxima' | 'Finalizada' {
-  const today = todayIso();
-  if (fecha === today) return 'Hoy';
-  return fecha > today ? 'Próxima' : 'Finalizada';
-}
-
-function statusClass(status: ReturnType<typeof huelgaStatus>): string {
-  if (status === 'Hoy') return 'border-red-500/40 bg-red-500/15 text-red-200';
-  if (status === 'Próxima') return 'border-amber-500/40 bg-amber-500/15 text-amber-200';
-  return 'border-metro-border bg-metro-panel/70 text-metro-muted';
-}
-
-function convocatoriaLabel(huelga: Pick<Huelga, 'tipo' | 'tramos'>): string {
-  if (huelga.tipo === 'jornada-completa') return 'Jornada completa';
-  if (huelga.tramos.length === 0) return 'Paros parciales';
-  return huelga.tramos.map((tramo) => `${tramo.inicio}–${tramo.fin}`).join(' · ');
-}
-
-function validateDraft(draft: HuelgaDraft): string | null {
-  if (!draft.fecha) return 'Indica la fecha de la huelga.';
-  if (draft.sindicatos.length === 0) return 'Selecciona al menos un sindicato convocante.';
-  if (draft.tipo === 'paros-parciales') {
-    if (draft.tramos.length === 0) return 'Añade al menos un tramo horario para los paros parciales.';
-    for (const tramo of draft.tramos) {
-      if (!tramo.inicio || !tramo.fin) return 'Completa la hora de inicio y fin de todos los tramos.';
-      if (tramo.inicio >= tramo.fin) return 'La hora de fin de cada tramo debe ser posterior a la de inicio.';
-    }
-  }
-  return null;
-}
-
-function resolveResidenceOverride(
-  overrides: Record<string, string>,
-  residencia: string,
-  puesto: string,
-): string {
-  let current = residencia.trim();
-  const visited = new Set<string>();
-  for (let index = 0; index < 20; index += 1) {
-    const key = asignacionKey(current, puesto);
-    if (visited.has(key)) break;
-    visited.add(key);
-    const next = overrides[key]?.trim();
-    if (!next || next === current) break;
-    current = next;
-  }
-  return current;
-}
-
-function employeeToDraft(employee: Employee): EmployeeDraft {
-  return {
-    empleado: employee.empleado,
-    nombreApellidos: employee.nombreApellidos,
-    puestoNomina: employee.puestoNomina,
-    puestoOrganizativo: employee.puestoOrganizativo,
-    puestoEus: employee.puestoEus,
-    residencia: employee.residencia,
-    unidad: employee.unidad,
-    nivelRetributivo: employee.nivelRetributivo,
-    direccionOrganizativa: employee.direccionOrganizativa,
-    antiguedadPuesto: employee.antiguedadPuesto,
-    sexo: employee.sexo,
-    calle: employee.calle,
-    numero: employee.numero,
-    piso: employee.piso,
-    codigoPostal: employee.codigoPostal,
-    poblacion: employee.poblacion,
-    provincia: employee.provincia,
-    nif: employee.nif,
-    telefono1: employee.telefono1,
-    telefono2: employee.telefono2,
-    email: employee.email,
-  };
-}
-
-function sameNormalizedText(left: string, right: string): boolean {
-  const normalize = (value: string) => value
-    .replace(/\u00a0/g, ' ')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('es-ES')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return normalize(left) === normalize(right);
-}
+import { HuelgasOverview } from './HuelgasOverview';
+import { HuelgaEditorModal } from './HuelgaEditorModal';
+import {
+  AREAS_STORAGE_KEY,
+  EMPTY_ASSIGNMENT_FILTERS,
+  EMPTY_DRAFT,
+  PUESTO_RESPONSABLES_STORAGE_KEY,
+  STORAGE_KEY,
+  ZONAS_STORAGE_KEY,
+  createId,
+  employeeToDraft,
+  isHuelgas,
+  resolveResidenceOverride,
+  sameNormalizedText,
+  todayIso,
+  validateDraft,
+  type AssignmentFilters,
+  type AssignmentSortDirection,
+  type AssignmentSortKey,
+  type Huelga,
+  type HuelgaDraft,
+} from './huelgasPageModel';
 
 export function HuelgasPage() {
   const { alert, confirm, dialogNode } = useAppDialog();
@@ -1211,151 +1041,22 @@ export function HuelgasPage() {
 
   return (
     <div className="ui3-huelgas space-y-3">
-      <PageHeader
-        title="Huelgas"
-        actions={
-          <div className="flex items-center gap-2">
-            <ActionButton variant="secondary" iconOnly={false} icon={MapPinned} onClick={openZones}>Zonas y áreas</ActionButton>
-            <ActionButton variant="add" iconOnly={false} onClick={openNew}>Nueva huelga</ActionButton>
-          </div>
-        }
+      <HuelgasOverview
+        huelgas={huelgas}
+        sortedHuelgas={sortedHuelgas}
+        nextHuelga={nextHuelga ?? null}
+        puestoResponsables={puestoResponsables}
+        zonas={zonas}
+        areas={areas}
+        generatingCollectionForId={generatingCollectionForId}
+        onOpenZones={openZones}
+        onOpenNew={openNew}
+        onOpenEdit={openEdit}
+        onOpenImport={openImport}
+        onOpenAssignments={openAssignments}
+        onOpenCollectionMails={(huelga) => void openCollectionMails(huelga)}
+        onRemove={(huelga) => void remove(huelga)}
       />
-
-      {nextHuelga ? (
-        <section className="ui3-operational-card rounded-xl border border-metro-border bg-metro-panel/75 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-metro-red/15 text-metro-red">
-                <CalendarDays size={21} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-metro-muted">Próxima convocatoria</p>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <strong className="text-base text-metro-text">{formatDate(nextHuelga.fecha)}</strong>
-                  <span className="text-sm text-metro-muted">{convocatoriaLabel(nextHuelga)}</span>
-                </div>
-                <p className="mt-1 truncate text-sm text-metro-muted">{nextHuelga.sindicatos.join(' · ')}</p>
-              </div>
-            </div>
-            <ActionButton variant="edit" onClick={() => openEdit(nextHuelga)} title="Editar próxima huelga" />
-          </div>
-        </section>
-      ) : (
-        <section className="ui3-empty-state rounded-xl border border-dashed border-metro-border bg-metro-panel/35 px-4 py-3 text-sm text-metro-muted">
-          No hay próximas convocatorias registradas.
-        </section>
-      )}
-
-      <section className="ui3-operational-card overflow-hidden rounded-xl border border-metro-border bg-metro-panel/75">
-        <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
-          <div>
-            <h3 className="text-sm font-semibold text-metro-text">Convocatorias</h3>
-            <p className="mt-0.5 text-xs text-metro-muted">{huelgas.length} registrada{huelgas.length === 1 ? '' : 's'}</p>
-          </div>
-        </div>
-
-        {sortedHuelgas.length === 0 ? (
-          <div className="ui3-empty-state flex min-h-36 flex-col items-center justify-center gap-2.5 px-5 py-7 text-center">
-            <CalendarDays className="text-metro-muted" size={32} />
-            <div>
-              <p className="font-medium text-metro-text">Todavía no hay huelgas registradas</p>
-              <p className="mt-1 text-sm text-metro-muted">Da de alta la primera convocatoria para iniciar el seguimiento.</p>
-            </div>
-            <ActionButton variant="add" iconOnly={false} onClick={openNew}>Nueva huelga</ActionButton>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-metro-raised/70 text-[11px] uppercase tracking-wide text-metro-muted">
-                <tr>
-                  <th className="px-4 py-2.5 font-semibold">Fecha</th>
-                  <th className="px-4 py-2.5 font-semibold">Convocantes</th>
-                  <th className="px-4 py-2.5 font-semibold">Tipo</th>
-                  <th className="px-4 py-2.5 font-semibold">Estado</th>
-                  <th className="px-4 py-2.5 font-semibold">Personal del día</th>
-                  <th className="px-4 py-2.5 font-semibold">Áreas y zonas</th>
-                  <th className="w-64 px-4 py-2.5 text-right font-semibold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-metro-border">
-                {sortedHuelgas.map((huelga) => {
-                  const status = huelgaStatus(huelga.fecha);
-                  const assignments = buildAsignacionesForPersonal(
-                    huelga.personalConTurno ?? [],
-                    huelga.asignacionesPuesto ?? [],
-                    puestoResponsables,
-                    zonas,
-                    areas,
-                  );
-                  const configuredAssignments = assignments.filter(isAsignacionCompleta).length;
-                  return (
-                    <tr className="transition hover:bg-metro-raised/45" key={huelga.id}>
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-metro-text">{formatDate(huelga.fecha)}</td>
-                      <td className="px-4 py-3 text-metro-text">{huelga.sindicatos.join(' · ')}</td>
-                      <td className="px-4 py-3 text-metro-muted">{convocatoriaLabel(huelga)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(status)}`}>{status}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {(huelga.personalConTurno?.length ?? 0) > 0 ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
-                            <UsersRound size={13} /> {huelga.personalConTurno?.length} personas
-                          </span>
-                        ) : (
-                          <span className="text-xs text-metro-muted">Sin importar</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {assignments.length === 0 ? (
-                          <span className="text-xs text-metro-muted">Pendiente de personal</span>
-                        ) : configuredAssignments === assignments.length ? (
-                          <span className="inline-flex rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
-                            {configuredAssignments}/{assignments.length} configurados
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-200">
-                            {configuredAssignments}/{assignments.length} configurados
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <ActionButton variant="import" size="sm" iconOnly={false} onClick={() => openImport(huelga)} title="Importar personal trabajador del día de la huelga">Importar personal</ActionButton>
-                          <ActionButton
-                            variant="secondary"
-                            size="sm"
-                            iconOnly={false}
-                            icon={Settings2}
-                            disabled={(huelga.personalConTurno?.length ?? 0) === 0}
-                            onClick={() => openAssignments(huelga)}
-                            title="Asignar área y zona a los puestos de trabajo"
-                          >
-                            Áreas y zonas
-                          </ActionButton>
-                          <ActionButton
-                            variant="secondary"
-                            size="sm"
-                            iconOnly={false}
-                            icon={MailPlus}
-                            loading={generatingCollectionForId === huelga.id}
-                            disabled={(huelga.personalConTurno?.length ?? 0) === 0 || configuredAssignments !== assignments.length}
-                            onClick={() => void openCollectionMails(huelga)}
-                            title={configuredAssignments !== assignments.length ? 'Completa primero todas las áreas, zonas y responsables de zona' : 'Generar borradores de Outlook con Excel de recogida'}
-                          >
-                            Correos
-                          </ActionButton>
-                          <ActionButton variant="edit" size="sm" onClick={() => openEdit(huelga)} title="Editar huelga" />
-                          <ActionButton variant="delete" size="sm" onClick={() => remove(huelga)} title="Eliminar huelga" />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
 
       {importTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="presentation">
@@ -2030,83 +1731,20 @@ export function HuelgasPage() {
         </div>
       )}
 
-      {editorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="presentation">
-          <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-metro-border bg-metro-app shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="huelga-editor-title">
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-metro-border bg-metro-app/95 px-5 py-4 backdrop-blur">
-              <div>
-                <h2 id="huelga-editor-title" className="text-lg font-semibold text-metro-text">{editingId ? 'Editar convocatoria' : 'Nueva convocatoria de huelga'}</h2>
-                <p className="mt-1 text-sm text-metro-muted">Registra los datos básicos de la jornada convocada.</p>
-              </div>
-              <button className="rounded-lg px-2 py-1 text-xl text-metro-muted hover:bg-metro-raised hover:text-metro-text" onClick={() => setEditorOpen(false)} type="button" aria-label="Cerrar">×</button>
-            </div>
-
-            <div className="space-y-5 p-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1.5 text-sm font-medium text-metro-text">
-                  Fecha de huelga <span className="text-metro-red">*</span>
-                  <input className="w-full rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5 text-metro-text outline-none focus:border-metro-red" type="date" value={draft.fecha} onChange={(event) => setDraft((current) => ({ ...current, fecha: event.target.value }))} />
-                </label>
-
-                <fieldset className="space-y-1.5">
-                  <legend className="text-sm font-medium text-metro-text">Tipo de convocatoria <span className="text-metro-red">*</span></legend>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${draft.tipo === 'jornada-completa' ? 'border-metro-red bg-metro-red/15 text-metro-text' : 'border-metro-border bg-metro-panel text-metro-muted hover:bg-metro-raised'}`} onClick={() => setDraft((current) => ({ ...current, tipo: 'jornada-completa', tramos: [] }))} type="button">Jornada completa</button>
-                    <button className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${draft.tipo === 'paros-parciales' ? 'border-metro-red bg-metro-red/15 text-metro-text' : 'border-metro-border bg-metro-panel text-metro-muted hover:bg-metro-raised'}`} onClick={() => setDraft((current) => ({ ...current, tipo: 'paros-parciales', tramos: current.tramos.length ? current.tramos : [{ id: createId('tramo'), inicio: '', fin: '' }] }))} type="button">Paros parciales</button>
-                  </div>
-                </fieldset>
-              </div>
-
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium text-metro-text">Sindicato/s convocante/s <span className="text-metro-red">*</span></legend>
-                <div className="flex flex-wrap gap-2 rounded-xl border border-metro-border bg-metro-panel p-3">
-                  {sindicatos.length === 0 ? (
-                    <p className="text-sm text-metro-muted">No hay sindicatos activos configurados.</p>
-                  ) : sindicatos.map((sindicato) => {
-                    const selected = draft.sindicatos.includes(sindicato);
-                    return <button key={sindicato} type="button" onClick={() => toggleSindicato(sindicato)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${selected ? 'border-metro-red bg-metro-red text-white' : 'border-metro-border bg-metro-app text-metro-muted hover:border-metro-red hover:text-metro-text'}`}>{sindicato}</button>;
-                  })}
-                </div>
-              </fieldset>
-
-              {draft.tipo === 'paros-parciales' && (
-                <fieldset className="space-y-3 rounded-xl border border-metro-border bg-metro-panel/55 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <legend className="text-sm font-medium text-metro-text">Tramos de paro</legend>
-                    <ActionButton variant="add" size="sm" iconOnly={false} onClick={addTramo}>Añadir tramo</ActionButton>
-                  </div>
-                  <div className="space-y-2">
-                    {draft.tramos.map((tramo, index) => (
-                      <div className="grid grid-cols-[1fr_auto_1fr_auto] items-end gap-2" key={tramo.id}>
-                        <label className="space-y-1 text-xs text-metro-muted">Inicio<input className="w-full rounded-lg border border-metro-border bg-metro-app px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" type="time" value={tramo.inicio} onChange={(event) => updateTramo(tramo.id, 'inicio', event.target.value)} /></label>
-                        <span className="pb-2 text-metro-muted">—</span>
-                        <label className="space-y-1 text-xs text-metro-muted">Fin<input className="w-full rounded-lg border border-metro-border bg-metro-app px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" type="time" value={tramo.fin} onChange={(event) => updateTramo(tramo.id, 'fin', event.target.value)} /></label>
-                        <button className="mb-0.5 rounded-lg border border-metro-border p-2 text-metro-muted transition hover:border-red-500/50 hover:bg-red-950/25 hover:text-red-200" type="button" onClick={() => removeTramo(tramo.id)} aria-label={`Eliminar tramo ${index + 1}`}><Trash2 size={16} /></button>
-                      </div>
-                    ))}
-                  </div>
-                </fieldset>
-              )}
-
-              <label className="block space-y-1.5 text-sm font-medium text-metro-text">
-                Observaciones
-                <textarea className="min-h-24 w-full resize-y rounded-xl border border-metro-border bg-metro-panel px-3 py-2.5 text-sm text-metro-text outline-none focus:border-metro-red" placeholder="Texto breve sobre la convocatoria..." value={draft.observaciones} onChange={(event) => setDraft((current) => ({ ...current, observaciones: event.target.value }))} />
-              </label>
-
-              <div className="grid gap-3 rounded-xl border border-metro-border bg-metro-panel/45 p-3 text-xs text-metro-muted sm:grid-cols-3">
-                <div className="flex items-center gap-2"><CalendarDays size={15} /> Fecha de convocatoria</div>
-                <div className="flex items-center gap-2"><UsersRound size={15} /> Uno o varios sindicatos</div>
-                <div className="flex items-center gap-2"><Clock3 size={15} /> Varios tramos si procede</div>
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-metro-border bg-metro-app/95 px-5 py-4 backdrop-blur">
-              <ActionButton variant="secondary" iconOnly={false} onClick={() => setEditorOpen(false)}>Cancelar</ActionButton>
-              <ActionButton variant="save" iconOnly={false} loading={saving} onClick={save}>{editingId ? 'Guardar cambios' : 'Guardar huelga'}</ActionButton>
-            </div>
-          </section>
-        </div>
-      )}
+      <HuelgaEditorModal
+        open={editorOpen}
+        editingId={editingId}
+        draft={draft}
+        sindicatos={sindicatos}
+        saving={saving}
+        onClose={() => setEditorOpen(false)}
+        onDraftChange={setDraft}
+        onToggleSindicato={toggleSindicato}
+        onAddTramo={addTramo}
+        onUpdateTramo={updateTramo}
+        onRemoveTramo={removeTramo}
+        onSave={() => void save()}
+      />
 
       {dialogNode}
     </div>
