@@ -1,273 +1,63 @@
-import { normalizeEmployeeNumber } from '../../plantilla/domain/employeeMaster';
-export interface TicketCalendar {
-  id: string;
-  nombre: string;
-  activo: boolean;
-  diasSinTicket: string[];
-  ticketIsoWeekdays: number[];
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
+import type {
+  TicketAbsenceMonthImpact,
+  TicketAbsenceTicketImpactInput,
+  TicketAbsenceTicketImpactResult,
+  TicketAnnualClosure,
+  TicketCalculationRules,
+  TicketCalendar,
+  TicketCalendarDraft,
+  TicketDebtDetailDay,
+  TicketDebtRegularization,
+  TicketDebtRegularizationDraft,
+  TicketManutencionDetailDay,
+  TicketManutencionImpact,
+  TicketManualDebt,
+  TicketManualDebtDraft,
+  TicketManualPerson,
+  TicketMonthCalculation,
+  TicketMonthlySnapshot,
+  TicketMonthlySnapshotRow,
+  TicketMonthlyWorkflowReview,
+  TicketPerson,
+  TicketPersonCalculation,
+  TicketPersonDraft,
+  TicketPriceHistoryEntry,
+  TicketRestaurantAbsence,
+  TicketRestaurantAbsenceDraft,
+  TicketRestaurantConfig,
+} from './ticketRestauranteTypes';
+import {
+  isIsoDate,
+  normalizeTicketCalendarName,
+  normalizeTicketIsoWeekdays,
+} from './ticketCalendars';
+import {
+  normalizeTicketEmployeeNumber,
+  sameTicketEmployee,
+  splitTicketPersonFullName,
+} from './ticketPeople';
 
-export interface TicketCalendarDraft {
-  nombre: string;
-  activo: boolean;
-  diasSinTicket: string[];
-  ticketIsoWeekdays?: number[];
-}
-
-export interface TicketRestaurantAbsence {
-  id: string;
-  empleado: string;
-  nombreApellidos: string;
-  desde: string;
-  hasta: string;
-  motivo: string;
-  totalDias: number;
-  afectaTicket: boolean;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
-
-export interface TicketRestaurantAbsenceDraft {
-  empleado: string;
-  nombreApellidos: string;
-  desde: string;
-  hasta: string;
-  motivo: string;
-  totalDias: number;
-  afectaTicket: boolean;
-}
-
-export interface TicketManutencionImpact {
-  id: string;
-  empleado: string;
-  nombreApellidos: string;
-  fechaGasto: string;
-  afectaTicket: boolean;
-  imputacionYear: number;
-  imputacionMonth: number;
-  deletedAt: string | null;
-}
-
-export interface TicketPerson {
-  empleado: string;
-  nombre: string;
-  apellido1: string;
-  apellido2: string;
-  dni: string;
-  nombreApellidos: string;
-  puesto: string;
-  calendarId: string;
-  activo: boolean;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-}
-
-export interface TicketPersonDraft {
-  empleado: string;
-  nombre: string;
-  apellido1: string;
-  apellido2: string;
-  dni: string;
-  nombreApellidos: string;
-  puesto: string;
-  calendarId: string;
-  activo: boolean;
-}
-
-export interface TicketPersonDraftInput {
-  empleado: string;
-  nombre?: string;
-  apellido1?: string;
-  apellido2?: string;
-  dni?: string;
-  nombreApellidos?: string;
-  puesto: string;
-  calendarId: string;
-  activo: boolean;
-}
-
-export interface TicketPriceHistoryEntry {
-  amount: number;
-  effectiveFrom: string;
-}
-
-export interface TicketCalculationRules {
-  debtStartDate: string;
-  nonDiscountableMotivesByCalendar: Record<string, string[]>;
-}
-
-export interface TicketManualDebt {
-  id: string;
-  empleado: string;
-  nombreApellidos: string;
-  totalTickets: number;
-  originYear: number;
-  originMonth: number;
-  startYear: number;
-  startMonth: number;
-  months: number;
-  reason: string;
-  observations: string;
-  createdAt: string;
-  updatedAt: string;
-  cancelledAt: string | null;
-  cancellationReason: string;
-}
-
-export interface TicketDebtRegularization {
-  id: string;
-  empleado: string;
-  nombreApellidos: string;
-  year: number;
-  month: number;
-  calculatedTickets: number;
-  targetTickets: number;
-  reason: string;
-  observations: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TicketDebtRegularizationDraft {
-  empleado: string;
-  nombreApellidos: string;
-  year: number;
-  month: number;
-  calculatedTickets: number;
-  targetTickets: number;
-  reason: string;
-  observations: string;
-}
-
-export interface TicketManualDebtDraft {
-  empleado: string;
-  nombreApellidos: string;
-  totalTickets: number;
-  originYear: number;
-  originMonth: number;
-  startYear: number;
-  startMonth: number;
-  months: number;
-  reason: string;
-  observations: string;
-}
-
-export interface TicketManualPerson {
-  id: string;
-  empleado: string;
-  nombreApellidos: string;
-  dni: string;
-  activo: boolean;
-  includeContribution: boolean;
-  area?: string;
-  monthlyTickets: Record<string, number>;
-  inactiveFromMonth?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TicketMonthlySnapshotRow {
-  empleado: string;
-  nombreApellidos: string;
-  area: string;
-  tickets: number;
-  importe: number;
-  manual: boolean;
-}
-
-export interface TicketMonthlySnapshot {
-  year: number;
-  month: number;
-  closedAt: string;
-  rows: TicketMonthlySnapshotRow[];
-}
-
-export interface TicketAnnualClosure {
-  year: number;
-  closedAt: string;
-}
-
-export interface TicketMonthlyWorkflowReview {
-  absencesReviewed: boolean;
-  manutencionesReviewed: boolean;
-  manualDebtsReviewed: boolean;
-}
-
-export interface TicketRestaurantConfig {
-  importeTicket: number;
-  pedidoMensual: number;
-  priceHistory: TicketPriceHistoryEntry[];
-  rules: TicketCalculationRules;
-  manualDebts?: TicketManualDebt[];
-  debtRegularizations?: TicketDebtRegularization[];
-  manualPeople?: TicketManualPerson[];
-  workflowReviews?: Record<string, TicketMonthlyWorkflowReview>;
-  monthlySnapshots?: Record<string, TicketMonthlySnapshot>;
-  annualClosures?: Record<string, TicketAnnualClosure>;
-}
-
-export interface TicketDebtDetailDay {
-  id: string;
-  fecha: string;
-  motivo: string;
-  mesOrigen: string;
-}
-
-export interface TicketManutencionDetailDay {
-  id: string;
-  fecha: string;
-}
-
-export interface TicketPersonCalculation {
-  empleado: string;
-  nombre: string;
-  apellido1: string;
-  apellido2: string;
-  dni: string;
-  nombreApellidos: string;
-  puesto: string;
-  calendario: string;
-  diasTeoricos: number;
-  diasSinTicket: number;
-  ausenciasMes: number;
-  hojasGastoMes: number;
-  deudaEntrante: number;
-  ausenciasAplicadas: number;
-  deudaPendiente: number;
-  ticketsFinales: number;
-  importe: number;
-  manualEntry?: boolean;
-  manualIncludeContribution?: boolean;
-  ausenciaIds: string[];
-  ausenciaDiasDescontados: Record<string, number>;
-  deudaEntranteDetalle: TicketDebtDetailDay[];
-  deudaAplicadaDetalle: TicketDebtDetailDay[];
-  deudaPendienteDetalle: TicketDebtDetailDay[];
-  hojaGastoDetalle: TicketManutencionDetailDay[];
-}
-
-export interface TicketMonthCalculation {
-  year: number;
-  month: number;
-  rows: TicketPersonCalculation[];
-  totals: {
-    personas: number;
-    diasTeoricos: number;
-    diasSinTicket: number;
-    ausenciasMes: number;
-    hojasGastoMes: number;
-    deudaEntrante: number;
-    ausenciasAplicadas: number;
-    deudaPendiente: number;
-    ticketsFinales: number;
-    importe: number;
-  };
-}
+export * from './ticketRestauranteTypes';
+export {
+  buildTicketCalendar,
+  buildYearCalendar,
+  isIsoDate,
+  normalizeDiasSinTicket,
+  normalizeTicketCalendarName,
+  normalizeTicketIsoWeekdays,
+  nextCalendarYear,
+  previousCalendarYear,
+  toggleDiaSinTicket,
+  visibleTicketCalendars,
+} from './ticketCalendars';
+export {
+  buildTicketPerson,
+  buildTicketPersonFullName,
+  normalizeTicketEmployeeNumber,
+  splitTicketPersonFullName,
+  ticketPeopleExistingInMonth,
+  visibleTicketPeople,
+} from './ticketPeople';
 
 export const TICKET_RESTAURANT_MIN_ABSENCE_DATE = '2026-03-01';
 
@@ -299,252 +89,12 @@ export const EMPTY_TICKET_PERSON_DRAFT: TicketPersonDraft = {
   activo: true,
 };
 
-export interface CalendarDay {
-  fecha: string;
-  diaMes: number;
-  diaSemana: number;
-  esFinDeSemana: boolean;
-  sinTicket: boolean;
-}
-
-export interface CalendarMonth {
-  mes: number;
-  nombre: string;
-  blancosIniciales: number;
-  dias: CalendarDay[];
-}
-
 export const EMPTY_TICKET_CALENDAR_DRAFT: TicketCalendarDraft = {
   nombre: '',
   activo: true,
   diasSinTicket: [],
   ticketIsoWeekdays: [1, 2, 3, 4, 5],
 };
-
-const CANONICAL_TICKET_CALENDAR_NAMES: Record<string, string> = {
-  sscc: 'sscc',
-  servicioscentrales: 'sscc',
-  'servicios centrales': 'sscc',
-  ariz: 'ingenieria ariz',
-  ingenieriaariz: 'ingenieria ariz',
-  'ingenieria ariz': 'ingenieria ariz',
-  'ingeniería ariz': 'ingenieria ariz',
-  sopela: 'instalaciones sopela',
-  instalacionessopela: 'instalaciones sopela',
-  'instalaciones sopela': 'instalaciones sopela',
-  liberados: 'liberados',
-  liberado: 'liberados',
-};
-
-export function normalizeTicketCalendarName(value: string): string {
-  const normalized = normalizePlainText(value);
-  return (
-    CANONICAL_TICKET_CALENDAR_NAMES[normalized.replace(/\s+/g, '')] ??
-    CANONICAL_TICKET_CALENDAR_NAMES[normalized] ??
-    normalized
-  );
-}
-
-const MONTH_NAMES = [
-  'Enero',
-  'Febrero',
-  'Marzo',
-  'Abril',
-  'Mayo',
-  'Junio',
-  'Julio',
-  'Agosto',
-  'Septiembre',
-  'Octubre',
-  'Noviembre',
-  'Diciembre',
-];
-
-export function normalizeDiasSinTicket(fechas: string[]): string[] {
-  return Array.from(
-    new Set(fechas.map((fecha) => fecha.trim()).filter((fecha) => isIsoDate(fecha))),
-  ).sort((first, second) => first.localeCompare(second));
-}
-
-export function normalizeTicketIsoWeekdays(days: readonly number[] | undefined): number[] {
-  const normalized = Array.from(
-    new Set(
-      (days ?? [1, 2, 3, 4, 5])
-        .map((day) => Number(day))
-        .filter((day) => Number.isInteger(day) && day >= 1 && day <= 5),
-    ),
-  ).sort((first, second) => first - second);
-
-  return normalized.length ? normalized : [1, 2, 3, 4, 5];
-}
-
-export function buildTicketCalendar(
-  draft: TicketCalendarDraft,
-  now: string,
-  id: string,
-  previous?: TicketCalendar,
-): TicketCalendar {
-  return {
-    id,
-    nombre: draft.nombre.trim(),
-    activo: draft.activo,
-    diasSinTicket: normalizeDiasSinTicket(draft.diasSinTicket),
-    ticketIsoWeekdays: normalizeTicketIsoWeekdays(
-      draft.ticketIsoWeekdays ?? previous?.ticketIsoWeekdays,
-    ),
-    createdAt: previous?.createdAt ?? now,
-    updatedAt: now,
-    deletedAt: previous?.deletedAt ?? null,
-  };
-}
-
-export function visibleTicketCalendars(calendars: TicketCalendar[]): TicketCalendar[] {
-  return calendars.filter((calendar) => !calendar.deletedAt);
-}
-
-export function toggleDiaSinTicket(calendar: TicketCalendar, fecha: string): TicketCalendar {
-  if (!isIsoDate(fecha)) {
-    return calendar;
-  }
-
-  const actuales = new Set(calendar.diasSinTicket);
-  if (actuales.has(fecha)) {
-    actuales.delete(fecha);
-  } else {
-    actuales.add(fecha);
-  }
-
-  return {
-    ...calendar,
-    diasSinTicket: normalizeDiasSinTicket(Array.from(actuales)),
-  };
-}
-
-export function normalizeTicketEmployeeNumber(value: unknown): string {
-  return normalizeEmployeeNumber(value);
-}
-
-function sameTicketEmployee(first: string | undefined, second: string | undefined): boolean {
-  return normalizeTicketEmployeeNumber(first) === normalizeTicketEmployeeNumber(second);
-}
-
-function cleanTicketPersonText(value: string | undefined): string {
-  return (value ?? '').trim().replace(/\s+/g, ' ');
-}
-
-export function buildTicketPersonFullName(
-  draft: Pick<TicketPersonDraftInput, 'nombre' | 'apellido1' | 'apellido2' | 'nombreApellidos'>,
-): string {
-  const partsName = [draft.nombre, draft.apellido1, draft.apellido2]
-    .map(cleanTicketPersonText)
-    .filter(Boolean)
-    .join(' ');
-
-  return partsName || cleanTicketPersonText(draft.nombreApellidos);
-}
-
-export function splitTicketPersonFullName(
-  nombreApellidos: string,
-): Pick<TicketPersonDraft, 'nombre' | 'apellido1' | 'apellido2'> {
-  const cleaned = cleanTicketPersonText(nombreApellidos);
-  const commaIndex = cleaned.indexOf(',');
-
-  // La plantilla corporativa suele aportar el nombre como "Apellido1 Apellido2, Nombre".
-  // La coma es una señal inequívoca y, además, permite conservar nombres compuestos.
-  if (commaIndex >= 0) {
-    const surnames = cleanTicketPersonText(cleaned.slice(0, commaIndex));
-    const nombre = cleanTicketPersonText(cleaned.slice(commaIndex + 1));
-    const surnameParts = surnames.split(' ').filter(Boolean);
-
-    if (surnameParts.length <= 1) {
-      return { nombre, apellido1: surnameParts[0] ?? '', apellido2: '' };
-    }
-
-    return {
-      nombre,
-      apellido1: surnameParts.slice(0, -1).join(' '),
-      apellido2: surnameParts.at(-1) ?? '',
-    };
-  }
-
-  const parts = cleaned.split(' ').filter(Boolean);
-  if (parts.length <= 1) {
-    return { nombre: parts.join(' '), apellido1: '', apellido2: '' };
-  }
-
-  if (parts.length === 2) {
-    return { nombre: parts[0] ?? '', apellido1: parts[1] ?? '', apellido2: '' };
-  }
-
-  return {
-    nombre: parts.slice(0, -2).join(' '),
-    apellido1: parts.at(-2) ?? '',
-    apellido2: parts.at(-1) ?? '',
-  };
-}
-
-export function buildTicketPerson(
-  draft: TicketPersonDraftInput,
-  now: string,
-  previous?: TicketPerson,
-): TicketPerson {
-  const nombre = cleanTicketPersonText(draft.nombre);
-  const apellido1 = cleanTicketPersonText(draft.apellido1);
-  const apellido2 = cleanTicketPersonText(draft.apellido2);
-  const nombreApellidos = buildTicketPersonFullName({
-    ...draft,
-    nombre,
-    apellido1,
-    apellido2,
-  });
-
-  return {
-    empleado: normalizeTicketEmployeeNumber(draft.empleado),
-    nombre,
-    apellido1,
-    apellido2,
-    dni: cleanTicketPersonText(draft.dni),
-    nombreApellidos,
-    puesto: cleanTicketPersonText(draft.puesto),
-    calendarId: draft.calendarId,
-    activo: draft.activo,
-    createdAt: previous?.createdAt ?? now,
-    updatedAt: now,
-    deletedAt: null,
-  };
-}
-
-export function visibleTicketPeople(people: TicketPerson[]): TicketPerson[] {
-  return people.filter((person) => !person.deletedAt);
-}
-
-function ticketPersonMonthFromTimestamp(value: string | null | undefined): string | null {
-  if (typeof value !== 'string') return null;
-  const match = /^(\d{4})-(\d{2})/.exec(value.trim());
-  if (!match) return null;
-  const month = Number(match[2]);
-  if (month < 1 || month > 12) return null;
-  return `${match[1]}-${match[2]}`;
-}
-
-/**
- * Plantilla regular que ya existía en Ticket Restaurante durante el mes indicado.
- * Evita que una incorporación posterior reciba tickets de meses anteriores en
- * el Balance anual. Los registros antiguos sin fecha interpretable se conservan
- * por compatibilidad.
- */
-export function ticketPeopleExistingInMonth(
-  people: readonly TicketPerson[],
-  year: number,
-  month: number,
-): TicketPerson[] {
-  const targetMonth = `${year}-${String(month).padStart(2, '0')}`;
-  return people.filter((person) => {
-    if (person.deletedAt) return false;
-    const createdMonth = ticketPersonMonthFromTimestamp(person.createdAt);
-    return createdMonth === null || createdMonth <= targetMonth;
-  });
-}
 
 export function calculateMonthlyTicketOrder(
   people: readonly TicketPerson[],
@@ -600,12 +150,6 @@ export function calculateTicketMonth(
 }
 
 type TicketCalculationMode = 'monthlyOrderWithDebt' | 'monthlyContribution';
-
-export interface TicketAbsenceMonthImpact {
-  calendario: string;
-  diasTicketMes: number;
-  descuentaTicket: boolean;
-}
 
 export function calculateTicketAbsenceMonthImpact(
   absence: TicketRestaurantAbsence,
@@ -1860,19 +1404,6 @@ export function visibleTicketRestaurantAbsences(
   );
 }
 
-export interface TicketAbsenceTicketImpactInput {
-  empleado: string;
-  desde: string;
-  hasta: string;
-  motivo: string;
-}
-
-export interface TicketAbsenceTicketImpactResult {
-  diasTicket: number;
-  afectaTicket: boolean;
-  calendario: string;
-}
-
 export function calculateTicketAbsenceTicketImpact(
   absence: TicketAbsenceTicketImpactInput,
   people: readonly TicketPerson[],
@@ -1946,54 +1477,6 @@ export function countTicketCalendarDays(
   return buildMonthTicketDays(calendar, year, month).length;
 }
 
-export function buildYearCalendar(calendar: TicketCalendar, year: number): CalendarMonth[] {
-  const sinTicket = new Set(calendar.diasSinTicket);
-
-  return MONTH_NAMES.map((nombre, monthIndex) => {
-    const mes = monthIndex + 1;
-    const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
-    const firstDay = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
-    const blancosIniciales = firstDay === 0 ? 6 : firstDay - 1;
-    const dias = Array.from({ length: daysInMonth }, (_, index) => {
-      const diaMes = index + 1;
-      const fecha = toIsoDate(year, mes, diaMes);
-      const diaSemana = new Date(Date.UTC(year, monthIndex, diaMes)).getUTCDay();
-
-      return {
-        fecha,
-        diaMes,
-        diaSemana,
-        esFinDeSemana: diaSemana === 0 || diaSemana === 6,
-        sinTicket: sinTicket.has(fecha),
-      };
-    });
-
-    return {
-      mes,
-      nombre,
-      blancosIniciales,
-      dias,
-    };
-  });
-}
-
-export function nextCalendarYear(year: number): number {
-  return year + 1;
-}
-
-export function previousCalendarYear(year: number): number {
-  return year - 1;
-}
-
 function toIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-export function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
 }
