@@ -1,4 +1,5 @@
-import type { ComponentType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 export function TaskEditorSection({
   icon: Icon,
@@ -6,7 +7,7 @@ export function TaskEditorSection({
   action,
   children,
 }: {
-  icon: ComponentType<{ className?: string; size?: number }>;
+  icon: LucideIcon;
   title: string;
   action?: ReactNode;
   children: ReactNode;
