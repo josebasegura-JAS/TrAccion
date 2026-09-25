@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_TASK_DRAFT } from '../../features/tareas/domain/task';
+import { EMPTY_TASK_DRAFT, type Task } from '../../features/tareas/domain/task';
 import {
   createInitialDraft,
   decodeTracking,
   encodeTracking,
   mergeDocumentLinks,
+  toDraft,
 } from './taskEditorModel';
 
 describe('taskEditorModel', () => {
@@ -27,6 +28,34 @@ describe('taskEditorModel', () => {
       ],
     );
     expect(merged.map((item) => item.id)).toEqual(['1', '3']);
+  });
+
+  it('convierte una tarea existente a borrador sin perder documentos ni correo', () => {
+    const task: Task = {
+      id: 'task-1',
+      titulo: 'Revisar calendario',
+      descripcion: 'Detalle',
+      tipo: 'tarea',
+      fase: 'tarea',
+      estado: 'pendiente',
+      prioridad: 'media',
+      createdAt: '2026-09-25T08:00:00.000Z',
+      updatedAt: '2026-09-25T08:00:00.000Z',
+      fechaLimite: '',
+      responsable: 'RRLL',
+      origen: 'Interno',
+      sindicato: '',
+      observaciones: '',
+      mail: 'Contenido del correo',
+      documentLinks: [{ id: 'doc-1', nombre: 'a.pdf', ruta: 'Z:/a.pdf', createdAt: '2026-09-25T08:00:00.000Z' }],
+      seguimiento: [],
+    };
+
+    expect(toDraft(task)).toMatchObject({
+      titulo: 'Revisar calendario',
+      mail: 'Contenido del correo',
+      documentLinks: task.documentLinks,
+    });
   });
 
   it('aplica el borrador inicial sólo al crear una tarea', () => {

@@ -126,7 +126,7 @@ export function mergeDocumentLinks(current: TaskDocumentLink[], incoming: TaskDo
   ];
 }
 
-function toDraft(task: Task | null): TaskDraft {
+export function toDraft(task: Task | null): TaskDraft {
   if (!task) return { ...EMPTY_TASK_DRAFT, documentLinks: [] };
   return {
     titulo: task.titulo,
