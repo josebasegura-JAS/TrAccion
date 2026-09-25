@@ -189,9 +189,14 @@ describe('useTaskStore', () => {
       .createWithConcurrencyCheck(draft({ titulo: 'Ya cerrada', estado: 'cerrada', fase: CLOSED_TASK_PHASE }));
     const [openTask, closedTask] = useTaskStore.getState().tasks;
 
-    useTaskStore
+    const result = await useTaskStore
       .getState()
-      .closeTasksFromSession([openTask.id, closedTask.id], 'Comité de Empresa', 'CE 08/06/2026');
+      .closeTasksFromSessionWithConcurrencyCheck(
+        [openTask.id, closedTask.id],
+        'Comité de Empresa',
+        'CE 08/06/2026',
+      );
+    expect(result.ok).toBe(true);
 
     const tasks = useTaskStore.getState().tasks;
     const updatedOpenTask = tasks.find((task) => task.id === openTask.id);

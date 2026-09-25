@@ -1,5 +1,5 @@
 import { File as NodeFile } from 'node:buffer';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEmployeeStore } from '../store/useEmployeeStore';
 import { buildDireccionTeletrabajo, buildResidenciaEus, hydrateEmployee, normalizeDni } from './derived';
 import { EMPTY_EMPLOYEE_FILTERS } from './filters';
@@ -53,6 +53,34 @@ describe('plantilla derived field helpers', () => {
 describe('plantilla import', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    const records = new Map<string, string>();
+    Object.defineProperty(window, 'traccion', {
+      configurable: true,
+      value: {
+        loadEmployeeRecords: vi.fn(async () => ({
+          status: { ready: true, phase: 'active' as const },
+          records: Array.from(records, ([id, value]) => ({ id, value })),
+        })),
+        saveEmployeeRecordsIfUnchanged: vi.fn(async (items: Array<{ id: string; value: string }>) => {
+          items.forEach(({ id, value }) => records.set(id, value));
+          return {
+            ok: true,
+            status: { ready: true, phase: 'active' as const },
+            saved: items.length,
+            message: 'Guardado.',
+          };
+        }),
+        saveEmployeeRecordIfUnchanged: vi.fn(async ({ id, value }: { id: string; value: string }) => {
+          records.set(id, value);
+          return {
+            ok: true,
+            status: { ready: true, phase: 'active' as const },
+            currentValue: value,
+            message: 'Guardado.',
+          };
+        }),
+      },
+    });
     useEmployeeStore.setState({
       employees: [existingEmployee],
       selectedEmployeeId: existingEmployee.empleado,
