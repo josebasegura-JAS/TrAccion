@@ -84,11 +84,12 @@ import {
   type LocalBackupService,
   type LocalBackupServiceDependencies,
 } from './persistence/localBackupService.js';
+import { DATABASE_HEARTBEAT_BLOCKED_MESSAGE } from './persistence/databaseLockManager.js';
 import {
-  createDatabaseLockManager,
-  DATABASE_HEARTBEAT_BLOCKED_MESSAGE,
-  type DatabaseLockManager,
-} from './persistence/databaseLockManager.js';
+  createSqliteLockLifecycle,
+  type DatabaseConnectivityIssuePayload,
+  type DatabaseLockInfo,
+} from './persistence/sqliteLockLifecycle.js';
 import { openSqliteDatabase } from './persistence/sqliteConnection.js';
 import {
   inspectAndEnsureDatabaseIdentity,
@@ -306,12 +307,7 @@ let status: DatabaseStatus | null = null;
 // Flags para evitar el COUNT(*) de red en cada carga una vez confirmado que la migración ya se hizo.
 let configuracionMigrationDone = false;
 
-export interface DatabaseConnectivityIssuePayload {
-  blocked: boolean;
-  message: string;
-  failedHeartbeatCount: number;
-  updatedAt: string;
-}
+export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persistence/sqliteLockLifecycle.js';
 
 // --- Mantenimiento de la base: VACUUM ---------------------------------
 
@@ -390,31 +386,29 @@ function getLocalBackupService(): LocalBackupService {
 }
 
 // --- Bloqueo de la base compartida (SMB) ------------------------------
-// El mecanismo del lock (ficheros .lockdir, caducidad, heartbeat, aviso de
-// conectividad) vive en databaseLockManager.ts. Aquí solo se instancia una
-// vez (mantiene contadores de heartbeat y el notifier como estado interno)
-// y se exponen wrappers finos con los mismos nombres que antes, para no
-// tener que tocar cada punto de la base que ya los usa.
+// La fachada singleton de lock/heartbeat vive en sqliteLockLifecycle.ts.
+// Aquí se mantienen únicamente las operaciones que dependen del estado vivo
+// de sqlitePersistence (p. ej. liberación manual + reactivación de la base).
 
-let lockManagerInstance: DatabaseLockManager | null = null;
+const sqliteLockLifecycle = createSqliteLockLifecycle(() => ownerId);
 
-function getLockManager(): DatabaseLockManager {
-  if (!lockManagerInstance) {
-    lockManagerInstance = createDatabaseLockManager({ getOwnerId: () => ownerId });
-  }
-  return lockManagerInstance;
-}
+const {
+  acquireLock,
+  acquireStartupLock,
+  assertDatabaseWritesAllowed,
+  getLockInfoPath,
+  getLockPath,
+  isDatabaseWriteBlockedByHeartbeat,
+  readLock,
+  releaseLock,
+  startDatabaseLockHeartbeat,
+  withDatabaseOperationLock,
+} = sqliteLockLifecycle;
 
-function getLockPath(databasePath: string): string {
-  return getLockManager().getLockPath(databasePath);
-}
-
-function getLockInfoPath(lockPath: string): string {
-  return getLockManager().getLockInfoPath(lockPath);
-}
-
-function readLock(lockPath: string): Promise<DatabaseLockInfo | null> {
-  return getLockManager().readLock(lockPath);
+export function setDatabaseConnectivityIssueNotifier(
+  notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
+): void {
+  sqliteLockLifecycle.setConnectivityIssueNotifier(notifier);
 }
 
 export async function getCurrentDatabaseLockInfo(): Promise<DatabaseLockInfo | null> {
@@ -501,47 +495,6 @@ export async function forceReleaseDatabaseLock(): Promise<ForceReleaseDatabaseLo
         : `No se ha podido reconectar con SQLite: ${errorMessage(error)}`,
     };
   }
-}
-
-function withDatabaseOperationLock<T>(
-  databasePath: string,
-  operation: () => Promise<T>,
-  waitMs?: number,
-): Promise<T> {
-  return getLockManager().withDatabaseOperationLock(databasePath, operation, waitMs);
-}
-
-function acquireLock(databasePath: string, waitMs?: number): Promise<DatabaseLockInfo> {
-  return getLockManager().acquireLock(databasePath, waitMs);
-}
-
-function acquireStartupLock(databasePath: string): Promise<DatabaseLockInfo> {
-  return getLockManager().acquireStartupLock(databasePath);
-}
-
-export function setDatabaseConnectivityIssueNotifier(
-  notifier: ((payload: DatabaseConnectivityIssuePayload) => void) | null,
-): void {
-  getLockManager().setConnectivityIssueNotifier(notifier);
-}
-
-function assertDatabaseWritesAllowed(): void {
-  getLockManager().assertDatabaseWritesAllowed();
-}
-
-function isDatabaseWriteBlockedByHeartbeat(): boolean {
-  return getLockManager().isDatabaseWriteBlockedByHeartbeat();
-}
-
-function startDatabaseLockHeartbeat(
-  lockPath: string,
-  lock: DatabaseLockInfo,
-): ReturnType<typeof setInterval> {
-  return getLockManager().startDatabaseLockHeartbeat(lockPath, lock);
-}
-
-function releaseLock(lockPath: string, lock: DatabaseLockInfo): Promise<void> {
-  return getLockManager().releaseLock(lockPath, lock);
 }
 
 async function pruneEmergencyDatabaseBackups(
