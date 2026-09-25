@@ -54,6 +54,7 @@ import {
 import { requestTaskCriterionEditor } from '../features/criterios-rrll/domain/taskCriterionEditorBus';
 import { navigateInApp } from '../services/appNavigationBus';
 import { TaskLinksSection } from '../features/task-links/components/TaskLinksSection';
+import { formatImportedTaskMail } from '../features/tareas/domain/taskMail';
 
 const TRACKING_META_PREFIX = '[[traccion-seguimiento:';
 const TRACKING_META_SUFFIX = ']]';
@@ -183,31 +184,6 @@ function mergeDocumentLinks(current: TaskDocumentLink[], incoming: TaskDocumentL
   ];
 }
 
-function decodeHtmlEntities(value: string): string {
-  const textarea = document.createElement('textarea');
-  textarea.innerHTML = value;
-  return textarea.value;
-}
-
-function normalizeMailBodyAsPlainText(value: string): string {
-  const source = /<[^>]+>/.test(value)
-    ? value
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/(p|div)>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
-    : value;
-  return decodeHtmlEntities(source)
-    .replace(/\r\n?/g, '\n')
-    .replace(/\u00a0/g, ' ')
-    .split('\n')
-    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 function toDraft(task: Task | null): TaskDraft {
   if (!task) return { ...EMPTY_TASK_DRAFT, documentLinks: [] };
   return {
@@ -313,6 +289,7 @@ export function TaskEditor({
   const [manualDocumentPath, setManualDocumentPath] = useState('');
   const [documentStatus, setDocumentStatus] = useState('');
   const [mailStatus, setMailStatus] = useState('');
+  const [mailDragActive, setMailDragActive] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
   const [saveStatusIsError, setSaveStatusIsError] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState(() => `${mode}:${task?.id ?? 'new'}`);
@@ -635,8 +612,8 @@ export function TaskEditor({
       return;
     }
     const parsedMailData = parsed.data;
-    setDraft((current) => ({ ...current, mail: normalizeMailBodyAsPlainText(parsedMailData.body) }));
-    setMailStatus('Texto del mensaje copiado al campo Email.');
+    setDraft((current) => ({ ...current, mail: formatImportedTaskMail(parsedMailData) }));
+    setMailStatus('Correo importado con remitente, fecha, asunto y contenido. Guarda la tarea para persistirlo.');
   };
 
   const liveTask = useTaskStore((state) =>
@@ -1216,10 +1193,35 @@ export function TaskEditor({
 
                 <Section
                   icon={Mail}
-                  title="Email"
+                  title="Email de origen"
                   action={<label className="cursor-pointer rounded-md border border-metro-border px-2 py-1 text-[11px] font-semibold text-slate-300 hover:border-metro-red">Seleccionar mensaje .msg<input accept=".msg" className="sr-only" type="file" onChange={(e) => void handleImportMailFile(e.target.files?.[0])} /></label>}
                 >
-                  <Textarea className="min-h-28" placeholder="Texto plano del email vinculado..." value={draft.mail} onChange={(e) => setDraft((c) => ({ ...c, mail: e.target.value }))} />
+                  <div
+                    className={`rounded-lg border border-dashed p-2 transition-colors ${mailDragActive ? 'border-sky-300 bg-sky-400/10' : 'border-slate-600/80 bg-slate-950/10'}`}
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      if (!isFormReadOnly) setMailDragActive(true);
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                      setMailDragActive(false);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (!isFormReadOnly) event.dataTransfer.dropEffect = 'copy';
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setMailDragActive(false);
+                      if (isFormReadOnly) return;
+                      const file = Array.from(event.dataTransfer.files).find((candidate) => /\.msg$/i.test(candidate.name));
+                      void handleImportMailFile(file);
+                    }}
+                  >
+                    <p className="mb-2 text-[10px] font-semibold text-slate-400">Arrastra aquí un correo .msg de Outlook. Se guardarán remitente, fecha, asunto y contenido en texto plano.</p>
+                    <Textarea className="min-h-40" placeholder="Correo vinculado a la tarea..." value={draft.mail} onChange={(e) => setDraft((c) => ({ ...c, mail: e.target.value }))} />
+                  </div>
                   {mailStatus && <p className="mt-2 text-[11px] font-semibold text-metro-muted">{mailStatus}</p>}
                 </Section>
               </div>
