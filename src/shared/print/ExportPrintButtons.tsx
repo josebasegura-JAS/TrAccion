@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ActionButton } from '../../components/ui/ActionButton';
-import { useAppDialog } from '../../hooks/useAppDialog';
+import { useToast } from '../../components/ui/Toast';
 import { exportTableToExcel } from '../export/tableExport';
 import type { ExportTablePayload } from '../export/types';
 import { buildPrintableTableHtml } from './buildPrintableTableHtml';
@@ -19,14 +19,14 @@ export function ExportPrintButtons<T>({
   size = 'sm',
 }: ExportPrintButtonsProps<T>) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const { alert, dialogNode } = useAppDialog();
+  const toast = useToast();
   return (
     <>
       <ActionButton
         disabled={payload.rows.length === 0}
         onClick={() =>
           exportTableToExcel({ ...payload, generatedAt: new Date() }, (message) => {
-            void alert(message, { type: 'error' });
+            toast.error(message, { title: 'No se ha podido exportar' });
           })
         }
         iconOnly={false}
@@ -50,7 +50,6 @@ export function ExportPrintButtons<T>({
       >
         Imprimir
       </ActionButton>
-      {dialogNode}
       {previewHtml && (
         <PrintPreviewModal
           html={previewHtml}

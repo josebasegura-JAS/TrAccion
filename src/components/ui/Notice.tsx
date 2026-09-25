@@ -5,6 +5,8 @@ type NoticeTone = 'info' | 'warning' | 'error' | 'success' | 'muted';
 type NoticeProps = {
   children: ReactNode;
   className?: string;
+  /** Anuncia cambios dinámicos sin convertir todos los avisos estáticos en alertas. */
+  live?: 'off' | 'polite' | 'assertive';
   tone?: NoticeTone;
 };
 
@@ -20,9 +22,20 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }
 
-export function Notice({ children, className, tone = 'muted' }: NoticeProps) {
+export function Notice({ children, className, live = 'off', tone = 'muted' }: NoticeProps) {
+  const liveProps = live === 'off'
+    ? {}
+    : {
+        'aria-atomic': true as const,
+        'aria-live': live,
+        role: live === 'assertive' ? ('alert' as const) : ('status' as const),
+      };
+
   return (
-    <p className={cx('rounded-xl border px-3 py-2 text-xs font-semibold', toneClassName[tone], className)}>
+    <p
+      {...liveProps}
+      className={cx('rounded-xl border px-3 py-2 text-xs font-semibold', toneClassName[tone], className)}
+    >
       {children}
     </p>
   );

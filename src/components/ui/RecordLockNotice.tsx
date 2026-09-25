@@ -13,7 +13,7 @@ interface RecordLockNoticeProps {
  */
 export function RecordLockNotice({ className, lockedBy }: RecordLockNoticeProps) {
   return (
-    <Notice className={className} tone="warning">
+    <Notice className={className} live="polite" tone="warning">
       📖 Modo consulta — editando: {lockedBy.ownerName}@{lockedBy.machineName}
     </Notice>
   );

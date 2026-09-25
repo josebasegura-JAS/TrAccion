@@ -3,6 +3,7 @@ import { AlertTriangle, LockKeyhole } from 'lucide-react';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { TooltipLayer } from './components/ui/TooltipLayer';
+import { ToastProvider } from './components/ui/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
@@ -200,6 +201,7 @@ export function App() {
   };
 
   return (
+    <ToastProvider>
     <AppShellErrorBoundary>
       <TooltipLayer /><AppUpdateChecker />
       <div className="app-shell">
@@ -241,5 +243,6 @@ export function App() {
       </div>
       {dialogNode}
     </AppShellErrorBoundary>
+    </ToastProvider>
   );
 }

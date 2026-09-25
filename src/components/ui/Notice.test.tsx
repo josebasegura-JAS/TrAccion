@@ -40,6 +40,17 @@ describe('Notice', () => {
     expect(screen.getByText('Aviso importante')).toHaveClass('border-amber-400/40');
   });
 
+  it('solo crea una región viva cuando se solicita', () => {
+    const { rerender } = render(<Notice>Estático</Notice>);
+    expect(screen.getByText('Estático')).not.toHaveAttribute('aria-live');
+
+    rerender(<Notice live="polite">Bloqueado por otro usuario</Notice>);
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+
+    rerender(<Notice live="assertive" tone="error">Error de guardado</Notice>);
+    expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive');
+  });
+
   it('combina className adicional con las clases base', () => {
     render(<Notice className="mt-3">Mensaje con margen</Notice>);
 
