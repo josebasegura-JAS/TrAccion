@@ -13,6 +13,7 @@ import { AjustesPage } from '../components/AjustesPage';
 import { PlantillaPage } from '../components/PlantillaPage';
 import { TareasPage } from '../components/TareasPage';
 import { TeletrabajoPage } from '../components/TeletrabajoPage';
+import { ToastProvider } from '../components/ui/Toast';
 
 const databaseStatus: TraccionDatabaseStatus = {
   ready: false,
@@ -119,7 +120,7 @@ describe('humo UI de módulos principales', () => {
     ['Vinculograma', <VinculogramaPage />, /Vinculograma/i],
     ['Presupuestos', <PresupuestosPage />, /Crear escenario/i],
   ])('renderiza el módulo %s sin romper', async (_moduleName, ui, expectedText) => {
-    render(ui);
+    render(<ToastProvider>{ui}</ToastProvider>);
 
     expect((await screen.findAllByText(expectedText))[0]).toBeInTheDocument();
   });

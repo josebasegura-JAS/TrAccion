@@ -13,7 +13,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ToastContext, type ToastApi, type ToastItem, type ToastOptions, type ToastTone } from './toastContext';
+import {
+  ToastContext,
+  type ToastApi,
+  type ToastItem,
+  type ToastOptions,
+  type ToastTone,
+} from './toastContext';
 
 const DEFAULT_DURATION_MS = 4_500;
 const MAX_VISIBLE_TOASTS = 4;
