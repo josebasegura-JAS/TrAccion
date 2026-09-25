@@ -1,6 +1,6 @@
 import type { Task } from '../../features/tareas/domain/task';
 import { escapeHtml } from '../export/tableExport';
-import { managedSessionLabel, type ManagedSession, type SessionModuleConfig } from './session';
+import { getManagedSessionTaskResult, managedSessionLabel, managedSessionTaskResultLabel, type ManagedSession, type SessionModuleConfig } from './session';
 
 function formatDate(value: string | null | undefined): string {
   if (!value) {
@@ -33,19 +33,7 @@ function getSessionStatusLabel(session: ManagedSession): string {
 }
 
 function getPointStatus(session: ManagedSession, taskId: string): string {
-  if (session.status === 'open') {
-    return 'Pendiente de tratar';
-  }
-
-  if (session.treatedTaskIds.includes(taskId)) {
-    return 'Tratada';
-  }
-
-  if (session.untreatedTaskIds.includes(taskId)) {
-    return 'No tratada';
-  }
-
-  return 'Sin clasificar';
+  return managedSessionTaskResultLabel(getManagedSessionTaskResult(session, taskId));
 }
 
 function getStatusClass(status: string): string {

@@ -2,7 +2,7 @@ import type { Task } from '../../features/tareas/domain/task';
 import { buildFilterLabel } from '../export/filterLabel';
 import type { ExportColumn, ExportTablePayload } from '../export/types';
 import { sanitizeFilenamePart } from '../export/tableExport';
-import { managedSessionLabel, type ManagedSession, type SessionModuleConfig } from './session';
+import { getManagedSessionTaskResult, managedSessionLabel, managedSessionTaskResultLabel, type ManagedSession, type SessionModuleConfig } from './session';
 
 export const sessionExportColumns: ExportColumn<ManagedSession>[] = [
   {
@@ -181,19 +181,7 @@ function getTaskDescription(task: Task | undefined): string {
 }
 
 function getSessionPointStatus(session: ManagedSession, taskId: string): string {
-  if (session.status === 'open') {
-    return 'Pendiente de tratar';
-  }
-
-  if (session.treatedTaskIds.includes(taskId)) {
-    return 'Tratada';
-  }
-
-  if (session.untreatedTaskIds.includes(taskId)) {
-    return 'No tratada';
-  }
-
-  return 'Sin clasificar';
+  return managedSessionTaskResultLabel(getManagedSessionTaskResult(session, taskId));
 }
 
 function buildSessionPointRows(

@@ -7,7 +7,7 @@ import {
   ModalTitle,
 } from '../../components/ui/ModalShell';
 import type { Task } from '../../features/tareas/domain/task';
-import { managedSessionLabel, type ManagedSession, type SessionModuleConfig } from './session';
+import { managedSessionLabel, type ManagedSession, type ManagedSessionTaskResult, type SessionModuleConfig } from './session';
 import { describeTask, getTaskTitle } from './sessionManagementPage.helpers';
 
 export function SessionCloseModal({
@@ -15,19 +15,19 @@ export function SessionCloseModal({
   config,
   onCancel,
   onConfirm,
-  setTreatedTaskIds,
+  pointResults,
+  setPointResults,
   tasksById,
-  treatedTaskIds,
 }: {
   closingSession: ManagedSession;
   config: SessionModuleConfig;
   onCancel: () => void;
   onConfirm: () => void;
-  setTreatedTaskIds: (
-    update: (current: Record<string, boolean>) => Record<string, boolean>,
+  pointResults: Record<string, ManagedSessionTaskResult>;
+  setPointResults: (
+    update: (current: Record<string, ManagedSessionTaskResult>) => Record<string, ManagedSessionTaskResult>,
   ) => void;
   tasksById: Map<string, Task>;
-  treatedTaskIds: Record<string, boolean>;
 }) {
   const titleId = 'session-close-modal-title';
 
@@ -36,7 +36,7 @@ export function SessionCloseModal({
       <ModalHeader>
         <ModalTitle
           id={titleId}
-          subtitle="Desmarca los puntos no tratados para mantener sus tareas abiertas."
+          subtitle="Indica el resultado de cada punto. Solo “Tratado y resuelto” cerrará la tarea."
         >
           Cerrar sesión de {config.shortTitle}
         </ModalTitle>
@@ -57,28 +57,29 @@ export function SessionCloseModal({
             const task = tasksById.get(taskId);
 
             return (
-              <label
-                className="flex cursor-pointer gap-3 rounded-xl bg-metro-panel p-3 hover:bg-metro-raised"
-                key={taskId}
-              >
-                <input
-                  checked={treatedTaskIds[taskId] ?? true}
-                  className="mt-1 h-4 w-4"
-                  onChange={(event) =>
-                    setTreatedTaskIds((current) => ({
-                      ...current,
-                      [taskId]: event.target.checked,
-                    }))
-                  }
-                  type="checkbox"
-                />
+              <div className="grid gap-3 rounded-xl bg-metro-panel p-3 md:grid-cols-[minmax(0,1fr)_250px] md:items-center" key={taskId}>
                 <span>
                   <span className="block font-semibold text-metro-text">
                     {index + 1}. {getTaskTitle(tasksById, taskId)}
                   </span>
                   <span className="mt-1 block text-xs text-metro-muted">{describeTask(task)}</span>
                 </span>
-              </label>
+                <select
+                  className="ui-control ui-control--compact text-xs font-semibold"
+                  onChange={(event) =>
+                    setPointResults((current) => ({
+                      ...current,
+                      [taskId]: event.target.value as ManagedSessionTaskResult,
+                    }))
+                  }
+                  value={pointResults[taskId] ?? 'resolved'}
+                >
+                  <option value="resolved">Tratado y resuelto</option>
+                  <option value="followup">Tratado · requiere seguimiento</option>
+                  <option value="return">Volver a próxima sesión</option>
+                  <option value="not-treated">No tratado</option>
+                </select>
+              </div>
             );
           })}
         </div>

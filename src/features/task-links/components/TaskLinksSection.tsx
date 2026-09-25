@@ -5,10 +5,10 @@ import { useParitariaSessionStore } from '../../paritaria/store/useParitariaSess
 import { useCoordinacionStore } from '../../coordinacion/store/useCoordinacionStore';
 import { formatCoordinationDate } from '../../coordinacion/domain/coordinacion';
 import type { Task } from '../../tareas/domain/task';
-import { formatManagedSessionDate } from '../../../shared/sessions/session';
+import { formatManagedSessionDate, getManagedSessionTaskResult } from '../../../shared/sessions/session';
 import { navigateInApp } from '../../../services/appNavigationBus';
 
-type LinkStatus = 'pending' | 'scheduled' | 'treated' | 'followup';
+type LinkStatus = 'pending' | 'scheduled' | 'treated' | 'followup' | 'return' | 'not-treated';
 
 type TaskLink = {
   id: string;
@@ -22,14 +22,16 @@ type TaskLink = {
 function statusClasses(status: LinkStatus): string {
   if (status === 'treated') return 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200';
   if (status === 'scheduled') return 'border-sky-400/20 bg-sky-500/10 text-sky-200';
-  if (status === 'followup') return 'border-amber-400/20 bg-amber-500/10 text-amber-200';
+  if (status === 'followup' || status === 'return' || status === 'not-treated') return 'border-amber-400/20 bg-amber-500/10 text-amber-200';
   return 'border-amber-400/20 bg-amber-500/10 text-amber-200';
 }
 
 function statusLabel(status: LinkStatus): string {
   if (status === 'treated') return 'Tratado';
   if (status === 'scheduled') return 'Incluido';
-  if (status === 'followup') return 'Seguimiento';
+  if (status === 'followup') return 'Requiere seguimiento';
+  if (status === 'return') return 'Volver a próxima';
+  if (status === 'not-treated') return 'No tratado';
   return 'Pendiente';
 }
 
@@ -69,13 +71,21 @@ export function TaskLinksSection({ task }: { task: Task }) {
         .sort((a, b) => b.date.localeCompare(a.date));
 
       taskSessions.forEach((session) => {
-        const treated = session.status === 'closed' && session.treatedTaskIds.includes(task.id);
-        const followup = session.status === 'closed' && session.untreatedTaskIds.includes(task.id);
+        const sessionResult = getManagedSessionTaskResult(session, task.id);
+        const status: LinkStatus = session.status === 'open'
+          ? 'scheduled'
+          : sessionResult === 'resolved'
+            ? 'treated'
+            : sessionResult === 'followup'
+              ? 'followup'
+              : sessionResult === 'return'
+                ? 'return'
+                : 'not-treated';
         result.push({
           id: `${organ}:${session.id}`,
           label,
           detail: `${session.code || 'Sin código'} · ${formatManagedSessionDate(session.date)}`,
-          status: treated ? 'treated' : followup ? 'followup' : 'scheduled',
+          status,
           target: { view: organ, recordId: session.id },
           icon: 'organ',
         });
@@ -112,7 +122,11 @@ export function TaskLinksSection({ task }: { task: Task }) {
           ? 'scheduled'
           : point.status === 'tratado'
             ? 'treated'
-            : 'followup';
+            : point.status === 'seguimiento'
+              ? 'followup'
+              : point.status === 'volver'
+                ? 'return'
+                : 'not-treated';
         result.push({
           id: `coord:${meeting.id}`,
           label,

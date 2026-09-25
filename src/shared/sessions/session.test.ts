@@ -3,8 +3,10 @@ import type { Task } from '../../features/tareas/domain/task';
 import {
   formatManagedSessionDate,
   isManagedSession,
+  getManagedSessionTaskResult,
   isTaskInSessionPhase,
   managedSessionLabel,
+  managedSessionTaskResultLabel,
   normalizeManagedSession,
   type ManagedSession,
 } from './session';
@@ -65,6 +67,25 @@ describe('managed session domain', () => {
     expect(normalized.closedAt).toBe('2025-05-21T00:00:00.000Z');
     expect(normalized.treatedTaskIds).toEqual(['task-1', 'task-2']);
     expect(normalized.untreatedTaskIds).toEqual([]);
+  });
+
+
+  it('mantiene resultados detallados y conserva compatibilidad con sesiones antiguas', () => {
+    const detailed = session({
+      status: 'closed',
+      treatedTaskIds: ['task-1'],
+      untreatedTaskIds: ['task-2'],
+      taskResults: { 'task-1': 'followup', 'task-2': 'return' },
+      closedAt: timestamp,
+    });
+
+    expect(getManagedSessionTaskResult(detailed, 'task-1')).toBe('followup');
+    expect(getManagedSessionTaskResult(detailed, 'task-2')).toBe('return');
+    expect(managedSessionTaskResultLabel(getManagedSessionTaskResult(detailed, 'task-1'))).toBe('Tratado · requiere seguimiento');
+
+    const legacy = session({ status: 'closed', treatedTaskIds: ['task-1'], untreatedTaskIds: ['task-2'], closedAt: timestamp });
+    expect(getManagedSessionTaskResult(legacy, 'task-1')).toBe('resolved');
+    expect(getManagedSessionTaskResult(legacy, 'task-2')).toBe('not-treated');
   });
 
   it('identifica sesiones mínimas válidas frente a objetos incompletos', () => {

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreApi, UseBoundStore } from 'zustand';
-import { CLOSED_TASK_PHASE, isTaskClosed } from '../../features/tareas/domain/task';
+import { CLOSED_TASK_PHASE, DEFAULT_TASK_PHASE, isTaskClosed } from '../../features/tareas/domain/task';
 import { buildActaObservacionesFromSession } from '../../features/actas/domain/acta';
 import { useActasStore } from '../../features/actas/store/useActasStore';
 import { useTaskStore } from '../../features/tareas/store/useTaskStore';
@@ -35,6 +35,7 @@ import {
   managedSessionLabel,
   type ManagedSession,
   type ManagedSessionDraft,
+  type ManagedSessionTaskResult,
   type SessionModuleConfig,
 } from './session';
 
@@ -80,7 +81,7 @@ export function SessionManagementPage({
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [openHistoryYears, setOpenHistoryYears] = useState<Record<string, boolean>>({});
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
-  const [treatedTaskIds, setTreatedTaskIds] = useState<Record<string, boolean>>({});
+  const [pointResults, setPointResults] = useState<Record<string, ManagedSessionTaskResult>>({});
   const [importPreview, setImportPreview] = useState<SessionImportPreview | null>(null);
   const [importError, setImportError] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
@@ -239,7 +240,7 @@ export function SessionManagementPage({
   };
 
   const openCloseModal = (session: ManagedSession) => {
-    setTreatedTaskIds(Object.fromEntries(session.items.map((taskId) => [taskId, true])));
+    setPointResults(Object.fromEntries(session.items.map((taskId) => [taskId, 'resolved' as const])));
     setClosingSessionId(session.id);
   };
 
@@ -402,8 +403,9 @@ export function SessionManagementPage({
     }
 
     try {
-      const treatedIds = closingSession.items.filter((taskId) => treatedTaskIds[taskId]);
-      const treatedTasks = treatedIds.flatMap((taskId) => {
+      const resolvedIds = closingSession.items.filter((taskId) => (pointResults[taskId] ?? 'resolved') === 'resolved');
+      const handledIds = closingSession.items.filter((taskId) => ['resolved', 'followup'].includes(pointResults[taskId] ?? 'resolved'));
+      const treatedTasks = handledIds.flatMap((taskId) => {
         const task = tasksById.get(taskId);
         return task ? [task] : [];
       });
@@ -428,32 +430,42 @@ export function SessionManagementPage({
           }
 
           const now = new Date().toISOString();
-          const treatedSet = new Set(treatedIds);
+          const handledSet = new Set(handledIds);
           const closedSession: ManagedSession = {
             ...closingSession,
             status: 'closed',
-            treatedTaskIds: closingSession.items.filter((taskId) => treatedSet.has(taskId)),
-            untreatedTaskIds: closingSession.items.filter((taskId) => !treatedSet.has(taskId)),
+            treatedTaskIds: closingSession.items.filter((taskId) => handledSet.has(taskId)),
+            untreatedTaskIds: closingSession.items.filter((taskId) => !handledSet.has(taskId)),
+            taskResults: Object.fromEntries(
+              closingSession.items.map((taskId) => [taskId, pointResults[taskId] ?? 'resolved']),
+            ),
             updatedAt: now,
             closedAt: now,
           };
 
+          const resolvedSet = new Set(resolvedIds);
           const updatedTasks = treatedTasks
             .filter((task) => !task.deletedAt && !isTaskClosed(task))
-            .map((task) => ({
-              ...task,
-              estado: 'cerrada' as const,
-              fase: CLOSED_TASK_PHASE,
-              seguimiento: [
-                {
-                  fechaHora: now,
-                  texto: `Tratada en ${config.closeTrackingLabel} (${managedSessionLabel(closedSession)}).`,
-                },
-                ...task.seguimiento,
-              ],
-              closedAt: task.closedAt ?? now,
-              updatedAt: now,
-            }));
+            .map((task) => {
+              const isResolved = resolvedSet.has(task.id);
+              const trackingText = isResolved
+                ? `Tratada y resuelta en ${config.closeTrackingLabel} (${managedSessionLabel(closedSession)}).`
+                : `Tratada en ${config.closeTrackingLabel} (${managedSessionLabel(closedSession)}). Requiere seguimiento.`;
+
+              return {
+                ...task,
+                estado: isResolved ? ('cerrada' as const) : task.estado,
+                fase: isResolved
+                  ? CLOSED_TASK_PHASE
+                  : task.fase.trim().toLowerCase() === config.taskPhase ? DEFAULT_TASK_PHASE : task.fase,
+                seguimiento: [
+                  { fechaHora: now, texto: trackingText },
+                  ...task.seguimiento,
+                ],
+                closedAt: isResolved ? (task.closedAt ?? now) : task.closedAt,
+                updatedAt: now,
+              };
+            });
 
           const acta = shouldCreateActa
             ? {
@@ -505,7 +517,7 @@ export function SessionManagementPage({
           useActasStore.getState().load();
 
           setClosingSessionId(null);
-          setTreatedTaskIds({});
+          setPointResults({});
           setExpandedSessionId(null);
           setOpenPanel('history');
         },
@@ -927,9 +939,9 @@ export function SessionManagementPage({
           config={config}
           onCancel={() => setClosingSessionId(null)}
           onConfirm={() => void confirmCloseSession()}
-          setTreatedTaskIds={setTreatedTaskIds}
+          pointResults={pointResults}
+          setPointResults={setPointResults}
           tasksById={tasksById}
-          treatedTaskIds={treatedTaskIds}
         />
       )}
       {dialogNode}

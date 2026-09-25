@@ -384,14 +384,14 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const areaTaskIds = { ...current.areaTaskIds };
     if (meeting.area === 'direccion') meeting.points.forEach((point) => {
       if (!point.taskId) return;
-      if (point.status === 'tratado') directionTaskIds.delete(point.taskId);
-      if (point.status === 'volver') directionTaskIds.add(point.taskId);
+      if (point.status === 'tratado' || point.status === 'seguimiento') directionTaskIds.delete(point.taskId);
+      if (point.status === 'volver' || point.status === 'pendiente') directionTaskIds.add(point.taskId);
     });
     if (meeting.area === 'sindicatos' && meeting.unionName) {
       const ids = new Set(unionTaskIds[meeting.unionName] ?? []);
       meeting.points.forEach((point) => {
         if (!point.taskId) return;
-        if (point.status === 'tratado') ids.delete(point.taskId); else ids.add(point.taskId);
+        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId); else ids.add(point.taskId);
       });
       unionTaskIds[meeting.unionName] = [...ids];
     }
@@ -399,7 +399,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
       const ids = new Set(areaTaskIds[meeting.areaName] ?? []);
       meeting.points.forEach((point) => {
         if (!point.taskId) return;
-        if (point.status === 'tratado') ids.delete(point.taskId); else ids.add(point.taskId);
+        if (point.status === 'tratado' || point.status === 'seguimiento') ids.delete(point.taskId); else ids.add(point.taskId);
       });
       areaTaskIds[meeting.areaName] = [...ids];
     }
@@ -426,8 +426,10 @@ registerSyncableStore({
 });
 
 export function coordinationPointStatusLabel(status: CoordinationPointStatus): string {
-  if (status === 'tratado') return 'Tratado';
-  if (status === 'volver') return 'Volver a tratar';
+  if (status === 'tratado') return 'Tratado y resuelto';
+  if (status === 'seguimiento') return 'Tratado · requiere seguimiento';
+  if (status === 'volver') return 'Volver a próxima reunión';
+  if (status === 'no-tratado') return 'No tratado';
   if (status === 'pendiente-rrll') return 'Pendiente de RRLL';
   if (status === 'pendiente-sindicato') return 'Pendiente del sindicato';
   return 'Pendiente';

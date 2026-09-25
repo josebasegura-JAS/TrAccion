@@ -1,6 +1,7 @@
 import type { Task } from '../../features/tareas/domain/task';
 
 export type ManagedSessionStatus = 'open' | 'closed';
+export type ManagedSessionTaskResult = 'resolved' | 'followup' | 'return' | 'not-treated';
 
 export interface ManagedSession {
   id: string;
@@ -12,6 +13,8 @@ export interface ManagedSession {
   items: string[];
   treatedTaskIds: string[];
   untreatedTaskIds: string[];
+  /** Resultado detallado por punto. Ausente en sesiones antiguas. */
+  taskResults?: Record<string, ManagedSessionTaskResult>;
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
@@ -82,6 +85,13 @@ export function normalizeManagedSession(session: ManagedSession, fallbackTitle: 
   const untreatedTaskIds = Array.isArray(session.untreatedTaskIds)
     ? session.untreatedTaskIds.filter((item): item is string => typeof item === 'string')
     : [];
+  const taskResults = session.taskResults && typeof session.taskResults === 'object'
+    ? Object.fromEntries(
+        Object.entries(session.taskResults).filter((entry): entry is [string, ManagedSessionTaskResult] =>
+          ['resolved', 'followup', 'return', 'not-treated'].includes(entry[1]),
+        ),
+      )
+    : undefined;
   const shouldForceHistory = isHistoricalSessionDate(session.date);
   const closedAt = session.closedAt ?? (shouldForceHistory ? `${session.date}T00:00:00.000Z` : null);
 
@@ -95,6 +105,9 @@ export function normalizeManagedSession(session: ManagedSession, fallbackTitle: 
     items,
     treatedTaskIds: shouldForceHistory ? items : treatedTaskIds,
     untreatedTaskIds: shouldForceHistory ? [] : untreatedTaskIds,
+    taskResults: shouldForceHistory
+      ? Object.fromEntries(items.map((taskId) => [taskId, 'resolved' as const]))
+      : taskResults,
     createdAt,
     updatedAt,
     closedAt,
@@ -114,4 +127,24 @@ export function isManagedSession(value: unknown): value is ManagedSession {
     typeof candidate.title === 'string' &&
     (candidate.status === 'open' || candidate.status === 'closed')
   );
+}
+
+export function getManagedSessionTaskResult(
+  session: ManagedSession,
+  taskId: string,
+): ManagedSessionTaskResult | null {
+  if (session.status === 'open') return null;
+  const detailed = session.taskResults?.[taskId];
+  if (detailed) return detailed;
+  if (session.treatedTaskIds.includes(taskId)) return 'resolved';
+  if (session.untreatedTaskIds.includes(taskId)) return 'not-treated';
+  return null;
+}
+
+export function managedSessionTaskResultLabel(result: ManagedSessionTaskResult | null): string {
+  if (result === 'resolved') return 'Tratado y resuelto';
+  if (result === 'followup') return 'Tratado · requiere seguimiento';
+  if (result === 'return') return 'Volver a próxima sesión';
+  if (result === 'not-treated') return 'No tratado';
+  return 'Pendiente de tratar';
 }

@@ -153,6 +153,32 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().areaTaskIds.Prevención).toEqual(['t-area-2']);
   });
 
+
+  it('saca de la cola los asuntos resueltos o con seguimiento y conserva volver/no tratado', async () => {
+    const tasks = [
+      task('t-r', 'Resuelto', ''),
+      task('t-s', 'Seguimiento', ''),
+      task('t-v', 'Volver', ''),
+      task('t-n', 'No tratado', ''),
+    ];
+    for (const item of tasks) await useCoordinacionStore.getState().setTaskForArea(item.id, 'Prevención');
+    const created = await useCoordinacionStore.getState().createOtherAreaMeeting(
+      '2026-09-25', 'Prevención', '', '', '', tasks,
+    );
+    const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
+    expect(meeting).toBeTruthy();
+    if (!meeting) return;
+
+    const byTask = Object.fromEntries(meeting.points.map((point) => [point.taskId ?? '', point.id]));
+    await useCoordinacionStore.getState().updatePoint(meeting.id, byTask['t-r'], { status: 'tratado' });
+    await useCoordinacionStore.getState().updatePoint(meeting.id, byTask['t-s'], { status: 'seguimiento' });
+    await useCoordinacionStore.getState().updatePoint(meeting.id, byTask['t-v'], { status: 'volver' });
+    await useCoordinacionStore.getState().updatePoint(meeting.id, byTask['t-n'], { status: 'no-tratado' });
+    await useCoordinacionStore.getState().closeMeeting(meeting.id);
+
+    expect(useCoordinacionStore.getState().areaTaskIds['Prevención']).toEqual(['t-v', 't-n']);
+  });
+
   it('permite crear una reunión sindical sin tareas iniciales', async () => {
     const result = await useCoordinacionStore.getState().createUnionMeeting(
       '2026-09-22', 'ELA', 'ordinaria', 'Representación y RRLL', 'Asunto sobrevenido', [], [],

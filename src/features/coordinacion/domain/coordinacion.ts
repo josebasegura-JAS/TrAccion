@@ -3,7 +3,9 @@ export type CoordinationMeetingStatus = 'open' | 'closed';
 export type CoordinationPointStatus =
   | 'pendiente'
   | 'tratado'
+  | 'seguimiento'
   | 'volver'
+  | 'no-tratado'
   | 'pendiente-rrll'
   | 'pendiente-sindicato';
 export type CoordinationPointOrigin = 'task' | 'manual';

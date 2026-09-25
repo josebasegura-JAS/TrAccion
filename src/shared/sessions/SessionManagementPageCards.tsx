@@ -14,7 +14,7 @@ import { ActionButton } from '../../components/ui/ActionButton';
 import { CountBadge } from '../../components/ui/CountBadge';
 import { ExportPrintButtons } from '../print/ExportPrintButtons';
 import { buildPrintableCommitteeSessionHtml } from './buildPrintableCommitteeSessionHtml';
-import { managedSessionLabel, type ManagedSession, type SessionModuleConfig } from './session';
+import { getManagedSessionTaskResult, managedSessionLabel, managedSessionTaskResultLabel, type ManagedSession, type SessionModuleConfig } from './session';
 import {
   buildSessionExportPayload,
   describeTask,
@@ -364,23 +364,29 @@ export function HistoricSessionCard({
               <li className="text-metro-muted">Sin tareas tratadas.</li>
             )}
             {session.treatedTaskIds.map((taskId, index) => (
-              <li className="truncate" key={taskId} title={getTaskTitle(tasksById, taskId)}>
-                {index + 1}. {getTaskTitle(tasksById, taskId)}
+              <li className="flex min-w-0 items-center justify-between gap-2" key={taskId} title={getTaskTitle(tasksById, taskId)}>
+                <span className="truncate">{index + 1}. {getTaskTitle(tasksById, taskId)}</span>
+                <span className="shrink-0 text-[10px] font-semibold text-metro-muted">
+                  {managedSessionTaskResultLabel(getManagedSessionTaskResult(session, taskId))}
+                </span>
               </li>
             ))}
           </ol>
         </div>
         <div className="rounded-xl border border-metro-border/60 bg-metro-surface p-3">
           <p className="mb-2 text-xs font-semibold text-metro-muted">
-            No tratadas ({session.untreatedTaskIds.length})
+            Pendientes / no tratadas ({session.untreatedTaskIds.length})
           </p>
           <ol className="space-y-1 text-sm text-metro-text">
             {session.untreatedTaskIds.length === 0 && (
               <li className="text-metro-muted">Sin pendientes.</li>
             )}
             {session.untreatedTaskIds.map((taskId, index) => (
-              <li className="truncate" key={taskId} title={getTaskTitle(tasksById, taskId)}>
-                {index + 1}. {getTaskTitle(tasksById, taskId)}
+              <li className="flex min-w-0 items-center justify-between gap-2" key={taskId} title={getTaskTitle(tasksById, taskId)}>
+                <span className="truncate">{index + 1}. {getTaskTitle(tasksById, taskId)}</span>
+                <span className="shrink-0 text-[10px] font-semibold text-metro-muted">
+                  {managedSessionTaskResultLabel(getManagedSessionTaskResult(session, taskId))}
+                </span>
               </li>
             ))}
           </ol>

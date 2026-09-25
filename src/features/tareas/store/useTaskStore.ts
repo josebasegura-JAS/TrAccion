@@ -119,6 +119,7 @@ type StoredManagedSessionForTaskSync = {
   items: string[];
   treatedTaskIds: string[];
   untreatedTaskIds: string[];
+  taskResults?: Record<string, 'resolved' | 'followup' | 'return' | 'not-treated'>;
   closedAt: string | null;
 };
 
@@ -237,6 +238,7 @@ function isStoredManagedSessionForTaskSync(
     isStringArray(candidate.items) &&
     (candidate.treatedTaskIds === undefined || isStringArray(candidate.treatedTaskIds)) &&
     (candidate.untreatedTaskIds === undefined || isStringArray(candidate.untreatedTaskIds)) &&
+    (candidate.taskResults === undefined || (candidate.taskResults !== null && typeof candidate.taskResults === 'object')) &&
     (candidate.closedAt === null ||
       candidate.closedAt === undefined ||
       typeof candidate.closedAt === 'string')
@@ -279,10 +281,14 @@ function readClosedSessionTaskReferences(): Map<string, SessionTaskReference> {
       }
 
       const untreatedTaskIds = new Set(session.untreatedTaskIds ?? []);
-      const treatedTaskIds =
-        forceHistorical || (session.treatedTaskIds ?? []).length === 0
-          ? session.items
-          : (session.treatedTaskIds ?? []);
+      const detailedResults = session.taskResults ?? {};
+      const treatedTaskIds = forceHistorical
+        ? session.items
+        : Object.keys(detailedResults).length > 0
+          ? session.items.filter((taskId) => detailedResults[taskId] === 'resolved')
+          : (session.treatedTaskIds ?? []).length === 0
+            ? session.items
+            : (session.treatedTaskIds ?? []);
       const closedAt =
         session.closedAt ??
         (session.date ? `${session.date}T00:00:00.000Z` : new Date().toISOString());
