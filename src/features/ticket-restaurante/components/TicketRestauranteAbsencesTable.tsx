@@ -308,6 +308,7 @@ export function AbsencePreviewModal({
   onRemove,
   onSave,
   rows,
+  saving = false,
 }: {
   fileName?: string;
   onAdd: () => void;
@@ -320,6 +321,7 @@ export function AbsencePreviewModal({
   onRemove: (rowId: string) => void;
   onSave: () => void;
   rows: TicketRestaurantAbsencePreviewRow[];
+  saving?: boolean;
 }) {
   return (
     <ModalShell labelledBy="absence-preview-title" maxWidthClassName="max-w-6xl" onClose={onCancel}>
@@ -390,11 +392,11 @@ export function AbsencePreviewModal({
           </CompactTable>
       </ModalBody>
       <ModalFooter>
-        <ActionButton iconOnly={false} onClick={onCancel} variant="secondary">
+        <ActionButton disabled={saving} iconOnly={false} onClick={onCancel} variant="secondary">
           Cancelar
         </ActionButton>
-        <ActionButton iconOnly={false} onClick={onSave} variant="save">
-          Guardar ausencias
+        <ActionButton iconOnly={false} loading={saving} onClick={onSave} variant="save">
+          {saving ? 'Guardando ausencias…' : 'Guardar ausencias'}
         </ActionButton>
       </ModalFooter>
     </ModalShell>

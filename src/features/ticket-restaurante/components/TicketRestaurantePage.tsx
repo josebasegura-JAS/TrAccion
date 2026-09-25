@@ -40,6 +40,7 @@ import { importTicketPeopleFromFile, type TicketPeopleImportResult } from '../do
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAppDialog } from '../../../hooks/useAppDialog';
+import { useToast } from '../../../components/ui/useToast';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { buildFilterLabel } from '../../../shared/export/filterLabel';
 import {
@@ -126,6 +127,7 @@ export function TicketRestaurantePage({
   const loadEmployees = useEmployeeStore((state) => state.load);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const { alert, confirm, dialogNode } = useAppDialog();
+  const toast = useToast();
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
   const [year, setYear] = useState(currentTicketYear());
   const [absenceYear, setAbsenceYear] = useState(currentTicketYear());
@@ -162,6 +164,7 @@ export function TicketRestaurantePage({
   const [manutencionImputationYear, setManutencionImputationYear] = useState(currentTicketYear());
   const [manutencionImputationMonth, setManutencionImputationMonth] = useState(currentTicketMonth());
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isAbsenceSaving, setIsAbsenceSaving] = useState(false);
   const [isAbsenceImportHelpOpen, setIsAbsenceImportHelpOpen] = useState(false);
   const [editingAbsenceId, setEditingAbsenceId] = useState<string | null>(null);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
@@ -796,6 +799,8 @@ export function TicketRestaurantePage({
   };
 
   const savePreviewRows = async () => {
+    if (isAbsenceSaving) return;
+
     const currentAbsences = editingAbsenceId
       ? absences.filter((absence) => absence.id !== editingAbsenceId)
       : absences;
@@ -807,21 +812,36 @@ export function TicketRestaurantePage({
       return;
     }
 
-    const saveResult = await saveAbsences(result.absences);
-    if (!saveResult.ok) {
-      setImportMessage(
-        saveResult.message ??
-          'No se han podido guardar las ausencias. Recarga e inténtalo de nuevo.',
+    setIsAbsenceSaving(true);
+    try {
+      const saveResult = await saveAbsences(result.absences);
+      if (!saveResult.ok) {
+        const message =
+          saveResult.message ??
+          'No se han podido guardar las ausencias. Recarga e inténtalo de nuevo.';
+        setImportMessage(message);
+        toast.error(message);
+        return;
+      }
+
+      const summary = formatSaveSummary(result);
+      setImportMessage(summary);
+      setPreviewRows([]);
+      setEditingAbsenceId(null);
+      setIsPreviewOpen(false);
+      toast.success('Ausencias guardadas correctamente.');
+
+      const workflowResult = await updateConfig(
+        withTicketWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
       );
-      return;
+      if (!workflowResult.ok) {
+        toast.warning(
+          'Las ausencias se han guardado, pero no se ha podido actualizar el estado de revisión del mes.',
+        );
+      }
+    } finally {
+      setIsAbsenceSaving(false);
     }
-    await updateConfig(
-      withTicketWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
-    );
-    setImportMessage(formatSaveSummary(result));
-    setPreviewRows([]);
-    setEditingAbsenceId(null);
-    setIsPreviewOpen(false);
   };
 
   const editAbsence = useCallback((absence: TicketRestaurantAbsence) => {
@@ -1558,6 +1578,7 @@ export function TicketRestaurantePage({
           onRemove={removePreviewRow}
           onSave={savePreviewRows}
           rows={previewRows}
+          saving={isAbsenceSaving}
         />
       ) : null}
       {dialogNode}
