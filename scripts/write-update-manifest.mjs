@@ -27,7 +27,8 @@ if (!existsSync(sourceExePath)) {
 
 // Renombrar .exe a .piz no modifica el contenido, por lo que el SHA-256 sigue siendo válido.
 const sha256 = createHash('sha256').update(readFileSync(sourceExePath)).digest('hex');
-const networkFileName = artifactName.replace(/\.exe$/i, '.piz');
+const [major = '0', minor = '0', patch = '0'] = String(pkg.version).split('.');
+const networkFileName = `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
 const manifest = {
   version: pkg.version,
   file: networkFileName,

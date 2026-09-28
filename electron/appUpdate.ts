@@ -52,8 +52,8 @@ function getPortableExecutablePath(): string | null {
 function buildPortableUpdateNameFromVersion(version: string): string | null {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
   if (!match) return null;
-  const [, major, minor] = match;
-  return `Traccion ${major}.${minor}.piz`;
+  const [, major, minor, patch] = match;
+  return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
 }
 
 export function buildInstalledExecutableNameFromVersion(version: string): string | null {
@@ -76,9 +76,9 @@ function validateUpdateFileName(fileName: string, version: string): string {
     normalized.includes('/') ||
     normalized.includes('\\') ||
     path.basename(normalized) !== normalized ||
-    !/^Traccion \d+\.\d+\.piz$/i.test(normalized)
+    !/^TrAccion V\d+\.\d+\.\d+\.piz$/i.test(normalized)
   ) {
-    throw new Error('El nombre del fichero de actualización no es válido. Debe ser Traccion x.y.piz.');
+    throw new Error('El nombre del fichero de actualización no es válido. Debe ser TrAccion Vx.y.zz.piz.');
   }
 
   const expected = buildPortableUpdateNameFromVersion(version);
