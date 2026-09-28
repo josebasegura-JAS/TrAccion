@@ -874,26 +874,45 @@ export function TicketRestaurantePage({
 
       if (recoveryCandidates.length > 0) {
         const next = addTicketYearMonth(absenceYear, absenceMonth, 1);
-        const nextCalculation = calculateMonthlyTicketOrder(
-          people,
-          calendars,
-          result.absences,
-          config,
-          next.year,
-          next.month,
-          manutenciones,
-        );
         const messages = recoveryCandidates.map((absence) => {
           const end = new Date(`${absence.hasta}T12:00:00`);
           end.setDate(end.getDate() + 1);
           const highDate = end.toLocaleDateString('es-ES');
-          const calculation = nextCalculation.rows.find(
-            (row) => normalizeTicketEmployeeNumber(row.empleado) === normalizeTicketEmployeeNumber(absence.empleado),
+
+          // La sugerencia de alta debe simular a la persona REINCORPORADA. Si ya estaba
+          // excluida del pedido del mes siguiente, calcular con la configuración real
+          // devolvería siempre 0 y la sugerencia sería engañosa. Eliminamos únicamente
+          // su exclusión del mes sugerido para reutilizar exactamente el motor mensual.
+          const normalizedEmployee = normalizeTicketEmployeeNumber(absence.empleado);
+          const suggestionConfig = {
+            ...config,
+            monthlyOrderExclusions: (config.monthlyOrderExclusions ?? []).filter(
+              (item) =>
+                !(
+                  normalizeTicketEmployeeNumber(item.empleado) === normalizedEmployee &&
+                  item.year === next.year &&
+                  item.month === next.month
+                ),
+            ),
+          };
+          const nextCalculation = calculateMonthlyTicketOrder(
+            people,
+            calendars,
+            result.absences,
+            suggestionConfig,
+            next.year,
+            next.month,
+            manutenciones,
           );
-          const suggestion = calculation
-            ? `${calculation.ticketsFinales} ticket${calculation.ticketsFinales === 1 ? '' : 's'}`
-            : 'sin cálculo disponible';
-          return `${absence.empleado} · ${absence.nombreApellidos}: posible alta desde ${highDate} (${absence.motivo.toUpperCase()}). Sugerencia para ${String(next.month).padStart(2, '0')}/${next.year}: ${suggestion}.`;
+          const calculation = nextCalculation.rows.find(
+            (row) => normalizeTicketEmployeeNumber(row.empleado) === normalizedEmployee,
+          );
+          if (!calculation) {
+            return `${absence.empleado} · ${absence.nombreApellidos}: posible alta desde ${highDate} (${absence.motivo.toUpperCase()}). Sugerencia para ${String(next.month).padStart(2, '0')}/${next.year}: sin cálculo disponible.`;
+          }
+
+          const suggestion = `${calculation.ticketsFinales} ticket${calculation.ticketsFinales === 1 ? '' : 's'}`;
+          return `${absence.empleado} · ${absence.nombreApellidos}: posible alta desde ${highDate} (${absence.motivo.toUpperCase()}).\nPedido ${String(next.month).padStart(2, '0')}/${next.year} simulando reincorporación: ${suggestion}. Calendario: ${calculation.calendario}; días teóricos: ${calculation.diasTeoricos}; hoja gastos: ${calculation.hojasGastoMes}; deuda aplicada: ${calculation.ausenciasAplicadas}.`;
         });
         void alert(
           `Posibles altas detectadas\n\n${messages.join('\n\n')}\n\nLa fecha se deduce del último día ENF/ACC importado. Revísala antes de usar la sugerencia; el programa no modifica el pedido automáticamente.`,
