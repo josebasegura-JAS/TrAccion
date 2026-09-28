@@ -132,6 +132,7 @@ jobs:
           name: Traccion-1.2-windows-portable-lite
           path: |
             release/Traccion 1.2.exe
+            release/Traccion 1.2.piz
             release/version.json
           if-no-files-found: error
           retention-days: 7

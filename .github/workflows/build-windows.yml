@@ -149,5 +149,6 @@ jobs:
           name: Traccion-1.2-windows-portable
           path: |
             release/Traccion 1.2.exe
+            release/Traccion 1.2.piz
             release/version.json
           if-no-files-found: error
