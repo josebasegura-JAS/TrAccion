@@ -143,13 +143,11 @@ jobs:
             Write-Host "Sin cambios en el contador de build; nada que commitear."
           }
 
-      - name: Upload EXE and update manifest
+      - name: Upload update package
         uses: actions/upload-artifact@v4
         with:
           name: Traccion-1.2-windows-portable
           path: |
-            release/Traccion 1.2.exe
             release/Traccion 1.2.piz
-            release/TrAccion V*.piz
             release/version.json
           if-no-files-found: error
