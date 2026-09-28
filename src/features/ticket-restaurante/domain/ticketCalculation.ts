@@ -317,7 +317,9 @@ function calculatePersonMonthlyOrderWithDebt(
       )
     : emptyMonthlyOrderDebtStatus();
   const exclusion = getMonthlyOrderExclusion(config, person.empleado, year, month);
-  const ticketsFinales = exclusion ? 0 : Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
+  const automaticTickets = Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
+  const adjustment = getMonthlyOrderAdjustment(config, person.empleado, year, month);
+  const ticketsFinales = exclusion ? 0 : adjustment ? adjustment.tickets : automaticTickets;
 
   return {
     empleado: person.empleado,
@@ -339,6 +341,9 @@ function calculatePersonMonthlyOrderWithDebt(
     importe: roundCurrency(ticketsFinales * effectivePrice),
     excludedFromOrder: Boolean(exclusion),
     exclusionReason: exclusion?.reason ?? '',
+    automaticTickets,
+    manuallyAdjusted: Boolean(adjustment) && !exclusion,
+    adjustmentReason: adjustment?.reason ?? '',
     ausenciaIds: debtStatus.ausenciaIds,
     ausenciaDiasDescontados: debtStatus.ausenciaDiasDescontados,
     deudaEntranteDetalle: debtStatus.deudaEntranteDetalle,
@@ -368,6 +373,12 @@ interface MonthlyOrderDebtStatus {
 
 function getMonthlyOrderExclusion(config: TicketRestaurantConfig, empleado: string, year: number, month: number) {
   return (config.monthlyOrderExclusions ?? []).find(
+    (item) => sameTicketEmployee(item.empleado, empleado) && item.year === year && item.month === month,
+  );
+}
+
+function getMonthlyOrderAdjustment(config: TicketRestaurantConfig, empleado: string, year: number, month: number) {
+  return (config.monthlyOrderAdjustments ?? []).find(
     (item) => sameTicketEmployee(item.empleado, empleado) && item.year === year && item.month === month,
   );
 }

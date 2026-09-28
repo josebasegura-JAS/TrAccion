@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Calculator, RotateCcw, Search } from 'lucide-react';
+import { AlertTriangle, Ban, Calculator, Pencil, RotateCcw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -119,6 +119,10 @@ export function CalculationPanel({
   const [exclusionReason, setExclusionReason] = useState('Baja');
   const [deliveredTickets, setDeliveredTickets] = useState(0);
   const [savingExclusion, setSavingExclusion] = useState(false);
+  const [adjustmentRow, setAdjustmentRow] = useState<TicketPersonCalculation | null>(null);
+  const [adjustmentTickets, setAdjustmentTickets] = useState(0);
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
   const { alert, dialogNode } = useAppDialog();
   const validColumnIds =
     mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
@@ -288,6 +292,11 @@ export function CalculationPanel({
                 Excluido
               </span>
             ) : null}
+            {mode === 'monthly' && row.manuallyAdjusted && !row.excludedFromOrder ? (
+              <span className="rounded-full border border-sky-500/45 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-300" title={row.adjustmentReason || 'Pedido ajustado manualmente'}>
+                Ajustado
+              </span>
+            ) : null}
             {row.manualEntry ? (
               <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-xs font-bold text-metro-muted">Manual</span>
             ) : (
@@ -305,6 +314,22 @@ export function CalculationPanel({
               <Search className="h-3.5 w-3.5" />
             </button>
             )}
+            {mode === 'monthly' && !row.manualEntry && onUpdateConfig && !row.excludedFromOrder ? (
+              <button
+                aria-label={`Ajustar pedido de ${row.nombreApellidos}`}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-metro-border bg-metro-panel text-metro-muted transition hover:border-sky-500 hover:text-sky-300"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAdjustmentTickets(row.ticketsFinales);
+                  setAdjustmentReason(row.adjustmentReason ?? '');
+                  setAdjustmentRow(row);
+                }}
+                title={row.manuallyAdjusted ? 'Editar ajuste manual del pedido' : 'Ajustar manualmente el pedido'}
+                type="button"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
             {mode === 'monthly' && !row.manualEntry && onUpdateConfig ? (
               <button
                 aria-label={row.excludedFromOrder ? `Reactivar ${row.nombreApellidos} en el pedido` : `Excluir ${row.nombreApellidos} del pedido`}
@@ -494,6 +519,46 @@ export function CalculationPanel({
         </ModalShell>
       ) : null}
       {dialogNode}
+      {adjustmentRow && onUpdateConfig ? (
+        <ModalShell labelledBy="ticket-order-adjustment-title" maxWidthClassName="max-w-lg" onClose={() => setAdjustmentRow(null)}>
+          <ModalHeader>
+            <ModalTitle id="ticket-order-adjustment-title" subtitle={`${adjustmentRow.empleado} · ${adjustmentRow.nombreApellidos} · ${year}-${String(month).padStart(2, '0')}`}>
+              Ajustar pedido mensual
+            </ModalTitle>
+          </ModalHeader>
+          <ModalBody className="space-y-4">
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-metro-text">
+              El cálculo automático propone <strong>{adjustmentRow.automaticTickets ?? adjustmentRow.ticketsFinales} tickets</strong>. El ajuste cambia solo el pedido efectivo; no crea ni elimina deuda automáticamente.
+            </div>
+            <label className="block text-sm font-bold text-metro-text">
+              Tickets a pedir
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text outline-none focus:border-metro-red focus:ring-1 focus:ring-metro-red/30" min={0} onChange={(event) => setAdjustmentTickets(Math.max(0, Number.parseInt(event.target.value || '0', 10) || 0))} type="number" value={adjustmentTickets} />
+            </label>
+            <label className="block text-sm font-bold text-metro-text">
+              Motivo del ajuste <span className="text-metro-red">*</span>
+              <textarea className="mt-1 min-h-20 w-full resize-y rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text outline-none placeholder:text-metro-muted focus:border-metro-red focus:ring-1 focus:ring-metro-red/30" maxLength={300} onChange={(event) => setAdjustmentReason(event.target.value)} placeholder="Indica por qué el pedido efectivo difiere del cálculo automático…" value={adjustmentReason} />
+            </label>
+          </ModalBody>
+          <ModalFooter>
+            {adjustmentRow.manuallyAdjusted ? (
+              <ActionButton iconOnly={false} onClick={() => {
+                const next = (config.monthlyOrderAdjustments ?? []).filter((item) => !(item.empleado === adjustmentRow.empleado && item.year === year && item.month === month));
+                void onUpdateConfig({ ...config, monthlyOrderAdjustments: next }).then((result) => { if (result.ok) setAdjustmentRow(null); });
+              }} size="sm" variant="secondary">Eliminar ajuste</ActionButton>
+            ) : null}
+            <ActionButton iconOnly={false} onClick={() => setAdjustmentRow(null)} size="sm" variant="secondary">Cancelar</ActionButton>
+            <ActionButton disabled={savingAdjustment || !adjustmentReason.trim()} iconOnly={false} onClick={() => {
+              setSavingAdjustment(true);
+              const next = [...(config.monthlyOrderAdjustments ?? []).filter((item) => !(item.empleado === adjustmentRow.empleado && item.year === year && item.month === month)), { empleado: adjustmentRow.empleado, year, month, tickets: adjustmentTickets, reason: adjustmentReason.trim(), createdAt: new Date().toISOString() }];
+              void onUpdateConfig({ ...config, monthlyOrderAdjustments: next }).then((result) => {
+                setSavingAdjustment(false);
+                if (result.ok) setAdjustmentRow(null);
+              });
+            }} size="sm" variant="primary">Guardar ajuste</ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
+
       {selectedDetailRow ? (
         <CalculationAbsenceDetailModal
           absences={absences}
@@ -529,7 +594,8 @@ export function CalculationAbsenceDetailModal({
   const appliedDebtRows = row.deudaAplicadaDetalle ?? [];
   const pendingDebtRows = row.deudaPendienteDetalle ?? [];
   const hojaGastoRows = row.hojaGastoDetalle ?? [];
-  const appliedDiscounts = Math.max(0, row.diasTeoricos - row.ticketsFinales);
+  const automaticTickets = row.automaticTickets ?? row.ticketsFinales;
+  const appliedDiscounts = Math.max(0, row.diasTeoricos - automaticTickets);
   const monthlyDebtDiscounts = Math.max(0, appliedDiscounts - row.hojasGastoMes);
   const hasDetail =
     appliedDebtRows.length > 0 || pendingDebtRows.length > 0 || hojaGastoRows.length > 0;
@@ -570,10 +636,12 @@ export function CalculationAbsenceDetailModal({
           <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
             <h4 className="mb-2 text-sm font-bold">Cálculo aplicado</h4>
             {mode === 'monthly' ? (
-              <div className="grid gap-2 md:grid-cols-4">
+              <div className={`grid gap-2 ${row.manuallyAdjusted ? 'md:grid-cols-6' : 'md:grid-cols-4'}`}>
                 <DetailFormulaItem label="Días calendario" value={row.diasTeoricos} />
                 <DetailFormulaItem label="Hojas de gasto" value={`-${row.hojasGastoMes}`} />
                 <DetailFormulaItem label="Deuda aplicada" value={`-${monthlyDebtDiscounts}`} />
+                {row.manuallyAdjusted ? <DetailFormulaItem label="Cálculo automático" value={automaticTickets} /> : null}
+                {row.manuallyAdjusted ? <DetailFormulaItem label="Ajuste manual" value={`${row.ticketsFinales - automaticTickets >= 0 ? '+' : ''}${row.ticketsFinales - automaticTickets}`} /> : null}
                 <DetailFormulaItem label="Tickets a pedir" value={row.ticketsFinales} strong />
               </div>
             ) : (
@@ -584,6 +652,12 @@ export function CalculationAbsenceDetailModal({
               </div>
             )}
           </section>
+
+          {mode === 'monthly' && row.manuallyAdjusted ? (
+            <section className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-metro-text">
+              <span className="font-bold">Motivo del ajuste manual:</span> {row.adjustmentReason}
+            </section>
+          ) : null}
 
           {hasDetail ? (
             <>

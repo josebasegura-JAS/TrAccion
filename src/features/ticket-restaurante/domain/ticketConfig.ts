@@ -10,6 +10,7 @@ import type {
   TicketRestaurantConfig,
   TicketDebtRegularization,
   TicketMonthlyOrderExclusion,
+  TicketMonthlyOrderAdjustment,
 } from './ticketRestauranteTypes';
 import { isIsoDate } from './ticketCalendars';
 import { normalizeTicketEmployeeNumber } from './ticketPeople';
@@ -31,6 +32,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   monthlySnapshots: {},
   annualClosures: {},
   monthlyOrderExclusions: [],
+  monthlyOrderAdjustments: [],
 };
 
 export function getEffectiveTicketPrice(
@@ -310,6 +312,25 @@ function normalizeMonthlyOrderExclusions(value: unknown): TicketMonthlyOrderExcl
   });
 }
 
+function normalizeMonthlyOrderAdjustments(value: unknown): TicketMonthlyOrderAdjustment[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<TicketMonthlyOrderAdjustment>;
+    if (typeof item.empleado !== 'string' || typeof item.year !== 'number' || typeof item.month !== 'number' || typeof item.tickets !== 'number') return [];
+    const empleado = normalizeTicketEmployeeNumber(item.empleado);
+    const year = Math.trunc(item.year);
+    const month = Math.trunc(item.month);
+    const tickets = Math.max(0, Math.trunc(item.tickets));
+    if (!empleado || !Number.isInteger(year) || month < 1 || month > 12 || !Number.isFinite(tickets)) return [];
+    const key = `${empleado}:${year}-${String(month).padStart(2, '0')}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ empleado, year, month, tickets, reason: typeof item.reason === 'string' ? item.reason.trim() : '', createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
+  });
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -335,5 +356,6 @@ export function normalizeTicketRestaurantConfig(
     monthlySnapshots: normalizeMonthlySnapshots(config.monthlySnapshots),
     annualClosures: normalizeAnnualClosures(config.annualClosures),
     monthlyOrderExclusions: normalizeMonthlyOrderExclusions(config.monthlyOrderExclusions),
+    monthlyOrderAdjustments: normalizeMonthlyOrderAdjustments(config.monthlyOrderAdjustments),
   };
 }
