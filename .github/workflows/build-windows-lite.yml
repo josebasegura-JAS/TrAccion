@@ -108,7 +108,7 @@ jobs:
       - name: Upload EXE and update manifest
         uses: actions/upload-artifact@v4
         with:
-          name: TrAccion-V1-windows-portable-lite
+          name: Traccion-1.2-windows-portable-lite
           path: |
             release/*.exe
             release/version.json
