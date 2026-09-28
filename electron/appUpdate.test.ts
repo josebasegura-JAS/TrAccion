@@ -44,29 +44,35 @@ describe('parseAppUpdateManifest', () => {
   it('lee version.json con .piz, SHA-256, notas y obligatoriedad', () => {
     expect(parseAppUpdateManifest(JSON.stringify({
       version: '1.1.79',
-      file: 'TrAccion V1.1.79.piz',
+      file: 'Traccion 1.1.piz',
       sha256: sha,
       mandatory: true,
       notes: 'Correcciones críticas.',
     }))).toEqual({
       version: '1.1.79',
-      fileName: 'TrAccion V1.1.79.piz',
+      fileName: 'Traccion 1.1.piz',
       sha256: sha,
       mandatory: true,
       notes: 'Correcciones críticas.',
     });
   });
 
+  it('acepta también el nombre técnico legado Vx.y.zz para paquetes ya publicados', () => {
+    const sha = 'a'.repeat(64);
+    const result = parseAppUpdateManifest(JSON.stringify({ version: '1.2.03', file: 'TrAccion V1.2.03.piz', sha256: sha }));
+    expect(result.fileName).toBe('TrAccion V1.2.03.piz');
+  });
+
   it('exige JSON, SHA-256 y fichero .piz correspondiente a la versión', () => {
     expect(() => parseAppUpdateManifest('1.1.79')).toThrow(/JSON válido/i);
-    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'TrAccion V1.1.79.piz' }))).toThrow(/SHA-256/i);
+    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'Traccion 1.1.piz' }))).toThrow(/SHA-256/i);
     expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'TrAccion V1.1.79.exe', sha256: sha }))).toThrow(/no es válido/i);
-    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'TrAccion V1.2.00.piz', sha256: sha }))).toThrow(/no corresponde/i);
+    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'Traccion 1.2.piz', sha256: sha }))).toThrow(/no corresponde/i);
   });
 
   it('rechaza rutas y hashes inválidos', () => {
-    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: '..\\TrAccion V1.1.79.piz', sha256: sha }))).toThrow(/no es válido/i);
-    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'TrAccion V1.1.79.piz', sha256: '123' }))).toThrow(/SHA-256/i);
+    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: '..\\Traccion 1.1.piz', sha256: sha }))).toThrow(/no es válido/i);
+    expect(() => parseAppUpdateManifest(JSON.stringify({ version: '1.1.79', file: 'Traccion 1.1.piz', sha256: '123' }))).toThrow(/SHA-256/i);
   });
 });
 
@@ -88,7 +94,7 @@ describe('checkForAppUpdate', () => {
 
   it('detecta una versión JSON más nueva y devuelve sus metadatos', async () => {
     writeFileSync(path.join(tempDir, 'version.json'), JSON.stringify({
-      version: '1.1.79', file: 'TrAccion V1.1.79.piz', sha256: sha, mandatory: true, notes: 'Cambio importante',
+      version: '1.1.79', file: 'Traccion 1.1.piz', sha256: sha, mandatory: true, notes: 'Cambio importante',
     }), 'utf8');
 
     const result = await checkForAppUpdate('1.1.78', tempDir);
@@ -100,7 +106,7 @@ describe('checkForAppUpdate', () => {
 
   it('no ofrece actualización cuando la versión es igual', async () => {
     writeFileSync(path.join(tempDir, 'version.json'), JSON.stringify({
-      version: '1.1.78', file: 'TrAccion V1.1.78.piz', sha256: sha,
+      version: '1.1.78', file: 'Traccion 1.1.piz', sha256: sha,
     }), 'utf8');
     const result = await checkForAppUpdate('1.1.78', tempDir);
     expect(result.updateAvailable).toBe(false);
@@ -108,7 +114,7 @@ describe('checkForAppUpdate', () => {
 
   it('rechaza manifiestos antiguos o sin SHA-256', async () => {
     writeFileSync(path.join(tempDir, 'version.json'), JSON.stringify({
-      version: '1.1.79', file: 'TrAccion V1.1.79.piz',
+      version: '1.1.79', file: 'Traccion 1.1.piz',
     }), 'utf8');
     const result = await checkForAppUpdate('1.1.78', tempDir);
     expect(result.updateAvailable).toBe(false);

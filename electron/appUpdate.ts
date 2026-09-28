@@ -52,9 +52,19 @@ function getPortableExecutablePath(): string | null {
 function buildPortableUpdateNameFromVersion(version: string): string | null {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
   if (!match) return null;
+  const [, major, minor] = match;
+  // El nombre publicado permanece estable durante toda la rama visible (1.2).
+  // La revisión exacta (1.2.01, 1.2.103...) vive únicamente en version.json.
+  return `Traccion ${major}.${minor}.piz`;
+}
+
+function buildLegacyPortableUpdateNameFromVersion(version: string): string | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return null;
   const [, major, minor, patch] = match;
   return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
 }
+
 
 export function buildInstalledExecutableNameFromVersion(version: string): string | null {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
@@ -71,19 +81,19 @@ export function buildInstalledExecutablePath(currentExecutablePath: string, vers
 
 function validateUpdateFileName(fileName: string, version: string): string {
   const normalized = fileName.trim();
-  if (
-    !normalized ||
-    normalized.includes('/') ||
-    normalized.includes('\\') ||
-    path.basename(normalized) !== normalized ||
-    !/^TrAccion V\d+\.\d+\.\d+\.piz$/i.test(normalized)
-  ) {
-    throw new Error('El nombre del fichero de actualización no es válido. Debe ser TrAccion Vx.y.zz.piz.');
+  if (!normalized || normalized.includes('/') || normalized.includes('\\') || path.basename(normalized) !== normalized) {
+    throw new Error('El nombre del fichero de actualización no es válido. Debe ser Traccion x.y.piz.');
   }
 
-  const expected = buildPortableUpdateNameFromVersion(version);
-  if (!expected || normalized.toLowerCase() !== expected.toLowerCase()) {
-    throw new Error(`El fichero de actualización no corresponde a la versión ${version}.`);
+  // Compatibilidad bidireccional: el formato estable actual permite que una instalación
+  // antigua salte a 1.2; el formato Vx.y.zz se sigue aceptando para paquetes ya publicados.
+  const accepted = [
+    buildPortableUpdateNameFromVersion(version),
+    buildLegacyPortableUpdateNameFromVersion(version),
+  ].filter((value): value is string => Boolean(value));
+
+  if (!accepted.some((expected) => normalized.toLowerCase() === expected.toLowerCase())) {
+    throw new Error(`El fichero de actualización no corresponde a la versión ${version}. Formato esperado: Traccion x.y.piz.`);
   }
   return normalized;
 }
