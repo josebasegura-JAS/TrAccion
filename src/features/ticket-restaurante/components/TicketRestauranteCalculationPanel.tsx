@@ -184,7 +184,7 @@ export function CalculationPanel({
       },
       {
         id: 'hojaGastos',
-        header: 'Hoja gastos',
+        header: mode === 'monthly' ? 'Hoja gastos aplicada' : 'Hoja gastos',
         accessor: (row) => row.hojasGastoMes,
         render: (row) => (row.manualEntry ? '—' : row.hojasGastoMes),
         width: 115,
@@ -196,7 +196,7 @@ export function CalculationPanel({
       },
       {
         id: 'ausencias',
-        header: mode === 'monthly' ? 'Ausencias aplicadas' : 'Ausencias mes',
+        header: mode === 'monthly' ? 'Descuento total' : 'Ausencias mes',
         accessor: (row) => (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
         render: (row) => row.manualEntry ? '—' : (mode === 'monthly' ? row.ausenciasAplicadas : row.ausenciasMes),
         width: 130,
@@ -213,9 +213,10 @@ export function CalculationPanel({
         {
           id: 'deudaEntrante',
           tone: 'attention',
-          header: 'Deuda entrante',
-          accessor: (row) => row.deudaEntrante,
-          render: (row) => (row.manualEntry ? '—' : row.deudaEntrante),
+          header: 'Deuda aplicada',
+          accessor: (row) => Math.max(0, row.ausenciasAplicadas - row.hojasGastoMes),
+          render: (row) =>
+            row.manualEntry ? '—' : Math.max(0, row.ausenciasAplicadas - row.hojasGastoMes),
           width: 120,
           minWidth: 105,
           maxWidth: 175,
@@ -439,12 +440,12 @@ export function CalculationAbsenceDetailModal({
           >
             <DetailStat label="Calendario" value={row.calendario} />
             <DetailStat label="Días teóricos" value={row.diasTeoricos} />
-            <DetailStat label="Hoja gastos" value={row.hojasGastoMes} />
+            <DetailStat label="Hoja gastos aplicada" value={row.hojasGastoMes} />
             {mode === 'monthly' ? (
-              <DetailStat label="Deuda entrante" value={row.deudaEntrante} />
+              <DetailStat label="Deuda inicial / arrastrada" value={row.deudaEntrante} />
             ) : null}
             <DetailStat
-              label={mode === 'monthly' ? 'Descuento total' : 'Ausencias mes'}
+              label={mode === 'monthly' ? 'Descuento total aplicado' : 'Ausencias mes'}
               value={appliedDiscounts}
             />
             {mode === 'monthly' ? (
