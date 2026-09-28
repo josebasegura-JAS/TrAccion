@@ -1,5 +1,5 @@
-// Genera un paquete puente compatible con instalaciones antiguas y nuevas.
-// La app visible sigue siendo 1.2; la revisión técnica completa vive en version.json.
+// Genera el paquete de actualización definitivo de TrAcción 1.2.
+// La revisión técnica completa vive en version.json; el nombre visible permanece estable.
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -16,22 +16,16 @@ if (!artifactName || typeof artifactName !== 'string' || !artifactName.toLowerCa
 const sourceExePath = path.join(releaseDir, artifactName);
 if (!existsSync(sourceExePath)) throw new Error(`No se ha encontrado el portable generado: ${sourceExePath}`);
 
-const [major, minor, patch] = version.split('.');
-const currentFileName = `Traccion ${major}.${minor}.piz`;
-// El manifiesto apunta temporalmente al nombre legacy porque las versiones antiguas
-// solo aceptan TrAccion Vx.y.zz.piz. Las versiones nuevas aceptan ambos formatos.
-const legacyFileName = `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
-const currentFilePath = path.join(releaseDir, currentFileName);
-const legacyFilePath = path.join(releaseDir, legacyFileName);
+const [major, minor] = version.split('.');
+const updateFileName = `Traccion ${major}.${minor}.piz`;
+const updateFilePath = path.join(releaseDir, updateFileName);
 
-copyFileSync(sourceExePath, currentFilePath);
-copyFileSync(sourceExePath, legacyFilePath);
+copyFileSync(sourceExePath, updateFilePath);
 
-const sha256 = createHash('sha256').update(readFileSync(legacyFilePath)).digest('hex');
-const manifest = { version, file: legacyFileName, sha256, mandatory: false, notes: '' };
+const sha256 = createHash('sha256').update(readFileSync(updateFilePath)).digest('hex');
+const manifest = { version, file: updateFileName, sha256, mandatory: false, notes: '' };
 writeFileSync(path.join(releaseDir, 'version.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
-console.log(`Paquete actual generado: ${currentFilePath}`);
-console.log(`Paquete puente legacy generado: ${legacyFilePath}`);
-console.log(`Manifiesto puente: version=${version}, file=${legacyFileName}`);
+console.log(`Paquete de actualización generado: ${updateFilePath}`);
+console.log(`Manifiesto: version=${version}, file=${updateFileName}`);
 console.log(`SHA-256: ${sha256}`);
