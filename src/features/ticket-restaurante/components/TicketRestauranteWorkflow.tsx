@@ -43,17 +43,21 @@ function ProcessStep({
   detail,
   state,
   onClick,
+  reviewed,
+  onReviewChange,
 }: {
   number: number;
   title: string;
   detail: string;
   state: StepState;
   onClick: () => void;
+  reviewed?: boolean;
+  onReviewChange?: (checked: boolean) => void;
 }) {
   return (
-    <button
+    <div
       className={cx(
-        'group relative flex min-h-[76px] min-w-0 flex-1 items-start gap-3 rounded-xl border px-3 py-3 text-left transition',
+        'group relative flex min-h-[76px] min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-left transition',
         state === 'current'
           ? 'border-metro-red bg-metro-red/[0.075] shadow-[0_10px_24px_rgba(220,38,38,0.12)]'
           : state === 'done'
@@ -61,7 +65,14 @@ function ProcessStep({
             : 'border-metro-border bg-metro-surface/60 hover:border-metro-red/45 hover:bg-metro-raised',
       )}
       onClick={onClick}
-      type="button"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       <span
         className={cx(
@@ -75,11 +86,26 @@ function ProcessStep({
       >
         {state === 'done' ? <Check className="h-4 w-4" /> : number}
       </span>
-      <span className="min-w-0 pt-0.5">
+      <span className="min-w-0 flex-1 pt-0.5">
         <span className="block text-[13px] font-extrabold leading-4 text-metro-text">{title}</span>
         <span className="mt-1 block text-xs leading-5 text-metro-muted">{detail}</span>
+        {onReviewChange ? (
+          <span
+            className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold text-metro-secondary"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <input
+              aria-label={`Marcar ${title} como revisado`}
+              checked={Boolean(reviewed)}
+              className="h-3.5 w-3.5 accent-emerald-500"
+              onChange={(event) => onReviewChange(event.target.checked)}
+              type="checkbox"
+            />
+            {reviewed ? 'Revisado' : 'Marcar revisado'}
+          </span>
+        ) : null}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -109,33 +135,6 @@ function AdvancedAction({
       </span>
       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-metro-muted transition group-hover:translate-x-0.5 group-hover:text-metro-text" />
     </button>
-  );
-}
-
-function ReviewCheck({
-  label,
-  detail,
-  checked,
-  onChange,
-}: {
-  label: string;
-  detail: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-metro-border bg-metro-surface/45 px-3 py-2.5 transition hover:bg-metro-raised">
-      <input
-        checked={checked}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-500"
-        onChange={(event) => onChange(event.target.checked)}
-        type="checkbox"
-      />
-      <span className="min-w-0">
-        <span className="block text-[12px] font-bold text-metro-text">{label}</span>
-        <span className="mt-0.5 block text-xs leading-5 text-metro-muted">{detail}</span>
-      </span>
-    </label>
   );
 }
 
@@ -303,6 +302,8 @@ export function TicketRestauranteWorkflow({
             number={2}
             onClick={absenceCount > 0 ? onOpenAbsences : onImportAbsences}
             state={absencesReviewed ? 'done' : baseReady ? 'current' : 'pending'}
+            reviewed={absencesReviewed}
+            onReviewChange={(checked) => onReviewChange('absencesReviewed', checked)}
             title="Ausencias"
           />
           <ProcessStep
@@ -310,6 +311,8 @@ export function TicketRestauranteWorkflow({
             number={3}
             onClick={manutencionCount > 0 ? onOpenManutenciones : onImportManutenciones}
             state={manutencionesReviewed ? 'done' : absencesReviewed ? 'current' : 'pending'}
+            reviewed={manutencionesReviewed}
+            onReviewChange={(checked) => onReviewChange('manutencionesReviewed', checked)}
             title="Manutenciones"
           />
           <ProcessStep
@@ -317,6 +320,8 @@ export function TicketRestauranteWorkflow({
             number={4}
             onClick={onOpenManualDebt}
             state={manualDebtsReviewed ? 'done' : monthlyInputsReviewed ? 'current' : 'pending'}
+            reviewed={manualDebtsReviewed}
+            onReviewChange={(checked) => onReviewChange('manualDebtsReviewed', checked)}
             title="Deudas y ajustes"
           />
           <ProcessStep
@@ -337,23 +342,23 @@ export function TicketRestauranteWorkflow({
       </section>
 
       <section className={cx(
-        'rounded-2xl border p-4 shadow-card',
+        'rounded-xl border px-4 py-3 shadow-card',
         readyForOrder
           ? 'border-emerald-400/30 bg-emerald-500/[0.055]'
           : 'border-metro-red/45 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/10',
       )}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <span className={cx(
-              'grid h-11 w-11 shrink-0 place-items-center rounded-xl',
+              'grid h-9 w-9 shrink-0 place-items-center rounded-lg',
               readyForOrder ? 'bg-emerald-500/15 text-emerald-300' : 'bg-metro-red/12 text-red-300',
             )}>
               {readyForOrder ? <CheckCircle2 className="h-5 w-5" /> : <NextIcon className="h-5 w-5" />}
             </span>
             <div className="min-w-0">
               <p className={cx('text-[11px] font-bold uppercase tracking-[0.08em]', readyForOrder ? 'text-emerald-300' : 'text-red-300')}>{nextAction.eyebrow}</p>
-              <h2 className="mt-1 text-lg font-extrabold leading-6 text-metro-text">{nextAction.title}</h2>
-              <p className="mt-1 max-w-3xl text-[12px] leading-5 text-metro-secondary">{nextAction.detail}</p>
+              <h2 className="mt-0.5 text-[15px] font-extrabold leading-5 text-metro-text">{nextAction.title}</h2>
+              <p className="mt-0.5 max-w-4xl text-[11px] leading-4 text-metro-secondary">{nextAction.detail}</p>
             </div>
           </div>
           <button
@@ -372,49 +377,24 @@ export function TicketRestauranteWorkflow({
         </div>
       </section>
 
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_310px]">
-        <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-extrabold text-metro-text">Controles del mes</p>
-              <p className="mt-0.5 text-xs text-metro-muted">Marca cada bloque cuando hayas comprobado que sus datos son correctos.</p>
-            </div>
-            <span className="rounded-full border border-metro-border bg-metro-surface px-2.5 py-1 text-[11px] font-bold text-metro-secondary">
-              {[absencesReviewed, manutencionesReviewed, manualDebtsReviewed].filter(Boolean).length}/3 revisados
-            </span>
-          </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <ReviewCheck
-              checked={absencesReviewed}
-              detail={absenceCount > 0 ? `${absenceCount} registros en ${monthLabel}` : `Sin registros en ${monthLabel}`}
-              label="Ausencias"
-              onChange={(checked) => onReviewChange('absencesReviewed', checked)}
-            />
-            <ReviewCheck
-              checked={manutencionesReviewed}
-              detail={manutencionCount > 0 ? `${manutencionCount} manutenciones imputadas` : 'Sin manutenciones registradas'}
-              label="Manutenciones"
-              onChange={(checked) => onReviewChange('manutencionesReviewed', checked)}
-            />
-            <ReviewCheck
-              checked={manualDebtsReviewed}
-              detail={manualDebtCount > 0 ? `${manualDebtCount} ajustes activos` : 'Sin ajustes manuales activos'}
-              label="Deudas y ajustes"
-              onChange={(checked) => onReviewChange('manualDebtsReviewed', checked)}
-            />
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-metro-border bg-metro-panel p-4 shadow-card">
-          <p className="text-sm font-extrabold text-metro-text">Resumen del pedido</p>
-          <div className="mt-3 space-y-2.5">
-            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Users className="h-4 w-4" />Personas con derecho</span><strong className="text-sm text-metro-text">{formatInteger(activePeople)}</strong></div>
-            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Ticket className="h-4 w-4" />Tickets previstos</span><strong className="text-sm text-metro-text">{formatInteger(calculation.totals.ticketsFinales)}</strong></div>
-            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Euro className="h-4 w-4" />Importe estimado</span><strong className="text-sm text-emerald-300">{formatMoney(calculation.totals.importe)} €</strong></div>
-            <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-[12px] text-metro-muted"><Clock3 className="h-4 w-4" />Deuda pendiente</span><strong className="text-sm text-amber-300">{formatInteger(calculation.totals.deudaPendiente)}</strong></div>
-          </div>
-        </section>
-      </div>
+      <section className="grid grid-cols-2 overflow-hidden rounded-xl border border-metro-border bg-metro-panel shadow-card md:grid-cols-4">
+        <div className="flex items-center gap-3 border-b border-r border-metro-border px-4 py-3 md:border-b-0">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-muted"><Users className="h-4 w-4" /></span>
+          <div><strong className="block text-base text-metro-text">{formatInteger(activePeople)}</strong><span className="text-[11px] text-metro-muted">Personas con derecho</span></div>
+        </div>
+        <div className="flex items-center gap-3 border-b border-metro-border px-4 py-3 md:border-b-0 md:border-r">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-metro-surface text-metro-muted"><Ticket className="h-4 w-4" /></span>
+          <div><strong className="block text-base text-metro-text">{formatInteger(calculation.totals.ticketsFinales)}</strong><span className="text-[11px] text-metro-muted">Tickets previstos</span></div>
+        </div>
+        <div className="flex items-center gap-3 border-r border-metro-border px-4 py-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-300"><Euro className="h-4 w-4" /></span>
+          <div><strong className="block text-base text-emerald-300">{formatMoney(calculation.totals.importe)} €</strong><span className="text-[11px] text-metro-muted">Importe estimado</span></div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-300"><Clock3 className="h-4 w-4" /></span>
+          <div><strong className="block text-base text-amber-300">{formatInteger(calculation.totals.deudaPendiente)}</strong><span className="text-[11px] text-metro-muted">Deuda pendiente</span></div>
+        </div>
+      </section>
 
       <button
         className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-blue-400/25 bg-blue-500/[0.055] p-4 text-left shadow-card transition hover:border-blue-300/45 hover:bg-blue-500/[0.085]"
