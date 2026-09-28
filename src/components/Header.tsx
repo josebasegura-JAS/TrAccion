@@ -289,8 +289,6 @@ export function Header({
   return (
     <header className="relative z-40 px-1.5 pt-1.5 sm:px-2 sm:pt-2">
       <div className="relative grid min-w-0 gap-3 overflow-visible rounded-[18px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-3 py-2.5 shadow-[0_18px_36px_rgba(2,6,23,0.26)] lg:min-h-16 lg:grid-cols-[minmax(0,1fr)_minmax(290px,420px)_auto] lg:items-center lg:gap-4 lg:px-4">
-        <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-metro-red" />
-
         <div className="flex min-w-0 items-center gap-3">
           <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-metro-red/35 bg-metro-red/10 text-metro-red shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <CirclePlus aria-hidden="true" size={18} strokeWidth={2.1} />

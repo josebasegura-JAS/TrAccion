@@ -81,7 +81,13 @@ export function buildInstalledExecutablePath(currentExecutablePath: string, vers
 
 function validateUpdateFileName(fileName: string, version: string): string {
   const normalized = fileName.trim();
-  if (!normalized || normalized.includes('/') || normalized.includes('\\') || path.basename(normalized) !== normalized) {
+  if (
+    !normalized
+    || normalized.includes('/')
+    || normalized.includes('\\')
+    || path.basename(normalized) !== normalized
+    || path.extname(normalized).toLowerCase() !== '.piz'
+  ) {
     throw new Error('El nombre del fichero de actualización no es válido. Debe ser Traccion x.y.piz.');
   }
 
