@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, X, UserRound } from 'lucide-react';
+import { Bell, ChevronRight, CirclePlus, X } from 'lucide-react';
 import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { ModuleHelpButton } from './ModuleHelp';
@@ -107,7 +107,7 @@ const getFallbackUserName = () => {
 type HeaderSyncVisual = {
   label: string;
   dotClass: string;
-  chipClass: string;
+  textClass: string;
 };
 
 function buildHeaderSyncVisual(
@@ -118,7 +118,7 @@ function buildHeaderSyncVisual(
     return {
       label: 'Edición bloqueada',
       dotClass: 'bg-orange-400',
-      chipClass: 'border-orange-400/20 bg-orange-500/10 text-orange-200',
+      textClass: 'text-orange-200',
     };
   }
 
@@ -126,7 +126,7 @@ function buildHeaderSyncVisual(
     return {
       label: 'Error de sync',
       dotClass: 'bg-red-500',
-      chipClass: 'border-red-400/20 bg-red-500/10 text-red-200',
+      textClass: 'text-red-200',
     };
   }
 
@@ -135,15 +135,33 @@ function buildHeaderSyncVisual(
       label: 'Sincronizando…',
       dotClass:
         'bg-amber-400 animate-pulse shadow-[0_0_0_4px_rgba(251,191,36,0.10),0_0_14px_rgba(251,191,36,0.32)]',
-      chipClass: 'border-amber-400/20 bg-amber-500/10 text-amber-100',
+      textClass: 'text-amber-100',
     };
   }
 
   return {
     label: 'Actualizado',
     dotClass: 'bg-emerald-400',
-    chipClass: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100',
+    textClass: 'text-emerald-200',
   };
+}
+
+function formatBreadcrumbLabel(value: string): string {
+  return value.replace(/\s*›\s*/g, ' / ').toLocaleUpperCase('es');
+}
+
+function getUserInitials(name: string): string {
+  const cleaned = name.trim();
+  if (!cleaned) {
+    return 'UL';
+  }
+
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toLocaleUpperCase('es');
+  }
+
+  return cleaned.slice(0, 2).toLocaleUpperCase('es');
 }
 
 export function Header({
@@ -155,7 +173,7 @@ export function Header({
 }) {
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
-  const breadcrumb = useMemo(() => getNavigationBreadcrumb(activeView), [activeView]);
+  const breadcrumb = useMemo(() => formatBreadcrumbLabel(getNavigationBreadcrumb(activeView)), [activeView]);
   const moduleHelp = useModuleHelpRegistry((state) => state.content);
   const dbStatus = useDatabaseStatus();
   const syncStatus = useExternalDataSyncStatus();
@@ -185,6 +203,7 @@ export function Header({
   );
 
   const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus);
+  const userInitials = useMemo(() => getUserInitials(windowsUserName), [windowsUserName]);
 
   useEffect(() => {
     if (!dbStatus?.ready || !isWindowsUserResolved || !currentResponsible) return;
@@ -268,28 +287,36 @@ export function Header({
   };
 
   return (
-    <header className="relative z-40 border-b border-sky-300/[0.07] px-3 pb-2 pt-2.5 sm:px-4">
-      <div className="grid min-w-0 gap-2 rounded-[22px] border border-white/10 bg-gradient-to-r from-metro-topbar via-metro-navy to-metro-topbar px-4 py-3 shadow-[0_14px_32px_rgba(2,6,23,0.22)] lg:grid-cols-[minmax(0,1fr)_minmax(280px,430px)_auto] lg:items-center lg:gap-4">
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="inline-flex max-w-full items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-metro-muted">
-              {breadcrumb}
-            </span>
-            {moduleHelp ? (
-              <ModuleHelpButton
-                title={moduleHelp.title}
-                subtitle={moduleHelp.subtitle}
-                sections={moduleHelp.sections}
-              />
-            ) : null}
-          </div>
+    <header className="relative z-40 px-1.5 pt-1.5 sm:px-2 sm:pt-2">
+      <div className="relative grid min-w-0 gap-3 overflow-visible rounded-[18px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-3 py-2.5 shadow-[0_18px_36px_rgba(2,6,23,0.26)] lg:min-h-16 lg:grid-cols-[minmax(0,1fr)_minmax(290px,420px)_auto] lg:items-center lg:gap-4 lg:px-4">
+        <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-metro-red" />
 
-          <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <h1 className="truncate text-[1.45rem] font-black leading-tight tracking-tight text-metro-text">
-              {headerCopy.title}
-            </h1>
-            <span className="hidden h-5 w-px shrink-0 bg-white/10 md:block" aria-hidden="true" />
-            <p className="min-w-0 truncate text-sm text-metro-muted">{headerCopy.subtitle}</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-metro-red/35 bg-metro-red/10 text-metro-red shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <CirclePlus aria-hidden="true" size={18} strokeWidth={2.1} />
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-sky-100/80">
+                {breadcrumb}
+              </p>
+              {moduleHelp ? (
+                <ModuleHelpButton
+                  title={moduleHelp.title}
+                  subtitle={moduleHelp.subtitle}
+                  sections={moduleHelp.sections}
+                />
+              ) : null}
+            </div>
+            <div className="mt-0.5 flex min-w-0 items-baseline gap-2.5 overflow-hidden">
+              <h1 className="truncate text-[1.42rem] font-black leading-none tracking-tight text-metro-text">
+                {headerCopy.title}
+              </h1>
+              <p className="hidden min-w-0 truncate text-[11px] text-metro-muted md:block">
+                {headerCopy.subtitle}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -298,79 +325,77 @@ export function Header({
         </div>
 
         <div className="flex min-w-0 items-center gap-2 lg:justify-end">
-          {unseenAssignments.length > 0 && (
-            <div className="relative shrink-0" ref={assignmentNoticeRef}>
-              <button
-                aria-controls="task-assignment-notice"
-                aria-expanded={isAssignmentNoticeOpen}
-                aria-haspopup="dialog"
-                aria-label={`${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-[11px] font-bold text-amber-200 shadow-sm transition hover:border-amber-300/70 hover:bg-amber-400/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
-                onClick={() => setIsAssignmentNoticeOpen((open) => !open)}
-                title="Consultar nuevas tareas asignadas"
-                type="button"
+          <div className="relative shrink-0" ref={assignmentNoticeRef}>
+            <button
+              aria-controls="task-assignment-notice"
+              aria-expanded={isAssignmentNoticeOpen}
+              aria-haspopup="dialog"
+              aria-label={unseenAssignments.length > 0
+                ? `${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`
+                : 'No hay nuevas tareas asignadas'}
+              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
+                unseenAssignments.length > 0
+                  ? 'border-amber-400/35 bg-amber-400/10 text-amber-200 hover:border-amber-300/70 hover:bg-amber-400/18'
+                  : 'border-white/10 bg-white/[0.045] text-metro-muted hover:border-white/20 hover:text-metro-text'
+              }`}
+              onClick={() => unseenAssignments.length > 0 ? setIsAssignmentNoticeOpen((open) => !open) : undefined}
+              title={unseenAssignments.length > 0 ? 'Consultar nuevas tareas asignadas' : 'Sin nuevas tareas asignadas'}
+              type="button"
+            >
+              <Bell size={17} aria-hidden="true" />
+              {unseenAssignments.length > 0 ? (
+                <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold leading-none text-slate-950 ring-2 ring-[#08111F]">
+                  {unseenAssignments.length > 9 ? '9+' : unseenAssignments.length}
+                </span>
+              ) : null}
+            </button>
+            {isAssignmentNoticeOpen && unseenAssignments.length > 0 ? (
+              <section
+                aria-label="Nuevas tareas asignadas"
+                className="absolute right-0 top-[calc(100%+10px)] z-50 w-[min(22rem,calc(100vw-5rem))] overflow-hidden rounded-2xl border border-amber-400/25 bg-metro-surface text-metro-text shadow-[0_22px_55px_rgba(2,6,23,0.6)]"
+                id="task-assignment-notice"
+                role="dialog"
               >
-                <AlertTriangle size={16} aria-hidden="true" />
-                <span>{unseenAssignments.length} nueva{unseenAssignments.length === 1 ? '' : 's'}</span>
-              </button>
-              {isAssignmentNoticeOpen && (
-                <section
-                  aria-label="Nuevas tareas asignadas"
-                  className="absolute right-0 top-[calc(100%+12px)] z-50 w-[min(22rem,calc(100vw-6rem))] overflow-hidden rounded-2xl border border-amber-400/25 bg-metro-surface text-metro-text shadow-[0_22px_55px_rgba(2,6,23,0.6)]"
-                  id="task-assignment-notice"
-                  role="dialog"
-                >
-                  <div className="flex items-start gap-3 border-b border-white/10 bg-metro-panel px-4 py-3">
-                    <span className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-2 text-amber-300"><AlertTriangle size={19} aria-hidden="true" /></span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-sm font-bold">{unseenAssignments.length === 1 ? 'Nueva tarea asignada' : 'Nuevas tareas asignadas'}</h2>
-                      <p className="mt-0.5 text-xs text-metro-muted">Tienes {unseenAssignments.length} tarea{unseenAssignments.length === 1 ? '' : 's'} nueva{unseenAssignments.length === 1 ? '' : 's'}</p>
-                    </div>
-                    <button aria-label="Más tarde" className="rounded-lg p-1 text-metro-muted hover:bg-white/10 hover:text-metro-text" onClick={() => setIsAssignmentNoticeOpen(false)} type="button"><X size={17} /></button>
+                <div className="flex items-start gap-3 border-b border-white/10 bg-metro-panel px-4 py-3">
+                  <span className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-2 text-amber-300"><Bell size={18} aria-hidden="true" /></span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-bold">{unseenAssignments.length === 1 ? 'Nueva tarea asignada' : 'Nuevas tareas asignadas'}</h2>
+                    <p className="mt-0.5 text-xs text-metro-muted">Tienes {unseenAssignments.length} tarea{unseenAssignments.length === 1 ? '' : 's'} nueva{unseenAssignments.length === 1 ? '' : 's'}</p>
                   </div>
-                  <div className="max-h-60 space-y-1 overflow-y-auto p-2">
-                    {unseenAssignments.slice(0, 3).map((task) => (
-                      <button className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition hover:border-metro-border hover:bg-metro-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400" key={task.assignmentNoticeId} onClick={() => handleOpenAssignment(task)} title={`Ver tarea: ${task.titulo}`} type="button">
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
-                        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{task.titulo}</span><span className="block text-xs text-metro-muted">Prioridad {task.prioridad === 'critica' ? 'crítica' : task.prioridad}</span></span>
-                        <ChevronRight className="shrink-0 text-amber-300" size={17} aria-hidden="true" />
-                      </button>
-                    ))}
-                    {unseenAssignments.length > 3 && <p className="px-3 py-1 text-xs text-metro-muted">Y {unseenAssignments.length - 3} más</p>}
-                  </div>
-                  <div className="flex items-center gap-2 border-t border-white/10 px-3 py-2.5">
-                    <button className="flex-1 rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white transition hover:bg-metro-dark" onClick={() => unseenAssignments.length === 1 ? handleOpenAssignment(unseenAssignments[0]) : handleOpenNewAssignments()} type="button">{unseenAssignments.length === 1 ? 'Ver tarea' : 'Ver todas mis tareas'}</button>
-                    <button className="rounded-lg px-3 py-2 text-xs font-semibold text-metro-secondary hover:bg-white/10" onClick={() => setIsAssignmentNoticeOpen(false)} type="button">Más tarde</button>
-                  </div>
-                </section>
-              )}
-            </div>
-          )}
-          <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:w-[300px] lg:justify-start">
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-metro-red/10 text-metro-red ring-1 ring-metro-red/20">
-            <UserRound size={17} />
-            <span
-              aria-label={`Estado de sincronización: ${syncStatus.message}`}
-              className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-metro-topbar transition-colors ${syncVisual.dotClass}`}
-              data-tip={syncStatus.message}
-            />
+                  <button aria-label="Más tarde" className="rounded-lg p-1 text-metro-muted hover:bg-white/10 hover:text-metro-text" onClick={() => setIsAssignmentNoticeOpen(false)} type="button"><X size={17} /></button>
+                </div>
+                <div className="max-h-60 space-y-1 overflow-y-auto p-2">
+                  {unseenAssignments.slice(0, 3).map((task) => (
+                    <button className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition hover:border-metro-border hover:bg-metro-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400" key={task.assignmentNoticeId} onClick={() => handleOpenAssignment(task)} title={`Ver tarea: ${task.titulo}`} type="button">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{task.titulo}</span><span className="block text-xs text-metro-muted">Prioridad {task.prioridad === 'critica' ? 'crítica' : task.prioridad}</span></span>
+                      <ChevronRight className="shrink-0 text-amber-300" size={17} aria-hidden="true" />
+                    </button>
+                  ))}
+                  {unseenAssignments.length > 3 ? <p className="px-3 py-1 text-xs text-metro-muted">Y {unseenAssignments.length - 3} más</p> : null}
+                </div>
+                <div className="flex items-center gap-2 border-t border-white/10 px-3 py-2.5">
+                  <button className="flex-1 rounded-lg bg-metro-red px-3 py-2 text-xs font-bold text-white transition hover:bg-metro-dark" onClick={() => unseenAssignments.length === 1 ? handleOpenAssignment(unseenAssignments[0]) : handleOpenNewAssignments()} type="button">{unseenAssignments.length === 1 ? 'Ver tarea' : 'Ver todas mis tareas'}</button>
+                  <button className="rounded-lg px-3 py-2 text-xs font-semibold text-metro-secondary hover:bg-white/10" onClick={() => setIsAssignmentNoticeOpen(false)} type="button">Más tarde</button>
+                </div>
+              </section>
+            ) : null}
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-sm font-bold text-metro-text" title={windowsUserName}>
+          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:min-w-[196px]">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E3650] text-sm font-black tracking-[0.02em] text-sky-100 ring-1 ring-white/8">
+              {userInitials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold leading-tight text-metro-text" title={windowsUserName}>
                 {windowsUserName}
               </p>
-              <span className="shrink-0 text-[10px] text-metro-muted/55">·</span>
-              <span
-                className={`inline-flex min-w-0 max-w-[116px] items-center rounded-full border px-2 py-0.5 text-[10px] font-bold leading-4 ${syncVisual.chipClass}`}
-                title={syncStatus.message}
-              >
+              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold ${syncVisual.textClass}`} title={syncStatus.message}>
+                <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${syncVisual.dotClass}`} />
                 <span className="truncate">{syncVisual.label}</span>
-              </span>
+              </div>
             </div>
           </div>
-        </div>
         </div>
       </div>
     </header>
