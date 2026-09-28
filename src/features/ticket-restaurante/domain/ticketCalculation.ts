@@ -110,6 +110,25 @@ function calculateTicketMonthInternal(
   manutenciones: readonly TicketManutencionImpact[] = [],
 ): TicketMonthCalculation {
   const effectiveConfig = normalizeTicketRestaurantConfig(config);
+
+  // Las reglas maestras de tipos de ausencia deben gobernar también el histórico.
+  // No basta con aplicarlas al importar/guardar: una ausencia antigua puede conservar
+  // afectaTicket=true en SQLite y volver a generar deuda al recalcular meses posteriores.
+  // Normalizamos la vista de cálculo en cada ejecución para que, por ejemplo, TEX=No
+  // deje de descontar inmediatamente aunque el registro original sea de meses atrás.
+  const absenceTypeRuleMap = new Map(
+    (effectiveConfig.absenceTypeRules ?? []).map((rule) => [
+      rule.motivo.trim().toUpperCase(),
+      rule.descuentaTicket,
+    ]),
+  );
+  const effectiveAbsences = absences.map((absence) => {
+    const configured = absenceTypeRuleMap.get(absence.motivo.trim().toUpperCase());
+    return typeof configured === 'boolean'
+      ? { ...absence, afectaTicket: configured }
+      : absence;
+  });
+
   const calendarById = new Map(
     calendars
       .filter((calendar) => !calendar.deletedAt && calendar.activo)
@@ -124,7 +143,7 @@ function calculateTicketMonthInternal(
         ? calculatePersonMonthlyOrderWithDebt(
             person,
             calendar,
-            absences,
+            effectiveAbsences,
             effectiveConfig,
             year,
             month,
@@ -133,7 +152,7 @@ function calculateTicketMonthInternal(
         : calculatePersonMonthlyContribution(
             person,
             calendar,
-            absences,
+            effectiveAbsences,
             effectiveConfig,
             year,
             month,
