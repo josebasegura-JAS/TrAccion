@@ -264,15 +264,6 @@ export interface ForceReleaseDatabaseLockResult {
   message: string;
 }
 
-export interface DatabaseLockInfo {
-  ownerId: string;
-  username: string;
-  hostname: string;
-  pid: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export type RecordLockOwnerInfo = RecordLockModuleOwnerInfo;
 export type RecordLockPayload = RecordLockModulePayload;
 export type RecordLockResult = RecordLockModuleResult;
