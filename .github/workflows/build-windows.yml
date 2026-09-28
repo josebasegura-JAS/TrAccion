@@ -150,5 +150,6 @@ jobs:
           path: |
             release/Traccion 1.2.exe
             release/Traccion 1.2.piz
+            release/TrAccion V*.piz
             release/version.json
           if-no-files-found: error
