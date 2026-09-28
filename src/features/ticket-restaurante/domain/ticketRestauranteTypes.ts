@@ -202,6 +202,8 @@ export interface TicketMonthlyOrderExclusion {
   year: number;
   month: number;
   reason: string;
+  /** Tickets realmente cargados/entregados durante un mes excluido. Se recuperan como deuda al mes siguiente. */
+  deliveredTickets?: number;
   createdAt: string;
 }
 

@@ -1,4 +1,4 @@
-import { Ban, Calculator, RotateCcw, Search } from 'lucide-react';
+import { AlertTriangle, Ban, Calculator, RotateCcw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -117,6 +117,7 @@ export function CalculationPanel({
   const [selectedDetailRow, setSelectedDetailRow] = useState<TicketPersonCalculation | null>(null);
   const [exclusionRow, setExclusionRow] = useState<TicketPersonCalculation | null>(null);
   const [exclusionReason, setExclusionReason] = useState('Baja');
+  const [deliveredTickets, setDeliveredTickets] = useState(0);
   const [savingExclusion, setSavingExclusion] = useState(false);
   const { alert, dialogNode } = useAppDialog();
   const validColumnIds =
@@ -132,6 +133,28 @@ export function CalculationPanel({
     });
 
   const effectiveTicketPrice = getEffectiveTicketPrice(config, year, month);
+  const activeSickLeaveSuggestions = useMemo(() => {
+    if (mode !== 'monthly') return [];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const normalizeEmployee = (value: string) => value.trim().replace(/^0+(?=\d)/, '');
+    const activeEmployees = new Set(
+      absences
+        .filter((absence) =>
+          !absence.deletedAt &&
+          absence.afectaTicket &&
+          absence.motivo.trim().toUpperCase() === 'ENF' &&
+          absence.desde <= today &&
+          (!absence.hasta || absence.hasta >= today),
+        )
+        .map((absence) => normalizeEmployee(absence.empleado)),
+    );
+    return calculation.rows.filter((row) =>
+      !row.manualEntry &&
+      !row.excludedFromOrder &&
+      activeEmployees.has(normalizeEmployee(row.empleado)),
+    );
+  }, [absences, calculation.rows, mode]);
   const calculationColumns = useMemo<
     Array<DataTableColumn<TicketPersonCalculation, TicketCalculationTableColumnId>>
   >(() => {
@@ -293,6 +316,7 @@ export function CalculationPanel({
                     void onUpdateConfig({ ...config, monthlyOrderExclusions: nextExclusions });
                   } else {
                     setExclusionReason('Baja');
+                    setDeliveredTickets(0);
                     setExclusionRow(row);
                   }
                 }}
@@ -390,6 +414,31 @@ export function CalculationPanel({
           <ExportPrintButtons payload={exportPayload} />
         </div>
       </div>
+      {mode === 'monthly' && activeSickLeaveSuggestions.length > 0 && onUpdateConfig ? (
+        <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <div className="mb-2 flex items-center gap-2 font-bold">
+            <AlertTriangle className="h-4 w-4" />
+            Posibles exclusiones: baja ENF activa a fecha de cálculo
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {activeSickLeaveSuggestions.map((row) => (
+              <button
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold transition hover:border-amber-500 hover:bg-amber-100"
+                key={row.empleado}
+                onClick={() => {
+                  setExclusionReason('Baja ENF activa');
+                  setDeliveredTickets(0);
+                  setExclusionRow(row);
+                }}
+                type="button"
+              >
+                {row.empleado} · {row.nombreApellidos} · Revisar exclusión
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs">La sugerencia no excluye automáticamente a nadie. Confirma cada caso y, si ya se cargaron tickets durante la baja, indica cuántos para recuperarlos como deuda real.</p>
+        </div>
+      ) : null}
       <DataTable
         ariaLabel={
           mode === 'monthly'
@@ -418,24 +467,29 @@ export function CalculationPanel({
           </ModalHeader>
           <ModalBody className="space-y-3">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-              Este mes tendrá 0 tickets. La deuda anterior queda congelada y las ausencias de este mes no generarán nueva deuda. Las cuotas manuales previstas se aplazarán al siguiente mes no excluido.
+              Este mes tendrá 0 tickets. La deuda anterior queda congelada y las ausencias del mes excluido no generarán deuda ficticia. Si ya se cargaron tickets durante la baja, indícalos abajo: solo esos tickets se recuperarán en el siguiente pedido.
             </div>
             <label className="block text-sm font-bold text-metro-text">
               Motivo
               <input className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-normal outline-none focus:border-metro-red" maxLength={120} onChange={(event) => setExclusionReason(event.target.value)} placeholder="Baja, excedencia, permiso prolongado…" value={exclusionReason} />
+            </label>
+            <label className="block text-sm font-bold text-metro-text">
+              Tickets ya cargados/entregados durante este mes
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-normal outline-none focus:border-metro-red" min={0} onChange={(event) => setDeliveredTickets(Math.max(0, Math.trunc(Number(event.target.value) || 0)))} type="number" value={deliveredTickets} />
+              <span className="mt-1 block text-xs font-normal text-metro-muted">Normalmente 0. Si se cargaron por error, esa cantidad será la deuda real del siguiente pedido.</span>
             </label>
           </ModalBody>
           <ModalFooter>
             <ActionButton onClick={() => setExclusionRow(null)} variant="secondary">Cancelar</ActionButton>
             <ActionButton disabled={savingExclusion || !exclusionReason.trim()} onClick={() => {
               setSavingExclusion(true);
-              const nextExclusions = [...(config.monthlyOrderExclusions ?? []).filter((item) => !(item.empleado === exclusionRow.empleado && item.year === year && item.month === month)), { empleado: exclusionRow.empleado, year, month, reason: exclusionReason.trim(), createdAt: new Date().toISOString() }];
+              const nextExclusions = [...(config.monthlyOrderExclusions ?? []).filter((item) => !(item.empleado === exclusionRow.empleado && item.year === year && item.month === month)), { empleado: exclusionRow.empleado, year, month, reason: exclusionReason.trim(), deliveredTickets, createdAt: new Date().toISOString() }];
               void onUpdateConfig({ ...config, monthlyOrderExclusions: nextExclusions }).then((result) => {
                 setSavingExclusion(false);
                 if (result.ok) setExclusionRow(null);
                 else void alert(result.message ?? 'No se ha podido guardar la exclusión.', { type: 'error' });
               });
-            }}>Excluir del pedido</ActionButton>
+            }} variant="primary">Excluir del pedido</ActionButton>
           </ModalFooter>
         </ModalShell>
       ) : null}

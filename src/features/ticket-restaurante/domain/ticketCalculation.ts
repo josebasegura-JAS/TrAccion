@@ -256,8 +256,6 @@ function calculatePersonMonthlyContribution(
     deudaPendiente: 0,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
-    excludedFromOrder: Boolean(exclusion),
-    exclusionReason: exclusion?.reason ?? '',
     ausenciaIds: [
       ...getAppliedAbsenceIdsForTicketDays(
         person,
@@ -442,7 +440,13 @@ function calculatePersonMonthlyDiscountStatus(
       new Date(Date.UTC(previousMonth.year, previousMonth.month, 0)).getUTCDate(),
     );
 
-    if (!isMonthlyOrderExcluded(config, person.empleado, previousMonth.year, previousMonth.month)) {
+    const previousMonthExclusion = getMonthlyOrderExclusion(
+      config,
+      person.empleado,
+      previousMonth.year,
+      previousMonth.month,
+    );
+    if (!previousMonthExclusion) {
       pendingDiscounts.push(
         ...buildPersonAbsenceTicketDayDetails(
           person,
@@ -453,6 +457,19 @@ function calculatePersonMonthlyDiscountStatus(
           config.rules,
         ).map((detail): PendingMonthlyDiscount => ({ ...detail, kind: 'absence' })),
       );
+    } else {
+      // En un mes excluido no se transforma toda la baja en deuda: solo se recuperan
+      // los tickets que conste que se cargaron/entregaron realmente durante la exclusión.
+      const deliveredTickets = Math.max(0, Math.trunc(previousMonthExclusion.deliveredTickets ?? 0));
+      for (let unit = 0; unit < deliveredTickets; unit += 1) {
+        pendingDiscounts.push({
+          id: `excluded-delivered:${person.empleado}:${previousMonth.year}-${String(previousMonth.month).padStart(2, '0')}:${unit + 1}`,
+          fecha: previousMonthEnd,
+          motivo: `Tickets cargados durante exclusión: ${previousMonthExclusion.reason || 'Exclusión del pedido'}`,
+          mesOrigen: `${previousMonth.year}-${String(previousMonth.month).padStart(2, '0')}`,
+          kind: 'absence',
+        });
+      }
     }
 
     const currentMonthExcluded = isMonthlyOrderExcluded(config, person.empleado, cursorYear, cursorMonth);
@@ -512,13 +529,16 @@ function calculatePersonMonthlyDiscountStatus(
         }
         const installments = splitManualDebtInstallments(debt.totalTickets, debt.months);
         installments.forEach((amount, installmentIndex) => {
-          let installmentMonth = addMonths(debt.startYear, debt.startMonth, installmentIndex);
-          let scheduleCursor = { year: debt.startYear, month: debt.startMonth };
-          while (scheduleCursor.year * 100 + scheduleCursor.month <= installmentMonth.year * 100 + installmentMonth.month) {
-            if (isMonthlyOrderExcluded(config, person.empleado, scheduleCursor.year, scheduleCursor.month)) {
-              installmentMonth = addMonths(installmentMonth.year, installmentMonth.month, 1);
+          // Cada cuota ocupa el siguiente mes NO excluido. Así una exclusión desplaza
+          // la secuencia completa sin amontonar dos cuotas en el mismo mes.
+          let installmentMonth = { year: debt.startYear, month: debt.startMonth };
+          let remainingInstallments = installmentIndex;
+          while (true) {
+            if (!isMonthlyOrderExcluded(config, person.empleado, installmentMonth.year, installmentMonth.month)) {
+              if (remainingInstallments === 0) break;
+              remainingInstallments -= 1;
             }
-            scheduleCursor = addMonths(scheduleCursor.year, scheduleCursor.month, 1);
+            installmentMonth = addMonths(installmentMonth.year, installmentMonth.month, 1);
           }
           if (installmentMonth.year !== cursorYear || installmentMonth.month !== cursorMonth) return;
           for (let unit = 0; unit < amount; unit += 1) {

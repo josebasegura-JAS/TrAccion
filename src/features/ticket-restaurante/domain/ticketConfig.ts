@@ -306,7 +306,7 @@ function normalizeMonthlyOrderExclusions(value: unknown): TicketMonthlyOrderExcl
     const key = `${empleado}:${year}-${String(month).padStart(2, '0')}`;
     if (seen.has(key)) return [];
     seen.add(key);
-    return [{ empleado, year, month, reason: typeof item.reason === 'string' ? item.reason.trim() : '', createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
+    return [{ empleado, year, month, reason: typeof item.reason === 'string' ? item.reason.trim() : '', deliveredTickets: typeof item.deliveredTickets === 'number' && Number.isFinite(item.deliveredTickets) ? Math.max(0, Math.trunc(item.deliveredTickets)) : 0, createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
   });
 }
 
