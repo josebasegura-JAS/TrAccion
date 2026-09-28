@@ -284,7 +284,7 @@ export function CalculationPanel({
               {row.ticketsFinales}
             </span>
             {mode === 'monthly' && row.excludedFromOrder ? (
-              <span className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.exclusionReason || 'Excluido del pedido'}>
+              <span className="rounded-full border border-amber-500/45 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-300" title={row.exclusionReason || 'Excluido del pedido'}>
                 Excluido
               </span>
             ) : null}
@@ -415,15 +415,15 @@ export function CalculationPanel({
         </div>
       </div>
       {mode === 'monthly' && activeSickLeaveSuggestions.length > 0 && onUpdateConfig ? (
-        <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-          <div className="mb-2 flex items-center gap-2 font-bold">
+        <div className="mb-3 rounded-xl border border-amber-500/40 bg-metro-panel/80 px-3 py-2.5 text-sm text-metro-text shadow-sm">
+          <div className="mb-2 flex items-center gap-2 font-bold text-amber-300">
             <AlertTriangle className="h-4 w-4" />
             Posibles exclusiones: baja ENF activa a fecha de cálculo
           </div>
           <div className="flex flex-wrap gap-2">
             {activeSickLeaveSuggestions.map((row) => (
               <button
-                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold transition hover:border-amber-500 hover:bg-amber-100"
+                className="rounded-lg border border-amber-500/45 bg-metro-surface px-3 py-1.5 text-xs font-bold text-metro-text transition hover:border-amber-400 hover:bg-amber-500/10"
                 key={row.empleado}
                 onClick={() => {
                   setExclusionReason('Baja ENF activa');
@@ -436,7 +436,7 @@ export function CalculationPanel({
               </button>
             ))}
           </div>
-          <p className="mt-2 text-xs">La sugerencia no excluye automáticamente a nadie. Confirma cada caso y, si ya se cargaron tickets durante la baja, indica cuántos para recuperarlos como deuda real.</p>
+          <p className="mt-2 text-xs text-metro-muted">La sugerencia no excluye automáticamente a nadie. Confirma cada caso y, si ya se cargaron tickets durante la baja, indica cuántos para recuperarlos como deuda real.</p>
         </div>
       ) : null}
       <DataTable
@@ -466,21 +466,21 @@ export function CalculationPanel({
             </ModalTitle>
           </ModalHeader>
           <ModalBody className="space-y-3">
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-relaxed text-metro-secondary">
               Este mes tendrá 0 tickets. La deuda anterior queda congelada y las ausencias del mes excluido no generarán deuda ficticia. Si ya se cargaron tickets durante la baja, indícalos abajo: solo esos tickets se recuperarán en el siguiente pedido.
             </div>
             <label className="block text-sm font-bold text-metro-text">
               Motivo
-              <input className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-normal outline-none focus:border-metro-red" maxLength={120} onChange={(event) => setExclusionReason(event.target.value)} placeholder="Baja, excedencia, permiso prolongado…" value={exclusionReason} />
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text outline-none placeholder:text-metro-muted focus:border-metro-red focus:ring-1 focus:ring-metro-red/30" maxLength={120} onChange={(event) => setExclusionReason(event.target.value)} placeholder="Baja, excedencia, permiso prolongado…" value={exclusionReason} />
             </label>
             <label className="block text-sm font-bold text-metro-text">
               Tickets ya cargados/entregados durante este mes
-              <input className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-normal outline-none focus:border-metro-red" min={0} onChange={(event) => setDeliveredTickets(Math.max(0, Math.trunc(Number(event.target.value) || 0)))} type="number" value={deliveredTickets} />
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text outline-none placeholder:text-metro-muted focus:border-metro-red focus:ring-1 focus:ring-metro-red/30" min={0} onChange={(event) => setDeliveredTickets(Math.max(0, Math.trunc(Number(event.target.value) || 0)))} type="number" value={deliveredTickets} />
               <span className="mt-1 block text-xs font-normal text-metro-muted">Normalmente 0. Si se cargaron por error, esa cantidad será la deuda real del siguiente pedido.</span>
             </label>
           </ModalBody>
           <ModalFooter>
-            <ActionButton onClick={() => setExclusionRow(null)} variant="secondary">Cancelar</ActionButton>
+            <ActionButton iconOnly={false} onClick={() => setExclusionRow(null)} size="sm" variant="secondary">Cancelar</ActionButton>
             <ActionButton disabled={savingExclusion || !exclusionReason.trim()} onClick={() => {
               setSavingExclusion(true);
               const nextExclusions = [...(config.monthlyOrderExclusions ?? []).filter((item) => !(item.empleado === exclusionRow.empleado && item.year === year && item.month === month)), { empleado: exclusionRow.empleado, year, month, reason: exclusionReason.trim(), deliveredTickets, createdAt: new Date().toISOString() }];
@@ -489,7 +489,7 @@ export function CalculationPanel({
                 if (result.ok) setExclusionRow(null);
                 else void alert(result.message ?? 'No se ha podido guardar la exclusión.', { type: 'error' });
               });
-            }} variant="primary">Excluir del pedido</ActionButton>
+            }} iconOnly={false} size="sm" variant="primary">Excluir del pedido</ActionButton>
           </ModalFooter>
         </ModalShell>
       ) : null}
