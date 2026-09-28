@@ -129,10 +129,14 @@ export function TicketRestaurantePage({
   const { alert, confirm, dialogNode } = useAppDialog();
   const toast = useToast();
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
+  const initialOrderPeriod = addTicketYearMonth(currentTicketYear(), currentTicketMonth(), 1);
   const [year, setYear] = useState(currentTicketYear());
   const [absenceYear, setAbsenceYear] = useState(currentTicketYear());
-  const [calculationYear, setCalculationYear] = useState(currentTicketYear());
-  const [calculationMonth, setCalculationMonth] = useState(currentTicketMonth());
+  // El trabajo ordinario consiste en preparar el pedido del mes siguiente.
+  // Ausencias permanece en el mes actual, porque son precisamente las que
+  // alimentan el cálculo del pedido siguiente.
+  const [calculationYear, setCalculationYear] = useState(initialOrderPeriod.year);
+  const [calculationMonth, setCalculationMonth] = useState(initialOrderPeriod.month);
   const [absenceMonth, setAbsenceMonth] = useState(currentTicketMonth());
   const [manutencionYear, setManutencionYear] = useState(currentTicketYear());
   const [manutencionMonth, setManutencionMonth] = useState(currentTicketMonth());
@@ -287,31 +291,27 @@ export function TicketRestaurantePage({
     [absences, manutenciones],
   );
 
-  const monthCalculation = useMemo(
-    () =>
-      calculateMonthlyTicketOrder(
-        people,
-        calendars,
-        absences,
-        config,
-        calculationYear,
-        calculationMonth,
-        manutenciones,
-      ),
-    [absences, calendars, calculationMonth, calculationYear, config, manutenciones, people],
+  // Estos dos cálculos son deliberadamente directos (sin memoización). El módulo
+  // tiene un volumen pequeño y prima que cualquier edición de ausencias, deudas,
+  // calendarios o ajustes se refleje en el mismo render. Antes, cambiar de mes
+  // podía aparentar "arreglar" un dato porque forzaba la invalidación del memo.
+  const monthCalculation = calculateMonthlyTicketOrder(
+    people,
+    calendars,
+    absences,
+    config,
+    calculationYear,
+    calculationMonth,
+    manutenciones,
   );
-  const contributionCalculation = useMemo(
-    () =>
-      calculateTicketContribution(
-        people,
-        calendars,
-        absences,
-        config,
-        calculationYear,
-        calculationMonth,
-        manutenciones,
-      ),
-    [absences, calendars, calculationMonth, calculationYear, config, manutenciones, people],
+  const contributionCalculation = calculateTicketContribution(
+    people,
+    calendars,
+    absences,
+    config,
+    calculationYear,
+    calculationMonth,
+    manutenciones,
   );
 
   const visibleAbsences = useMemo<TicketAbsenceDisplayRow[]>(
