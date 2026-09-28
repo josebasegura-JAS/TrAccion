@@ -9,6 +9,7 @@ import type {
   TicketPriceHistoryEntry,
   TicketRestaurantConfig,
   TicketDebtRegularization,
+  TicketMonthlyOrderExclusion,
 } from './ticketRestauranteTypes';
 import { isIsoDate } from './ticketCalendars';
 import { normalizeTicketEmployeeNumber } from './ticketPeople';
@@ -29,6 +30,7 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   workflowReviews: {},
   monthlySnapshots: {},
   annualClosures: {},
+  monthlyOrderExclusions: [],
 };
 
 export function getEffectiveTicketPrice(
@@ -290,6 +292,24 @@ export function getTicketMonthlyWorkflowReview(
   };
 }
 
+function normalizeMonthlyOrderExclusions(value: unknown): TicketMonthlyOrderExclusion[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<TicketMonthlyOrderExclusion>;
+    if (typeof item.empleado !== 'string' || typeof item.year !== 'number' || typeof item.month !== 'number') return [];
+    const empleado = normalizeTicketEmployeeNumber(item.empleado);
+    const year = Math.trunc(item.year);
+    const month = Math.trunc(item.month);
+    if (!empleado || !Number.isInteger(year) || month < 1 || month > 12) return [];
+    const key = `${empleado}:${year}-${String(month).padStart(2, '0')}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ empleado, year, month, reason: typeof item.reason === 'string' ? item.reason.trim() : '', createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
+  });
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -314,5 +334,6 @@ export function normalizeTicketRestaurantConfig(
     workflowReviews: normalizeWorkflowReviews(config.workflowReviews),
     monthlySnapshots: normalizeMonthlySnapshots(config.monthlySnapshots),
     annualClosures: normalizeAnnualClosures(config.annualClosures),
+    monthlyOrderExclusions: normalizeMonthlyOrderExclusions(config.monthlyOrderExclusions),
   };
 }

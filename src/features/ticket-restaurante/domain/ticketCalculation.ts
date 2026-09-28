@@ -256,6 +256,8 @@ function calculatePersonMonthlyContribution(
     deudaPendiente: 0,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
+    excludedFromOrder: Boolean(exclusion),
+    exclusionReason: exclusion?.reason ?? '',
     ausenciaIds: [
       ...getAppliedAbsenceIdsForTicketDays(
         person,
@@ -316,7 +318,8 @@ function calculatePersonMonthlyOrderWithDebt(
         month,
       )
     : emptyMonthlyOrderDebtStatus();
-  const ticketsFinales = Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
+  const exclusion = getMonthlyOrderExclusion(config, person.empleado, year, month);
+  const ticketsFinales = exclusion ? 0 : Math.max(0, ticketDays.length - debtStatus.ausenciasAplicadas);
 
   return {
     empleado: person.empleado,
@@ -336,6 +339,8 @@ function calculatePersonMonthlyOrderWithDebt(
     deudaPendiente: debtStatus.deudaPendiente,
     ticketsFinales,
     importe: roundCurrency(ticketsFinales * effectivePrice),
+    excludedFromOrder: Boolean(exclusion),
+    exclusionReason: exclusion?.reason ?? '',
     ausenciaIds: debtStatus.ausenciaIds,
     ausenciaDiasDescontados: debtStatus.ausenciaDiasDescontados,
     deudaEntranteDetalle: debtStatus.deudaEntranteDetalle,
@@ -361,6 +366,16 @@ interface MonthlyOrderDebtStatus {
   deudaAplicadaDetalle: TicketDebtDetailDay[];
   deudaPendienteDetalle: TicketDebtDetailDay[];
   hojaGastoDetalle: TicketManutencionDetailDay[];
+}
+
+function getMonthlyOrderExclusion(config: TicketRestaurantConfig, empleado: string, year: number, month: number) {
+  return (config.monthlyOrderExclusions ?? []).find(
+    (item) => sameTicketEmployee(item.empleado, empleado) && item.year === year && item.month === month,
+  );
+}
+
+function isMonthlyOrderExcluded(config: TicketRestaurantConfig, empleado: string, year: number, month: number): boolean {
+  return Boolean(getMonthlyOrderExclusion(config, empleado, year, month));
 }
 
 function calculatePersonMonthlyDiscountStatus(
@@ -427,16 +442,40 @@ function calculatePersonMonthlyDiscountStatus(
       new Date(Date.UTC(previousMonth.year, previousMonth.month, 0)).getUTCDate(),
     );
 
-    pendingDiscounts.push(
-      ...buildPersonAbsenceTicketDayDetails(
-        person,
-        calendar,
-        absences,
-        maxIsoDate(previousMonthStart, debtStartDate),
-        previousMonthEnd,
-        config.rules,
-      ).map((detail): PendingMonthlyDiscount => ({ ...detail, kind: 'absence' })),
-    );
+    if (!isMonthlyOrderExcluded(config, person.empleado, previousMonth.year, previousMonth.month)) {
+      pendingDiscounts.push(
+        ...buildPersonAbsenceTicketDayDetails(
+          person,
+          calendar,
+          absences,
+          maxIsoDate(previousMonthStart, debtStartDate),
+          previousMonthEnd,
+          config.rules,
+        ).map((detail): PendingMonthlyDiscount => ({ ...detail, kind: 'absence' })),
+      );
+    }
+
+    const currentMonthExcluded = isMonthlyOrderExcluded(config, person.empleado, cursorYear, cursorMonth);
+    if (currentMonthExcluded) {
+      if (cursorYear === targetYear && cursorMonth === targetMonth) {
+        return {
+          deudaEntrante: pendingDiscounts.length,
+          deudaEntranteDetalle: pendingDiscounts.map(stripPendingDiscountKind),
+          ausenciasAplicadas: 0,
+          hojasGastoAplicadas: 0,
+          deudaPendiente: pendingDiscounts.length,
+          ausenciaIds: [],
+          ausenciaDiasDescontados: {},
+          deudaAplicadaDetalle: [],
+          deudaPendienteDetalle: pendingDiscounts.map(stripPendingDiscountKind),
+          hojaGastoDetalle: [],
+        };
+      }
+      const nextMonth = addMonths(cursorYear, cursorMonth, 1);
+      cursorYear = nextMonth.year;
+      cursorMonth = nextMonth.month;
+      continue;
+    }
 
     applyDebtRegularizationForMonth(
       pendingDiscounts,
@@ -473,7 +512,14 @@ function calculatePersonMonthlyDiscountStatus(
         }
         const installments = splitManualDebtInstallments(debt.totalTickets, debt.months);
         installments.forEach((amount, installmentIndex) => {
-          const installmentMonth = addMonths(debt.startYear, debt.startMonth, installmentIndex);
+          let installmentMonth = addMonths(debt.startYear, debt.startMonth, installmentIndex);
+          let scheduleCursor = { year: debt.startYear, month: debt.startMonth };
+          while (scheduleCursor.year * 100 + scheduleCursor.month <= installmentMonth.year * 100 + installmentMonth.month) {
+            if (isMonthlyOrderExcluded(config, person.empleado, scheduleCursor.year, scheduleCursor.month)) {
+              installmentMonth = addMonths(installmentMonth.year, installmentMonth.month, 1);
+            }
+            scheduleCursor = addMonths(scheduleCursor.year, scheduleCursor.month, 1);
+          }
           if (installmentMonth.year !== cursorYear || installmentMonth.month !== cursorMonth) return;
           for (let unit = 0; unit < amount; unit += 1) {
             pendingDiscounts.push({

@@ -197,6 +197,14 @@ export interface TicketMonthlyWorkflowReview {
   manualDebtsReviewed: boolean;
 }
 
+export interface TicketMonthlyOrderExclusion {
+  empleado: string;
+  year: number;
+  month: number;
+  reason: string;
+  createdAt: string;
+}
+
 export interface TicketRestaurantConfig {
   importeTicket: number;
   pedidoMensual: number;
@@ -208,6 +216,7 @@ export interface TicketRestaurantConfig {
   workflowReviews?: Record<string, TicketMonthlyWorkflowReview>;
   monthlySnapshots?: Record<string, TicketMonthlySnapshot>;
   annualClosures?: Record<string, TicketAnnualClosure>;
+  monthlyOrderExclusions?: TicketMonthlyOrderExclusion[];
 }
 
 export interface TicketDebtDetailDay {
@@ -242,6 +251,8 @@ export interface TicketPersonCalculation {
   importe: number;
   manualEntry?: boolean;
   manualIncludeContribution?: boolean;
+  excludedFromOrder?: boolean;
+  exclusionReason?: string;
   ausenciaIds: string[];
   ausenciaDiasDescontados: Record<string, number>;
   deudaEntranteDetalle: TicketDebtDetailDay[];

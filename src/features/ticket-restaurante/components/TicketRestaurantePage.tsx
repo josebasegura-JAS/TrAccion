@@ -1372,6 +1372,7 @@ export function TicketRestaurantePage({
           onMonthChange={handleCalculationMonthChange}
           onNextMonth={() => moveCalculationMonth(1)}
           onPreviousMonth={() => moveCalculationMonth(-1)}
+          onUpdateConfig={updateConfig}
           onYearChange={handleCalculationYearChange}
           year={calculationYear}
           />

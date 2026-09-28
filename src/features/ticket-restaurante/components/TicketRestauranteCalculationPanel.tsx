@@ -1,4 +1,4 @@
-import { Calculator, Search } from 'lucide-react';
+import { Ban, Calculator, RotateCcw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -95,6 +95,7 @@ export function CalculationPanel({
   exportPayload,
   onMonthChange,
   onNextMonth,
+  onUpdateConfig,
   onPreviousMonth,
   onYearChange,
   year,
@@ -108,11 +109,15 @@ export function CalculationPanel({
   exportPayload: ExportTablePayload<TicketPersonCalculation>;
   onMonthChange: (value: string) => void;
   onNextMonth: () => void;
+  onUpdateConfig?: (config: TicketRestaurantConfig) => Promise<{ ok: boolean; message?: string }>;
   onPreviousMonth: () => void;
   onYearChange: (value: string) => void;
   year: number;
 }) {
   const [selectedDetailRow, setSelectedDetailRow] = useState<TicketPersonCalculation | null>(null);
+  const [exclusionRow, setExclusionRow] = useState<TicketPersonCalculation | null>(null);
+  const [exclusionReason, setExclusionReason] = useState('Baja');
+  const [savingExclusion, setSavingExclusion] = useState(false);
   const { alert, dialogNode } = useAppDialog();
   const validColumnIds =
     mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
@@ -255,6 +260,11 @@ export function CalculationPanel({
             >
               {row.ticketsFinales}
             </span>
+            {mode === 'monthly' && row.excludedFromOrder ? (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.exclusionReason || 'Excluido del pedido'}>
+                Excluido
+              </span>
+            ) : null}
             {row.manualEntry ? (
               <span className="rounded-full border border-metro-border px-1.5 py-0.5 text-xs font-bold text-metro-muted">Manual</span>
             ) : (
@@ -272,6 +282,26 @@ export function CalculationPanel({
               <Search className="h-3.5 w-3.5" />
             </button>
             )}
+            {mode === 'monthly' && !row.manualEntry && onUpdateConfig ? (
+              <button
+                aria-label={row.excludedFromOrder ? `Reactivar ${row.nombreApellidos} en el pedido` : `Excluir ${row.nombreApellidos} del pedido`}
+                className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${row.excludedFromOrder ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100' : 'border-metro-border bg-white text-metro-muted hover:border-metro-red hover:text-metro-red'}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (row.excludedFromOrder) {
+                    const nextExclusions = (config.monthlyOrderExclusions ?? []).filter((item) => !(item.empleado === row.empleado && item.year === year && item.month === month));
+                    void onUpdateConfig({ ...config, monthlyOrderExclusions: nextExclusions });
+                  } else {
+                    setExclusionReason('Baja');
+                    setExclusionRow(row);
+                  }
+                }}
+                title={row.excludedFromOrder ? 'Volver a incluir en el pedido' : 'Excluir del pedido de este mes'}
+                type="button"
+              >
+                {row.excludedFromOrder ? <RotateCcw className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+              </button>
+            ) : null}
           </div>
         ),
         width: 135,
@@ -310,7 +340,7 @@ export function CalculationPanel({
     );
 
     return baseColumns;
-  }, [effectiveTicketPrice, mode]);
+  }, [config, effectiveTicketPrice, mode, month, onUpdateConfig, year]);
 
   return (
     <div className="rounded-2xl border border-metro-border bg-metro-panel p-3 shadow-card">
@@ -379,6 +409,36 @@ export function CalculationPanel({
         rows={calculation.rows}
         sort={preferences.sort}
       />
+      {exclusionRow && onUpdateConfig ? (
+        <ModalShell labelledBy="ticket-order-exclusion-title" maxWidthClassName="max-w-lg" onClose={() => setExclusionRow(null)}>
+          <ModalHeader>
+            <ModalTitle id="ticket-order-exclusion-title" subtitle={`${exclusionRow.empleado} · ${exclusionRow.nombreApellidos} · ${year}-${String(month).padStart(2, '0')}`}>
+              Excluir del pedido mensual
+            </ModalTitle>
+          </ModalHeader>
+          <ModalBody className="space-y-3">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              Este mes tendrá 0 tickets. La deuda anterior queda congelada y las ausencias de este mes no generarán nueva deuda. Las cuotas manuales previstas se aplazarán al siguiente mes no excluido.
+            </div>
+            <label className="block text-sm font-bold text-metro-text">
+              Motivo
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-white px-3 py-2 text-sm font-normal outline-none focus:border-metro-red" maxLength={120} onChange={(event) => setExclusionReason(event.target.value)} placeholder="Baja, excedencia, permiso prolongado…" value={exclusionReason} />
+            </label>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton onClick={() => setExclusionRow(null)} variant="secondary">Cancelar</ActionButton>
+            <ActionButton disabled={savingExclusion || !exclusionReason.trim()} onClick={() => {
+              setSavingExclusion(true);
+              const nextExclusions = [...(config.monthlyOrderExclusions ?? []).filter((item) => !(item.empleado === exclusionRow.empleado && item.year === year && item.month === month)), { empleado: exclusionRow.empleado, year, month, reason: exclusionReason.trim(), createdAt: new Date().toISOString() }];
+              void onUpdateConfig({ ...config, monthlyOrderExclusions: nextExclusions }).then((result) => {
+                setSavingExclusion(false);
+                if (result.ok) setExclusionRow(null);
+                else void alert(result.message ?? 'No se ha podido guardar la exclusión.', { type: 'error' });
+              });
+            }}>Excluir del pedido</ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
       {dialogNode}
       {selectedDetailRow ? (
         <CalculationAbsenceDetailModal
