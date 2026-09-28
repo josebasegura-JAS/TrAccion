@@ -3,7 +3,7 @@
 //
 // El contador de build (XX, empieza en 00) se guarda en su propio fichero
 // (.build-version, fuera de package.json) para mantener el formato de
-// nombre de fichero con ceros a la izquierda pedido ("V1.0.00", "V1.0.01"...).
+// versión técnica interna usada por el actualizador (1.2.00, 1.2.01...).
 //
 // "version" en package.json AHORA SÍ se actualiza en cada build (a partir
 // de la actualización automática añadida en 2026, el patch de
@@ -49,7 +49,7 @@ if (!match) {
 const [, major, minor] = match;
 
 const displayBuildNumber = String(nextBuildNumber).padStart(2, '0');
-const exeBaseName = `TrAccion V${major}.${minor}.${displayBuildNumber}`;
+const exeBaseName = `Traccion ${major}.${minor}`;
 
 // El patch de package.json.version (semver, sin ceros a la izquierda) pasa
 // a ser exactamente el mismo contador de build que ya se usaba para el

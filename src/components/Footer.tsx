@@ -11,6 +11,12 @@ import { useDatabaseStatus } from '../services/databaseStatus';
 import { buildDatabaseStatusBadge, type DatabaseStatusTone } from '../services/databaseStatusView';
 import { StatusBadge } from './ui/StatusBadge';
 
+function getPublicAppVersion(version: string | null): string | null {
+  if (!version) return null;
+  const match = /^(\d+)\.(\d+)/.exec(version.trim());
+  return match ? `${match[1]}.${match[2]}` : version;
+}
+
 function useAppVersion(): string | null {
   const [version, setVersion] = useState<string | null>(null);
 
@@ -105,7 +111,7 @@ export function Footer() {
 
   return (
     <footer className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-black/10 px-3 text-[11px] text-slate-400">
-      <span className="shrink-0">TrAcción {appVersion ? `V${appVersion}` : ''}</span>
+      <span className="shrink-0">TrAcción {getPublicAppVersion(appVersion) ?? '1.2'}</span>
       <div className="flex min-w-0 items-center gap-3">
         {pendingCount > 0 && (
           <StatusBadge

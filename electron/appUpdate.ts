@@ -52,15 +52,15 @@ function getPortableExecutablePath(): string | null {
 function buildPortableUpdateNameFromVersion(version: string): string | null {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
   if (!match) return null;
-  const [, major, minor, patch] = match;
-  return `TrAccion V${major}.${minor}.${patch.padStart(2, '0')}.piz`;
+  const [, major, minor] = match;
+  return `Traccion ${major}.${minor}.piz`;
 }
 
 export function buildInstalledExecutableNameFromVersion(version: string): string | null {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
   if (!match) return null;
   const [, major, minor] = match;
-  return `TrAccion V${major}.${minor}.exe`;
+  return `Traccion ${major}.${minor}.exe`;
 }
 
 export function buildInstalledExecutablePath(currentExecutablePath: string, version: string): string | null {
@@ -76,9 +76,9 @@ function validateUpdateFileName(fileName: string, version: string): string {
     normalized.includes('/') ||
     normalized.includes('\\') ||
     path.basename(normalized) !== normalized ||
-    !/^TrAccion V\d+\.\d+\.\d+\.piz$/i.test(normalized)
+    !/^Traccion \d+\.\d+\.piz$/i.test(normalized)
   ) {
-    throw new Error('El nombre del fichero de actualización no es válido. Debe ser TrAccion Vx.y.zz.piz.');
+    throw new Error('El nombre del fichero de actualización no es válido. Debe ser Traccion x.y.piz.');
   }
 
   const expected = buildPortableUpdateNameFromVersion(version);
@@ -191,7 +191,7 @@ export async function checkForAppUpdate(
 /**
  * Copia el .piz a TEMP, verifica su SHA-256 y genera un .cmd temporal.
  * La instalación local usa un nombre estable por rama mayor/menor
- * (por ejemplo, "TrAccion V1.1.exe" o "TrAccion V1.2.exe"), mientras
+ * (por ejemplo, "Traccion 1.1.exe" o "Traccion 1.2.exe"), mientras
  * version.json conserva la versión exacta (1.1.82, 1.2.01, etc.).
  */
 export async function applyAppUpdate(

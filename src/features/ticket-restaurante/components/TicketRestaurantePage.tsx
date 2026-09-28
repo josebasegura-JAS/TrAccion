@@ -831,6 +831,59 @@ export function TicketRestaurantePage({
       setIsPreviewOpen(false);
       toast.success('Ausencias guardadas correctamente.');
 
+      // Detectar posibles altas de bajas largas (ENF/ACC) que venían del mes anterior.
+      // La ausencia importada aporta el último día de baja; el alta sugerida es el día siguiente.
+      // Se informa, pero nunca se modifica el pedido automáticamente.
+      const selectedMonthStart = `${absenceYear}-${String(absenceMonth).padStart(2, '0')}-01`;
+      const recoveryCandidates = result.absences
+        .filter((absence) => {
+          const motive = absence.motivo.trim().toUpperCase();
+          if (motive !== 'ENF' && motive !== 'ACC') return false;
+          if (absence.desde >= selectedMonthStart) return false;
+          const end = new Date(`${absence.hasta}T12:00:00`);
+          return (
+            end.getFullYear() === absenceYear &&
+            end.getMonth() + 1 === absenceMonth
+          );
+        })
+        .filter((absence) =>
+          !result.absences.some((other) =>
+            other.id !== absence.id &&
+            normalizeTicketEmployeeNumber(other.empleado) === normalizeTicketEmployeeNumber(absence.empleado) &&
+            ['ENF', 'ACC'].includes(other.motivo.trim().toUpperCase()) &&
+            other.desde > absence.hasta,
+          ),
+        );
+
+      if (recoveryCandidates.length > 0) {
+        const next = addTicketYearMonth(absenceYear, absenceMonth, 1);
+        const nextCalculation = calculateMonthlyTicketOrder(
+          people,
+          calendars,
+          result.absences,
+          config,
+          next.year,
+          next.month,
+          manutenciones,
+        );
+        const messages = recoveryCandidates.map((absence) => {
+          const end = new Date(`${absence.hasta}T12:00:00`);
+          end.setDate(end.getDate() + 1);
+          const highDate = end.toLocaleDateString('es-ES');
+          const calculation = nextCalculation.rows.find(
+            (row) => normalizeTicketEmployeeNumber(row.empleado) === normalizeTicketEmployeeNumber(absence.empleado),
+          );
+          const suggestion = calculation
+            ? `${calculation.ticketsFinales} ticket${calculation.ticketsFinales === 1 ? '' : 's'}`
+            : 'sin cálculo disponible';
+          return `${absence.empleado} · ${absence.nombreApellidos}: posible alta desde ${highDate} (${absence.motivo.toUpperCase()}). Sugerencia para ${String(next.month).padStart(2, '0')}/${next.year}: ${suggestion}.`;
+        });
+        void alert(
+          `Posibles altas detectadas\n\n${messages.join('\n\n')}\n\nLa fecha se deduce del último día ENF/ACC importado. Revísala antes de usar la sugerencia; el programa no modifica el pedido automáticamente.`,
+          { type: 'info' },
+        );
+      }
+
       const workflowResult = await updateConfig(
         withTicketWorkflowReview(config, absenceYear, absenceMonth, 'absencesReviewed', false),
       );
