@@ -85,6 +85,27 @@ jobs:
 
           exit $LASTEXITCODE
 
+      - name: Validate portable EXE
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "release\Traccion 1.2.exe"
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            Write-Error "No se ha generado el portable esperado: $exe"
+            Get-ChildItem release -Force | Format-Table Name, Length, LastWriteTime
+            exit 1
+          }
+
+          $size = (Get-Item -LiteralPath $exe).Length
+          Write-Host "Portable generado: $exe"
+          Write-Host "Tamano: $size bytes ($([math]::Round($size / 1MB, 2)) MB)"
+
+          # Un portable Electron real debe ocupar decenas de MB.
+          # Impide publicar por error un fichero de unos pocos bytes.
+          if ($size -lt 20MB) {
+            Write-Error "El EXE generado es anormalmente pequeno ($size bytes). Se cancela la publicacion."
+            exit 1
+          }
+
       - name: Create auto-update manifest
         run: npm run update-manifest:write
 
@@ -110,7 +131,7 @@ jobs:
         with:
           name: Traccion-1.2-windows-portable-lite
           path: |
-            release/*.exe
+            release/Traccion 1.2.exe
             release/version.json
           if-no-files-found: error
           retention-days: 7
