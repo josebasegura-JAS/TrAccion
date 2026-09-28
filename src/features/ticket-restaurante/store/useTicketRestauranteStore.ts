@@ -903,17 +903,16 @@ export const useTicketRestauranteStore = create<TicketRestauranteState>((set, ge
           };
         }
         absenceSqliteUpdatedAt.delete(id);
-        const absences = state.absences.map((absence) =>
-          absence.id === id ? removedAbsence : absence,
-        );
+        // El tombstone queda persistido en SQLite, pero no debe permanecer
+        // en el estado activo del renderer: así cualquier cálculo posterior
+        // se recompone inmediatamente con el listado real de ausencias.
+        const absences = state.absences.filter((absence) => absence.id !== id);
         set({ absences });
         return { ok: true };
       }
     }
 
-    const absences = state.absences.map((absence) =>
-      absence.id === id ? removedAbsence : absence,
-    );
+    const absences = state.absences.filter((absence) => absence.id !== id);
     commitTicketState(set, { absences }, [[ABSENCES_STORAGE_KEY, absences]]);
     return { ok: true };
   },

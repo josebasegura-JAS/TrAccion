@@ -1349,3 +1349,16 @@ describe('ticketPeopleExistingInMonth', () => {
     expect(ticketPeopleExistingInMonth([deleted], 2026, 8)).toEqual([]);
   });
 });
+
+describe('ticket restaurante ausencia no afecta ticket', () => {
+  it('conserva afectaTicket=false al guardar una ausencia revisada', () => {
+    const row = normalizeTicketRestaurantAbsenceRow(
+      { empleado: '685', nombreApellidos: 'Persona Prueba', desde: '15/09/2026', hasta: '16/09/2026', motivo: 'ENF', afectaTicket: 'No' },
+      'no-afecta-regression',
+    );
+    const result = saveTicketRestaurantAbsencePreviewRows([], [row], new Date('2026-09-28T08:00:00Z'));
+    expect(result.errors).toHaveLength(0);
+    expect(result.absences).toHaveLength(1);
+    expect(result.absences[0]?.afectaTicket).toBe(false);
+  });
+});

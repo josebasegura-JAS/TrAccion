@@ -317,7 +317,7 @@ export function CalculationPanel({
             {mode === 'monthly' && !row.manualEntry && onUpdateConfig && !row.excludedFromOrder ? (
               <button
                 aria-label={`Ajustar pedido de ${row.nombreApellidos}`}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-metro-border bg-metro-panel text-metro-muted transition hover:border-sky-500 hover:text-sky-300"
+                className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-metro-border bg-metro-panel px-1.5 text-[10px] font-semibold text-metro-muted transition hover:border-sky-500 hover:text-sky-300"
                 onClick={(event) => {
                   event.stopPropagation();
                   setAdjustmentTickets(row.ticketsFinales);
@@ -327,7 +327,8 @@ export function CalculationPanel({
                 title={row.manuallyAdjusted ? 'Editar ajuste manual del pedido' : 'Ajustar manualmente el pedido'}
                 type="button"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
+                <span>Ajustar</span>
               </button>
             ) : null}
             {mode === 'monthly' && !row.manualEntry && onUpdateConfig ? (

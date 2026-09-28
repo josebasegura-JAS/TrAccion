@@ -274,7 +274,10 @@ export function TicketRestaurantePage({
 
         return {
           ...row,
-          afectaTicket: impact.afectaTicket,
+          // El calendario puede impedir que una ausencia descuente tickets,
+          // pero nunca debe volver a activar una ausencia que el usuario o
+          // el fichero haya marcado expresamente como "no afecta".
+          afectaTicket: row.afectaTicket && impact.afectaTicket,
         };
       }),
     [calendars, config, people],
@@ -666,9 +669,10 @@ export function TicketRestaurantePage({
         activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumber(row.empleado)),
       );
       const rowsWithCalendarImpact = applyCalendarTicketImpactToPreviewRows(activePersonRows);
-      const rowsWithTicketRight = rowsWithCalendarImpact.filter(
-        (row) => row.errors.length > 0 || row.afectaTicket,
-      );
+      // Conservamos también las ausencias que no afectan a ticket. Son parte
+      // del histórico y, sobre todo, deben poder guardarse como "No" sin
+      // desaparecer de la importación.
+      const rowsWithTicketRight = rowsWithCalendarImpact;
       const ignoredWithoutActiveRight = rows.length - activePersonRows.length;
       const ignoredWithoutTicketDay = rowsWithCalendarImpact.length - rowsWithTicketRight.length;
       const rowsWithErrors = rowsWithTicketRight.filter((row) => row.errors.length > 0).length;
@@ -804,10 +808,13 @@ export function TicketRestaurantePage({
     const currentAbsences = editingAbsenceId
       ? absences.filter((absence) => absence.id !== editingAbsenceId)
       : absences;
-    const rowsWithCalendarImpact = applyCalendarTicketImpactToPreviewRows(previewRows);
-    const result = saveTicketRestaurantAbsencePreviewRows(currentAbsences, rowsWithCalendarImpact);
+    // No recalculamos aquí `afectaTicket`: hacerlo al guardar pisaba la
+    // elección manual del usuario (por ejemplo, desmarcar "Afecta ticket").
+    // El impacto de calendario ya se aplicó al cargar/importar la fila.
+    const rowsToSave = previewRows;
+    const result = saveTicketRestaurantAbsencePreviewRows(currentAbsences, rowsToSave);
     if (result.errors.length > 0) {
-      setPreviewRows(validateTicketRestaurantAbsencePreviewRows(rowsWithCalendarImpact));
+      setPreviewRows(validateTicketRestaurantAbsencePreviewRows(rowsToSave));
       setImportMessage(result.errors.join(' '));
       return;
     }
