@@ -249,6 +249,11 @@ export interface TicketOrderMovement {
   createdAt: string;
 }
 
+export interface TicketAbsenceTypeRule {
+  motivo: string;
+  descuentaTicket: boolean;
+}
+
 export interface TicketRestaurantConfig {
   importeTicket: number;
   pedidoMensual: number;
@@ -264,6 +269,7 @@ export interface TicketRestaurantConfig {
   monthlyOrderAdjustments?: TicketMonthlyOrderAdjustment[];
   monthlyOrders?: Record<string, TicketMonthlyOrderRecord>;
   orderMovements?: TicketOrderMovement[];
+  absenceTypeRules?: TicketAbsenceTypeRule[];
 }
 
 export interface TicketDebtDetailDay {

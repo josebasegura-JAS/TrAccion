@@ -59,6 +59,7 @@ import { TicketRestaurantePeopleImportModal } from './TicketRestaurantePeopleImp
 import { TicketRestauranteManualDebtPanel } from './TicketRestauranteManualDebtPanel';
 import { TicketRestauranteManualPeoplePanel } from './TicketRestauranteManualPeoplePanel';
 import { TicketRestauranteAnnualBalance } from './TicketRestauranteAnnualBalance';
+import { TicketRestauranteAbsenceTypesPanel } from './TicketRestauranteAbsenceTypesPanel';
 import {
   TicketRestauranteAbsenceImportHelpModal,
   TicketRestauranteManutencionMonthModal,
@@ -670,7 +671,14 @@ export function TicketRestaurantePage({
       const activePersonRows = rows.filter((row) =>
         activeTicketEmployeeNumbers.has(normalizeTicketEmployeeNumber(row.empleado)),
       );
-      const rowsWithCalendarImpact = applyCalendarTicketImpactToPreviewRows(activePersonRows);
+      const absenceRuleMap = new Map(
+        (config.absenceTypeRules ?? []).map((rule) => [rule.motivo.trim().toUpperCase(), rule.descuentaTicket]),
+      );
+      const rowsWithTypeRules = activePersonRows.map((row) => {
+        const configured = absenceRuleMap.get(row.motivo.trim().toUpperCase());
+        return typeof configured === 'boolean' ? { ...row, afectaTicket: configured } : row;
+      });
+      const rowsWithCalendarImpact = applyCalendarTicketImpactToPreviewRows(rowsWithTypeRules);
       // Conservamos también las ausencias que no afectan a ticket. Son parte
       // del histórico y, sobre todo, deben poder guardarse como "No" sin
       // desaparecer de la importación.
@@ -1508,6 +1516,30 @@ export function TicketRestaurantePage({
           onRemove={handleRemoveAbsence}
           onYearChange={handleAbsenceYearChange}
           year={absenceYear}
+        />
+      ) : activeSubview === 'tiposAusencia' ? (
+        <TicketRestauranteAbsenceTypesPanel
+          absences={absences}
+          config={config}
+          onSave={async (rules) => {
+            const ruleMap = new Map(rules.map((rule) => [rule.motivo.trim().toUpperCase(), rule.descuentaTicket]));
+            const nextAbsences = absences.map((absence) => {
+              if (absence.deletedAt) return absence;
+              const configured = ruleMap.get(absence.motivo.trim().toUpperCase());
+              return typeof configured === 'boolean' ? { ...absence, afectaTicket: configured } : absence;
+            });
+            const absenceResult = await saveAbsences(nextAbsences);
+            if (!absenceResult.ok) {
+              toast.error(absenceResult.message ?? 'No se han podido actualizar las ausencias existentes.');
+              return;
+            }
+            const configResult = await updateConfig({ ...config, absenceTypeRules: rules });
+            if (!configResult.ok) {
+              toast.error(configResult.message ?? 'No se han podido guardar las reglas de ausencia.');
+              return;
+            }
+            toast.success('Reglas de ausencia guardadas y aplicadas.');
+          }}
         />
       ) : activeSubview === 'manutenciones' ? (
         <ManutencionesPanel

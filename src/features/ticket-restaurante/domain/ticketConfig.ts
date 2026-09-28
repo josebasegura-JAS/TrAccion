@@ -13,6 +13,7 @@ import type {
   TicketMonthlyOrderAdjustment,
   TicketMonthlyOrderRecord,
   TicketOrderMovement,
+  TicketAbsenceTypeRule,
 } from './ticketRestauranteTypes';
 import { isIsoDate } from './ticketCalendars';
 import { normalizeTicketEmployeeNumber } from './ticketPeople';
@@ -37,6 +38,9 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   monthlyOrderAdjustments: [],
   monthlyOrders: {},
   orderMovements: [],
+  // TEX no descuenta Ticket Restaurante. El resto de motivos se incorporan
+  // al maestro cuando aparecen en las importaciones.
+  absenceTypeRules: [{ motivo: 'TEX', descuentaTicket: false }],
 };
 
 export function getEffectiveTicketPrice(
@@ -370,6 +374,23 @@ function normalizeMonthlyOrderAdjustments(value: unknown): TicketMonthlyOrderAdj
   });
 }
 
+
+function normalizeAbsenceTypeRules(value: unknown): TicketAbsenceTypeRule[] {
+  if (!Array.isArray(value)) return [...(DEFAULT_TICKET_RESTAURANT_CONFIG.absenceTypeRules ?? [])];
+  const byMotive = new Map<string, TicketAbsenceTypeRule>();
+  value.forEach((raw) => {
+    if (!raw || typeof raw !== 'object') return;
+    const item = raw as Partial<TicketAbsenceTypeRule>;
+    const motivo = typeof item.motivo === 'string' ? item.motivo.trim().toUpperCase() : '';
+    if (!motivo || typeof item.descuentaTicket !== 'boolean') return;
+    byMotive.set(motivo, { motivo, descuentaTicket: item.descuentaTicket });
+  });
+  // TEX es una regla funcional conocida y debe existir también al migrar
+  // configuraciones antiguas que todavía no tenían maestro de ausencias.
+  if (!byMotive.has('TEX')) byMotive.set('TEX', { motivo: 'TEX', descuentaTicket: false });
+  return [...byMotive.values()].sort((a, b) => a.motivo.localeCompare(b.motivo, 'es'));
+}
+
 export function normalizeTicketRestaurantConfig(
   config: TicketRestaurantConfig,
 ): TicketRestaurantConfig {
@@ -398,5 +419,6 @@ export function normalizeTicketRestaurantConfig(
     monthlyOrderAdjustments: normalizeMonthlyOrderAdjustments(config.monthlyOrderAdjustments),
     monthlyOrders: normalizeMonthlyOrders(config.monthlyOrders),
     orderMovements: normalizeOrderMovements(config.orderMovements),
+    absenceTypeRules: normalizeAbsenceTypeRules(config.absenceTypeRules),
   };
 }

@@ -10,7 +10,8 @@ export type TicketRestauranteSubview =
   | 'ausencias'
   | 'manutenciones'
   | 'deudaManual'
-  | 'balanceAnual';
+  | 'balanceAnual'
+  | 'tiposAusencia';
 
 const SUBVIEWS: Array<{ id: TicketRestauranteSubview; label: string }> = [
   { id: 'calendarios', label: 'Calendarios' },
@@ -18,6 +19,7 @@ const SUBVIEWS: Array<{ id: TicketRestauranteSubview; label: string }> = [
   { id: 'computoMensual', label: 'Cómputo mensual' },
   { id: 'computoCotizacion', label: 'Cómputo cotización' },
   { id: 'ausencias', label: 'Ausencias' },
+  { id: 'tiposAusencia', label: 'Tipos ausencia' },
   { id: 'manutenciones', label: 'Manutenciones' },
   { id: 'deudaManual', label: 'Deudas' },
   { id: 'balanceAnual', label: 'Balance anual' },
