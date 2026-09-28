@@ -345,7 +345,7 @@ export function TicketRestauranteWorkflow({
         'rounded-xl border px-4 py-3 shadow-card',
         readyForOrder
           ? 'border-emerald-400/30 bg-emerald-500/[0.055]'
-          : 'border-metro-red/45 bg-gradient-to-br from-metro-panel via-metro-panel to-red-950/10',
+          : 'border-metro-border bg-metro-panel',
       )}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-3">
