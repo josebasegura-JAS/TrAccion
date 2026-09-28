@@ -154,7 +154,7 @@ export function CalculationPanel({
         .filter((absence) =>
           !absence.deletedAt &&
           absence.afectaTicket &&
-          absence.motivo.trim().toUpperCase() === 'ENF' &&
+          ['ENF', 'ACC'].includes(absence.motivo.trim().toUpperCase()) &&
           absence.desde <= today &&
           (!absence.hasta || absence.hasta >= today),
         )
@@ -170,6 +170,8 @@ export function CalculationPanel({
   const registeredOrder = config.monthlyOrders?.[orderMonthKey];
   const monthMovements = (config.orderMovements ?? []).filter((item) => item.year === year && item.month === month);
   const movementTotal = monthMovements.reduce((sum, item) => sum + item.tickets, 0);
+  const movementAmountTotal = monthMovements.reduce((sum, item) => sum + (item.amount ?? item.tickets * effectiveTicketPrice), 0);
+  const actuallyOrderedAmount = (registeredOrder?.totalAmount ?? 0) + movementAmountTotal;
   const actuallyOrderedTickets = (registeredOrder?.totalTickets ?? 0) + movementTotal;
   const calculatedDifference = registeredOrder ? actuallyOrderedTickets - calculation.totals.ticketsFinales : 0;
 
@@ -464,7 +466,7 @@ export function CalculationPanel({
               </div>
               <p className="mt-1 text-xs text-metro-muted">
                 {registeredOrder
-                  ? `${registeredOrder.totalTickets} tickets en el pedido inicial · ${monthMovements.length} movimiento(s) posterior(es) · total real ${actuallyOrderedTickets}`
+                  ? `${registeredOrder.totalTickets} tickets en el pedido inicial · ${monthMovements.length} movimiento(s) posterior(es) · total real ${actuallyOrderedTickets} · ${actuallyOrderedAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`
                   : 'Cuando envíes el pedido, registra aquí la fotografía exacta de lo solicitado. Los cambios posteriores se anotan como movimientos.'}
               </p>
             </div>
@@ -472,7 +474,7 @@ export function CalculationPanel({
               {!registeredOrder ? (
                 <ActionButton disabled={savingOrder || calculation.rows.length === 0} iconOnly={false} onClick={() => {
                   setSavingOrder(true);
-                  const rows = calculation.rows.map((row) => ({ empleado: row.empleado, nombreApellidos: row.nombreApellidos, tickets: row.ticketsFinales }));
+                  const rows = calculation.rows.map((row) => ({ empleado: row.empleado, nombreApellidos: row.nombreApellidos, tickets: row.ticketsFinales, unitPrice: effectiveTicketPrice, amount: Math.round(row.ticketsFinales * effectiveTicketPrice * 100) / 100 }));
                   const order = { year, month, orderedAt: new Date().toISOString(), rows, totalTickets: rows.reduce((sum, row) => sum + row.tickets, 0), totalAmount: calculation.totals.importe };
                   void onUpdateConfig({ ...config, monthlyOrders: { ...(config.monthlyOrders ?? {}), [orderMonthKey]: order } }).then((result) => {
                     setSavingOrder(false);
@@ -488,7 +490,7 @@ export function CalculationPanel({
             <div className="mt-3 grid gap-2 sm:grid-cols-4">
               <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Pedido inicial</div><div className="text-lg font-extrabold text-metro-text">{registeredOrder.totalTickets}</div></div>
               <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Movimientos</div><div className="text-lg font-extrabold text-metro-text">{movementTotal >= 0 ? '+' : ''}{movementTotal}</div></div>
-              <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Total solicitado</div><div className="text-lg font-extrabold text-emerald-400">{actuallyOrderedTickets}</div></div>
+              <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Total solicitado</div><div className="text-lg font-extrabold text-emerald-400">{actuallyOrderedTickets}</div><div className="text-[10px] font-semibold text-metro-muted">{actuallyOrderedAmount.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</div></div>
               <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Diferencia vs cálculo</div><div className={`text-lg font-extrabold ${calculatedDifference === 0 ? 'text-metro-text' : 'text-amber-300'}`}>{calculatedDifference > 0 ? '+' : ''}{calculatedDifference}</div></div>
             </div>
           ) : null}
@@ -508,7 +510,7 @@ export function CalculationPanel({
         <div className="mb-3 rounded-xl border border-amber-500/40 bg-metro-panel/80 px-3 py-2.5 text-sm text-metro-text shadow-sm">
           <div className="mb-2 flex items-center gap-2 font-bold text-amber-300">
             <AlertTriangle className="h-4 w-4" />
-            Posibles exclusiones: baja ENF activa a fecha de cálculo
+            Posibles exclusiones: baja ENF/ACC activa a fecha de cálculo
           </div>
           <div className="flex flex-wrap gap-2">
             {activeSickLeaveSuggestions.map((row) => (
@@ -516,7 +518,7 @@ export function CalculationPanel({
                 className="rounded-lg border border-amber-500/45 bg-metro-surface px-3 py-1.5 text-xs font-bold text-metro-text transition hover:border-amber-400 hover:bg-amber-500/10"
                 key={row.empleado}
                 onClick={() => {
-                  setExclusionReason('Baja ENF activa');
+                  setExclusionReason('Baja ENF/ACC activa');
                   setDeliveredTickets(0);
                   setExclusionRow(row);
                 }}
@@ -650,7 +652,7 @@ export function CalculationPanel({
               setSavingMovement(true);
               const selected = calculation.rows.find((row) => row.empleado === movementEmployee);
               const now = new Date();
-              const movement = { id: `order-movement-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, year, month, date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, empleado: movementEmployee, nombreApellidos: selected?.nombreApellidos ?? '', tickets: movementTickets, reason: movementReason.trim(), observations: movementObservations.trim(), createdAt: now.toISOString() };
+              const movement = { id: `order-movement-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, year, month, date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, empleado: movementEmployee, nombreApellidos: selected?.nombreApellidos ?? '', tickets: movementTickets, unitPrice: effectiveTicketPrice, amount: Math.round(movementTickets * effectiveTicketPrice * 100) / 100, reason: movementReason.trim(), observations: movementObservations.trim(), createdAt: now.toISOString() };
               void onUpdateConfig({ ...config, orderMovements: [...(config.orderMovements ?? []), movement] }).then((result) => { setSavingMovement(false); if (result.ok) setMovementOpen(false); else void alert(result.message ?? 'No se ha podido guardar el movimiento.', { type: 'error' }); });
             }} variant="save">Guardar movimiento</ActionButton>
           </ModalFooter>
@@ -720,7 +722,7 @@ export function CalculationAbsenceDetailModal({
             <DetailStat label="Días teóricos" value={row.diasTeoricos} />
             <DetailStat label="Hoja gastos aplicada" value={row.hojasGastoMes} />
             {mode === 'monthly' ? (
-              <DetailStat label="Deuda inicial / arrastrada" value={row.deudaEntrante} />
+              <DetailStat label="Deuda arrastrada" value={row.deudaEntrante} />
             ) : null}
             <DetailStat
               label={mode === 'monthly' ? 'Descuento total aplicado' : 'Ausencias mes'}

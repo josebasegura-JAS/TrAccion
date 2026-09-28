@@ -333,7 +333,7 @@ export function TicketRestauranteManualDebtPanel({
               <p className="text-lg font-extrabold text-metro-text">{carriedDebtRows.length}</p>
             </div>
             <div className="rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2">
-              <p className="text-xs font-semibold uppercase text-amber-300">Deuda entrante</p>
+              <p className="text-xs font-semibold uppercase text-amber-300">Deuda arrastrada</p>
               <p className="text-lg font-extrabold text-metro-text">{carriedDebtTotal}</p>
             </div>
             <div className="rounded-lg border border-red-400/20 bg-red-500/[0.06] px-3 py-2">
@@ -552,7 +552,7 @@ export function TicketRestauranteManualDebtPanel({
           <ModalBody>
             <div className="mb-3 grid gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-metro-border bg-metro-surface p-2">
-                <p className="text-xs font-semibold uppercase text-metro-muted">Deuda entrante</p>
+                <p className="text-xs font-semibold uppercase text-metro-muted">Deuda arrastrada</p>
                 <p className="mt-0.5 text-lg font-extrabold text-amber-300">{detailRow.deudaEntrante}</p>
               </div>
               <div className="rounded-xl border border-metro-border bg-metro-surface p-2">

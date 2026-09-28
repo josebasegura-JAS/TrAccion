@@ -221,6 +221,8 @@ export interface TicketOrderSnapshotRow {
   empleado: string;
   nombreApellidos: string;
   tickets: number;
+  unitPrice?: number;
+  amount?: number;
 }
 
 export interface TicketMonthlyOrderRecord {
@@ -240,6 +242,8 @@ export interface TicketOrderMovement {
   empleado: string;
   nombreApellidos: string;
   tickets: number;
+  unitPrice?: number;
+  amount?: number;
   reason: string;
   observations: string;
   createdAt: string;

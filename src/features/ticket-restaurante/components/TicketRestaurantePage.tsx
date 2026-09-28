@@ -23,6 +23,7 @@ import {
   type TicketPersonDraft,
   type TicketRestaurantAbsence,
   normalizeTicketEmployeeNumber,
+  ticketPeopleExistingInMonth,
 } from '../domain/ticketRestaurante';
 import {
   importTicketRestaurantAbsencesFromFile,
@@ -295,8 +296,9 @@ export function TicketRestaurantePage({
   // tiene un volumen pequeño y prima que cualquier edición de ausencias, deudas,
   // calendarios o ajustes se refleje en el mismo render. Antes, cambiar de mes
   // podía aparentar "arreglar" un dato porque forzaba la invalidación del memo.
+  const calculationPeople = ticketPeopleExistingInMonth(people, calculationYear, calculationMonth);
   const monthCalculation = calculateMonthlyTicketOrder(
-    people,
+    calculationPeople,
     calendars,
     absences,
     config,
@@ -305,7 +307,7 @@ export function TicketRestaurantePage({
     manutenciones,
   );
   const contributionCalculation = calculateTicketContribution(
-    people,
+    calculationPeople,
     calendars,
     absences,
     config,

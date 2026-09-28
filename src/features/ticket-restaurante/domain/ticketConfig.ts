@@ -325,9 +325,12 @@ function normalizeMonthlyOrders(value: unknown): Record<string, TicketMonthlyOrd
     if (typeof item.year !== 'number' || typeof item.month !== 'number' || !Array.isArray(item.rows)) return;
     const rows = item.rows.flatMap((row) => {
       if (!row || typeof row !== 'object') return [];
-      const candidate = row as { empleado?: unknown; nombreApellidos?: unknown; tickets?: unknown };
+      const candidate = row as { empleado?: unknown; nombreApellidos?: unknown; tickets?: unknown; unitPrice?: unknown; amount?: unknown };
       if (typeof candidate.empleado !== 'string' || typeof candidate.tickets !== 'number') return [];
-      return [{ empleado: normalizeTicketEmployeeNumber(candidate.empleado), nombreApellidos: typeof candidate.nombreApellidos === 'string' ? candidate.nombreApellidos.trim() : '', tickets: Math.max(0, Math.trunc(candidate.tickets)) }];
+      const tickets = Math.max(0, Math.trunc(candidate.tickets));
+      const unitPrice = typeof candidate.unitPrice === 'number' && Number.isFinite(candidate.unitPrice) ? roundCurrency(Math.max(0, candidate.unitPrice)) : undefined;
+      const amount = typeof candidate.amount === 'number' && Number.isFinite(candidate.amount) ? roundCurrency(Math.max(0, candidate.amount)) : unitPrice !== undefined ? roundCurrency(tickets * unitPrice) : undefined;
+      return [{ empleado: normalizeTicketEmployeeNumber(candidate.empleado), nombreApellidos: typeof candidate.nombreApellidos === 'string' ? candidate.nombreApellidos.trim() : '', tickets, unitPrice, amount }];
     });
     result[key] = { year: Math.trunc(item.year), month: Math.min(12, Math.max(1, Math.trunc(item.month))), orderedAt: typeof item.orderedAt === 'string' ? item.orderedAt : '', rows, totalTickets: rows.reduce((sum, row) => sum + row.tickets, 0), totalAmount: typeof item.totalAmount === 'number' && Number.isFinite(item.totalAmount) ? roundCurrency(Math.max(0, item.totalAmount)) : 0 };
   });
@@ -342,7 +345,9 @@ function normalizeOrderMovements(value: unknown): TicketOrderMovement[] {
     if (typeof item.id !== 'string' || typeof item.year !== 'number' || typeof item.month !== 'number' || typeof item.tickets !== 'number') return [];
     const tickets = Math.trunc(item.tickets);
     if (!tickets) return [];
-    return [{ id: item.id, year: Math.trunc(item.year), month: Math.min(12, Math.max(1, Math.trunc(item.month))), date: typeof item.date === 'string' ? item.date : '', empleado: typeof item.empleado === 'string' ? normalizeTicketEmployeeNumber(item.empleado) : '', nombreApellidos: typeof item.nombreApellidos === 'string' ? item.nombreApellidos.trim() : '', tickets, reason: typeof item.reason === 'string' ? item.reason.trim() : '', observations: typeof item.observations === 'string' ? item.observations.trim() : '', createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
+    const unitPrice = typeof item.unitPrice === 'number' && Number.isFinite(item.unitPrice) ? roundCurrency(Math.max(0, item.unitPrice)) : undefined;
+    const amount = typeof item.amount === 'number' && Number.isFinite(item.amount) ? roundCurrency(item.amount) : unitPrice !== undefined ? roundCurrency(tickets * unitPrice) : undefined;
+    return [{ id: item.id, year: Math.trunc(item.year), month: Math.min(12, Math.max(1, Math.trunc(item.month))), date: typeof item.date === 'string' ? item.date : '', empleado: typeof item.empleado === 'string' ? normalizeTicketEmployeeNumber(item.empleado) : '', nombreApellidos: typeof item.nombreApellidos === 'string' ? item.nombreApellidos.trim() : '', tickets, unitPrice, amount, reason: typeof item.reason === 'string' ? item.reason.trim() : '', observations: typeof item.observations === 'string' ? item.observations.trim() : '', createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
   });
 }
 
