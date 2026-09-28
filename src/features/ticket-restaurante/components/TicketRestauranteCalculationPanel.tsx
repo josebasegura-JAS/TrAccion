@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, Calculator, Pencil, RotateCcw, Search } from 'lucide-react';
+import { AlertTriangle, Ban, Calculator, CheckCircle2, Pencil, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -123,6 +123,13 @@ export function CalculationPanel({
   const [adjustmentTickets, setAdjustmentTickets] = useState(0);
   const [adjustmentReason, setAdjustmentReason] = useState('');
   const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [movementOpen, setMovementOpen] = useState(false);
+  const [movementEmployee, setMovementEmployee] = useState('');
+  const [movementTickets, setMovementTickets] = useState(0);
+  const [movementReason, setMovementReason] = useState('');
+  const [movementObservations, setMovementObservations] = useState('');
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [savingMovement, setSavingMovement] = useState(false);
   const { alert, dialogNode } = useAppDialog();
   const validColumnIds =
     mode === 'monthly' ? monthlyCalculationTableColumnIds : contributionCalculationTableColumnIds;
@@ -159,6 +166,13 @@ export function CalculationPanel({
       activeEmployees.has(normalizeEmployee(row.empleado)),
     );
   }, [absences, calculation.rows, mode]);
+  const orderMonthKey = `${year}-${String(month).padStart(2, '0')}`;
+  const registeredOrder = config.monthlyOrders?.[orderMonthKey];
+  const monthMovements = (config.orderMovements ?? []).filter((item) => item.year === year && item.month === month);
+  const movementTotal = monthMovements.reduce((sum, item) => sum + item.tickets, 0);
+  const actuallyOrderedTickets = (registeredOrder?.totalTickets ?? 0) + movementTotal;
+  const calculatedDifference = registeredOrder ? actuallyOrderedTickets - calculation.totals.ticketsFinales : 0;
+
   const calculationColumns = useMemo<
     Array<DataTableColumn<TicketPersonCalculation, TicketCalculationTableColumnId>>
   >(() => {
@@ -440,6 +454,56 @@ export function CalculationPanel({
           <ExportPrintButtons payload={exportPayload} />
         </div>
       </div>
+      {mode === 'monthly' && onUpdateConfig ? (
+        <section className="mb-3 rounded-xl border border-metro-border bg-metro-surface/55 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold text-metro-text">
+                <CheckCircle2 className={`h-4 w-4 ${registeredOrder ? 'text-emerald-400' : 'text-metro-muted'}`} />
+                {registeredOrder ? 'Pedido realizado' : 'Pedido todavía no registrado'}
+              </div>
+              <p className="mt-1 text-xs text-metro-muted">
+                {registeredOrder
+                  ? `${registeredOrder.totalTickets} tickets en el pedido inicial · ${monthMovements.length} movimiento(s) posterior(es) · total real ${actuallyOrderedTickets}`
+                  : 'Cuando envíes el pedido, registra aquí la fotografía exacta de lo solicitado. Los cambios posteriores se anotan como movimientos.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!registeredOrder ? (
+                <ActionButton disabled={savingOrder || calculation.rows.length === 0} iconOnly={false} onClick={() => {
+                  setSavingOrder(true);
+                  const rows = calculation.rows.map((row) => ({ empleado: row.empleado, nombreApellidos: row.nombreApellidos, tickets: row.ticketsFinales }));
+                  const order = { year, month, orderedAt: new Date().toISOString(), rows, totalTickets: rows.reduce((sum, row) => sum + row.tickets, 0), totalAmount: calculation.totals.importe };
+                  void onUpdateConfig({ ...config, monthlyOrders: { ...(config.monthlyOrders ?? {}), [orderMonthKey]: order } }).then((result) => {
+                    setSavingOrder(false);
+                    if (!result.ok) void alert(result.message ?? 'No se ha podido registrar el pedido.', { type: 'error' });
+                  });
+                }} variant="save">Registrar pedido realizado</ActionButton>
+              ) : (
+                <ActionButton icon={Plus} iconOnly={false} onClick={() => { setMovementEmployee(''); setMovementTickets(0); setMovementReason(''); setMovementObservations(''); setMovementOpen(true); }} variant="add">Movimiento de pedido</ActionButton>
+              )}
+            </div>
+          </div>
+          {registeredOrder ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Pedido inicial</div><div className="text-lg font-extrabold text-metro-text">{registeredOrder.totalTickets}</div></div>
+              <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Movimientos</div><div className="text-lg font-extrabold text-metro-text">{movementTotal >= 0 ? '+' : ''}{movementTotal}</div></div>
+              <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Total solicitado</div><div className="text-lg font-extrabold text-emerald-400">{actuallyOrderedTickets}</div></div>
+              <div className="rounded-lg bg-metro-panel px-3 py-2"><div className="text-[10px] font-bold uppercase text-metro-muted">Diferencia vs cálculo</div><div className={`text-lg font-extrabold ${calculatedDifference === 0 ? 'text-metro-text' : 'text-amber-300'}`}>{calculatedDifference > 0 ? '+' : ''}{calculatedDifference}</div></div>
+            </div>
+          ) : null}
+          {registeredOrder && monthMovements.length > 0 ? (
+            <div className="mt-3 space-y-1">
+              {monthMovements.map((movement) => (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-xs" key={movement.id}>
+                  <span className="text-metro-secondary"><strong className="text-metro-text">{movement.tickets > 0 ? '+' : ''}{movement.tickets}</strong> · {movement.nombreApellidos || movement.empleado || 'General'} · {movement.reason} · {movement.date}</span>
+                  <button aria-label="Eliminar movimiento" className="text-metro-muted hover:text-metro-red" onClick={() => { const next = (config.orderMovements ?? []).filter((item) => item.id !== movement.id); void onUpdateConfig({ ...config, orderMovements: next }); }} title="Eliminar movimiento" type="button"><Trash2 className="h-3.5 w-3.5" /></button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       {mode === 'monthly' && activeSickLeaveSuggestions.length > 0 && onUpdateConfig ? (
         <div className="mb-3 rounded-xl border border-amber-500/40 bg-metro-panel/80 px-3 py-2.5 text-sm text-metro-text shadow-sm">
           <div className="mb-2 flex items-center gap-2 font-bold text-amber-300">
@@ -556,6 +620,39 @@ export function CalculationPanel({
                 if (result.ok) setAdjustmentRow(null);
               });
             }} size="sm" variant="primary">Guardar ajuste</ActionButton>
+          </ModalFooter>
+        </ModalShell>
+      ) : null}
+
+      {movementOpen && onUpdateConfig ? (
+        <ModalShell labelledBy="ticket-order-movement-title" maxWidthClassName="max-w-lg" onClose={() => setMovementOpen(false)}>
+          <ModalHeader><ModalTitle id="ticket-order-movement-title" subtitle={`${year}-${String(month).padStart(2, '0')} · no modifica automáticamente la deuda`}>Movimiento de pedido</ModalTitle></ModalHeader>
+          <ModalBody className="space-y-3">
+            <label className="block text-sm font-bold text-metro-text">Persona
+              <select className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text" onChange={(event) => setMovementEmployee(event.target.value)} value={movementEmployee}>
+                <option value="">Movimiento general</option>
+                {calculation.rows.map((row) => <option key={row.empleado} value={row.empleado}>{row.empleado} · {row.nombreApellidos}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-bold text-metro-text">Tickets (+ adicional / − corrección)
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text" onChange={(event) => setMovementTickets(Number.parseInt(event.target.value || '0', 10) || 0)} type="number" value={movementTickets} />
+            </label>
+            <label className="block text-sm font-bold text-metro-text">Motivo <span className="text-metro-red">*</span>
+              <input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text" maxLength={160} onChange={(event) => setMovementReason(event.target.value)} placeholder="Alta médica, corrección del proveedor…" value={movementReason} />
+            </label>
+            <label className="block text-sm font-bold text-metro-text">Observaciones
+              <textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-normal text-metro-text" maxLength={400} onChange={(event) => setMovementObservations(event.target.value)} value={movementObservations} />
+            </label>
+          </ModalBody>
+          <ModalFooter>
+            <ActionButton iconOnly={false} onClick={() => setMovementOpen(false)} variant="secondary">Cancelar</ActionButton>
+            <ActionButton disabled={savingMovement || movementTickets === 0 || !movementReason.trim()} iconOnly={false} onClick={() => {
+              setSavingMovement(true);
+              const selected = calculation.rows.find((row) => row.empleado === movementEmployee);
+              const now = new Date();
+              const movement = { id: `order-movement-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`, year, month, date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, empleado: movementEmployee, nombreApellidos: selected?.nombreApellidos ?? '', tickets: movementTickets, reason: movementReason.trim(), observations: movementObservations.trim(), createdAt: now.toISOString() };
+              void onUpdateConfig({ ...config, orderMovements: [...(config.orderMovements ?? []), movement] }).then((result) => { setSavingMovement(false); if (result.ok) setMovementOpen(false); else void alert(result.message ?? 'No se ha podido guardar el movimiento.', { type: 'error' }); });
+            }} variant="save">Guardar movimiento</ActionButton>
           </ModalFooter>
         </ModalShell>
       ) : null}

@@ -216,6 +216,35 @@ export interface TicketMonthlyOrderExclusion {
   createdAt: string;
 }
 
+
+export interface TicketOrderSnapshotRow {
+  empleado: string;
+  nombreApellidos: string;
+  tickets: number;
+}
+
+export interface TicketMonthlyOrderRecord {
+  year: number;
+  month: number;
+  orderedAt: string;
+  rows: TicketOrderSnapshotRow[];
+  totalTickets: number;
+  totalAmount: number;
+}
+
+export interface TicketOrderMovement {
+  id: string;
+  year: number;
+  month: number;
+  date: string;
+  empleado: string;
+  nombreApellidos: string;
+  tickets: number;
+  reason: string;
+  observations: string;
+  createdAt: string;
+}
+
 export interface TicketRestaurantConfig {
   importeTicket: number;
   pedidoMensual: number;
@@ -229,6 +258,8 @@ export interface TicketRestaurantConfig {
   annualClosures?: Record<string, TicketAnnualClosure>;
   monthlyOrderExclusions?: TicketMonthlyOrderExclusion[];
   monthlyOrderAdjustments?: TicketMonthlyOrderAdjustment[];
+  monthlyOrders?: Record<string, TicketMonthlyOrderRecord>;
+  orderMovements?: TicketOrderMovement[];
 }
 
 export interface TicketDebtDetailDay {

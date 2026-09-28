@@ -1255,6 +1255,13 @@ export function TicketRestaurantePage({
           absenceCount={workflowAbsenceCount}
           absencesReviewed={workflowReview.absencesReviewed}
           calculation={monthCalculation}
+          orderedTickets={(() => {
+            const key = `${calculationYear}-${String(calculationMonth).padStart(2, '0')}`;
+            const initial = config.monthlyOrders?.[key];
+            if (!initial) return undefined;
+            const movements = (config.orderMovements ?? []).filter((item) => item.year === calculationYear && item.month === calculationMonth);
+            return initial.totalTickets + movements.reduce((sum, item) => sum + item.tickets, 0);
+          })()}
           effectiveTicketPrice={getEffectiveTicketPrice(config, calculationYear, calculationMonth)}
           inactivePeople={workflowInactivePeople}
           manutencionCount={workflowManutencionCount}

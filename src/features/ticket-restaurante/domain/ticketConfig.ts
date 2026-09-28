@@ -11,6 +11,8 @@ import type {
   TicketDebtRegularization,
   TicketMonthlyOrderExclusion,
   TicketMonthlyOrderAdjustment,
+  TicketMonthlyOrderRecord,
+  TicketOrderMovement,
 } from './ticketRestauranteTypes';
 import { isIsoDate } from './ticketCalendars';
 import { normalizeTicketEmployeeNumber } from './ticketPeople';
@@ -33,6 +35,8 @@ export const DEFAULT_TICKET_RESTAURANT_CONFIG: TicketRestaurantConfig = {
   annualClosures: {},
   monthlyOrderExclusions: [],
   monthlyOrderAdjustments: [],
+  monthlyOrders: {},
+  orderMovements: [],
 };
 
 export function getEffectiveTicketPrice(
@@ -312,6 +316,36 @@ function normalizeMonthlyOrderExclusions(value: unknown): TicketMonthlyOrderExcl
   });
 }
 
+function normalizeMonthlyOrders(value: unknown): Record<string, TicketMonthlyOrderRecord> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, TicketMonthlyOrderRecord> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    if (!/^\d{4}-\d{2}$/.test(key) || !raw || typeof raw !== 'object') return;
+    const item = raw as Partial<TicketMonthlyOrderRecord>;
+    if (typeof item.year !== 'number' || typeof item.month !== 'number' || !Array.isArray(item.rows)) return;
+    const rows = item.rows.flatMap((row) => {
+      if (!row || typeof row !== 'object') return [];
+      const candidate = row as { empleado?: unknown; nombreApellidos?: unknown; tickets?: unknown };
+      if (typeof candidate.empleado !== 'string' || typeof candidate.tickets !== 'number') return [];
+      return [{ empleado: normalizeTicketEmployeeNumber(candidate.empleado), nombreApellidos: typeof candidate.nombreApellidos === 'string' ? candidate.nombreApellidos.trim() : '', tickets: Math.max(0, Math.trunc(candidate.tickets)) }];
+    });
+    result[key] = { year: Math.trunc(item.year), month: Math.min(12, Math.max(1, Math.trunc(item.month))), orderedAt: typeof item.orderedAt === 'string' ? item.orderedAt : '', rows, totalTickets: rows.reduce((sum, row) => sum + row.tickets, 0), totalAmount: typeof item.totalAmount === 'number' && Number.isFinite(item.totalAmount) ? roundCurrency(Math.max(0, item.totalAmount)) : 0 };
+  });
+  return result;
+}
+
+function normalizeOrderMovements(value: unknown): TicketOrderMovement[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Partial<TicketOrderMovement>;
+    if (typeof item.id !== 'string' || typeof item.year !== 'number' || typeof item.month !== 'number' || typeof item.tickets !== 'number') return [];
+    const tickets = Math.trunc(item.tickets);
+    if (!tickets) return [];
+    return [{ id: item.id, year: Math.trunc(item.year), month: Math.min(12, Math.max(1, Math.trunc(item.month))), date: typeof item.date === 'string' ? item.date : '', empleado: typeof item.empleado === 'string' ? normalizeTicketEmployeeNumber(item.empleado) : '', nombreApellidos: typeof item.nombreApellidos === 'string' ? item.nombreApellidos.trim() : '', tickets, reason: typeof item.reason === 'string' ? item.reason.trim() : '', observations: typeof item.observations === 'string' ? item.observations.trim() : '', createdAt: typeof item.createdAt === 'string' ? item.createdAt : '' }];
+  });
+}
+
 function normalizeMonthlyOrderAdjustments(value: unknown): TicketMonthlyOrderAdjustment[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -357,5 +391,7 @@ export function normalizeTicketRestaurantConfig(
     annualClosures: normalizeAnnualClosures(config.annualClosures),
     monthlyOrderExclusions: normalizeMonthlyOrderExclusions(config.monthlyOrderExclusions),
     monthlyOrderAdjustments: normalizeMonthlyOrderAdjustments(config.monthlyOrderAdjustments),
+    monthlyOrders: normalizeMonthlyOrders(config.monthlyOrders),
+    orderMovements: normalizeOrderMovements(config.orderMovements),
   };
 }

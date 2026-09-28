@@ -154,6 +154,7 @@ export interface TicketRestauranteWorkflowProps {
   manualDebtsReviewed: boolean;
   effectiveTicketPrice: number;
   calculation: TicketMonthCalculation;
+  orderedTickets?: number;
   onOpenCalendars: () => void;
   onOpenPrice: () => void;
   onOpenRules: () => void;
@@ -186,6 +187,7 @@ export function TicketRestauranteWorkflow({
   manualDebtsReviewed,
   effectiveTicketPrice,
   calculation,
+  orderedTickets,
   onOpenCalendars,
   onOpenPrice,
   onOpenRules,
@@ -206,6 +208,7 @@ export function TicketRestauranteWorkflow({
   const adjustmentsReviewed = manualDebtsReviewed;
   const readyForOrder = baseReady && monthlyInputsReviewed && adjustmentsReviewed;
   const monthLabel = `${MONTH_OPTIONS[month - 1] ?? month} ${year}`;
+  const orderRegistered = typeof orderedTickets === 'number';
 
   const nextAction = !baseReady
     ? {
@@ -250,10 +253,10 @@ export function TicketRestauranteWorkflow({
               onClick: onOpenManualDebt,
             }
           : {
-              eyebrow: 'Pedido preparado para revisión',
-              title: `Revisar el pedido de ${monthLabel}`,
-              detail: `${formatInteger(calculation.totals.ticketsFinales)} tickets · ${formatMoney(calculation.totals.importe)} €. Comprueba el detalle y genera el fichero “A cargar”.`,
-              button: 'Revisar y generar A cargar',
+              eyebrow: orderRegistered ? 'Pedido realizado' : 'Pedido preparado para revisión',
+              title: orderRegistered ? `Pedido de ${monthLabel} registrado` : `Revisar el pedido de ${monthLabel}`,
+              detail: orderRegistered ? `${formatInteger(orderedTickets)} tickets realmente solicitados. Entra para registrar pedidos adicionales o correcciones.` : `${formatInteger(calculation.totals.ticketsFinales)} tickets · ${formatMoney(calculation.totals.importe)} €. Comprueba el detalle y genera el fichero “A cargar”.`,
+              button: orderRegistered ? 'Ver pedido y movimientos' : 'Revisar y generar A cargar',
               icon: Calculator,
               onClick: onOpenMonthlyCalculation,
             };
@@ -325,11 +328,11 @@ export function TicketRestauranteWorkflow({
             title="Deudas y ajustes"
           />
           <ProcessStep
-            detail={`${formatInteger(calculation.totals.ticketsFinales)} tickets · ${formatMoney(calculation.totals.importe)} €`}
+            detail={orderRegistered ? `${formatInteger(orderedTickets)} tickets solicitados` : `${formatInteger(calculation.totals.ticketsFinales)} tickets · ${formatMoney(calculation.totals.importe)} €`}
             number={5}
             onClick={onOpenMonthlyCalculation}
-            state={readyForOrder ? 'current' : 'pending'}
-            title="Revisar pedido"
+            state={orderRegistered ? 'done' : readyForOrder ? 'current' : 'pending'}
+            title={orderRegistered ? 'Pedido realizado' : 'Revisar pedido'}
           />
           <ProcessStep
             detail="A mes vencido"

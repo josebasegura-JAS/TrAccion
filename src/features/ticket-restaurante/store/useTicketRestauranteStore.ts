@@ -265,6 +265,10 @@ function readConfig(): TicketRestaurantConfig {
     workflowReviews: candidate.workflowReviews ?? {},
     monthlySnapshots: candidate.monthlySnapshots ?? {},
     annualClosures: candidate.annualClosures ?? {},
+    monthlyOrderExclusions: candidate.monthlyOrderExclusions ?? [],
+    monthlyOrderAdjustments: candidate.monthlyOrderAdjustments ?? [],
+    monthlyOrders: candidate.monthlyOrders ?? {},
+    orderMovements: candidate.orderMovements ?? [],
   });
 }
 
