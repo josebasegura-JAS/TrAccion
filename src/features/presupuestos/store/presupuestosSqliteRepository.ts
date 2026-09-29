@@ -5,7 +5,6 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  registerPendingWriteReplayer,
   saveRecordWithPendingFallback,
 } from '../../../services/pendingRecordWrites';
 import type { BudgetActual, BudgetManualItem, BudgetScenario, BudgetTicketGroup } from '../domain/presupuestos';
@@ -13,8 +12,7 @@ import type { BudgetActual, BudgetManualItem, BudgetScenario, BudgetTicketGroup 
 const PRESUPUESTOS_STORAGE_KEY = 'traccion.v1.presupuestos';
 const PRESUPUESTOS_PENDING_WRITE_MODULE = 'presupuestos';
 // Presupuestos guarda las 4 colecciones como un único snapshot atómico, no
-// registro a registro, así que a efectos de la cola de pendientes se trata
-// como un solo "registro" con id fijo.
+// registro a registro; se identifica como un único registro con id fijo.
 const PRESUPUESTOS_SNAPSHOT_RECORD_ID = 'snapshot';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
@@ -25,24 +23,6 @@ interface PresupuestosSnapshotPayload {
   ticketGroups: BudgetTicketGroup[];
   actuals: BudgetActual[];
 }
-
-registerPendingWriteReplayer(PRESUPUESTOS_PENDING_WRITE_MODULE, async (_recordId, value, expectedUpdatedAt) => {
-  const saver = window.traccion?.savePresupuestosSnapshotIfUnchanged;
-  if (!saver) {
-    return null;
-  }
-
-  const snapshot = JSON.parse(value) as PresupuestosSnapshotPayload;
-  const result = await saver({
-    scenarios: snapshot.scenarios.map((item) => ({ id: item.id, value: JSON.stringify(item) })),
-    manualItems: snapshot.manualItems.map((item) => ({ id: item.id, value: JSON.stringify(item) })),
-    ticketGroups: snapshot.ticketGroups.map((item) => ({ id: item.id, value: JSON.stringify(item) })),
-    actuals: snapshot.actuals.map((item) => ({ id: item.id, value: JSON.stringify(item) })),
-    expectedUpdatedAt,
-  });
-  publishDatabaseStatus(result.status);
-  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
-});
 
 export interface PresupuestosSqliteState {
   scenarios: BudgetScenario[];

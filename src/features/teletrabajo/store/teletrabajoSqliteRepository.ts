@@ -5,7 +5,6 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  registerPendingWriteReplayer,
   saveRecordWithPendingFallback,
 } from '../../../services/pendingRecordWrites';
 import type { TeletrabajoSolicitud } from '../domain/solicitud';
@@ -14,17 +13,6 @@ const TELETRABAJO_STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
 const TELETRABAJO_PENDING_WRITE_MODULE = 'teletrabajo-solicitudes';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
-
-registerPendingWriteReplayer(TELETRABAJO_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
-  const saver = window.traccion?.saveTeletrabajoRecordIfUnchanged;
-  if (!saver) {
-    return null;
-  }
-
-  const result = await saver({ id: recordId, value, expectedUpdatedAt });
-  publishDatabaseStatus(result.status);
-  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
-});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -186,8 +174,7 @@ export interface TeletrabajoBatchSaveResult {
  * en vez de una por una. Pensado para importadores masivos (encuesta e
  * histórico): antes disparaban N llamadas IPC secuenciales, ahora 1.
  *
- * Deliberadamente fuera de la cola de pendientes, mismo motivo que en
- * `saveActaTypesToSqlite`.
+ * El lote se guarda directamente en una única transacción SQLite.
  */
 export async function saveTeletrabajoSolicitudesToSqlite(
   items: Array<{ solicitud: TeletrabajoSolicitud; expectedUpdatedAt: string | null }>,

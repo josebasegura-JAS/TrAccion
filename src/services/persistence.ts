@@ -2,7 +2,6 @@ import {
   PERSISTED_STORAGE_KEYS,
   SQLITE_HYDRATION_METADATA_KEY,
   SQLITE_MIGRATION_FLAG_KEY,
-  SQLITE_PENDING_WRITES_KEY,
   SQLITE_RECORD_METADATA_KEY,
   type PersistedStorageKey,
   isPersistedStorageKey as isKnownPersistedStorageKey,
@@ -216,23 +215,6 @@ async function resolveExpectedUpdatedAtForWrite(
 }
 
 
-function clearLegacyPendingSqliteWrites(): void {
-  window.localStorage.removeItem(SQLITE_PENDING_WRITES_KEY);
-}
-
-export function getPendingSqliteWriteCount(): number {
-  clearLegacyPendingSqliteWrites();
-  return 0;
-}
-
-/**
- * TrAcción ya no reproduce escrituras offline. Las colas heredadas se purgan
- * para evitar aplicar cambios obsoletos al recuperar conectividad.
- */
-export async function flushPendingSqliteWrites(): Promise<number> {
-  clearLegacyPendingSqliteWrites();
-  return 0;
-}
 
 export function isPersistedStorageKey(key: string): key is PersistedStorageKey {
   return isKnownPersistedStorageKey(key);

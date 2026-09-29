@@ -12,7 +12,6 @@ type TestModule = typeof import('./externalDataSync');
 type TestContext = {
   module: TestModule;
   reloadRegisteredSyncableStores: ReturnType<typeof vi.fn>;
-  flushPendingSqliteWrites: ReturnType<typeof vi.fn>;
   readHydrationMetadata: ReturnType<typeof vi.fn>;
   applyPersistedRecordsSnapshotToLocalStorage: ReturnType<typeof vi.fn>;
   setActiveSharedEditing: (active: boolean) => void;
@@ -44,7 +43,6 @@ async function loadExternalDataSyncTestContext(): Promise<TestContext> {
 
   let activeSharedEditing = false;
   const reloadRegisteredSyncableStores = vi.fn();
-  const flushPendingSqliteWrites = vi.fn(async () => 0);
   const readHydrationMetadata = vi.fn(() => ({
     lastUpdatedAt: '2026-06-19T08:00:00.000Z',
     sqlitePath: 'Z:/TrAccion/traccion.sqlite',
@@ -63,7 +61,6 @@ async function loadExternalDataSyncTestContext(): Promise<TestContext> {
   }));
   vi.doMock('./persistence', () => ({
     applyPersistedRecordsSnapshotToLocalStorage,
-    flushPendingSqliteWrites,
     readHydrationMetadata,
     readStorageItem: (key: string) => window.localStorage.getItem(key),
     subscribeToPersistenceFeedback: () => () => undefined,
@@ -74,7 +71,6 @@ async function loadExternalDataSyncTestContext(): Promise<TestContext> {
   return {
     module,
     reloadRegisteredSyncableStores,
-    flushPendingSqliteWrites,
     readHydrationMetadata,
     applyPersistedRecordsSnapshotToLocalStorage,
     setActiveSharedEditing: (active: boolean) => {

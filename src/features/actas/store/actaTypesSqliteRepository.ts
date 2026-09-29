@@ -5,7 +5,6 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  registerPendingWriteReplayer,
   saveRecordWithPendingFallback,
 } from '../../../services/pendingRecordWrites';
 import type { ActaTypeDefinition } from '../domain/acta';
@@ -14,17 +13,6 @@ const ACTA_TYPES_STORAGE_KEY = 'traccion.v1.actas.types';
 const ACTA_TYPES_PENDING_WRITE_MODULE = 'actas-tipos';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
-
-registerPendingWriteReplayer(ACTA_TYPES_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
-  const saver = window.traccion?.saveActaTypeRecordIfUnchanged;
-  if (!saver) {
-    return null;
-  }
-
-  const result = await saver({ id: recordId, value, expectedUpdatedAt });
-  publishDatabaseStatus(result.status);
-  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
-});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -167,10 +155,8 @@ export interface ActaTypeBatchSaveResult {
  * en vez de uno por uno. Pensado para la migración inicial desde
  * createDefaultActaTypes() / localStorage, que puede traer varios tipos a la vez.
  *
- * Deliberadamente fuera de la cola de pendientes: es una operación de
- * importación puntual, no una edición del día a día, y encolar un lote
- * completo complicaría la reconciliación sin aportar nada — si falla, el
- * usuario repite la importación.
+ * Es una operación de importación puntual y se confirma de forma atómica en
+ * SQLite; si falla, el usuario repite la importación.
  */
 export async function saveActaTypesToSqlite(
   records: Array<{ record: ActaTypeDefinition; expectedUpdatedAt: string | null }>,

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDatabaseStatus } from '../services/databaseStatus';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import {
-  getPendingSqliteWriteCount,
   isPersistenceFeedbackSilent,
   readHydrationMetadata,
   readStorageItem,
@@ -10,7 +9,6 @@ import {
   writeStorageItem,
   type PersistenceFeedback,
 } from '../services/persistence';
-import { getPendingRecordWriteCount } from '../services/pendingRecordWrites';
 import { AlertTriangle, Database, Home, LockKeyhole, Pin, PinOff, Settings, X } from 'lucide-react';
 import { getGroupForView, navigationGroups, type AppView, type NavigationGroupId } from '../navigation/navigation';
 
@@ -50,10 +48,9 @@ const formatSaveTime = (timestamp: string | null | undefined) => {
     : date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
-const getPersistenceStatusText = (feedback: PersistenceFeedback | null, pendingCount: number) => {
+const getPersistenceStatusText = (feedback: PersistenceFeedback | null) => {
   if (feedback?.kind === 'saving') return 'Guardando…';
   if (feedback?.kind === 'error') return feedback.message || 'Error de guardado';
-  if (pendingCount > 0) return `${pendingCount} pendiente${pendingCount === 1 ? '' : 's'} de sincronizar`;
   if (feedback?.kind === 'saved') {
     const savedAt = formatSaveTime(feedback.updatedAt);
     return savedAt ? `Último guardado: ${savedAt}` : 'Guardado';
@@ -114,9 +111,6 @@ export function Sidebar({
   const [activeGroupId, setActiveGroupId] = useState(() => readStoredActiveGroup(activeView));
   const [isPanelOpen, setIsPanelOpen] = useState(() => readStoredPinnedPreference());
   const [persistenceFeedback, setPersistenceFeedback] = useState<PersistenceFeedback | null>(null);
-  const [pendingWriteCount, setPendingWriteCount] = useState(
-    () => getPendingSqliteWriteCount() + getPendingRecordWriteCount(),
-  );
 
   const activeViewGroupId = getGroupForView(activeView);
   const activeGroup = useMemo(
@@ -130,20 +124,17 @@ export function Sidebar({
     externalDataSyncStatus.lastCheckedAt,
   )}. Últimos cambios aplicados: ${formatDatabaseTimestamp(externalDataSyncStatus.lastAppliedAt)}.`;
   const databaseIndicator = buildDatabaseIndicatorViewModel(databaseStatus, syncStatusText);
-  const persistenceStatusText = getPersistenceStatusText(persistenceFeedback, pendingWriteCount);
+  const persistenceStatusText = getPersistenceStatusText(persistenceFeedback);
   const savedAt = persistenceFeedback?.kind === 'saved' ? formatSaveTime(persistenceFeedback.updatedAt) : null;
   const compactPersistenceLabel = persistenceFeedback?.kind === 'saving'
     ? 'Guard.'
     : persistenceFeedback?.kind === 'error'
       ? 'Error'
-      : pendingWriteCount > 0
-        ? `${pendingWriteCount} pend.`
-        : savedAt ?? databaseIndicator.label;
+      : savedAt ?? databaseIndicator.label;
   const databaseIndicatorTooltip = `Ruta activa: ${databaseIndicator.routeText}\nEstado: ${databaseIndicator.statusText}\n${persistenceStatusText}\nÚltima sincronización/hidratación: ${databaseIndicator.lastSyncText}\n${databaseIndicator.syncStatusText}`;
 
   useEffect(() => subscribeToPersistenceFeedback((nextFeedback) => {
     if (!isPersistenceFeedbackSilent(nextFeedback)) setPersistenceFeedback(nextFeedback);
-    setPendingWriteCount(getPendingSqliteWriteCount() + getPendingRecordWriteCount());
   }), []);
   useEffect(() => { writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned)); }, [isPinned]);
   useEffect(() => { writeStorageItem(SIDEBAR_ACTIVE_GROUP_KEY, activeGroupId); }, [activeGroupId]);

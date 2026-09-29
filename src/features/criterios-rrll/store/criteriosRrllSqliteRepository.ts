@@ -5,7 +5,6 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  registerPendingWriteReplayer,
   saveRecordWithPendingFallback,
 } from '../../../services/pendingRecordWrites';
 import type { CriterioRrll } from '../domain/criterioRrll';
@@ -14,17 +13,6 @@ const CRITERIOS_RRLL_STORAGE_KEY = 'traccion.v1.criterios-rrll.criterios';
 const CRITERIOS_RRLL_PENDING_WRITE_MODULE = 'criterios-rrll';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
-
-registerPendingWriteReplayer(CRITERIOS_RRLL_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
-  const saver = window.traccion?.saveCriteriosRrllRecordIfUnchanged;
-  if (!saver) {
-    return null;
-  }
-
-  const result = await saver({ id: recordId, value, expectedUpdatedAt });
-  publishDatabaseStatus(result.status);
-  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
-});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -170,9 +158,7 @@ export interface CriterioRrllBatchSaveResult {
  * vez de uno por uno. Pensado para importaciones masivas desde Excel: antes
  * disparaba N llamadas IPC secuenciales (una por fila), ahora dispara 1.
  *
- * Deliberadamente fuera de la cola de pendientes, mismo motivo que en
- * `saveActaTypesToSqlite`: es una importación puntual, no una edición del
- * día a día.
+ * El lote se confirma directamente en una única transacción SQLite.
  */
 export async function saveCriteriosRrllToSqlite(
   records: Array<{ record: CriterioRrll; expectedUpdatedAt: string | null }>,

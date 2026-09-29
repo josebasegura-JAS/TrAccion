@@ -1,77 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SQLITE_PENDING_WRITES_KEY } from './persistenceKeys';
 import {
-  flushPendingSqliteWrites,
   hydrateLocalStorageFromSqlite,
   isTemporarySqliteLockMessage,
 } from './persistence';
-
-// Clave de negocio real usada para comprobar la purga de colas heredadas.
-const TEST_KEY = 'traccion.v1.vinculograma.records';
-
-function writePendingWriteDirectly(attempts: number): void {
-  window.localStorage.setItem(
-    SQLITE_PENDING_WRITES_KEY,
-    JSON.stringify([
-      {
-        key: TEST_KEY,
-        value: '[]',
-        updatedAt: new Date().toISOString(),
-        expectedUpdatedAt: null,
-        attempts,
-        lastError: 'Conflicto de concurrencia simulado.',
-      },
-    ]),
-  );
-}
-
-function readPendingWriteCount(): number {
-  const stored = window.localStorage.getItem(SQLITE_PENDING_WRITES_KEY);
-  if (!stored) {
-    return 0;
-  }
-  const parsed: unknown = JSON.parse(stored);
-  return Array.isArray(parsed) ? parsed.length : 0;
-}
-
-describe('persistence — colas offline deshabilitadas', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'traccion', { configurable: true, value: undefined });
-    window.localStorage.clear();
-  });
-
-  it('purga una cola heredada sin reproducirla contra SQLite', async () => {
-    writePendingWriteDirectly(1);
-    const save = vi.fn();
-    Object.defineProperty(window, 'traccion', {
-      configurable: true,
-      value: { saveLocalStorageRecordIfUnchanged: save },
-    });
-
-    const flushed = await flushPendingSqliteWrites();
-
-    expect(flushed).toBe(0);
-    expect(readPendingWriteCount()).toBe(0);
-    expect(save).not.toHaveBeenCalled();
-  });
-
-  it('purga todas las claves de una cola heredada', async () => {
-    window.localStorage.setItem(
-      SQLITE_PENDING_WRITES_KEY,
-      JSON.stringify([
-        { key: TEST_KEY, value: '[]', updatedAt: new Date().toISOString(), expectedUpdatedAt: null, attempts: 1, lastError: 'offline' },
-        { key: 'traccion.v1.criterios-rrll.criterios', value: '[]', updatedAt: new Date().toISOString(), expectedUpdatedAt: null, attempts: 2, lastError: 'offline' },
-      ]),
-    );
-
-    await flushPendingSqliteWrites();
-    expect(window.localStorage.getItem(SQLITE_PENDING_WRITES_KEY)).toBeNull();
-  });
-});
 
 describe('isTemporarySqliteLockMessage', () => {
   it('reconoce el mensaje de base ocupada temporalmente por otro equipo', () => {

@@ -10,31 +10,9 @@ export interface PendingRecordWriteResult extends PendingRecordWriteSaveResult {
   queued?: boolean;
 }
 
-type PendingWriteReplayer = (
-  recordId: string,
-  value: string,
-  expectedUpdatedAt: string | null,
-) => Promise<PendingRecordWriteSaveResult | null>;
-
-/**
- * Compatibilidad de API para repositorios ya migrados. TrAcción no admite
- * escrituras offline: no se registra ni reproduce ninguna cola local.
- */
-export function registerPendingWriteReplayer(module: string, replayer: PendingWriteReplayer): void {
-  void module;
-  void replayer;
-  // Intencionadamente vacío. Se conserva temporalmente para evitar un refactor
-  // masivo de repositorios en esta entrega de robustez.
-}
-
 function clearLegacyPendingRecordWrites(): void {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(SQLITE_PENDING_RECORD_WRITES_KEY);
-}
-
-export function getPendingRecordWriteCount(): number {
-  clearLegacyPendingRecordWrites();
-  return 0;
 }
 
 export interface SaveRecordWithPendingFallbackOptions {
@@ -98,11 +76,3 @@ export async function saveRecordWithPendingFallback({
   }
 }
 
-/**
- * Las versiones actuales no reproducen colas locales antiguas. Se purgan para
- * impedir que un cambio offline obsoleto se aplique más tarde sobre SQLite.
- */
-export async function flushPendingRecordWrites(): Promise<number> {
-  clearLegacyPendingRecordWrites();
-  return 0;
-}

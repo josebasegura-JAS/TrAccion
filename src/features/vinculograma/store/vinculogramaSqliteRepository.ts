@@ -5,7 +5,6 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  registerPendingWriteReplayer,
   saveRecordWithPendingFallback,
 } from '../../../services/pendingRecordWrites';
 import type { Vinculograma } from '../domain/vinculograma';
@@ -14,17 +13,6 @@ const VINCULOGRAMA_STORAGE_KEY = 'traccion.v1.vinculograma.records';
 const VINCULOGRAMA_PENDING_WRITE_MODULE = 'vinculograma';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
-
-registerPendingWriteReplayer(VINCULOGRAMA_PENDING_WRITE_MODULE, async (recordId, value, expectedUpdatedAt) => {
-  const saver = window.traccion?.saveVinculogramaRecordIfUnchanged;
-  if (!saver) {
-    return null;
-  }
-
-  const result = await saver({ id: recordId, value, expectedUpdatedAt });
-  publishDatabaseStatus(result.status);
-  return { ok: result.ok, message: result.message, currentUpdatedAt: result.currentUpdatedAt };
-});
 
 async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
