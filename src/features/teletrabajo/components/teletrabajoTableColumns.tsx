@@ -253,8 +253,8 @@ export function buildTeletrabajoTableColumns({
               }}
               size="sm"
               title="Generar acuerdo Word"
-              variant="word"
-            />
+              variant="word" iconOnly
+          />
           )}
           <ActionButton
             iconOnly={false}

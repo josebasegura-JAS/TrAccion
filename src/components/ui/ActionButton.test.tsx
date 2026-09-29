@@ -7,12 +7,12 @@ describe('ActionButton', () => {
     cleanup();
   });
 
-  it('muestra solo el icono por defecto (iconOnly) y usa la etiqueta de la variante como aria-label', () => {
+  it('muestra texto por defecto y usa la etiqueta de la variante como aria-label', () => {
     render(<ActionButton variant="delete" onClick={() => undefined} />);
 
     const button = screen.getByRole('button', { name: 'Eliminar' });
     expect(button).toBeInTheDocument();
-    expect(button).not.toHaveTextContent('Eliminar');
+    expect(button).toHaveTextContent('Eliminar');
   });
 
   it('muestra el texto cuando iconOnly es false', () => {

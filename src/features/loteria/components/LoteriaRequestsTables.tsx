@@ -149,7 +149,7 @@ export function LoteriaParticipantsTable({
       isActionColumn: true, reorderable: false, resizable: false,
       render: (request) => (
         <div className="flex justify-end">
-          <ActionButton onClick={() => onRemove(request.id)} size="sm" title="Eliminar participante" variant="delete" />
+          <ActionButton onClick={() => onRemove(request.id)} size="sm" title="Eliminar participante" variant="delete" iconOnly />
         </div>
       ),
     },

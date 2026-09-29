@@ -634,31 +634,31 @@ export function ActasPage() {
                 onClick={() => void createActaBorradorOutlookDraft(acta, acta.id)}
                 size="sm"
                 title="Generar Outlook del borrador del acta"
-                variant="outlook"
-              />
+                variant="outlook" iconOnly
+          />
             )}
             {acta.estado === 'Pendiente de alegaciones' && (
               <ActionButton
                 onClick={() => void createActaOutlookDraft(acta)}
                 size="sm"
                 title="Abrir borrador Outlook de alegaciones"
-                variant="outlook"
-              />
+                variant="outlook" iconOnly
+          />
             )}
             {acta.estado === 'Pendiente de firma' && (
               <ActionButton
                 onClick={() => void createActaFirmaOutlookDraft(acta)}
                 size="sm"
                 title="Exportar Outlook del acta definitiva"
-                variant="outlook"
-              />
+                variant="outlook" iconOnly
+          />
             )}
             <ActionButton
               onClick={() => void deleteActa(acta.id)}
               size="sm"
               title="Eliminar acta"
-              variant="delete"
-            />
+              variant="delete" iconOnly
+          />
           </div>
         ),
         width: 80,

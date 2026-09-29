@@ -797,8 +797,8 @@ function RecipientTable({
                   <td className="truncate px-3 py-2 text-metro-muted">{item.email}</td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} />
-                      <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} />
+                      <ActionButton size="sm" variant="edit" onClick={() => onEdit(item)} iconOnly />
+                      <ActionButton size="sm" variant="delete" onClick={() => onDelete(item.id)} iconOnly />
                     </div>
                   </td>
                 </tr>

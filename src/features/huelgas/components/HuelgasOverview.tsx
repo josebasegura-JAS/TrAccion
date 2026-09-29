@@ -79,7 +79,7 @@ export function HuelgasOverview({
                 <p className="mt-1 truncate text-sm text-metro-muted">{nextHuelga.sindicatos.join(' · ')}</p>
               </div>
             </div>
-            <ActionButton variant="edit" onClick={() => onOpenEdit(nextHuelga)} title="Editar próxima huelga" />
+            <ActionButton variant="edit" onClick={() => onOpenEdit(nextHuelga)} title="Editar próxima huelga" iconOnly />
           </div>
         </section>
       ) : (
@@ -186,8 +186,8 @@ export function HuelgasOverview({
                           >
                             Correos
                           </ActionButton>
-                          <ActionButton variant="edit" size="sm" onClick={() => onOpenEdit(huelga)} title="Editar huelga" />
-                          <ActionButton variant="delete" size="sm" onClick={() => onRemove(huelga)} title="Eliminar huelga" />
+                          <ActionButton variant="edit" size="sm" onClick={() => onOpenEdit(huelga)} title="Editar huelga" iconOnly />
+                          <ActionButton variant="delete" size="sm" onClick={() => onRemove(huelga)} title="Eliminar huelga" iconOnly />
                         </div>
                       </td>
                     </tr>

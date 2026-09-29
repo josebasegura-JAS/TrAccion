@@ -538,8 +538,8 @@ export function PresupuestosPage() {
                           <p className="mt-0.5 text-xs text-metro-muted">{euro(total.total)} · ticket {euro(scenario.ticketAmount)}</p>
                         </div>
                         <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setActiveScenario(scenario.id); setStage('simulate'); }}>Abrir</ActionButton>
-                        <ActionButton size="sm" variant="duplicate" onClick={() => duplicateScenario(scenario.id)} title="Duplicar escenario" />
-                        <ActionButton size="sm" variant="delete" onClick={() => confirmAndRemoveScenario(scenario)} title={scenario.finalizedAt ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario'} />
+                        <ActionButton size="sm" variant="duplicate" onClick={() => duplicateScenario(scenario.id)} title="Duplicar escenario" iconOnly />
+                        <ActionButton size="sm" variant="delete" onClick={() => confirmAndRemoveScenario(scenario)} title={scenario.finalizedAt ? 'Eliminar presupuesto definitivo' : 'Eliminar escenario'} iconOnly />
                       </div>
                     );
                   })

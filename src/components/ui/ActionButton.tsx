@@ -151,7 +151,7 @@ export function ActionButton({
   className,
   disabled,
   icon: iconOverride,
-  iconOnly = true,
+  iconOnly = false,
   loading = false,
   size = 'md',
   title,

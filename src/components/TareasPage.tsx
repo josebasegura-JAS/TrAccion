@@ -576,7 +576,7 @@ export function TareasPage({
               })();
             }}
             size="sm"
-            variant="delete"
+            variant="delete" iconOnly
           />
         ),
         width: 88,

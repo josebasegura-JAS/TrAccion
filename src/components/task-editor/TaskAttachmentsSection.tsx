@@ -34,7 +34,7 @@ export function TaskAttachmentsSection({
         <span className="min-w-0 truncate text-xs font-semibold text-slate-300" title={link.ruta}>{link.nombre}</span>
         <div className="flex gap-1">
           <button className="p-1.5 text-metro-muted hover:text-white" onClick={() => void window.traccion?.openTaskDocument?.(link.ruta)} type="button"><Eye size={14} /></button>
-          <ActionButton onClick={() => setDraft((c) => ({ ...c, documentLinks: c.documentLinks.filter((item) => item.id !== link.id) }))} size="sm" variant="delete" />
+          <ActionButton onClick={() => setDraft((c) => ({ ...c, documentLinks: c.documentLinks.filter((item) => item.id !== link.id) }))} size="sm" variant="delete" iconOnly />
         </div>
       </div>)}</div>}
       {documentStatus && <p className="mt-2 text-[11px] font-semibold text-metro-muted">{documentStatus}</p>}

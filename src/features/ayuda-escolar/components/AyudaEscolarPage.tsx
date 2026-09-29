@@ -203,15 +203,9 @@ export function AyudaEscolarPage() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-metro-border bg-metro-surface p-4 shadow-card">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-metro-red">Personas</p>
-            <h2 className="text-2xl font-bold text-metro-text">Ayuda escolar</h2>
-            <p className="mt-1 text-sm text-metro-muted">Recibe correos de Outlook, identifica a la persona de Plantilla y archiva automáticamente sus adjuntos.</p>
-          </div>
-          <div className="text-right text-xs text-metro-muted">Carpeta: <span className="font-semibold text-metro-text">{basePath || 'Sin configurar'}</span></div>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 shadow-card">
+        <p className="text-xs text-metro-muted">Arrastra un correo de Outlook para identificar a la persona y archivar sus adjuntos.</p>
+        <div className="min-w-0 text-xs text-metro-muted">Carpeta: <span className="font-semibold text-metro-text">{basePath || 'Sin configurar'}</span></div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">

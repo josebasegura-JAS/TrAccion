@@ -105,8 +105,8 @@ export function ActaTypeManagerModal({
                           ? 'No se puede eliminar: tiene actas asociadas'
                           : 'Eliminar tipo de acta'
                       }
-                      variant="delete"
-                    />
+                      variant="delete" iconOnly
+          />
                   )}
                 </div>
               );

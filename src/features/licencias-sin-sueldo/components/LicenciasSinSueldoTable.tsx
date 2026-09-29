@@ -252,8 +252,8 @@ export function LicenciasTable({
               }}
               size="sm"
               title="Eliminar"
-              variant="delete"
-            />
+              variant="delete" iconOnly
+          />
           </div>
         ),
       },

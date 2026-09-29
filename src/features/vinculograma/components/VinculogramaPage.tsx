@@ -662,8 +662,8 @@ function VinculogramaTable({
                 event.stopPropagation();
                 onEdit(record);
               }}
-              title="Editar vínculo"
-            />
+              title="Editar vínculo" iconOnly
+          />
             <ActionButton
               size="sm"
               variant="delete"
@@ -671,8 +671,8 @@ function VinculogramaTable({
                 event.stopPropagation();
                 onDelete(record);
               }}
-              title="Eliminar vínculo"
-            />
+              title="Eliminar vínculo" iconOnly
+          />
           </div>
         ),
         width: 104,

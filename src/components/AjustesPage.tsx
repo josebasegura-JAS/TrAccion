@@ -799,7 +799,6 @@ export function AjustesPage() {
       <details
         className="ui-accordion group scroll-mt-4"
         id="ajustes-plantillas"
-        open
       >
         <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
@@ -824,7 +823,6 @@ export function AjustesPage() {
       <details
         className="ui-accordion group scroll-mt-4"
         id="ajustes-exportaciones"
-        open
       >
         <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
@@ -881,7 +879,6 @@ export function AjustesPage() {
       <details
         className="ui-accordion group scroll-mt-4"
         id="ajustes-tareas"
-        open
       >
         <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
