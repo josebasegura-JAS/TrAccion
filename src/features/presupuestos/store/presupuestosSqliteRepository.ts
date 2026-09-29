@@ -17,13 +17,6 @@ const PRESUPUESTOS_SNAPSHOT_RECORD_ID = 'snapshot';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
-interface PresupuestosSnapshotPayload {
-  scenarios: BudgetScenario[];
-  manualItems: BudgetManualItem[];
-  ticketGroups: BudgetTicketGroup[];
-  actuals: BudgetActual[];
-}
-
 export interface PresupuestosSqliteState {
   scenarios: BudgetScenario[];
   manualItems: BudgetManualItem[];
