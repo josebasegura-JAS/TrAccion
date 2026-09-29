@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { SortDirection } from '../../../shared/sort/sortDirection';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { openWorkbookInExcel } from '../../../shared/export/tableExport';
@@ -33,7 +34,6 @@ const AREA_COLORS = ['#4F8DF7', '#5BCB78', '#FFAA3D', '#9B6DE3', '#E85D75', '#41
 
 type AnnualMonthKind = 'actual' | 'current' | 'forecast' | 'inactive';
 type PeopleSortKey = 'empleado' | 'nombre' | 'area' | 'totalTickets' | 'totalAmount' | 'monthsWithTickets' | `month-${number}`;
-type SortDirection = 'asc' | 'desc';
 
 interface AnnualMonthDetail {
   kind: AnnualMonthKind;

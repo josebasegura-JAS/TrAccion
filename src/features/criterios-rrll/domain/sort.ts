@@ -1,7 +1,8 @@
 import type { CriterioRrll } from './criterioRrll';
 
 export type CriterioRrllSortKey = 'tema' | 'estado' | 'sentido' | 'fecha' | 'responsable';
-export type SortDirection = 'asc' | 'desc';
+export type { SortDirection } from '../../../shared/sort/sortDirection';
+import type { SortDirection } from '../../../shared/sort/sortDirection';
 
 function compareDateWithEmptyLast(firstDate: string, secondDate: string): number {
   const firstHasDate = firstDate.trim().length > 0;

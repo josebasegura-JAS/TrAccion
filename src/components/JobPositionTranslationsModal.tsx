@@ -10,7 +10,11 @@ import {
   type TableViewPreferences,
 } from '../shared/table/useTableViewPreferences';
 import { useEmployeeStore } from '../features/plantilla/store/useEmployeeStore';
-import { isJobPositionTranslationPending } from '../features/plantilla/domain/jobPositionTranslation';
+import {
+  EMPTY_JOB_POSITION_TRANSLATION,
+  isJobPositionTranslationPending,
+  type JobPositionTranslation,
+} from '../features/plantilla/domain/jobPositionTranslation';
 import { buildStableExportFilename, openWorkbookInExcel } from '../shared/export/tableExport';
 import { ModalCloseButton } from './ui/ModalCloseButton';
 
@@ -18,9 +22,6 @@ interface JobPositionTranslationsModalProps {
   onClose: () => void;
 }
 
-type JobPositionTranslation = ReturnType<
-  typeof useEmployeeStore.getState
->['jobPositionTranslations'][number];
 type JobPositionTranslationColumnId = 'puestoCastellano' | 'puestoEuskera' | 'acciones';
 type TranslationEditorMode = 'create' | 'edit';
 const JOB_POSITION_TRANSLATIONS_TABLE_STORAGE_KEY =
@@ -36,10 +37,7 @@ const defaultJobPositionTranslationTablePreferences: TableViewPreferences<JobPos
     columnWidths: {},
     columnOrder: null,
   };
-const EMPTY_TRANSLATION_DRAFT: JobPositionTranslation = {
-  puestoCastellano: '',
-  puestoEuskera: '',
-};
+const EMPTY_TRANSLATION_DRAFT: JobPositionTranslation = EMPTY_JOB_POSITION_TRANSLATION;
 
 export function JobPositionTranslationsModal({ onClose }: JobPositionTranslationsModalProps) {
   const {

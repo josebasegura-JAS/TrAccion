@@ -1,5 +1,10 @@
 import type { Employee } from '../../plantilla/domain/employee';
-import { findActiveEmployee, searchActiveEmployees } from '../../plantilla/domain/employeeMaster';
+import {
+  findActiveEmployeeSuggestion,
+  searchActiveEmployeeSuggestions,
+  type EmployeeSuggestion,
+} from '../../plantilla/domain/employeeMaster';
+export type { EmployeeSuggestion } from '../../plantilla/domain/employeeMaster';
 
 export const LICENCIA_SIN_SUELDO_STORAGE_KEY = 'traccion.v1.licenciasSinSueldo.records';
 
@@ -64,11 +69,6 @@ export type LicenciaSinSueldoDraft = Pick<
   | 'actualizaciones'
   | 'prorroga'
 >;
-
-export interface EmployeeSuggestion {
-  empleado: string;
-  nombreApellidos: string;
-}
 
 export interface ValidationResult {
   ok: boolean;
@@ -287,13 +287,9 @@ export function findEmployeeByNumber(
   employees: Employee[],
   employeeNumber: string,
 ): EmployeeSuggestion | null {
-  const employee = findActiveEmployee(employees, employeeNumber);
-  return employee ? { empleado: employee.empleado, nombreApellidos: employee.nombreApellidos } : null;
+  return findActiveEmployeeSuggestion(employees, employeeNumber);
 }
 
 export function suggestEmployees(employees: Employee[], search: string): EmployeeSuggestion[] {
-  return searchActiveEmployees(employees, search, 8).map((employee) => ({
-    empleado: employee.empleado,
-    nombreApellidos: employee.nombreApellidos,
-  }));
+  return searchActiveEmployeeSuggestions(employees, search, 8);
 }

@@ -81,3 +81,28 @@ export function searchActiveEmployees(
     )
     .slice(0, Math.max(0, limit));
 }
+
+export interface EmployeeSuggestion {
+  empleado: string;
+  nombreApellidos: string;
+}
+
+export function toEmployeeSuggestion(employee: Employee): EmployeeSuggestion {
+  return { empleado: employee.empleado, nombreApellidos: employee.nombreApellidos };
+}
+
+export function findActiveEmployeeSuggestion(
+  employees: readonly Employee[],
+  employeeNumber: unknown,
+): EmployeeSuggestion | null {
+  const employee = findActiveEmployee(employees, employeeNumber);
+  return employee ? toEmployeeSuggestion(employee) : null;
+}
+
+export function searchActiveEmployeeSuggestions(
+  employees: readonly Employee[],
+  search: unknown,
+  limit = 8,
+): EmployeeSuggestion[] {
+  return searchActiveEmployees(employees, search, limit).map(toEmployeeSuggestion);
+}

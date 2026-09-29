@@ -9,7 +9,8 @@ export type TaskSortKey =
   | 'fechaLimite'
   | 'responsable'
   | 'sindicato';
-export type SortDirection = 'asc' | 'desc';
+export type { SortDirection } from '../../../shared/sort/sortDirection';
+import type { SortDirection } from '../../../shared/sort/sortDirection';
 
 const PRIORITY_ORDER = new Map(TASK_PRIORITIES.map((priority, index) => [priority, index]));
 

@@ -9,7 +9,8 @@ export type TeletrabajoSortKey =
   | 'diasTeletrabajo'
   | 'estado'
   | 'periodo';
-export type SortDirection = 'asc' | 'desc';
+export type { SortDirection } from '../../../shared/sort/sortDirection';
+import type { SortDirection } from '../../../shared/sort/sortDirection';
 
 function compareEmpleado(first: string, second: string): number {
   const firstNumber = Number(first.trim());
