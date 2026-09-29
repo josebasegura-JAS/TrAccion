@@ -83,6 +83,22 @@ const TAREAS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Correo de origen',
+    items: [
+      'En la ficha de una tarea puedes arrastrar o seleccionar un correo de Outlook en formato .msg.',
+      'TrAcción incorpora al campo Email de origen el remitente, la fecha, el asunto y el contenido del mensaje en texto plano; el correo sirve como contexto de la tarea y no se envía ni modifica desde la aplicación.',
+      'Si Outlook no permite arrastrar directamente el mensaje, guárdalo primero como archivo .msg y selecciónalo desde la ficha.',
+    ],
+  },
+  {
+    title: 'Avisos, impresión y exportación',
+    items: [
+      'Cuando una tarea se asigna a una persona, TrAcción genera un aviso de nueva asignación. La campana de la cabecera permite consultar las asignaciones pendientes de abrir y acceder directamente a la tarea.',
+      'El aviso sirve para descubrir la nueva asignación; abrirlo no cambia el estado funcional de la tarea ni la da por resuelta.',
+      'Desde el detalle de una tarea se puede preparar una vista de impresión y exportar un informe a Excel con sus datos y seguimiento.',
+    ],
+  },
+  {
     title: 'Flujo recomendado',
     ordered: true,
     items: [

@@ -25,8 +25,8 @@ export const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
   {
     title: 'Carpeta de actualizaciones',
     items: [
-      'Es la carpeta de red donde se publican TrAcción.piz y version.json. El .piz es el portable de TrAcción renombrado para poder almacenarlo en la red corporativa.',
-      'Al arrancar, la app comprueba esa carpeta y, si hay una versión más nueva, pregunta antes de actualizarse. Antes de instalarla valida su SHA-256 y la copia a una carpeta temporal local.',
+      'Es la carpeta de red donde se publican Traccion 1.2.piz y version.json. El .piz contiene el portable de TrAcción con un nombre estable que evita depender de la revisión técnica 1.2.xxx y permite almacenarlo en la red corporativa.',
+      'Al arrancar, la app comprueba version.json y, si la revisión técnica publicada es más nueva, pregunta antes de actualizarse. Antes de instalarla valida el SHA-256 del .piz, trabaja desde una copia temporal local y sustituye el ejecutable estable Traccion 1.2.exe.',
     ],
   },
   {
@@ -34,6 +34,13 @@ export const AJUSTES_HELP_SECTIONS: ModuleHelpSection[] = [
     items: [
       'Guardan solo la ruta (local, UNC o unidad mapeada) de los documentos DOCX externos que usan otros módulos para generar sus escritos: Teletrabajo, Licencia sin sueldo y Vinculograma.',
       'La plantilla no se copia dentro de TrAcción: la app abre el DOCX de esa ruta en el momento de generar el documento, así que si se mueve o renombra el fichero hay que actualizar la ruta aquí.',
+    ],
+  },
+  {
+    title: 'Configuración compartida',
+    items: [
+      'Las rutas y parámetros que deben ser comunes para los tres usuarios se guardan en la configuración compartida de TrAcción; no deben depender de que cada equipo vuelva a introducirlos.',
+      'Cuando cambies una ruta de Excel automático, plantilla Word, backup o actualización, comprueba que la ubicación sea accesible para el resto de usuarios antes de dar el cambio por cerrado.',
     ],
   },
   {

@@ -44,6 +44,14 @@ export const PRESUPUESTOS_HELP_SECTIONS: ModuleHelpSection[] = [
     ],
   },
   {
+    title: 'Excel de simulación y presupuesto',
+    items: [
+      'La simulación puede exportarse a Excel para revisar y compartir el escenario con su detalle mensual, Ticket Restaurante y partidas manuales.',
+      'El escenario elegido también puede exportarse como presupuesto, manteniendo diferenciados los importes simulados y los definitivos cuando hayan sido ajustados.',
+      'En Ticket Restaurante el Excel conserva el detalle por calendario y por mes para que el importe anual pueda trazarse hasta su cálculo mensual.',
+    ],
+  },
+  {
     title: 'Seguimiento de ejecución',
     items: [
       'El gasto real se registra por mes, bloque y concepto.',
