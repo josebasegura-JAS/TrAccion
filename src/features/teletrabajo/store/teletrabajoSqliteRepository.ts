@@ -5,12 +5,11 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { TeletrabajoSolicitud } from '../domain/solicitud';
 
 const TELETRABAJO_STORAGE_KEY = 'traccion.v1.teletrabajo.solicitudes';
-const TELETRABAJO_PENDING_WRITE_MODULE = 'teletrabajo-solicitudes';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -133,19 +132,13 @@ export async function saveTeletrabajoSolicitudToSqlite(
   const value = JSON.stringify(solicitud);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: TELETRABAJO_PENDING_WRITE_MODULE,
-      recordId: solicitud.id,
-      value,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: solicitud.id, value, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     if (!options.silentPersistenceFeedback) {
       clearPersistenceBusy(TELETRABAJO_STORAGE_KEY, result.message);

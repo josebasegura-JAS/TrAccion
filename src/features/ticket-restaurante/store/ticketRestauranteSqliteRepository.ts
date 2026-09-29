@@ -5,8 +5,8 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 
 const TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY = 'traccion.v1.ticketRestaurante.calendars';
 const TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY = 'traccion.v1.ticketRestaurante.people';
@@ -15,11 +15,6 @@ const TICKET_RESTAURANTE_CONFIG_STORAGE_KEY = 'traccion.v1.ticketRestaurante.con
 const TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY = 'traccion.v1.ticketRestaurante.manutenciones';
 // Ticket Restaurante tiene 5 entidades independientes. Se conserva un identificador
 // de contexto por entidad para los guardados estrictos y sus mensajes de diagnóstico.
-const TICKET_RESTAURANTE_CALENDARS_PENDING_WRITE_MODULE = 'ticket-restaurante-calendarios';
-const TICKET_RESTAURANTE_PEOPLE_PENDING_WRITE_MODULE = 'ticket-restaurante-personas';
-const TICKET_RESTAURANTE_ABSENCES_PENDING_WRITE_MODULE = 'ticket-restaurante-ausencias';
-const TICKET_RESTAURANTE_CONFIG_PENDING_WRITE_MODULE = 'ticket-restaurante-config';
-const TICKET_RESTAURANTE_MANUTENCIONES_PENDING_WRITE_MODULE = 'ticket-restaurante-manutenciones';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -126,19 +121,13 @@ export async function saveTicketRestauranteCalendarToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: TICKET_RESTAURANTE_CALENDARS_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value: serializedValue,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(TICKET_RESTAURANTE_CALENDARS_STORAGE_KEY, result.message);
 
@@ -246,19 +235,13 @@ export async function saveTicketRestaurantePersonToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: TICKET_RESTAURANTE_PEOPLE_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value: serializedValue,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(TICKET_RESTAURANTE_PEOPLE_STORAGE_KEY, result.message);
 
@@ -367,19 +350,13 @@ export async function saveTicketRestauranteAbsenceToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: TICKET_RESTAURANTE_ABSENCES_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value: serializedValue,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(TICKET_RESTAURANTE_ABSENCES_STORAGE_KEY, result.message);
 
@@ -495,19 +472,13 @@ export async function saveTicketRestauranteConfigToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: TICKET_RESTAURANTE_CONFIG_PENDING_WRITE_MODULE,
-      recordId: TICKET_RESTAURANTE_CONFIG_RECORD_ID,
-      value: serializedValue,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: TICKET_RESTAURANTE_CONFIG_RECORD_ID, value: serializedValue, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(TICKET_RESTAURANTE_CONFIG_STORAGE_KEY, result.message);
 
@@ -565,19 +536,13 @@ export async function saveTicketRestauranteManutencionToSqlite(
   await waitForNextPaint();
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: TICKET_RESTAURANTE_MANUTENCIONES_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value: serializedValue,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value: serializedValue, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(TICKET_RESTAURANTE_MANUTENCIONES_STORAGE_KEY, result.message);
 

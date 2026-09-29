@@ -5,12 +5,11 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { Vinculograma } from '../domain/vinculograma';
 
 const VINCULOGRAMA_STORAGE_KEY = 'traccion.v1.vinculograma.records';
-const VINCULOGRAMA_PENDING_WRITE_MODULE = 'vinculograma';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -124,19 +123,13 @@ export async function saveVinculogramaToSqlite(
   const value = JSON.stringify(record);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: VINCULOGRAMA_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(VINCULOGRAMA_STORAGE_KEY, result.message);
 

@@ -1,12 +1,11 @@
 import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { Acta } from '../domain/acta';
 
 const ACTAS_STORAGE_KEY = 'traccion.v1.actas.records';
-const ACTAS_PENDING_WRITE_MODULE = 'actas';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -110,19 +109,13 @@ export async function saveActaToSqlite(
   const value = JSON.stringify(acta);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: ACTAS_PENDING_WRITE_MODULE,
-      recordId: acta.id,
-      value,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: acta.id, value, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(ACTAS_STORAGE_KEY, result.message);
 

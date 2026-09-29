@@ -1,11 +1,10 @@
 import { clearPersistenceBusy, publishPersistenceBusy, waitForNextPaint } from '../../../services/persistence';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { Employee } from '../domain/employee';
 
 const EMPLOYEES_DIRECT_STORAGE_KEY = 'traccion.v1.plantilla.employees';
-const EMPLOYEES_PENDING_WRITE_MODULE = 'plantilla-empleados';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -89,18 +88,12 @@ export async function saveEmployeeToSqlite(
   const value = JSON.stringify(employee);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: EMPLOYEES_PENDING_WRITE_MODULE,
-      recordId: employee.empleado,
-      value,
-      expectedUpdatedAt: expectedValue,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: employee.empleado, value, expectedValue }),
         );
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentValue };
-      },
-    });
+      });
 
     clearPersistenceBusy(EMPLOYEES_DIRECT_STORAGE_KEY, result.message);
 

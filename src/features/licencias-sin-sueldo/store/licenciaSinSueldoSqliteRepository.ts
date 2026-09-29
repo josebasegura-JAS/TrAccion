@@ -5,12 +5,11 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { LicenciaSinSueldoRecord } from '../domain/licenciaSinSueldo';
 
 const LICENCIA_SIN_SUELDO_STORAGE_KEY = 'traccion.v1.licenciasSinSueldo.records';
-const LICENCIA_SIN_SUELDO_PENDING_WRITE_MODULE = 'licencias-sin-sueldo';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -124,19 +123,13 @@ export async function saveLicenciaSinSueldoToSqlite(
   const value = JSON.stringify(record);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: LICENCIA_SIN_SUELDO_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(LICENCIA_SIN_SUELDO_STORAGE_KEY, result.message);
 

@@ -129,7 +129,7 @@ guardado fallaba con un mensaje de error y no había forma de que el cambio
 se sincronizara solo al reconectar — el usuario tenía que reintentar a mano
 una vez volviera la red, y solo si no cerraba el formulario mientras tanto.
 
-> **DECISIÓN SUPERADA.** Se conserva como histórico de la etapa con fallback offline. `pendingRecordWrites.ts` mantiene hoy compatibilidad de API, pero ya no encola ni reproduce escrituras offline.
+> **DECISIÓN SUPERADA.** Se conserva como histórico de la etapa con fallback offline. La infraestructura `pendingRecordWrites` fue eliminada en la limpieza técnica posterior; el guardado vigente está centralizado en `strictSqliteWrites.ts` y no encola ni reproduce escrituras offline.
 
 **Decisión**: no tocar la cola existente (sigue protegiendo su camino), sino
 añadir una hermana genérica (`src/services/pendingRecordWrites.ts`) para el

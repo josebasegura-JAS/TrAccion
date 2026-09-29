@@ -5,12 +5,11 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { BudgetActual, BudgetManualItem, BudgetScenario, BudgetTicketGroup } from '../domain/presupuestos';
 
 const PRESUPUESTOS_STORAGE_KEY = 'traccion.v1.presupuestos';
-const PRESUPUESTOS_PENDING_WRITE_MODULE = 'presupuestos';
 // Presupuestos guarda las 4 colecciones como un único snapshot atómico, no
 // registro a registro; se identifica como un único registro con id fijo.
 const PRESUPUESTOS_SNAPSHOT_RECORD_ID = 'snapshot';
@@ -141,12 +140,7 @@ export async function savePresupuestosToSqlite(
   const value = JSON.stringify(state);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: PRESUPUESTOS_PENDING_WRITE_MODULE,
-      recordId: PRESUPUESTOS_SNAPSHOT_RECORD_ID,
-      value,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({
             scenarios: state.scenarios.map((item) => ({ id: item.id, value: JSON.stringify(item) })),
@@ -158,8 +152,7 @@ export async function savePresupuestosToSqlite(
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(PRESUPUESTOS_STORAGE_KEY, result.message);
 

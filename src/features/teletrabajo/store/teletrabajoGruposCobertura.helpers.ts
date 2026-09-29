@@ -117,7 +117,7 @@ async function persistGruposCoberturaInSqlite(gruposCobertura: GrupoCobertura[])
 }
 
 /**
- * Persiste TODA la lista de grupos en localStorage y, en segundo plano, en
+ * Persiste la lista completa de grupos mediante la capa de persistencia compartida en
  * SQLite registro a registro. Pensada solo para operaciones que legítimamente
  * tocan muchos grupos a la vez (migración legacy), donde el resultado se ve
  * en el siguiente reload. NO usar para una edición de un solo grupo desde el

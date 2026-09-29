@@ -5,12 +5,11 @@ import {
 } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
 import {
-  saveRecordWithPendingFallback,
-} from '../../../services/pendingRecordWrites';
+  saveSharedRecord,
+} from '../../../services/strictSqliteWrites';
 import type { CriterioRrll } from '../domain/criterioRrll';
 
 const CRITERIOS_RRLL_STORAGE_KEY = 'traccion.v1.criterios-rrll.criterios';
-const CRITERIOS_RRLL_PENDING_WRITE_MODULE = 'criterios-rrll';
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -124,19 +123,13 @@ export async function saveCriterioRrllToSqlite(
   const value = JSON.stringify(record);
 
   try {
-    const result = await saveRecordWithPendingFallback({
-      module: CRITERIOS_RRLL_PENDING_WRITE_MODULE,
-      recordId: record.id,
-      value,
-      expectedUpdatedAt,
-      save: async () => {
+    const result = await saveSharedRecord(async () => {
         const rawResult = await withTemporarySqliteRetry(() =>
           saver({ id: record.id, value, expectedUpdatedAt }),
         );
         publishDatabaseStatus(rawResult.status);
         return { ok: rawResult.ok, message: rawResult.message, currentUpdatedAt: rawResult.currentUpdatedAt };
-      },
-    });
+      });
 
     clearPersistenceBusy(CRITERIOS_RRLL_STORAGE_KEY, result.message);
 

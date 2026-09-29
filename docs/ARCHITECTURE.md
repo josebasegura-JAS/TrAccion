@@ -61,12 +61,13 @@ Si SQLite está vacía, TrAcción **no la rellena automáticamente** con datos a
 
 ### 4.2 Sin modo offline
 
-`src/services/pendingRecordWrites.ts` mantiene compatibilidad de API con repositorios antiguos, pero actualmente:
+`src/services/strictSqliteWrites.ts` centraliza el guardado estricto de los repositorios compartidos:
 
 - no registra escrituras offline;
 - no reproduce colas locales;
-- purga colas legacy;
-- un cambio solo se considera guardado cuando SQLite lo confirma.
+- purga la antigua clave de cola legacy por compatibilidad;
+- un cambio solo se considera guardado cuando SQLite lo confirma;
+- los conflictos OCC se propagan intactos para que el store recargue el dato vigente.
 
 Por tanto, cualquier documentación o código que describa `localStorage` como fallback operativo de negocio está obsoleto.
 

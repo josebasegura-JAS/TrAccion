@@ -219,7 +219,7 @@ async function persistPuestosTeletrabajoInSqlite(
 }
 
 /**
- * Persiste TODA la lista de puestos en localStorage y, en segundo plano, en
+ * Persiste la lista completa de puestos mediante la capa de persistencia compartida en
  * SQLite registro a registro. Pensada solo para operaciones que legítimamente
  * tocan muchos puestos a la vez (migración legacy, importación masiva), donde
  * el resultado se ve en el siguiente reload. NO usar para una edición de un
