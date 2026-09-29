@@ -505,7 +505,7 @@ export function TareasPage({
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${(TASK_STATE_PILL[task.estado] ?? 'border-metro-border bg-metro-panel text-metro-text')}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${(TASK_STATE_DOT[task.estado] ?? 'bg-slate-400')}`} />
-            {taskStateLabel(task.estado)}
+            {taskStates.find((state) => state.id === task.estado)?.nombre ?? TASK_STATE_LABELS[task.estado] ?? task.estado}
           </span>
         ),
         width: 122,
@@ -589,7 +589,7 @@ export function TareasPage({
         className: 'whitespace-nowrap',
       },
     ],
-    [alert, removeWithConcurrencyCheck],
+    [alert, removeWithConcurrencyCheck, taskStates],
   );
 
   const sortedTasks = useMemo(
