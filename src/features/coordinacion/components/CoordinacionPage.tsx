@@ -11,6 +11,18 @@ import { formatCoordinationDate, type CoordinationArea, type CoordinationMeeting
 import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/useCoordinacionStore';
 import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
 import { navigateInApp } from '../../../services/appNavigationBus';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { useModuleHelpRegistry } from '../../../services/moduleHelpRegistry';
+
+
+const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
+  { title: 'Para qué sirve', items: ['Prepara y conserva las reuniones de RRLL con Dirección, otras áreas y sindicatos.', 'Permite convertir tareas abiertas en puntos de reunión, añadir puntos libres y crear tareas nuevas sin perder la relación entre reunión y seguimiento.'] },
+  { title: 'Dirección', items: ['Al crear una reunión se incorporan automáticamente las tareas marcadas previamente como «Trasladar a Dirección».', 'Dentro de la reunión puedes añadir tareas activas, puntos manuales o crear una tarea nueva desde la propia reunión.', 'Cada punto puede registrar su resultado y estado. Al cerrar la reunión, los puntos vinculados dejan trazabilidad en sus tareas.'] },
+  { title: 'Otras áreas', items: ['Indica el área, fecha y, si procede, interlocutores y objetivo. Una tarea inicial es opcional.', 'Si existen tareas pendientes marcadas para esa área, TrAcción puede incorporarlas al crear la reunión.', 'Los puntos pueden ser tareas existentes, puntos no inventariados o nuevas tareas creadas desde la reunión.'] },
+  { title: 'Sindicatos', items: ['El seguimiento se organiza por organización sindical y mantiene el histórico de reuniones.', 'El guion es flexible y permite registrar asuntos, resultados y compromisos de seguimiento según la reunión.', 'Utiliza el histórico para consultar lo tratado anteriormente con cada sindicato sin depender de notas externas.'] },
+  { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Cuando un punto vinculado se marca como tratado al cerrar la reunión, TrAcción actualiza el seguimiento de la tarea y aplica el cierre previsto por el módulo.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
+  { title: 'Histórico y Excel', items: ['Las reuniones permanecen disponibles como histórico una vez cerradas.', 'El Excel automático utiliza la ruta configurada en Ajustes. Comprueba esa ruta si la exportación no puede actualizarse.', 'Eliminar una reunión o un punto manual debe reservarse para registros creados por error; para reuniones celebradas es preferible conservar el histórico.'] },
+];
 
 function todayIso(): string {
   const now = new Date();
@@ -89,6 +101,13 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [status, setStatus] = useState('');
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
   const { confirm, dialogNode } = useAppDialog();
+  const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
+  const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
+
+  useEffect(() => {
+    setModuleHelp({ title: 'Coordinación', subtitle: 'Guía rápida de reuniones, guiones, tareas, acuerdos e histórico.', sections: COORDINACION_HELP_SECTIONS });
+    return () => clearModuleHelp();
+  }, [clearModuleHelp, setModuleHelp]);
 
   useEffect(() => { load(); loadTasks(); loadConfig(); }, [load, loadConfig, loadTasks]);
 

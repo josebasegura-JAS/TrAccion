@@ -1,10 +1,20 @@
 import { CalendarDays, MailPlus, MapPinned, Settings2, UsersRound } from 'lucide-react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { buildAsignacionesForPersonal, isAsignacionCompleta, type HuelgaPuestoAsignacion } from './huelgasAssignments';
 import type { HuelgaZona } from './huelgasZones';
 import type { HuelgaArea } from './huelgasAreas';
 import { convocatoriaLabel, formatDate, huelgaStatus, statusClass, type Huelga } from './huelgasPageModel';
+
+
+const HUELGAS_HELP_SECTIONS: ModuleHelpSection[] = [
+  { title: 'Para qué sirve', items: ['Centraliza cada convocatoria de huelga y prepara la recogida de información por zonas responsables.', 'Relaciona el personal que trabaja ese día con su puesto, área y zona para generar los correos y Excel de seguimiento.'] },
+  { title: 'Flujo recomendado', ordered: true, items: ['Crear la convocatoria indicando fecha, sindicatos convocantes, tipo de jornada o paros y observaciones.', 'Importar el personal con turno del día desde el Excel. TrAcción contrasta los datos con Plantilla para completar la residencia cuando sea posible.', 'Revisar Áreas y Zonas y completar las asignaciones que falten. Cada puesto debe quedar asociado al área y zona responsables.', 'Abrir Correos cuando todas las asignaciones estén completas. Revisar destinatarios y texto antes de generar los borradores de Outlook.', 'Usar el Excel de recogida como soporte del seguimiento de la convocatoria.'] },
+  { title: 'Zonas y áreas', items: ['Área describe la adscripción organizativa del puesto; Zona agrupa el destino operativo al que se enviará la petición de información.', 'Las asignaciones guardadas se reutilizan en convocatorias posteriores. Si cambia una residencia o puesto, conviene revisar su correspondencia antes de generar correos.', 'Los responsables y correos se mantienen por zona; Servicios Centrales puede quedar sin destinatario cuando el proceso no requiera correo.'] },
+  { title: 'Importación y revisión', items: ['La importación corresponde al personal previsto con turno en la fecha concreta de huelga; no sustituye a Plantilla.', 'Antes de generar comunicaciones revisa especialmente personas sin área, zona o responsable, porque impiden completar correctamente la distribución.', 'Editar una convocatoria permite corregir sus datos sin tener que crearla de nuevo. Eliminar debe reservarse para convocatorias registradas por error.'] },
+  { title: 'Correos y Excel', items: ['Los correos se generan por zona con el texto configurado y la información correspondiente a esa convocatoria.', 'La generación de correos solo se habilita cuando las asignaciones necesarias están completas, para evitar enviar una recogida incompleta.', 'El Excel generado agrupa la información que necesita cada zona para realizar el seguimiento.'] },
+];
 
 type Props = {
   huelgas: Huelga[];
@@ -43,6 +53,8 @@ export function HuelgasOverview({
     <>
       <PageHeader
         title="Huelgas"
+        helpSections={HUELGAS_HELP_SECTIONS}
+        helpSubtitle="Guía rápida de convocatorias, personal, áreas, zonas y comunicaciones."
         actions={
           <div className="flex items-center gap-2">
             <ActionButton variant="secondary" iconOnly={false} icon={MapPinned} onClick={onOpenZones}>Zonas y áreas</ActionButton>

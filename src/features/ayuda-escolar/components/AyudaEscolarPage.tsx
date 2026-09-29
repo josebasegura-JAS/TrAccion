@@ -9,6 +9,18 @@ import {
   type SchoolHelpArchiveResult,
 } from '../domain/ayudaEscolar';
 import { useAyudaEscolarStore } from '../store/useAyudaEscolarStore';
+import type { ModuleHelpSection } from '../../../components/ModuleHelp';
+import { useModuleHelpRegistry } from '../../../services/moduleHelpRegistry';
+
+
+const AYUDA_ESCOLAR_HELP_SECTIONS: ModuleHelpSection[] = [
+  { title: 'Para qué sirve', items: ['Recibe correos .msg de Outlook con documentación de Ayuda Escolar, identifica a la persona de Plantilla y archiva sus adjuntos en la carpeta configurada.', 'Mantiene un seguimiento compartido de qué personas han enviado documentación y qué archivos se archivaron.'] },
+  { title: 'Flujo recomendado', ordered: true, items: ['Comprobar en Ajustes la carpeta de Ayuda Escolar correspondiente.', 'Arrastrar el correo .msg de Outlook al área de importación o seleccionarlo desde el botón.', 'Revisar remitente, adjuntos y la persona propuesta antes de guardar.', 'Si el correo se envía en nombre de otra persona, marcar esa opción y seleccionar manualmente a la persona correcta.', 'Confirmar el archivado y comprobar que aparece en el listado de documentación recibida.'] },
+  { title: 'Identificación de la persona', items: ['TrAcción compara los datos del remitente con Plantilla y propone candidatos; las normalizaciones permiten resolver variaciones habituales de nombres y tildes.', 'Si el correo del remitente no está todavía en Plantilla y la identificación es inequívoca, el proceso puede incorporarlo a la ficha de la persona.', 'Si el correo ya pertenece a otra persona de Plantilla, TrAcción avisa del conflicto y no debe archivarse hasta revisar la selección.'] },
+  { title: 'En nombre de otra persona', items: ['Marca «envía en nombre de otro» cuando el remitente del correo no sea la persona cuya documentación se está presentando.', 'En ese caso selecciona expresamente a la persona destinataria del trámite. El seguimiento queda asociado a ella y conserva la referencia del remitente sin utilizar su correo como identificación de la persona seleccionada.'] },
+  { title: 'Archivos e histórico', items: ['No se guarda nada al arrastrar el correo: primero se inspeccionan remitente y adjuntos y después debes confirmar la persona.', 'Los adjuntos se archivan con el nombre de la persona en la ruta configurada; si es necesario se utilizan sufijos para no sobrescribir archivos existentes.', 'El listado permite comprobar documentación recibida, número de archivos y registros anteriores de cada persona.'] },
+  { title: 'Si algo no encaja', items: ['Si Outlook no entrega directamente el archivo al arrastrarlo, guarda primero el mensaje como .msg y selecciónalo desde la pantalla.', 'Un correo sin adjuntos puede inspeccionarse, pero no aporta documentación que archivar.', 'Si la carpeta no está configurada o no está disponible, corrige la ruta en Ajustes antes de confirmar el archivado.'] },
+];
 
 const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white transition hover:bg-metro-dark disabled:cursor-not-allowed disabled:opacity-50';
@@ -22,6 +34,8 @@ export function AyudaEscolarPage() {
   const addRecord = useAyudaEscolarStore((state) => state.add);
   const basePath = useConfiguracionStore((state) => state.rutaAyudaEscolar);
   const loadConfig = useConfiguracionStore((state) => state.load);
+  const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
+  const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
   const [messageFile, setMessageFile] = useState<File | null>(null);
   const [inspection, setInspection] = useState<OutlookMessageInspection | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -32,6 +46,11 @@ export function AyudaEscolarPage() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setModuleHelp({ title: 'Ayuda escolar', subtitle: 'Guía rápida para recibir correos, identificar personas y archivar documentación.', sections: AYUDA_ESCOLAR_HELP_SECTIONS });
+    return () => clearModuleHelp();
+  }, [clearModuleHelp, setModuleHelp]);
 
   useEffect(() => {
     loadEmployees();
