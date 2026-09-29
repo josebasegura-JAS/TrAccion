@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-windows-zip:
@@ -72,6 +72,9 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      - name: Bump build version
+        run: npm run version:bump
+
       - name: Build renderer and Electron main
         run: npm run build
 
@@ -102,7 +105,8 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           $source = "release\win-unpacked"
-          $zip = "release\TrAccion V$version Windows.zip"
+          $zip = "release\TrAccion 1.2 Windows.zip"
+          Write-Host "Version tecnica incluida en el ZIP: $version"
 
           if (-not (Test-Path $source)) {
             throw "No se ha encontrado la carpeta $source generada por electron-builder."
@@ -115,10 +119,27 @@ jobs:
           Compress-Archive -Path "$source\*" -DestinationPath $zip -CompressionLevel Optimal
           Write-Host "ZIP generado: $zip"
 
+      - name: Commit updated build counter
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .build-version package.json package-lock.json
+          $changes = git status --porcelain
+
+          if ($changes) {
+            git commit -m "ci: bump build counter [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          } else {
+            Write-Host "Sin cambios en el contador de build; nada que commitear."
+          }
+
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TrAccion-V1-windows-zip
-          path: release/TrAccion V*.zip
+          name: Traccion-1.2-windows-zip
+          path: release/TrAccion 1.2 Windows.zip
           if-no-files-found: error
           compression-level: 0
