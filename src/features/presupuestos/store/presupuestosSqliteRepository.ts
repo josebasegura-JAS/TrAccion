@@ -10,9 +10,7 @@ import {
 import type { BudgetActual, BudgetManualItem, BudgetScenario, BudgetTicketGroup } from '../domain/presupuestos';
 
 const PRESUPUESTOS_STORAGE_KEY = 'traccion.v1.presupuestos';
-// Presupuestos guarda las 4 colecciones como un único snapshot atómico, no
-// registro a registro; se identifica como un único registro con id fijo.
-const PRESUPUESTOS_SNAPSHOT_RECORD_ID = 'snapshot';
+// Presupuestos guarda las 4 colecciones como un único snapshot atómico.
 const TEMPORARY_SQLITE_BUSY_RETRIES = 6;
 const TEMPORARY_SQLITE_BUSY_RETRY_MS = 250;
 
@@ -136,8 +134,6 @@ export async function savePresupuestosToSqlite(
 
   publishPersistenceBusy(PRESUPUESTOS_STORAGE_KEY, 'Guardando presupuestos en SQLite…');
   await waitForNextPaint();
-
-  const value = JSON.stringify(state);
 
   try {
     const result = await saveSharedRecord(async () => {
