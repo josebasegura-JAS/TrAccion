@@ -12,6 +12,7 @@ import { startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './service
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
 import { hasDirtyEditors } from './services/dirtyEditors';
+import { recordPerformanceMetric } from './services/performanceMetrics';
 import { useAppDialog } from './hooks/useAppDialog';
 import {
   bootstrapSqlitePersistence,
@@ -168,6 +169,7 @@ class AppShellErrorBoundary extends Component<{ children: ReactNode }, ModuleErr
 export function App() {
   const { confirm, dialogNode } = useAppDialog();
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const navigationStartedAtRef = useRef<{ view: AppView; startedAt: number } | null>(null);
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
 
   useEffect(() => {
@@ -191,8 +193,23 @@ export function App() {
       const shouldLeave = await confirm('Hay cambios sin guardar en el formulario abierto. Si cambia de módulo ahora, el borrador se conservará para poder recuperarlo. ¿Desea continuar?', { title: 'Cambios sin guardar', confirmLabel: 'Cambiar de módulo', cancelLabel: 'Seguir editando' });
       if (!shouldLeave) return;
     }
+    navigationStartedAtRef.current = { view: nextView, startedAt: performance.now() };
     setActiveView(nextView);
   };
+
+  useEffect(() => {
+    const pending = navigationStartedAtRef.current;
+    if (!pending || pending.view !== activeView) return;
+    let cancelled = false;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        recordPerformanceMetric('navegacion', `Cambio de vista: ${activeView}`, performance.now() - pending.startedAt);
+        if (navigationStartedAtRef.current === pending) navigationStartedAtRef.current = null;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [activeView]);
 
   const resetToDashboard = (): void => window.location.reload();
   const handleDashboardOpenRecord = (target: { view: AppView; recordId?: string; responsibleFilter?: string }) => {

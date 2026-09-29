@@ -16,6 +16,8 @@ import { DatabaseSettingsSection } from './ajustes/DatabaseSettingsSection';
 import { TaskCatalogSettings } from './ajustes/TaskCatalogSettings';
 import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import { publishDatabaseStatus, refreshDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
+import { PerformanceDiagnostics } from './ajustes/PerformanceDiagnostics';
+import { measurePerformance } from '../services/performanceMetrics';
 
 type RouteDraft = {
   rutaPlantillaTeletrabajo: string;
@@ -280,12 +282,16 @@ export function AjustesPage() {
   const loadDatabaseDetails = useCallback(() => {
     if (databaseDetailsLoadedRef.current) return;
     databaseDetailsLoadedRef.current = true;
-    void refreshCurrentDatabaseLock();
-    void refreshLocalBackups();
-    void refreshVacuumStatus();
-    void window.traccion?.getSecondaryBackupDirectory?.().then(setSecondaryBackupPath).catch(() => undefined);
-    void window.traccion?.getUpdatesDirectory?.().then(setUpdatesDirectoryPath).catch(() => undefined);
-    void window.traccion?.getDailyLocalBackupSettings?.().then(setDailyBackupSettings).catch(() => undefined);
+    void measurePerformance('ajustes', 'Cargar detalles de Base de datos', async () => {
+      await Promise.all([
+        refreshCurrentDatabaseLock(),
+        refreshLocalBackups(),
+        refreshVacuumStatus(),
+        window.traccion?.getSecondaryBackupDirectory?.().then(setSecondaryBackupPath).catch(() => undefined),
+        window.traccion?.getUpdatesDirectory?.().then(setUpdatesDirectoryPath).catch(() => undefined),
+        window.traccion?.getDailyLocalBackupSettings?.().then(setDailyBackupSettings).catch(() => undefined),
+      ]);
+    });
   }, [refreshCurrentDatabaseLock, refreshLocalBackups, refreshVacuumStatus]);
 
   const applyDatabaseStatus = async (nextStatus: TraccionDatabaseStatus) => {
@@ -848,6 +854,7 @@ export function AjustesPage() {
       </details>
 
       <TaskCatalogSettings />
+      <PerformanceDiagnostics />
     </section>
   );
 }

@@ -9,6 +9,7 @@ import {
   reportStartupHydrationResult,
 } from './services/persistence';
 import { getDirtyEditorCount } from './services/dirtyEditors';
+import { recordPerformanceMetric } from './services/performanceMetrics';
 import './styles.css';
 import './dashboard-overrides.css';
 
@@ -79,13 +80,17 @@ async function renderApp(): Promise<void> {
 }
 
 async function startApp(): Promise<void> {
+  const startupStartedAt = performance.now();
   renderBootScreen('Inicializando base de datos...');
   await waitForNextPaint();
   notifyBootVisible();
+  const hydrationStartedAt = performance.now();
   const hydrationResult = await hydrateLocalStorageFromSqlite();
+  recordPerformanceMetric('arranque', 'Hidratación SQLite', performance.now() - hydrationStartedAt);
   reportStartupHydrationResult(hydrationResult);
   renderBootScreen('Preparando módulos...');
   await renderApp();
+  recordPerformanceMetric('arranque', 'Arranque hasta interfaz lista', performance.now() - startupStartedAt);
 }
 
 startApp().catch((error: unknown) => {
