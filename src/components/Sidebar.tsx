@@ -199,7 +199,7 @@ export function Sidebar({
               <span className={`pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>
                 <span className="block font-semibold">{databaseIndicator.statusText}</span>
                 <span className="mt-1 block break-all text-slate-300">{databaseIndicator.routeText}</span>
-                <span className={`mt-1 block ${persistenceFeedback?.kind === 'error' ? 'text-red-300' : pendingWriteCount > 0 || persistenceFeedback?.kind === 'saving' ? 'text-amber-300' : 'text-emerald-300'}`}>{persistenceStatusText}</span>
+                <span className={`mt-1 block ${persistenceFeedback?.kind === 'error' ? 'text-red-300' : persistenceFeedback?.kind === 'saving' ? 'text-amber-300' : 'text-emerald-300'}`}>{persistenceStatusText}</span>
                 <span className="mt-1 block text-slate-400">{databaseIndicator.lastSyncText}</span>
               </span>
             </button>
@@ -238,7 +238,7 @@ export function Sidebar({
             <button aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`} className="mb-3 flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-left transition hover:bg-white/[0.07]" data-tip={databaseIndicatorTooltip} onClick={handleDatabaseIndicatorSelect} type="button">
               <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-4 ${databaseIndicator.dotClassName}`}>{databaseIndicator.icon === 'lock' ? <LockKeyhole className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} /> : <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />}</span>
               {databaseIndicator.requiresAttention && <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0 text-amber-200" strokeWidth={2.5} />}
-              <span className="min-w-0"><span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>{databaseIndicator.label}</span><span className="block truncate text-[11px] text-slate-400">{databaseIndicator.statusText}</span><span className={`block truncate text-[11px] ${persistenceFeedback?.kind === 'error' ? 'text-red-300' : pendingWriteCount > 0 || persistenceFeedback?.kind === 'saving' ? 'text-amber-300' : 'text-emerald-300'}`}>{persistenceStatusText}</span><span className="block truncate text-[11px] text-slate-500">{externalDataSyncStatus.message}</span></span>
+              <span className="min-w-0"><span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>{databaseIndicator.label}</span><span className="block truncate text-[11px] text-slate-400">{databaseIndicator.statusText}</span><span className={`block truncate text-[11px] ${persistenceFeedback?.kind === 'error' ? 'text-red-300' : persistenceFeedback?.kind === 'saving' ? 'text-amber-300' : 'text-emerald-300'}`}>{persistenceStatusText}</span><span className="block truncate text-[11px] text-slate-500">{externalDataSyncStatus.message}</span></span>
             </button>
             {isPinned ? 'Panel fijado: el área principal reserva espacio en escritorio.' : 'Panel temporal: se oculta al abrir un módulo.'}
           </div>
