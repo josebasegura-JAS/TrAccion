@@ -9,7 +9,7 @@ import {
   Save,
   Settings2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isDocxPath } from '../features/configuracion/domain/teletrabajoTemplate';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { DatabaseSettingsSection } from './ajustes/DatabaseSettingsSection';
@@ -269,8 +269,17 @@ export function AjustesPage() {
     }
   }, []);
 
+  const databaseDetailsLoadedRef = useRef(false);
+
   useEffect(() => {
+    // La cabecera solo necesita el estado ligero de SQLite. El resto de operaciones
+    // administrativas se difieren hasta que el usuario abre Base de datos.
     void refreshDatabaseStatus();
+  }, []);
+
+  const loadDatabaseDetails = useCallback(() => {
+    if (databaseDetailsLoadedRef.current) return;
+    databaseDetailsLoadedRef.current = true;
     void refreshCurrentDatabaseLock();
     void refreshLocalBackups();
     void refreshVacuumStatus();
@@ -599,6 +608,7 @@ export function AjustesPage() {
     const section = document.getElementById(id);
     if (section instanceof HTMLDetailsElement) {
       section.open = true;
+      if (id === 'ajustes-base-datos') loadDatabaseDetails();
     }
     section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -694,7 +704,7 @@ export function AjustesPage() {
       <details
         className="ui-accordion group scroll-mt-4"
         id="ajustes-base-datos"
-        open
+        onToggle={(event) => { if (event.currentTarget.open) loadDatabaseDetails(); }}
       >
         <summary className="ui-accordion__summary">
           <div className="flex min-w-0 items-center gap-3">
