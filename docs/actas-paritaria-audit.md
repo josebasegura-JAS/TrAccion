@@ -1,5 +1,7 @@
 # Auditoría previa Comité → Actas / Comisión Paritaria
 
+> **DOCUMENTO HISTÓRICO.** Refleja el estado de TrAcción en la fecha de esta auditoría y no define la arquitectura o el funcionamiento vigente. Para el estado actual, consulte `ARCHITECTURE.md`, `FUNCIONAMIENTO.md` y `DECISIONS.md`.
+
 Fecha: 2026-06-07.
 
 ## Modelos de sesión

@@ -1341,12 +1341,67 @@ describe('ticketPeopleExistingInMonth', () => {
     expect(ticketPeopleExistingInMonth([legacy], 2026, 1)).toEqual([legacy]);
   });
 
-  it('no usa registros eliminados', () => {
+  it('mantiene una persona eliminada en los meses históricos anteriores a su baja', () => {
     const deleted: TicketPerson = {
       ...person('1', '2026-04-01T00:00:00.000Z'),
       deletedAt: '2026-09-01T00:00:00.000Z',
     };
-    expect(ticketPeopleExistingInMonth([deleted], 2026, 8)).toEqual([]);
+    expect(ticketPeopleExistingInMonth([deleted], 2026, 8).map((item) => item.empleado)).toEqual(['1']);
+    expect(ticketPeopleExistingInMonth([deleted], 2026, 9)).toEqual([]);
+    expect(ticketPeopleExistingInMonth([deleted], 2026, 10)).toEqual([]);
+  });
+
+  it('el motor mensual conserva también a la persona en su histórico anterior a deletedAt', () => {
+    const calendar = buildCalendar();
+    const deleted: TicketPerson = {
+      ...person('1', '2026-04-01T00:00:00.000Z'),
+      calendarId: calendar.id,
+      deletedAt: '2026-09-01T00:00:00.000Z',
+    };
+    expect(calculateMonthlyTicketOrder([deleted], [calendar], [], DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 8).rows).toHaveLength(1);
+    expect(calculateMonthlyTicketOrder([deleted], [calendar], [], DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 9).rows).toHaveLength(0);
+  });
+});
+
+
+describe('ticket restaurante — reglas maestras de tipos de ausencia', () => {
+  it('conserva reglas personalizadas al normalizar la configuración', () => {
+    const config = normalizeTicketRestaurantConfig({
+      ...DEFAULT_TICKET_RESTAURANT_CONFIG,
+      absenceTypeRules: [
+        { motivo: 'VAC', descuentaTicket: false },
+        { motivo: 'ENF', descuentaTicket: true },
+      ],
+    });
+
+    expect(config.absenceTypeRules).toEqual([
+      { motivo: 'ENF', descuentaTicket: true },
+      { motivo: 'TEX', descuentaTicket: false },
+      { motivo: 'VAC', descuentaTicket: false },
+    ]);
+  });
+
+  it('una TEX histórica no genera deuda aunque el registro antiguo conserve afectaTicket=true', () => {
+    const calendar = buildCalendar();
+    const person = buildTicketPerson(
+      { empleado: '685', nombreApellidos: 'Persona TEX', puesto: 'SSCC', calendarId: calendar.id, activo: true },
+      timestamp,
+    );
+    const tex = buildTicketRestaurantAbsence(
+      {
+        empleado: '685', nombreApellidos: 'Persona TEX', desde: '2026-03-02', hasta: '2026-03-03',
+        motivo: 'TEX', totalDias: 2, afectaTicket: true,
+      },
+      timestamp,
+      'tex-historica',
+    );
+
+    const april = calculateMonthlyTicketOrder(
+      [person], [calendar], [tex], DEFAULT_TICKET_RESTAURANT_CONFIG, 2026, 4,
+    );
+    expect(april.rows[0]?.deudaEntrante).toBe(0);
+    expect(april.rows[0]?.ausenciasAplicadas).toBe(0);
+    expect(april.rows[0]?.deudaPendiente).toBe(0);
   });
 });
 

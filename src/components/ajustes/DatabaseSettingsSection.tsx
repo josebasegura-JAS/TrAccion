@@ -358,7 +358,7 @@ export function DatabaseSettingsSection({
           Carpeta de actualizaciones
         </p>
         <p className="mt-1 text-xs text-metro-muted">
-          Carpeta de red donde se publican las nuevas versiones de TrAcción (TrAcción.piz junto a
+          Carpeta de red donde se publican las nuevas versiones de TrAcción (Traccion 1.2.piz junto a
           version.json). Al arrancar, TrAcción comprueba aquí si hay una versión más nueva y, si la
           hay, pregunta antes de actualizarse. El .piz se copia al equipo, se verifica y se instala
           localmente sin tocar la base de datos.

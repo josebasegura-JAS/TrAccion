@@ -1,5 +1,7 @@
 # Auditoría quirúrgica de persistencia y preparación SQLite
 
+> **DOCUMENTO HISTÓRICO.** Refleja el estado de TrAcción en la fecha de esta auditoría y no define la arquitectura o el funcionamiento vigente. Para el estado actual, consulte `ARCHITECTURE.md`, `FUNCIONAMIENTO.md` y `DECISIONS.md`.
+
 ## Decisión técnica
 
 **Migración parcial segura / infraestructura base.** La app mantiene stores Zustand síncronos que leen `localStorage` durante la carga de módulo y exponen API síncrona. En Electron, el acceso correcto a SQLite desde renderer debe pasar por `preload` + IPC, que es asíncrono. Migrar todo a lectura SQLite real en una sola intervención obligaría a rehidratar todos los stores, cambiar ciclos de carga y tocar componentes: riesgo alto de alterar lógica funcional.

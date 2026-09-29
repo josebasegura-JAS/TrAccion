@@ -10,7 +10,7 @@ import type {
   TicketRestaurantConfig,
   TicketDebtRegularization,
 } from './ticketRestauranteTypes';
-import { sameTicketEmployee, splitTicketPersonFullName } from './ticketPeople';
+import { sameTicketEmployee, splitTicketPersonFullName, ticketPeopleExistingInMonth } from './ticketPeople';
 import {
   buildPersonAbsenceTicketDayDetails,
   buildPersonAbsenceTicketDays,
@@ -135,8 +135,8 @@ function calculateTicketMonthInternal(
       .map((calendar) => [calendar.id, calendar]),
   );
 
-  const rows = people
-    .filter((person) => !person.deletedAt && person.activo)
+  const rows = ticketPeopleExistingInMonth(people, year, month)
+    .filter((person) => person.activo)
     .map((person) => {
       const calendar = calendarById.get(person.calendarId);
       return mode === 'monthlyOrderWithDebt'

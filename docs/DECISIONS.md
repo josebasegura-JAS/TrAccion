@@ -129,6 +129,8 @@ guardado fallaba con un mensaje de error y no había forma de que el cambio
 se sincronizara solo al reconectar — el usuario tenía que reintentar a mano
 una vez volviera la red, y solo si no cerraba el formulario mientras tanto.
 
+> **DECISIÓN SUPERADA.** Se conserva como histórico de la etapa con fallback offline. `pendingRecordWrites.ts` mantiene hoy compatibilidad de API, pero ya no encola ni reproduce escrituras offline.
+
 **Decisión**: no tocar la cola existente (sigue protegiendo su camino), sino
 añadir una hermana genérica (`src/services/pendingRecordWrites.ts`) para el
 patrón por-módulo, con la misma filosofía (localStorage, límite de
@@ -275,6 +277,8 @@ documentado en otro workflow (`tests-ci.yml`), y cambiarlo habría
 reintroducido ese riesgo sin necesidad.
 
 ## Migración a "SQLite autoritativo" — investigado, sin acción (julio 2026)
+
+> **DECISIÓN SUPERADA.** Esta sección conserva el razonamiento histórico de julio de 2026. La arquitectura vigente desde septiembre de 2026 usa SQLite compartida como fuente autoritativa y no permite trabajo funcional offline; véanse las decisiones de consolidación posteriores y `ARCHITECTURE.md`.
 
 Se evaluó la propuesta de declarar explícitamente `persistenceMode: 'sqlite-authoritative'`,
 `migrationVersion` y `legacyMigrationCompletedAt` por módulo, para que `localStorage`

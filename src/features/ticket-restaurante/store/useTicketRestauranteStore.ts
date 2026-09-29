@@ -269,6 +269,7 @@ function readConfig(): TicketRestaurantConfig {
     monthlyOrderAdjustments: candidate.monthlyOrderAdjustments ?? [],
     monthlyOrders: candidate.monthlyOrders ?? {},
     orderMovements: candidate.orderMovements ?? [],
+    absenceTypeRules: candidate.absenceTypeRules ?? DEFAULT_TICKET_RESTAURANT_CONFIG.absenceTypeRules,
   });
 }
 

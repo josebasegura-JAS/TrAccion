@@ -98,8 +98,15 @@ export function ticketPeopleExistingInMonth(
 ): TicketPerson[] {
   const targetMonth = `${year}-${String(month).padStart(2, '0')}`;
   return people.filter((person) => {
-    if (person.deletedAt) return false;
     const createdMonth = ticketPersonMonthFromTimestamp(person.createdAt);
-    return createdMonth === null || createdMonth <= targetMonth;
+    if (createdMonth !== null && createdMonth > targetMonth) return false;
+
+    // Una baja/eliminación no debe borrar a la persona de los meses históricos
+    // en los que todavía pertenecía al colectivo. Como la vigencia se gestiona
+    // a nivel mensual, el mes de deletedAt ya se considera fuera del cálculo.
+    const deletedMonth = ticketPersonMonthFromTimestamp(person.deletedAt);
+    if (deletedMonth !== null && deletedMonth <= targetMonth) return false;
+
+    return true;
   });
 }
