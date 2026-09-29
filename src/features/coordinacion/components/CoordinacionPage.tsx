@@ -1,3 +1,4 @@
+import { isTaskClosed } from '../../tareas/domain/task';
 import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
@@ -67,7 +68,7 @@ async function appendMeetingTracking(meeting: CoordinationMeeting): Promise<stri
 }
 
 function isActiveTask(task: Task): boolean {
-  return !task.deletedAt && task.estado !== 'cerrada' && task.fase.trim().toLowerCase() !== 'cerrada';
+  return !task.deletedAt && !isTaskClosed(task);
 }
 
 export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: { initialMeetingId?: string | null; navigationNonce?: number }) {

@@ -1,3 +1,4 @@
+import { isTaskClosed } from '../../tareas/domain/task';
 import { CalendarDays, CheckSquare2, Clock3, History, UsersRound } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
@@ -6,7 +7,7 @@ import { formatCoordinationDate, type UnionMeetingType } from '../domain/coordin
 import { useCoordinacionStore } from '../store/useCoordinacionStore';
 
 function isActiveTask(task: Task): boolean {
-  return !task.deletedAt && task.estado !== 'cerrada' && task.fase.trim().toLowerCase() !== 'cerrada';
+  return !task.deletedAt && !isTaskClosed(task);
 }
 
 export function SindicatosCoordinationPanel({

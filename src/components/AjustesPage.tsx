@@ -166,8 +166,13 @@ export function AjustesPage() {
   const load = useConfiguracionStore((state) => state.load);
   const saveRutasCompartidas = useConfiguracionStore((state) => state.saveRutasCompartidas);
   const taskPhases = useConfiguracionStore((state) => state.taskPhases);
+  const taskStates = useConfiguracionStore((state) => state.taskStates);
   const taskOrigins = useConfiguracionStore((state) => state.taskOrigins);
   const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
+  const addTaskState = useConfiguracionStore((state) => state.addTaskState);
+  const updateTaskState = useConfiguracionStore((state) => state.updateTaskState);
+  const toggleTaskState = useConfiguracionStore((state) => state.toggleTaskState);
+  const moveTaskState = useConfiguracionStore((state) => state.moveTaskState);
   const addTaskPhase = useConfiguracionStore((state) => state.addTaskPhase);
   const updateTaskPhase = useConfiguracionStore((state) => state.updateTaskPhase);
   const toggleTaskPhase = useConfiguracionStore((state) => state.toggleTaskPhase);
@@ -221,6 +226,7 @@ export function AjustesPage() {
   const [status, setStatus] = useState('');
   const [savingRoutes, setSavingRoutes] = useState(false);
   const [generatingTasksExcel, setGeneratingTasksExcel] = useState(false);
+  const [newTaskState, setNewTaskState] = useState('');
   const [newTaskPhase, setNewTaskPhase] = useState('');
   const [newOriginName, setNewOriginName] = useState('');
   const [newOriginType, setNewOriginType] = useState<TaskOriginConfig['tipo']>('empresa');
@@ -575,6 +581,11 @@ export function AjustesPage() {
     }
   };
 
+  const handleAddTaskState = () => {
+    addTaskState(newTaskState);
+    setNewTaskState('');
+  };
+
   const handleAddTaskPhase = () => {
     addTaskPhase(newTaskPhase);
     setNewTaskPhase('');
@@ -723,7 +734,7 @@ export function AjustesPage() {
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-bold text-metro-text">Tareas</span>
-                <span className="block text-xs text-metro-muted">Fases y orígenes</span>
+                <span className="block text-xs text-metro-muted">Estados, fases, responsables y orígenes</span>
               </span>
             </button>
           </div>
@@ -895,7 +906,35 @@ export function AjustesPage() {
           <ChevronDown className="shrink-0 text-metro-muted transition-transform group-open:rotate-180" size={18} />
         </summary>
 
-        <div className="grid gap-4 border-t border-metro-border p-4 xl:grid-cols-3">
+        <div className="grid gap-4 border-t border-metro-border p-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
+            <div className="mb-3">
+              <h4 className="text-sm font-bold text-metro-text">Estados</h4>
+              <p className="mt-1 text-xs leading-5 text-metro-muted">
+                El nombre y el orden son configurables. Pendiente y Cerrada conservan su función interna para proteger el flujo de trabajo.
+              </p>
+            </div>
+            <div className="mb-3 flex gap-2">
+              <input className="min-w-0 flex-1 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red" onChange={(event) => setNewTaskState(event.target.value)} placeholder="Nuevo estado" type="text" value={newTaskState} />
+              <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark disabled:opacity-50" disabled={!newTaskState.trim()} onClick={handleAddTaskState} type="button"><Plus size={16} /> Añadir</button>
+            </div>
+            <div className="space-y-2">
+              {taskStates.map((taskState, index) => (
+                <div className="grid gap-2 rounded-lg border border-metro-border bg-metro-panel p-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]" key={taskState.id}>
+                  <div>
+                    <input className="w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-medium text-metro-text outline-none focus:border-metro-red" onChange={(event) => updateTaskState(taskState.id, event.target.value)} type="text" value={taskState.nombre} />
+                    {taskState.protectedRole && <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-metro-muted">{taskState.protectedRole === 'initial' ? 'Estado inicial protegido' : 'Estado de cierre protegido'}</span>}
+                  </div>
+                  <div className="flex gap-1">
+                    <button aria-label="Subir estado" className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-bold text-metro-text disabled:opacity-30" disabled={index === 0} onClick={() => moveTaskState(taskState.id, 'up')} type="button">↑</button>
+                    <button aria-label="Bajar estado" className="rounded-lg border border-metro-border bg-metro-surface px-2 py-2 text-xs font-bold text-metro-text disabled:opacity-30" disabled={index === taskStates.length - 1} onClick={() => moveTaskState(taskState.id, 'down')} type="button">↓</button>
+                  </div>
+                  <button className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-xs font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50" disabled={Boolean(taskState.protectedRole)} onClick={() => toggleTaskState(taskState.id)} type="button">{taskState.active ? 'Desactivar' : 'Activar'}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-xl border border-metro-border bg-metro-surface p-3">
             <div className="mb-3">
               <h4 className="flex items-center gap-2 text-sm font-bold text-metro-text"><UserRound size={15} /> Responsables</h4>

@@ -1,3 +1,4 @@
+import { isTaskClosed } from '../../features/tareas/domain/task';
 import type { Acta } from '../../features/actas/domain/acta';
 import type { LicenciaSinSueldoRecord } from '../../features/licencias-sin-sueldo/domain/licenciaSinSueldo';
 import type { LotteryCampaign } from '../../features/loteria/domain/loteria';
@@ -75,7 +76,7 @@ export function buildDashboardAttentionItems({
 }: BuildDashboardAttentionInput): DashboardAttentionItem[] {
   const items: DashboardAttentionItem[] = [];
 
-  const openTasks = tasks.filter((task) => !task.deletedAt && task.estado !== 'cerrada' && task.fase.trim().toLowerCase() !== 'cerrada');
+  const openTasks = tasks.filter((task) => !task.deletedAt && !isTaskClosed(task));
   const overdueTasks = openTasks.filter((task) => task.fechaLimite && task.fechaLimite < todayIso);
   if (overdueTasks.length) {
     const critical = overdueTasks.filter((task) => task.prioridad === 'critica').length;

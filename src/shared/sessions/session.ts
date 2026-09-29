@@ -1,3 +1,4 @@
+import { isTaskClosed } from '../../features/tareas/domain/task';
 import type { Task } from '../../features/tareas/domain/task';
 
 export type ManagedSessionStatus = 'open' | 'closed';
@@ -52,7 +53,7 @@ export function isTaskInSessionPhase(
   task: Pick<Task, 'fase' | 'estado' | 'deletedAt'>,
   taskPhase: string,
 ): boolean {
-  return !task.deletedAt && task.estado !== 'cerrada' && task.fase.trim().toLowerCase() === taskPhase;
+  return !task.deletedAt && !isTaskClosed(task) && task.fase.trim().toLowerCase() === taskPhase;
 }
 
 export function formatManagedSessionDate(date: string): string {

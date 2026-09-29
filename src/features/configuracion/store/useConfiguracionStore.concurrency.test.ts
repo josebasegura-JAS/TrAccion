@@ -15,6 +15,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
       rutaPlantillaTeletrabajo: '',
       rutaPlantillaLicenciaSinSueldo: '',
       taskPhases: [],
+      taskStates: [],
       taskOrigins: [],
     });
   });
@@ -26,6 +27,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
         rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\teletrabajo.docx',
         rutaPlantillaLicenciaSinSueldo: '',
         taskPhases: [],
+      taskStates: [],
         taskOrigins: [],
       }),
       updatedAt: timestamp,
@@ -90,6 +92,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
       rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\teletrabajo.docx',
       rutaPlantillaLicenciaSinSueldo: '',
       taskPhases: [],
+      taskStates: [],
       taskOrigins: [],
     });
     const loader = vi.fn(async () => ({
@@ -132,6 +135,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
           rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\teletrabajo.docx',
           rutaPlantillaLicenciaSinSueldo: '',
           taskPhases: [],
+      taskStates: [],
           taskOrigins: [],
         }),
         updatedAt: timestamp,
@@ -142,6 +146,7 @@ describe('useConfiguracionStore concurrencia multiusuario', () => {
           rutaPlantillaTeletrabajo: '\\\\servidor\\plantillas\\modificada-por-otro.docx',
           rutaPlantillaLicenciaSinSueldo: '',
           taskPhases: [],
+      taskStates: [],
           taskOrigins: [],
         }),
         updatedAt: '2026-06-17T09:00:00.000Z',

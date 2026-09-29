@@ -1,4 +1,4 @@
-import type { Task, TaskState } from '../../features/tareas/domain/task';
+import type { Task } from '../../features/tareas/domain/task';
 import type { CalendarEventType } from './dashboardTypes';
 
 export const eventTone: Record<CalendarEventType, string> = {
@@ -10,7 +10,7 @@ export const eventTone: Record<CalendarEventType, string> = {
   actas: 'bg-amber-400',
 };
 
-export const taskStateLabels: Record<TaskState, string> = {
+export const taskStateLabels: Record<string, string> = {
   pendiente: 'Abiertas',
   'en curso': 'En curso',
   bloqueada: 'Bloqueadas',
@@ -18,7 +18,7 @@ export const taskStateLabels: Record<TaskState, string> = {
   cerrada: 'Cerradas',
 };
 
-export const taskStateBars: Record<TaskState, string> = {
+export const taskStateBars: Record<string, string> = {
   pendiente: 'bg-red-500',
   'en curso': 'bg-orange-500',
   bloqueada: 'bg-violet-500',
@@ -87,22 +87,19 @@ export function getLatestTeletrabajoPeriodo(solicitudes: readonly { periodo: str
   )[0] ?? '';
 }
 
-function groupByState(tasks: readonly Task[]): Record<TaskState, number> {
-  return tasks.reduce<Record<TaskState, number>>(
-    (accumulator, task) => {
-      accumulator[task.estado] += 1;
-      return accumulator;
-    },
-    { pendiente: 0, 'en curso': 0, bloqueada: 0, resuelta: 0, cerrada: 0 },
-  );
+function groupByState(tasks: readonly Task[]): Record<string, number> {
+  return tasks.reduce<Record<string, number>>((accumulator, task) => {
+    accumulator[task.estado] = (accumulator[task.estado] ?? 0) + 1;
+    return accumulator;
+  }, {});
 }
 
-export function stateSegmentsFromTasks(tasks: readonly Task[]) {
+export function stateSegmentsFromTasks(tasks: readonly Task[], labelForState?: (state: string) => string) {
   const byState = groupByState(tasks);
   return Object.entries(byState).map(([state, value]) => ({
-    label: taskStateLabels[state as TaskState],
+    label: labelForState?.(state) ?? taskStateLabels[state] ?? state,
     value,
-    className: taskStateBars[state as TaskState],
+    className: taskStateBars[state] ?? 'bg-blue-500',
   }));
 }
 

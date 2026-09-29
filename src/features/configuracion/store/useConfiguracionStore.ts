@@ -14,6 +14,12 @@ import {
   type TaskOriginConfig,
 } from '../domain/taskOrigins';
 import {
+  createTaskStateIdFromName,
+  DEFAULT_TASK_STATES,
+  normalizeTaskStateName,
+  type TaskStateConfig,
+} from '../domain/taskStates';
+import {
   createTaskResponsibleIdFromName,
   DEFAULT_TASK_RESPONSIBLES,
   normalizeTaskResponsibleName,
@@ -38,6 +44,7 @@ interface ConfiguracionState {
   rutaExportacionCoordinacion: string;
   rutaAyudaEscolar: string;
   taskPhases: TaskPhaseConfig[];
+  taskStates: TaskStateConfig[];
   taskOrigins: TaskOriginConfig[];
   taskResponsibles: TaskResponsibleConfig[];
 }
@@ -72,6 +79,10 @@ interface ConfiguracionStore extends ConfiguracionState {
   setRutaExportacionCoordinacion: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   setRutaAyudaEscolar: (ruta: string) => Promise<{ ok: boolean; message: string }>;
   saveRutasCompartidas: (rutas: SharedRouteSettings) => Promise<{ ok: boolean; message: string }>;
+  addTaskState: (nombre: string) => void;
+  updateTaskState: (id: string, nombre: string) => void;
+  toggleTaskState: (id: string) => void;
+  moveTaskState: (id: string, direction: 'up' | 'down') => void;
   addTaskPhase: (nombre: string) => void;
   updateTaskPhase: (id: string, nombre: string) => void;
   toggleTaskPhase: (id: string) => void;
@@ -98,6 +109,7 @@ function selectConfiguracionState(state: ConfiguracionStore): ConfiguracionState
     rutaExportacionCoordinacion: state.rutaExportacionCoordinacion,
     rutaAyudaEscolar: state.rutaAyudaEscolar,
     taskPhases: state.taskPhases,
+    taskStates: state.taskStates,
     taskOrigins: state.taskOrigins,
     taskResponsibles: state.taskResponsibles,
   };
@@ -126,6 +138,30 @@ function normalizeTaskResponsibles(value: unknown): TaskResponsibleConfig[] {
   const missingDefaults = DEFAULT_TASK_RESPONSIBLES.filter((defaultResponsible) =>
     !responsibles.some((responsible) => responsible.id === defaultResponsible.id));
   return [...responsibles, ...missingDefaults];
+}
+
+function isTaskStateConfig(value: unknown): value is TaskStateConfig {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<Record<keyof TaskStateConfig, unknown>>;
+  return typeof candidate.id === 'string' && typeof candidate.nombre === 'string' &&
+    typeof candidate.active === 'boolean' &&
+    (candidate.protectedRole === undefined || candidate.protectedRole === 'initial' || candidate.protectedRole === 'closed') &&
+    typeof candidate.createdAt === 'string' && typeof candidate.updatedAt === 'string';
+}
+
+function normalizeTaskStates(value: unknown): TaskStateConfig[] {
+  if (!Array.isArray(value)) return DEFAULT_TASK_STATES;
+  const states = value.filter(isTaskStateConfig).map((state) => {
+    const protectedDefault = DEFAULT_TASK_STATES.find((defaultState) => defaultState.id === state.id && defaultState.protectedRole);
+    return {
+      ...state,
+      nombre: normalizeTaskStateName(state.nombre),
+      active: protectedDefault ? true : state.active,
+      protectedRole: protectedDefault?.protectedRole ?? state.protectedRole,
+    };
+  });
+  const missingDefaults = DEFAULT_TASK_STATES.filter((defaultState) => !states.some((state) => state.id === defaultState.id));
+  return [...states, ...missingDefaults];
 }
 
 function isTaskOriginConfig(value: unknown): value is TaskOriginConfig {
@@ -200,6 +236,7 @@ function defaultConfiguracion(): ConfiguracionState {
     rutaExportacionCoordinacion: '',
     rutaAyudaEscolar: getDefaultAyudaEscolarPath(),
     taskPhases: DEFAULT_TASK_PHASES,
+    taskStates: DEFAULT_TASK_STATES,
     taskOrigins: DEFAULT_TASK_ORIGINS,
     taskResponsibles: DEFAULT_TASK_RESPONSIBLES,
   };
@@ -223,6 +260,7 @@ function parseConfiguracionValue(stored: string | null): ConfiguracionState {
     rutaExportacionCoordinacion: typeof (parsed as { rutaExportacionCoordinacion?: unknown }).rutaExportacionCoordinacion === 'string' ? (parsed as { rutaExportacionCoordinacion: string }).rutaExportacionCoordinacion.trim() : '',
     rutaAyudaEscolar: normalizeAyudaEscolarPath((parsed as { rutaAyudaEscolar?: unknown }).rutaAyudaEscolar),
     taskPhases: normalizeTaskPhases(parsed.taskPhases),
+    taskStates: normalizeTaskStates((parsed as { taskStates?: unknown }).taskStates),
     taskOrigins: normalizeTaskOrigins(parsed.taskOrigins),
     taskResponsibles: normalizeTaskResponsibles((parsed as { taskResponsibles?: unknown }).taskResponsibles),
   };
@@ -294,6 +332,7 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   rutaExportacionCoordinacion: initialConfiguracion.rutaExportacionCoordinacion,
   rutaAyudaEscolar: initialConfiguracion.rutaAyudaEscolar,
   taskPhases: initialConfiguracion.taskPhases,
+  taskStates: initialConfiguracion.taskStates,
   taskOrigins: initialConfiguracion.taskOrigins,
   taskResponsibles: initialConfiguracion.taskResponsibles,
   load: () => {
@@ -302,8 +341,8 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
   },
   reloadFromStorage: () => {
     const applyIfChanged = (configuracion: ConfiguracionState) => {
-      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins, taskResponsibles } = get();
-      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskOrigins, taskResponsibles };
+      const { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles } = get();
+      const current: ConfiguracionState = { rutaPlantillaTeletrabajo, rutaPlantillaLicenciaSinSueldo, rutaPlantillaExcedencia, rutaPlantillaProrrogaExcedencia, rutaPlantillaVinculograma, rutaExportacionTareas, rutaExportacionLoteria, rutaExportacionLicencias, rutaExportacionVinculograma, rutaExportacionCoordinacion, rutaAyudaEscolar, taskPhases, taskStates, taskOrigins, taskResponsibles };
       if (!areConfiguracionesEquivalent(current, configuracion)) set(configuracion);
     };
     if (window.traccion?.loadConfiguracion) {
@@ -336,6 +375,34 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     rutaExportacionVinculograma: rutas.rutaExportacionVinculograma.trim(),
     rutaExportacionCoordinacion: rutas.rutaExportacionCoordinacion.trim(),
     rutaAyudaEscolar: rutas.rutaAyudaEscolar.trim(),
+  }),
+  addTaskState: (nombre) => set((state) => {
+    const normalizedName = normalizeTaskStateName(nombre); if (!normalizedName) return state;
+    const now = new Date().toISOString();
+    const baseId = createTaskStateIdFromName(normalizedName);
+    const id = state.taskStates.some((item) => item.id === baseId) ? `${baseId}-${Date.now().toString(36)}` : baseId;
+    const taskState: TaskStateConfig = { id, nombre: normalizedName, active: true, createdAt: now, updatedAt: now };
+    const configuracion = { ...selectConfiguracionState(state), taskStates: [...state.taskStates, taskState] };
+    void commitConfiguracion(set, configuracion); return state;
+  }),
+  updateTaskState: (id, nombre) => set((state) => {
+    const normalizedName = normalizeTaskStateName(nombre); if (!normalizedName) return state;
+    const now = new Date().toISOString();
+    const configuracion = { ...selectConfiguracionState(state), taskStates: state.taskStates.map((item) => item.id === id ? { ...item, nombre: normalizedName, updatedAt: now } : item) };
+    void commitConfiguracion(set, configuracion); return state;
+  }),
+  toggleTaskState: (id) => set((state) => {
+    const target = state.taskStates.find((item) => item.id === id); if (!target || target.protectedRole) return state;
+    const now = new Date().toISOString();
+    const configuracion = { ...selectConfiguracionState(state), taskStates: state.taskStates.map((item) => item.id === id ? { ...item, active: !item.active, updatedAt: now } : item) };
+    void commitConfiguracion(set, configuracion); return state;
+  }),
+  moveTaskState: (id, direction) => set((state) => {
+    const index = state.taskStates.findIndex((item) => item.id === id); if (index < 0) return state;
+    const nextIndex = direction === 'up' ? index - 1 : index + 1; if (nextIndex < 0 || nextIndex >= state.taskStates.length) return state;
+    const next = [...state.taskStates]; [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    const configuracion = { ...selectConfiguracionState(state), taskStates: next };
+    void commitConfiguracion(set, configuracion); return state;
   }),
   addTaskPhase: (nombre) => set((state) => {
     const normalizedName = normalizeTaskPhaseName(nombre); if (!normalizedName) return state;

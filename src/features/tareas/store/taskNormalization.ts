@@ -4,7 +4,6 @@ import {
   DEFAULT_TASK_PHASE,
   EMPTY_TASK_DRAFT,
   TASK_PRIORITIES,
-  TASK_STATES,
   TASK_TYPES,
   type LegacyPeticionForTaskMigration,
   type Task,
@@ -30,7 +29,7 @@ export function isTask(value: unknown): value is Task {
     typeof candidate.titulo === 'string' &&
     typeof candidate.descripcion === 'string' &&
     typeof candidate.estado === 'string' &&
-    (TASK_STATES as readonly string[]).includes(candidate.estado) &&
+    candidate.estado.trim().length > 0 &&
     typeof candidate.prioridad === 'string' &&
     (TASK_PRIORITIES as readonly string[]).includes(candidate.prioridad)
   );
@@ -106,7 +105,7 @@ export function normalizeTask(task: Task): Task {
   const updatedAt = task.updatedAt ?? task.createdAt;
   const tipo = (TASK_TYPES as readonly string[]).includes(task.tipo) ? task.tipo : EMPTY_TASK_DRAFT.tipo;
   const fase = typeof task.fase === 'string' && task.fase.trim() ? task.fase : DEFAULT_TASK_PHASE;
-  const estado = (TASK_STATES as readonly string[]).includes(task.estado) ? task.estado : EMPTY_TASK_DRAFT.estado;
+  const estado = typeof task.estado === 'string' && task.estado.trim() ? task.estado : EMPTY_TASK_DRAFT.estado;
   const normalizedTask = {
     id: task.id,
     titulo: task.titulo,

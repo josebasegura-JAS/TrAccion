@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { FileText } from 'lucide-react';
 import { Input, Select } from '../ui/Field';
-import { TASK_PRIORITIES, TASK_STATES, TASK_TYPES, type Task, type TaskDraft } from '../../features/tareas/domain/task';
+import { TASK_PRIORITIES, TASK_TYPES, type Task, type TaskDraft } from '../../features/tareas/domain/task';
+import { useConfiguracionStore } from '../../features/configuracion/store/useConfiguracionStore';
 import { TaskEditorSection } from './TaskEditorSection';
 
 export function TaskGeneralFields({
@@ -25,6 +26,8 @@ export function TaskGeneralFields({
   otherResponsibleValue: string;
   creationDate: string;
 }) {
+  const taskStates = useConfiguracionStore((state) => state.taskStates);
+  const stateOptions = taskStates.filter((state) => state.active || state.id === draft.estado);
   return (
     <TaskEditorSection icon={FileText} title="Datos de la tarea">
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-12">
@@ -45,7 +48,7 @@ export function TaskGeneralFields({
           {responsibleSelectValue === 'Otros' && <Input className="mt-1 h-8 rounded-lg px-2 text-xs" placeholder="Indica el responsable" value={otherResponsibleValue} onChange={(e) => setDraft((c) => ({ ...c, responsable: `Otros: ${e.target.value}` }))} />}
         </label>
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-2">Estado
-          <Select className="h-8 rounded-lg px-2 text-xs" value={draft.estado} onChange={(e) => setDraft((c) => ({ ...c, estado: e.target.value as TaskDraft['estado'] }))}>{TASK_STATES.map((v) => <option key={v}>{v}</option>)}</Select>
+          <Select className="h-8 rounded-lg px-2 text-xs" value={draft.estado} onChange={(e) => setDraft((c) => ({ ...c, estado: e.target.value as TaskDraft['estado'] }))}>{stateOptions.map((state) => <option key={state.id} value={state.id}>{state.nombre}</option>)}</Select>
         </label>
         <label className="text-[11px] font-semibold text-metro-muted lg:col-span-4">Detalle origen / solicitante
           <Input className="h-8 rounded-lg px-2 text-xs" value={draft.origen} onChange={(e) => setDraft((c) => ({ ...c, origen: e.target.value }))} />

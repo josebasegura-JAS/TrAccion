@@ -307,6 +307,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   const loteriaCampaign = useLoteriaStore((state) => state.campaign);
   const loadLoteria = useLoteriaStore((state) => state.load);
   const taskResponsibles = useConfiguracionStore((state) => state.taskResponsibles);
+  const taskStates = useConfiguracionStore((state) => state.taskStates);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
 
   useEffect(() => {
@@ -335,6 +336,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
 
   const nonDeletedTasks = useMemo(() => tasks.filter((task) => !task.deletedAt), [tasks]);
   const activeTasks = useMemo(() => nonDeletedTasks.filter((task) => !isTaskClosed(task)), [nonDeletedTasks]);
+  const taskStateLabel = useCallback((stateId: string) => taskStates.find((state) => state.id === stateId)?.nombre ?? taskStateLabels[stateId] ?? stateId, [taskStates]);
   const criticalTasks = useMemo(() => activeTasks.filter((task) => task.prioridad === 'critica'), [activeTasks]);
   const openCommitteeSessions = useMemo(() => sessions.filter((session) => session.status === 'open'), [sessions]);
   const openParitariaSessions = useMemo(() => paritariaSessions.filter((session) => session.status === 'open'), [paritariaSessions]);
@@ -366,11 +368,11 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
         date: task.fechaLimite || task.updatedAt.slice(0, 10),
         type,
         title: task.titulo,
-        detail: `${task.fase || 'Tareas'} · ${taskStateLabels[task.estado]} · prioridad ${task.prioridad}`,
+        detail: `${task.fase || 'Tareas'} · ${taskStateLabel(task.estado)} · prioridad ${task.prioridad}`,
         view: 'tareas' as const,
         recordId: task.id,
       })),
-    [],
+    [taskStateLabel],
   );
 
   const showTaskPopup = useCallback((title: string, items: readonly Task[]) => {
@@ -389,7 +391,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
       date: task.fechaLimite,
       type: 'task' as const,
       title: task.titulo,
-      detail: `${taskStateLabels[task.estado]} · prioridad ${task.prioridad}`,
+      detail: `${taskStateLabel(task.estado)} · prioridad ${task.prioridad}`,
       view: 'tareas' as const,
       recordId: task.id,
     }));
@@ -420,7 +422,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
       view: 'actas' as const,
     }));
     return [...taskEvents, ...committeeEvents, ...paritariaEvents, ...actaEvents];
-  }, [activeTasks, openActas, openCommitteeSessions, openParitariaSessions]);
+  }, [activeTasks, openActas, openCommitteeSessions, openParitariaSessions, taskStateLabel]);
 
   const eventsByDay = useMemo(() => calendarEvents.reduce<Record<string, CalendarEvent[]>>((acc, event) => {
     (acc[event.date] ??= []).push(event);
@@ -467,7 +469,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     return b.updatedAt.localeCompare(a.updatedAt);
   }).slice(0, 6), [myTasks]);
 
-  const taskSegments = useMemo(() => stateSegmentsFromTasks(nonDeletedTasks), [nonDeletedTasks]);
+  const taskSegments = useMemo(() => stateSegmentsFromTasks(nonDeletedTasks, taskStateLabel), [nonDeletedTasks, taskStateLabel]);
   const donutStyle = useMemo(() => miniDonutStyle(taskSegments), [taskSegments]);
   const monthCells = useMemo(() => getMonthMatrix(visibleMonth), [visibleMonth]);
   const monthLabel = useMemo(() => {

@@ -6,7 +6,7 @@ export const PETICION_TASK_PHASE = 'peticion';
 export const CLOSED_TASK_PHASE = 'cerrada';
 
 export type TaskType = (typeof TASK_TYPES)[number];
-export type TaskState = (typeof TASK_STATES)[number];
+export type TaskState = string;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export interface TaskSeguimientoEntry {
@@ -123,9 +123,7 @@ export function isTaskClosed(task: Pick<Task, 'estado' | 'fase'>): boolean {
 }
 
 export function migratePeticionToTask(peticion: LegacyPeticionForTaskMigration): Task {
-  const estado = (TASK_STATES as readonly string[]).includes(peticion.estado)
-    ? (peticion.estado as TaskState)
-    : 'pendiente';
+  const estado: TaskState = peticion.estado.trim() || 'pendiente';
   const prioridad = (TASK_PRIORITIES as readonly string[]).includes(peticion.prioridad)
     ? (peticion.prioridad as TaskPriority)
     : 'media';

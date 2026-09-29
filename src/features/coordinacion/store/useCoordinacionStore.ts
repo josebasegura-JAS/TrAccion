@@ -1,3 +1,4 @@
+import { isTaskClosed } from '../../tareas/domain/task';
 import { create } from 'zustand';
 import { readStorageItem, writeJsonStorageAsync } from '../../../services/persistence';
 import type { Task } from '../../tareas/domain/task';
@@ -83,7 +84,7 @@ async function persist(state: CoordinationState): Promise<Result> {
 }
 
 function activeTask(task: Task): boolean {
-  return !task.deletedAt && task.estado !== 'cerrada' && task.fase.trim().toLowerCase() !== 'cerrada';
+  return !task.deletedAt && !isTaskClosed(task);
 }
 
 function normalizedName(value: string): string {
