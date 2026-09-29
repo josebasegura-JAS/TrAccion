@@ -317,3 +317,140 @@ archivo; se listan aquí para que quede todo en un solo sitio:
   usuario, no verificable desde el código) — motivo original por el que su
   hardening multiusuario se dejó para el final; se completó de todos modos
   antes de esa fecha porque no había motivo técnico para esperar.
+
+## Consolidación funcional y operativa (agosto-septiembre 2026)
+
+Esta sección registra decisiones tomadas durante la fase de consolidación de TrAcción 1.2. No sustituye a `FUNCIONAMIENTO.md`: allí se describe qué debe hacer actualmente la aplicación; aquí se conserva el motivo de las decisiones que sería fácil reinterpretar o revertir en un refactor futuro.
+
+### SQLite compartida: no permitir trabajo de negocio en local si la BBDD de red no está disponible
+
+Se decidió que la base SQLite compartida es la fuente autoritativa del trabajo multiusuario. Si la BBDD configurada no está disponible, la aplicación debe avisar y bloquear las operaciones de negocio que podrían crear información únicamente local. La razón es operativa: un dato creado en fallback local no tiene una reconciliación suficientemente segura como para asumir que acabará incorporándose a la BBDD común sin intervención.
+
+Esto no elimina caches o mecanismos locales usados con fines técnicos, pero sí evita presentarlos al usuario como una sesión normal de trabajo. Un futuro cambio no debe convertir silenciosamente una pérdida de conectividad en «modo local» editable.
+
+### Ajustes compartidos y rutas de trabajo
+
+Las rutas que afectan al funcionamiento común —BBDD, Excel automáticos, plantillas Word, backups y carpetas funcionales parametrizadas— se tratan como configuración compartida cuando su naturaleza lo requiere. La decisión evita que los tres usuarios tengan comportamientos distintos ante el mismo proceso por haber configurado cada PC de forma independiente.
+
+Las opciones de mantenimiento de SQLite, locks, backups y restauración se mantienen concentradas en Ajustes para no dispersar operaciones potencialmente críticas por módulos funcionales.
+
+### Versionado visible y versionado técnico
+
+Se separó deliberadamente la identidad que ve el usuario de la revisión técnica:
+
+- Producto visible: **TrAcción 1.2**.
+- Ejecutable estable: **`Traccion 1.2.exe`**.
+- Revisión técnica: **`1.2.xxx`**, utilizada para builds, manifest y diagnóstico.
+
+No se quiere renombrar el ejecutable en cada revisión. La versión de tres componentes sirve para saber qué build está instalado sin convertir el nombre del programa en un dato cambiante para los usuarios.
+
+En textos visibles se usa **TrAcción** con tilde siempre que no afecte a identificadores, rutas, nombres técnicos o compatibilidad.
+
+### Actualizador mediante `.piz` y `version.json`
+
+La red de despliegue no permite distribuir el `.exe` directamente, por lo que se decidió usar un contenedor con extensión **`.piz`**. El pipeline genera el EXE portable, valida que exista y tenga un tamaño razonable, lo copia como `Traccion 1.2.piz` y genera `version.json` con la revisión técnica y hash SHA-256.
+
+Una vez actualizados todos los puestos al nuevo formato se eliminó el puente de compatibilidad con nombres legacy. Los artifacts normales/Lite deben publicar únicamente `Traccion 1.2.piz` y `version.json`; el EXE sigue generándose internamente porque es el contenido real del paquete y debe validarse antes de publicar.
+
+No conservar el ejecutable anterior como copia visible fue una decisión de UX y mantenimiento: el actualizador debe sustituir la instalación utilizada, no dejar varias revisiones aparentemente válidas en el escritorio.
+
+### Build normal y Lite
+
+El build Lite existe para reducir tiempos de entrega durante iteraciones frecuentes. No define un producto funcional distinto: debe producir el mismo formato de actualización y manifest que el build normal. Cualquier divergencia futura entre ambos pipelines debe justificarse expresamente.
+
+### Notificaciones de nuevas tareas
+
+La notificación de una tarea recién asignada debe llamar la atención una vez sin convertirse en un aviso permanente. Se adoptó una campana en el header con contador/estado y acceso a las nuevas tareas, complementada por el aviso inicial cuando procede.
+
+La decisión evita tanto el extremo de no avisar al usuario como el de mantener alertas intrusivas después de que la novedad ya haya sido vista. El refresco de Tareas debe conservar la posición de scroll para no penalizar el trabajo sobre listas largas.
+
+### Coordinación: tres contextos, un patrón común
+
+Dirección, Otras áreas y Sindicatos comparten el concepto de reunión y seguimiento, pero no se forzó un modelo idéntico cuando la casuística no lo era. Se decidió homogeneizar las operaciones comunes —fecha, puntos, tareas, resultados, histórico y exportación— permitiendo particularidades por tipo.
+
+Un punto de reunión no tiene por qué proceder de una tarea existente. Puede ser manual y, cuando tenga sentido, puede originar una tarea nueva. El vínculo tarea ↔ coordinación debe conservar trazabilidad sin obligar a inventar una tarea para poder registrar un asunto.
+
+### Huelgas: Área y Zona son conceptos distintos
+
+Se mantuvo una jerarquía operativa en la que el puesto/residencia ayuda a determinar el **Área**, y el Área se relaciona con una **Zona** usada para responsables, agrupación y comunicaciones. No deben fusionarse ambos conceptos aunque en algunos casos coincidan.
+
+Las asignaciones aprendidas/editadas deben persistir para reducir correcciones en convocatorias posteriores. La generación de comunicaciones se hace por zona y el Excel de apoyo agrupa la información necesaria para la gestión, sin convertir la exportación en la fuente de verdad.
+
+### Ayuda Escolar: el correo es entrada, la persona es la referencia
+
+El `.msg` de Outlook es un mecanismo de entrada documental, no la identidad definitiva del expediente. La persona se contrasta con Plantilla y existe la opción «envía en nombre de otro» precisamente para los casos en los que remitente y beneficiario no coinciden.
+
+En ese caso no debe aprenderse/guardarse el email como si perteneciera a la persona seleccionada. Los adjuntos se archivan en la ruta parametrizada del año y el sistema evita colisiones de nombre mediante sufijos en vez de sobrescribir silenciosamente documentos existentes.
+
+### Ticket Restaurante: separar cálculo, decisión y realidad
+
+Se decidió mantener tres capas explícitamente distintas:
+
+1. **Pedido calculado**: resultado de calendario, ausencias, manutenciones, deuda y demás reglas.
+2. **Pedido ajustado**: corrección manual deliberada antes de cursar el pedido, con motivo.
+3. **Pedido realizado**: fotografía inmutable de lo que realmente se solicitó.
+
+Esta separación es estructural. Un refactor no debe hacer que modificar posteriormente una ausencia reescriba el pedido que ya fue cursado, ni confundir un ajuste previo con un movimiento posterior.
+
+### Ticket Restaurante: movimientos posteriores no son deuda
+
+Después del pedido inicial pueden existir pedidos adicionales o correcciones. Se registran como movimientos positivos o negativos con fecha, persona cuando corresponda y motivo.
+
+Un movimiento de pedido **no genera ni elimina automáticamente deuda**. Describe qué se pidió realmente al proveedor. La deuda pertenece a otra capa funcional y solo debe cambiar por las reglas que la gobiernan.
+
+Se decidió conservar también precio e importe en la fotografía/movimiento para poder reconstruir el coste histórico aunque cambie posteriormente el precio configurado.
+
+### Ticket Restaurante: exclusión mensual por baja
+
+La exclusión se modeló por persona y mes, no como desactivación global. Una persona puede no formar parte del pedido de un mes y reincorporarse después.
+
+Durante una exclusión:
+
+- el pedido del mes es 0;
+- la deuda real anterior no desaparece;
+- las ausencias del mes excluido no deben crear deuda ficticia por tickets que nunca se entregaron;
+- las cuotas manuales que no puedan aplicarse deben desplazarse al siguiente mes disponible sin apilar indebidamente cuotas.
+
+Si durante una baja se cargaron realmente tickets, la cantidad recuperable es la efectivamente entregada. Por ejemplo, si se cargaron 4 tickets durante un mes completo de baja, se recuperan 4; no se transforma automáticamente cada día de ENF/ACC en deuda.
+
+### Ticket Restaurante: ENF/ACC y sugerencias, nunca exclusión automática
+
+ENF y ACC pueden indicar una baja activa y generar una **sugerencia** de exclusión. Se decidió no excluir automáticamente porque los datos importados pueden ser incompletos o requerir interpretación operativa.
+
+Del mismo modo, cuando la importación permite detectar el fin de ENF/ACC, TrAcción puede proponer una posible reincorporación. La sugerencia de tickets debe usar el mismo motor mensual real, simulando únicamente que la persona deja de estar excluida para ese mes. La simulación no modifica previamente la exclusión almacenada.
+
+### Ticket Restaurante: Tipos de ausencia como fuente de verdad
+
+La propiedad «descuenta/no descuenta» pertenece al **tipo de ausencia**, no debería decidirse de nuevo para cada fila importada. Por ello se creó un maestro de Tipos de ausencia que actúa como regla general de cálculo.
+
+**TEX se configura como ausencia que no descuenta tickets.** La regla vigente debe aplicarse también al recalcular históricos; de lo contrario, una TEX importada meses antes con un valor antiguo podría seguir generando deuda aunque el maestro actual diga lo contrario.
+
+La edición individual se conserva para excepciones concretas, pero no debe convertir la importación de cada Excel en una repetición manual de reglas conocidas.
+
+### Ticket Restaurante: mes operativo por defecto
+
+Se decidió que **Cómputo/Pedido y Cotización abran por defecto el mes siguiente**, porque el trabajo habitual a final de mes consiste en preparar el pedido del siguiente. **Ausencias permanece en el mes actual**, ya que son precisamente esas incidencias las que alimentan el cálculo posterior.
+
+El cambio de diciembre a enero debe resolver también el año automáticamente.
+
+### Ticket Restaurante: históricos coherentes con la vigencia de personas
+
+Los cálculos históricos deben considerar las personas que existían/vigían en el mes consultado, no simplemente todas las personas activas hoy. La misma regla debe aplicarse en Cómputo mensual, Cotización y Balance anual para evitar resultados distintos según la pantalla utilizada.
+
+### Ticket Restaurante: terminología de deuda
+
+Se adoptó **«Deuda arrastrada»** para la deuda procedente de meses anteriores. El término «Deuda entrante» resultaba ambiguo porque durante el cálculo pueden incorporarse después cuotas manuales u otros conceptos. La nomenclatura visible debe describir el origen del dato, no sugerir que representa toda la deuda aplicada finalmente ese mes.
+
+### Ayuda integrada, funcionamiento y decisiones son capas distintas
+
+Tras la consolidación de 1.2 se decidió mantener tres niveles documentales:
+
+- **Ayuda integrada**: explica al usuario cómo realizar una operación.
+- **`FUNCIONAMIENTO.md`**: contrato funcional de lo que TrAcción debe hacer hoy.
+- **`DECISIONS.md`**: conserva el motivo de decisiones no obvias y evita reabrirlas sin contexto.
+
+`ARCHITECTURE.md` queda reservado para patrones técnicos y estructura. Cuando un cambio funcional altere una regla estable, debe revisarse si afecta a estas capas además de al código y a los tests.
+
+### Documentación histórica no equivale a especificación vigente
+
+Auditorías y documentos de migraciones representan una fotografía de una fecha concreta. Se decidió conservarlos por trazabilidad, pero no deben usarse como definición automática del estado actual si contradicen `FUNCIONAMIENTO.md`, la arquitectura vigente o el código probado.
