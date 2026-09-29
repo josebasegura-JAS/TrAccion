@@ -1,124 +1,296 @@
-# Arquitectura de TrAccion
+# Arquitectura de TrAcción
 
-Este documento describe los patrones reales que ya usa el código, verificados contra el repositorio (no un ideal aspiracional). El objetivo es que cualquiera —incluida una sesión de IA sin memoria de conversaciones anteriores— pueda seguir las mismas reglas sin tener que releer miles de líneas primero.
+> Estado contrastado con el repositorio de TrAcción 1.2.111 (septiembre de 2026).
+>
+> Este documento describe la arquitectura técnica vigente. Las reglas de negocio pertenecen a `FUNCIONAMIENTO.md`; el motivo de las decisiones relevantes, a `DECISIONS.md`.
 
-Si un cambio rompe una de estas reglas, es casi seguro un bug, no una variante válida.
+## 1. Principios de arquitectura
 
-## 1. Dónde vive cada cosa
+1. **SQLite compartida es la fuente de verdad de negocio.** TrAcción no admite trabajo offline ni escrituras locales pendientes.
+2. **Las lecturas no deben producir escrituras de negocio.** Una carga puede actualizar caché efímera de sesión, pero no sembrar SQLite ni crear datos implícitamente.
+3. **Las escrituras multiusuario se protegen con OCC** (`expectedUpdatedAt`) y, cuando el flujo lo necesita, con locks compartidos.
+4. **El renderer no accede directamente al fichero SQLite.** La persistencia nativa vive en Electron y se expone mediante IPC/preload.
+5. **La lógica pura debe permanecer fuera de Electron siempre que sea posible**, para que pueda probarse con Vitest sin depender del runtime de Electron.
+6. **Las decisiones funcionales no se deducen de la arquitectura.** Antes de cambiar un comportamiento consultar también `FUNCIONAMIENTO.md` y `DECISIONS.md`.
 
-```
+## 2. Estructura real del repositorio
+
+```text
 electron/
-  main.ts              IPC handlers (puente entre frontend y persistencia)
-  preload.ts            Puente window.traccion expuesto al renderer
-  sqlitePersistence.ts   Toda la lógica de SQLite: schema, migraciones, locks, backups, VACUUM
+  main.ts                         arranque Electron e IPC
+  preload.ts                      API segura expuesta al renderer
+  sqlitePersistence.ts            orquestación de SQLite
+  persistence/                    piezas extraídas y testeables de persistencia
 
-src/features/<modulo>/
-  domain/                Tipos, validación, lógica pura sin efectos secundarios
-  store/                 Zustand store + repositorio SQLite del módulo (mismo directorio, no carpetas separadas)
-  components/            UI del módulo
-
-src/components/          Módulos que aún no se han movido a src/features/<modulo>/
-src/shared/               Código compartido entre módulos (tablas, sesiones, exportación, locks)
-src/services/             Capas transversales (persistencia, búsqueda global, estado de BD)
+src/
+  features/<modulo>/
+    domain/                        tipos, validaciones y lógica pura
+    store/                         Zustand, repositorios y acciones
+    components/                    UI del módulo
+  components/                     shell y componentes todavía compartidos/legacy
+  shared/                         infraestructura reutilizable
+  services/                       persistencia, sincronización, locks y servicios transversales
 ```
 
-**Nota de transición**: algunos módulos (Plantilla, Tareas, Teletrabajo, Ajustes, Comité, Paritaria) todavía viven en `src/components/` en vez de `src/features/<modulo>/`. No es un error, es deuda histórica. Al tocar uno de estos módulos no es necesario moverlo a `features/` salvo que ya se esté haciendo un cambio grande ahí.
+La mayor parte de los módulos funcionales ya vive en `src/features/`: Actas, Ayuda Escolar, Comité, Configuración, Coordinación, Criterios RRLL, Especiales, Huelgas, Licencias, Lotería, Paritaria, Plantilla, Presupuestos, Sorteos, Tareas, Teletrabajo, Ticket Restaurante y Vinculograma.
 
-El repositorio SQLite de cada módulo vive en un archivo `<modulo>SqliteRepository.ts` dentro de la propia carpeta `store/`, no en una carpeta `repository/` separada. Es el patrón real en los 12+ módulos ya migrados — no inventar uno nuevo.
+`src/components/` conserva principalmente el shell de la aplicación y algunos puntos de entrada/editores históricos (`AjustesPage`, `Header`, `Sidebar`, `DashboardCards`, etc.). La existencia de un wrapper histórico no justifica mover un módulo durante un cambio pequeño.
 
-## 2. Patrón de persistencia (regla central del proyecto)
+## 3. Frontera Electron ↔ renderer
 
-Cada módulo migrado a SQLite tiene tres piezas, con nombres predecibles:
+El renderer trabaja contra `window.traccion`, definido por `electron/preload.ts`. Los handlers de `electron/main.ts` delegan en la capa de persistencia.
 
-1. **Lado Electron** (`electron/sqlitePersistence.ts`): un repositorio creado con la factory `createJsonModuleRepository(tableName, legacyKey, moduleLabel, ...)`. El `tableName` es siempre un literal de código fuente, nunca viene de input externo — esa es la protección real contra inyección SQL, no una whitelist en runtime.
-2. **Lado frontend, repositorio** (`store/<modulo>SqliteRepository.ts`): funciones `hasXSqliteRepository()`, `loadXRecordsFromSqlite()`, `saveXToSqlite(record, expectedUpdatedAt)`. "Eliminar" no es una función distinta: es `saveXToSqlite` con `deletedAt` poblado (soft-delete).
-3. **Lado frontend, store** (`store/useXStore.ts`): expone `xWithConcurrencyCheck` (create/update/remove) a los componentes. Las versiones sin chequeo de concurrencia (`create`, `update`, `remove` sin sufijo) **no deben existir** — si aparecen, son legacy y se eliminan (ver sección 6).
+Reglas:
 
-### Control de concurrencia
+- no importar `better-sqlite3` desde `src/`;
+- no acceder al filesystem de SQLite desde componentes React;
+- no añadir IPC ad hoc si la operación encaja en un repositorio existente;
+- validar en Electron cualquier operación que afecte a fichero, backup, lock o mantenimiento.
 
-Todo `update`/`remove` recibe `expectedUpdatedAt: string | null`. Si el valor en BD no coincide, la operación falla con un mensaje claro ("modificado por otro usuario") en vez de sobrescribir a ciegas. **Cualquier componente que llame a una función de guardado sin pasar `expectedUpdatedAt` está incompleto.**
+`electron/sqlitePersistence.ts` sigue siendo el coordinador principal, pero parte de su lógica ya está extraída a `electron/persistence/` (`sqliteConnection`, `schemaMigrations`, `sqliteOperationGuard`, repositorios, backups, locks, mantenimiento, identidad de BD, etc.). Para cambios nuevos se prefiere ampliar esas piezas testeables antes que engordar el coordinador.
 
-### Lectura nunca escribe
+## 4. SQLite: fuente única de verdad
 
-Las funciones de carga (`load`, `reloadFromStorage`, `mirrorX`) solo escriben en `localStorage` como caché de lectura, **nunca** disparan una escritura real a SQLite. Si una función de lectura necesita guardar algo en la base de datos, es un bug — el caso histórico fue Teletrabajo, ya corregido.
+La política vigente sustituyó el antiguo modelo de fallback local.
 
-### Fallback a localStorage
+### 4.1 Arranque
 
-Cuando `window.traccion?.loadXRecords` no existe (SQLite no disponible), el store cae a `localStorage` vía `writeStorageItem`/`readStorageItem` (capa unificada en `src/services/persistence.ts`). Esto es intencional, no deuda técnica: es la red de seguridad de arranque cuando SQLite aún no está montado. La clave debe estar en `PERSISTED_STORAGE_KEYS` (`src/services/persistenceKeys.ts`) para entrar en esa capa.
+`src/services/persistence.ts` hidrata desde SQLite. Los datos de negocio cargados pueden reflejarse en una **caché efímera de sesión**, pero no se conserva una copia local que pueda convertirse después en fuente alternativa.
 
-Esto cubre el arranque en frío, pero no una caída de conectividad SMB a media sesión: en ese caso `window.traccion.saveXRecordIfUnchanged` sigue existiendo (el puente IPC no ha desaparecido), así que el store nunca activa el fallback de arriba, y hasta julio de 2026 el guardado simplemente fallaba con un mensaje de error, sin más red de seguridad.
+Si SQLite está vacía, TrAcción **no la rellena automáticamente** con datos antiguos del equipo. Si SQLite no está disponible, la aplicación informa del problema y **bloquea la edición**.
 
-### Cola de escrituras pendientes ante caída de conectividad
+### 4.2 Sin modo offline
 
-`src/services/pendingRecordWrites.ts` cubre ese hueco para el patrón `<modulo>SqliteRepository.ts`: cada repositorio envuelve su `saveXToSqlite` con `saveRecordWithPendingFallback` y se registra una vez con `registerPendingWriteReplayer(module, replayer)`. Si el guardado falla por un mensaje identificable como problema de conectividad (heartbeat SMB bloqueado, base ocupada, IPC caído — ver `isConnectivityFailureMessage`), el cambio se encola en `localStorage` (`SQLITE_PENDING_RECORD_WRITES_KEY`) en vez de perderse, y se reintenta automáticamente en el siguiente ciclo de polling (`externalDataSync.ts`) o al reconectar. Un conflicto OCC real (otro usuario ya modificó el registro) **no** se encola — se deja pasar tal cual para que el usuario lo vea, igual que hoy.
+`src/services/pendingRecordWrites.ts` mantiene compatibilidad de API con repositorios antiguos, pero actualmente:
 
-Es hermana, no sustituta, de la cola más antigua de `persistence.ts` (`SQLITE_PENDING_WRITES_KEY`, atada a `writeStorageItem`): esa protege el camino genérico de clave plana, que hoy usan sobre todo escrituras espejo en `localStorage`, no el guardado real de la mayoría de módulos.
+- no registra escrituras offline;
+- no reproduce colas locales;
+- purga colas legacy;
+- un cambio solo se considera guardado cuando SQLite lo confirma.
 
-**Migrado a la nueva cola**: todos los módulos con `<modulo>SqliteRepository.ts` — Tareas, Licencias sin sueldo, Actas (registros y tipos), Criterios RRLL, Plantilla (empleados), Vinculograma, Teletrabajo (solicitudes) y las 5 entidades de Ticket Restaurante (calendarios, personas, ausencias, config, manutenciones). Quedan deliberadamente fuera los guardados por lote (`saveXsToSqlite`, usados por importadores masivos): encolar un lote entero complicaría la reconciliación sin aportar nada — si un import falla, el usuario lo repite.
+Por tanto, cualquier documentación o código que describa `localStorage` como fallback operativo de negocio está obsoleto.
 
-## 3. Importadores masivos
+### 4.3 localStorage/sessionStorage
 
-Regla extraída de arreglar el importador de histórico de Teletrabajo (`previewImportHistorico` / `confirmImportHistorico` en `useTeletrabajoStore.ts`):
+Pueden seguir utilizándose para preferencias visuales, metadatos o caché efímera controlada. No deben utilizarse para permitir que el usuario continúe modificando datos de negocio sin SQLite.
 
-1. **Leer y calcular en memoria** (función pura en `domain/`, sin efectos secundarios) — produce un resultado con resumen (creados/actualizados/sin cambios/ignorados).
-2. **Mostrar resumen al usuario** antes de tocar la base de datos. Nunca escribir en el mismo paso que se lee el archivo.
-3. **Confirmar explícitamente** (botón "Confirmar e importar") — solo entonces se persiste, en bloque, no fila a fila.
-4. **Conservar campos que el importador no conoce** al actualizar un registro existente (ejemplo: validaciones internas de Teletrabajo no se resetean al reimportar un histórico externo).
+## 5. Patrón de repositorio y OCC
 
-Este patrón está implementado en Teletrabajo. Los importadores de Especiales y Criterios RRLL todavía no separan preview de confirmación — son candidatos a alinear, no la referencia a copiar.
+Los módulos con registros independientes suelen exponer un repositorio renderer (`*SqliteRepository.ts`) y una implementación Electron apoyada en repositorios JSON/tabla específica.
 
-## 4. Backups (5 mecanismos, cada uno con un propósito distinto)
+Una escritura normal transporta:
 
-| Mecanismo | Dónde | Cuándo | Retención |
-|---|---|---|---|
-| Backup compartido SMB | misma carpeta que `traccion.sqlite` | cada guardado (debounce 5s) | últimas 3 copias |
-| Backup local rotado | `userData/sqlite-local-backup` | cada guardado (debounce 5s) | últimas 5 copias |
-| Backup diario local | `userData/sqlite-daily-backup` (configurable) | cada guardado, sobrescribe el archivo del día | 1-7 días, configurable |
-| Backup de cierre | `userData/sqlite-local-backup/shutdown` | al cerrar la app | últimas 3 copias |
-| Backup manual | igual que el compartido + local | botón "Crear copia ahora" en Ajustes | rota igual que el rotado |
+```text
+recordId
+value
+expectedUpdatedAt
+```
 
-`VACUUM` + `ANALYZE` corren automáticamente al cerrar la app (máximo 1 vez por semana) o a demanda desde el botón "Compactar ahora" en Ajustes. Compactan el archivo activo, no los backups.
+`expectedUpdatedAt` implementa **optimistic concurrency control (OCC)**. Si el registro cambió desde que el usuario lo cargó, SQLite rechaza la escritura en vez de pisar el cambio de otra persona.
 
-## 5. Locks
+Reglas:
 
-Dos mecanismos distintos, no intercambiables:
+- create/update/delete deben pasar por la ruta con control de concurrencia;
+- el borrado de entidades JSON suele ser soft-delete (`deletedAt`), según el repositorio;
+- un conflicto OCC se muestra al usuario y obliga a reconciliar/recargar;
+- un fallo de conexión no se transforma en una escritura local pendiente.
 
-- **Lock de archivo** (`acquireLock`/`releaseLock`, basado en `mkdir`, en `electron/sqlitePersistence.ts`): coordina operaciones de mantenimiento (VACUUM, backups) entre los 2-3 equipos de la red. Tiene heartbeat para operaciones largas.
-- **Lock de registro** (`useSharedRecordLock`, por `(module, recordId)`): impide que dos personas editen el mismo registro a la vez desde el editor. No bloquea lectura, solo edición concurrente del mismo ítem.
+No todos los módulos usan exactamente los mismos nombres públicos. No renombrar APIs solo para homogeneizar si no existe beneficio funcional.
 
-Un módulo puede (y suele) usar ambos sin conflicto, porque operan sobre claves distintas.
+## 6. Locks: tres conceptos distintos
 
-## 6. Qué es legacy y se puede eliminar sin preguntar
+No deben confundirse:
 
-- Funciones `create`/`update`/`remove` sin `WithConcurrencyCheck` que ningún componente real invoque. Antes de borrar, confirmar con `grep` que cero componentes las llaman — varias veces estas funciones existen "por si acaso" sin que nadie las use.
-- Helpers (`persist`, `persistRecords`) que solo llamaban a las funciones anteriores: si quedan huérfanos tras la limpieza, se eliminan también, junto con el import de `writeStorageItem` si deja de usarse.
-- Archivos con el comentario `// Archivo legado no usado` al inicio (`src/features/PlantillaPage.tsx`, `TareasPage.tsx`, `TeletrabajoPage.tsx`, `JobPositionTranslationsModal.tsx`) — no tocar su contenido, son marcadores intencionales de una reorganización anterior, no hace falta "completarlos".
+### Lock de mantenimiento de fichero
 
-## 7. Cuándo subir la versión de schema
+Gestionado en Electron. Coordina operaciones como backup, VACUUM o actuaciones sobre el fichero SQLite compartido.
 
-`CURRENT_SCHEMA_VERSION` en `electron/sqlitePersistence.ts` solo sube cuando se añade una `migrateToVersionN()` real que crea/modifica tablas. Nunca subir el número sin la migración correspondiente — si el número sube sin cambios reales de esquema, el guard de seguridad (que impide abrir una BD "más nueva" que el código) deja de proteger nada.
+### Lock de registro
 
-## 8. Convenciones de UI
+`useSharedRecordLock` / servicios de record lock. Evita que dos usuarios entren simultáneamente en edición del mismo registro cuando el módulo lo utiliza.
 
-- Botones de acción: `ActionButton` (`src/components/ui/ActionButton.tsx`), no `<button>` con clases sueltas. Variantes: `save`, `delete`, `secondary`, `add`, `edit`, `approve`, etc.
-- Inputs/selects/textareas: `Field`, `Input`, `Select`, `Textarea`, `FieldLabel` (`src/components/ui/Field.tsx`).
-- Cabecera de módulo: `PageHeader` (`src/components/ui/PageHeader.tsx`) — eyebrow + título + ayuda + subtítulo + acciones.
-- Confirmaciones y alertas: `useAppDialog()` (`alert`, `confirm` + `dialogNode` a renderizar en el JSX), no `window.confirm`/`window.alert` nativos.
+### Lock de módulo/operación
 
-Migrado: Especiales, Sorteos, Licencias sin sueldo, Presupuestos, Criterios RRLL, Vinculograma, header de Actas.
-Pendiente: Plantilla, Tareas, Teletrabajo, Ajustes, Comité, Paritaria, resto de Actas, Ticket Restaurante.
+`withSharedModuleLocks` protege operaciones compuestas que deben ejecutarse como una unidad lógica. Ticket Restaurante, Sorteos y Especiales son ejemplos de uso.
 
-## 9. Multiusuario: estado real por módulo
+Los locks complementan al OCC; no lo sustituyen.
 
-Todos los módulos en `src/features/` con repositorio SQLite tienen `expectedUpdatedAt` en sus operaciones de escritura, incluido Ticket Restaurante (calendarios, personas, ausencias, configuración y manutenciones), que se completó en julio de 2026 — antes era la única excepción. Además, todas las escrituras de `TicketRestaurantePage.tsx` están envueltas en `withSharedModuleLocks(['ticket-restaurante'])`, igual que Sorteos y Especiales. Ver `DECISIONS.md` para el detalle de qué se cambió y por qué.
+## 7. Sincronización multiusuario
 
-Nota de nomenclatura: las funciones de escritura de Ticket Restaurante (`updateCalendar`, `upsertPerson`, `removeAbsence`, etc.) hacen la comprobación OCC completa pero **no** llevan el sufijo `WithConcurrencyCheck` que sí usan Especiales/Sorteos/Actas. Es una inconsistencia de nombres heredada, no un hueco funcional — no renombrar sin motivo, ya que tocaría toda la superficie pública del store.
+OCC evita sobrescrituras, pero no hace que otro puesto vea automáticamente el cambio.
 
-**OCC (no pisar cambios ajenos al guardar) y detección en vivo (ver los cambios de otro usuario sin recargar) son cosas distintas** — un módulo puede tener la primera perfecta y carecer de la segunda. En julio de 2026 se encontró que Licencias sin sueldo, Especiales, Criterios RRLL, Ticket Restaurante, Vinculograma, tipos de Acta y Configuración tenían OCC correcto pero ninguna detección en vivo real (el polling de `externalDataSync.ts` nunca se enteraba de sus cambios) — arreglado añadiéndolos a `DIRECT_STORE_UPDATED_AT_TABLES` en `electron/persistence/directStoreUpdatedAt.ts`. Ver `DECISIONS.md` para el detalle. Si añades un módulo nuevo con tabla propia, añádelo ahí explícitamente — no asumas que un mirror-write en el store cubre esto sin comprobar que se ejecuta en el camino de éxito, no solo en el de fallback.
+`src/services/externalDataSync.ts` realiza el polling de cambios. Los stores sincronizables se registran en `syncableStoreRegistrations.ts`/`syncableStoreRegistry.ts`.
 
-## 10. Tests: huecos conocidos
+Para tablas con repositorio propio, `electron/persistence/directStoreUpdatedAt.ts` consulta `MAX(updated_at)` y expone el token de actualización. Actualmente incluye, entre otros:
 
-- `electron/sqlitePersistence.ts` (~1975 líneas a julio de 2026, tras varias rondas de extracción — la nota anterior de ">5.000 líneas" quedó desactualizada) sigue sin tests directos sobre el fichero en sí, porque importa `electron` (`app`) y eso le impide correr con Vitest normal. La lógica pura que sí se pudo extraer sin ese problema (clasificación de errores SQLite: corrupción, contención de lock, `SQLITE_BUSY`/`SQLITE_LOCKED`) vive en `electron/persistence/sqliteOperationGuard.ts` y sí tiene tests directos — mismo patrón que ya se usó para `sqliteConnection.ts` y `schemaMigrations.ts`. Lo que queda sin cubrir es la orquestación con estado (`activateDatabase`, `safeDatabaseOperation`, apertura/cierre de la conexión real): verificado manualmente durante el desarrollo, no como tests del repositorio.
-- Comité y Paritaria (`src/shared/sessions/`) **sí tienen tests** (`createSessionStore.test.ts`, `createSessionStore.nativeTable.test.ts`, `session.test.ts`, `sessionSqliteRepository.test.ts` — 35 tests en total): la nota anterior de "no tienen ningún test" quedó desactualizada en algún momento entre julio de 2026 y ahora. Antes de asumir que un área carece de tests, comprobar con `find`/`grep` en vez de fiarse de esta lista — es exactamente el tipo de nota que caduca sin que nadie la borre.
+- Plantilla;
+- Teletrabajo;
+- Actas y tipos;
+- Comité/Paritaria;
+- Tareas;
+- Sorteos;
+- Licencias;
+- Especiales;
+- Criterios RRLL;
+- Vinculograma;
+- Configuración;
+- Lotería;
+- Ticket Restaurante (sus cinco tablas físicas).
 
-Antes de tocar `sqlitePersistence.ts`, considerar si el cambio justifica extraer la pieza afectada a un módulo sin dependencia de `electron` (como ya se hizo con los repositorios y con `sqliteOperationGuard.ts`) en vez de añadir más código intestable al monolito.
+**Regla para un módulo nuevo:** si crea una tabla propia que debe refrescarse entre puestos, registrar explícitamente su señal de `updated_at`; no asumir que un mirror-write genérico resolverá la detección.
+
+## 8. Ticket Restaurante como store compuesto
+
+Ticket Restaurante es un único dominio funcional y un único `storeId`, pero persiste varias entidades/tablas:
+
+- calendarios;
+- personas;
+- ausencias;
+- configuración;
+- manutenciones.
+
+La sincronización debe reaccionar al cambio de cualquiera de ellas. Sus escrituras se centralizan mediante acciones protegidas y locks del módulo.
+
+Las reglas de cálculo, exclusiones, deuda, ajustes, pedido realizado y movimientos **no pertenecen a este documento**: están en `FUNCIONAMIENTO.md` y sus decisiones en `DECISIONS.md`.
+
+## 9. Configuración compartida
+
+La configuración de negocio que debe ser común a los tres usuarios se persiste en SQLite (`configuracion_state` y/o repositorios específicos según el dato).
+
+No confundirla con preferencias puramente locales de interfaz. Antes de añadir una preferencia nueva hay que decidir expresamente si es:
+
+- **compartida**: afecta al funcionamiento/rutas comunes y debe viajar por SQLite;
+- **local**: afecta solo a la experiencia de ese puesto y no debe sincronizarse.
+
+## 10. Importadores masivos
+
+Patrón preferido para importaciones con impacto significativo:
+
+1. leer y normalizar en memoria;
+2. calcular altas/cambios/incidencias sin persistir;
+3. mostrar preview o resumen cuando el riesgo lo justifique;
+4. confirmar;
+5. persistir en bloque;
+6. conservar campos internos que el fichero importado no conoce.
+
+Teletrabajo es la referencia histórica más clara del patrón preview/confirmación. Otros importadores pueden tener flujos distintos por necesidad funcional; no introducir una previsualización artificial si no aporta control real.
+
+Una importación que falla por falta de SQLite debe fallar de forma visible; no debe quedar pendiente localmente.
+
+## 11. Backups y mantenimiento
+
+TrAcción dispone de varias capas de protección del fichero SQLite:
+
+| Mecanismo | Propósito |
+|---|---|
+| Backup compartido | copia cercana a la BD compartida |
+| Backup local rotado | recuperación desde el puesto |
+| Backup diario | punto de recuperación por día |
+| Backup de cierre | protección adicional al finalizar |
+| Backup manual | operación explícita desde Ajustes |
+
+La retención y rutas concretas dependen de la configuración vigente. La implementación está repartida entre `sqlitePersistence.ts` y `electron/persistence/` (`localBackupService`, `localBackups`, `backupReference`, etc.).
+
+`VACUUM`/`ANALYZE` son operaciones de mantenimiento sobre la base activa y deben respetar los locks correspondientes. Ajustes expone las operaciones administrativas necesarias; no replicarlas en módulos funcionales.
+
+## 12. Identidad y seguridad de la base
+
+La aplicación mantiene información suficiente para identificar la SQLite activa y distinguir la base configurada de estados no válidos. Las preferencias y comprobaciones viven en piezas como:
+
+- `databaseIdentity.ts`;
+- `databasePreferences.ts`;
+- `databaseStatus.ts` / `databaseStatusView.ts`;
+- `databaseHealthMonitor.ts`.
+
+La regla funcional es estricta: si la base compartida requerida no está disponible, TrAcción no debe aparentar que trabaja normalmente con una copia local.
+
+## 13. Schema y migraciones
+
+`CURRENT_SCHEMA_VERSION` solo debe incrementarse cuando existe una migración real correspondiente en `schemaMigrations.ts`/orquestación asociada.
+
+Nunca subir el número para "marcar versión" de la aplicación. La versión de schema y la versión de TrAcción son conceptos independientes.
+
+Una versión de la app no debe abrir y modificar silenciosamente una BD cuyo schema sea más nuevo de lo que conoce.
+
+## 14. UI compartida
+
+Componentes de referencia:
+
+- `ActionButton` para acciones;
+- `Field`, `Input`, `Select`, `Textarea`, `FieldLabel` para formularios;
+- `PageHeader` para cabeceras de módulo;
+- `useAppDialog()` para alertas/confirmaciones;
+- componentes compartidos de tabla cuando el caso encaja.
+
+La migración visual es progresiva. **No mantener listas estáticas de “módulos migrados/pendientes” en este documento**, porque caducan rápidamente. Para una auditoría UI hay que comprobar el código actual.
+
+Reglas estables:
+
+- evitar `window.alert`/`window.confirm` si existe el diálogo común;
+- no crear un nuevo patrón de botón/campo para un único módulo;
+- priorizar densidad adecuada para portátil de 14";
+- mantener consistencia visual sin sacrificar información operativa.
+
+## 15. Ayuda y documentación
+
+La documentación tiene responsabilidades distintas:
+
+- **Ayuda integrada**: cómo utiliza el usuario cada módulo.
+- **`FUNCIONAMIENTO.md`**: reglas funcionales que el software debe cumplir.
+- **`DECISIONS.md`**: por qué se tomaron decisiones relevantes.
+- **`ARCHITECTURE.md`**: cómo se organiza técnicamente la aplicación.
+- **README**: puerta de entrada al proyecto.
+
+Un cambio funcional relevante debe revisar las cinco superficies que correspondan. No duplicar explicaciones extensas entre documentos: enlazar al documento propietario.
+
+## 16. Actualización y versionado
+
+La versión visible del producto es **TrAcción 1.2**. La versión técnica mantiene el tercer componente (`1.2.xxx`) para builds y actualización.
+
+El flujo portable vigente genera internamente el ejecutable estable `Traccion 1.2.exe`. Para distribución del actualizador se publica:
+
+```text
+Traccion 1.2.piz
+version.json
+```
+
+`version.json` conserva la versión técnica y la referencia/hash del paquete. El `.piz` contiene el binario que el actualizador instala/reemplaza.
+
+Los workflows normal y Lite validan que el EXE generado sea un binario de tamaño razonable antes de crear/publicar el paquete de actualización. No reintroducir nombres variables del EXE por cada build salvo cambio deliberado del sistema de actualización.
+
+## 17. Tests y comprobaciones
+
+El repositorio tiene cobertura unitaria amplia y tests específicos de persistencia, concurrencia, dominio y servicios. `electron/persistence/` contiene numerosas piezas extraídas precisamente para poder probarlas sin arrancar Electron.
+
+`electron/sqlitePersistence.ts` sigue siendo un coordinador grande (~2.000 líneas en esta fotografía) y no debe crecer innecesariamente. Si una modificación contiene lógica determinista extraíble, crear/usar una pieza testeable en `electron/persistence/`.
+
+Antes de entregar cambios de código, el objetivo es superar:
+
+```bash
+npm run typecheck
+npm run lint
+npm run test
+```
+
+y, cuando el cambio afecta a interacción Electron/UI crítica, los tests E2E correspondientes (`test:ui` / `test:critical` / `test:all` según alcance).
+
+No afirmar que una comprobación ha pasado si no se ha ejecutado en un entorno con dependencias instaladas.
+
+## 18. Checklist para nuevos desarrollos
+
+Antes de crear o modificar un módulo:
+
+1. consultar `FUNCIONAMIENTO.md` y `DECISIONS.md`;
+2. decidir si el dato es compartido o local;
+3. si es negocio compartido, persistirlo en SQLite;
+4. definir OCC y, si procede, lock de registro/módulo;
+5. registrar la detección multiusuario si hay tabla nueva;
+6. impedir cualquier fallback de escritura offline;
+7. separar lógica pura de UI/Electron;
+8. añadir tests de la regla nueva o de la regresión corregida;
+9. actualizar ayuda/documentación afectada;
+10. ejecutar las comprobaciones disponibles antes de entregar.
+
+## 19. Documentos históricos
+
+Las auditorías puntuales (`*-audit.md` y documentos equivalentes) son fotografías de una fecha. Pueden explicar el origen de una decisión, pero **no sustituyen** a `FUNCIONAMIENTO.md`, `DECISIONS.md` ni a este documento para conocer el estado vigente.
