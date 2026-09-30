@@ -304,7 +304,7 @@ export function PeoplePanel({
           <div className="mt-2 space-y-2">
             {!editingPersonId ? (
               <div className="relative max-w-2xl">
-                <Field label="Buscar en Plantilla" hint="Los datos personales proceden de Plantilla; aquí solo asignas calendario y estado.">
+                <Field label="Buscar en Plantilla" hint="Selecciona una persona como base. Después puedes corregir nombre, apellidos y DNI específicamente para Ticket Restaurante.">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-metro-muted" />
                     <Input
@@ -343,26 +343,26 @@ export function PeoplePanel({
             </Field>
             <Field label="Nombre" required>
               <Input
+                onChange={(event) => onChange({ ...draft, nombre: event.target.value })}
                 required
-                readOnly
                 value={draft.nombre}
               />
             </Field>
             <Field label="Apellido 1">
               <Input
-                readOnly
+                onChange={(event) => onChange({ ...draft, apellido1: event.target.value })}
                 value={draft.apellido1}
               />
             </Field>
             <Field label="Apellido 2">
               <Input
-                readOnly
+                onChange={(event) => onChange({ ...draft, apellido2: event.target.value })}
                 value={draft.apellido2}
               />
             </Field>
             <Field label="DNI">
               <Input
-                readOnly
+                onChange={(event) => onChange({ ...draft, dni: event.target.value })}
                 value={draft.dni}
               />
             </Field>
