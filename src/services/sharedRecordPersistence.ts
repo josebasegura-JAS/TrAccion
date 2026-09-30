@@ -1,6 +1,6 @@
 import { writeRendererStorageCache } from './persistence';
 import { publishDatabaseStatus } from './databaseStatus';
-import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy, waitForNextPaint } from './persistenceFeedback';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy } from './persistenceFeedback';
 
 async function saveSharedStorageValue(
   storageKey: string,
@@ -12,8 +12,8 @@ async function saveSharedStorageValue(
     throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
   }
 
+  // El feedback es puramente observador: nunca debe retrasar ni bloquear la escritura.
   publishPersistenceBusy(storageKey, 'Guardando cambios en SQLite…');
-  await waitForNextPaint();
   try {
     const result = await saver({ key: storageKey, value, expectedUpdatedAt });
     if (result.ok && result.status.ready && result.status.phase === 'active') {
