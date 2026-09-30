@@ -31,8 +31,9 @@ export function PerformanceDiagnostics() {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>(() => getPerformanceMetrics());
 
   useEffect(() => {
-    void loadPreviousShutdownMetrics();
-    return subscribePerformanceMetrics(() => setMetrics(getPerformanceMetrics()));
+    const unsubscribe = subscribePerformanceMetrics(() => setMetrics(getPerformanceMetrics()));
+    void loadPreviousShutdownMetrics().then(() => setMetrics(getPerformanceMetrics()));
+    return unsubscribe;
   }, []);
 
   const slowest = useMemo(
