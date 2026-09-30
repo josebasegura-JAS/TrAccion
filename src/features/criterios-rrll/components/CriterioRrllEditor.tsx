@@ -321,14 +321,6 @@ export function CriterioRrllEditor({
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
-                Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
-              </ActionButton>
-              <InlineSaveFeedback />
-              <div className="flex-1" />
-              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">
-                Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
-              </ActionButton>
               {!isCreate && criterio && (
                 <ActionButton
                   disabled={isReadOnly}
@@ -350,6 +342,14 @@ export function CriterioRrllEditor({
                   Eliminar
                 </ActionButton>
               )}
+              <InlineSaveFeedback />
+              <div className="flex-1" />
+              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">
+                Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
+              </ActionButton>
+              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">
+                Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd>
+              </ActionButton>
             </div>
           </div>
         </form>

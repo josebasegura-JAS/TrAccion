@@ -369,10 +369,6 @@ export function TeletrabajoEditor({
           </div>
 
           <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-t border-metro-border bg-metro-panel pt-3">
-            <ActionButton disabled={!canSubmit} iconOnly={false} size="sm" type="submit" variant="save">
-              {isSaving ? 'Guardando…' : <>Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></>}
-            </ActionButton>
-            <InlineSaveFeedback />
             {!isCreate && solicitud && (
               <>
                 <AuditHistoryButton
@@ -411,9 +407,9 @@ export function TeletrabajoEditor({
               {isGeneratingWord ? 'Generando…' : 'Generar Word'}
             </ActionButton>
             {!isCreate && solicitud && (
-              <button
-                className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red disabled:cursor-not-allowed disabled:opacity-50"
+              <ActionButton
                 disabled={isFormReadOnly || isSaving}
+                iconOnly={false}
                 onClick={() => {
                   setIsSaving(true);
                   setSaveStatus('');
@@ -426,18 +422,19 @@ export function TeletrabajoEditor({
                     setSaveStatus(result.message);
                   }).finally(() => setIsSaving(false));
                 }}
-                type="button"
+                variant="delete"
               >
                 Eliminar
-              </button>
+              </ActionButton>
             )}
-            <button
-              className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text"
-              onClick={() => void requestClose()}
-              type="button"
-            >
+            <InlineSaveFeedback />
+            <div className="flex-1" />
+            <ActionButton iconOnly={false} onClick={() => void requestClose()} size="sm" variant="secondary">
               Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd>
-            </button>
+            </ActionButton>
+            <ActionButton disabled={!canSubmit} iconOnly={false} size="sm" type="submit" variant="save">
+              {isSaving ? 'Guardando…' : <>Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></>}
+            </ActionButton>
           </div>
         </form>
         </div>

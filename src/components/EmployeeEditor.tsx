@@ -174,10 +174,11 @@ export function EmployeeEditor({ employee, mode, onDone }: { employee: Employee 
           <div className="border-t border-metro-border/80 pt-4">
             {saveError && <p className="mb-3 w-full rounded-lg border border-metro-red/40 bg-metro-red/10 px-3 py-2 text-xs font-semibold text-metro-red">{saveError}</p>}
             <div className="flex flex-wrap items-center gap-2">
-              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></ActionButton>
-              <InlineSaveFeedback /><div className="flex-1" />
-              <button className="rounded-xl border border-metro-border bg-metro-surface px-4 py-2 text-sm font-semibold text-metro-muted hover:text-metro-text" onClick={() => void requestClose()} type="button">Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd></button>
               {!isCreate && employee && <ActionButton disabled={isReadOnly} iconOnly={false} onClick={() => { void (async () => { setSaveError(''); const result = await removeEmployee(employee.empleado, JSON.stringify(employee)); if (!result.ok) { setSaveError(result.message); return; } clearRecoveryDraft(); onDone(); })(); }} variant="delete">Eliminar</ActionButton>}
+              <InlineSaveFeedback />
+              <div className="flex-1" />
+              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd></ActionButton>
+              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></ActionButton>
             </div>
           </div>
         </form>

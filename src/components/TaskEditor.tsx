@@ -225,8 +225,13 @@ export function TaskEditor({
 
           <div className="shrink-0 border-t border-sky-300/10 bg-[#0c1b2e]/95 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></ActionButton>
-              <InlineSaveFeedback />
+              {!isCreate && task && (
+                <ActionButton disabled={isFormReadOnly} iconOnly={false} variant="delete" onClick={() => void (async () => {
+                  const result = await removeTask(task.id, loadedUpdatedAt);
+                  if (!result.ok) { setSaveStatus(result.message); setSaveStatusIsError(true); return; }
+                  clearRecoveryDraft(); onDone();
+                })()}>Eliminar</ActionButton>
+              )}
               {!isCreate && task && (
                 <>
                   <ActionButton
@@ -268,15 +273,11 @@ export function TaskEditor({
                       : 'Crear criterio RRLL'}
                 </ActionButton>
               )}
-              {!isCreate && task && (
-                <ActionButton disabled={isFormReadOnly} iconOnly={false} variant="delete" onClick={() => void (async () => {
-                  const result = await removeTask(task.id, loadedUpdatedAt);
-                  if (!result.ok) { setSaveStatus(result.message); setSaveStatusIsError(true); return; }
-                  clearRecoveryDraft(); onDone();
-                })()}>Eliminar</ActionButton>
-              )}
-              <button className="rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-muted hover:text-white" onClick={() => void requestClose()} type="button">Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd></button>
-              {saveStatus && <p className={`ml-auto text-xs font-semibold ${saveStatusIsError ? 'text-red-300' : 'text-slate-400'}`}>{saveStatus}</p>}
+              <InlineSaveFeedback />
+              {saveStatus && <p className={`text-xs font-semibold ${saveStatusIsError ? 'text-red-300' : 'text-slate-400'}`}>{saveStatus}</p>}
+              <div className="flex-1" />
+              <ActionButton iconOnly={false} onClick={() => void requestClose()} variant="secondary">Cancelar <kbd className="ml-1 text-[10px] opacity-70">Esc</kbd></ActionButton>
+              <ActionButton disabled={!canSubmit} iconOnly={false} type="submit" variant="save">Guardar <kbd className="ml-1 text-[10px] opacity-70">Ctrl S</kbd></ActionButton>
             </div>
           </div>
         </form>
