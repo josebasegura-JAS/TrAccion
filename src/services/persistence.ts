@@ -8,6 +8,7 @@ import {
 } from './persistenceKeys';
 import { publishDatabaseStatus } from './databaseStatus';
 import { getEditingAvailability } from './editingAvailability';
+import { recordPerformanceMetric } from './performanceMetrics';
 
 import {
   emitPersistenceFeedback,
@@ -534,7 +535,9 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     const hydrationStartedAt = performance.now();
 
     if (window.traccion.getPersistedRecordsToken) {
+      const tokenStartedAt = performance.now();
       const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
+      recordPerformanceMetric('arranque', 'SQLite: comprobar estado y token', performance.now() - tokenStartedAt);
       publishDatabaseStatus(tokenSnapshot.status);
       if (!tokenSnapshot.status.ready || tokenSnapshot.status.phase !== 'active' || tokenSnapshot.status.isDefaultPath !== false) {
         return {
@@ -562,7 +565,9 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
       }
     }
 
+    const snapshotStartedAt = performance.now();
     const snapshot = await window.traccion.loadPersistedRecords();
+    recordPerformanceMetric('arranque', 'SQLite: cargar snapshot', performance.now() - snapshotStartedAt);
     publishDatabaseStatus(snapshot.status);
     if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {
       return {
@@ -604,6 +609,7 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
 
     const applyStartedAt = performance.now();
     const applyStats = applyPersistedRecordsSnapshotToLocalStorage(snapshot);
+    recordPerformanceMetric('arranque', 'SQLite: aplicar snapshot', performance.now() - applyStartedAt);
     logPersistenceMetric('hidratación SQLite: caché de sesión actualizada', {
       records: sqliteRecords.length,
       applied: applyStats.applied,

@@ -60,8 +60,10 @@ function renderBootScreen(message?: string): void {
   );
 }
 
-async function renderApp(): Promise<void> {
-  const { App } = await import('./App');
+type AppModule = typeof import('./App');
+
+async function renderApp(appModulePromise: Promise<AppModule> = import('./App')): Promise<void> {
+  const { App } = await appModulePromise;
 
   root.render(
     <React.StrictMode>
@@ -82,12 +84,21 @@ async function startApp(): Promise<void> {
   renderBootScreen('Inicializando base de datos...');
   await waitForNextPaint();
   notifyBootVisible();
+  // Prepara el bundle principal en paralelo con SQLite. La interfaz no se
+  // renderiza hasta que la hidratación termina, por lo que se conservan las
+  // mismas garantías de arranque y fuente única de verdad.
+  const appImportStartedAt = performance.now();
+  const appModulePromise = import('./App');
+  void appModulePromise.then(() => {
+    recordPerformanceMetric('arranque', 'Preparación de módulos', performance.now() - appImportStartedAt);
+  });
+
   const hydrationStartedAt = performance.now();
   const hydrationResult = await hydrateLocalStorageFromSqlite();
   recordPerformanceMetric('arranque', 'Hidratación SQLite', performance.now() - hydrationStartedAt);
   reportStartupHydrationResult(hydrationResult);
   renderBootScreen('Preparando módulos...');
-  await renderApp();
+  await renderApp(appModulePromise);
   recordPerformanceMetric('arranque', 'Arranque hasta interfaz lista', performance.now() - startupStartedAt);
 }
 
