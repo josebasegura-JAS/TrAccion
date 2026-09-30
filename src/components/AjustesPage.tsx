@@ -1,4 +1,5 @@
 import {
+  Activity,
   ChevronDown,
   Database,
   FileSpreadsheet,
@@ -648,7 +649,7 @@ export function AjustesPage() {
           <p className="ui-eyebrow mb-2 text-metro-muted">
             Accesos directos
           </p>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <button
               className="ui-shortcut-card"
               onClick={() => openAndScroll('ajustes-base-datos')}
@@ -701,6 +702,19 @@ export function AjustesPage() {
               <span className="min-w-0">
                 <span className="block text-sm font-bold text-metro-text">Tareas</span>
                 <span className="block text-xs text-metro-muted">Estados, fases, responsables y orígenes</span>
+              </span>
+            </button>
+            <button
+              className="ui-shortcut-card"
+              onClick={() => openAndScroll('ajustes-rendimiento')}
+              type="button"
+            >
+              <span className="ui-shortcut-card__icon">
+                <Activity size={17} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-metro-text">Rendimiento</span>
+                <span className="block text-xs text-metro-muted">Diagnóstico y tiempos de esta sesión</span>
               </span>
             </button>
           </div>

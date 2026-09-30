@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppBootScreen } from './components/AppBootScreen';
 import { DatabaseLockQuickActionsPortal } from './components/ajustes/DatabaseLockQuickActionsPortal';
-import { SafeSettingsLoadingIndicator } from './components/ajustes/SafeSettingsLoadingIndicator';
 import { TaskCriterionBridge } from './features/criterios-rrll/components/TaskCriterionBridge';
 import {
   hydrateLocalStorageFromSqlite,
@@ -69,7 +68,6 @@ async function renderApp(): Promise<void> {
       <>
         <App />
         <DatabaseLockQuickActionsPortal />
-        <SafeSettingsLoadingIndicator />
         <TaskCriterionBridge />
       </>
     </React.StrictMode>,
