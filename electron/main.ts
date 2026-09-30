@@ -24,9 +24,46 @@ function loadSqlitePersistenceModule(): Promise<SqlitePersistenceModule> {
 function logStartupPhase(startedAt: number, phase: string): void { console.info(`[startup] ${phase}: ${Date.now() - startedAt} ms`); }
 function createContextMenu(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('context-menu', (_event, params) => {
-    const template: MenuItemConstructorOptions[] = [
-      { role: 'cut', enabled: params.isEditable }, { role: 'copy', enabled: params.selectionText.length > 0 }, { role: 'paste', enabled: params.isEditable }, { type: 'separator' }, { role: 'selectAll' },
-    ];
+    const template: MenuItemConstructorOptions[] = [];
+
+    if (params.isEditable && params.misspelledWord) {
+      const suggestions = params.dictionarySuggestions.slice(0, 6);
+      if (suggestions.length > 0) {
+        for (const suggestion of suggestions) {
+          template.push({
+            label: suggestion,
+            click: () => mainWindow.webContents.replaceMisspelling(suggestion),
+          });
+        }
+      } else {
+        template.push({ label: 'Sin sugerencias ortográficas', enabled: false });
+      }
+      template.push({
+        label: 'Añadir al diccionario',
+        click: () => mainWindow.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      });
+      template.push({ type: 'separator' });
+    }
+
+    if (params.isEditable) {
+      template.push(
+        { role: 'undo', label: 'Deshacer', enabled: params.editFlags.canUndo },
+        { role: 'redo', label: 'Rehacer', enabled: params.editFlags.canRedo },
+        { type: 'separator' },
+        { role: 'cut', label: 'Cortar', enabled: params.editFlags.canCut },
+        { role: 'copy', label: 'Copiar', enabled: params.editFlags.canCopy },
+        { role: 'paste', label: 'Pegar', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Seleccionar todo', enabled: params.editFlags.canSelectAll },
+      );
+    } else {
+      template.push(
+        { role: 'copy', label: 'Copiar', enabled: params.selectionText.length > 0 },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Seleccionar todo' },
+      );
+    }
+
     Menu.buildFromTemplate(template).popup({ window: mainWindow });
   });
 }
