@@ -12,9 +12,13 @@ let previousShutdownLoaded = false;
 
 async function loadPreviousShutdownMetrics(): Promise<void> {
   if (previousShutdownLoaded) return;
-  previousShutdownLoaded = true;
   const previous = await window.traccion?.getLastShutdownPerformance?.();
   if (!previous) return;
+  previousShutdownLoaded = true;
+  if (previous.totalMs === 0 && previous.vacuumMs === 0 && previous.shutdownBackupMs === 0 && previous.closeDatabaseMs === 0) {
+    recordPerformanceMetric('cierre', 'Cierre anterior: iniciado pero no completado', 0);
+    return;
+  }
   recordPerformanceMetric('cierre', 'Cierre anterior: total', previous.totalMs);
   recordPerformanceMetric('cierre', 'Cierre anterior: backup de cierre', previous.shutdownBackupMs);
   recordPerformanceMetric('cierre', 'Cierre anterior: VACUUM programado', previous.vacuumMs);

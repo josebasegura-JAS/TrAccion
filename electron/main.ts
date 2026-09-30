@@ -196,9 +196,14 @@ if (!app.requestSingleInstanceLock()) {
     if (isShutdownInProgress) return;
     isShutdownInProgress = true;
     shutdownWindow = createShutdownWindow();
+    const shutdownStartedAt = Date.now();
+    // Persistimos una marca al comenzar el cierre. Así el siguiente arranque puede
+    // diagnosticar también un cierre que no llegue a completar la escritura final.
+    void writeShutdownPerformance({ totalMs: 0, vacuumMs: 0, shutdownBackupMs: 0, closeDatabaseMs: 0 })
+      .catch((error: unknown) => console.warn('No se ha podido iniciar la métrica de cierre.', error));
     loadSqlitePersistenceModule()
       .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
-      .then((metrics) => writeShutdownPerformance(metrics))
+      .then((metrics) => writeShutdownPerformance({ ...metrics, totalMs: Math.max(metrics.totalMs, Date.now() - shutdownStartedAt) }))
       .catch((error: unknown) => console.warn('No se ha podido completar el cierre SQLite antes de salir.', error))
       .finally(() => {
       isQuitAfterSqlitePersistenceClosed = true;
