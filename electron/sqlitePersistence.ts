@@ -1147,6 +1147,66 @@ export async function getPersistedRecordSnapshot(key: string): Promise<Persisted
   );
 }
 
+export async function loadPersistedRecordsHydrationSnapshot(): Promise<PersistedRecordsSnapshot> {
+  return safeDatabaseOperation(
+    () => {
+      const currentStatus = getSqliteStatus();
+      if (!currentStatus.ready || currentStatus.phase === 'locked') {
+        return {
+          status: currentStatus,
+          records: [],
+          refreshToken: null,
+          latestUpdatedAt: null,
+          taskRecordsUpdatedAt: null,
+          sorteosDrawsUpdatedAt: null,
+          sorteosExclusionsUpdatedAt: null,
+          directStoreUpdatedAt: {},
+        };
+      }
+
+      // El arranque solo necesita los registros genéricos y el token global.
+      // Los MAX(updated_at) de las tablas nativas se usan para el polling
+      // multiusuario, pero no para aplicar la hidratación inicial. Evitarlos
+      // aquí ahorra múltiples consultas sobre la SQLite compartida sin
+      // reducir los datos de negocio que recibe el renderer.
+      const db = requireDatabase();
+      const startedAt = Date.now();
+      const records = readAllPersistedRecords(db);
+      const latestUpdatedAt = records.reduce<string | null>((latest, record) => {
+        if (!latest) return record.updatedAt;
+        return Date.parse(record.updatedAt) > Date.parse(latest) ? record.updatedAt : latest;
+      }, null);
+
+      logSqliteMetric('loadPersistedRecordsHydrationSnapshot', {
+        records: records.length,
+        elapsedMs: Date.now() - startedAt,
+        largestKeys: largestPersistedRecordSizes(records),
+      });
+
+      return {
+        status: currentStatus,
+        records,
+        refreshToken: readRefreshToken(db),
+        latestUpdatedAt,
+        taskRecordsUpdatedAt: null,
+        sorteosDrawsUpdatedAt: null,
+        sorteosExclusionsUpdatedAt: null,
+        directStoreUpdatedAt: {},
+      };
+    },
+    (nextStatus) => ({
+      status: nextStatus,
+      records: [],
+      refreshToken: null,
+      latestUpdatedAt: null,
+      taskRecordsUpdatedAt: null,
+      sorteosDrawsUpdatedAt: null,
+      sorteosExclusionsUpdatedAt: null,
+      directStoreUpdatedAt: {},
+    }),
+  );
+}
+
 export async function loadPersistedRecordsSnapshot(): Promise<PersistedRecordsSnapshot> {
   return safeDatabaseOperation(
     () => {

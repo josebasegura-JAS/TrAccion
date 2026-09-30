@@ -177,6 +177,7 @@ interface TraccionApi {
   forceReleaseDatabaseLock?: () => Promise<TraccionForceReleaseDatabaseLockResult>;
   restoreLocalBackup?: (id: string) => Promise<TraccionRestoreLocalBackupResult>;
   loadPersistedRecords?: () => Promise<TraccionPersistedRecordsSnapshot>;
+  loadPersistedRecordsForHydration?: () => Promise<TraccionPersistedRecordsSnapshot>;
   getPersistedRecord?: (key: string) => Promise<TraccionPersistedRecordSnapshot>;
   getPersistedRecordsToken?: () => Promise<TraccionPersistedRecordsTokenSnapshot>;
   onDatabaseConnectivityIssue?: (listener: (payload: TraccionDatabaseConnectivityIssue) => void) => () => void;

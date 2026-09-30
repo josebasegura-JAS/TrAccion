@@ -446,10 +446,14 @@ interface AppliedPersistedRecordsStats {
   removed: number;
 }
 
+function hasSessionHydrationCache(): boolean {
+  return PERSISTED_STORAGE_KEYS.some((key) => window.sessionStorage.getItem(key) !== null);
+}
+
 function hasFreshHydrationCache(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
   // Los metadatos sobreviven a un reinicio, la caché de negocio no. Si la
   // sesión no contiene ningún snapshot compartido debemos reconstruirlo desde SQLite.
-  if (PERSISTED_STORAGE_KEYS.every((key) => window.sessionStorage.getItem(key) === null)) {
+  if (!hasSessionHydrationCache()) {
     return false;
   }
 
@@ -534,7 +538,10 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
   try {
     const hydrationStartedAt = performance.now();
 
-    if (window.traccion.getPersistedRecordsToken) {
+    // En un arranque frío sessionStorage está vacío, así que el token no puede
+    // permitir omitir la hidratación. Evitamos esa ida y vuelta a SQLite. En
+    // recargas del renderer sí se conserva la comprobación rápida por token.
+    if (hasSessionHydrationCache() && window.traccion.getPersistedRecordsToken) {
       const tokenStartedAt = performance.now();
       const tokenSnapshot = await window.traccion.getPersistedRecordsToken();
       recordPerformanceMetric('arranque', 'SQLite: comprobar estado y token', performance.now() - tokenStartedAt);
@@ -566,7 +573,12 @@ export async function hydrateLocalStorageFromSqlite(): Promise<HydrationResult> 
     }
 
     const snapshotStartedAt = performance.now();
-    const snapshot = await window.traccion.loadPersistedRecords();
+    // En arranque no necesitamos los tokens por tabla usados por el polling
+    // multiusuario. La ruta ligera conserva exactamente los mismos registros
+    // de negocio y evita ese trabajo adicional.
+    const snapshot = window.traccion.loadPersistedRecordsForHydration
+      ? await window.traccion.loadPersistedRecordsForHydration()
+      : await window.traccion.loadPersistedRecords();
     recordPerformanceMetric('arranque', 'SQLite: cargar snapshot', performance.now() - snapshotStartedAt);
     publishDatabaseStatus(snapshot.status);
     if (!snapshot.status.ready || snapshot.status.phase !== 'active' || snapshot.status.isDefaultPath !== false) {

@@ -20,6 +20,7 @@ import {
   heartbeatRecordLock,
   listLocalBackups,
   loadPersistedRecordsSnapshot,
+  loadPersistedRecordsHydrationSnapshot,
   getPersistedRecordsTokenSnapshot,
   migrateLocalStorageSnapshot,
   releaseRecordLock,
@@ -234,6 +235,11 @@ export function registerCoreDatabaseIpc(): void {
   });
   ipcMain.handle('database:load-persisted-records', () =>
     enqueueSqliteIpc('database:load-persisted-records', () => loadPersistedRecordsSnapshot()),
+  );
+  ipcMain.handle('database:load-persisted-records-hydration', () =>
+    enqueueSqliteIpc('database:load-persisted-records-hydration', () =>
+      loadPersistedRecordsHydrationSnapshot(),
+    ),
   );
   ipcMain.handle('database:get-persisted-record', (_event, payload: unknown) => {
     if (!payload || typeof payload !== 'object') {

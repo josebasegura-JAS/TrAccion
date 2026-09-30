@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('traccion', {
   forceReleaseDatabaseLock: () => ipcRenderer.invoke('database:force-release-lock'),
   restoreLocalBackup: (id: string) => ipcRenderer.invoke('database:restore-local-backup', { id }),
   loadPersistedRecords: () => ipcRenderer.invoke('database:load-persisted-records'),
+  loadPersistedRecordsForHydration: () => ipcRenderer.invoke('database:load-persisted-records-hydration'),
   getPersistedRecord: (key: string) => ipcRenderer.invoke('database:get-persisted-record', { key }),
   getPersistedRecordsToken: () => ipcRenderer.invoke('database:get-persisted-records-token'),
   getSqliteSyncTokens: () => ipcRenderer.invoke('database:get-sqlite-sync-tokens'),
