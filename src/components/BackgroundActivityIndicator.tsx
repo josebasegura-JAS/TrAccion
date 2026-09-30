@@ -23,17 +23,18 @@ function ActivityIcon({ activity }: { activity: BackgroundActivity }) {
 export function BackgroundActivityIndicator() {
   const [activities, setActivities] = useState(() => getBackgroundActivityState().activities);
   const [visible, setVisible] = useState(false);
+  const hasActivities = activities.length > 0;
 
   useEffect(() => subscribeBackgroundActivity((state) => setActivities(state.activities)), []);
 
   useEffect(() => {
-    if (activities.length === 0) {
+    if (!hasActivities) {
       setVisible(false);
       return;
     }
     const timer = window.setTimeout(() => setVisible(true), SHOW_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [activities.length > 0]);
+  }, [hasActivities]);
 
   const current = useMemo(() => activities[activities.length - 1] ?? null, [activities]);
   if (!visible || !current) return null;
