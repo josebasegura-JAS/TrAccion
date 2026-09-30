@@ -124,12 +124,17 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   let localBackupQueue: Promise<void> = Promise.resolve();
   let localBackupTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingLocalBackupReason: string | null = null;
+  // Revisión de cambios de esta sesión. Si todos los cambios ya están incluidos
+  // en una copia viva completada, repetir un backup completo al cerrar solo
+  // añade varios segundos de E/S sobre la base compartida sin aportar datos nuevos.
+  let backupRevision = 0;
+  let backedUpRevision = 0;
 
-  const writeLocalBackupArtifacts = async (reason: string): Promise<void> => {
+  const writeLocalBackupArtifacts = async (reason: string): Promise<boolean> => {
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
     if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
-      return;
+      return false;
     }
 
     const backupDirectory = getLocalBackupDirectory();
@@ -141,7 +146,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     } catch (error) {
       if (dependencies.isLockContentionError(error)) {
         console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
-        return;
+        return false;
       }
       throw error;
     }
@@ -170,6 +175,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       }
       await pruneRotatedLocalBackups('json');
 
+      let coreSqliteBackupOk = true;
       try {
         await copyFile(currentStatus.path, getLocalBackupDatabasePath());
         if (shouldRotateBackup) {
@@ -177,12 +183,14 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         }
         await pruneRotatedLocalBackups('sqlite');
       } catch (error) {
+        coreSqliteBackupOk = false;
         console.warn('No se ha podido copiar la base SQLite activa al respaldo local.', error);
       }
 
       try {
         await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
       } catch (error) {
+        coreSqliteBackupOk = false;
         console.warn('No se ha podido crear la copia SQLite en la carpeta compartida.', error);
       }
 
@@ -209,6 +217,8 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       } catch (error) {
         console.warn('No se ha podido crear la copia de respaldo secundaria.', error);
       }
+
+      return coreSqliteBackupOk;
     } finally {
       clearInterval(backupLockHeartbeat);
       await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
@@ -218,6 +228,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const enqueueLocalBackup = (reason: string): void => {
+    backupRevision += 1;
     pendingLocalBackupReason = pendingLocalBackupReason ? `${pendingLocalBackupReason}, ${reason}` : reason;
 
     if (localBackupTimer) {
@@ -226,11 +237,15 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
 
     localBackupTimer = setTimeout(() => {
       const reasonToWrite = pendingLocalBackupReason ?? reason;
+      const revisionToBackup = backupRevision;
       pendingLocalBackupReason = null;
       localBackupTimer = null;
 
       localBackupQueue = localBackupQueue
-        .then(() => writeLocalBackupArtifacts(reasonToWrite))
+        .then(async () => {
+          const ok = await writeLocalBackupArtifacts(reasonToWrite);
+          if (ok) backedUpRevision = Math.max(backedUpRevision, revisionToBackup);
+        })
         .catch((error: unknown) => {
           console.warn('No se ha podido actualizar la copia local de respaldo SQLite.', error);
           dependencies.enqueueErrorLogger?.(error);
@@ -250,7 +265,9 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     await localBackupQueue;
 
     if (reasonToWrite) {
-      await writeLocalBackupArtifacts(reasonToWrite);
+      const revisionToBackup = backupRevision;
+      const ok = await writeLocalBackupArtifacts(reasonToWrite);
+      if (ok) backedUpRevision = Math.max(backedUpRevision, revisionToBackup);
     }
 
     await localBackupQueue;
@@ -379,9 +396,21 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
       clearTimeout(localBackupTimer);
       localBackupTimer = null;
     }
+    const hadPendingChanges = pendingLocalBackupReason !== null;
     pendingLocalBackupReason = null;
     await localBackupQueue;
-    return writeShutdownLocalBackupArtifacts();
+
+    // Si esta sesión no ha modificado la base, o la última copia viva ya incluye
+    // todas sus escrituras, el backup de cierre sería una repetición byte a byte.
+    // Conservamos el backup de cierre completo cuando queda cualquier revisión
+    // sin respaldar (por ejemplo, al cerrar inmediatamente después de Guardar).
+    if (!hadPendingChanges && backedUpRevision >= backupRevision) {
+      return { totalMs: 0, prepareMs: 0, jsonMs: 0, localSqliteMs: 0, sharedSqliteMs: 0, dailySqliteMs: 0 };
+    }
+
+    const metrics = await writeShutdownLocalBackupArtifacts();
+    backedUpRevision = backupRevision;
+    return metrics;
   };
 
   const createManualLocalBackup = async (): Promise<void> => {
