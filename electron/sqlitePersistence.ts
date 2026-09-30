@@ -854,8 +854,8 @@ function enqueueLocalBackup(reason: string): void {
   getLocalBackupService().enqueueLocalBackup(reason);
 }
 
-export async function createShutdownLocalBackup(): Promise<void> {
-  await getLocalBackupService().createShutdownLocalBackup();
+export async function createShutdownLocalBackup() {
+  return getLocalBackupService().createShutdownLocalBackup();
 }
 
 export async function createManualLocalBackup(): Promise<void> {
@@ -2030,6 +2030,11 @@ export interface ShutdownPerformanceMetrics {
   vacuumMs: number;
   shutdownBackupMs: number;
   closeDatabaseMs: number;
+  shutdownBackupPrepareMs: number;
+  shutdownBackupJsonMs: number;
+  shutdownBackupLocalSqliteMs: number;
+  shutdownBackupSharedSqliteMs: number;
+  shutdownBackupDailySqliteMs: number;
 }
 
 export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
@@ -2040,7 +2045,7 @@ export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetri
   const vacuumMs = Date.now() - vacuumStartedAt;
 
   const backupStartedAt = Date.now();
-  await createShutdownLocalBackup();
+  const shutdownBackup = await createShutdownLocalBackup();
   const shutdownBackupMs = Date.now() - backupStartedAt;
 
   const closeStartedAt = Date.now();
@@ -2052,5 +2057,10 @@ export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetri
     vacuumMs,
     shutdownBackupMs,
     closeDatabaseMs,
+    shutdownBackupPrepareMs: shutdownBackup.prepareMs,
+    shutdownBackupJsonMs: shutdownBackup.jsonMs,
+    shutdownBackupLocalSqliteMs: shutdownBackup.localSqliteMs,
+    shutdownBackupSharedSqliteMs: shutdownBackup.sharedSqliteMs,
+    shutdownBackupDailySqliteMs: shutdownBackup.dailySqliteMs,
   };
 }

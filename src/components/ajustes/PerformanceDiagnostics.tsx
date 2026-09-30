@@ -23,6 +23,11 @@ async function loadPreviousShutdownMetrics(): Promise<void> {
   recordPerformanceMetric('cierre', 'Cierre anterior: backup de cierre', previous.shutdownBackupMs);
   recordPerformanceMetric('cierre', 'Cierre anterior: VACUUM programado', previous.vacuumMs);
   recordPerformanceMetric('cierre', 'Cierre anterior: cerrar SQLite', previous.closeDatabaseMs);
+  if (typeof previous.shutdownBackupPrepareMs === 'number') recordPerformanceMetric('cierre', 'Cierre anterior: preparar backup', previous.shutdownBackupPrepareMs);
+  if (typeof previous.shutdownBackupJsonMs === 'number') recordPerformanceMetric('cierre', 'Cierre anterior: backup JSON local', previous.shutdownBackupJsonMs);
+  if (typeof previous.shutdownBackupLocalSqliteMs === 'number') recordPerformanceMetric('cierre', 'Cierre anterior: copia SQLite local', previous.shutdownBackupLocalSqliteMs);
+  if (typeof previous.shutdownBackupSharedSqliteMs === 'number') recordPerformanceMetric('cierre', 'Cierre anterior: copia SQLite compartida', previous.shutdownBackupSharedSqliteMs);
+  if (typeof previous.shutdownBackupDailySqliteMs === 'number') recordPerformanceMetric('cierre', 'Cierre anterior: copia SQLite diaria', previous.shutdownBackupDailySqliteMs);
 }
 
 function severity(durationMs: number): string {

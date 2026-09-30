@@ -21,6 +21,11 @@ interface PersistedShutdownPerformance {
   vacuumMs: number;
   shutdownBackupMs: number;
   closeDatabaseMs: number;
+  shutdownBackupPrepareMs?: number;
+  shutdownBackupJsonMs?: number;
+  shutdownBackupLocalSqliteMs?: number;
+  shutdownBackupSharedSqliteMs?: number;
+  shutdownBackupDailySqliteMs?: number;
 }
 
 function shutdownPerformancePath(): string {

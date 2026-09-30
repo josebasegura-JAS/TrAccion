@@ -100,10 +100,19 @@ export interface LocalBackupServiceDependencies {
   enqueueErrorLogger?: (error: unknown) => void;
 }
 
+export interface ShutdownBackupMetrics {
+  totalMs: number;
+  prepareMs: number;
+  jsonMs: number;
+  localSqliteMs: number;
+  sharedSqliteMs: number;
+  dailySqliteMs: number;
+}
+
 export interface LocalBackupService {
   enqueueLocalBackup: (reason: string) => void;
   flushPendingLocalBackup: () => Promise<void>;
-  createShutdownLocalBackup: () => Promise<void>;
+  createShutdownLocalBackup: () => Promise<ShutdownBackupMetrics>;
   createManualLocalBackup: () => Promise<void>;
   listLocalBackups: () => Promise<LocalBackupEntry[]>;
   restoreLocalBackup: (fileName: string) => Promise<RestoreLocalBackupResult>;
@@ -247,11 +256,20 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     await localBackupQueue;
   };
 
-  const writeShutdownLocalBackupArtifacts = async (): Promise<void> => {
+  const writeShutdownLocalBackupArtifacts = async (): Promise<ShutdownBackupMetrics> => {
+    const totalStartedAt = Date.now();
+    const emptyMetrics = (): ShutdownBackupMetrics => ({
+      totalMs: Date.now() - totalStartedAt,
+      prepareMs: 0,
+      jsonMs: 0,
+      localSqliteMs: 0,
+      sharedSqliteMs: 0,
+      dailySqliteMs: 0,
+    });
     const currentDatabase = dependencies.getDatabase();
     const currentStatus = dependencies.getStatus();
     if (!currentDatabase || !currentStatus.ready || currentStatus.phase !== 'active') {
-      return;
+      return emptyMetrics();
     }
 
     const backupDirectory = getLocalShutdownBackupDirectory();
@@ -263,7 +281,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     } catch (error) {
       if (dependencies.isLockContentionError(error)) {
         console.info('Copia local SQLite omitida: base compartida ocupada temporalmente.');
-        return;
+        return emptyMetrics();
       }
       throw error;
     }
@@ -272,6 +290,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     const backupLockHeartbeat = dependencies.startDatabaseLockHeartbeat(backupLockPath, backupLock);
 
     try {
+      const prepareStartedAt = Date.now();
       const now = new Date().toISOString();
       const backupTimestamp = backupTimestampForFileName();
       const records = dependencies.readAllPersistedRecords(currentDatabase);
@@ -283,29 +302,66 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
         records,
       };
       const serializedPayload = JSON.stringify(payload, null, 2);
+      const prepareMs = Date.now() - prepareStartedAt;
 
-      await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
-      await pruneShutdownLocalBackups('json');
+      // Los cuatro respaldos son independientes. Antes se ejecutaban en serie y,
+      // sobre una SQLite alojada en red, el cierre acumulaba el coste de cada copia.
+      // Ejecutarlos en paralelo mantiene exactamente las mismas protecciones y hace
+      // que el cierre espere al respaldo más lento, no a la suma de todos ellos.
+      const jsonTask = (async () => {
+        const startedAt = Date.now();
+        await writeFile(getShutdownLocalBackupJsonPath(backupTimestamp), serializedPayload, 'utf8');
+        await pruneShutdownLocalBackups('json');
+        return Date.now() - startedAt;
+      })();
 
-      try {
-        await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
-        await pruneShutdownLocalBackups('sqlite');
-      } catch (error) {
-        console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
-      }
+      const localSqliteTask = (async () => {
+        const startedAt = Date.now();
+        try {
+          await copyFile(currentStatus.path, getShutdownLocalBackupDatabasePath(backupTimestamp));
+          await pruneShutdownLocalBackups('sqlite');
+        } catch (error) {
+          console.warn('No se ha podido crear la copia local de cierre SQLite.', error);
+        }
+        return Date.now() - startedAt;
+      })();
 
-      try {
-        await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
-      } catch (error) {
-        console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
-      }
+      const sharedSqliteTask = (async () => {
+        const startedAt = Date.now();
+        try {
+          await writeSharedSqliteBackup(currentStatus.path, backupTimestamp);
+        } catch (error) {
+          console.warn('No se ha podido crear la copia SQLite de cierre en la carpeta compartida.', error);
+        }
+        return Date.now() - startedAt;
+      })();
 
-      try {
-        const dailyBackupPreferences = await readDatabasePreferences();
-        await writeDailyLocalBackup(currentStatus.path, dailyBackupPreferences, getDailyLocalBackupWeekdayName);
-      } catch (error) {
-        console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
-      }
+      const dailySqliteTask = (async () => {
+        const startedAt = Date.now();
+        try {
+          const dailyBackupPreferences = await readDatabasePreferences();
+          await writeDailyLocalBackup(currentStatus.path, dailyBackupPreferences, getDailyLocalBackupWeekdayName);
+        } catch (error) {
+          console.warn('No se ha podido crear la copia diaria local SQLite de cierre.', error);
+        }
+        return Date.now() - startedAt;
+      })();
+
+      const [jsonMs, localSqliteMs, sharedSqliteMs, dailySqliteMs] = await Promise.all([
+        jsonTask,
+        localSqliteTask,
+        sharedSqliteTask,
+        dailySqliteTask,
+      ]);
+
+      return {
+        totalMs: Date.now() - totalStartedAt,
+        prepareMs,
+        jsonMs,
+        localSqliteMs,
+        sharedSqliteMs,
+        dailySqliteMs,
+      };
     } finally {
       clearInterval(backupLockHeartbeat);
       await dependencies.releaseLock(backupLockPath, backupLock).catch((error: unknown) => {
@@ -314,7 +370,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
   };
 
-  const createShutdownLocalBackup = async (): Promise<void> => {
+  const createShutdownLocalBackup = async (): Promise<ShutdownBackupMetrics> => {
     // El backup de cierre es más completo que el backup vivo pendiente. Si el
     // usuario cierra dentro de la ventana de debounce, no tiene sentido escribir
     // primero el mismo estado como backup vivo y repetirlo inmediatamente como
@@ -325,7 +381,7 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
     }
     pendingLocalBackupReason = null;
     await localBackupQueue;
-    await writeShutdownLocalBackupArtifacts();
+    return writeShutdownLocalBackupArtifacts();
   };
 
   const createManualLocalBackup = async (): Promise<void> => {
