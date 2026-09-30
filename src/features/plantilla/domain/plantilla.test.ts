@@ -175,17 +175,30 @@ describe('plantilla import', () => {
     ]);
   });
 
-  it('actualiza por empleado al importar sin duplicar registros y recalcula derivados', async () => {
-    const file: File = new NodeFile(
+  it('conserva por defecto los datos existentes y solo sustituye conflictos autorizados', async () => {
+    const makeFile = (): File => new NodeFile(
       ['empleado;nombreApellidos;residencia;nif\n100;Ane Bilbao Actualizada;Sopela Taller;72451233H'],
       'plantilla.csv',
       { type: 'text/csv' },
     );
 
-    await useEmployeeStore.getState().importExcel(file);
+    await useEmployeeStore.getState().importExcel(makeFile());
 
-    const employees = useEmployeeStore.getState().employees;
+    let employees = useEmployeeStore.getState().employees;
     expect(employees.filter((employee) => employee.empleado === '100')).toHaveLength(1);
+    expect(employees[0]).toEqual(expect.objectContaining({
+      nombreApellidos: 'Ane Bilbao',
+      residencia: 'Oficinas Centrales',
+      dni: '12345678Z',
+    }));
+
+    await useEmployeeStore.getState().importExcel(makeFile(), undefined, 'generic', {
+      '100::nombreApellidos': 'source',
+      '100::residencia': 'source',
+      '100::nif': 'source',
+    });
+
+    employees = useEmployeeStore.getState().employees;
     expect(employees).toEqual([
       expect.objectContaining({
         empleado: '100',

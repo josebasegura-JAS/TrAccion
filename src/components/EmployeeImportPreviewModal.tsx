@@ -416,6 +416,7 @@ function GenericImportPreviewModal({
   const [mapping, setMapping] = useState<Array<EmployeeField | null>>([...preview.defaultMapping]);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState('');
+  const [conflictResolution, setConflictResolution] = useState<EmployeeImportConflictResolution>({});
 
   const mappedFields = mapping.filter((field): field is EmployeeField => field !== null);
   const fieldCounts = new Map<EmployeeField, number>();
@@ -428,6 +429,23 @@ function GenericImportPreviewModal({
   const existingIds = useMemo(() => new Set(employees.map((employee) => employee.empleado.trim())), [employees]);
   const createdCount = importData.drafts.filter((draft) => !existingIds.has(draft.empleado.trim())).length;
   const updatedCount = importData.drafts.length - createdCount;
+  const existingById = useMemo(() => new Map(employees.map((employee) => [employee.empleado.trim(), employee])), [employees]);
+  const conflicts = useMemo(() => importData.drafts.flatMap((draft) => {
+    const previous = existingById.get(draft.empleado.trim());
+    if (!previous) return [];
+    return importData.importedFields
+      .filter((field): field is EmployeeField => field !== 'empleado')
+      .filter((field) => previous[field].trim() !== draft[field].trim())
+      .map((field) => ({ employee: draft, field, previous: previous[field].trim(), next: draft[field].trim() }));
+  }), [existingById, importData]);
+  const conflictKey = (employeeId: string, field: EmployeeField) => `${employeeId}::${field}`;
+  const resolutionFor = (employeeId: string, field: EmployeeField) => conflictResolution[conflictKey(employeeId, field)] ?? 'keep';
+  const setResolution = (employeeId: string, field: EmployeeField, resolution: 'keep' | 'source') => {
+    setConflictResolution((current) => ({ ...current, [conflictKey(employeeId, field)]: resolution }));
+  };
+  const setAllResolutions = (resolution: 'keep' | 'source') => {
+    setConflictResolution(Object.fromEntries(conflicts.map(({ employee, field }) => [conflictKey(employee.empleado, field), resolution])));
+  };
   const nonEmptyHeaders = preview.headers.map((header, index) => ({ header: header.trim(), index })).filter(({ header }) => header.length > 0);
   const recognizedCount = nonEmptyHeaders.filter(({ index }) => preview.defaultMapping[index] !== null).length;
   const unrecognizedCount = nonEmptyHeaders.length - recognizedCount;
@@ -449,7 +467,7 @@ function GenericImportPreviewModal({
     setIsImporting(true);
     setError('');
     try {
-      await onImport(mapping);
+      await onImport(mapping, conflictResolution);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : 'No se ha podido importar la plantilla.');
       setIsImporting(false);
@@ -520,13 +538,42 @@ function GenericImportPreviewModal({
           </div>
         </div>
 
+        {conflicts.length > 0 ? (
+          <div className="space-y-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs text-metro-muted">
+                <span className="font-bold text-metro-text">{conflicts.length} diferencias en personas existentes.</span>{' '}
+                Por defecto se conserva siempre el dato actual de TrAcción. Solo se sustituye lo que marques como «Usar importado».
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <ActionButton iconOnly={false} onClick={() => setAllResolutions('keep')} size="sm" variant="secondary">Mantener todos los actuales</ActionButton>
+                <ActionButton iconOnly={false} onClick={() => setAllResolutions('source')} size="sm" variant="secondary">Usar todos los importados</ActionButton>
+              </div>
+            </div>
+            <div className="max-h-48 overflow-y-auto border-t border-metro-border/60 pt-1">
+              {conflicts.map(({ employee, field, previous, next }) => (
+                <div className="grid grid-cols-[minmax(150px,0.8fr)_minmax(180px,1fr)_auto] items-center gap-2 border-b border-metro-border/50 py-1.5 text-[11px] last:border-b-0" key={`${employee.empleado}-${field}`}>
+                  <div className="min-w-0"><span className="font-bold text-metro-text">{employee.empleado}</span><span className="text-metro-muted"> · {FIELD_LABELS[field]}</span></div>
+                  <div className="min-w-0 truncate text-metro-muted" title={`Actual: ${displayValue(previous)} · Importado: ${displayValue(next)}`}>
+                    <span className="text-metro-text">{displayValue(previous)}</span> → {displayValue(next)}
+                  </div>
+                  <div className="flex gap-1">
+                    <button className={`rounded px-2 py-1 ${resolutionFor(employee.empleado, field) === 'keep' ? 'bg-emerald-400/15 font-bold text-emerald-200' : 'text-metro-muted'}`} onClick={() => setResolution(employee.empleado, field, 'keep')} type="button">Mantener actual</button>
+                    <button className={`rounded px-2 py-1 ${resolutionFor(employee.empleado, field) === 'source' ? 'bg-amber-400/15 font-bold text-amber-200' : 'text-metro-muted'}`} onClick={() => setResolution(employee.empleado, field, 'source')} type="button">Usar importado</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {!hasEmployee ? <div className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-semibold text-red-200">Debes asignar una columna al campo «Empleado» para poder identificar a cada persona.</div> : null}
         {duplicateFields.size > 0 ? <div className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-semibold text-red-200">Un mismo campo de Plantilla no puede recibir dos columnas del Excel. Revisa: {Array.from(duplicateFields).map((field) => FIELD_LABELS[field]).join(', ')}.</div> : null}
         {error ? <div className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-semibold text-red-200">{error}</div> : null}
       </ModalBody>
 
       <ModalFooter className="justify-between">
-        <span className="text-xs text-metro-muted">Solo se actualizarán los campos asignados; los demás datos existentes se conservarán.</span>
+        <span className="text-xs text-metro-muted">En personas existentes se conserva todo por defecto; solo se sustituirán los campos que marques expresamente como «Usar importado».</span>
         <div className="flex items-center gap-2">
           <ActionButton iconOnly={false} onClick={onClose} size="sm" variant="secondary">Cancelar</ActionButton>
           <ActionButton disabled={!canImport} iconOnly={false} onClick={() => void handleImport()} size="sm" variant="import">{isImporting ? 'Importando…' : 'Importar'}</ActionButton>

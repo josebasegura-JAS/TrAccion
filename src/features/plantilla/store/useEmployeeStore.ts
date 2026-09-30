@@ -397,7 +397,9 @@ function buildEmployeeImport(
 
       const conflictKey = `${draft.empleado}::${field}`;
       const hasConflict = previous !== undefined && previous[field].trim() !== draft[field].trim();
-      if (deactivateMissing && hasConflict && conflictResolution[conflictKey] !== 'source') {
+      // Una persona existente conserva siempre el valor actual por defecto.
+      // La importación solo sustituye un campo distinto cuando el usuario lo autoriza expresamente.
+      if (hasConflict && conflictResolution[conflictKey] !== 'source') {
         return;
       }
 
@@ -413,9 +415,6 @@ function buildEmployeeImport(
     }
 
     const nextEmployee = hydrateEmployee(nextDraft, null);
-    if (previous?.deletedAt) {
-      reactivated += 1;
-    }
     employeesById.set(draft.empleado, nextEmployee);
     const hasChanged = !previous || employeeSnapshot(nextEmployee) !== employeeSnapshot(previous);
     if (hasChanged) {
