@@ -10,7 +10,7 @@ import {
 } from '../domain/ayudaEscolar';
 import { useAyudaEscolarStore } from '../store/useAyudaEscolarStore';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
-import { useModuleHelpRegistry } from '../../../services/moduleHelpRegistry';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 
 const AYUDA_ESCOLAR_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -34,8 +34,6 @@ export function AyudaEscolarPage() {
   const addRecord = useAyudaEscolarStore((state) => state.add);
   const basePath = useConfiguracionStore((state) => state.rutaAyudaEscolar);
   const loadConfig = useConfiguracionStore((state) => state.load);
-  const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
-  const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
   const [messageFile, setMessageFile] = useState<File | null>(null);
   const [inspection, setInspection] = useState<OutlookMessageInspection | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -46,11 +44,6 @@ export function AyudaEscolarPage() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    setModuleHelp({ title: 'Ayuda escolar', subtitle: 'Guía rápida para recibir correos, identificar personas y archivar documentación.', sections: AYUDA_ESCOLAR_HELP_SECTIONS });
-    return () => clearModuleHelp();
-  }, [clearModuleHelp, setModuleHelp]);
 
   useEffect(() => {
     loadEmployees();
@@ -203,6 +196,12 @@ export function AyudaEscolarPage() {
 
   return (
     <section className="space-y-4">
+      <PageHeader
+        title="Ayuda escolar"
+        helpSections={AYUDA_ESCOLAR_HELP_SECTIONS}
+        helpSubtitle="Guía rápida para recibir correos, identificar personas y archivar documentación."
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 py-2 shadow-card">
         <p className="text-xs text-metro-muted">Arrastra un correo de Outlook para identificar a la persona y archivar sus adjuntos.</p>
         <div className="min-w-0 text-xs text-metro-muted">Carpeta: <span className="font-semibold text-metro-text">{basePath || 'Sin configurar'}</span></div>

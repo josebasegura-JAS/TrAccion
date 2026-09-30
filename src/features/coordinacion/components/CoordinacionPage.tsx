@@ -14,7 +14,7 @@ import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/use
 import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
 import { navigateInApp } from '../../../services/appNavigationBus';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
-import { useModuleHelpRegistry } from '../../../services/moduleHelpRegistry';
+import { PageHeader } from '../../../components/ui/PageHeader';
 
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -103,13 +103,6 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [status, setStatus] = useState('');
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
   const { confirm, dialogNode } = useAppDialog();
-  const setModuleHelp = useModuleHelpRegistry((state) => state.setModuleHelp);
-  const clearModuleHelp = useModuleHelpRegistry((state) => state.clearModuleHelp);
-
-  useEffect(() => {
-    setModuleHelp({ title: 'Coordinación', subtitle: 'Guía rápida de reuniones, guiones, tareas, acuerdos e histórico.', sections: COORDINACION_HELP_SECTIONS });
-    return () => clearModuleHelp();
-  }, [clearModuleHelp, setModuleHelp]);
 
   useEffect(() => { load(); loadTasks(); loadConfig(); }, [load, loadConfig, loadTasks]);
 
@@ -254,6 +247,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       ],
     };
     return <section className="space-y-4">
+      <PageHeader title="Coordinación" helpSections={COORDINACION_HELP_SECTIONS} helpSubtitle="Guía rápida para preparar reuniones, vincular tareas y conservar el histórico." />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <button className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-metro-muted hover:text-metro-text" onClick={() => setSelectedId(null)} type="button"><ChevronLeft size={15}/>Volver</button>
@@ -302,6 +296,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   }
 
   return <section className="space-y-3">
+    <PageHeader title="Coordinación" helpSections={COORDINACION_HELP_SECTIONS} helpSubtitle="Guía rápida para preparar reuniones, vincular tareas y conservar el histórico." />
     <div className="grid gap-2 md:grid-cols-3">
       <button className={`ui-area-selector ${area === 'direccion' ? 'ui-area-selector--active' : ''}`} onClick={() => setArea('direccion')} type="button"><Building2 className="mb-2 text-metro-red" size={20}/><strong className="block text-metro-text">Dirección</strong><span className="text-xs text-metro-muted">Tareas marcadas, nuevas tareas y puntos libres</span></button>
       <button className={`ui-area-selector ${area === 'otras-areas' ? 'ui-area-selector--active' : ''}`} onClick={() => setArea('otras-areas')} type="button"><UsersRound className="mb-2 text-metro-red" size={20}/><strong className="block text-metro-text">Otras áreas</strong><span className="text-xs text-metro-muted">Tareas existentes, nuevas y puntos libres</span></button>

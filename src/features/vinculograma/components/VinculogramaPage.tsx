@@ -42,6 +42,7 @@ import { ModalBody, ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { SearchField } from '../../../components/ui/SearchField';
 import { FilterSelect } from '../../../components/ui/FilterSelect';
+import { ActiveFilterChips, type ActiveFilterChip } from '../../../shared/filters/ActiveFilterChips';
 
 const VINCULOGRAMA_HELP_SECTIONS: ModuleHelpSection[] = [
   {
@@ -1000,6 +1001,15 @@ export function VinculogramaPage() {
     persistExpiredVisibility(nextValue);
   };
 
+  const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
+    const chips: ActiveFilterChip[] = [];
+    if (query.trim()) chips.push({ key: 'search', label: 'Búsqueda', value: query.trim(), onClear: () => setQuery('') });
+    if (statusFilter !== 'todos') chips.push({ key: 'status', label: 'Estado', value: statusFilter, onClear: () => setStatusFilter('todos') });
+    return chips;
+  }, [query, statusFilter]);
+
+  const clearActiveFilters = () => { setQuery(''); setStatusFilter('todos'); };
+
   return (
     <section className="space-y-4" id="vinculograma">
       <PageHeader
@@ -1101,6 +1111,8 @@ export function VinculogramaPage() {
           </div>
         </div>
       </div>
+
+      <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
 
       <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

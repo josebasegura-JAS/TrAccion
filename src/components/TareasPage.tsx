@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ModuleHelpSection } from './ModuleHelp';
 import { ActionButton } from './ui/ActionButton';
 import { PageHeader } from './ui/PageHeader';
+import { ActiveFilterChips, type ActiveFilterChip } from '../shared/filters/ActiveFilterChips';
 import { InlineSaveFeedback } from './InlineSaveFeedback';
 import { useConfiguracionStore } from '../features/configuracion/store/useConfiguracionStore';
 import { responsibleMatchesWindowsUser } from '../features/configuracion/domain/taskResponsibles';
@@ -391,6 +392,16 @@ export function TareasPage({
   );
 
   const activeTasksFilterLabel = buildFilterLabel([['Búsqueda', filters.search]]);
+  const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
+    const chips: ActiveFilterChip[] = [];
+    if (filters.search.trim()) chips.push({ key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') });
+    if (responsibleFilter) {
+      const value = responsibleFilter === '__mine__' ? 'Mías' : responsibleFilter === '__unassigned__' ? 'Sin asignar' : responsibleFilter;
+      chips.push({ key: 'responsible', label: 'Responsable', value, onClear: () => setResponsibleFilter('') });
+    }
+    return chips;
+  }, [filters.search, responsibleFilter, setFilter]);
+  const clearActiveFilters = () => { setFilter('search', ''); setResponsibleFilter(''); };
 
   const handleGenerateOpenTasksExcel = async () => {
     const bridge = (window as unknown as {
@@ -768,6 +779,10 @@ export function TareasPage({
               />
             </div>
           </div>
+        </div>
+
+        <div className="px-3 pt-3">
+          <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
         </div>
 
         <DataTable

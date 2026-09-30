@@ -26,6 +26,7 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { Toolbar } from '../../../components/ui/Toolbar';
 import { SearchField } from '../../../components/ui/SearchField';
 import { FilterSelect } from '../../../components/ui/FilterSelect';
+import { ActiveFilterChips, type ActiveFilterChip } from '../../../shared/filters/ActiveFilterChips';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { CompactTable, CompactTableBody, CompactTableHead } from '../../../shared/table/CompactTable';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
@@ -454,6 +455,20 @@ export function CriteriosRrllPage() {
     }
   };
 
+  const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
+    const chips: ActiveFilterChip[] = [];
+    if (filters.search.trim()) chips.push({ key: 'search', label: 'Búsqueda', value: filters.search.trim(), onClear: () => setFilter('search', '') });
+    if (filters.estado) chips.push({ key: 'estado', label: 'Estado', value: filters.estado, onClear: () => setFilter('estado', '') });
+    if (filters.sentido) chips.push({ key: 'sentido', label: 'Sentido', value: filters.sentido, onClear: () => setFilter('sentido', '') });
+    return chips;
+  }, [filters.estado, filters.search, filters.sentido, setFilter]);
+
+  const clearActiveFilters = () => {
+    setFilter('search', '');
+    setFilter('estado', '');
+    setFilter('sentido', '');
+  };
+
   return (
     <section className="space-y-4" id="criterios-rrll">
       <PageHeader
@@ -557,6 +572,8 @@ export function CriteriosRrllPage() {
           />
         }
       />
+
+      <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={FileText} label="Criterios totales" value={summary.total} detail="Registros disponibles en la base de datos" tone="blue" />

@@ -12,6 +12,7 @@ import { Toolbar } from '../../../components/ui/Toolbar';
 import { SearchField } from '../../../components/ui/SearchField';
 import { FilterSelect } from '../../../components/ui/FilterSelect';
 import { Notice } from '../../../components/ui/Notice';
+import { ActiveFilterChips, type ActiveFilterChip } from '../../../shared/filters/ActiveFilterChips';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { saveDocxWithDialog } from '../../teletrabajo/domain/download';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
@@ -371,6 +372,16 @@ export function LicenciasSinSueldoPage() {
     });
   };
 
+  const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
+    const chips: ActiveFilterChip[] = [];
+    if (query.trim()) chips.push({ key: 'search', label: 'Búsqueda', value: query.trim(), onClear: () => setQuery('') });
+    if (typeFilter !== 'todos') chips.push({ key: 'type', label: 'Tipo', value: typeFilter, onClear: () => setTypeFilter('todos') });
+    if (yearFilter !== 'todos') chips.push({ key: 'year', label: 'Año', value: yearFilter, onClear: () => setYearFilter('todos') });
+    return chips;
+  }, [query, typeFilter, yearFilter]);
+
+  const clearActiveFilters = () => { setQuery(''); setTypeFilter('todos'); setYearFilter('todos'); };
+
   return (
     <section className="space-y-4" id="licencias-sin-sueldo">
       <PageHeader
@@ -431,6 +442,8 @@ export function LicenciasSinSueldoPage() {
           />
         }
       />
+
+      <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
 
       {wordStatus && <Notice tone="muted">{wordStatus}</Notice>}
 
