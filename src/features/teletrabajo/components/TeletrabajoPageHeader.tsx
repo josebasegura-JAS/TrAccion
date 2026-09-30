@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { BriefcaseBusiness, Download, Plus, Upload, Users } from 'lucide-react';
+import { Download, Plus, Upload } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { DropdownMenu } from '../../../components/ui/DropdownMenu';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -12,9 +12,6 @@ interface TeletrabajoPageHeaderProps {
   onHistoricoFileSelected: (file: File) => void;
   onGenerateSampleEncuestaExcel: () => void;
   onGenerateSampleHistoricoExcel: () => void;
-  onOpenPuestosModal: () => void;
-  onOpenGruposCoberturaModal: () => void;
-  onOpenPeriodoModal: () => void;
   onCreateSolicitud: () => void;
 }
 
@@ -25,9 +22,6 @@ export function TeletrabajoPageHeader({
   onHistoricoFileSelected,
   onGenerateSampleEncuestaExcel,
   onGenerateSampleHistoricoExcel,
-  onOpenPuestosModal,
-  onOpenGruposCoberturaModal,
-  onOpenPeriodoModal,
   onCreateSolicitud,
 }: TeletrabajoPageHeaderProps) {
   return (
@@ -95,9 +89,6 @@ export function TeletrabajoPageHeader({
             ]}
             label="Importar"
           />
-          <ActionButton icon={BriefcaseBusiness} iconOnly={false} onClick={onOpenPuestosModal} size="sm" variant="secondary">Puestos Teletrabajo</ActionButton>
-          <ActionButton icon={Users} iconOnly={false} onClick={onOpenGruposCoberturaModal} size="sm" variant="secondary">Grupos Cobertura</ActionButton>
-          <ActionButton icon={Plus} iconOnly={false} onClick={onOpenPeriodoModal} size="sm" variant="secondary">Nuevo periodo</ActionButton>
           <ActionButton icon={Plus} iconOnly={false} onClick={onCreateSolicitud} size="sm" variant="add">Nueva solicitud</ActionButton>
         </>
       }

@@ -946,7 +946,6 @@ export function TeletrabajoPage({
           gruposCount={gruposCobertura.length}
           incidencias={workflowIncidentStats.conflicts}
           nuevas={workflowStats.nuevas}
-          onCreateSolicitud={openCreateEditor}
           onExportDireccion={() => void handleExportDireccion()}
           onOpenAprobadas={() => openOperationalFiltered({ estado: 'aprobada' })}
           onOpenDenegadas={() => openOperationalFiltered({ estado: 'denegada' })}
@@ -987,9 +986,6 @@ export function TeletrabajoPage({
             onHistoricoFileSelected={(file) => void handleImportHistorico(file)}
             onGenerateSampleEncuestaExcel={() => void handleGenerateSampleEncuestaExcel()}
             onGenerateSampleHistoricoExcel={() => void handleGenerateSampleHistoricoExcel()}
-            onOpenPuestosModal={() => setIsPuestosModalOpen(true)}
-            onOpenGruposCoberturaModal={() => setIsGruposCoberturaModalOpen(true)}
-            onOpenPeriodoModal={openPeriodoModal}
             onCreateSolicitud={openCreateEditor}
           />
 

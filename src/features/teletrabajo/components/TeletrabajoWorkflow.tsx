@@ -7,11 +7,9 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
-  FileCheck2,
   History,
   ListChecks,
   Settings,
-  ShieldCheck,
   TrafficCone,
   UserPlus,
   Users,
@@ -116,7 +114,6 @@ export interface TeletrabajoWorkflowProps {
   onOpenPeriodos: () => void;
   onOpenPuestos: () => void;
   onOpenGrupos: () => void;
-  onCreateSolicitud: () => void;
   onOpenSolicitudes: () => void;
   onOpenPendientes: () => void;
   onOpenAprobadas: () => void;
@@ -145,7 +142,6 @@ export function TeletrabajoWorkflow({
   onOpenPeriodos,
   onOpenPuestos,
   onOpenGrupos,
-  onCreateSolicitud,
   onOpenSolicitudes,
   onOpenPendientes,
   onOpenAprobadas,
@@ -348,8 +344,8 @@ export function TeletrabajoWorkflow({
           <span className="flex min-w-0 items-center gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-metro-red/10 text-red-300"><Settings className="h-4 w-4" /></span>
             <span>
-              <span className="block text-sm font-extrabold text-metro-text">Configuración y herramientas avanzadas</span>
-              <span className="mt-0.5 block text-[11px] text-metro-muted">Periodos, puestos, grupos de cobertura, histórico y accesos de administración.</span>
+              <span className="block text-sm font-extrabold text-metro-text">Configuración y administración</span>
+              <span className="mt-0.5 block text-[11px] text-metro-muted">Maestros y opciones que no forman parte de la operativa diaria.</span>
             </span>
           </span>
           <ChevronDown className={cx('h-4 w-4 shrink-0 text-metro-muted transition-transform', showAdvanced && 'rotate-180')} />
@@ -364,12 +360,6 @@ export function TeletrabajoWorkflow({
               <AdvancedAction icon={History} title="Histórico" detail="Consultar periodos anteriores y realizar importaciones históricas." onClick={onOpenHistorico} />
             </div>
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <AdvancedAction icon={UserPlus} title="Nueva solicitud" detail="Dar de alta manualmente una solicitud en el periodo activo." onClick={onCreateSolicitud} />
-              <AdvancedAction icon={FileCheck2} title="Todas las solicitudes" detail="Abrir la vista operativa completa, con filtros y detalle." onClick={onOpenSolicitudes} />
-              <AdvancedAction icon={ShieldCheck} title={`Incidencias · ${incidencias}`} detail="Consultar conflictos y controles de cobertura." onClick={onOpenIncidencias} />
-              <AdvancedAction icon={Download} title="Exportar Dirección" detail="Generar la salida de información del periodo activo." onClick={onExportDireccion} />
-            </div>
           </div>
         ) : null}
       </section>
