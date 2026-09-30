@@ -315,7 +315,16 @@ export function createLocalBackupService(dependencies: LocalBackupServiceDepende
   };
 
   const createShutdownLocalBackup = async (): Promise<void> => {
-    await flushPendingLocalBackup();
+    // El backup de cierre es más completo que el backup vivo pendiente. Si el
+    // usuario cierra dentro de la ventana de debounce, no tiene sentido escribir
+    // primero el mismo estado como backup vivo y repetirlo inmediatamente como
+    // backup de cierre. Sí esperamos cualquier backup que ya hubiera empezado.
+    if (localBackupTimer) {
+      clearTimeout(localBackupTimer);
+      localBackupTimer = null;
+    }
+    pendingLocalBackupReason = null;
+    await localBackupQueue;
     await writeShutdownLocalBackupArtifacts();
   };
 

@@ -2025,8 +2025,32 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'No se ha podido cambiar la ruta SQLite.';
 }
 
-export async function closeSqlitePersistence(): Promise<void> {
+export interface ShutdownPerformanceMetrics {
+  totalMs: number;
+  vacuumMs: number;
+  shutdownBackupMs: number;
+  closeDatabaseMs: number;
+}
+
+export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
+  const totalStartedAt = Date.now();
+
+  const vacuumStartedAt = Date.now();
   await runScheduledVacuumIfDue();
+  const vacuumMs = Date.now() - vacuumStartedAt;
+
+  const backupStartedAt = Date.now();
   await createShutdownLocalBackup();
+  const shutdownBackupMs = Date.now() - backupStartedAt;
+
+  const closeStartedAt = Date.now();
   await closeDatabaseAndReleaseLock();
+  const closeDatabaseMs = Date.now() - closeStartedAt;
+
+  return {
+    totalMs: Date.now() - totalStartedAt,
+    vacuumMs,
+    shutdownBackupMs,
+    closeDatabaseMs,
+  };
 }

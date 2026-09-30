@@ -38,6 +38,7 @@ interface TraccionOpenPathResult { ok: boolean; message: string; }
 interface TraccionDocxTextResult { ok: boolean; text?: string; message?: string; }
 
 interface TraccionDatabaseLockInfo { ownerId: string; username: string; hostname: string; pid: number; createdAt: string; updatedAt: string; }
+interface TraccionShutdownPerformance { recordedAt: string; totalMs: number; vacuumMs: number; shutdownBackupMs: number; closeDatabaseMs: number; }
 interface TraccionDatabaseStatus { ready: boolean; engine: string; phase: string; path?: string; schemaVersion?: number; isDefaultPath?: boolean; lockPath?: string; lock?: TraccionDatabaseLockInfo; message?: string; applicationId?: string; databaseUuid?: string; databaseCreatedAt?: string; environment?: string; }
 interface TraccionDatabaseHealthCheckResult { ok: boolean; status: TraccionDatabaseStatus; checkedAt: string; message: string; }
 interface TraccionAppUpdateCheckResult { updateAvailable: boolean; currentVersion: string; latestVersion: string | null; message: string | null; mandatory: boolean; notes: string | null; }
@@ -152,6 +153,7 @@ interface TraccionApi {
   notifyRendererReady?: () => void;
   getWindowsUser?: () => Promise<string>;
   databaseStatus: () => Promise<TraccionDatabaseStatus>;
+  getLastShutdownPerformance?: () => Promise<TraccionShutdownPerformance | null>;
   databaseHealthCheck: () => Promise<TraccionDatabaseHealthCheckResult>;
   selectDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;
   resetDatabaseDirectory?: () => Promise<TraccionDatabaseStatus>;

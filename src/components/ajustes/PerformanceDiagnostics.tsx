@@ -4,8 +4,22 @@ import {
   clearPerformanceMetrics,
   getPerformanceMetrics,
   subscribePerformanceMetrics,
+  recordPerformanceMetric,
   type PerformanceMetric,
 } from '../../services/performanceMetrics';
+
+let previousShutdownLoaded = false;
+
+async function loadPreviousShutdownMetrics(): Promise<void> {
+  if (previousShutdownLoaded) return;
+  previousShutdownLoaded = true;
+  const previous = await window.traccion?.getLastShutdownPerformance?.();
+  if (!previous) return;
+  recordPerformanceMetric('cierre', 'Cierre anterior: total', previous.totalMs);
+  recordPerformanceMetric('cierre', 'Cierre anterior: backup de cierre', previous.shutdownBackupMs);
+  recordPerformanceMetric('cierre', 'Cierre anterior: VACUUM programado', previous.vacuumMs);
+  recordPerformanceMetric('cierre', 'Cierre anterior: cerrar SQLite', previous.closeDatabaseMs);
+}
 
 function severity(durationMs: number): string {
   if (durationMs >= 1000) return 'text-red-300';
@@ -16,7 +30,10 @@ function severity(durationMs: number): string {
 export function PerformanceDiagnostics() {
   const [metrics, setMetrics] = useState<PerformanceMetric[]>(() => getPerformanceMetrics());
 
-  useEffect(() => subscribePerformanceMetrics(() => setMetrics(getPerformanceMetrics())), []);
+  useEffect(() => {
+    void loadPreviousShutdownMetrics();
+    return subscribePerformanceMetrics(() => setMetrics(getPerformanceMetrics()));
+  }, []);
 
   const slowest = useMemo(
     () => [...metrics].sort((a, b) => b.durationMs - a.durationMs).slice(0, 12),
@@ -36,7 +53,7 @@ export function PerformanceDiagnostics() {
       </summary>
       <div className="border-t border-metro-border p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-metro-muted">Se muestran las operaciones más lentas. Los datos son temporales y se borran al cerrar TrAcción.</p>
+          <p className="text-xs text-metro-muted">Se muestran las operaciones más lentas. Las métricas normales son temporales; el último cierre se conserva solo para diagnosticar el siguiente arranque.</p>
           <button className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-2.5 py-1.5 text-xs font-semibold text-metro-text hover:bg-metro-surface" onClick={clearPerformanceMetrics} type="button">
             <Trash2 size={14} /> Limpiar
           </button>

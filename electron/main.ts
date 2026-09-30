@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import type { IpcMainEvent, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,6 +13,33 @@ const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
 const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
 const splashMinimumVisibleMs = 800;
 const splashMaximumVisibleMs = 25_000;
+const shutdownPerformanceFileName = 'last-shutdown-performance.json';
+
+interface PersistedShutdownPerformance {
+  recordedAt: string;
+  totalMs: number;
+  vacuumMs: number;
+  shutdownBackupMs: number;
+  closeDatabaseMs: number;
+}
+
+function shutdownPerformancePath(): string {
+  return path.join(app.getPath('userData'), shutdownPerformanceFileName);
+}
+
+async function writeShutdownPerformance(metrics: Omit<PersistedShutdownPerformance, 'recordedAt'>): Promise<void> {
+  const payload: PersistedShutdownPerformance = { recordedAt: new Date().toISOString(), ...metrics };
+  await writeFile(shutdownPerformancePath(), JSON.stringify(payload), 'utf8');
+}
+
+async function readShutdownPerformance(): Promise<PersistedShutdownPerformance | null> {
+  try {
+    const raw = await readFile(shutdownPerformancePath(), 'utf8');
+    return JSON.parse(raw) as PersistedShutdownPerformance;
+  } catch {
+    return null;
+  }
+}
 
 type SqlitePersistenceModule = typeof import('./sqlitePersistence.js');
 type ConnectivityIssueNotifier = Parameters<SqlitePersistenceModule['setDatabaseConnectivityIssueNotifier']>[0];
@@ -127,6 +155,7 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
 }
 
 async function registerIpcHandlers(): Promise<void> {
+  ipcMain.handle('performance:last-shutdown', () => readShutdownPerformance());
   const [
     { registerCoreDatabaseIpc }, { registerSorteosIpc }, { registerPlantillaIpc }, { registerTareasIpc }, { registerSesionesIpc }, { registerVinculogramaIpc }, { registerCriteriosRrllIpc }, { registerTicketRestauranteIpc }, { registerPresupuestosIpc }, { registerEspecialesIpc }, { registerTeletrabajoIpc }, { registerConfiguracionIpc }, { registerLicenciasSinSueldoIpc }, { registerSharedDocumentIpc }, { registerLoteriaIpc }, { registerOperationalExcelBackupIpc }, { registerAyudaEscolarIpc },
   ] = await Promise.all([
@@ -167,7 +196,11 @@ if (!app.requestSingleInstanceLock()) {
     if (isShutdownInProgress) return;
     isShutdownInProgress = true;
     shutdownWindow = createShutdownWindow();
-    loadSqlitePersistenceModule().then(({ closeSqlitePersistence }) => closeSqlitePersistence()).catch((error: unknown) => console.warn('No se ha podido crear la copia de cierre antes de salir.', error)).finally(() => {
+    loadSqlitePersistenceModule()
+      .then(({ closeSqlitePersistence }) => closeSqlitePersistence())
+      .then((metrics) => writeShutdownPerformance(metrics))
+      .catch((error: unknown) => console.warn('No se ha podido completar el cierre SQLite antes de salir.', error))
+      .finally(() => {
       isQuitAfterSqlitePersistenceClosed = true;
       if (shutdownWindow && !shutdownWindow.isDestroyed()) shutdownWindow.destroy();
       shutdownWindow = null;
