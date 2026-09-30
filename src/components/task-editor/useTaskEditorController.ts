@@ -13,6 +13,7 @@ import { buildRecoverableDraftKey, useRecoverableDraft } from '../../hooks/useRe
 import { useUnsavedChanges } from '../../hooks/useUnsavedChanges';
 import { useAppDialog } from '../../hooks/useAppDialog';
 import { useSharedRecordLock } from '../../services/useSharedRecordLock';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy } from '../../services/persistenceFeedback';
 import { enqueueAuditEvent } from '../../shared/audit/auditTrail';
 import { useCriteriosRrllStore } from '../../features/criterios-rrll/store/useCriteriosRrllStore';
 import {
@@ -471,17 +472,30 @@ export function useTaskEditorController({
       updatedAt: new Date().toISOString(),
     };
 
-    const result = await saveTaskRecord({
-      id: latestTask.id,
-      value: JSON.stringify(updatedTask),
-      expectedUpdatedAt: loadedUpdatedAt,
-    });
+    const feedbackKey = `task-tracking:${latestTask.id}`;
+    publishPersistenceBusy(feedbackKey, 'Guardando seguimiento de tarea en SQLite…');
+    let result;
+    try {
+      result = await saveTaskRecord({
+        id: latestTask.id,
+        value: JSON.stringify(updatedTask),
+        expectedUpdatedAt: loadedUpdatedAt,
+      });
+    } catch (error) {
+      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message: error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.' });
+      setSaveStatus(error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento.');
+      setSaveStatusIsError(true);
+      return false;
+    }
 
     if (!result.ok) {
+      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: feedbackKey, message: result.message || 'No se ha podido actualizar el seguimiento.' });
       setSaveStatus(result.message || 'No se ha podido actualizar el seguimiento.');
       setSaveStatusIsError(true);
       return false;
     }
+
+    clearPersistenceBusy(feedbackKey, 'Seguimiento de tarea guardado en SQLite.');
 
     useTaskStore.setState((state) => ({
       tasks: state.tasks.map((candidate) =>

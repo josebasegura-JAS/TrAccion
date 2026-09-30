@@ -4,6 +4,7 @@ import {
   type GrupoCobertura,
 } from '../domain/gruposCobertura';
 import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy } from '../../../services/persistenceFeedback';
 
 export const GRUPOS_COBERTURA_STORAGE_KEY = 'traccion.v1.teletrabajo.gruposCobertura';
 
@@ -150,6 +151,8 @@ export async function persistGrupoCoberturaRecord(
     };
   }
 
+  publishPersistenceBusy(GRUPOS_COBERTURA_STORAGE_KEY, 'Guardando grupo de cobertura en SQLite…');
+
   try {
     const result = await saver({
       id: grupo.id,
@@ -157,6 +160,7 @@ export async function persistGrupoCoberturaRecord(
       expectedUpdatedAt: latestGruposCoberturaUpdatedAtById.get(grupo.id) ?? null,
     });
     if (!result.ok) {
+      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: GRUPOS_COBERTURA_STORAGE_KEY, message: result.message || 'No se ha podido guardar el grupo de cobertura.' });
       return {
         ok: false,
         message:
@@ -168,8 +172,10 @@ export async function persistGrupoCoberturaRecord(
       latestGruposCoberturaUpdatedAtById.set(grupo.id, result.currentUpdatedAt);
     }
     writeRendererStorageCache(GRUPOS_COBERTURA_STORAGE_KEY, JSON.stringify(allGrupos), 'sqlite');
+    clearPersistenceBusy(GRUPOS_COBERTURA_STORAGE_KEY, 'Grupo de cobertura guardado en SQLite.');
     return { ok: true, message: '' };
   } catch (error) {
+    emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: GRUPOS_COBERTURA_STORAGE_KEY, message: error instanceof Error ? error.message : 'No se ha podido guardar el grupo de cobertura.' });
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'No se ha podido guardar el grupo de cobertura.',

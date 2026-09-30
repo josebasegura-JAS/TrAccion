@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { readStorageItem, writeStorageItem, writeRendererStorageCache } from '../../../services/persistence';
 import { publishDatabaseStatus } from '../../../services/databaseStatus';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy } from '../../../services/persistenceFeedback';
 import {
   createDefaultLotteryCampaign,
   type LotteryCampaign,
@@ -255,21 +256,31 @@ export const useLoteriaStore = create<LotteryState>((set, get) => ({
     const saveSnapshot = window.traccion?.saveLoteriaSnapshotIfUnchanged;
     if (saveSnapshot) {
       const campaignWithoutRequests = { ...campaign, requests: [] };
-      const result = await saveSnapshot({
-        year: campaign.year,
-        campaignValue: JSON.stringify(campaignWithoutRequests),
-        requests: campaign.requests.map((request) => ({ id: request.id, value: JSON.stringify(request) })),
-        expectedCampaignUpdatedAt: get().campaignUpdatedAt,
-        expectedRequestUpdatedAt: get().requestUpdatedAt,
-      });
+      publishPersistenceBusy(LOTTERY_STORAGE_KEY, 'Guardando campaña de Lotería en SQLite…');
+      let result;
+      try {
+        result = await saveSnapshot({
+          year: campaign.year,
+          campaignValue: JSON.stringify(campaignWithoutRequests),
+          requests: campaign.requests.map((request) => ({ id: request.id, value: JSON.stringify(request) })),
+          expectedCampaignUpdatedAt: get().campaignUpdatedAt,
+          expectedRequestUpdatedAt: get().requestUpdatedAt,
+        });
+      } catch (error) {
+        emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: LOTTERY_STORAGE_KEY, message: error instanceof Error ? error.message : 'No se ha podido guardar la campaña de Lotería.' });
+        throw error;
+      }
       publishDatabaseStatus(result.status);
       if (result.ok) {
+        clearPersistenceBusy(LOTTERY_STORAGE_KEY, 'Campaña de Lotería guardada en SQLite.');
         set({
           campaign,
           campaignUpdatedAt: result.campaignUpdatedAt,
           requestUpdatedAt: result.requestUpdatedAt,
         });
         writeLocalArchiveCache(campaign);
+      } else {
+        emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: LOTTERY_STORAGE_KEY, message: result.message || 'No se ha podido guardar la campaña de Lotería.' });
       }
       return { ok: result.ok, message: result.message };
     }

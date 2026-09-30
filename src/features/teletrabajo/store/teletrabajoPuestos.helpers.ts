@@ -6,6 +6,7 @@ import {
 } from '../domain/puestosTeletrabajo';
 import { normalizeGrupoCoberturaNombre, type GrupoCobertura } from '../domain/gruposCobertura';
 import { readStorageItem, writeRendererStorageCache } from '../../../services/persistence';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy } from '../../../services/persistenceFeedback';
 import {
   createGrupoCoberturaId,
   loadGruposCoberturaFromSqliteOrStorage,
@@ -252,6 +253,8 @@ export async function persistPuestoTeletrabajoRecord(
     };
   }
 
+  publishPersistenceBusy(PUESTOS_STORAGE_KEY, 'Guardando puesto de Teletrabajo en SQLite…');
+
   try {
     const result = await saver({
       id: puesto.id,
@@ -259,6 +262,7 @@ export async function persistPuestoTeletrabajoRecord(
       expectedUpdatedAt: latestPuestosTeletrabajoUpdatedAtById.get(puesto.id) ?? null,
     });
     if (!result.ok) {
+      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: PUESTOS_STORAGE_KEY, message: result.message || 'No se ha podido guardar el puesto de Teletrabajo.' });
       return {
         ok: false,
         message:
@@ -270,8 +274,10 @@ export async function persistPuestoTeletrabajoRecord(
       latestPuestosTeletrabajoUpdatedAtById.set(puesto.id, result.currentUpdatedAt);
     }
     writeRendererStorageCache(PUESTOS_STORAGE_KEY, JSON.stringify(allPuestos), 'sqlite');
+    clearPersistenceBusy(PUESTOS_STORAGE_KEY, 'Puesto de Teletrabajo guardado en SQLite.');
     return { ok: true, message: '' };
   } catch (error) {
+    emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: PUESTOS_STORAGE_KEY, message: error instanceof Error ? error.message : 'No se ha podido guardar el puesto de Teletrabajo.' });
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'No se ha podido guardar el puesto.',
