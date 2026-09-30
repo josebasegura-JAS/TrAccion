@@ -1,3 +1,4 @@
+import { AlertTriangle, Check, Database } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
   isPersistenceFeedbackSilent,
@@ -5,126 +6,135 @@ import {
   type PersistenceFeedback,
 } from '../services/persistence';
 
-const SHOW_DELAY_MS = 100;
-const MAX_OPERATION_VISIBLE_MS = 12000;
+const SAVED_VISIBLE_MS = 1600;
+const ERROR_VISIBLE_MS = 4000;
+const SLOW_SAVE_MS = 3000;
+const MAX_OPERATION_VISIBLE_MS = 30000;
 const UNKNOWN_OPERATION_KEY = '__global__';
 
-type BusyState = {
-  active: boolean;
+type IndicatorState = {
+  kind: 'saving' | 'saved' | 'error';
   message: string;
+  slow: boolean;
 };
 
 function feedbackOperationKey(feedback: PersistenceFeedback): string {
   return feedback.key ?? UNKNOWN_OPERATION_KEY;
 }
 
-function buildBusyMessage(feedback: PersistenceFeedback): string {
-  if (feedback.message && feedback.message.trim().length > 0) {
-    return feedback.message.replace(/\.\.\.$/, '…');
-  }
-
-  return 'Guardando cambios…';
+function savingMessage(feedback: PersistenceFeedback): string {
+  const message = feedback.message?.trim();
+  if (!message) return 'Guardando cambios…';
+  return message.replace(/\.\.\.$/, '…').replace(/ en SQLite…?$/i, '…');
 }
 
 export function GlobalBusyIndicator() {
-  const [busyState, setBusyState] = useState<BusyState>({
-    active: false,
-    message: 'Guardando cambios…',
-  });
+  const [state, setState] = useState<IndicatorState | null>(null);
   const pendingOperationsRef = useRef<Set<string>>(new Set());
-  const operationTimeoutsRef = useRef<Map<string, number>>(new Map());
-  const showTimeoutRef = useRef<number | null>(null);
+  const safetyTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const slowTimeoutRef = useRef<number | null>(null);
+  const completionTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const pendingOperations = pendingOperationsRef.current;
-    const operationTimeouts = operationTimeoutsRef.current;
+    const safetyTimeouts = safetyTimeoutsRef.current;
 
-    const clearShowTimeout = (): void => {
-      if (showTimeoutRef.current !== null) {
-        window.clearTimeout(showTimeoutRef.current);
-        showTimeoutRef.current = null;
+    const clearSlowTimeout = () => {
+      if (slowTimeoutRef.current !== null) {
+        window.clearTimeout(slowTimeoutRef.current);
+        slowTimeoutRef.current = null;
       }
     };
-
-    const hideIfIdle = (): void => {
-      if (pendingOperations.size === 0) {
-        clearShowTimeout();
-        setBusyState((current) => ({ ...current, active: false }));
+    const clearCompletionTimeout = () => {
+      if (completionTimeoutRef.current !== null) {
+        window.clearTimeout(completionTimeoutRef.current);
+        completionTimeoutRef.current = null;
       }
     };
-
-    const clearOperationTimeout = (operationKey: string): void => {
-      const timeout = operationTimeouts.get(operationKey);
-      if (typeof timeout === 'number') {
-        window.clearTimeout(timeout);
-        operationTimeouts.delete(operationKey);
-      }
+    const clearSafetyTimeout = (key: string) => {
+      const timeout = safetyTimeouts.get(key);
+      if (typeof timeout === 'number') window.clearTimeout(timeout);
+      safetyTimeouts.delete(key);
     };
-
-    const completeOperation = (operationKey: string): void => {
-      pendingOperations.delete(operationKey);
-      clearOperationTimeout(operationKey);
-      hideIfIdle();
-    };
-
-    const scheduleOperationSafetyTimeout = (operationKey: string): void => {
-      clearOperationTimeout(operationKey);
-      const timeout = window.setTimeout(() => {
-        pendingOperations.delete(operationKey);
-        operationTimeouts.delete(operationKey);
-        hideIfIdle();
-      }, MAX_OPERATION_VISIBLE_MS);
-      operationTimeouts.set(operationKey, timeout);
+    const scheduleSlowState = () => {
+      clearSlowTimeout();
+      slowTimeoutRef.current = window.setTimeout(() => {
+        if (pendingOperations.size > 0) {
+          setState((current) => current?.kind === 'saving' ? { ...current, slow: true } : current);
+        }
+      }, SLOW_SAVE_MS);
     };
 
     const unsubscribe = subscribeToPersistenceFeedback((feedback) => {
-      if (isPersistenceFeedbackSilent(feedback)) {
+      if (isPersistenceFeedbackSilent(feedback)) return;
+
+      const key = feedbackOperationKey(feedback);
+      clearCompletionTimeout();
+
+      if (feedback.kind === 'saving') {
+        pendingOperations.add(key);
+        clearSafetyTimeout(key);
+        safetyTimeouts.set(key, window.setTimeout(() => {
+          pendingOperations.delete(key);
+          safetyTimeouts.delete(key);
+          if (pendingOperations.size === 0) setState(null);
+        }, MAX_OPERATION_VISIBLE_MS));
+        setState({ kind: 'saving', message: savingMessage(feedback), slow: false });
+        scheduleSlowState();
         return;
       }
 
-      const operationKey = feedbackOperationKey(feedback);
+      pendingOperations.delete(key);
+      clearSafetyTimeout(key);
 
-      if (feedback.kind !== 'saving') {
-        completeOperation(operationKey);
+      if (pendingOperations.size > 0) return;
+      clearSlowTimeout();
+
+      if (feedback.kind === 'error') {
+        setState({ kind: 'error', message: feedback.message || 'No se han podido guardar los cambios.', slow: false });
+        completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
         return;
       }
 
-      pendingOperations.add(operationKey);
-      scheduleOperationSafetyTimeout(operationKey);
-
-      const message = buildBusyMessage(feedback);
-      clearShowTimeout();
-      showTimeoutRef.current = window.setTimeout(() => {
-        if (pendingOperations.size > 0) {
-          setBusyState({ active: true, message });
-        }
-        showTimeoutRef.current = null;
-      }, SHOW_DELAY_MS);
+      setState({ kind: 'saved', message: 'Cambios guardados', slow: false });
+      completionTimeoutRef.current = window.setTimeout(() => setState(null), SAVED_VISIBLE_MS);
     });
 
     return () => {
-      clearShowTimeout();
-      operationTimeouts.forEach((timeout) => window.clearTimeout(timeout));
-      operationTimeouts.clear();
+      clearSlowTimeout();
+      clearCompletionTimeout();
+      safetyTimeouts.forEach((timeout) => window.clearTimeout(timeout));
+      safetyTimeouts.clear();
       pendingOperations.clear();
       unsubscribe();
     };
   }, []);
 
-  if (!busyState.active) {
-    return null;
-  }
+  if (!state) return null;
+
+  const label = state.kind === 'saving' && state.slow
+    ? 'SQLite está tardando más de lo habitual…'
+    : state.message;
+  const detail = state.kind === 'saving'
+    ? state.slow
+      ? 'No cierres la ventana hasta confirmar el guardado.'
+      : 'Confirmando el cambio en la base compartida.'
+    : state.kind === 'saved'
+      ? 'El cambio ha quedado confirmado en SQLite.'
+      : 'El cambio no se ha confirmado.';
 
   return (
-    <div
-      className="global-busy-indicator"
-      role="status"
-      aria-live="polite"
-      aria-label={busyState.message}
-    >
+    <div className={`global-busy-indicator global-busy-indicator--${state.kind}`} role="status" aria-live="polite" aria-label={label}>
       <div className="global-busy-indicator__panel">
-        <span className="global-busy-indicator__spinner" aria-hidden="true" />
-        <span>{busyState.message}</span>
+        <span className="global-busy-indicator__icon" aria-hidden="true">
+          {state.kind === 'saving' ? <Database size={18} className="global-busy-indicator__database" /> : null}
+          {state.kind === 'saved' ? <Check size={19} /> : null}
+          {state.kind === 'error' ? <AlertTriangle size={18} /> : null}
+        </span>
+        <span className="global-busy-indicator__copy">
+          <strong>{label}</strong>
+          <small>{detail}</small>
+        </span>
       </div>
     </div>
   );

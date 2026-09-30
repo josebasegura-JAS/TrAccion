@@ -420,46 +420,51 @@ a {
 
 .global-busy-indicator {
   position: fixed;
-  inset: 0;
+  right: 20px;
+  top: 80px;
   z-index: 12000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  background: rgba(2, 6, 23, 0.18);
-  backdrop-filter: blur(1px);
+  pointer-events: none;
 }
 
 .global-busy-indicator__panel {
-  display: inline-flex;
+  display: flex;
+  min-width: 300px;
+  max-width: min(390px, calc(100vw - 40px));
   align-items: center;
-  gap: 10px;
-  max-width: min(420px, calc(100vw - 32px));
-  border: 1px solid rgba(148, 163, 184, 0.32);
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.94);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.35);
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.3);
   color: #e5e7eb;
-  font-size: 0.86rem;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  padding: 10px 16px;
+  padding: 11px 13px;
+  backdrop-filter: blur(10px);
+  animation: globalBusyEnter 160ms ease-out;
 }
 
-.global-busy-indicator__spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgba(226, 232, 240, 0.28);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: globalBusySpin 0.8s linear infinite;
+.global-busy-indicator__icon {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 9px;
+  background: rgba(148, 163, 184, 0.08);
 }
 
-@keyframes globalBusySpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+.global-busy-indicator--saving .global-busy-indicator__icon { color: rgb(125 211 252); }
+.global-busy-indicator--saved .global-busy-indicator__icon { color: rgb(110 231 183); }
+.global-busy-indicator--error .global-busy-indicator__icon { color: rgb(252 165 165); }
+
+.global-busy-indicator__database { animation: globalBusyPulse 900ms ease-in-out infinite alternate; }
+.global-busy-indicator__copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.global-busy-indicator__copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.2; }
+.global-busy-indicator__copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgb(148 163 184); font-size: 11px; line-height: 1.25; }
+
+@keyframes globalBusyPulse { from { opacity: 0.55; transform: scale(0.94); } to { opacity: 1; transform: scale(1.04); } }
+@keyframes globalBusyEnter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
 
 .sqlite-readonly-banner {

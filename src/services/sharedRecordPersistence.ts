@@ -1,5 +1,32 @@
 import { writeRendererStorageCache } from './persistence';
 import { publishDatabaseStatus } from './databaseStatus';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy, waitForNextPaint } from './persistenceFeedback';
+
+async function saveSharedStorageValue(
+  storageKey: string,
+  value: string,
+  expectedUpdatedAt: string | null,
+): Promise<Awaited<ReturnType<NonNullable<NonNullable<Window['traccion']>['saveLocalStorageRecordIfUnchanged']>>>> {
+  const saver = window.traccion?.saveLocalStorageRecordIfUnchanged;
+  if (!saver) {
+    throw new Error('SQLite compartido no disponible. No se permite guardar sin base compartida.');
+  }
+
+  publishPersistenceBusy(storageKey, 'Guardando cambios en SQLite…');
+  await waitForNextPaint();
+  try {
+    const result = await saver({ key: storageKey, value, expectedUpdatedAt });
+    if (result.ok && result.status.ready && result.status.phase === 'active') {
+      clearPersistenceBusy(storageKey, 'Cambios guardados en SQLite.');
+    } else {
+      emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: storageKey, message: result.message ?? 'No se ha confirmado el guardado en SQLite.' });
+    }
+    return result;
+  } catch (error) {
+    emitPersistenceFeedback({ kind: 'error', updatedAt: new Date().toISOString(), key: storageKey, message: error instanceof Error ? error.message : 'No se ha confirmado el guardado en SQLite.' });
+    throw error;
+  }
+}
 
 async function loadSharedStorageRecord(
   storageKey: string,
@@ -93,11 +120,7 @@ export async function saveSharedArrayRecord<TRecord>({
     getRecordId(record) === recordId ? updatedRecord : record,
   );
   const serialized = JSON.stringify(nextRecords);
-  const result = await saveLocalStorageRecordIfUnchanged({
-    key: storageKey,
-    value: serialized,
-    expectedUpdatedAt: expectedStorageUpdatedAt,
-  });
+  const result = await saveSharedStorageValue(storageKey, serialized, expectedStorageUpdatedAt);
   publishDatabaseStatus(result.status);
 
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
@@ -145,11 +168,7 @@ export async function saveNewSharedArrayRecord<TRecord>({
 
   const nextRecords = [...latestRecords, newRecord];
   const serialized = JSON.stringify(nextRecords);
-  const result = await saveLocalStorageRecordIfUnchanged({
-    key: storageKey,
-    value: serialized,
-    expectedUpdatedAt: expectedStorageUpdatedAt,
-  });
+  const result = await saveSharedStorageValue(storageKey, serialized, expectedStorageUpdatedAt);
   publishDatabaseStatus(result.status);
 
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
@@ -188,11 +207,7 @@ export async function saveSharedArrayMutation<TRecord>({
   const latestRecords = parseRecords(latestStorageValue);
   const nextRecords = updateRecords(latestRecords);
   const serialized = JSON.stringify(nextRecords);
-  const result = await saveLocalStorageRecordIfUnchanged({
-    key: storageKey,
-    value: serialized,
-    expectedUpdatedAt: expectedStorageUpdatedAt,
-  });
+  const result = await saveSharedStorageValue(storageKey, serialized, expectedStorageUpdatedAt);
   publishDatabaseStatus(result.status);
 
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
@@ -250,11 +265,7 @@ export async function deleteSharedArrayRecord<TRecord>({
 
   const nextRecords = latestRecords.filter((record) => getRecordId(record) !== recordId);
   const serialized = JSON.stringify(nextRecords);
-  const result = await saveLocalStorageRecordIfUnchanged({
-    key: storageKey,
-    value: serialized,
-    expectedUpdatedAt: expectedStorageUpdatedAt,
-  });
+  const result = await saveSharedStorageValue(storageKey, serialized, expectedStorageUpdatedAt);
   publishDatabaseStatus(result.status);
 
   if (!result.ok || !result.status.ready || result.status.phase !== 'active') {
