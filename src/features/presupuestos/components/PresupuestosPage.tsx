@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Check, ChevronRight, Copy, FileSpreadsheet, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, FileSpreadsheet, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { InlineSaveFeedback } from '../../../components/InlineSaveFeedback';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { FieldLabel, Input, Select } from '../../../components/ui/Field';
@@ -65,7 +65,7 @@ function WorkflowStep({ number, title, detail, active, done, onClick }: StepProp
   return (
     <button
       className={cx(
-        'flex min-h-[72px] min-w-0 flex-1 items-start gap-3 rounded-xl border px-3 py-3 text-left transition',
+        'flex min-h-[60px] min-w-0 flex-1 items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition',
         active
           ? 'border-metro-red bg-metro-red/[0.07] shadow-sm'
           : done
@@ -77,7 +77,7 @@ function WorkflowStep({ number, title, detail, active, done, onClick }: StepProp
     >
       <span
         className={cx(
-          'grid h-8 w-8 shrink-0 place-items-center rounded-full border text-xs font-extrabold',
+          'grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-extrabold',
           done
             ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
             : active
@@ -89,7 +89,7 @@ function WorkflowStep({ number, title, detail, active, done, onClick }: StepProp
       </span>
       <span className="min-w-0 pt-0.5">
         <span className="block text-[13px] font-extrabold leading-4 text-metro-text">{title}</span>
-        <span className="mt-1 block text-xs leading-5 text-metro-muted">{detail}</span>
+        <span className="mt-0.5 block text-[11px] leading-4 text-metro-muted">{detail}</span>
       </span>
     </button>
   );
@@ -173,6 +173,7 @@ export function PresupuestosPage() {
   const [actualDraft, setActualDraft] = useState<BudgetActualDraft>(emptyActualDraft(currentYear));
   const [cutoffMonth, setCutoffMonth] = useState(new Date().getMonth() + 1);
   const [message, setMessage] = useState('');
+  const [showTicketDetails, setShowTicketDetails] = useState(false);
 
   useEffect(() => {
     load();
@@ -554,15 +555,15 @@ export function PresupuestosPage() {
           <Notice>Primero crea o abre un escenario.</Notice>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-metro-border bg-metro-panel px-4 py-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-metro-muted">Simulando</p>
-                <p className="text-lg font-extrabold text-metro-text">{activeScenario.name} · {activeScenario.year}</p>
+            <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-2xl border border-metro-border bg-metro-panel/95 px-4 py-3 shadow-sm backdrop-blur">
+              <div className="min-w-[220px] flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-metro-muted">Simulación activa</p>
+                <p className="text-base font-extrabold text-metro-text">{activeScenario.name} · {activeScenario.year}</p>
+                <p className="mt-0.5 text-[11px] text-metro-muted">Partidas {euro(liveTotal.manualTotal)} · Ticket {euro(liveTotal.ticketTotal)}</p>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Metric label="Partidas" value={euro(liveTotal.manualTotal)} />
-                <Metric label="Ticket" value={euro(liveTotal.ticketTotal)} detail={`Absentismo ${ticketAbsenceA}%`} />
-                <Metric label="Total escenario" value={euro(liveTotal.total)} />
+              <div className="rounded-xl border border-metro-red/30 bg-metro-red/[0.06] px-4 py-2 text-right">
+                <p className="text-[10px] font-extrabold uppercase tracking-wide text-metro-muted">Total escenario</p>
+                <p className="text-xl font-extrabold text-metro-text">{euro(liveTotal.total)}</p>
               </div>
             </div>
 
@@ -578,6 +579,11 @@ export function PresupuestosPage() {
                     </Field>
                   </div>
                 </div>
+                <button className="mt-3 flex w-full items-center justify-between rounded-xl border border-metro-border bg-metro-surface/45 px-3 py-2 text-left text-xs font-bold text-metro-text transition hover:bg-metro-raised" type="button" onClick={() => setShowTicketDetails((value) => !value)} aria-expanded={showTicketDetails}>
+                  <span>Hipótesis, sensibilidad y detalle por calendario</span>
+                  <ChevronDown size={15} className={cx('transition-transform', showTicketDetails && 'rotate-180')} />
+                </button>
+                {showTicketDetails ? <>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <Field label="Absentismo A (%) · cálculo principal">
                     <Input type="number" min="0" max="100" step="0.1" value={ticketAbsenceA} onChange={(event) => setTicketAbsenceA(Number(event.target.value))} />
@@ -618,6 +624,7 @@ export function PresupuestosPage() {
                 <div className="mt-3 flex justify-end">
                   <ActionButton size="sm" iconOnly={false} variant="secondary" onClick={() => { setTicketAmount(activeScenario.ticketAmount); setTicketAbsenceA((activeScenario.ticketAbsenceRateA ?? 0.03) * 100); setTicketAbsenceB((activeScenario.ticketAbsenceRateB ?? 0.06) * 100); setTicketExtras(activeScenario.ticketExtraPeopleByCalendar ?? {}); }}><RotateCcw size={14} /> Restablecer Ticket</ActionButton>
                 </div>
+                </> : null}
               </Panel>
 
               <Panel title="Partidas manuales" subtitle="Cada partida puede ser un importe directo o un desglose de subpartidas. Observaciones e importes se actualizan en la simulación al momento.">
@@ -746,6 +753,7 @@ export function PresupuestosPage() {
           <Notice>Selecciona primero el escenario que se va a ejecutar.</Notice>
         ) : (
           <div className="space-y-4">
+            <div className="flex items-center gap-3"><span className="rounded-full bg-metro-red px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white">1 · Presupuesto aprobado</span><div className="h-px flex-1 bg-metro-border" /></div>
             <Panel title={`Presupuesto definitivo · ${selectedScenario.name}`} subtitle="Dirección puede modificar los importes por partida. Estos valores sustituyen a la simulación cuando guardas como definitivo.">
               <div className="mb-3 grid gap-2 sm:grid-cols-3">
                 <Metric label="Simulación seleccionada" value={euro(calculateBudgetScenarioYear(selectedScenario, manualItems, ticketGroups, selectedScenario.year, calendars, people).total)} />
@@ -772,6 +780,7 @@ export function PresupuestosPage() {
               </div>
             </Panel>
 
+            <div className="flex items-center gap-3 pt-1"><span className="rounded-full bg-metro-raised px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-metro-text">2 · Ejecución real</span><div className="h-px flex-1 bg-metro-border" /></div>
             <div className="grid gap-4 xl:grid-cols-[0.9fr_1.4fr]">
               <Panel title="Registrar ejecución" subtitle="Añade gasto real por mes y bloque.">
                 <div className="grid gap-2 sm:grid-cols-2">
