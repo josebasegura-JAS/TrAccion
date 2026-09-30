@@ -1,5 +1,5 @@
 import { toLocalIsoDate as todayIso } from '../../../utils/dateOnly';
-import { CalendarClock, History, Link2, RotateCcw, Search, UsersRound } from 'lucide-react';
+import { CalendarClock, History, Link2, RotateCcw, UsersRound } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable, type DataTableColumn } from '../../../shared/table/DataTable';
 import { sortDataTableRows } from '../../../shared/table/tableSorting';
@@ -797,7 +797,9 @@ export function VinculogramaPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showSolicitudModal, setShowSolicitudModal] = useState(false);
-  const [showExpired, setShowExpired] = useState(readExpiredVisibility);
+  const [activeView, setActiveView] = useState<'active' | 'history'>(() =>
+    readExpiredVisibility() ? 'history' : 'active',
+  );
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'Vigente' | 'Vencido' | 'Revocado'>('todos');
   const [activePage, setActivePage] = useState(1);
@@ -995,10 +997,10 @@ export function VinculogramaPage() {
     await releaseMutationLock(record.id);
   };
 
-  const toggleExpired = () => {
-    const nextValue = !showExpired;
-    setShowExpired(nextValue);
-    persistExpiredVisibility(nextValue);
+  const selectView = (view: 'active' | 'history') => {
+    setActiveView(view);
+    persistExpiredVisibility(view === 'history');
+    setStatusFilter('todos');
   };
 
   const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
@@ -1082,20 +1084,21 @@ export function VinculogramaPage() {
             value={query}
             wrapperClassName="min-w-[300px] flex-1"
           />
-          <FilterSelect
-            aria-label="Filtrar vinculogramas por estado"
-            onChange={(event) =>
-              setStatusFilter(event.target.value as 'todos' | 'Vigente' | 'Vencido' | 'Revocado')
-            }
-            options={[
-              { label: 'Todos los estados', value: 'todos' },
-              { label: 'Vigentes', value: 'Vigente' },
-              { label: 'Vencidos', value: 'Vencido' },
-              { label: 'Revocados', value: 'Revocado' },
-            ]}
-            value={statusFilter}
-            wrapperClassName="w-52"
-          />
+          {activeView === 'history' && (
+            <FilterSelect
+              aria-label="Filtrar histórico por estado"
+              onChange={(event) =>
+                setStatusFilter(event.target.value as 'todos' | 'Vencido' | 'Revocado')
+              }
+              options={[
+                { label: 'Todo el histórico', value: 'todos' },
+                { label: 'Vencidos', value: 'Vencido' },
+                { label: 'Revocados', value: 'Revocado' },
+              ]}
+              value={statusFilter}
+              wrapperClassName="w-52"
+            />
+          )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <ActionButton
               variant="word"
@@ -1114,110 +1117,134 @@ export function VinculogramaPage() {
 
       <ActiveFilterChips filters={activeFilterChips} onClearAll={clearActiveFilters} />
 
-      <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300">
-              <Link2 size={18} />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-metro-text">Vinculogramas vigentes</h2>
-                <span className="rounded-full border border-red-400/20 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-100">
-                  {filteredVigentes.length} registros
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-metro-muted">Relaciones activas entre personas.</p>
-            </div>
-          </div>
-          <ExportPrintButtons
-            payload={{
-              title: 'Vinculogramas vigentes',
-              filename: 'vinculogramas-vigentes',
-              columns: reorderExportColumns(
-                vinculogramaExportColumns(today),
-                tablePreferences.columnOrder,
-              ),
-              rows: filteredVigentes,
-              filterLabel: 'Estado: vigente',
-            }}
-            size="sm"
-          />
-        </div>
-        <VinculogramaTable
-          emptyText="No hay vinculogramas vigentes con los filtros actuales."
-          onDelete={deleteTableRecord}
-          onEdit={openEditModal}
-          records={filteredVigentes}
-          today={today}
-          preferences={tablePreferences}
-          setSort={setTableSort}
-          setColumnWidth={setTableColumnWidth}
-          setColumnOrder={setTableColumnOrder}
-          resetColumnWidths={resetTableColumnWidths}
-          resetPreferences={resetTablePreferences}
-          page={activePage}
-          pageSize={pageSize}
-          onPageChange={setActivePage}
-        />
-      </section>
+      <div className="flex items-center gap-1 rounded-xl border border-metro-border/80 bg-metro-surface/70 p-1" role="tablist" aria-label="Vista de vinculogramas">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeView === 'active'}
+          onClick={() => selectView('active')}
+          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+            activeView === 'active'
+              ? 'bg-metro-red text-white shadow-sm'
+              : 'text-metro-muted hover:bg-white/5 hover:text-metro-text'
+          }`}
+        >
+          <Link2 size={16} />
+          Vigentes
+          <span className={`rounded-full px-2 py-0.5 text-xs ${activeView === 'active' ? 'bg-white/15 text-white' : 'bg-white/5'}`}>
+            {filteredVigentes.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeView === 'history'}
+          onClick={() => selectView('history')}
+          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition ${
+            activeView === 'history'
+              ? 'bg-metro-red text-white shadow-sm'
+              : 'text-metro-muted hover:bg-white/5 hover:text-metro-text'
+          }`}
+        >
+          <History size={16} />
+          Histórico
+          <span className={`rounded-full px-2 py-0.5 text-xs ${activeView === 'history' ? 'bg-white/15 text-white' : 'bg-white/5'}`}>
+            {filteredVencidos.length}
+          </span>
+        </button>
+      </div>
 
-      <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-200">
-              <Search size={18} />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-metro-text">Vinculogramas vencidos / revocados</h2>
-                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-100">
-                  {filteredVencidos.length} registros
-                </span>
+      {activeView === 'active' ? (
+        <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300">
+                <Link2 size={18} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-metro-text">Vinculogramas vigentes</h2>
+                  <span className="rounded-full border border-red-400/20 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-100">
+                    {filteredVigentes.length} registros
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-metro-muted">Relaciones activas entre personas.</p>
               </div>
-              <p className="mt-0.5 text-xs text-metro-muted">Histórico de relaciones ya no vigentes.</p>
             </div>
+            <ExportPrintButtons
+              payload={{
+                title: 'Vinculogramas vigentes',
+                filename: 'vinculogramas-vigentes',
+                columns: reorderExportColumns(vinculogramaExportColumns(today), tablePreferences.columnOrder),
+                rows: filteredVigentes,
+                filterLabel: 'Estado: vigente',
+              }}
+              size="sm"
+            />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <VinculogramaTable
+            emptyText="No hay vinculogramas vigentes con los filtros actuales."
+            onDelete={deleteTableRecord}
+            onEdit={openEditModal}
+            records={filteredVigentes}
+            today={today}
+            preferences={tablePreferences}
+            setSort={setTableSort}
+            setColumnWidth={setTableColumnWidth}
+            setColumnOrder={setTableColumnOrder}
+            resetColumnWidths={resetTableColumnWidths}
+            resetPreferences={resetTablePreferences}
+            page={activePage}
+            pageSize={pageSize}
+            onPageChange={setActivePage}
+          />
+        </section>
+      ) : (
+        <section className="rounded-[1.35rem] border border-metro-border/80 bg-[linear-gradient(180deg,rgba(18,35,56,0.98),rgba(14,30,49,0.95))] p-3.5 shadow-[0_16px_36px_rgba(2,8,23,0.2)]">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-200">
+                <History size={18} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-metro-text">Vinculogramas vencidos / revocados</h2>
+                  <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-100">
+                    {filteredVencidos.length} registros
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-metro-muted">Histórico de relaciones ya no vigentes.</p>
+              </div>
+            </div>
             <ExportPrintButtons
               payload={{
                 title: 'Vinculogramas vencidos / revocados',
                 filename: 'vinculogramas-historico',
-                columns: reorderExportColumns(
-                  vinculogramaExportColumns(today),
-                  tablePreferences.columnOrder,
-                ),
+                columns: reorderExportColumns(vinculogramaExportColumns(today), tablePreferences.columnOrder),
                 rows: filteredVencidos,
                 filterLabel: 'Estado: vencido o revocado',
               }}
               size="sm"
             />
-            <ActionButton variant="secondary" iconOnly={false} onClick={toggleExpired} size="sm">
-              {showExpired ? 'Ocultar histórico' : 'Mostrar histórico'}
-            </ActionButton>
           </div>
-        </div>
-        {showExpired && (
-          <div className="mt-3">
-            <VinculogramaTable
-              emptyText="No hay vinculogramas vencidos ni revocados con los filtros actuales."
-              onDelete={deleteTableRecord}
-              onEdit={openEditModal}
-              records={filteredVencidos}
-              today={today}
-              preferences={tablePreferences}
-              setSort={setTableSort}
-              setColumnWidth={setTableColumnWidth}
-              setColumnOrder={setTableColumnOrder}
-              resetColumnWidths={resetTableColumnWidths}
-              resetPreferences={resetTablePreferences}
-              page={historyPage}
-              pageSize={pageSize}
-              onPageChange={setHistoryPage}
-            />
-          </div>
-        )}
-      </section>
+          <VinculogramaTable
+            emptyText="No hay vinculogramas vencidos ni revocados con los filtros actuales."
+            onDelete={deleteTableRecord}
+            onEdit={openEditModal}
+            records={filteredVencidos}
+            today={today}
+            preferences={tablePreferences}
+            setSort={setTableSort}
+            setColumnWidth={setTableColumnWidth}
+            setColumnOrder={setTableColumnOrder}
+            resetColumnWidths={resetTableColumnWidths}
+            resetPreferences={resetTablePreferences}
+            page={historyPage}
+            pageSize={pageSize}
+            onPageChange={setHistoryPage}
+          />
+        </section>
+      )}
 
       {showSolicitudModal && (
         <SolicitudVinculogramaModal
