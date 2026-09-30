@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo,
 import { AlertTriangle, LockKeyhole } from 'lucide-react';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
+import { BackgroundActivityIndicator } from './components/BackgroundActivityIndicator';
 import { TooltipLayer } from './components/ui/TooltipLayer';
 import { ToastProvider } from './components/ui/Toast';
 import { Header } from './components/Header';
@@ -230,6 +231,7 @@ export function App() {
               <SqliteReadOnlyBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <PersistenceErrorBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <GlobalBusyIndicator />
+              <BackgroundActivityIndicator />
               <ModuleErrorBoundary activeView={activeView}>
                 <OperationalModuleGuard activeView={activeView}>
                   <Suspense fallback={<ModuleLoading activeView={activeView} />}>

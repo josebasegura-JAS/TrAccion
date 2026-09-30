@@ -19,6 +19,7 @@ import { buildDatabaseStatusBadge } from '../services/databaseStatusView';
 import { publishDatabaseStatus, refreshDatabaseStatus, useDatabaseStatus } from '../services/databaseStatus';
 import { PerformanceDiagnostics } from './ajustes/PerformanceDiagnostics';
 import { measurePerformance } from '../services/performanceMetrics';
+import { runBackgroundActivity } from '../services/backgroundActivity';
 
 type RouteDraft = {
   rutaPlantillaTeletrabajo: string;
@@ -283,7 +284,13 @@ export function AjustesPage() {
   const loadDatabaseDetails = useCallback(() => {
     if (databaseDetailsLoadedRef.current) return;
     databaseDetailsLoadedRef.current = true;
-    void measurePerformance('ajustes', 'Cargar detalles de Base de datos', async () => {
+    void runBackgroundActivity(
+      {
+        kind: 'database',
+        label: 'Consultando base de datos…',
+        detail: 'Cargando copias, bloqueo y estado de mantenimiento.',
+      },
+      () => measurePerformance('ajustes', 'Cargar detalles de Base de datos', async () => {
       await Promise.all([
         refreshCurrentDatabaseLock(),
         refreshLocalBackups(),
@@ -292,7 +299,8 @@ export function AjustesPage() {
         window.traccion?.getUpdatesDirectory?.().then(setUpdatesDirectoryPath).catch(() => undefined),
         window.traccion?.getDailyLocalBackupSettings?.().then(setDailyBackupSettings).catch(() => undefined),
       ]);
-    });
+      }),
+    );
   }, [refreshCurrentDatabaseLock, refreshLocalBackups, refreshVacuumStatus]);
 
   const applyDatabaseStatus = async (nextStatus: TraccionDatabaseStatus) => {
