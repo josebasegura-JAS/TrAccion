@@ -134,7 +134,6 @@ export function buildTaskReportHtml({ task, draft }: TaskReportData): string {
 <article class="print-document">
   <header class="print-report-header">
     <div>
-      <p class="print-eyebrow">TrAcción · Relaciones Laborales</p>
       <h1 class="task-report-title">Detalle de tarea</h1>
       <p class="task-report-subtitle">${escapeHtml(draft.titulo || 'Tarea sin título')}</p>
     </div>
