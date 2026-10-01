@@ -225,13 +225,13 @@ export function GlobalSearch({ onNavigate }: GlobalSearchProps) {
     <div className="relative">
       <button
         type="button"
-        className="hidden min-h-10 min-w-[18rem] items-center gap-2.5 rounded-xl border border-white/10 bg-[#122036] px-4 py-2 text-left text-sm text-metro-muted shadow-inner shadow-slate-950/10 transition hover:border-metro-red/35 hover:text-metro-text lg:flex xl:min-w-[26rem]"
+        className="hidden min-h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-[#122036] px-3.5 py-2 text-left text-[13px] text-metro-muted shadow-inner shadow-slate-950/10 transition hover:border-metro-red/35 hover:text-metro-text lg:flex"
         onClick={openSearch}
         aria-label="Buscar en TrAcción"
       >
-        <Search className="flex-none" size={16} />
+        <Search className="flex-none" size={15} />
         <span className="truncate">Buscar personas, tareas, actas...</span>
-        <kbd className="ml-auto rounded-md border border-white/10 bg-slate-950/35 px-1.5 py-0.5 text-[10px] font-semibold text-metro-muted">
+        <kbd className="ml-auto rounded-md border border-white/10 bg-slate-950/35 px-1.5 py-0.5 text-[9px] font-semibold text-metro-muted">
           Ctrl K
         </kbd>
       </button>

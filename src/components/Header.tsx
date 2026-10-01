@@ -288,16 +288,16 @@ export function Header({
   };
 
   return (
-    <header className="relative z-40 px-1.5 pt-1.5 sm:px-2 sm:pt-2">
-      <div className="relative grid min-w-0 gap-3 overflow-visible rounded-[18px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-3 py-2.5 shadow-[0_18px_36px_rgba(2,6,23,0.26)] lg:min-h-16 lg:grid-cols-[minmax(0,1fr)_minmax(290px,420px)_auto] lg:items-center lg:gap-4 lg:px-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-metro-red/35 bg-metro-red/10 text-metro-red shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <ModuleIcon aria-hidden="true" size={20} strokeWidth={2.1} />
+    <header className="relative z-40 px-1 pt-1 sm:px-1.5 sm:pt-1.5">
+      <div className="relative grid min-w-0 gap-2.5 overflow-visible rounded-[16px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-3 py-2 shadow-[0_16px_32px_rgba(2,6,23,0.24)] lg:min-h-[58px] lg:grid-cols-[minmax(0,1fr)_minmax(270px,360px)_auto] lg:items-center lg:gap-3.5 lg:px-3.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-metro-red/35 bg-metro-red/10 text-metro-red shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <ModuleIcon aria-hidden="true" size={18} strokeWidth={2.1} />
           </span>
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-sky-100/80">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="truncate text-[9px] font-extrabold uppercase tracking-[0.15em] text-sky-100/80">
                 {breadcrumb}
               </p>
               {moduleHelp ? (
@@ -308,22 +308,22 @@ export function Header({
                 />
               ) : null}
             </div>
-            <div className="mt-0.5 flex min-w-0 items-baseline gap-2.5 overflow-hidden">
-              <h1 className="truncate text-[1.42rem] font-black leading-none tracking-tight text-metro-text">
+            <div className="mt-0.5 min-w-0 overflow-hidden">
+              <h1 className="truncate text-[1.28rem] font-black leading-none tracking-tight text-metro-text">
                 {headerCopy.title}
               </h1>
-              <p className="hidden min-w-0 truncate text-[11px] text-metro-muted md:block">
+              <p className="mt-0.5 hidden truncate text-[10.5px] text-metro-muted xl:block">
                 {headerCopy.subtitle}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="min-w-0 lg:justify-self-stretch">
+        <div className="min-w-0 lg:justify-self-end lg:w-full lg:max-w-[22rem] xl:max-w-[24rem]">
           <GlobalSearch onNavigate={onViewChange} />
         </div>
 
-        <div className="flex min-w-0 items-center gap-2 lg:justify-end">
+        <div className="flex min-w-0 items-center gap-1.5 lg:justify-end">
           <div className="relative shrink-0" ref={assignmentNoticeRef}>
             <button
               aria-controls="task-assignment-notice"
@@ -332,7 +332,7 @@ export function Header({
               aria-label={unseenAssignments.length > 0
                 ? `${unseenAssignments.length} tarea${unseenAssignments.length === 1 ? '' : 's'} nueva${unseenAssignments.length === 1 ? '' : 's'} asignada${unseenAssignments.length === 1 ? '' : 's'}`
                 : 'No hay nuevas tareas asignadas'}
-              className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
+              className={`relative inline-flex h-9 w-9 items-center justify-center rounded-lg border text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 ${
                 unseenAssignments.length > 0
                   ? 'border-amber-400/35 bg-amber-400/10 text-amber-200 hover:border-amber-300/70 hover:bg-amber-400/18'
                   : 'border-white/10 bg-white/[0.045] text-metro-muted hover:border-white/20 hover:text-metro-text'
@@ -341,7 +341,7 @@ export function Header({
               title={unseenAssignments.length > 0 ? 'Consultar nuevas tareas asignadas' : 'Sin nuevas tareas asignadas'}
               type="button"
             >
-              <Bell size={17} aria-hidden="true" />
+              <Bell size={16} aria-hidden="true" />
               {unseenAssignments.length > 0 ? (
                 <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold leading-none text-slate-950 ring-2 ring-[#08111F]">
                   {unseenAssignments.length > 9 ? '9+' : unseenAssignments.length}
@@ -381,15 +381,15 @@ export function Header({
             ) : null}
           </div>
 
-          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 shadow-sm shadow-slate-950/15 lg:min-w-[196px]">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E3650] text-sm font-black tracking-[0.02em] text-sky-100 ring-1 ring-white/8">
+          <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.045] px-2.5 py-1.5 shadow-sm shadow-slate-950/15 lg:min-w-[188px]">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1E3650] text-[13px] font-black tracking-[0.02em] text-sky-100 ring-1 ring-white/8">
               {userInitials}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold leading-tight text-metro-text" title={windowsUserName}>
+              <p className="truncate text-[13px] font-bold leading-tight text-metro-text" title={windowsUserName}>
                 {windowsUserName}
               </p>
-              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold ${syncVisual.textClass}`} title={syncStatus.message}>
+              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold ${syncVisual.textClass}`} title={syncStatus.message}>
                 <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${syncVisual.dotClass}`} />
                 <span className="truncate">{syncVisual.label}</span>
               </div>
