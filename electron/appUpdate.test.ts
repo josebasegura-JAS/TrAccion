@@ -15,6 +15,14 @@ describe('compareAppVersions', () => {
     expect(compareAppVersions('1.0.10', '1.0.9')).toBeGreaterThan(0);
     expect(compareAppVersions('1.1.0', '1.0.99')).toBeGreaterThan(0);
     expect(compareAppVersions('1.0.5', '1.0.5')).toBe(0);
+    expect(compareAppVersions('1.3.0', '1.2.999')).toBeGreaterThan(0);
+    expect(compareAppVersions('2.0.0', '1.99.999')).toBeGreaterThan(0);
+    expect(compareAppVersions('10.0.1', '2.99.999')).toBeGreaterThan(0);
+  });
+
+  it('rechaza versiones ambiguas o mal formadas', () => {
+    expect(() => compareAppVersions('1.2', '1.2.136')).toThrow(/versiones no válidas/i);
+    expect(() => compareAppVersions('1.2.beta', '1.2.136')).toThrow(/versiones no válidas/i);
   });
 });
 
@@ -55,6 +63,15 @@ describe('parseAppUpdateManifest', () => {
       mandatory: true,
       notes: 'Correcciones críticas.',
     });
+  });
+
+  it('acepta paquetes de cualquier rama futura si el fichero corresponde al manifiesto', () => {
+    expect(parseAppUpdateManifest(JSON.stringify({
+      version: '2.0.1', file: 'Traccion 2.0.piz', sha256: sha,
+    })).fileName).toBe('Traccion 2.0.piz');
+    expect(parseAppUpdateManifest(JSON.stringify({
+      version: '10.4.27', file: 'Traccion 10.4.piz', sha256: sha,
+    })).fileName).toBe('Traccion 10.4.piz');
   });
 
   it('acepta también el nombre técnico legado Vx.y.zz para paquetes ya publicados', () => {
@@ -102,6 +119,16 @@ describe('checkForAppUpdate', () => {
     expect(result.latestVersion).toBe('1.1.79');
     expect(result.mandatory).toBe(true);
     expect(result.notes).toBe('Cambio importante');
+  });
+
+  it('detecta un salto directo entre ramas, incluido 1.2 -> 2.0', async () => {
+    writeFileSync(path.join(tempDir, 'version.json'), JSON.stringify({
+      version: '2.0.1', file: 'Traccion 2.0.piz', sha256: sha,
+    }), 'utf8');
+
+    const result = await checkForAppUpdate('1.2.136', tempDir);
+    expect(result.updateAvailable).toBe(true);
+    expect(result.latestVersion).toBe('2.0.1');
   });
 
   it('no ofrece actualización cuando la versión es igual', async () => {

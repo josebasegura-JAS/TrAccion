@@ -28,15 +28,21 @@ export interface AppUpdateManifest {
   notes: string | null;
 }
 
-export function compareAppVersions(a: string, b: string): number {
-  const partsA = a.trim().split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const partsB = b.trim().split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const length = Math.max(partsA.length, partsB.length);
+function parseAppVersion(version: string): [number, number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
 
-  for (let index = 0; index < length; index += 1) {
-    const valueA = partsA[index] ?? 0;
-    const valueB = partsB[index] ?? 0;
-    if (valueA !== valueB) return valueA - valueB;
+export function compareAppVersions(a: string, b: string): number {
+  const partsA = parseAppVersion(a);
+  const partsB = parseAppVersion(b);
+  if (!partsA || !partsB) {
+    throw new Error(`No se pueden comparar versiones no válidas: \"${a}\" y \"${b}\".`);
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    if (partsA[index] !== partsB[index]) return partsA[index] - partsB[index];
   }
   return 0;
 }
@@ -91,8 +97,9 @@ function validateUpdateFileName(fileName: string, version: string): string {
     throw new Error('El nombre del fichero de actualización no es válido. Debe ser Traccion x.y.piz.');
   }
 
-  // Compatibilidad bidireccional: el formato estable actual permite que una instalación
-  // antigua salte a 1.2; el formato Vx.y.zz se sigue aceptando para paquetes ya publicados.
+  // El nombre se valida contra la rama MAJOR.MINOR declarada por el propio manifiesto.
+  // Así una instalación 1.2 puede aceptar directamente 1.3, 2.0, 3.1, etc. sin conocerlas de antemano.
+  // El formato Vx.y.zz se conserva únicamente para paquetes antiguos ya publicados.
   const accepted = [
     buildPortableUpdateNameFromVersion(version),
     buildLegacyPortableUpdateNameFromVersion(version),
@@ -206,9 +213,10 @@ export async function checkForAppUpdate(
 
 /**
  * Copia el .piz a TEMP, verifica su SHA-256 y genera un .cmd temporal.
- * La instalación local usa un nombre estable por rama mayor/menor
- * (por ejemplo, "Traccion 1.1.exe" o "Traccion 1.2.exe"), mientras
- * version.json conserva la versión exacta (1.1.82, 1.2.01, etc.).
+ * La instalación local usa un nombre estable derivado de la rama MAJOR.MINOR
+ * declarada por version.json (por ejemplo, "Traccion 1.2.exe", "Traccion 1.3.exe"
+ * o "Traccion 2.0.exe"). El manifiesto conserva la versión técnica exacta.
+ * El actualizador no presupone ninguna rama concreta y admite saltos directos entre ramas.
  */
 export async function applyAppUpdate(
   currentVersion: string,

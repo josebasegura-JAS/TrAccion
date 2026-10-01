@@ -1,5 +1,5 @@
-// Genera el paquete de actualización definitivo de TrAcción 1.2.
-// La revisión técnica completa vive en version.json; el nombre visible permanece estable.
+// Genera el paquete de actualización para cualquier rama MAJOR.MINOR de TrAcción.
+// La versión técnica completa vive en version.json; el .piz se deriva automáticamente de MAJOR.MINOR.
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
