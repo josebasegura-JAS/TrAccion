@@ -44,7 +44,7 @@ export function getUnseenTaskAssignments(
   if (!responsible || !normalize(windowsUser)) return [];
 
   const seen = readSeenNoticeIds(windowsUser);
-  return tasks
+  const eligibleTasks = tasks
     .filter((task) =>
       !task.deletedAt &&
       task.assignmentNoticeId &&
@@ -56,6 +56,21 @@ export function getUnseenTaskAssignments(
         left.assignmentNoticeAt ?? left.updatedAt,
       ),
     );
+
+  // El store puede refrescarse mientras llega una escritura SQLite y, durante un
+  // instante, contener dos snapshots de la misma tarea. El aviso es por tarea,
+  // no por fila/snapshot, así que solo mostramos la versión más reciente.
+  const uniqueTasks: Task[] = [];
+  const seenTaskIds = new Set<string>();
+  const seenNoticeIds = new Set<string>();
+  for (const task of eligibleTasks) {
+    if (seenTaskIds.has(task.id) || seenNoticeIds.has(task.assignmentNoticeId!)) continue;
+    seenTaskIds.add(task.id);
+    seenNoticeIds.add(task.assignmentNoticeId!);
+    uniqueTasks.push(task);
+  }
+
+  return uniqueTasks;
 }
 
 export function markTaskAssignmentsSeen(windowsUser: string, tasks: readonly Task[]): void {
