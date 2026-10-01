@@ -690,7 +690,7 @@ export async function initializeSqlitePersistence(): Promise<DatabaseStatus> {
         ? `Base de datos SQLite dañada: ${error instanceof Error ? error.message : 'error desconocido'}. Restaura una copia de seguridad antes de seguir trabajando.`
         : error instanceof Error
           ? error.message
-          : 'SQLite no está disponible; se mantiene localStorage.',
+          : 'SQLite no está disponible. La edición permanece bloqueada hasta recuperar la base de datos compartida.',
     };
   }
 

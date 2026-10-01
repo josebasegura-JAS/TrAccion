@@ -338,25 +338,25 @@ Las rutas que afectan al funcionamiento común —BBDD, Excel automáticos, plan
 
 Las opciones de mantenimiento de SQLite, locks, backups y restauración se mantienen concentradas en Ajustes para no dispersar operaciones potencialmente críticas por módulos funcionales.
 
+El mantenimiento `VACUUM`/`ANALYZE` no forma parte del camino crítico de cierre. El cierre debe priorizar la protección de cambios pendientes y liberación limpia de SQLite; las operaciones de compactación se ejecutan desde mantenimiento explícito o en un contexto no crítico.
+
 ### Versionado visible y versionado técnico
 
-Se separó deliberadamente la identidad que ve el usuario de la revisión técnica:
+Se separó deliberadamente la rama visible de distribución de la revisión técnica:
 
-- Producto visible: **TrAcción 1.2**.
-- Ejecutable estable: **`Traccion 1.2.exe`**.
-- Revisión técnica: **`1.2.xxx`**, utilizada para builds, manifest y diagnóstico.
+- Versión técnica: **`MAJOR.MINOR.PATCH`**.
+- Ejecutable estable dentro de una rama: **`Traccion MAJOR.MINOR.exe`**.
+- `PATCH` identifica el build exacto y se muestra en diagnóstico/título, pero no obliga a renombrar el ejecutable en cada compilación.
 
-No se quiere renombrar el ejecutable en cada revisión. La versión de tres componentes sirve para saber qué build está instalado sin convertir el nombre del programa en un dato cambiante para los usuarios.
-
-En textos visibles se usa **TrAcción** con tilde siempre que no afecte a identificadores, rutas, nombres técnicos o compatibilidad.
+Cambiar de `MINOR` o `MAJOR` sí cambia el nombre estable de la rama (`Traccion 1.3.exe`, `Traccion 2.0.exe`, etc.). En textos visibles se usa **TrAcción** con tilde siempre que no afecte a identificadores, rutas, nombres técnicos o compatibilidad.
 
 ### Actualizador mediante `.piz` y `version.json`
 
-La red de despliegue no permite distribuir el `.exe` directamente, por lo que se decidió usar un contenedor con extensión **`.piz`**. El pipeline genera el EXE portable, valida que exista y tenga un tamaño razonable, lo copia como `Traccion 1.2.piz` y genera `version.json` con la revisión técnica y hash SHA-256.
+La red de despliegue no permite distribuir el `.exe` directamente, por lo que se usa un contenedor con extensión **`.piz`**. El pipeline deriva automáticamente la rama desde la versión técnica, genera `Traccion MAJOR.MINOR.piz` y escribe `version.json` con versión exacta, nombre de fichero y SHA-256.
 
-Una vez actualizados todos los puestos al nuevo formato se eliminó el puente de compatibilidad con nombres legacy. Los artifacts normales/Lite deben publicar únicamente `Traccion 1.2.piz` y `version.json`; el EXE sigue generándose internamente porque es el contenido real del paquete y debe validarse antes de publicar.
+`version.json` manda sobre la rama instalada. Una versión antigua puede aceptar directamente cualquier versión semánticamente superior, incluso un salto de `MAJOR`, siempre que el paquete coincida con el `MAJOR.MINOR` declarado y supere la validación SHA-256. El lector conserva compatibilidad con nombres técnicos legacy `TrAccion Vx.y.zz.piz` únicamente para paquetes históricos ya publicados; los builds nuevos publican el formato `Traccion MAJOR.MINOR.piz`.
 
-No conservar el ejecutable anterior como copia visible fue una decisión de UX y mantenimiento: el actualizador debe sustituir la instalación utilizada, no dejar varias revisiones aparentemente válidas en el escritorio.
+No conservar el ejecutable anterior como copia visible fue una decisión de UX y mantenimiento: el actualizador debe sustituir la instalación utilizada, no dejar varias revisiones aparentemente válidas en el escritorio. Si Windows impide completar la sustitución tras los reintentos, el script conserva y relanza el ejecutable actual para no dejar al usuario sin aplicación abierta.
 
 ### Build normal y Lite
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildInstalledExecutableNameFromVersion,
   buildInstalledExecutablePath,
+  buildUpdateApplyScript,
   checkForAppUpdate,
   compareAppVersions,
   parseAppUpdateManifest,
@@ -152,5 +153,45 @@ describe('checkForAppUpdate', () => {
     const result = await checkForAppUpdate('1.1.78', tempDir);
     expect(result.updateAvailable).toBe(false);
     expect(result.message).toContain('version.json');
+  });
+});
+
+
+describe('script de aplicación del actualizador', () => {
+  it('instala una revisión dentro de la misma rama y relanza el destino', () => {
+    const script = buildUpdateApplyScript(
+      'C:\\Apps\\Traccion 1.2.exe',
+      'C:\\Apps\\Traccion 1.2.exe',
+      'C:\\Temp\\TrAccion-nueva.exe',
+    );
+
+    expect(script).toContain('set "CURRENT=C:\\Apps\\Traccion 1.2.exe"');
+    expect(script).toContain('set "TARGET=C:\\Apps\\Traccion 1.2.exe"');
+    expect(script).toContain('if /I "%CURRENT%"=="%TARGET%" goto :launch');
+    expect(script).toContain('start "" "%TARGET%"');
+  });
+
+  it('permite un salto de rama y elimina el ejecutable anterior después de copiar el nuevo', () => {
+    const script = buildUpdateApplyScript(
+      'C:\\Apps\\Traccion 1.2.exe',
+      'C:\\Apps\\Traccion 2.0.exe',
+      'C:\\Temp\\TrAccion-nueva.exe',
+    );
+
+    expect(script).toContain('set "TARGET=C:\\Apps\\Traccion 2.0.exe"');
+    expect(script.indexOf('copy /Y "%SOURCE%" "%TARGET%"')).toBeLessThan(script.indexOf('del /Q "%CURRENT%"'));
+    expect(script).toContain('start "" "%TARGET%"');
+  });
+
+  it('si no consigue sustituir el ejecutable conserva y relanza la versión actual', () => {
+    const script = buildUpdateApplyScript(
+      'C:\\Apps\\Traccion 1.2.exe',
+      'C:\\Apps\\Traccion 2.0.exe',
+      'C:\\Temp\\TrAccion-nueva.exe',
+    );
+
+    expect(script).toContain('if !ATTEMPTS! GEQ 120 goto :giveup');
+    expect(script).toContain(':giveup');
+    expect(script).toContain('if exist "%CURRENT%" start "" "%CURRENT%"');
   });
 });

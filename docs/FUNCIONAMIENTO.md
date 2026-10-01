@@ -1,6 +1,6 @@
-# TrAcción 1.2 — Funcionamiento funcional
+# TrAcción — Funcionamiento funcional
 
-> Documento funcional de referencia. Revisado contra el código de TrAcción 1.2.111 (septiembre de 2026).
+> Documento funcional de referencia. Revisado contra el código de TrAcción 1.2.137 (octubre de 2026).
 >
 > Este documento describe **qué debe hacer la aplicación y qué reglas funcionales deben conservarse**. No sustituye a `ARCHITECTURE.md` (cómo está construida) ni a `DECISIONS.md` (por qué se adoptaron determinadas soluciones).
 
@@ -397,12 +397,13 @@ Las rutas de Excel automáticos, plantillas Word, actualizaciones y otros recurs
 
 ### 19.4. Actualización de la aplicación
 
-- La versión visible del producto es **TrAcción 1.2**.
-- La revisión técnica utiliza el formato `1.2.xxx` para identificar builds/actualizaciones.
-- El ejecutable estable utiliza el nombre `Traccion 1.2.exe`.
-- La distribución del actualizador utiliza `Traccion 1.2.piz` y `version.json`.
-- `version.json` conserva la versión técnica y la información necesaria para validar/aplicar la actualización.
-- Una actualización no debe dejar como resultado operativo múltiples ejecutables antiguos cuando el flujo normal puede sustituir el existente.
+- La versión técnica utiliza el formato `MAJOR.MINOR.PATCH`.
+- El ejecutable se mantiene estable dentro de cada rama como `Traccion MAJOR.MINOR.exe`.
+- La distribución utiliza `Traccion MAJOR.MINOR.piz` y `version.json`.
+- `version.json` conserva la versión exacta y la información necesaria para validar/aplicar la actualización, incluido SHA-256.
+- Una instalación puede actualizar directamente a una rama `MINOR` o `MAJOR` posterior; no debe exigir versiones intermedias.
+- El paquete debe corresponder a la rama `MAJOR.MINOR` declarada en el manifiesto antes de instalarse.
+- Una actualización no debe dejar múltiples ejecutables antiguos cuando el flujo normal puede sustituir el existente. Si la sustitución no puede completarse, debe conservarse y relanzarse la versión actual.
 
 ---
 

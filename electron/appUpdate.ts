@@ -59,8 +59,8 @@ function buildPortableUpdateNameFromVersion(version: string): string | null {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
   if (!match) return null;
   const [, major, minor] = match;
-  // El nombre publicado permanece estable durante toda la rama visible (1.2).
-  // La revisión exacta (1.2.01, 1.2.103...) vive únicamente en version.json.
+  // El nombre publicado permanece estable durante toda la rama MAJOR.MINOR.
+  // La revisión exacta MAJOR.MINOR.PATCH vive únicamente en version.json.
   return `Traccion ${major}.${minor}.piz`;
 }
 
@@ -83,6 +83,55 @@ export function buildInstalledExecutablePath(currentExecutablePath: string, vers
   const fileName = buildInstalledExecutableNameFromVersion(version);
   if (!fileName) return null;
   return path.join(path.dirname(currentExecutablePath), fileName);
+}
+
+/**
+ * Genera el script de sustitución fuera del proceso Electron. Se mantiene como
+ * función pura para poder probar los saltos de rama y, sobre todo, la ruta de
+ * recuperación si Windows no permite reemplazar el ejecutable nuevo.
+ */
+export function buildUpdateApplyScript(
+  currentExePath: string,
+  targetExePath: string,
+  stagedExePath: string,
+): string {
+  return [
+    '@echo off',
+    'setlocal EnableExtensions EnableDelayedExpansion',
+    `set "CURRENT=${currentExePath}"`,
+    `set "TARGET=${targetExePath}"`,
+    `set "SOURCE=${stagedExePath}"`,
+    'set /a ATTEMPTS=0',
+    ':copy_new',
+    'set /a ATTEMPTS+=1',
+    'copy /Y "%SOURCE%" "%TARGET%" >NUL 2>&1',
+    'if errorlevel 1 (',
+    '  if !ATTEMPTS! GEQ 120 goto :giveup',
+    '  timeout /t 1 /nobreak >NUL',
+    '  goto :copy_new',
+    ')',
+    'if /I "%CURRENT%"=="%TARGET%" goto :launch',
+    'set /a ATTEMPTS=0',
+    ':remove_old',
+    'set /a ATTEMPTS+=1',
+    'del /Q "%CURRENT%" >NUL 2>&1',
+    'if exist "%CURRENT%" (',
+    '  if !ATTEMPTS! GEQ 120 goto :launch',
+    '  timeout /t 1 /nobreak >NUL',
+    '  goto :remove_old',
+    ')',
+    ':launch',
+    'start "" "%TARGET%"',
+    'goto :cleanup',
+    ':giveup',
+    'rem No se ha podido completar la actualización; se conserva y relanza la versión actual.',
+    'if exist "%CURRENT%" start "" "%CURRENT%"',
+    'goto :cleanup',
+    ':cleanup',
+    'del /Q "%SOURCE%" >NUL 2>&1',
+    '(goto) 2>nul & del "%~f0"',
+    '',
+  ].join('\r\n');
 }
 
 function validateUpdateFileName(fileName: string, version: string): string {
@@ -264,43 +313,7 @@ export async function applyAppUpdate(
   }
 
   const scriptPath = path.join(stagingDir, 'traccion-apply-update.cmd');
-  const batScript = [
-    '@echo off',
-    'setlocal EnableExtensions EnableDelayedExpansion',
-    `set "CURRENT=${currentExePath}"`,
-    `set "TARGET=${targetExePath}"`,
-    `set "SOURCE=${stagedExePath}"`,
-    'set /a ATTEMPTS=0',
-    ':copy_new',
-    'set /a ATTEMPTS+=1',
-    'copy /Y "%SOURCE%" "%TARGET%" >NUL 2>&1',
-    'if errorlevel 1 (',
-    '  if !ATTEMPTS! GEQ 120 goto :giveup',
-    '  timeout /t 1 /nobreak >NUL',
-    '  goto :copy_new',
-    ')',
-    'if /I "%CURRENT%"=="%TARGET%" goto :launch',
-    'set /a ATTEMPTS=0',
-    ':remove_old',
-    'set /a ATTEMPTS+=1',
-    'del /Q "%CURRENT%" >NUL 2>&1',
-    'if exist "%CURRENT%" (',
-    '  if !ATTEMPTS! GEQ 120 goto :launch',
-    '  timeout /t 1 /nobreak >NUL',
-    '  goto :remove_old',
-    ')',
-    ':launch',
-    'start "" "%TARGET%"',
-    'goto :cleanup',
-    ':giveup',
-    'rem No se ha podido completar la actualización; se conserva y relanza la versión actual.',
-    'if exist "%CURRENT%" start "" "%CURRENT%"',
-    'goto :cleanup',
-    ':cleanup',
-    'del /Q "%SOURCE%" >NUL 2>&1',
-    '(goto) 2>nul & del "%~f0"',
-    '',
-  ].join('\r\n');
+  const batScript = buildUpdateApplyScript(currentExePath, targetExePath, stagedExePath);
 
   try {
     await writeFile(scriptPath, batScript, 'utf8');

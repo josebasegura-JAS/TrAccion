@@ -1,6 +1,6 @@
 # Arquitectura de TrAcción
 
-> Estado contrastado con el repositorio de TrAcción 1.2.111 (septiembre de 2026).
+> Estado contrastado con el repositorio de TrAcción 1.2.137 (octubre de 2026).
 >
 > Este documento describe la arquitectura técnica vigente. Las reglas de negocio pertenecen a `FUNCIONAMIENTO.md`; el motivo de las decisiones relevantes, a `DECISIONS.md`.
 
@@ -18,7 +18,7 @@
 ```text
 electron/
   main.ts                         arranque Electron e IPC
-  preload.ts                      API segura expuesta al renderer
+  preload.cts                     API segura expuesta al renderer; compila a preload.cjs
   sqlitePersistence.ts            orquestación de SQLite
   persistence/                    piezas extraídas y testeables de persistencia
 
@@ -38,7 +38,7 @@ La mayor parte de los módulos funcionales ya vive en `src/features/`: Actas, Ay
 
 ## 3. Frontera Electron ↔ renderer
 
-El renderer trabaja contra `window.traccion`, definido por `electron/preload.ts`. Los handlers de `electron/main.ts` delegan en la capa de persistencia.
+El renderer trabaja contra `window.traccion`, definido por `electron/preload.cts`. Los handlers de `electron/main.ts` delegan en la capa de persistencia.
 
 Reglas:
 
@@ -192,7 +192,7 @@ TrAcción dispone de varias capas de protección del fichero SQLite:
 
 La retención y rutas concretas dependen de la configuración vigente. La implementación está repartida entre `sqlitePersistence.ts` y `electron/persistence/` (`localBackupService`, `localBackups`, `backupReference`, etc.).
 
-`VACUUM`/`ANALYZE` son operaciones de mantenimiento sobre la base activa y deben respetar los locks correspondientes. Ajustes expone las operaciones administrativas necesarias; no replicarlas en módulos funcionales.
+`VACUUM`/`ANALYZE` son operaciones de mantenimiento sobre la base activa y deben respetar los locks correspondientes. Ajustes expone las operaciones administrativas necesarias; no replicarlas en módulos funcionales ni ejecutarlas en el camino crítico de cierre de la aplicación.
 
 ## 12. Identidad y seguridad de la base
 
@@ -246,18 +246,24 @@ Un cambio funcional relevante debe revisar las cinco superficies que corresponda
 
 ## 16. Actualización y versionado
 
-La versión visible del producto es **TrAcción 1.2**. La versión técnica mantiene el tercer componente (`1.2.xxx`) para builds y actualización.
+TrAcción usa versión técnica `MAJOR.MINOR.PATCH`. `MAJOR.MINOR` identifica la rama visible de distribución y `PATCH` cada build.
 
-El flujo portable vigente genera internamente el ejecutable estable `Traccion 1.2.exe`. Para distribución del actualizador se publica:
+Para una versión `MAJOR.MINOR.PATCH`, el flujo portable genera internamente:
 
 ```text
-Traccion 1.2.piz
+Traccion MAJOR.MINOR.exe
+```
+
+y publica para el actualizador:
+
+```text
+Traccion MAJOR.MINOR.piz
 version.json
 ```
 
-`version.json` conserva la versión técnica y la referencia/hash del paquete. El `.piz` contiene el binario que el actualizador instala/reemplaza.
+`version.json` es la fuente de verdad: contiene la versión técnica exacta, el nombre del paquete, SHA-256 y metadatos de actualización. El actualizador compara versiones numéricamente, valida que el `.piz` corresponda a la rama declarada y admite saltos directos entre ramas, incluidos cambios de `MAJOR` (por ejemplo `1.2.x → 2.0.x`).
 
-Los workflows normal y Lite validan que el EXE generado sea un binario de tamaño razonable antes de crear/publicar el paquete de actualización. No reintroducir nombres variables del EXE por cada build salvo cambio deliberado del sistema de actualización.
+Los workflows normal y Lite derivan los nombres desde la versión real del proyecto y validan que el EXE generado sea un binario de tamaño razonable antes de crear/publicar el paquete. No codificar una rama concreta (`1.2`, `1.3`, etc.) en workflows o lógica de actualización.
 
 ## 17. Tests y comprobaciones
 

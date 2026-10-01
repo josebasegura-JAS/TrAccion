@@ -1,8 +1,8 @@
-# TrAcción 1.2
+# TrAcción
 
 Aplicación de escritorio interna para la gestión operativa de Relaciones Laborales. Centraliza procesos, seguimiento, documentación y cálculos recurrentes en una única aplicación multiusuario.
 
-La versión visible para usuario es **TrAcción 1.2**. El proyecto mantiene además una revisión técnica `1.2.xxx` para compilaciones y actualizaciones.
+La aplicación utiliza versionado técnico `MAJOR.MINOR.PATCH` (por ejemplo, `1.2.137`). La rama visible de distribución es `MAJOR.MINOR`; el tercer componente identifica cada build y actualización.
 
 ## Módulos
 
@@ -120,19 +120,21 @@ Realiza las comprobaciones de calidad configuradas en el workflow, compila la ap
 
 Ruta de compilación más rápida para entregas en las que no se necesita repetir toda la batería del workflow normal. No sustituye al build normal como validación completa.
 
-Ambos generan internamente el ejecutable portable **`Traccion 1.2.exe`**, comprueban que el fichero generado es válido y preparan para distribución únicamente:
+Ambos derivan los nombres desde la versión real del proyecto. Para una versión `MAJOR.MINOR.PATCH` generan internamente **`Traccion MAJOR.MINOR.exe`**, comprueban que el fichero sea válido y preparan para distribución únicamente:
 
-- `Traccion 1.2.piz`
+- `Traccion MAJOR.MINOR.piz`
 - `version.json`
 
 ## Actualización
 
-El nombre visible del ejecutable se mantiene estable como **`Traccion 1.2.exe`** aunque avance la revisión técnica `1.2.xxx`.
+El nombre del ejecutable permanece estable dentro de cada rama `MAJOR.MINOR` (por ejemplo, `Traccion 1.2.exe` o `Traccion 2.0.exe`) mientras cambia `PATCH`.
 
 El actualizador utiliza:
 
-- `version.json` para conocer la revisión disponible y validar el paquete.
-- `Traccion 1.2.piz` como paquete distribuible de actualización.
+- `version.json` como fuente de verdad de la versión disponible, nombre de paquete y SHA-256.
+- `Traccion MAJOR.MINOR.piz` como paquete distribuible.
+
+La comparación es semántica y admite saltos directos entre ramas, por ejemplo `1.2.x → 1.3.x`, `1.2.x → 2.0.x` o ramas futuras. La instalación valida que el nombre del `.piz` corresponda al `MAJOR.MINOR` declarado por el manifiesto antes de aplicarlo.
 
 El detalle del mecanismo, las responsabilidades entre proceso principal/renderer y las reglas de seguridad del actualizador se documentan en `docs/ARCHITECTURE.md` y las decisiones asociadas en `docs/DECISIONS.md`.
 
@@ -145,4 +147,4 @@ El detalle del mecanismo, las responsabilidades entre proceso principal/renderer
 
 ## Estado del proyecto
 
-TrAcción 1.2 es una aplicación operativa en evolución. El repositorio, la documentación funcional y las ayudas de los módulos deben actualizarse conjuntamente cuando un cambio altere el comportamiento observable de la aplicación.
+TrAcción es una aplicación operativa en evolución. El repositorio, la documentación funcional y las ayudas de los módulos deben actualizarse conjuntamente cuando un cambio altere el comportamiento observable de la aplicación.
