@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('traccion', {
   notifyBootVisible: () => ipcRenderer.send('app:boot-visible'),
   notifyRendererReady: () => ipcRenderer.send('app:renderer-ready'),
   getWindowsUser: () => ipcRenderer.invoke('app:get-windows-user'),
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   getLastShutdownPerformance: () => ipcRenderer.invoke('performance:last-shutdown'),
   databaseStatus: () => ipcRenderer.invoke('database:status'),
   databaseHealthCheck: () => ipcRenderer.invoke('database:health-check'),

@@ -68,7 +68,6 @@ import { createPresupuestosRepository } from './persistence/presupuestosReposito
 import { createLoteriaRepository } from './persistence/loteriaRepository.js';
 import {
   getVacuumStatus as getVacuumStatusFromModule,
-  runScheduledVacuumIfDue as runScheduledVacuumIfDueFromModule,
   vacuumDatabase as vacuumDatabaseFromModule,
   type VacuumMaintenanceDependencies,
   type VacuumResult,
@@ -303,10 +302,6 @@ export type { DatabaseConnectivityIssuePayload, DatabaseLockInfo } from './persi
 // --- Mantenimiento de la base: VACUUM ---------------------------------
 
 export type { VacuumResult, VacuumStatus } from './persistence/vacuumMaintenance.js';
-
-async function runScheduledVacuumIfDue(): Promise<void> {
-  await runScheduledVacuumIfDueFromModule(createVacuumMaintenanceDependencies());
-}
 
 export async function vacuumDatabaseNow(): Promise<VacuumResult> {
   return vacuumDatabaseFromModule(createVacuumMaintenanceDependencies(), 'manual');
@@ -2040,9 +2035,9 @@ export interface ShutdownPerformanceMetrics {
 export async function closeSqlitePersistence(): Promise<ShutdownPerformanceMetrics> {
   const totalStartedAt = Date.now();
 
-  const vacuumStartedAt = Date.now();
-  await runScheduledVacuumIfDue();
-  const vacuumMs = Date.now() - vacuumStartedAt;
+  // El VACUUM programado no forma parte del camino crítico de cierre.
+  // El mantenimiento sigue disponible manualmente desde Ajustes.
+  const vacuumMs = 0;
 
   const backupStartedAt = Date.now();
   const shutdownBackup = await createShutdownLocalBackup();

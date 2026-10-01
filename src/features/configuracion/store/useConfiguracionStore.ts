@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { normalizeTemplatePath } from '../domain/teletrabajoTemplate';
 import { readStorageItem, writeJsonStorageAsync, writeRendererStorageCache } from '../../../services/persistence';
+import { clearPersistenceBusy, emitPersistenceFeedback, publishPersistenceBusy } from '../../../services/persistenceFeedback';
 import {
   createTaskPhaseIdFromName,
   DEFAULT_TASK_PHASES,
@@ -30,6 +31,10 @@ import {
 const STORAGE_KEY = 'traccion.v1.configuracion';
 
 let latestConfiguracionUpdatedAt: string | null = null;
+let configuracionWriteQueue: Promise<void> = Promise.resolve();
+let configuracionPendingWrites = 0;
+
+const CONFIGURACION_FEEDBACK_KEY = 'configuracion';
 
 interface ConfiguracionState {
   rutaPlantillaTeletrabajo: string;
@@ -302,15 +307,65 @@ async function persistConfiguracionConfirmed(configuracion: ConfiguracionState):
   if (!result.ok) throw new Error(result.message);
 }
 
-async function commitConfiguracion(set: (partial: ConfiguracionState) => void, configuracion: ConfiguracionState): Promise<{ ok: boolean; message: string }> {
-  try {
-    await persistConfiguracionConfirmed(configuracion);
-    set(configuracion);
-    return { ok: true, message: 'Configuración guardada.' };
-  } catch (error) {
-    console.warn('Configuración no guardada en SQLite.', error);
-    return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido guardar la configuración.' };
-  }
+async function commitConfiguracion(
+  set: (partial: ConfiguracionState) => void,
+  configuracion: ConfiguracionState,
+  options: { applyOnSuccess?: boolean; revertOnError?: boolean } = {},
+): Promise<{ ok: boolean; message: string }> {
+  const applyOnSuccess = options.applyOnSuccess ?? true;
+  const revertOnError = options.revertOnError ?? false;
+  configuracionPendingWrites += 1;
+  publishPersistenceBusy(CONFIGURACION_FEEDBACK_KEY, 'Guardando cambios…');
+
+  let result: { ok: boolean; message: string } = { ok: false, message: 'No se ha podido guardar la configuración.' };
+  const queuedWrite = configuracionWriteQueue.then(async () => {
+    try {
+      await persistConfiguracionConfirmed(configuracion);
+      if (applyOnSuccess) set(configuracion);
+      result = { ok: true, message: 'Configuración guardada.' };
+    } catch (error) {
+      console.warn('Configuración no guardada en SQLite.', error);
+      const message = error instanceof Error ? error.message : 'No se ha podido guardar la configuración.';
+      result = { ok: false, message };
+      emitPersistenceFeedback({
+        kind: 'error',
+        updatedAt: new Date().toISOString(),
+        key: CONFIGURACION_FEEDBACK_KEY,
+        message,
+      });
+
+      if (revertOnError) {
+        try {
+          const persisted = await readConfiguracionFromSqlite();
+          if (persisted) set(persisted);
+        } catch (reloadError) {
+          console.warn('No se ha podido restaurar la configuración tras un error de guardado.', reloadError);
+        }
+      }
+    } finally {
+      configuracionPendingWrites = Math.max(0, configuracionPendingWrites - 1);
+      if (result.ok && configuracionPendingWrites === 0) {
+        clearPersistenceBusy(CONFIGURACION_FEEDBACK_KEY, 'Cambios guardados');
+      }
+    }
+  });
+
+  // La cola sigue viva aunque una escritura falle: el siguiente cambio debe poder
+  // persistirse con el updatedAt confirmado más reciente.
+  configuracionWriteQueue = queuedWrite.catch(() => undefined);
+  await queuedWrite;
+  return result;
+}
+
+function commitTaskCatalogConfiguracion(
+  set: (partial: ConfiguracionState) => void,
+  configuracion: ConfiguracionState,
+): void {
+  // El callback de Zustand devuelve esta configuración de forma optimista para
+  // que los inputs controlados respondan al instante. La persistencia queda
+  // serializada para no provocar conflictos OCC contra escrituras anteriores
+  // realizadas por este mismo equipo.
+  void commitConfiguracion(set, configuracion, { applyOnSuccess: false, revertOnError: true });
 }
 
 function areConfiguracionesEquivalent(left: ConfiguracionState, right: ConfiguracionState): boolean {
@@ -383,59 +438,59 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
     const id = state.taskStates.some((item) => item.id === baseId) ? `${baseId}-${Date.now().toString(36)}` : baseId;
     const taskState: TaskStateConfig = { id, nombre: normalizedName, active: true, createdAt: now, updatedAt: now };
     const configuracion = { ...selectConfiguracionState(state), taskStates: [...state.taskStates, taskState] };
-    void commitConfiguracion(set, configuracion); return state;
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   updateTaskState: (id, nombre) => set((state) => {
     const normalizedName = normalizeTaskStateName(nombre); if (!normalizedName) return state;
     const now = new Date().toISOString();
     const configuracion = { ...selectConfiguracionState(state), taskStates: state.taskStates.map((item) => item.id === id ? { ...item, nombre: normalizedName, updatedAt: now } : item) };
-    void commitConfiguracion(set, configuracion); return state;
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   toggleTaskState: (id) => set((state) => {
     const target = state.taskStates.find((item) => item.id === id); if (!target || target.protectedRole) return state;
     const now = new Date().toISOString();
     const configuracion = { ...selectConfiguracionState(state), taskStates: state.taskStates.map((item) => item.id === id ? { ...item, active: !item.active, updatedAt: now } : item) };
-    void commitConfiguracion(set, configuracion); return state;
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   moveTaskState: (id, direction) => set((state) => {
     const index = state.taskStates.findIndex((item) => item.id === id); if (index < 0) return state;
     const nextIndex = direction === 'up' ? index - 1 : index + 1; if (nextIndex < 0 || nextIndex >= state.taskStates.length) return state;
     const next = [...state.taskStates]; [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
     const configuracion = { ...selectConfiguracionState(state), taskStates: next };
-    void commitConfiguracion(set, configuracion); return state;
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   addTaskPhase: (nombre) => set((state) => {
     const normalizedName = normalizeTaskPhaseName(nombre); if (!normalizedName) return state;
     const now = new Date().toISOString();
     const phase: TaskPhaseConfig = { id: `${createTaskPhaseIdFromName(normalizedName)}-${Date.now().toString(36)}`, nombre: normalizedName, active: true, createdAt: now, updatedAt: now };
-    const configuracion = { ...state, taskPhases: [...state.taskPhases, phase] }; void commitConfiguracion(set, configuracion); return state;
+    const configuracion = { ...selectConfiguracionState(state), taskPhases: [...state.taskPhases, phase] }; commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   updateTaskPhase: (id, nombre) => set((state) => {
     const normalizedName = normalizeTaskPhaseName(nombre); if (!normalizedName) return state;
-    const now = new Date().toISOString(); const configuracion = { ...state, taskPhases: state.taskPhases.map((phase) => phase.id === id ? { ...phase, nombre: normalizedName, updatedAt: now } : phase) };
-    void commitConfiguracion(set, configuracion); return state;
+    const now = new Date().toISOString(); const configuracion = { ...selectConfiguracionState(state), taskPhases: state.taskPhases.map((phase) => phase.id === id ? { ...phase, nombre: normalizedName, updatedAt: now } : phase) };
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   toggleTaskPhase: (id) => set((state) => {
-    const now = new Date().toISOString(); const configuracion = { ...state, taskPhases: state.taskPhases.map((phase) => phase.id === id ? { ...phase, active: !phase.active, updatedAt: now } : phase) };
-    void commitConfiguracion(set, configuracion); return state;
+    const now = new Date().toISOString(); const configuracion = { ...selectConfiguracionState(state), taskPhases: state.taskPhases.map((phase) => phase.id === id ? { ...phase, active: !phase.active, updatedAt: now } : phase) };
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   addTaskOrigin: (nombre, tipo) => set((state) => {
     const normalizedName = normalizeTaskOriginName(nombre); if (!normalizedName) return state;
     const now = new Date().toISOString(); const origin: TaskOriginConfig = { id: `${createTaskOriginIdFromName(normalizedName)}-${Date.now().toString(36)}`, nombre: normalizedName, tipo, active: true, createdAt: now, updatedAt: now };
-    const configuracion = { ...state, taskOrigins: [...state.taskOrigins, origin] }; void commitConfiguracion(set, configuracion); return state;
+    const configuracion = { ...selectConfiguracionState(state), taskOrigins: [...state.taskOrigins, origin] }; commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   updateTaskOrigin: (id, nombre, tipo) => set((state) => {
     const normalizedName = normalizeTaskOriginName(nombre); if (!normalizedName) return state;
-    const now = new Date().toISOString(); const configuracion = { ...state, taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, nombre: normalizedName, tipo, updatedAt: now } : origin) };
-    void commitConfiguracion(set, configuracion); return state;
+    const now = new Date().toISOString(); const configuracion = { ...selectConfiguracionState(state), taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, nombre: normalizedName, tipo, updatedAt: now } : origin) };
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   toggleTaskOrigin: (id) => set((state) => {
-    const now = new Date().toISOString(); const configuracion = { ...state, taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, active: !origin.active, updatedAt: now } : origin) };
-    void commitConfiguracion(set, configuracion); return state;
+    const now = new Date().toISOString(); const configuracion = { ...selectConfiguracionState(state), taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, active: !origin.active, updatedAt: now } : origin) };
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   deleteTaskOrigin: (id) => set((state) => {
-    const now = new Date().toISOString(); const configuracion = { ...state, taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, active: false, deletedAt: now, updatedAt: now } : origin) };
-    void commitConfiguracion(set, configuracion); return state;
+    const now = new Date().toISOString(); const configuracion = { ...selectConfiguracionState(state), taskOrigins: state.taskOrigins.map((origin) => origin.id === id ? { ...origin, active: false, deletedAt: now, updatedAt: now } : origin) };
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   addTaskResponsible: (nombre, windowsUser) => set((state) => {
     const normalizedName = normalizeTaskResponsibleName(nombre); if (!normalizedName) return state;
@@ -448,14 +503,14 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     };
-    const configuracion = { ...state, taskResponsibles: [...state.taskResponsibles, responsible] };
-    void commitConfiguracion(set, configuracion); return state;
+    const configuracion = { ...selectConfiguracionState(state), taskResponsibles: [...state.taskResponsibles, responsible] };
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   updateTaskResponsible: (id, nombre, windowsUser) => set((state) => {
     const normalizedName = normalizeTaskResponsibleName(nombre); if (!normalizedName) return state;
     const now = new Date().toISOString();
     const configuracion = {
-      ...state,
+      ...selectConfiguracionState(state),
       taskResponsibles: state.taskResponsibles.map((responsible) => responsible.id === id ? {
         ...responsible,
         nombre: normalizedName,
@@ -463,14 +518,14 @@ export const useConfiguracionStore = create<ConfiguracionStore>((set, get) => ({
         updatedAt: now,
       } : responsible),
     };
-    void commitConfiguracion(set, configuracion); return state;
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
   toggleTaskResponsible: (id) => set((state) => {
     const now = new Date().toISOString();
     const configuracion = {
-      ...state,
+      ...selectConfiguracionState(state),
       taskResponsibles: state.taskResponsibles.map((responsible) => responsible.id === id ? { ...responsible, active: !responsible.active, updatedAt: now } : responsible),
     };
-    void commitConfiguracion(set, configuracion); return state;
+    commitTaskCatalogConfiguracion(set, configuracion); return configuracion;
   }),
 }));

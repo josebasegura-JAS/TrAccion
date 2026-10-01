@@ -145,6 +145,7 @@ export function registerCoreDatabaseIpc(): void {
     await clearUpdatesDirectory();
     return { ok: true };
   });
+  ipcMain.handle('app:get-version', () => app.getVersion());
   ipcMain.handle('app-update:check', async () => {
     const updatesDirectoryPath = await getUpdatesDirectory();
     return checkForAppUpdate(app.getVersion(), updatesDirectoryPath);

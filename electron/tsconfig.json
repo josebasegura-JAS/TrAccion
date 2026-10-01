@@ -8,7 +8,16 @@
     "skipLibCheck": true,
     "outDir": "../dist-electron",
     "rootDir": ".",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["*.ts", "*.cts", "*.d.ts"]
+  "include": [
+    "*.ts",
+    "*.cts",
+    "*.d.ts"
+  ],
+  "exclude": [
+    "preload.ts"
+  ]
 }
