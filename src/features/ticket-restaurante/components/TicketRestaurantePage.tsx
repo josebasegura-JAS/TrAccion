@@ -132,16 +132,19 @@ export function TicketRestaurantePage({
   const toast = useToast();
   const [activeSubview, setActiveSubview] = useState<TicketRestauranteSubview | null>(null);
   const initialOrderPeriod = addTicketYearMonth(currentTicketYear(), currentTicketMonth(), 1);
+  const initialContributionPeriod = addTicketYearMonth(currentTicketYear(), currentTicketMonth(), -1);
   const [year, setYear] = useState(currentTicketYear());
-  const [absenceYear, setAbsenceYear] = useState(currentTicketYear());
-  // El trabajo ordinario consiste en preparar el pedido del mes siguiente.
-  // Ausencias permanece en el mes actual, porque son precisamente las que
-  // alimentan el cálculo del pedido siguiente.
+  const [absenceYear, setAbsenceYear] = useState(initialOrderPeriod.year);
+  // El trabajo ordinario se prepara siempre sobre el mes siguiente.
+  // La única excepción es Cotización, que se trabaja a mes vencido y por
+  // defecto muestra el mes anterior al actual.
   const [calculationYear, setCalculationYear] = useState(initialOrderPeriod.year);
   const [calculationMonth, setCalculationMonth] = useState(initialOrderPeriod.month);
-  const [absenceMonth, setAbsenceMonth] = useState(currentTicketMonth());
-  const [manutencionYear, setManutencionYear] = useState(currentTicketYear());
-  const [manutencionMonth, setManutencionMonth] = useState(currentTicketMonth());
+  const [absenceMonth, setAbsenceMonth] = useState(initialOrderPeriod.month);
+  const [manutencionYear, setManutencionYear] = useState(initialOrderPeriod.year);
+  const [manutencionMonth, setManutencionMonth] = useState(initialOrderPeriod.month);
+  const [contributionYear, setContributionYear] = useState(initialContributionPeriod.year);
+  const [contributionMonth, setContributionMonth] = useState(initialContributionPeriod.month);
   const [calendarDraft, setCalendarDraft] = useState<TicketCalendarDraft>(
     EMPTY_TICKET_CALENDAR_DRAFT,
   );
@@ -167,8 +170,8 @@ export function TicketRestaurantePage({
   const [manualManutencionEmployee, setManualManutencionEmployee] = useState('');
   const [manualManutencionDate, setManualManutencionDate] = useState('');
   const [isManutencionMonthModalOpen, setIsManutencionMonthModalOpen] = useState(false);
-  const [manutencionImputationYear, setManutencionImputationYear] = useState(currentTicketYear());
-  const [manutencionImputationMonth, setManutencionImputationMonth] = useState(currentTicketMonth());
+  const [manutencionImputationYear, setManutencionImputationYear] = useState(initialOrderPeriod.year);
+  const [manutencionImputationMonth, setManutencionImputationMonth] = useState(initialOrderPeriod.month);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isAbsenceSaving, setIsAbsenceSaving] = useState(false);
   const [isAbsenceImportHelpOpen, setIsAbsenceImportHelpOpen] = useState(false);
@@ -307,13 +310,14 @@ export function TicketRestaurantePage({
     calculationMonth,
     manutenciones,
   );
+  const contributionPeople = ticketPeopleExistingInMonth(people, contributionYear, contributionMonth);
   const contributionCalculation = calculateTicketContribution(
-    calculationPeople,
+    contributionPeople,
     calendars,
     absences,
     config,
-    calculationYear,
-    calculationMonth,
+    contributionYear,
+    contributionMonth,
     manutenciones,
   );
 
@@ -615,6 +619,26 @@ export function TicketRestaurantePage({
     const next = addTicketYearMonth(calculationYear, calculationMonth, offset);
     setCalculationYear(next.year);
     setCalculationMonth(next.month);
+  };
+
+  const handleContributionYearChange = (value: string) => {
+    const parsedYear = Number(value);
+    if (Number.isInteger(parsedYear) && parsedYear >= 1900 && parsedYear <= 2200) {
+      setContributionYear(parsedYear);
+    }
+  };
+
+  const handleContributionMonthChange = (value: string) => {
+    const parsedMonth = Number(value);
+    if (Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12) {
+      setContributionMonth(parsedMonth);
+    }
+  };
+
+  const moveContributionMonth = (offset: number) => {
+    const next = addTicketYearMonth(contributionYear, contributionMonth, offset);
+    setContributionYear(next.year);
+    setContributionMonth(next.month);
   };
 
   const moveAbsenceMonth = (offset: number) => {
@@ -1487,26 +1511,26 @@ export function TicketRestaurantePage({
           calculation={contributionCalculation}
           config={config}
           mode="contribution"
-          month={calculationMonth}
+          month={contributionMonth}
           exportPayload={{
             title: 'Cómputo cotización Ticket Restaurante',
-            filename: `Computo_${MONTH_OPTIONS[calculationMonth - 1]?.label ?? calculationMonth}_Base_Cotizacion_y_Retribucion_${calculationYear}`,
+            filename: `Computo_${MONTH_OPTIONS[contributionMonth - 1]?.label ?? contributionMonth}_Base_Cotizacion_y_Retribucion_${contributionYear}`,
             columns: contributionCalculationExportColumns(
-              getEffectiveTicketPrice(config, calculationYear, calculationMonth),
+              getEffectiveTicketPrice(config, contributionYear, contributionMonth),
             ),
             rows: sortContributionCalculationRows(contributionCalculation.rows),
             rowGroupValue: (row) => row.calendario,
             filterLabel: buildFilterLabel([
-              ['Mes', calculationMonth],
-              ['Año', calculationYear],
+              ['Mes', contributionMonth],
+              ['Año', contributionYear],
             ]),
             formatPreset: 'ticket-restaurante-contribution',
           }}
-          onMonthChange={handleCalculationMonthChange}
-          onNextMonth={() => moveCalculationMonth(1)}
-          onPreviousMonth={() => moveCalculationMonth(-1)}
-          onYearChange={handleCalculationYearChange}
-          year={calculationYear}
+          onMonthChange={handleContributionMonthChange}
+          onNextMonth={() => moveContributionMonth(1)}
+          onPreviousMonth={() => moveContributionMonth(-1)}
+          onYearChange={handleContributionYearChange}
+          year={contributionYear}
         />
       ) : activeSubview === 'ausencias' ? (
         <AbsencesTable

@@ -24,6 +24,8 @@ export function StepCard({
   title,
   detail,
   onClick,
+  reviewed,
+  onReviewChange,
 }: {
   active: boolean;
   done: boolean;
@@ -32,9 +34,11 @@ export function StepCard({
   title: string;
   detail: string;
   onClick: () => void;
+  reviewed?: boolean;
+  onReviewChange?: (checked: boolean) => void;
 }) {
   return (
-    <button
+    <div
       className={cx(
         'rounded-2xl border p-3.5 text-left transition shadow-sm',
         active
@@ -43,9 +47,8 @@ export function StepCard({
             ? 'border-emerald-500/35 bg-emerald-500/[0.07] hover:border-emerald-400/60'
             : 'border-metro-border bg-metro-panel hover:border-metro-red/60',
       )}
-      onClick={onClick}
-      type="button"
     >
+      <button className="block w-full text-left" onClick={onClick} type="button">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={cx(
@@ -63,7 +66,18 @@ export function StepCard({
         )}><Check size={12} /></span>
       </div>
       <p className="mt-2 text-xs leading-5 text-metro-muted">{detail}</p>
-    </button>
+      </button>
+      {onReviewChange ? (
+        <label className="mt-3 flex items-center gap-2 border-t border-metro-border/70 pt-2.5 text-xs font-bold text-metro-secondary">
+          <input
+            checked={Boolean(reviewed)}
+            onChange={(event) => onReviewChange(event.target.checked)}
+            type="checkbox"
+          />
+          Mes revisado
+        </label>
+      ) : null}
+    </div>
   );
 }
 
