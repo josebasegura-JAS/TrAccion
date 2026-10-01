@@ -233,7 +233,7 @@ function MetricCard({
   value,
   detail,
   tone,
-  progressWidth,
+  progressPercent,
   onClick,
 }: {
   icon: typeof ClipboardList;
@@ -241,7 +241,7 @@ function MetricCard({
   value: number;
   detail: string;
   tone: MetricCardTone;
-  progressWidth: string;
+  progressPercent: number;
   onClick?: () => void;
 }) {
   const content = (
@@ -249,18 +249,21 @@ function MetricCard({
       <span className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${tone.accentBar}`} />
       <span className={`pointer-events-none absolute -left-8 top-1/2 h-20 w-20 -translate-y-1/2 rounded-full blur-2xl ${tone.glow}`} />
 
-      <div className="relative flex min-w-0 flex-1 items-center gap-3 pb-4 pt-1.5">
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${tone.icon}`}>
-          <Icon size={18} />
+      <div className="relative flex min-w-0 flex-1 items-center gap-2.5 pb-3.5 pt-1">
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${tone.icon}`}>
+          <Icon size={16} />
         </span>
         <span className="min-w-0 flex-1 pt-0.5">
           <span className="block truncate text-[11px] font-semibold leading-tight text-slate-200">{label}</span>
-          <span className="mt-1 block text-[28px] font-black leading-none text-white">{value}</span>
-          <span className={`mt-1.5 block truncate text-[10px] font-medium leading-tight ${tone.detail}`}>{detail}</span>
+          <span className="mt-0.5 block text-[24px] font-black leading-none text-white">{value}</span>
+          <span className={`mt-1 block truncate text-[9px] font-medium leading-tight ${tone.detail}`}>{detail}</span>
         </span>
 
         <div className="absolute bottom-0 left-0 right-10 h-1 overflow-hidden rounded-full bg-white/5">
-          <div className={`h-full rounded-full ${tone.accentBar} ${progressWidth}`} />
+          <div
+            className={`h-full rounded-full transition-[width] duration-300 ${tone.accentBar}`}
+            style={{ width: `${Math.max(0, Math.min(100, progressPercent))}%` }}
+          />
         </div>
         <span className={`absolute bottom-[-9px] right-0 grid h-7 w-7 place-items-center rounded-full border transition ${tone.arrow}`}>
           <ChevronRight size={12} />
@@ -270,7 +273,7 @@ function MetricCard({
   );
 
   const className =
-    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3.5 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
+    `relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-[1.05rem] border bg-[linear-gradient(180deg,rgba(16,40,66,0.98),rgba(10,27,46,0.96))] px-3 py-2 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.025),0_10px_24px_rgba(2,6,23,0.28)] ${tone.border}`;
 
   return onClick ? (
     <button className={`${className} transition hover:-translate-y-[1px] hover:brightness-[1.04]`} onClick={onClick} type="button">
@@ -495,6 +498,10 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
     [attentionItems],
   );
 
+  const metricValues = [activeTasks.length, criticalTasks.length, allOpenSessions.length, openActas.length, pendingTelework.length, pendingLicenses.length];
+  const maxMetricValue = Math.max(1, ...metricValues);
+  const metricProgress = (value: number) => value <= 0 ? 0 : Math.max(7, Math.round((value / maxMetricValue) * 100));
+
   const overdueTasks = useMemo(
     () => activeTasks.filter((task) => task.fechaLimite && task.fechaLimite < todayIso),
     [activeTasks, todayIso],
@@ -513,10 +520,10 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
   ];
 
   return (
-    <div className="dashboard-pro grid h-full min-h-[780px] grid-rows-[44px_104px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-visible">
+    <div className="dashboard-pro grid h-full min-h-[780px] grid-rows-[44px_92px_minmax(0,1fr)_minmax(0,0.9fr)] gap-3 overflow-visible">
       <div className="grid grid-cols-6 gap-3">
         {[
-          { label: 'Nueva tarea', icon: Plus, view: 'tareas' as const, primary: true },
+          { label: 'Nueva tarea', icon: Plus, view: 'tareas' as const },
           { label: 'Nueva sesión', icon: UsersRound, view: 'comite' as const },
           { label: 'Nueva acta', icon: FileText, view: 'actas' as const },
           { label: 'Importar plantilla', icon: Upload, view: 'plantilla' as const },
@@ -524,10 +531,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           { label: 'Ticket Restaurante', icon: Utensils, view: 'ticket-restaurante' as const },
         ].map((action) => (
           <button
-            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg border px-3 text-[11px] font-bold transition ${action.primary
-              ? 'border-red-400/30 bg-gradient-to-b from-red-500 to-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] hover:from-red-400 hover:to-red-600'
-              : 'border-sky-300/15 bg-gradient-to-b from-[#173b61] to-[#102944] text-slate-100 hover:border-sky-300/25 hover:from-[#1b456f] hover:to-[#12314f]'
-            }`}
+            className="flex min-w-0 items-center justify-center gap-2 rounded-lg border border-sky-300/15 bg-gradient-to-b from-[#173b61] to-[#102944] px-3 text-[11px] font-bold text-slate-100 transition hover:border-sky-300/25 hover:from-[#1b456f] hover:to-[#12314f]"
             key={action.label}
             onClick={() => openRecord({ view: action.view })}
             type="button"
@@ -544,7 +548,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           icon={ClipboardList}
           label="Tareas abiertas"
           onClick={() => showTaskPopup('Tareas abiertas', activeTasks)}
-          progressWidth="w-[28%]"
+          progressPercent={metricProgress(activeTasks.length)}
           tone={metricToneCatalog.sky}
           value={activeTasks.length}
         />
@@ -553,7 +557,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           icon={AlertTriangle}
           label="Críticas"
           onClick={() => showTaskPopup('Tareas críticas', criticalTasks)}
-          progressWidth="w-[16%]"
+          progressPercent={metricProgress(criticalTasks.length)}
           tone={metricToneCatalog.rose}
           value={criticalTasks.length}
         />
@@ -562,7 +566,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           icon={UsersRound}
           label="Sesiones abiertas"
           onClick={() => openRecord({ view: 'comite' })}
-          progressWidth="w-[22%]"
+          progressPercent={metricProgress(allOpenSessions.length)}
           tone={metricToneCatalog.teal}
           value={allOpenSessions.length}
         />
@@ -571,7 +575,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           icon={FileText}
           label="Actas en seguimiento"
           onClick={() => openRecord({ view: 'actas' })}
-          progressWidth="w-[34%]"
+          progressPercent={metricProgress(openActas.length)}
           tone={metricToneCatalog.violet}
           value={openActas.length}
         />
@@ -580,7 +584,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           icon={Laptop}
           label="Solicitudes teletrabajo"
           onClick={() => openRecord({ view: 'teletrabajo' })}
-          progressWidth="w-[20%]"
+          progressPercent={metricProgress(pendingTelework.length)}
           tone={metricToneCatalog.emerald}
           value={pendingTelework.length}
         />
@@ -589,7 +593,7 @@ export function DashboardCards({ onOpenRecord }: { onOpenRecord?: (target: Dashb
           icon={UserRound}
           label="Licencias pendientes"
           onClick={() => openRecord({ view: 'licencias-sin-sueldo' })}
-          progressWidth="w-[24%]"
+          progressPercent={metricProgress(pendingLicenses.length)}
           tone={metricToneCatalog.amber}
           value={pendingLicenses.length}
         />
