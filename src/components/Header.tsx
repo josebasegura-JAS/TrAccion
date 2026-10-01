@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, ChevronRight, CirclePlus, X } from 'lucide-react';
-import { getNavigationBreadcrumb, type AppView } from '../navigation/navigation';
+import { Bell, ChevronRight, X } from 'lucide-react';
+import { getNavigationBreadcrumb, getNavigationIcon, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { ModuleHelpButton } from './ModuleHelp';
 import { useModuleHelpRegistry } from '../services/moduleHelpRegistry';
@@ -174,6 +174,7 @@ export function Header({
   const [windowsUserName, setWindowsUserName] = useState(getFallbackUserName);
   const headerCopy = useMemo(() => viewHeaderCopy[activeView], [activeView]);
   const breadcrumb = useMemo(() => formatBreadcrumbLabel(getNavigationBreadcrumb(activeView)), [activeView]);
+  const ModuleIcon = useMemo(() => getNavigationIcon(activeView), [activeView]);
   const moduleHelp = useModuleHelpRegistry((state) => state.content);
   const dbStatus = useDatabaseStatus();
   const syncStatus = useExternalDataSyncStatus();
@@ -291,7 +292,7 @@ export function Header({
       <div className="relative grid min-w-0 gap-3 overflow-visible rounded-[18px] border border-white/10 bg-gradient-to-r from-[#071322] via-metro-topbar to-[#091424] px-3 py-2.5 shadow-[0_18px_36px_rgba(2,6,23,0.26)] lg:min-h-16 lg:grid-cols-[minmax(0,1fr)_minmax(290px,420px)_auto] lg:items-center lg:gap-4 lg:px-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-metro-red/35 bg-metro-red/10 text-metro-red shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <CirclePlus aria-hidden="true" size={18} strokeWidth={2.1} />
+            <ModuleIcon aria-hidden="true" size={20} strokeWidth={2.1} />
           </span>
 
           <div className="min-w-0 flex-1">

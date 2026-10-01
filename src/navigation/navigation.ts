@@ -9,8 +9,10 @@ import {
   Gift,
   GraduationCap,
   Laptop,
+  LayoutDashboard,
   Link2,
   MailPlus,
+  Settings,
   ShieldCheck,
   Utensils,
   UsersRound,
@@ -115,6 +117,29 @@ export const navigationGroups: NavigationGroup[] = [
     ],
   },
 ];
+
+export const getNavigationIcon = (view: AppView): LucideIcon => {
+  if (view === 'dashboard') {
+    return LayoutDashboard;
+  }
+
+  if (view === 'ajustes') {
+    return Settings;
+  }
+
+  if (view === 'paritaria') {
+    return CalendarDays;
+  }
+
+  for (const group of navigationGroups) {
+    const item = group.items.find((navigationItem) => navigationItem.view === view);
+    if (item) {
+      return item.icon;
+    }
+  }
+
+  return ClipboardList;
+};
 
 export const getGroupForView = (view: AppView): NavigationGroupId | null => {
   if (view === 'paritaria') {
