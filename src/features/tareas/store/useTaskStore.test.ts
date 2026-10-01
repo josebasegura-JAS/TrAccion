@@ -104,6 +104,38 @@ describe('useTaskStore', () => {
     expect(readPersistedTasks()[0].id).toBe(tasks[0].id);
   });
 
+  it('Coordinación crea y actualiza un único seguimiento vinculado a la misma reunión y punto', async () => {
+    await useTaskStore.getState().createWithConcurrencyCheck(draft({ titulo: 'Tarea vinculada a coordinación' }));
+    const [task] = useTaskStore.getState().tasks;
+    const trackingId = 'coordination:meeting-1:point-1';
+    const source = {
+      module: 'coordinacion' as const,
+      recordId: 'meeting-1',
+      pointId: 'point-1',
+      label: 'Coordinación · EGIE · 01/10/2026',
+    };
+
+    const first = await useTaskStore.getState().upsertCoordinationTracking({
+      taskId: task.id, trackingId, source, text: 'Coordinación · EGIE · 01/10/2026\nPendiente de tratar\nPrimer acuerdo',
+    });
+    expect(first.ok).toBe(true);
+
+    vi.setSystemTime(new Date('2026-06-08T11:00:00.000Z'));
+    const second = await useTaskStore.getState().upsertCoordinationTracking({
+      taskId: task.id, trackingId, source, text: 'Coordinación · EGIE · 01/10/2026\nTratado · requiere seguimiento\nAcuerdo corregido',
+    });
+    expect(second.ok).toBe(true);
+
+    const updated = useTaskStore.getState().tasks.find((candidate) => candidate.id === task.id);
+    expect(updated?.seguimiento).toHaveLength(1);
+    expect(updated?.seguimiento[0]).toMatchObject({
+      id: trackingId,
+      texto: 'Coordinación · EGIE · 01/10/2026\nTratado · requiere seguimiento\nAcuerdo corregido',
+      source,
+    });
+    expect(updated?.seguimiento[0].fechaHora).toBe('2026-06-08T10:00:00.000Z');
+  });
+
   it('createManyFromImport deduplica por ImportKey y devuelve el id ya existente', async () => {
     const firstIds = await useTaskStore
       .getState()

@@ -11,6 +11,8 @@ import {
   createTaskWithConcurrencyCheck,
   removeTaskWithConcurrencyCheck,
   updateTaskWithConcurrencyCheck,
+  upsertCoordinationTrackingWithConcurrencyCheck,
+  type CoordinationTrackingMutation,
 } from './taskCrud';
 
 export { TASKS_STORAGE_KEY } from './taskPersistence';
@@ -39,6 +41,7 @@ interface TaskStateStore {
     id: string,
     expectedUpdatedAt: string | null,
   ) => Promise<TaskUpdateResult>;
+  upsertCoordinationTracking: (mutation: CoordinationTrackingMutation) => Promise<TaskUpdateResult>;
   selectTask: (taskId: string) => void;
   closeTasksFromCommittee: (taskIds: string[], sessionLabel: string) => void;
   closeTasksFromSession: (taskIds: string[], moduleLabel: string, sessionLabel: string) => void;
@@ -125,6 +128,8 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
     updateTaskWithConcurrencyCheck(id, draft, seguimientoText, expectedUpdatedAt, set),
   removeWithConcurrencyCheck: (id, expectedUpdatedAt) =>
     removeTaskWithConcurrencyCheck(id, expectedUpdatedAt, set),
+  upsertCoordinationTracking: (mutation) =>
+    upsertCoordinationTrackingWithConcurrencyCheck(mutation, set),
   closeTasksFromCommittee: (taskIds, sessionLabel) => {
     get().closeTasksFromSession(taskIds, 'Comité de Empresa', sessionLabel);
   },

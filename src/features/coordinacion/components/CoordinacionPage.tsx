@@ -7,7 +7,7 @@ import { useAppDialog } from '../../../hooks/useAppDialog';
 import { syncCoordinacionExcelBackup } from '../../../shared/export/coordinacionExcelBackup';
 import { ExportPrintButtons } from '../../../shared/print/ExportPrintButtons';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
-import { CLOSED_TASK_PHASE, type Task, type TaskDraft } from '../../tareas/domain/task';
+import { type Task, type TaskDraft } from '../../tareas/domain/task';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { formatCoordinationDate, type CoordinationArea, type CoordinationMeeting, type CoordinationPointStatus } from '../domain/coordinacion';
 import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/useCoordinacionStore';
@@ -20,10 +20,10 @@ import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Para qué sirve', items: ['Prepara y conserva las reuniones de RRLL con Dirección, otras áreas y sindicatos.', 'Permite convertir tareas abiertas en puntos de reunión, añadir puntos libres y crear tareas nuevas sin perder la relación entre reunión y seguimiento.'] },
-  { title: 'Dirección', items: ['Al crear una reunión se incorporan automáticamente las tareas marcadas previamente como «Trasladar a Dirección».', 'Dentro de la reunión puedes añadir tareas activas, puntos manuales o crear una tarea nueva desde la propia reunión.', 'Cada punto puede registrar su resultado y estado. Al cerrar la reunión, los puntos vinculados dejan trazabilidad en sus tareas.'] },
+  { title: 'Dirección', items: ['Al crear una reunión se incorporan automáticamente las tareas marcadas previamente como «Trasladar a Dirección».', 'Dentro de la reunión puedes añadir tareas activas, puntos manuales o crear una tarea nueva desde la propia reunión.', 'Cada punto puede registrar su resultado y estado. Al guardar la reunión, los puntos vinculados actualizan automáticamente el seguimiento de sus tareas.'] },
   { title: 'Otras áreas', items: ['Indica el área, fecha y, si procede, interlocutores y objetivo. Una tarea inicial es opcional.', 'Si existen tareas pendientes marcadas para esa área, TrAcción puede incorporarlas al crear la reunión.', 'Los puntos pueden ser tareas existentes, puntos no inventariados o nuevas tareas creadas desde la reunión.'] },
   { title: 'Sindicatos', items: ['El seguimiento se organiza por organización sindical y mantiene el histórico de reuniones.', 'El guion es flexible y permite registrar asuntos, resultados y compromisos de seguimiento según la reunión.', 'Utiliza el histórico para consultar lo tratado anteriormente con cada sindicato sin depender de notas externas.'] },
-  { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Cuando un punto vinculado se marca como tratado al cerrar la reunión, TrAcción actualiza el seguimiento de la tarea y aplica el cierre previsto por el módulo.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
+  { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Guardar un punto vinculado crea o actualiza un único seguimiento en la tarea madre; sucesivos guardados corrigen ese mismo seguimiento sin duplicarlo. Al cerrar la reunión, los puntos tratados aplican además el cierre previsto por el módulo.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
   { title: 'Histórico y Excel', items: ['Las reuniones permanecen disponibles como histórico una vez cerradas.', 'El Excel automático utiliza la ruta configurada en Ajustes. Comprueba esa ruta si la exportación no puede actualizarse.', 'Eliminar una reunión o un punto manual debe reservarse para registros creados por error; para reuniones celebradas es preferible conservar el histórico.'] },
 ];
 
@@ -32,38 +32,50 @@ function todayIso(): string {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
-function taskToDraft(task: Task): TaskDraft {
-  return {
-    titulo: task.titulo, descripcion: task.descripcion, tipo: task.tipo, fase: task.fase,
-    estado: task.estado, prioridad: task.prioridad, fechaLimite: task.fechaLimite,
-    responsable: task.responsable, origen: task.origen, sindicato: task.sindicato,
-    observaciones: task.observaciones, mail: task.mail, documentLinks: task.documentLinks,
-    createdAt: task.createdAt,
-  };
-}
-
 function meetingContext(meeting: CoordinationMeeting): string {
   if (meeting.area === 'direccion') return 'Dirección';
   if (meeting.area === 'sindicatos') return meeting.unionName?.trim() || 'sindicato';
   return meeting.areaName?.trim() || 'otra área';
 }
 
-async function appendMeetingTracking(meeting: CoordinationMeeting): Promise<string[]> {
-  const failures: string[] = [];
+type TrackingSyncFailure = { pointId: string; message: string };
+
+function coordinationTrackingId(meetingId: string, pointId: string): string {
+  return `coordination:${meetingId}:${pointId}`;
+}
+
+function buildCoordinationTrackingText(meeting: CoordinationMeeting, point: CoordinationMeeting['points'][number], allowStatusOnly: boolean): string {
+  const result = point.result.trim();
+  if (!result && !allowStatusOnly) return '';
+  const header = `Coordinación · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`;
+  const status = coordinationPointStatusLabel(point.status);
+  return result ? `${header}\n${status}\n${result}` : `${header}\n${status}`;
+}
+
+async function syncMeetingTracking(
+  meeting: CoordinationMeeting,
+  pointIds: Iterable<string>,
+  options: { allowStatusOnly: boolean; closeResolvedTasks: boolean },
+): Promise<TrackingSyncFailure[]> {
+  const failures: TrackingSyncFailure[] = [];
+  const pointIdSet = new Set(pointIds);
   for (const point of meeting.points) {
-    if (!point.taskId || point.status === 'pendiente') continue;
+    if (!pointIdSet.has(point.id) || !point.taskId) continue;
     const task = useTaskStore.getState().tasks.find((candidate) => candidate.id === point.taskId);
     if (!task || task.deletedAt) continue;
-    const resultText = point.result.trim() || coordinationPointStatusLabel(point.status);
-    const tracking = `Coordinación RRLL con ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}\n${coordinationPointStatusLabel(point.status)}${point.result.trim() ? ` · ${resultText}` : ''}`;
-    if (task.seguimiento.some((entry) => entry.texto.includes(tracking))) continue;
-    const draft = taskToDraft(task);
-    if (point.status === 'tratado') {
-      draft.estado = 'cerrada';
-      draft.fase = CLOSED_TASK_PHASE;
-    }
-    const result = await useTaskStore.getState().updateWithConcurrencyCheck(task.id, draft, tracking, task.updatedAt);
-    if (!result.ok) failures.push(`${task.titulo}: ${result.message}`);
+    const result = await useTaskStore.getState().upsertCoordinationTracking({
+      taskId: point.taskId,
+      trackingId: coordinationTrackingId(meeting.id, point.id),
+      text: buildCoordinationTrackingText(meeting, point, options.allowStatusOnly),
+      source: {
+        module: 'coordinacion',
+        recordId: meeting.id,
+        pointId: point.id,
+        label: `Coordinación · ${meetingContext(meeting)} · ${formatCoordinationDate(meeting.date)}`,
+      },
+      closeTask: options.closeResolvedTasks && point.status === 'tratado',
+    });
+    if (!result.ok) failures.push({ pointId: point.id, message: `${task.titulo}: ${result.message}` });
   }
   return failures;
 }
@@ -245,6 +257,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
 
   const handleSaveMeeting = async () => {
     if (!selected || selected.status === 'closed' || isSavingMeeting) return false;
+    const dirtyPointIds = new Set(dirtyPointIdsRef.current);
     const patches = selected.points.map((point) => {
       const draft = pointDraftsRef.current[point.id] ?? pointToDraft(point);
       return { pointId: point.id, patch: draft };
@@ -255,10 +268,23 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       const result = await saveMeetingPoints(selected.id, patches);
       if (!result.ok) { setStatus(result.message || 'No se han podido guardar los cambios de la reunión.'); return false; }
       const latest = useCoordinacionStore.getState().meetings.find((meeting) => meeting.id === selected.id);
-      if (latest) pointDraftsRef.current = Object.fromEntries(latest.points.map((point) => [point.id, pointToDraft(point)]));
-      dirtyPointIdsRef.current = new Set();
-      setHasUnsavedMeetingChanges(false);
-      setStatus('Cambios guardados correctamente.');
+      if (!latest) { setStatus('La reunión se ha guardado, pero no se ha podido recargar para actualizar las tareas vinculadas.'); return false; }
+
+      const trackingFailures = await syncMeetingTracking(latest, dirtyPointIds, {
+        allowStatusOnly: false,
+        closeResolvedTasks: false,
+      });
+      const failedPointIds = new Set(trackingFailures.map((failure) => failure.pointId));
+      pointDraftsRef.current = Object.fromEntries(latest.points.map((point) => [point.id, pointToDraft(point)]));
+      dirtyPointIdsRef.current = failedPointIds;
+      setHasUnsavedMeetingChanges(failedPointIds.size > 0);
+      if (trackingFailures.length > 0) {
+        setStatus(`La reunión se ha guardado, pero no se ha podido actualizar el seguimiento de ${trackingFailures.length} tarea(s): ${trackingFailures.map((failure) => failure.message).join(' | ')}`);
+        await backup();
+        return false;
+      }
+
+      setStatus('Cambios guardados y seguimiento de tareas actualizado.');
       await backup();
       return true;
     } finally {
@@ -315,8 +341,11 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (!latest) { setStatus('No se ha encontrado la reunión después de guardar los cambios.'); return; }
     const pending = latest.points.filter((point) => point.status === 'pendiente').length;
     if (pending > 0) { setStatus(`Quedan ${pending} punto(s) sin resultado. Indica si se resolvieron, requieren seguimiento, vuelven a la próxima reunión o no se trataron.`); return; }
-    const failures = await appendMeetingTracking(latest);
-    if (failures.length) { setStatus(`No se ha podido actualizar el seguimiento de ${failures.length} tarea(s): ${failures.join(' | ')}`); return; }
+    const failures = await syncMeetingTracking(latest, latest.points.filter((point) => point.status !== 'pendiente').map((point) => point.id), {
+      allowStatusOnly: true,
+      closeResolvedTasks: true,
+    });
+    if (failures.length) { setStatus(`No se ha podido actualizar el seguimiento de ${failures.length} tarea(s): ${failures.map((failure) => failure.message).join(' | ')}`); return; }
     const result = await closeMeeting(latest.id);
     setStatus(result.ok ? 'Reunión cerrada y seguimiento de tareas actualizado.' : result.message);
     if (result.ok) await backup();

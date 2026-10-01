@@ -1,7 +1,7 @@
 import { emitPersistenceFeedback } from '../../../services/persistence';
 import { saveNewSharedArrayRecord, saveSharedArrayRecord } from '../../../services/sharedRecordPersistence';
 import { enqueueAuditEvent } from '../../../shared/audit/auditTrail';
-import { isTaskClosed, type Task, type TaskDraft } from '../domain/task';
+import { CLOSED_TASK_PHASE, isTaskClosed, type Task, type TaskDraft, type TaskSeguimientoSource } from '../domain/task';
 import {
   firstActiveTaskId,
   normalizeTask,
@@ -33,6 +33,93 @@ type SetTaskCrudState = (
     | Partial<TaskCrudState>
     | ((state: TaskCrudState) => Partial<TaskCrudState>),
 ) => void;
+
+
+export interface CoordinationTrackingMutation {
+  taskId: string;
+  trackingId: string;
+  text: string;
+  source: TaskSeguimientoSource;
+  closeTask?: boolean;
+}
+
+function applyCoordinationTrackingMutation(task: Task, mutation: CoordinationTrackingMutation): Task {
+  const now = new Date().toISOString();
+  const existingEntry = task.seguimiento.find((entry) => entry.id === mutation.trackingId);
+  const cleanText = mutation.text.trim();
+  const remainingTracking = task.seguimiento.filter((entry) => entry.id !== mutation.trackingId);
+  const seguimiento = cleanText
+    ? [
+        {
+          id: mutation.trackingId,
+          fechaHora: existingEntry?.fechaHora ?? now,
+          texto: cleanText,
+          source: mutation.source,
+        },
+        ...remainingTracking,
+      ]
+    : remainingTracking;
+
+  const shouldClose = Boolean(mutation.closeTask) && !isTaskClosed(task);
+  return normalizeTask({
+    ...task,
+    seguimiento,
+    estado: shouldClose ? 'cerrada' : task.estado,
+    fase: shouldClose ? CLOSED_TASK_PHASE : task.fase,
+    closedAt: shouldClose ? now : task.closedAt,
+    updatedAt: now,
+  });
+}
+
+export async function upsertCoordinationTrackingWithConcurrencyCheck(
+  mutation: CoordinationTrackingMutation,
+  setState: SetTaskCrudState,
+): Promise<TaskUpdateResult> {
+  try {
+    if (hasTaskSqliteRepository()) {
+      const latestTasks = await readTasksForStore('all');
+      const latestTask = latestTasks.find((task) => task.id === mutation.taskId);
+      if (!latestTask || latestTask.deletedAt) {
+        return { ok: false, message: 'La tarea vinculada ya no existe o está eliminada.' };
+      }
+
+      const updatedTask = applyCoordinationTrackingMutation(latestTask, mutation);
+      const saveResult = await persistTaskDirectly(updatedTask, latestTask.updatedAt);
+      if (!saveResult.ok) return saveResult;
+      setState((state) => ({
+        tasks: state.tasks.some((task) => task.id === updatedTask.id)
+          ? state.tasks.map((task) => task.id === updatedTask.id ? updatedTask : task)
+          : [...state.tasks, updatedTask],
+        selectedTaskId: state.selectedTaskId,
+      }));
+      enqueueAuditEvent({
+        module: 'tareas',
+        entityId: updatedTask.id,
+        action: 'updated',
+        summary: mutation.text.trim() ? 'Seguimiento actualizado desde Coordinación' : 'Seguimiento de Coordinación eliminado',
+        changes: [],
+      });
+      return { ok: true, message: 'Seguimiento de tarea actualizado.', recordId: updatedTask.id };
+    }
+
+    const { records, updatedRecord } = await saveSharedArrayRecord<Task>({
+      storageKey: TASKS_STORAGE_KEY,
+      recordId: mutation.taskId,
+      expectedUpdatedAt: null,
+      parseRecords: parseTasksSnapshot,
+      getRecordId: (record) => record.id,
+      getRecordUpdatedAt: (record) => record.updatedAt,
+      updateRecord: (latestTask) => applyCoordinationTrackingMutation(latestTask, mutation),
+      missingMessage: 'La tarea vinculada ya no existe. Recarga antes de continuar.',
+      conflictMessage: 'La tarea vinculada ha cambiado mientras guardabas. Vuelve a guardar la reunión.',
+    });
+    const normalizedRecords = records.map(normalizeTask);
+    setState((state) => ({ tasks: normalizedRecords, selectedTaskId: state.selectedTaskId }));
+    return { ok: true, message: 'Seguimiento de tarea actualizado.', recordId: updatedRecord.id };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'No se ha podido actualizar el seguimiento de la tarea vinculada.' };
+  }
+}
 
 export async function createTaskWithConcurrencyCheck(
   draft: TaskDraft,

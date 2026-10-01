@@ -9,6 +9,13 @@ export type TaskType = (typeof TASK_TYPES)[number];
 export type TaskState = string;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+export interface TaskSeguimientoSource {
+  module: 'coordinacion';
+  recordId: string;
+  pointId?: string;
+  label: string;
+}
+
 export interface TaskSeguimientoEntry {
   /**
    * Identificador estable del seguimiento.
@@ -20,6 +27,8 @@ export interface TaskSeguimientoEntry {
   id?: string;
   fechaHora: string;
   texto: string;
+  /** Origen navegable cuando el seguimiento nace de otro módulo. */
+  source?: TaskSeguimientoSource;
 }
 
 export interface TaskDocumentLink {

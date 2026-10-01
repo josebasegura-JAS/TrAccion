@@ -1,10 +1,11 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { CalendarDays, Check, Info, MessageSquare, Pencil, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Check, Info, MessageSquare, Pencil, Plus, Trash2, UserRound, X } from 'lucide-react';
 import { CountBadge } from '../ui/CountBadge';
 import { Input, Textarea } from '../ui/Field';
 import type { Task, TaskSeguimientoEntry } from '../../features/tareas/domain/task';
 import { TaskEditorSection } from './TaskEditorSection';
 import { decodeTracking, formatDate, resolveTrackingId } from './taskEditorModel';
+import { navigateInApp } from '../../services/appNavigationBus';
 
 export function TaskTrackingSection({
   task,
@@ -69,7 +70,19 @@ export function TaskTrackingSection({
                   <div className="grid grid-cols-[110px_125px_minmax(0,1fr)_62px] items-start gap-3">
                     <div className="flex items-center gap-2 text-xs font-bold text-slate-200"><CalendarDays size={13} className="text-sky-300" />{formatDate(decoded.date)}</div>
                     <div className="flex items-center gap-2 truncate text-xs font-semibold text-slate-300"><UserRound size={13} className="text-sky-300" /><span className="truncate">{decoded.user}</span></div>
-                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{decoded.text}</p>
+                    <div className="min-w-0">
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{decoded.text}</p>
+                      {entry.source?.module === 'coordinacion' ? (
+                        <button
+                          className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-sky-400/20 px-2 py-1 text-[10px] font-bold text-sky-300 transition hover:bg-sky-500/10"
+                          onClick={() => navigateInApp({ view: 'coordinacion', recordId: entry.source?.recordId })}
+                          title={entry.source.label}
+                          type="button"
+                        >
+                          Origen: {entry.source.label}<ArrowUpRight size={11} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
                     <div className="flex items-center justify-end gap-1">
                       <button aria-label={`Editar seguimiento del ${formatDate(decoded.date)}`} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-sky-500/10 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40" disabled={isFormReadOnly || editingTrackingId !== null} onClick={() => onStartTrackingEdit(entry, index)} title="Editar seguimiento" type="button"><Pencil size={13} /></button>
                       <button aria-label={`Eliminar seguimiento del ${formatDate(decoded.date)}`} className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40" disabled={isFormReadOnly || editingTrackingId !== null} onClick={() => void onDeleteTracking(index)} title="Eliminar seguimiento" type="button"><Trash2 size={14} /></button>
