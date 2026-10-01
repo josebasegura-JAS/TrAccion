@@ -88,7 +88,8 @@ jobs:
       - name: Validate portable EXE
         shell: pwsh
         run: |
-          $exe = Join-Path $PWD "release\Traccion 1.2.exe"
+          $artifactName = node -p "require('./package.json').build.portable.artifactName"
+          $exe = Join-Path $PWD ("release\" + $artifactName)
           if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
             Write-Error "No se ha generado el portable esperado: $exe"
             Get-ChildItem release -Force | Format-Table Name, Length, LastWriteTime
@@ -129,9 +130,9 @@ jobs:
       - name: Upload update package
         uses: actions/upload-artifact@v4
         with:
-          name: Traccion-1.2-windows-portable-lite
+          name: Traccion-windows-portable-lite
           path: |
-            release/Traccion 1.2.piz
+            release/Traccion *.piz
             release/version.json
           if-no-files-found: error
           retention-days: 7

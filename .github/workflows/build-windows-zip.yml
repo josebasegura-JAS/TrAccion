@@ -103,9 +103,10 @@ jobs:
       - name: Create ZIP package
         shell: pwsh
         run: |
-          $version = node -p "require('./package.json').version"
           $source = "release\win-unpacked"
-          $zip = "release\TrAccion 1.2 Windows.zip"
+          $version = node -p "require('./package.json').version"
+          $parts = $version.Split('.')
+          $zip = "release\TrAccion $($parts[0]).$($parts[1]) Windows.zip"
           Write-Host "Version tecnica incluida en el ZIP: $version"
 
           if (-not (Test-Path $source)) {
@@ -139,7 +140,7 @@ jobs:
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Traccion-1.2-windows-zip
-          path: release/TrAccion 1.2 Windows.zip
+          name: Traccion-windows-zip
+          path: release/TrAccion * Windows.zip
           if-no-files-found: error
           compression-level: 0
