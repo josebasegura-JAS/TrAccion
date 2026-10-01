@@ -330,8 +330,7 @@ export function TicketRestaurantePage({
             absenceYear,
             absenceMonth,
           ),
-        }))
-        .filter((absence) => absence.diasTicketMes > 0),
+        })),
     [absenceMonth, absenceYear, absences, config, people, visibleCalendars],
   );
 

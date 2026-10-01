@@ -258,9 +258,40 @@ export function saveTicketRestaurantAbsencePreviewRows(
     }
     seen.add(exactKey);
 
-    const exactExisting = result.find((absence) => buildAbsenceExactKey(absence) === exactKey);
-    if (exactExisting) {
-      summary.duplicadas += 1;
+    const exactExistingIndex = result.findIndex(
+      (absence) => buildAbsenceExactKey(absence) === exactKey,
+    );
+    if (exactExistingIndex >= 0) {
+      const exactExisting = result[exactExistingIndex];
+      const importedTotalDays = Number(row.totalDias.replace(',', '.'));
+      const hasEditableChanges =
+        exactExisting.nombreApellidos !== row.nombreApellidos ||
+        exactExisting.totalDias !== importedTotalDays ||
+        exactExisting.afectaTicket !== row.afectaTicket;
+
+      if (!hasEditableChanges) {
+        summary.duplicadas += 1;
+        return;
+      }
+
+      // Una reimportación exacta puede utilizarse para corregir campos revisables
+      // (especialmente Afecta ticket). Antes se trataba siempre como duplicado y
+      // descartaba silenciosamente la corrección manual del usuario.
+      result[exactExistingIndex] = buildTicketRestaurantAbsence(
+        {
+          empleado: row.empleado,
+          nombreApellidos: row.nombreApellidos,
+          desde: row.desde,
+          hasta: row.hasta,
+          motivo: row.motivo,
+          totalDias: importedTotalDays,
+          afectaTicket: row.afectaTicket,
+        },
+        now,
+        exactExisting.id,
+        exactExisting,
+      );
+      summary.sustituidas += 1;
       return;
     }
 

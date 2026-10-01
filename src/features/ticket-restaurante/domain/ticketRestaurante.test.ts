@@ -938,6 +938,79 @@ describe('ticket restaurante absence importer domain', () => {
     expect(second.absences).toHaveLength(1);
   });
 
+  it('permite corregir afectaTicket al reimportar una ausencia exacta ya guardada', () => {
+    const initial = normalizeTicketRestaurantAbsenceRow(
+      {
+        empleado: '31',
+        nombreApellidos: 'Rodríguez Corral, Fernando',
+        desde: '25/09/2026',
+        hasta: '25/09/2026',
+        motivo: 'VAC',
+        totalDias: '1',
+        afectaTicket: 'No',
+      },
+      'fernando-inicial',
+    );
+    const corrected = { ...initial, id: 'fernando-corregida', afectaTicket: true };
+    const first = saveTicketRestaurantAbsencePreviewRows([], [initial], new Date(timestamp));
+    const second = saveTicketRestaurantAbsencePreviewRows(
+      first.absences,
+      [corrected],
+      new Date('2026-09-25T12:00:00.000Z'),
+    );
+
+    expect(second.summary.sustituidas).toBe(1);
+    expect(second.summary.duplicadas).toBe(0);
+    expect(second.absences).toHaveLength(1);
+    expect(second.absences[0]).toMatchObject({
+      id: first.absences[0]?.id,
+      empleado: '31',
+      desde: '2026-09-25',
+      motivo: 'VAC',
+      afectaTicket: true,
+    });
+  });
+
+  it('caso Fernando Rodríguez Corral: VAC del 25/09/2026 se importa y genera un día ticket si su calendario da derecho', () => {
+    const rows = importTicketRestaurantAbsences([
+      ['EMPLEADO', 'PUESTO ORGANIZATIVO', 'RESIDENCIA', 'NIVEL.', 'AUS.', 'AÑO', 'DESDE', 'HASTA', 'DIAS', 'J'],
+      ['31', 'Rodríguez Corral, Fernando', 'Ingeniería', 'Ariz Taller', 'N-F'],
+      ['VAC', '2026', '25/09/2026', '25/09/2026', '1', '--'],
+      ['Total días', '1'],
+    ]);
+    const row = rows[0];
+    expect(row).toMatchObject({
+      empleado: '31',
+      nombreApellidos: 'Rodríguez Corral, Fernando',
+      desde: '2026-09-25',
+      hasta: '2026-09-25',
+      motivo: 'VAC',
+      afectaTicket: true,
+    });
+
+    const calendar = buildCalendar({ id: 'calendar-nf', nombre: 'N-F' });
+    const person = buildTicketPerson(
+      {
+        empleado: '31',
+        nombreApellidos: 'Rodríguez Corral, Fernando',
+        puesto: 'Ingeniería',
+        calendarId: calendar.id,
+        activo: true,
+      },
+      timestamp,
+    );
+    const saved = saveTicketRestaurantAbsencePreviewRows([], [row!], new Date(timestamp)).absences[0]!;
+
+    expect(calculateTicketAbsenceMonthImpact(
+      saved,
+      [person],
+      [calendar],
+      DEFAULT_TICKET_RESTAURANT_CONFIG,
+      2026,
+      9,
+    )).toMatchObject({ diasTicketMes: 1, descuentaTicket: true, calendario: 'N-F' });
+  });
+
   it('sustituye ausencia solapada del mismo empleado/motivo', () => {
     const initial = normalizeTicketRestaurantAbsenceRow(
       { empleado: '1', desde: '01/03/2026', hasta: '05/03/2026', motivo: 'IT' },
