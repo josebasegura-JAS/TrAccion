@@ -101,6 +101,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [taskSearch, setTaskSearch] = useState('');
   const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
   const [status, setStatus] = useState('');
+  const [isSavingMeeting, setIsSavingMeeting] = useState(false);
   const [pointDrafts, setPointDrafts] = useState<Record<string, { result: string; status: CoordinationPointStatus; responsible: string; dueDate: string }>>({});
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
   const { confirm, dialogNode } = useAppDialog();
@@ -128,6 +129,17 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     [area, meetings],
   );
   const selected = meetings.find((meeting) => meeting.id === selectedId) ?? null;
+  const hasUnsavedMeetingChanges = useMemo(() => {
+    if (!selected || selected.status === 'closed') return false;
+    return selected.points.some((point) => {
+      const draft = pointDrafts[point.id];
+      if (!draft) return false;
+      return draft.result !== point.result
+        || draft.status !== point.status
+        || draft.responsible !== (point.responsible ?? '')
+        || draft.dueDate !== (point.dueDate ?? '');
+    });
+  }, [pointDrafts, selected]);
 
   useEffect(() => {
     if (!selectedId) { setPointDrafts({}); return; }
@@ -147,17 +159,22 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   };
 
   const handleSaveMeeting = async () => {
-    if (!selected || selected.status === 'closed') return false;
+    if (!selected || selected.status === 'closed' || isSavingMeeting) return false;
     const patches = selected.points.map((point) => {
       const draft = pointDrafts[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' };
       return { pointId: point.id, patch: draft };
     });
+    setIsSavingMeeting(true);
     setStatus('Guardando cambios…');
-    const result = await saveMeetingPoints(selected.id, patches);
-    if (!result.ok) { setStatus(result.message || 'No se han podido guardar los cambios de la reunión.'); return false; }
-    setStatus('Cambios guardados correctamente.');
-    await backup();
-    return true;
+    try {
+      const result = await saveMeetingPoints(selected.id, patches);
+      if (!result.ok) { setStatus(result.message || 'No se han podido guardar los cambios de la reunión.'); return false; }
+      setStatus('Cambios guardados correctamente.');
+      await backup();
+      return true;
+    } finally {
+      setIsSavingMeeting(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -287,7 +304,6 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           {!isDirection && <p className="mt-1 text-sm text-metro-muted">{isUnion && selected.meetingType ? `${selected.meetingType === 'urgente' ? 'Urgente' : selected.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · ` : ''}{selected.interlocutors ? `Interlocutores: ${selected.interlocutors}` : 'Sin interlocutores indicados'}{selected.purpose ? ` · ${selected.purpose}` : ''}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          {selected.status === 'open' && <ActionButton icon={Save} iconOnly={false} onClick={() => void handleSaveMeeting()} size="sm" variant="save">Guardar cambios</ActionButton>}
           <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => void backup()} size="sm" variant="secondary">Actualizar Excel</ActionButton>
           {isUnion && <ExportPrintButtons payload={exportPayload} size="sm" />}
           <ActionButton icon={Trash2} iconOnly={false} onClick={() => void handleDeleteMeeting()} size="sm" variant="delete">Eliminar reunión</ActionButton>
@@ -321,6 +337,21 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/15" onClick={() => setTaskCreation({ pointId: null })} type="button"><Plus size={16}/>Crear nueva tarea desde la reunión</button>
         </div>}
       </div>
+      {selected.status === 'open' && hasUnsavedMeetingChanges && (
+        <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-2xl border border-emerald-400/30 bg-[#0b1725]/95 p-2 shadow-[0_18px_45px_rgba(2,6,23,0.5)] backdrop-blur">
+          <span className="hidden px-2 text-xs font-semibold text-emerald-200 sm:inline">Cambios pendientes</span>
+          <ActionButton
+            disabled={isSavingMeeting}
+            icon={Save}
+            iconOnly={false}
+            onClick={() => void handleSaveMeeting()}
+            size="sm"
+            variant="save"
+          >
+            {isSavingMeeting ? 'Guardando…' : 'Guardar cambios'}
+          </ActionButton>
+        </div>
+      )}
       {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
       {taskCreation && <TaskEditor initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
       {dialogNode}
