@@ -159,14 +159,18 @@ describe('localBackupService - cierre sin backup redundante', () => {
     const service = createLocalBackupService(buildDependencies(databasePath, acquireLock));
     service.enqueueLocalBackup('save:test');
 
-    // Ejecuta explícitamente el debounce. Avanzar exactamente 5.000 ms dejaba
-    // esta aserción dependiendo del orden de microtareas de Vitest: en CI el
-    // callback podía haberse disparado sin que el .then de localBackupQueue
-    // hubiera llegado todavía a acquireLock().
-    await vi.runOnlyPendingTimersAsync();
+    // Dispara el debounce y deja que se vacíe también la cadena de microtareas
+    // que arranca realmente writeLocalBackupArtifacts(). No comprobamos el spy
+    // hasta que Vitest ha procesado ambas colas.
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.runAllTicks();
+    for (let i = 0; i < 5 && acquireLock.mock.calls.length === 0; i += 1) {
+      await Promise.resolve();
+    }
     expect(acquireLock).toHaveBeenCalledTimes(1);
 
     const shutdownPromise = service.createShutdownLocalBackup();
+    await Promise.resolve();
 
     releaseLockAttempt?.();
     const metrics = await shutdownPromise;
