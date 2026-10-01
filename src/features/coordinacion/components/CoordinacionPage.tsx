@@ -1,6 +1,6 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Save, Trash2, UsersRound } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Trash2, UsersRound } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { useAppDialog } from '../../../hooks/useAppDialog';
@@ -15,6 +15,7 @@ import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
 import { navigateInApp } from '../../../services/appNavigationBus';
 import type { ModuleHelpSection } from '../../../components/ModuleHelp';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
 
 
 const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
@@ -71,6 +72,86 @@ function isActiveTask(task: Task): boolean {
   return !task.deletedAt && !isTaskClosed(task);
 }
 
+
+type CoordinationPointDraft = {
+  result: string;
+  status: CoordinationPointStatus;
+  responsible: string;
+  dueDate: string;
+};
+
+function pointToDraft(point: CoordinationMeeting['points'][number]): CoordinationPointDraft {
+  return {
+    result: point.result,
+    status: point.status,
+    responsible: point.responsible ?? '',
+    dueDate: point.dueDate ?? '',
+  };
+}
+
+function pointDraftIsDirty(point: CoordinationMeeting['points'][number], draft: CoordinationPointDraft): boolean {
+  return draft.result !== point.result
+    || draft.status !== point.status
+    || draft.responsible !== (point.responsible ?? '')
+    || draft.dueDate !== (point.dueDate ?? '');
+}
+
+const CoordinationPointEditor = memo(function CoordinationPointEditor({
+  index,
+  isUnion,
+  meetingOpen,
+  onConvertToTask,
+  onDelete,
+  onDraftChange,
+  point,
+}: {
+  index: number;
+  isUnion: boolean;
+  meetingOpen: boolean;
+  onConvertToTask: (pointId: string) => void;
+  onDelete: (pointId: string, title: string) => void;
+  onDraftChange: (pointId: string, draft: CoordinationPointDraft, dirty: boolean) => void;
+  point: CoordinationMeeting['points'][number];
+}) {
+  const [draft, setDraft] = useState<CoordinationPointDraft>(() => pointToDraft(point));
+
+  const updateDraft = (patch: Partial<CoordinationPointDraft>) => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    onDraftChange(point.id, next, pointDraftIsDirty(point, next));
+  };
+
+  return (
+    <article className="ui-subsection p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span>
+            <h4 className="font-bold text-metro-text">{point.title}</h4>
+            {point.origin === 'task' && <span className="rounded-full border border-sky-400/30 px-2 py-0.5 text-[11px] font-bold text-sky-200">Tarea de referencia</span>}
+          </div>
+          {point.detail && <p className="mt-2 text-sm leading-5 text-metro-muted">{point.detail}</p>}
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {point.taskId && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => navigateInApp({ view: 'tareas', recordId: point.taskId ?? undefined })} title="Abrir la tarea vinculada" type="button">Abrir tarea<ArrowRight size={13}/></button>}
+          <select className="ui-control ui-control--compact text-xs font-semibold" disabled={!meetingOpen} onChange={(event) => updateDraft({ status: event.target.value as CoordinationPointStatus })} value={draft.status}>
+            <option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y resuelto</option><option value="seguimiento">Tratado · requiere seguimiento</option><option value="volver">Volver a próxima reunión</option><option value="no-tratado">No tratado</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}
+          </select>
+          {point.origin === 'manual' && meetingOpen && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => onConvertToTask(point.id)} title="Crear una tarea conservando este punto" type="button"><Plus size={14}/>Convertir en tarea</button>}
+          {point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => onDelete(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}
+        </div>
+      </div>
+      <label className="mt-3 block text-xs font-semibold text-metro-muted">Resultado / acuerdos
+        <textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" disabled={!meetingOpen} onChange={(event) => updateDraft({ result: event.target.value })} value={draft.result} placeholder="Decisión, actuación acordada y siguiente paso..." />
+      </label>
+      {isUnion && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="text-xs font-semibold text-metro-muted">Responsable del siguiente paso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" disabled={!meetingOpen} onChange={(event) => updateDraft({ responsible: event.target.value })} value={draft.responsible}/></label>
+        <label className="text-xs font-semibold text-metro-muted">Fecha de compromiso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" disabled={!meetingOpen} onChange={(event) => updateDraft({ dueDate: event.target.value })} value={draft.dueDate} type="date"/></label>
+      </div>}
+    </article>
+  );
+});
+
 export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: { initialMeetingId?: string | null; navigationNonce?: number }) {
   const tasks = useTaskStore((state) => state.tasks);
   const loadTasks = useTaskStore((state) => state.load);
@@ -102,7 +183,9 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
   const [status, setStatus] = useState('');
   const [isSavingMeeting, setIsSavingMeeting] = useState(false);
-  const [pointDrafts, setPointDrafts] = useState<Record<string, { result: string; status: CoordinationPointStatus; responsible: string; dueDate: string }>>({});
+  const pointDraftsRef = useRef<Record<string, CoordinationPointDraft>>({});
+  const dirtyPointIdsRef = useRef<Set<string>>(new Set());
+  const [hasUnsavedMeetingChanges, setHasUnsavedMeetingChanges] = useState(false);
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
   const { confirm, dialogNode } = useAppDialog();
 
@@ -129,29 +212,31 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     [area, meetings],
   );
   const selected = meetings.find((meeting) => meeting.id === selectedId) ?? null;
-  const hasUnsavedMeetingChanges = useMemo(() => {
-    if (!selected || selected.status === 'closed') return false;
-    return selected.points.some((point) => {
-      const draft = pointDrafts[point.id];
-      if (!draft) return false;
-      return draft.result !== point.result
-        || draft.status !== point.status
-        || draft.responsible !== (point.responsible ?? '')
-        || draft.dueDate !== (point.dueDate ?? '');
-    });
-  }, [pointDrafts, selected]);
-
   useEffect(() => {
-    if (!selectedId) { setPointDrafts({}); return; }
+    if (!selectedId) {
+      pointDraftsRef.current = {};
+      dirtyPointIdsRef.current = new Set();
+      setHasUnsavedMeetingChanges(false);
+      return;
+    }
     const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === selectedId);
-    if (!meeting) { setPointDrafts({}); return; }
-    setPointDrafts(Object.fromEntries(meeting.points.map((point) => [point.id, {
-      result: point.result,
-      status: point.status,
-      responsible: point.responsible ?? '',
-      dueDate: point.dueDate ?? '',
-    }])));
+    if (!meeting) {
+      pointDraftsRef.current = {};
+      dirtyPointIdsRef.current = new Set();
+      setHasUnsavedMeetingChanges(false);
+      return;
+    }
+    pointDraftsRef.current = Object.fromEntries(meeting.points.map((point) => [point.id, pointToDraft(point)]));
+    dirtyPointIdsRef.current = new Set();
+    setHasUnsavedMeetingChanges(false);
   }, [selectedId]);
+
+  const handlePointDraftChange = useCallback((pointId: string, draft: CoordinationPointDraft, dirty: boolean) => {
+    pointDraftsRef.current[pointId] = draft;
+    if (dirty) dirtyPointIdsRef.current.add(pointId); else dirtyPointIdsRef.current.delete(pointId);
+    const hasDirtyPoints = dirtyPointIdsRef.current.size > 0;
+    setHasUnsavedMeetingChanges((current) => current === hasDirtyPoints ? current : hasDirtyPoints);
+  }, []);
 
   const backup = async () => {
     const message = await syncCoordinacionExcelBackup(useCoordinacionStore.getState().meetings);
@@ -161,7 +246,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const handleSaveMeeting = async () => {
     if (!selected || selected.status === 'closed' || isSavingMeeting) return false;
     const patches = selected.points.map((point) => {
-      const draft = pointDrafts[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' };
+      const draft = pointDraftsRef.current[point.id] ?? pointToDraft(point);
       return { pointId: point.id, patch: draft };
     });
     setIsSavingMeeting(true);
@@ -169,6 +254,10 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     try {
       const result = await saveMeetingPoints(selected.id, patches);
       if (!result.ok) { setStatus(result.message || 'No se han podido guardar los cambios de la reunión.'); return false; }
+      const latest = useCoordinacionStore.getState().meetings.find((meeting) => meeting.id === selected.id);
+      if (latest) pointDraftsRef.current = Object.fromEntries(latest.points.map((point) => [point.id, pointToDraft(point)]));
+      dirtyPointIdsRef.current = new Set();
+      setHasUnsavedMeetingChanges(false);
       setStatus('Cambios guardados correctamente.');
       await backup();
       return true;
@@ -253,7 +342,12 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (!confirmed) return;
     const result = await deleteManualPoint(selected.id, pointId);
     setStatus(result.ok ? 'Punto manual eliminado.' : result.message);
-    if (result.ok) await backup();
+    if (result.ok) {
+      delete pointDraftsRef.current[pointId];
+      dirtyPointIdsRef.current.delete(pointId);
+      setHasUnsavedMeetingChanges(dirtyPointIdsRef.current.size > 0);
+      await backup();
+    }
   };
 
   if (selected) {
@@ -313,14 +407,18 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       <div className="ui-section p-3">
         <div className="mb-3 flex items-center justify-between"><h3 className="font-bold text-metro-text">Guion de reunión</h3><span className="text-xs font-semibold text-metro-muted">{selected.points.length} puntos</span></div>
         <div className="space-y-3">
-          {selected.points.map((point, index) => <article className="ui-subsection p-3" key={point.id}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span><h4 className="font-bold text-metro-text">{point.title}</h4>{point.origin === 'task' && <span className="rounded-full border border-sky-400/30 px-2 py-0.5 text-[11px] font-bold text-sky-200">Tarea de referencia</span>}</div>{point.detail && <p className="mt-2 text-sm leading-5 text-metro-muted">{point.detail}</p>}</div>
-              <div className="flex flex-wrap items-center justify-end gap-2">{point.taskId && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => navigateInApp({ view: 'tareas', recordId: point.taskId ?? undefined })} title="Abrir la tarea vinculada" type="button">Abrir tarea<ArrowRight size={13}/></button>}<select className="ui-control ui-control--compact text-xs font-semibold" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), status: event.target.value as CoordinationPointStatus } }))} value={pointDrafts[point.id]?.status ?? point.status}><option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y resuelto</option><option value="seguimiento">Tratado · requiere seguimiento</option><option value="volver">Volver a próxima reunión</option><option value="no-tratado">No tratado</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}</select>{point.origin === 'manual' && selected.status === 'open' && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => setTaskCreation({ pointId: point.id })} title="Crear una tarea conservando este punto" type="button"><Plus size={14}/>Convertir en tarea</button>}{point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => void handleDeleteManualPoint(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}</div>
-            </div>
-            <label className="mt-3 block text-xs font-semibold text-metro-muted">Resultado / acuerdos<textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), result: event.target.value } }))} value={pointDrafts[point.id]?.result ?? point.result} placeholder="Decisión, actuación acordada y siguiente paso..." /></label>
-            {isUnion && <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-xs font-semibold text-metro-muted">Responsable del siguiente paso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), responsible: event.target.value } }))} value={pointDrafts[point.id]?.responsible ?? point.responsible ?? ''}/></label><label className="text-xs font-semibold text-metro-muted">Fecha de compromiso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), dueDate: event.target.value } }))} value={pointDrafts[point.id]?.dueDate ?? point.dueDate ?? ''} type="date"/></label></div>}
-          </article>)}
+          {selected.points.map((point, index) => (
+            <CoordinationPointEditor
+              index={index}
+              isUnion={isUnion}
+              key={point.id}
+              meetingOpen={selected.status === 'open'}
+              onConvertToTask={(pointId) => setTaskCreation({ pointId })}
+              onDelete={(pointId, title) => void handleDeleteManualPoint(pointId, title)}
+              onDraftChange={handlePointDraftChange}
+              point={point}
+            />
+          ))}
           {selected.points.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">La reunión todavía no tiene puntos.</p>}
         </div>
         {selected.status === 'open' && <div className="mt-4 space-y-3">
@@ -337,21 +435,11 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           <button className="inline-flex items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/15" onClick={() => setTaskCreation({ pointId: null })} type="button"><Plus size={16}/>Crear nueva tarea desde la reunión</button>
         </div>}
       </div>
-      {selected.status === 'open' && hasUnsavedMeetingChanges && (
-        <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-2xl border border-emerald-400/30 bg-[#0b1725]/95 p-2 shadow-[0_18px_45px_rgba(2,6,23,0.5)] backdrop-blur">
-          <span className="hidden px-2 text-xs font-semibold text-emerald-200 sm:inline">Cambios pendientes</span>
-          <ActionButton
-            disabled={isSavingMeeting}
-            icon={Save}
-            iconOnly={false}
-            onClick={() => void handleSaveMeeting()}
-            size="sm"
-            variant="save"
-          >
-            {isSavingMeeting ? 'Guardando…' : 'Guardar cambios'}
-          </ActionButton>
-        </div>
-      )}
+      <FloatingSaveAction
+        onSave={handleSaveMeeting}
+        saving={isSavingMeeting}
+        visible={selected.status === 'open' && hasUnsavedMeetingChanges}
+      />
       {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}
       {taskCreation && <TaskEditor initialDraft={taskInitialDraft} initialTrackingText={taskInitialTrackingText} key={`meeting-task-${taskCreation.pointId ?? 'new'}`} mode="create" onCreated={handleCreatedTask} onDone={() => setTaskCreation(null)} task={null} />}
       {dialogNode}

@@ -40,6 +40,7 @@ import {
 import { importTicketPeopleFromFile, type TicketPeopleImportResult } from '../domain/importPeople';
 import { useTicketRestauranteStore } from '../store/useTicketRestauranteStore';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
 import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useToast } from '../../../components/ui/useToast';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
@@ -1420,6 +1421,13 @@ export function TicketRestaurantePage({
                 </button>
               </div>
             </div>
+
+            <FloatingSaveAction
+              onSave={saveCalendarDays}
+              pendingLabel="Calendario con cambios pendientes"
+              saving={isSavingCalendarDays}
+              visible={Boolean(selectedCalendar && calendarDaysDirty)}
+            />
 
             {selectedCalendar ? (
               <div className="grid gap-2 lg:grid-cols-3">

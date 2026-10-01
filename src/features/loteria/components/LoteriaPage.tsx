@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ActionButton } from '../../../components/ui/ActionButton';
+import { FloatingSaveAction } from '../../../components/ui/FloatingSaveAction';
 import type { Employee } from '../../plantilla/domain/employee';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import {
@@ -688,17 +689,10 @@ export function LoteriaPage() {
         </SectionShell>
       ) : null}
 
-      <div className="fixed bottom-5 right-5 z-40 rounded-2xl border border-metro-red/35 bg-metro-topbar/95 p-1.5 shadow-[0_18px_50px_rgba(2,6,23,0.55)] backdrop-blur">
-        <ActionButton
-          className="min-w-[9.5rem] shadow-lg shadow-red-950/30"
-          icon={Save}
-          iconOnly={false}
-          onClick={() => void persist(draft, 'Cambios de Lotería guardados.')}
-          variant="save"
-        >
-          Guardar cambios
-        </ActionButton>
-      </div>
+      <FloatingSaveAction
+        onSave={() => persist(draft, 'Cambios de Lotería guardados.')}
+        visible={dirty}
+      />
 
       {activeSection === 'cierre' ? (
         <SectionShell
