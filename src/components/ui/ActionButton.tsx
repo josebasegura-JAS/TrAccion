@@ -153,7 +153,7 @@ export function ActionButton({
   icon: iconOverride,
   iconOnly = false,
   loading = false,
-  size = 'md',
+  size = 'sm',
   title,
   type = 'button',
   variant,

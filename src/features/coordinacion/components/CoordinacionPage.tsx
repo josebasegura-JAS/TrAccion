@@ -287,11 +287,11 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           {!isDirection && <p className="mt-1 text-sm text-metro-muted">{isUnion && selected.meetingType ? `${selected.meetingType === 'urgente' ? 'Urgente' : selected.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · ` : ''}{selected.interlocutors ? `Interlocutores: ${selected.interlocutors}` : 'Sin interlocutores indicados'}{selected.purpose ? ` · ${selected.purpose}` : ''}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          {selected.status === 'open' && <button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" onClick={() => void handleSaveMeeting()} type="button"><Save size={16}/>Guardar cambios</button>}
-          <button className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text" onClick={() => void backup()} type="button"><FileSpreadsheet size={16}/>Actualizar Excel</button>
+          {selected.status === 'open' && <ActionButton icon={Save} iconOnly={false} onClick={() => void handleSaveMeeting()} size="sm" variant="save">Guardar cambios</ActionButton>}
+          <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => void backup()} size="sm" variant="secondary">Actualizar Excel</ActionButton>
           {isUnion && <ExportPrintButtons payload={exportPayload} size="sm" />}
-          <button className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-950/20 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-950/35" onClick={() => void handleDeleteMeeting()} type="button"><Trash2 size={16}/>Eliminar reunión</button>
-          {selected.status === 'open' && <button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" onClick={() => void handleClose()} type="button"><CheckCircle2 size={16}/>Cerrar reunión</button>}
+          <ActionButton icon={Trash2} iconOnly={false} onClick={() => void handleDeleteMeeting()} size="sm" variant="delete">Eliminar reunión</ActionButton>
+          {selected.status === 'open' && <ActionButton icon={CheckCircle2} iconOnly={false} onClick={() => void handleClose()} size="sm" variant="primary">Cerrar reunión</ActionButton>}
         </div>
       </div>
       <div className="ui-section p-3">

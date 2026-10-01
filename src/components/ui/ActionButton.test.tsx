@@ -7,6 +7,14 @@ describe('ActionButton', () => {
     cleanup();
   });
 
+  it('usa el tamaño compacto por defecto para mantener homogéneas las barras de acciones', () => {
+    render(<ActionButton variant="secondary">Acción</ActionButton>);
+
+    const button = screen.getByRole('button', { name: 'Acción' });
+    expect(button).toHaveClass('h-8', 'text-xs');
+    expect(button).not.toHaveClass('h-10', 'text-sm');
+  });
+
   it('muestra texto por defecto y usa la etiqueta de la variante como aria-label', () => {
     render(<ActionButton variant="delete" onClick={() => undefined} />);
 
