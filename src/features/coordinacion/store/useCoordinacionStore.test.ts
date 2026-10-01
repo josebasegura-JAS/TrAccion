@@ -225,4 +225,25 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     expect(useCoordinacionStore.getState().meetings[0].points).toHaveLength(0);
   });
 
+
+  it('guarda de una vez los cambios editables de todos los puntos de una reunión', async () => {
+    const tasks = [task('t-save', 'Asunto a guardar')];
+    await useCoordinacionStore.getState().setTaskForDirection('t-save', true);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-01', tasks);
+    const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === created.recordId);
+    expect(meeting).toBeTruthy();
+    if (!meeting) return;
+
+    const pointId = meeting.points[0].id;
+    const result = await useCoordinacionStore.getState().saveMeetingPoints(meeting.id, [{
+      pointId,
+      patch: { result: 'Acuerdo confirmado', status: 'seguimiento', responsible: 'RRLL', dueDate: '2026-10-15' },
+    }]);
+
+    expect(result.ok).toBe(true);
+    expect(useCoordinacionStore.getState().meetings.find((item) => item.id === meeting.id)?.points[0]).toMatchObject({
+      result: 'Acuerdo confirmado', status: 'seguimiento', responsible: 'RRLL', dueDate: '2026-10-15',
+    });
+  });
+
 });

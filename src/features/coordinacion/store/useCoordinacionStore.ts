@@ -49,6 +49,10 @@ interface CoordinationStore extends CoordinationState {
     pointId: string,
     patch: Partial<Pick<CoordinationPoint, 'title' | 'detail' | 'result' | 'status' | 'responsible' | 'dueDate'>>,
   ) => Promise<Result>;
+  saveMeetingPoints: (
+    meetingId: string,
+    patches: Array<{ pointId: string; patch: Partial<Pick<CoordinationPoint, 'result' | 'status' | 'responsible' | 'dueDate'>> }>,
+  ) => Promise<Result>;
   deleteManualPoint: (meetingId: string, pointId: string) => Promise<Result>;
   deleteMeeting: (meetingId: string) => Promise<Result>;
   closeMeeting: (meetingId: string) => Promise<Result>;
@@ -339,6 +343,27 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         updatedAt: now,
         points: meeting.points.map((point) => point.id === pointId ? { ...point, ...patch, updatedAt: now } : point),
       } : meeting),
+    };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  saveMeetingPoints: async (meetingId, patches) => {
+    const current = get();
+    const meeting = current.meetings.find((item) => item.id === meetingId);
+    if (!meeting || meeting.status === 'closed') return { ok: false, message: 'La reunión no está disponible para edición.' };
+    const byPoint = new Map(patches.map(({ pointId, patch }) => [pointId, patch]));
+    const now = new Date().toISOString();
+    const next: CoordinationState = {
+      ...current,
+      meetings: current.meetings.map((item) => item.id === meetingId ? {
+        ...item,
+        updatedAt: now,
+        points: item.points.map((point) => {
+          const patch = byPoint.get(point.id);
+          return patch ? { ...point, ...patch, updatedAt: now } : point;
+        }),
+      } : item),
     };
     const result = await persist(next);
     if (result.ok) set(next);

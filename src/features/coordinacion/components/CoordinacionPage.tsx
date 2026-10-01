@@ -1,5 +1,5 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Trash2, UsersRound } from 'lucide-react';
+import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Save, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -81,7 +81,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const addManualPoint = useCoordinacionStore((state) => state.addManualPoint);
   const addTaskPoint = useCoordinacionStore((state) => state.addTaskPoint);
   const linkManualPointToTask = useCoordinacionStore((state) => state.linkManualPointToTask);
-  const updatePoint = useCoordinacionStore((state) => state.updatePoint);
+  const saveMeetingPoints = useCoordinacionStore((state) => state.saveMeetingPoints);
   const deleteManualPoint = useCoordinacionStore((state) => state.deleteManualPoint);
   const deleteMeeting = useCoordinacionStore((state) => state.deleteMeeting);
   const closeMeeting = useCoordinacionStore((state) => state.closeMeeting);
@@ -101,6 +101,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [taskSearch, setTaskSearch] = useState('');
   const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
   const [status, setStatus] = useState('');
+  const [pointDrafts, setPointDrafts] = useState<Record<string, { result: string; status: CoordinationPointStatus; responsible: string; dueDate: string }>>({});
   const processedNavigationNonceRef = useRef<number | undefined>(undefined);
   const { confirm, dialogNode } = useAppDialog();
 
@@ -128,9 +129,35 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   );
   const selected = meetings.find((meeting) => meeting.id === selectedId) ?? null;
 
+  useEffect(() => {
+    if (!selectedId) { setPointDrafts({}); return; }
+    const meeting = useCoordinacionStore.getState().meetings.find((item) => item.id === selectedId);
+    if (!meeting) { setPointDrafts({}); return; }
+    setPointDrafts(Object.fromEntries(meeting.points.map((point) => [point.id, {
+      result: point.result,
+      status: point.status,
+      responsible: point.responsible ?? '',
+      dueDate: point.dueDate ?? '',
+    }])));
+  }, [selectedId]);
+
   const backup = async () => {
     const message = await syncCoordinacionExcelBackup(useCoordinacionStore.getState().meetings);
     if (message) setStatus(message);
+  };
+
+  const handleSaveMeeting = async () => {
+    if (!selected || selected.status === 'closed') return false;
+    const patches = selected.points.map((point) => {
+      const draft = pointDrafts[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' };
+      return { pointId: point.id, patch: draft };
+    });
+    setStatus('Guardando cambios…');
+    const result = await saveMeetingPoints(selected.id, patches);
+    if (!result.ok) { setStatus(result.message || 'No se han podido guardar los cambios de la reunión.'); return false; }
+    setStatus('Cambios guardados correctamente.');
+    await backup();
+    return true;
   };
 
   const handleCreate = async () => {
@@ -176,11 +203,15 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
 
   const handleClose = async () => {
     if (!selected) return;
-    const pending = selected.points.filter((point) => point.status === 'pendiente').length;
+    const saved = await handleSaveMeeting();
+    if (!saved) return;
+    const latest = useCoordinacionStore.getState().meetings.find((meeting) => meeting.id === selected.id);
+    if (!latest) { setStatus('No se ha encontrado la reunión después de guardar los cambios.'); return; }
+    const pending = latest.points.filter((point) => point.status === 'pendiente').length;
     if (pending > 0) { setStatus(`Quedan ${pending} punto(s) sin resultado. Indica si se resolvieron, requieren seguimiento, vuelven a la próxima reunión o no se trataron.`); return; }
-    const failures = await appendMeetingTracking(selected);
+    const failures = await appendMeetingTracking(latest);
     if (failures.length) { setStatus(`No se ha podido actualizar el seguimiento de ${failures.length} tarea(s): ${failures.join(' | ')}`); return; }
-    const result = await closeMeeting(selected.id);
+    const result = await closeMeeting(latest.id);
     setStatus(result.ok ? 'Reunión cerrada y seguimiento de tareas actualizado.' : result.message);
     if (result.ok) await backup();
   };
@@ -256,6 +287,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           {!isDirection && <p className="mt-1 text-sm text-metro-muted">{isUnion && selected.meetingType ? `${selected.meetingType === 'urgente' ? 'Urgente' : selected.meetingType === 'seguimiento' ? 'Seguimiento' : 'Ordinaria'} · ` : ''}{selected.interlocutors ? `Interlocutores: ${selected.interlocutors}` : 'Sin interlocutores indicados'}{selected.purpose ? ` · ${selected.purpose}` : ''}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {selected.status === 'open' && <button className="inline-flex items-center gap-2 rounded-lg bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark" onClick={() => void handleSaveMeeting()} type="button"><Save size={16}/>Guardar cambios</button>}
           <button className="inline-flex items-center gap-2 rounded-lg border border-metro-border bg-metro-panel px-3 py-2 text-sm font-semibold text-metro-text" onClick={() => void backup()} type="button"><FileSpreadsheet size={16}/>Actualizar Excel</button>
           {isUnion && <ExportPrintButtons payload={exportPayload} size="sm" />}
           <button className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-950/20 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-950/35" onClick={() => void handleDeleteMeeting()} type="button"><Trash2 size={16}/>Eliminar reunión</button>
@@ -268,10 +300,10 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           {selected.points.map((point, index) => <article className="ui-subsection p-3" key={point.id}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><span className="rounded-md bg-metro-surface px-2 py-1 text-xs font-bold text-metro-muted">{index + 1}</span><h4 className="font-bold text-metro-text">{point.title}</h4>{point.origin === 'task' && <span className="rounded-full border border-sky-400/30 px-2 py-0.5 text-[11px] font-bold text-sky-200">Tarea de referencia</span>}</div>{point.detail && <p className="mt-2 text-sm leading-5 text-metro-muted">{point.detail}</p>}</div>
-              <div className="flex flex-wrap items-center justify-end gap-2">{point.taskId && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => navigateInApp({ view: 'tareas', recordId: point.taskId ?? undefined })} title="Abrir la tarea vinculada" type="button">Abrir tarea<ArrowRight size={13}/></button>}<select className="ui-control ui-control--compact text-xs font-semibold" disabled={selected.status === 'closed'} onChange={(event) => void updatePoint(selected.id, point.id, { status: event.target.value as CoordinationPointStatus }).then(() => void backup())} value={point.status}><option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y resuelto</option><option value="seguimiento">Tratado · requiere seguimiento</option><option value="volver">Volver a próxima reunión</option><option value="no-tratado">No tratado</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}</select>{point.origin === 'manual' && selected.status === 'open' && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => setTaskCreation({ pointId: point.id })} title="Crear una tarea conservando este punto" type="button"><Plus size={14}/>Convertir en tarea</button>}{point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => void handleDeleteManualPoint(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}</div>
+              <div className="flex flex-wrap items-center justify-end gap-2">{point.taskId && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => navigateInApp({ view: 'tareas', recordId: point.taskId ?? undefined })} title="Abrir la tarea vinculada" type="button">Abrir tarea<ArrowRight size={13}/></button>}<select className="ui-control ui-control--compact text-xs font-semibold" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), status: event.target.value as CoordinationPointStatus } }))} value={pointDrafts[point.id]?.status ?? point.status}><option value="pendiente">Pendiente de tratar</option><option value="tratado">Tratado y resuelto</option><option value="seguimiento">Tratado · requiere seguimiento</option><option value="volver">Volver a próxima reunión</option><option value="no-tratado">No tratado</option>{isUnion && <><option value="pendiente-rrll">Pendiente de RRLL</option><option value="pendiente-sindicato">Pendiente del sindicato</option></>}</select>{point.origin === 'manual' && selected.status === 'open' && <button className="inline-flex h-9 items-center gap-1 rounded-lg border border-sky-400/30 px-2 text-xs font-bold text-sky-200 transition hover:bg-sky-500/10" onClick={() => setTaskCreation({ pointId: point.id })} title="Crear una tarea conservando este punto" type="button"><Plus size={14}/>Convertir en tarea</button>}{point.origin === 'manual' && <button aria-label={`Eliminar punto manual ${point.title}`} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10" onClick={() => void handleDeleteManualPoint(point.id, point.title)} title="Eliminar punto manual" type="button"><Trash2 size={15}/></button>}</div>
             </div>
-            <label className="mt-3 block text-xs font-semibold text-metro-muted">Resultado / acuerdos<textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" defaultValue={point.result} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { result: event.target.value }).then(() => void backup())} placeholder="Decisión, actuación acordada y siguiente paso..." /></label>
-            {isUnion && <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-xs font-semibold text-metro-muted">Responsable del siguiente paso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" defaultValue={point.responsible ?? ''} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { responsible: event.target.value }).then(() => void backup())}/></label><label className="text-xs font-semibold text-metro-muted">Fecha de compromiso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" defaultValue={point.dueDate ?? ''} disabled={selected.status === 'closed'} onBlur={(event) => void updatePoint(selected.id, point.id, { dueDate: event.target.value }).then(() => void backup())} type="date"/></label></div>}
+            <label className="mt-3 block text-xs font-semibold text-metro-muted">Resultado / acuerdos<textarea className="mt-1 min-h-20 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text outline-none focus:border-metro-red" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), result: event.target.value } }))} value={pointDrafts[point.id]?.result ?? point.result} placeholder="Decisión, actuación acordada y siguiente paso..." /></label>
+            {isUnion && <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-xs font-semibold text-metro-muted">Responsable del siguiente paso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), responsible: event.target.value } }))} value={pointDrafts[point.id]?.responsible ?? point.responsible ?? ''}/></label><label className="text-xs font-semibold text-metro-muted">Fecha de compromiso<input className="mt-1 w-full rounded-lg border border-metro-border bg-metro-surface px-3 py-2 text-sm text-metro-text" disabled={selected.status === 'closed'} onChange={(event) => setPointDrafts((current) => ({ ...current, [point.id]: { ...(current[point.id] ?? { result: point.result, status: point.status, responsible: point.responsible ?? '', dueDate: point.dueDate ?? '' }), dueDate: event.target.value } }))} value={pointDrafts[point.id]?.dueDate ?? point.dueDate ?? ''} type="date"/></label></div>}
           </article>)}
           {selected.points.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">La reunión todavía no tiene puntos.</p>}
         </div>
