@@ -149,28 +149,31 @@ describe('localBackupService - cierre sin backup redundante', () => {
   it('espera un backup vivo ya iniciado y evita duplicarlo al cerrar', async () => {
     vi.useFakeTimers();
     let releaseLockAttempt: (() => void) | null = null;
+    let signalAcquireStarted: (() => void) | null = null;
+    const acquireStarted = new Promise<void>((resolve) => {
+      signalAcquireStarted = resolve;
+    });
     const firstLock = new Promise<DatabaseLockInfo>((resolve) => {
       releaseLockAttempt = () => resolve({
         ownerId: 'test-owner', username: 'test-user', hostname: 'test-host', pid: 123,
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
     });
-    const acquireLock = vi.fn(async () => firstLock);
+    const acquireLock = vi.fn(async () => {
+      signalAcquireStarted?.();
+      return firstLock;
+    });
     const service = createLocalBackupService(buildDependencies(databasePath, acquireLock));
     service.enqueueLocalBackup('save:test');
 
-    // Dispara el debounce y deja que se vacíe también la cadena de microtareas
-    // que arranca realmente writeLocalBackupArtifacts(). No comprobamos el spy
-    // hasta que Vitest ha procesado ambas colas.
-    await vi.advanceTimersByTimeAsync(5000);
-    await vi.runAllTicks();
-    for (let i = 0; i < 5 && acquireLock.mock.calls.length === 0; i += 1) {
-      await Promise.resolve();
-    }
-    expect(acquireLock).toHaveBeenCalledTimes(1);
-
+    // Disparamos únicamente el debounce. El cierre se solicita inmediatamente
+    // después, mientras la copia viva sigue bloqueada en acquireLock(). En vez de
+    // depender del orden interno de microtareas de Vitest, esperamos una señal
+    // emitida por la propia dependencia cuando la copia ha empezado realmente.
+    vi.advanceTimersByTime(5000);
     const shutdownPromise = service.createShutdownLocalBackup();
-    await Promise.resolve();
+    await acquireStarted;
+    expect(acquireLock).toHaveBeenCalledTimes(1);
 
     releaseLockAttempt?.();
     const metrics = await shutdownPromise;
