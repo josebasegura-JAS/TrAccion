@@ -38,7 +38,7 @@ export function compareAppVersions(a: string, b: string): number {
   const partsA = parseAppVersion(a);
   const partsB = parseAppVersion(b);
   if (!partsA || !partsB) {
-    throw new Error(`No se pueden comparar versiones no válidas: \"${a}\" y \"${b}\".`);
+    throw new Error(`No se pueden comparar versiones no válidas: "${a}" y "${b}".`);
   }
 
   for (let index = 0; index < 3; index += 1) {
