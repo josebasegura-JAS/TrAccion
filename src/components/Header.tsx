@@ -239,10 +239,11 @@ export function Header({
   useEffect(() => subscribeToAppNavigation(onViewChange), [onViewChange]);
 
   useEffect(() => {
+    // Carga inicial para que campana y responsables estén disponibles desde el arranque.
+    // Los cambios posteriores llegan por externalDataSync; mantener además un polling
+    // local de Tareas duplicaba lecturas SQLite y podía refrescar la UI fuera de ciclo.
     loadConfiguracion();
     loadTasks();
-    const interval = window.setInterval(() => loadTasks(), 60_000);
-    return () => window.clearInterval(interval);
   }, [loadConfiguracion, loadTasks]);
 
   useEffect(() => {
@@ -297,7 +298,7 @@ export function Header({
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              <p className="truncate text-[9px] font-extrabold uppercase tracking-[0.15em] text-sky-100/80">
+              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.14em] text-sky-100/80">
                 {breadcrumb}
               </p>
               {moduleHelp ? (
@@ -312,7 +313,7 @@ export function Header({
               <h1 className="truncate text-[1.28rem] font-black leading-none tracking-tight text-metro-text">
                 {headerCopy.title}
               </h1>
-              <p className="mt-0.5 hidden truncate text-[10.5px] text-metro-muted xl:block">
+              <p className="mt-0.5 hidden truncate text-[11px] text-metro-muted xl:block">
                 {headerCopy.subtitle}
               </p>
             </div>

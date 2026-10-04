@@ -104,7 +104,6 @@ function subscribe(listener: ExternalDataSyncListener): () => void {
   return () => listeners.delete(listener);
 }
 
-
 function ensureSyncableStoresRegistered(): Promise<unknown> {
   syncableStoreRegistrationsPromise ??= import('./syncableStoreRegistrations');
   return syncableStoreRegistrationsPromise;
@@ -118,30 +117,29 @@ function canPollStatus(status: TraccionDatabaseStatus): boolean {
   return status.ready && status.phase === 'active' && status.isDefaultPath === false;
 }
 
-function valueChanged(lastSeenValue: string | null, nextValue: string | null | undefined): boolean {
-  if (!lastSeenValue || !nextValue) {
-    return false;
-  }
-
-  return nextValue !== lastSeenValue;
+export function hasSyncTokenChanged(
+  lastSeenValue: string | null | undefined,
+  nextValue: string | null | undefined,
+): boolean {
+  return (lastSeenValue ?? null) !== (nextValue ?? null);
 }
 
 function collectChangedDirectStores(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): string[] {
   const changedStoreIds = new Set<string>();
 
-  if (valueChanged(lastSeenTaskRecordsUpdatedAt, tokenSnapshot.taskRecordsUpdatedAt)) {
+  if (hasSyncTokenChanged(lastSeenTaskRecordsUpdatedAt, tokenSnapshot.taskRecordsUpdatedAt)) {
     changedStoreIds.add('tareas');
   }
 
   if (
-    valueChanged(lastSeenSorteosDrawsUpdatedAt, tokenSnapshot.sorteosDrawsUpdatedAt) ||
-    valueChanged(lastSeenSorteosExclusionsUpdatedAt, tokenSnapshot.sorteosExclusionsUpdatedAt)
+    hasSyncTokenChanged(lastSeenSorteosDrawsUpdatedAt, tokenSnapshot.sorteosDrawsUpdatedAt) ||
+    hasSyncTokenChanged(lastSeenSorteosExclusionsUpdatedAt, tokenSnapshot.sorteosExclusionsUpdatedAt)
   ) {
     changedStoreIds.add('sorteos');
   }
 
   Object.entries(tokenSnapshot.directStoreUpdatedAt ?? {}).forEach(([storeId, updatedAt]) => {
-    if (valueChanged(lastSeenDirectStoreUpdatedAt[storeId] ?? null, updatedAt)) {
+    if (hasSyncTokenChanged(lastSeenDirectStoreUpdatedAt[storeId] ?? null, updatedAt)) {
       changedStoreIds.add(storeId);
     }
   });
@@ -179,9 +177,8 @@ function updateSeenTokens(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot):
   lastSeenDirectStoreUpdatedAt = { ...(tokenSnapshot.directStoreUpdatedAt ?? {}) };
 }
 
-
 function persistedRecordsChanged(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
-  return valueChanged(lastSeenPersistedRecordsUpdatedAt, tokenSnapshot.latestUpdatedAt);
+  return hasSyncTokenChanged(lastSeenPersistedRecordsUpdatedAt, tokenSnapshot.latestUpdatedAt);
 }
 
 function refreshTokenChangedWithoutKnownStoreChange(tokenSnapshot: TraccionPersistedRecordsTokenSnapshot): boolean {
@@ -355,15 +352,16 @@ export function startExternalDataSyncPolling(): void {
 
   const metadata = readHydrationMetadata();
   lastSeenRefreshToken = metadata?.refreshToken ?? null;
-  // Si la hidratación fue satisfactoria (refreshToken presente), la caché efímera de sesión
-  // ya está al día. Inicializar los tokens de tareas/sorteos a un valor centinela
-  // distinto de null para que el primer poll no los recargue si no han cambiado.
-  // El valor real se actualiza en el primer updateSeenTokens.
+  // Los stores con tabla directa no forman parte del snapshot genérico de hidratación.
+  // Sus tokens arrancan a null deliberadamente: el primer poll los compara contra
+  // SQLite y recarga solo los stores que ya tienen datos, cerrando la ventana entre
+  // hidratación y primer polling sin añadir un segundo temporizador por módulo.
   const hasValidCache = Boolean(metadata?.refreshToken && metadata.strategy === 'sqlite');
   lastSeenPersistedRecordsUpdatedAt = hasValidCache ? (metadata?.lastUpdatedAt ?? null) : null;
   lastSeenTaskRecordsUpdatedAt = null;
   lastSeenSorteosDrawsUpdatedAt = null;
   lastSeenSorteosExclusionsUpdatedAt = null;
+  lastSeenDirectStoreUpdatedAt = {};
   void pollOnce();
   timerId = window.setInterval(() => {
     void pollOnce();
@@ -400,13 +398,13 @@ export function stopExternalDataSyncPolling(): void {
   unsubscribePersistenceFeedback = null;
   persistenceWriteInProgress = false;
   postponePollingUntil = 0;
+  lastSeenRefreshToken = null;
   lastSeenPersistedRecordsUpdatedAt = null;
   lastSeenTaskRecordsUpdatedAt = null;
   lastSeenSorteosDrawsUpdatedAt = null;
   lastSeenSorteosExclusionsUpdatedAt = null;
   lastSeenDirectStoreUpdatedAt = {};
 }
-
 
 export function useExternalDataSyncStatus(): ExternalDataSyncState {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
