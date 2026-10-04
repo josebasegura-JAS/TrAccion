@@ -50,6 +50,12 @@ export interface TaskSqliteSaveResult {
   currentUpdatedAt: string | null;
 }
 
+export interface TaskSqliteBatchSaveResult {
+  ok: boolean;
+  message: string;
+  saved: number;
+}
+
 export function hasTaskSqliteRepository(): boolean {
   return Boolean(window.traccion?.loadTaskRecords && window.traccion?.saveTaskRecordIfUnchanged);
 }
@@ -95,6 +101,41 @@ export async function saveTaskToSqlite(
     return result;
   } catch (error) {
     clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'No se ha podido guardar la tarea en SQLite.');
+    throw error;
+  }
+}
+
+export async function saveTasksToSqliteAtomically(
+  records: Array<{ task: Task; expectedUpdatedAt: string | null }>,
+): Promise<TaskSqliteBatchSaveResult | null> {
+  const saver = window.traccion?.saveTaskRecordIfUnchanged;
+  if (!saver) return null;
+
+  publishPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'Guardando lote de tareas en SQLite…');
+  await waitForNextPaint();
+
+  try {
+    // El preload expone una única función para este canal. El handler Electron
+    // distingue el payload de lote por la propiedad `records` y lo ejecuta en
+    // una única transacción SQLite.
+    const batchSaver = saver as unknown as (payload: {
+      records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+    }) => Promise<TaskSqliteBatchSaveResult>;
+
+    const result = await withTemporarySqliteRetry(() =>
+      batchSaver({
+        records: records.map(({ task, expectedUpdatedAt }) => ({
+          id: task.id,
+          value: JSON.stringify(task),
+          expectedUpdatedAt,
+        })),
+      }),
+    );
+
+    clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, result.message);
+    return result;
+  } catch (error) {
+    clearPersistenceBusy(TASKS_DIRECT_STORAGE_KEY, 'No se ha podido guardar el lote de tareas en SQLite.');
     throw error;
   }
 }

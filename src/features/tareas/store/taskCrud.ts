@@ -21,7 +21,7 @@ import {
   TASKS_STORAGE_KEY,
   type TaskUpdateResult,
 } from './taskPersistence';
-import { hasTaskSqliteRepository } from './taskSqliteRepository';
+import { hasTaskSqliteRepository, saveTasksToSqliteAtomically } from './taskSqliteRepository';
 
 export interface TaskCrudState {
   tasks: Task[];
@@ -33,7 +33,6 @@ type SetTaskCrudState = (
     | Partial<TaskCrudState>
     | ((state: TaskCrudState) => Partial<TaskCrudState>),
 ) => void;
-
 
 export interface CoordinationTrackingMutation {
   taskId: string;
@@ -228,18 +227,19 @@ export async function createManyTasksFromImport(
 
   if (hasTaskSqliteRepository()) {
     try {
-      for (const task of importedTasks) {
-        const result = await persistTaskDirectly(task, null);
-        if (!result.ok) throw new Error(result.message);
-      }
-      if (changedExistingTasks) {
-        for (let index = 0; index < tasksWithNormalizedExistingImports.length; index += 1) {
-          const task = tasksWithNormalizedExistingImports[index];
+      const batch = [
+        ...importedTasks.map((task) => ({ task, expectedUpdatedAt: null })),
+        ...tasksWithNormalizedExistingImports.flatMap((task, index) => {
           const previousTask = state.tasks[index];
-          if (!previousTask || !tasksDiffer(previousTask, task)) continue;
-          const result = await persistTaskDirectly(task, previousTask.updatedAt);
-          if (!result.ok) throw new Error(result.message);
-        }
+          return previousTask && tasksDiffer(previousTask, task)
+            ? [{ task, expectedUpdatedAt: previousTask.updatedAt }]
+            : [];
+        }),
+      ];
+
+      const result = await saveTasksToSqliteAtomically(batch);
+      if (!result || !result.ok) {
+        throw new Error(result?.message ?? 'Repositorio SQLite directo de tareas no disponible.');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se han podido guardar las tareas importadas.';

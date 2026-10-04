@@ -12,6 +12,7 @@ import {
   saveTaskRecordIfUnchanged,
   type SqliteTaskRecordsFilter,
 } from '../sqlitePersistence.js';
+import { saveTaskRecordsAtomically } from '../persistence/taskBatchPersistence.js';
 import {
   clearOpenTasksWordDirectory,
   getOpenTasksWordDirectory,
@@ -96,8 +97,6 @@ async function refreshOpenTasksWord(): Promise<TaskWordExportResult> {
 }
 
 async function showOpenTasksExcelFailure(message: string): Promise<void> {
-  // Evita encadenar el mismo diálogo en cada guardado mientras el mismo Excel
-  // siga abierto. En cuanto una actualización tiene éxito, se rearma el aviso.
   if (lastOpenTasksExcelFailureMessage === message) return;
   lastOpenTasksExcelFailureMessage = message;
 
@@ -142,6 +141,24 @@ function scheduleOpenTasksWordRefresh(): void {
   }, 1500);
 }
 
+function isAtomicTaskBatchPayload(
+  payload: unknown,
+): payload is {
+  records: Array<{ id: string; value: string; expectedUpdatedAt: string | null }>;
+} {
+  if (!payload || typeof payload !== 'object' || !('records' in payload)) return false;
+  const records = (payload as { records?: unknown }).records;
+  return Array.isArray(records) && records.every((record) => {
+    if (!record || typeof record !== 'object') return false;
+    const candidate = record as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
+    return (
+      typeof candidate.id === 'string' &&
+      typeof candidate.value === 'string' &&
+      (typeof candidate.expectedUpdatedAt === 'string' || candidate.expectedUpdatedAt === null)
+    );
+  });
+}
+
 export function registerTareasIpc(): void {
   ipcMain.handle('tasks:load-records', (_event, payload: unknown) => {
     const filter: SqliteTaskRecordsFilter =
@@ -152,6 +169,14 @@ export function registerTareasIpc(): void {
   });
 
   ipcMain.handle('tasks:save-record-if-unchanged', async (_event, payload: unknown) => {
+    if (isAtomicTaskBatchPayload(payload)) {
+      const result = await enqueueSqliteIpc('tasks:save-records-atomically', () =>
+        saveTaskRecordsAtomically(payload.records),
+      );
+      if (result.ok && result.saved > 0) scheduleOpenTasksWordRefresh();
+      return result;
+    }
+
     if (!payload || typeof payload !== 'object') {
       return {
         ok: false,
