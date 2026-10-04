@@ -147,7 +147,16 @@ describe('externalDataSync multiusuario', () => {
 
     module.startExternalDataSyncPolling();
     await flushPromises();
-    expect(reloadRegisteredSyncableStores).not.toHaveBeenCalled();
+
+    // Los stores con tabla directa arrancan sin baseline: el primer poll debe
+    // recargar únicamente los que ya contienen datos para cerrar la ventana
+    // entre la hidratación inicial y el comienzo del polling.
+    expect(reloadRegisteredSyncableStores).toHaveBeenCalledTimes(1);
+    expect(reloadRegisteredSyncableStores).toHaveBeenCalledWith(['teletrabajo'], {
+      silentPersistenceFeedback: true,
+    });
+
+    reloadRegisteredSyncableStores.mockClear();
 
     await vi.advanceTimersByTimeAsync(12_000);
     await flushPromises();
