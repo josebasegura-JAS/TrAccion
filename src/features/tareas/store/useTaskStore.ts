@@ -53,6 +53,12 @@ interface TaskStateStore {
   setFilter: <K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) => void;
 }
 
+function selectedTaskIdAfterRefresh(tasks: Task[], selectedTaskId: string): string {
+  return tasks.some((task) => task.id === selectedTaskId)
+    ? selectedTaskId
+    : firstActiveTaskId(tasks);
+}
+
 export const useTaskStore = create<TaskStateStore>((set, get) => ({
   tasks: [],
   selectedTaskId: '',
@@ -62,22 +68,9 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
   load: () => {
     if (!hasTaskSqliteRepository()) {
       const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
-      set({ tasks, selectedTaskId: firstActiveTaskId(tasks) });
-      return;
-    }
-
-    void readTasksForStore('active').then((tasks) => {
-      set({ tasks, selectedTaskId: firstActiveTaskId(tasks), historicalTasksLoaded: false });
-    });
-  },
-  reloadFromStorage: () => {
-    if (!hasTaskSqliteRepository()) {
-      const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
       set((state) => ({
         tasks,
-        selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
-          ? state.selectedTaskId
-          : firstActiveTaskId(tasks),
+        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
       }));
       return;
     }
@@ -85,9 +78,25 @@ export const useTaskStore = create<TaskStateStore>((set, get) => ({
     void readTasksForStore('active').then((tasks) => {
       set((state) => ({
         tasks,
-        selectedTaskId: tasks.some((task) => task.id === state.selectedTaskId)
-          ? state.selectedTaskId
-          : firstActiveTaskId(tasks),
+        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
+        historicalTasksLoaded: false,
+      }));
+    });
+  },
+  reloadFromStorage: () => {
+    if (!hasTaskSqliteRepository()) {
+      const tasks = import.meta.env.MODE === 'test' ? readTasks() : [];
+      set((state) => ({
+        tasks,
+        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
+      }));
+      return;
+    }
+
+    void readTasksForStore('active').then((tasks) => {
+      set((state) => ({
+        tasks,
+        selectedTaskId: selectedTaskIdAfterRefresh(tasks, state.selectedTaskId),
         historicalTasksLoaded: false,
       }));
     });
