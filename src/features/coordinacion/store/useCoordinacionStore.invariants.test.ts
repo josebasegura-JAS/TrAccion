@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoordinationMeeting, CoordinationState } from '../domain/coordinacion';
 import { useCoordinacionStore } from './useCoordinacionStore';
 
@@ -40,6 +40,10 @@ function setState(meetingValue: CoordinationMeeting): void {
 }
 
 describe('useCoordinacionStore invariants', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-04T12:00:00.000Z'));
