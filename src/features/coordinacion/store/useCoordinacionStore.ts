@@ -95,6 +95,19 @@ function normalizedName(value: string): string {
   return value.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+function findEditableMeeting(current: CoordinationState, meetingId: string):
+  | { meeting: CoordinationMeeting; error: null }
+  | { meeting: null; error: Result } {
+  const meeting = current.meetings.find((item) => item.id === meetingId);
+  if (!meeting) {
+    return { meeting: null, error: { ok: false, message: 'No se ha encontrado la reunión.' } };
+  }
+  if (meeting.status === 'closed') {
+    return { meeting: null, error: { ok: false, message: 'La reunión está cerrada y no admite modificaciones.' } };
+  }
+  return { meeting, error: null };
+}
+
 export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   ...readState(),
   load: () => set(readState()),
@@ -256,8 +269,9 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
   addTaskPoint: async (meetingId, taskId, tasks) => {
     const current = get();
-    const meeting = current.meetings.find((item) => item.id === meetingId);
-    if (!meeting || meeting.status === 'closed') return { ok: false, message: 'La reunión no está disponible para edición.' };
+    const editable = findEditableMeeting(current, meetingId);
+    if (editable.error) return editable.error;
+    const { meeting } = editable;
     if (meeting.points.some((point) => point.taskId === taskId)) return { ok: false, message: 'La tarea ya está incluida en el guion.' };
     const task = tasks.find((candidate) => candidate.id === taskId && activeTask(candidate));
     if (!task) return { ok: false, message: 'La tarea seleccionada no está activa.' };
@@ -279,8 +293,9 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
   linkManualPointToTask: async (meetingId, pointId, taskId, tasks) => {
     const current = get();
-    const meeting = current.meetings.find((item) => item.id === meetingId);
-    if (!meeting || meeting.status === 'closed') return { ok: false, message: 'La reunión no está disponible para edición.' };
+    const editable = findEditableMeeting(current, meetingId);
+    if (editable.error) return editable.error;
+    const { meeting } = editable;
     const point = meeting.points.find((item) => item.id === pointId);
     if (!point || point.origin !== 'manual') return { ok: false, message: 'El punto manual ya no está disponible.' };
     if (meeting.points.some((item) => item.id !== pointId && item.taskId === taskId)) {
@@ -310,6 +325,8 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const cleanTitle = title.trim();
     if (!cleanTitle) return { ok: false, message: 'Escribe el título del punto.' };
     const current = get();
+    const editable = findEditableMeeting(current, meetingId);
+    if (editable.error) return editable.error;
     const now = new Date().toISOString();
     const next: CoordinationState = {
       ...current,
@@ -335,6 +352,11 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
   updatePoint: async (meetingId, pointId, patch) => {
     const current = get();
+    const editable = findEditableMeeting(current, meetingId);
+    if (editable.error) return editable.error;
+    if (!editable.meeting.points.some((point) => point.id === pointId)) {
+      return { ok: false, message: 'No se ha encontrado el punto.' };
+    }
     const now = new Date().toISOString();
     const next: CoordinationState = {
       ...current,
@@ -350,8 +372,12 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
   saveMeetingPoints: async (meetingId, patches) => {
     const current = get();
-    const meeting = current.meetings.find((item) => item.id === meetingId);
-    if (!meeting || meeting.status === 'closed') return { ok: false, message: 'La reunión no está disponible para edición.' };
+    const editable = findEditableMeeting(current, meetingId);
+    if (editable.error) return editable.error;
+    const existingPointIds = new Set(editable.meeting.points.map((point) => point.id));
+    if (patches.some(({ pointId }) => !existingPointIds.has(pointId))) {
+      return { ok: false, message: 'Uno de los puntos ya no existe. Recarga la reunión antes de guardar.' };
+    }
     const byPoint = new Map(patches.map(({ pointId, patch }) => [pointId, patch]));
     const now = new Date().toISOString();
     const next: CoordinationState = {
@@ -360,8 +386,8 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         ...item,
         updatedAt: now,
         points: item.points.map((point) => {
-          const patch = byPoint.get(point.id);
-          return patch ? { ...point, ...patch, updatedAt: now } : point;
+          const pointPatch = byPoint.get(point.id);
+          return pointPatch ? { ...point, ...pointPatch, updatedAt: now } : point;
         }),
       } : item),
     };
@@ -371,8 +397,9 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
   },
   deleteManualPoint: async (meetingId, pointId) => {
     const current = get();
-    const meeting = current.meetings.find((item) => item.id === meetingId);
-    if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
+    const editable = findEditableMeeting(current, meetingId);
+    if (editable.error) return editable.error;
+    const { meeting } = editable;
     const point = meeting.points.find((item) => item.id === pointId);
     if (!point) return { ok: false, message: 'No se ha encontrado el punto.' };
     if (point.origin !== 'manual') {
@@ -407,6 +434,9 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     const current = get();
     const meeting = current.meetings.find((item) => item.id === meetingId);
     if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
+    if (meeting.status === 'closed') {
+      return { ok: true, message: 'La reunión ya estaba cerrada.', recordId: meeting.id };
+    }
     const now = new Date().toISOString();
     const directionTaskIds = new Set(current.directionTaskIds);
     const unionTaskIds = { ...current.unionTaskIds };
@@ -445,7 +475,7 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     };
     const result = await persist(next);
     if (result.ok) set(next);
-    return result;
+    return { ...result, recordId: meeting.id };
   },
 }));
 
