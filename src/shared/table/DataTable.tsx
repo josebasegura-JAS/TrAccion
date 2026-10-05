@@ -1,6 +1,7 @@
 import {
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useEffect,
@@ -99,6 +100,7 @@ interface DataTableProps<Row, ColumnId extends string> {
 const DEFAULT_MIN_COLUMN_WIDTH = 80;
 const DEFAULT_MAX_COLUMN_WIDTH = 640;
 const RESIZE_HANDLE_WIDTH = 12;
+const KEYBOARD_RESIZE_STEP = 16;
 const DEFAULT_RENDER_BATCH_SIZE = 300;
 const RENDER_BATCH_INCREMENT = 300;
 
@@ -157,6 +159,13 @@ function nextSortState<ColumnId extends string>(
   }
 
   return null;
+}
+
+function isInteractiveRowTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest(
+    'button, a, input, select, textarea, [role=\"button\"], [role=\"link\"], [contenteditable=\"true\"]',
+  ));
 }
 
 function OverflowTooltipText({ text }: { text: string }) {
@@ -381,7 +390,46 @@ export function DataTable<Row, ColumnId extends string>({
     setDragOverColumnId(null);
   };
 
+  const handleResizeKeyDown = (
+    event: ReactKeyboardEvent<HTMLSpanElement>,
+    column: (typeof visibleColumns)[number],
+  ) => {
+    let nextWidth: number | null = null;
+
+    if (event.key === 'ArrowLeft') {
+      nextWidth = column.width - KEYBOARD_RESIZE_STEP;
+    } else if (event.key === 'ArrowRight') {
+      nextWidth = column.width + KEYBOARD_RESIZE_STEP;
+    } else if (event.key === 'Home') {
+      nextWidth = column.minWidth;
+    } else if (event.key === 'End') {
+      nextWidth = column.maxWidth;
+    }
+
+    if (nextWidth === null) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    onColumnWidthChange(
+      column.id,
+      Math.round(clampColumnWidth(nextWidth, column.minWidth, column.maxWidth)),
+    );
+  };
+
+  const handleRowClick = (event: ReactMouseEvent<HTMLTableRowElement>, row: Row) => {
+    if (!onRowClick || isInteractiveRowTarget(event.target)) return;
+    onRowClick(row);
+  };
+
+  const handleRowDoubleClick = (event: ReactMouseEvent<HTMLTableRowElement>, row: Row) => {
+    if (!onRowDoubleClick || isInteractiveRowTarget(event.target)) return;
+    onRowDoubleClick(row);
+  };
+
   const handleRowKeyDown = (event: ReactKeyboardEvent<HTMLTableRowElement>, row: Row) => {
+    // Las teclas de botones, enlaces o inputs dentro de la fila no deben activar
+    // también la acción principal de la fila por propagación.
+    if (event.target !== event.currentTarget) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const handler = onRowClick ?? onRowDoubleClick;
     if (!handler) return;
@@ -407,7 +455,9 @@ export function DataTable<Row, ColumnId extends string>({
           </button>
         )}
         <table
+          aria-colcount={visibleColumns.length}
           aria-label={ariaLabel}
+          aria-rowcount={sortedRows.length + 1}
           className={`w-full table-fixed text-left ${currentDensity.table}`}
           style={{ minWidth: tableMinWidth }}
         >
@@ -500,13 +550,20 @@ export function DataTable<Row, ColumnId extends string>({
                     {column.resizable !== false && !column.isActionColumn && (
                       <span
                         aria-label={`Redimensionar columna ${column.header}`}
-                        className="absolute right-0 top-0 h-full cursor-col-resize touch-none"
+                        aria-orientation="vertical"
+                        aria-valuemax={column.maxWidth}
+                        aria-valuemin={column.minWidth}
+                        aria-valuenow={column.width}
+                        aria-valuetext={`${Math.round(column.width)} píxeles`}
+                        className="group absolute right-0 top-0 h-full cursor-col-resize touch-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-metro-red"
+                        data-tip="Redimensionar · flechas izquierda/derecha"
+                        onKeyDown={(event) => handleResizeKeyDown(event, column)}
                         onPointerDown={(event) => startResize(event, column)}
                         role="separator"
                         style={{ width: RESIZE_HANDLE_WIDTH }}
-                        tabIndex={-1}
+                        tabIndex={0}
                       >
-                        <span className="absolute right-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-transparent transition-colors hover:bg-metro-red/70" />
+                        <span className="absolute right-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-transparent transition-colors group-focus-visible:bg-metro-red/70 hover:bg-metro-red/70" />
                       </span>
                     )}
                   </th>
@@ -534,8 +591,9 @@ export function DataTable<Row, ColumnId extends string>({
                   <tr
                     className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/45' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/62' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-metro-red/70 ${isInteractive ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
                     key={getRowId(row)}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
+                    aria-rowindex={rowIndex + 2}
+                    onClick={onRowClick ? (event) => handleRowClick(event, row) : undefined}
+                    onDoubleClick={onRowDoubleClick ? (event) => handleRowDoubleClick(event, row) : undefined}
                     onKeyDown={isInteractive ? (event) => handleRowKeyDown(event, row) : undefined}
                     tabIndex={isInteractive ? 0 : undefined}
                   >
