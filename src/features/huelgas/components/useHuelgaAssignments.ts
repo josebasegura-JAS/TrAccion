@@ -480,6 +480,7 @@ export function useHuelgaAssignments({
     assignmentConfiguredCount,
     assignmentDraft,
     assignmentFilters,
+    assignmentPersonCounts,
     assignmentSearch,
     assignmentSort,
     assignmentTarget,
