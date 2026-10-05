@@ -1,5 +1,6 @@
 import {
   type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useEffect,
@@ -7,12 +8,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Inbox, RotateCcw } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Inbox, RotateCcw } from 'lucide-react';
 import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
 export type DataTableSortValue = string | number | Date | null | undefined;
 export type DataTableColumnTone = 'request' | 'start' | 'end' | 'attention' | 'financial' | 'identity';
+export type DataTableDensity = 'compact' | 'comfortable';
 
 const columnToneClasses: Record<DataTableColumnTone, { header: string; cell: string }> = {
   request: { header: 'bg-sky-400/[0.12]', cell: 'bg-sky-400/[0.045]' },
@@ -21,6 +23,24 @@ const columnToneClasses: Record<DataTableColumnTone, { header: string; cell: str
   attention: { header: 'bg-amber-400/[0.14]', cell: 'bg-amber-400/[0.05]' },
   financial: { header: 'bg-emerald-400/[0.12]', cell: 'bg-emerald-400/[0.045]' },
   identity: { header: 'bg-sky-300/[0.08]', cell: 'bg-sky-300/[0.025]' },
+};
+
+const densityClasses: Record<
+  DataTableDensity,
+  { table: string; header: string; cell: string; empty: string }
+> = {
+  compact: {
+    table: 'text-[12px] leading-4',
+    header: 'px-2.5 py-2',
+    cell: 'px-2.5 py-1.5',
+    empty: 'px-3 py-6',
+  },
+  comfortable: {
+    table: 'text-[13px] leading-5',
+    header: 'px-3 py-2.5',
+    cell: 'px-3 py-2.5',
+    empty: 'px-3 py-8',
+  },
 };
 
 export interface DataTableColumn<Row, ColumnId extends string> {
@@ -70,6 +90,10 @@ interface DataTableProps<Row, ColumnId extends string> {
   heightClassName?: string;
   /** Mantiene la posición vertical cuando cambian filas por una edición. Útil en tablas de trabajo largas. */
   preserveScrollOnRowsChange?: boolean;
+  /** Densidad visual de cabecera y filas. "comfortable" conserva el aspecto previo. */
+  density?: DataTableDensity;
+  /** Mantiene la columna marcada como acción visible al hacer scroll horizontal. */
+  stickyActionColumn?: boolean;
 }
 
 const DEFAULT_MIN_COLUMN_WIDTH = 80;
@@ -88,13 +112,6 @@ function isColumnReorderable<Row, ColumnId extends string>(
   return column.reorderable ?? !column.isActionColumn;
 }
 
-/**
- * Aplica el orden guardado por el usuario, respetando qué columnas son
- * reordenables. Las columnas no reordenables (típicamente "Acciones")
- * mantienen siempre su posición original dentro de la secuencia: si la
- * columna de acciones estaba al final, sigue al final aunque el usuario
- * reordene el resto.
- */
 function applyColumnOrder<Row, ColumnId extends string>(
   columns: Array<DataTableColumn<Row, ColumnId>>,
   columnOrder: ColumnId[] | null | undefined,
@@ -108,9 +125,6 @@ function applyColumnOrder<Row, ColumnId extends string>(
     columns.filter((column) => isColumnReorderable(column)).map((column) => column.id),
   );
 
-  // El orden guardado solo es válido si cubre exactamente las columnas
-  // reordenables actuales; si no coincide (cambió el módulo), se ignora y
-  // se usa el orden por defecto en vez de arriesgar un resultado raro.
   const storedReorderableIds = columnOrder.filter((id) => reorderableIds.has(id));
   if (
     storedReorderableIds.length !== reorderableIds.size ||
@@ -145,6 +159,31 @@ function nextSortState<ColumnId extends string>(
   return null;
 }
 
+function OverflowTooltipText({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  const refreshOverflowState = () => {
+    const element = ref.current;
+    if (!element) return;
+    const next = element.scrollWidth > element.clientWidth;
+    setIsOverflowing((current) => (current === next ? current : next));
+  };
+
+  return (
+    <span
+      className="block truncate"
+      data-tip={isOverflowing ? text : undefined}
+      onFocus={refreshOverflowState}
+      onMouseEnter={refreshOverflowState}
+      ref={ref}
+      title={isOverflowing ? text : undefined}
+    >
+      {text}
+    </span>
+  );
+}
+
 export function DataTable<Row, ColumnId extends string>({
   columns,
   rows,
@@ -165,6 +204,8 @@ export function DataTable<Row, ColumnId extends string>({
   maxHeightClassName = 'max-h-[460px]',
   heightClassName,
   preserveScrollOnRowsChange = false,
+  density = 'comfortable',
+  stickyActionColumn = false,
 }: DataTableProps<Row, ColumnId>) {
   const resizeStateRef = useRef<{
     columnId: ColumnId;
@@ -199,21 +240,16 @@ export function DataTable<Row, ColumnId extends string>({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // La ordenación debe aplicarse siempre sobre el conjunto completo para que el resultado
-  // sea globalmente correcto. El límite de 300 filas se aplica únicamente al renderizado,
-  // que sigue siendo progresivo para mantener fluida la tabla con muchos registros.
   const sortedRows = useMemo(
     () => sortDataTableRows(rows, visibleColumns, sort),
     [rows, sort, visibleColumns],
   );
 
-  // Resetear renderLimit y volver al inicio cuando cambia la ordenación.
   useEffect(() => {
     setRenderLimit(DEFAULT_RENDER_BATCH_SIZE);
     scrollContainerRef.current?.scrollTo(0, 0);
   }, [sort]);
 
-  // En tablas de edición frecuente puede interesar conservar la posición al volver del editor.
   useEffect(() => {
     if (preserveScrollOnRowsChange) {
       return;
@@ -223,7 +259,6 @@ export function DataTable<Row, ColumnId extends string>({
     scrollContainerRef.current?.scrollTo(0, 0);
   }, [preserveScrollOnRowsChange, rows]);
 
-  // Cargar más filas automáticamente al hacer scroll hasta el final (IntersectionObserver)
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) {
@@ -247,6 +282,7 @@ export function DataTable<Row, ColumnId extends string>({
   const hasHiddenRows = visibleRows.length < sortedRows.length;
 
   const tableMinWidth = visibleColumns.reduce((sum, column) => sum + column.minWidth, 0);
+  const currentDensity = densityClasses[density];
 
   const stopResize = () => {
     const resizeState = resizeStateRef.current;
@@ -345,16 +381,24 @@ export function DataTable<Row, ColumnId extends string>({
     setDragOverColumnId(null);
   };
 
+  const handleRowKeyDown = (event: ReactKeyboardEvent<HTMLTableRowElement>, row: Row) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const handler = onRowClick ?? onRowDoubleClick;
+    if (!handler) return;
+    event.preventDefault();
+    handler(row);
+  };
+
   return (
     <div className="space-y-2">
       <div
-        className={`relative ${heightClassName ?? ''} ${maxHeightClassName} overflow-auto rounded-2xl border border-metro-border/80 bg-metro-surface/70 shadow-sm shadow-slate-950/15`}
+        className={`relative ${heightClassName ?? ''} ${maxHeightClassName} overflow-auto rounded-xl border border-metro-border/80 bg-metro-surface/70`}
         ref={scrollContainerRef}
       >
         {onResetColumnWidths && (
           <button
             aria-label="Restablecer columnas"
-            className="absolute right-1 top-1 z-20 inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent bg-metro-panel/95 text-metro-muted transition-colors hover:border-metro-border hover:text-metro-text"
+            className="absolute right-1 top-1 z-30 inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent bg-metro-panel/95 text-metro-muted transition-colors hover:border-metro-border hover:text-metro-text"
             data-tip="Restablecer columnas"
             onClick={onResetColumnWidths}
             type="button"
@@ -364,7 +408,7 @@ export function DataTable<Row, ColumnId extends string>({
         )}
         <table
           aria-label={ariaLabel}
-          className="w-full table-fixed text-left text-[13px] leading-5"
+          className={`w-full table-fixed text-left ${currentDensity.table}`}
           style={{ minWidth: tableMinWidth }}
         >
           <colgroup>
@@ -372,7 +416,7 @@ export function DataTable<Row, ColumnId extends string>({
               <col key={column.id} style={{ width: column.width }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.06em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur">
+          <thead className="sticky top-0 z-20 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.06em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur">
             <tr>
               {visibleColumns.map((column) => {
                 const isSorted = sort?.columnId === column.id;
@@ -383,20 +427,19 @@ export function DataTable<Row, ColumnId extends string>({
                     : 'descending'
                   : 'none';
 
-                // El <th> entero es "draggable" cuando la columna es reordenable, incluido
-                // el botón de ordenar que pueda contener. Un click simple sigue disparando
-                // onSortChange con normalidad: los navegadores solo inician un drag HTML5
-                // tras un movimiento real del puntero, no con un click sin desplazamiento.
                 const isReorderable = isColumnReorderable(column) && Boolean(onColumnOrderChange);
                 const isDragging = draggedColumnId === column.id;
                 const isDragOver = dragOverColumnId === column.id && draggedColumnId !== column.id;
+                const stickyActionClass = stickyActionColumn && column.isActionColumn
+                  ? 'sticky right-0 z-30 border-l border-metro-border/70 bg-metro-topbar/98'
+                  : '';
 
                 return (
                   <th
                     aria-sort={canSort ? ariaSort : undefined}
-                    className={`relative px-3 py-2.5 ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.tone ? columnToneClasses[column.tone].header : ''} ${column.headerClassName ?? ''} ${
+                    className={`relative ${currentDensity.header} ${onResetColumnWidths && column === visibleColumns[visibleColumns.length - 1] ? 'pr-10' : ''} ${column.tone ? columnToneClasses[column.tone].header : ''} ${column.headerClassName ?? ''} ${
                       isDragging ? 'opacity-40' : ''
-                    } ${isDragOver ? 'bg-metro-red/10' : ''}`}
+                    } ${isDragOver ? 'bg-metro-red/10' : ''} ${stickyActionClass}`}
                     draggable={isReorderable}
                     key={column.id}
                     onDragEnd={isReorderable ? handleColumnDragEnd : undefined}
@@ -420,22 +463,31 @@ export function DataTable<Row, ColumnId extends string>({
                     )}
                     {canSort ? (
                       <button
-                        className={`flex w-full items-center gap-1 text-left font-semibold hover:text-metro-text ${
+                        className={`flex w-full items-center gap-1.5 text-left font-semibold hover:text-metro-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-metro-red ${
                           column.isActionColumn ? 'justify-end' : ''
                         }`}
                         onClick={() => onSortChange(nextSortState(sort, column.id))}
                         type="button"
                       >
-                        <span className="truncate" title={column.header}>
+                        <span className="truncate">
                           {column.header}
                         </span>
-                        <span aria-hidden="true" className="inline-block w-3 text-metro-red">
-                          {isSorted ? (sort?.direction === 'asc' ? '↑' : '↓') : ''}
+                        <span
+                          aria-hidden="true"
+                          className={`inline-flex h-4 w-4 shrink-0 items-center justify-center ${
+                            isSorted ? 'text-metro-red' : 'text-metro-muted/55'
+                          }`}
+                        >
+                          {isSorted
+                            ? sort?.direction === 'asc'
+                              ? <ArrowUp size={13} strokeWidth={2.5} />
+                              : <ArrowDown size={13} strokeWidth={2.5} />
+                            : <ChevronsUpDown size={13} strokeWidth={2} />}
                         </span>
                         <span className="sr-only">
                           {isSorted
-                            ? `Orden ${sort?.direction === 'asc' ? 'ascendente' : 'descendente'}`
-                            : 'Sin ordenar'}
+                            ? `Orden ${sort?.direction === 'asc' ? 'ascendente' : 'descendente'}. Pulsa para cambiar.`
+                            : 'Sin ordenar. Pulsa para ordenar ascendente.'}
                         </span>
                       </button>
                     ) : (
@@ -466,7 +518,7 @@ export function DataTable<Row, ColumnId extends string>({
             {sortedRows.length === 0 ? (
               <tr>
                 <td
-                  className="px-3 py-8 text-center text-sm font-semibold text-metro-muted"
+                  className={`${currentDensity.empty} text-center text-sm font-semibold text-metro-muted`}
                   colSpan={visibleColumns.length}
                 >
                   <div className="flex flex-col items-center gap-2">
@@ -476,32 +528,41 @@ export function DataTable<Row, ColumnId extends string>({
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row, rowIndex) => (
-                <tr
-                  className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/45' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/62' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
-                  key={getRowId(row)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
-                >
-                  {visibleColumns.map((column) => {
-                    const cellContent = column.render
-                      ? column.render(row)
-                      : String(column.accessor?.(row) ?? '');
+              visibleRows.map((row, rowIndex) => {
+                const isInteractive = Boolean(onRowClick || onRowDoubleClick);
+                return (
+                  <tr
+                    className={`${rowIndex % 2 === 0 ? (strongZebra ? 'bg-[#10243b]/45' : 'bg-transparent') : (strongZebra ? 'bg-[#1a3048]/62' : 'bg-metro-panel/28')} border-b border-metro-border/55 transition-colors hover:bg-sky-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-metro-red/70 ${isInteractive ? 'cursor-pointer' : ''} ${rowClassName?.(row) ?? ''}`}
+                    key={getRowId(row)}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
+                    onKeyDown={isInteractive ? (event) => handleRowKeyDown(event, row) : undefined}
+                    tabIndex={isInteractive ? 0 : undefined}
+                  >
+                    {visibleColumns.map((column) => {
+                      const cellContent = column.render
+                        ? column.render(row)
+                        : String(column.accessor?.(row) ?? '');
+                      const stickyActionClass = stickyActionColumn && column.isActionColumn
+                        ? 'sticky right-0 z-10 border-l border-metro-border/70 bg-metro-surface/95'
+                        : '';
 
-                    return (
-                      <td
-                        className={`truncate px-3 py-2.5 ${column.isActionColumn ? 'text-right' : ''} ${
-                          column.tone ? columnToneClasses[column.tone].cell : ''
-                        } ${column.className ?? ''}`}
-                        key={column.id}
-                        title={typeof cellContent === 'string' ? cellContent : undefined}
-                      >
-                        {cellContent}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))
+                      return (
+                        <td
+                          className={`truncate ${currentDensity.cell} ${column.isActionColumn ? 'text-right' : ''} ${
+                            column.tone ? columnToneClasses[column.tone].cell : ''
+                          } ${column.className ?? ''} ${stickyActionClass}`}
+                          key={column.id}
+                        >
+                          {typeof cellContent === 'string'
+                            ? <OverflowTooltipText text={cellContent} />
+                            : cellContent}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
