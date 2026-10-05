@@ -1,5 +1,5 @@
 import { isTaskClosed } from '../../tareas/domain/task';
-import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, Trash2, UsersRound } from 'lucide-react';
+import { ArrowRight, Building2, CalendarDays, CheckCircle2, ChevronLeft, FileSpreadsheet, Plus, RotateCcw, Search, Trash2, UsersRound } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TaskEditor } from '../../../components/TaskEditor';
 import { ActionButton } from '../../../components/ui/ActionButton';
@@ -12,6 +12,7 @@ import { useConfiguracionStore } from '../../configuracion/store/useConfiguracio
 import { type Task, type TaskDraft } from '../../tareas/domain/task';
 import { useTaskStore } from '../../tareas/store/useTaskStore';
 import { formatCoordinationDate, type CoordinationArea, type CoordinationMeeting, type CoordinationPointStatus } from '../domain/coordinacion';
+import { matchingMeetingPointTitles, meetingMatchesSearch } from '../domain/coordinationMeetingSearch';
 import { coordinationPointStatusLabel, useCoordinacionStore } from '../store/useCoordinacionStore';
 import { SindicatosCoordinationPanel } from './SindicatosCoordinationPanel';
 import { navigateInApp } from '../../../services/appNavigationBus';
@@ -26,7 +27,7 @@ const COORDINACION_HELP_SECTIONS: ModuleHelpSection[] = [
   { title: 'Otras áreas', items: ['Indica el área, fecha y, si procede, interlocutores y objetivo. Una tarea inicial es opcional.', 'Si existen tareas pendientes marcadas para esa área, TrAcción puede incorporarlas al crear la reunión.', 'Los puntos pueden ser tareas existentes, puntos no inventariados o nuevas tareas creadas desde la reunión.'] },
   { title: 'Sindicatos', items: ['El seguimiento se organiza por organización sindical y mantiene el histórico de reuniones.', 'El guion es flexible y permite registrar asuntos, resultados y compromisos de seguimiento según la reunión.', 'Utiliza el histórico para consultar lo tratado anteriormente con cada sindicato sin depender de notas externas.'] },
   { title: 'Tareas y cierre', items: ['Vincular un punto a una tarea mantiene la trazabilidad entre ambos módulos.', 'Guardar un punto vinculado crea o actualiza un único seguimiento en la tarea madre; sucesivos guardados corrigen ese mismo seguimiento sin duplicarlo. Al cerrar la reunión, los puntos tratados aplican además el cierre previsto por el módulo.', 'Un punto manual puede enlazarse posteriormente a una tarea si el asunto pasa a requerir seguimiento formal.'] },
-  { title: 'Histórico y Excel', items: ['Las reuniones permanecen disponibles como histórico una vez cerradas.', 'El Excel automático utiliza la ruta configurada en Ajustes. Comprueba esa ruta si la exportación no puede actualizarse.', 'Eliminar una reunión o un punto manual debe reservarse para registros creados por error; para reuniones celebradas es preferible conservar el histórico.'] },
+  { title: 'Histórico y Excel', items: ['Las reuniones permanecen disponibles como histórico una vez cerradas.', 'Usa «Buscar en reuniones» para localizar asuntos, acuerdos, responsables, interlocutores u objetivos en reuniones abiertas y cerradas.', 'Si una reunión se cerró por error, puedes reabrirla sin crear una copia ni perder sus puntos o vínculos.', 'El Excel automático utiliza la ruta configurada en Ajustes. Comprueba esa ruta si la exportación no puede actualizarse.', 'Eliminar una reunión o un punto manual debe reservarse para registros creados por error; para reuniones celebradas es preferible conservar el histórico.'] },
 ];
 
 function todayIso(): string {
@@ -180,6 +181,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const deleteManualPoint = useCoordinacionStore((state) => state.deleteManualPoint);
   const deleteMeeting = useCoordinacionStore((state) => state.deleteMeeting);
   const closeMeeting = useCoordinacionStore((state) => state.closeMeeting);
+  const reopenMeeting = useCoordinacionStore((state) => state.reopenMeeting);
   const markedCount = useCoordinacionStore((state) => state.directionTaskIds.length);
   const areaTaskIds = useCoordinacionStore((state) => state.areaTaskIds);
   const backupPath = useConfiguracionStore((state) => state.rutaExportacionCoordinacion);
@@ -194,6 +196,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const [newPoint, setNewPoint] = useState('');
   const [taskToAdd, setTaskToAdd] = useState('');
   const [taskSearch, setTaskSearch] = useState('');
+  const [meetingSearch, setMeetingSearch] = useState('');
   const [taskCreation, setTaskCreation] = useState<{ pointId: string | null } | null>(null);
   const [status, setStatus] = useState('');
   const [isSavingMeeting, setIsSavingMeeting] = useState(false);
@@ -224,6 +227,13 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
   const visibleMeetings = useMemo(
     () => meetings.filter((meeting) => meeting.area === area).sort((a, b) => b.date.localeCompare(a.date)),
     [area, meetings],
+  );
+  const normalizedMeetingSearch = meetingSearch.trim();
+  const meetingSearchResults = useMemo(
+    () => normalizedMeetingSearch
+      ? meetings.filter((meeting) => meetingMatchesSearch(meeting, normalizedMeetingSearch)).sort((a, b) => b.date.localeCompare(a.date))
+      : [],
+    [meetings, normalizedMeetingSearch],
   );
   const selected = meetings.find((meeting) => meeting.id === selectedId) ?? null;
   useEffect(() => {
@@ -353,6 +363,22 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
     if (result.ok) await backup();
   };
 
+  const handleReopen = async () => {
+    if (!selected || selected.status !== 'closed') return;
+    const confirmed = await confirm(
+      `La reunión del ${formatCoordinationDate(selected.date)} volverá a estar abierta y podrá editarse de nuevo. Se conservarán todos sus puntos, vínculos y seguimientos ya registrados.`,
+      {
+        title: 'Reabrir reunión',
+        confirmLabel: 'Reabrir reunión',
+        cancelLabel: 'Cancelar',
+      },
+    );
+    if (!confirmed) return;
+    const result = await reopenMeeting(selected.id);
+    setStatus(result.ok ? 'Reunión reabierta. Puedes volver a editarla y cerrarla cuando corresponda.' : result.message);
+    if (result.ok) await backup();
+  };
+
   const handleDeleteMeeting = async () => {
     if (!selected) return;
     const warning = selected.status === 'closed' ? '\n\nLos seguimientos ya registrados en las tareas vinculadas se conservarán.' : '';
@@ -432,6 +458,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
           <ActionButton icon={FileSpreadsheet} iconOnly={false} onClick={() => void backup()} size="sm" variant="secondary">Actualizar Excel</ActionButton>
           {isUnion && <ExportPrintButtons payload={exportPayload} size="sm" />}
           <ActionButton icon={Trash2} iconOnly={false} onClick={() => void handleDeleteMeeting()} size="sm" variant="delete">Eliminar reunión</ActionButton>
+          {selected.status === 'closed' && <ActionButton icon={RotateCcw} iconOnly={false} onClick={() => void handleReopen()} size="sm" variant="secondary">Reabrir reunión</ActionButton>}
           {selected.status === 'open' && <ActionButton icon={CheckCircle2} iconOnly={false} onClick={() => void handleClose()} size="sm" variant="primary">Cerrar reunión</ActionButton>}
         </div>
       </div>
@@ -479,6 +506,46 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
 
   return <section className="space-y-3">
     <PageHeader title="Coordinación" helpSections={COORDINACION_HELP_SECTIONS} helpSubtitle="Guía rápida para preparar reuniones, vincular tareas y conservar el histórico." />
+    <div className="ui-section p-3">
+      <div className="relative">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-metro-muted" size={16}/>
+        <Input
+          aria-label="Buscar en reuniones"
+          className="pl-9"
+          density="compact"
+          onChange={(event) => setMeetingSearch(event.target.value)}
+          placeholder="Buscar en reuniones: tema, acuerdo, responsable, área, sindicato..."
+          value={meetingSearch}
+        />
+      </div>
+      {normalizedMeetingSearch && <div className="mt-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-metro-muted">{meetingSearchResults.length} reunión{meetingSearchResults.length === 1 ? '' : 'es'} encontrada{meetingSearchResults.length === 1 ? '' : 's'}</p>
+          <ActionButton icon={RotateCcw} iconOnly={false} onClick={() => setMeetingSearch('')} size="sm" variant="secondary">Limpiar búsqueda</ActionButton>
+        </div>
+        <div className="space-y-2">
+          {meetingSearchResults.map((meeting) => {
+            const matchedPoints = matchingMeetingPointTitles(meeting, normalizedMeetingSearch);
+            return <button
+              className="ui-list-row"
+              key={meeting.id}
+              onClick={() => { setArea(meeting.area); setSelectedId(meeting.id); }}
+              type="button"
+            >
+              <span className="min-w-0">
+                <strong className="block truncate text-sm text-metro-text">{meetingContext(meeting)} · {formatCoordinationDate(meeting.date)}</strong>
+                <span className="block truncate text-xs text-metro-muted">
+                  {matchedPoints.length > 0 ? matchedPoints.join(' · ') : meeting.purpose || meeting.interlocutors || `${meeting.points.length} punto${meeting.points.length === 1 ? '' : 's'}`}
+                </span>
+              </span>
+              <StatusBadge tone={meeting.status === 'closed' ? 'success' : 'warning'} size="xs">{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</StatusBadge>
+            </button>;
+          })}
+          {meetingSearchResults.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">No hay reuniones que coincidan con la búsqueda.</p>}
+        </div>
+      </div>}
+    </div>
+    {!normalizedMeetingSearch && <>
     <div className="grid gap-2 md:grid-cols-3">
       <button className={`ui-area-selector ${area === 'direccion' ? 'ui-area-selector--active' : ''}`} onClick={() => setArea('direccion')} type="button"><Building2 className="mb-2 text-metro-red" size={20}/><strong className="block text-metro-text">Dirección</strong><span className="text-xs text-metro-muted">Tareas marcadas, nuevas tareas y puntos libres</span></button>
       <button className={`ui-area-selector ${area === 'otras-areas' ? 'ui-area-selector--active' : ''}`} onClick={() => setArea('otras-areas')} type="button"><UsersRound className="mb-2 text-metro-red" size={20}/><strong className="block text-metro-text">Otras áreas</strong><span className="text-xs text-metro-muted">Tareas existentes, nuevas y puntos libres</span></button>
@@ -489,6 +556,7 @@ export function CoordinacionPage({ initialMeetingId = null, navigationNonce }: {
       : <div className="ui-section p-3"><h3 className="font-bold text-metro-text">Nueva reunión con otra área</h3><p className="mt-1 text-xs leading-5 text-metro-muted">{areaName.trim() ? `Se incorporarán automáticamente ${markedAreaCount} tarea(s) pendiente(s) para ${areaName.trim()}. También puedes añadir una tarea inicial opcional.` : 'Indica el área. Si tiene asuntos marcados desde Tareas, se incorporarán automáticamente al crear la reunión.'}</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field density="compact" label="Área" required><Input onChange={(event) => setAreaName(event.target.value)} placeholder="Operaciones, Prevención, Finanzas..." required value={areaName}/></Field><Field density="compact" label="Tarea inicial · opcional"><Select onChange={(event) => setReferenceTaskId(event.target.value)} value={referenceTaskId}><option value="">Sin tarea inicial</option>{activeTasks.map((task) => <option key={task.id} value={task.id}>{task.titulo}</option>)}</Select></Field><Field density="compact" label="Fecha"><Input dateTone="request" onChange={(event) => setDate(event.target.value)} type="date" value={date}/></Field><Field density="compact" label="Interlocutores"><Input onChange={(event) => setInterlocutors(event.target.value)} placeholder="Personas participantes" value={interlocutors}/></Field><Field className="sm:col-span-2" density="compact" label="Objetivo"><Textarea className="min-h-16" onChange={(event) => setPurpose(event.target.value)} placeholder="Qué se necesita tratar o resolver" value={purpose}/></Field></div><ActionButton className="mt-3 w-full" disabled={!areaName.trim()} icon={CalendarDays} iconOnly={false} onClick={() => void handleCreate()} size="sm" variant="primary">Crear reunión</ActionButton></div>}
       <div className="ui-section p-3"><h3 className="mb-3 font-bold text-metro-text">{area === 'direccion' ? 'Reuniones de Dirección' : 'Reuniones con otras áreas'}</h3><div className="space-y-2">{visibleMeetings.map((meeting) => <button className="ui-list-row" key={meeting.id} onClick={() => setSelectedId(meeting.id)} type="button"><span className="min-w-0"><strong className="block truncate text-sm text-metro-text">{area === 'direccion' ? formatCoordinationDate(meeting.date) : meeting.areaName || 'Área sin indicar'}</strong><span className="block truncate text-xs text-metro-muted">{area === 'direccion' ? `${meeting.points.length} puntos` : `${formatCoordinationDate(meeting.date)} · ${meeting.points.length ? `${meeting.points.length} asunto${meeting.points.length === 1 ? '' : 's'}` : 'Sin asuntos todavía'}`}</span></span><StatusBadge tone={meeting.status === 'closed' ? 'success' : 'warning'} size="xs">{meeting.status === 'closed' ? 'Cerrada' : 'Abierta'}</StatusBadge></button>)}{visibleMeetings.length === 0 && <p className="rounded-xl border border-dashed border-metro-border p-5 text-center text-sm text-metro-muted">Todavía no hay reuniones registradas.</p>}</div></div>
     </div>}
+    </>}
     {status && <p className="rounded-xl border border-metro-border bg-metro-panel px-3 py-2 text-xs font-semibold text-metro-muted">{status}</p>}{dialogNode}
   </section>;
 }

@@ -57,6 +57,7 @@ interface CoordinationStore extends CoordinationState {
   deleteManualPoint: (meetingId: string, pointId: string) => Promise<Result>;
   deleteMeeting: (meetingId: string) => Promise<Result>;
   closeMeeting: (meetingId: string) => Promise<Result>;
+  reopenMeeting: (meetingId: string) => Promise<Result>;
 }
 
 function normalizeCoordinationState(value: unknown): CoordinationState | null {
@@ -509,6 +510,27 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
         ...item,
         status: 'closed',
         closedAt: now,
+        updatedAt: now,
+      } : item),
+    };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return { ...result, recordId: meeting.id };
+  },
+  reopenMeeting: async (meetingId) => {
+    const current = get();
+    const meeting = current.meetings.find((item) => item.id === meetingId);
+    if (!meeting) return { ok: false, message: 'No se ha encontrado la reunión.' };
+    if (meeting.status === 'open') {
+      return { ok: true, message: 'La reunión ya estaba abierta.', recordId: meeting.id };
+    }
+    const now = new Date().toISOString();
+    const next: CoordinationState = {
+      ...current,
+      meetings: current.meetings.map((item) => item.id === meetingId ? {
+        ...item,
+        status: 'open',
+        closedAt: null,
         updatedAt: now,
       } : item),
     };

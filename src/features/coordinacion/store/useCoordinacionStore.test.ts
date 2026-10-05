@@ -246,4 +246,22 @@ describe('useCoordinacionStore — reuniones sindicales', () => {
     });
   });
 
+
+  it('reabre una reunión cerrada conservando el mismo registro y sus puntos', async () => {
+    const tasks = [task('t-reopen', 'Asunto a corregir', '')];
+    await useCoordinacionStore.getState().setTaskForDirection('t-reopen', true);
+    const created = await useCoordinacionStore.getState().createDirectionMeeting('2026-10-05', tasks);
+    const meetingId = created.recordId ?? '';
+    const originalPointId = useCoordinacionStore.getState().meetings.find((item) => item.id === meetingId)?.points[0]?.id;
+
+    await useCoordinacionStore.getState().closeMeeting(meetingId);
+    const result = await useCoordinacionStore.getState().reopenMeeting(meetingId);
+    const reopened = useCoordinacionStore.getState().meetings.find((item) => item.id === meetingId);
+
+    expect(result.ok).toBe(true);
+    expect(reopened).toMatchObject({ id: meetingId, status: 'open', closedAt: null });
+    expect(reopened?.points).toHaveLength(1);
+    expect(reopened?.points[0].id).toBe(originalPointId);
+  });
+
 });
