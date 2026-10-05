@@ -7,41 +7,24 @@ import { ipcMain } from 'electron';
 import { enqueueSqliteIpc } from '../sqliteIpcQueue.js';
 import { createOutlookDraft } from '../outlookIntegration.js';
 import { normalizeOutlookMsgPayload, parseOutlookMsgBuffer } from '../msgParser.js';
-import { getSqliteStatus, loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged } from '../sqlitePersistence.js';
+import { validateConditionalJsonRecord } from './ipcHelpers.js';
+import { loadEspecialesRecipientRecordsSnapshot, saveEspecialesRecipientRecordIfUnchanged } from '../sqlitePersistence.js';
 
 export function registerEspecialesIpc(): void {
   ipcMain.handle('especiales:load-recipient-records', () =>
     enqueueSqliteIpc('especiales:load-recipient-records', () => loadEspecialesRecipientRecordsSnapshot()),
   );
   ipcMain.handle('especiales:save-recipient-record-if-unchanged', (_event, payload: unknown) => {
-    if (!payload || typeof payload !== 'object') {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de destinatario inválido.',
-      };
-    }
-
-    const candidate = payload as { id?: unknown; value?: unknown; expectedUpdatedAt?: unknown };
-    if (
-      typeof candidate.id !== 'string' ||
-      typeof candidate.value !== 'string' ||
-      (typeof candidate.expectedUpdatedAt !== 'string' && candidate.expectedUpdatedAt !== null)
-    ) {
-      return {
-        ok: false,
-        status: getSqliteStatus(),
-        currentUpdatedAt: null,
-        message: 'Payload de destinatario inválido.',
-      };
+    const record = validateConditionalJsonRecord(payload, 'Payload de destinatario inválido.');
+    if (!record.ok) {
+      return record.result;
     }
 
     return enqueueSqliteIpc('especiales:save-recipient-record-if-unchanged', () =>
       saveEspecialesRecipientRecordIfUnchanged({
-        id: candidate.id as string,
-        value: candidate.value as string,
-        expectedUpdatedAt: typeof candidate.expectedUpdatedAt === 'string' ? candidate.expectedUpdatedAt : null,
+        id: record.id,
+        value: record.value,
+        expectedUpdatedAt: record.expectedUpdatedAt,
       }),
     );
   });
