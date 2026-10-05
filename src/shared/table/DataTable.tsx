@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Inbox, RotateCcw } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, RotateCcw } from 'lucide-react';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { sortDataTableRows } from './tableSorting';
 import type { TableSortState } from './useTableViewPreferences';
 
@@ -28,19 +29,17 @@ const columnToneClasses: Record<DataTableColumnTone, { header: string; cell: str
 
 const densityClasses: Record<
   DataTableDensity,
-  { table: string; header: string; cell: string; empty: string }
+  { table: string; header: string; cell: string }
 > = {
   compact: {
     table: 'text-[12px] leading-4',
     header: 'px-2.5 py-2',
     cell: 'px-2.5 py-1.5',
-    empty: 'px-3 py-6',
   },
   comfortable: {
     table: 'text-[13px] leading-5',
     header: 'px-3 py-2.5',
     cell: 'px-3 py-2.5',
-    empty: 'px-3 py-8',
   },
 };
 
@@ -574,14 +573,12 @@ export function DataTable<Row, ColumnId extends string>({
           <tbody className="bg-metro-surface/75">
             {sortedRows.length === 0 ? (
               <tr>
-                <td
-                  className={`${currentDensity.empty} text-center text-sm font-semibold text-metro-muted`}
-                  colSpan={visibleColumns.length}
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <Inbox aria-hidden="true" className="text-metro-muted/60" size={28} />
-                    <span>{emptyMessage}</span>
-                  </div>
+                <td className="p-0" colSpan={visibleColumns.length}>
+                  <EmptyState
+                    description={emptyMessage}
+                    size={density === 'compact' ? 'compact' : 'standard'}
+                    title="Sin registros"
+                  />
                 </td>
               </tr>
             ) : (

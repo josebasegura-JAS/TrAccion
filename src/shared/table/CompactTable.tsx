@@ -1,4 +1,10 @@
-import type { HTMLAttributes, ReactNode, TableHTMLAttributes } from 'react';
+import {
+  createContext,
+  useContext,
+  type HTMLAttributes,
+  type ReactNode,
+  type TableHTMLAttributes,
+} from 'react';
 import { EmptyState } from '../../components/ui/EmptyState';
 
 export type CompactTableDensity = 'compact' | 'comfortable';
@@ -25,6 +31,8 @@ const densityClassName: Record<
   },
 };
 
+const CompactTableDensityContext = createContext<CompactTableDensity>('compact');
+
 export function CompactTable({
   children,
   className,
@@ -33,13 +41,15 @@ export function CompactTable({
   ...props
 }: CompactTableProps) {
   return (
-    <table
-      className={`${minWidthClassName} table-fixed text-left ${densityClassName[density].table} ${className ?? ''}`}
-      data-density={density}
-      {...props}
-    >
-      {children}
-    </table>
+    <CompactTableDensityContext.Provider value={density}>
+      <table
+        className={`${minWidthClassName} table-fixed text-left ${densityClassName[density].table} ${className ?? ''}`}
+        data-density={density}
+        {...props}
+      >
+        {children}
+      </table>
+    </CompactTableDensityContext.Provider>
   );
 }
 
@@ -50,12 +60,16 @@ interface CompactTableHeadProps extends HTMLAttributes<HTMLTableSectionElement> 
 export function CompactTableHead({
   children,
   className,
-  density = 'compact',
+  density,
   ...props
 }: CompactTableHeadProps) {
+  const inheritedDensity = useContext(CompactTableDensityContext);
+  const resolvedDensity = density ?? inheritedDensity;
+
   return (
     <thead
-      className={`sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.04em] text-metro-muted backdrop-blur [&>tr>th]:align-middle ${densityClassName[density].headerCell} ${className ?? ''}`}
+      className={`sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.04em] text-metro-muted backdrop-blur [&>tr>th]:align-middle ${densityClassName[resolvedDensity].headerCell} ${className ?? ''}`}
+      data-density={resolvedDensity}
       {...props}
     >
       {children}
@@ -71,17 +85,20 @@ interface CompactTableBodyProps extends HTMLAttributes<HTMLTableSectionElement> 
 export function CompactTableBody({
   children,
   className,
-  density = 'compact',
+  density,
   strongZebra = false,
   ...props
 }: CompactTableBodyProps) {
+  const inheritedDensity = useContext(CompactTableDensityContext);
+  const resolvedDensity = density ?? inheritedDensity;
   const zebraClassName = strongZebra
     ? '[&>tr:nth-child(odd)]:bg-[#10243b]/45 [&>tr:nth-child(even)]:bg-[#1a3048]/62'
     : '[&>tr:nth-child(odd)]:bg-transparent [&>tr:nth-child(even)]:bg-metro-panel/28';
 
   return (
     <tbody
-      className={`divide-y divide-metro-border/55 bg-metro-surface/75 ${densityClassName[density].bodyCell} ${zebraClassName} [&>tr]:transition-colors motion-reduce:[&>tr]:transition-none [&>tr:hover]:bg-sky-400/[0.08] ${className ?? ''}`}
+      className={`divide-y divide-metro-border/55 bg-metro-surface/75 ${densityClassName[resolvedDensity].bodyCell} ${zebraClassName} [&>tr]:transition-colors motion-reduce:[&>tr]:transition-none [&>tr:hover]:bg-sky-400/[0.08] ${className ?? ''}`}
+      data-density={resolvedDensity}
       {...props}
     >
       {children}

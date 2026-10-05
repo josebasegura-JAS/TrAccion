@@ -102,6 +102,14 @@ interface FieldProps {
   required?: boolean;
 }
 
+type SharedControlProps = {
+  id?: string;
+  density?: FieldDensity;
+  required?: boolean;
+  'aria-invalid'?: boolean | 'true' | 'false';
+  'aria-describedby'?: string;
+};
+
 /** Agrupa etiqueta, control y ayuda/error con espaciado uniforme y asociación accesible. */
 export function Field({
   children,
@@ -114,25 +122,31 @@ export function Field({
   required,
 }: FieldProps) {
   const generatedId = useId().replace(/:/g, '');
-  const controlId = htmlFor ?? `field-${generatedId}`;
-  const errorId = `${controlId}-error`;
-  const hintId = `${controlId}-hint`;
-  const describedBy = error ? errorId : hint ? hintId : undefined;
-
   const isSharedControl =
     isValidElement(children) &&
     (children.type === Input || children.type === Select || children.type === Textarea);
+  const sharedControlProps = isSharedControl
+    ? (children.props as SharedControlProps)
+    : null;
+
+  // Si el control ya trae id, la etiqueta debe apuntar a ese mismo id.
+  // htmlFor explícito sigue teniendo prioridad para mantener compatibilidad.
+  const controlId = htmlFor ?? sharedControlProps?.id ?? `field-${generatedId}`;
+  const errorId = `${controlId}-error`;
+  const hintId = `${controlId}-hint`;
+  const describedBy = [
+    sharedControlProps?.['aria-describedby'],
+    error ? errorId : null,
+    hint ? hintId : null,
+  ].filter(Boolean).join(' ') || undefined;
 
   const control = isSharedControl
-    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
-        id: (children.props as { id?: string }).id ?? controlId,
-        density: (children.props as { density?: FieldDensity }).density ?? density,
-        required: (children.props as { required?: boolean }).required ?? required,
-        'aria-invalid': error ? true : (children.props as { 'aria-invalid'?: boolean | 'true' | 'false' })['aria-invalid'],
-        'aria-describedby': [
-          (children.props as { 'aria-describedby'?: string })['aria-describedby'],
-          describedBy,
-        ].filter(Boolean).join(' ') || undefined,
+    ? cloneElement(children as ReactElement<SharedControlProps>, {
+        id: sharedControlProps?.id ?? controlId,
+        density: sharedControlProps?.density ?? density,
+        required: sharedControlProps?.required ?? required,
+        'aria-invalid': error ? true : sharedControlProps?.['aria-invalid'],
+        'aria-describedby': describedBy,
       })
     : children;
 
@@ -146,7 +160,7 @@ export function Field({
       {error ? (
         <p id={errorId} className="text-xs font-semibold text-red-300" role="alert">{error}</p>
       ) : null}
-      {!error && hint ? <p id={hintId} className="text-xs leading-4 text-metro-muted">{hint}</p> : null}
+      {hint ? <p id={hintId} className="text-xs leading-4 text-metro-muted">{hint}</p> : null}
     </div>
   );
 }
