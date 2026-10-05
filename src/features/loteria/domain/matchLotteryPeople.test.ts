@@ -101,15 +101,16 @@ describe('Lotería - emparejamiento de participantes con Plantilla', () => {
     )).toBe(true);
   });
 
-  it('ordena alfabéticamente los candidatos cuando tienen la misma puntuación', () => {
+  it('ordena alfabéticamente los candidatos cuando la puntuación sí es idéntica', () => {
     const review = buildLotteryImportReview(
-      [{ nombre: 'ZZZ', email: '', telefono: '' }],
+      [{ nombre: '', email: '', telefono: '' }],
       [
         employee('2', 'Beatriz Test'),
         employee('1', 'Ana Test'),
       ],
     );
 
+    expect(review[0].candidates.map((candidate) => candidate.score)).toEqual([0, 0]);
     expect(review[0].candidates.map((candidate) => candidate.nombreApellidos)).toEqual([
       'Ana Test',
       'Beatriz Test',
