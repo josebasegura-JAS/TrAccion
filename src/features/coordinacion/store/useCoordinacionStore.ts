@@ -23,6 +23,7 @@ interface CoordinationStore extends CoordinationState {
   setTaskForDirection: (taskId: string, enabled: boolean) => Promise<Result>;
   setTaskForUnion: (taskId: string, unionName: string | null) => Promise<Result>;
   setTaskForArea: (taskId: string, areaName: string | null) => Promise<Result>;
+  setTaskTargets: (taskId: string, targets: { direction: boolean; unionName: string | null; areaName: string | null }) => Promise<Result>;
   createDirectionMeeting: (date: string, tasks: Task[]) => Promise<Result>;
   createOtherAreaMeeting: (
     date: string,
@@ -146,6 +147,44 @@ export const useCoordinacionStore = create<CoordinationStore>((set, get) => ({
     );
     if (cleanArea) areaTaskIds[cleanArea] = [...new Set([...(areaTaskIds[cleanArea] ?? []), taskId])];
     const next: CoordinationState = { ...current, areaTaskIds };
+    const result = await persist(next);
+    if (result.ok) set(next);
+    return result;
+  },
+  setTaskTargets: async (taskId, targets) => {
+    const current = get();
+
+    const directionTaskIds = new Set(current.directionTaskIds);
+    if (targets.direction) directionTaskIds.add(taskId); else directionTaskIds.delete(taskId);
+
+    const cleanUnion = targets.unionName?.trim() || null;
+    const unionTaskIds = Object.fromEntries(
+      Object.entries(current.unionTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
+    );
+    if (cleanUnion) unionTaskIds[cleanUnion] = [...new Set([...(unionTaskIds[cleanUnion] ?? []), taskId])];
+
+    const cleanArea = targets.areaName?.trim() || null;
+    const areaTaskIds = Object.fromEntries(
+      Object.entries(current.areaTaskIds).map(([name, ids]) => [name, ids.filter((id) => id !== taskId)]),
+    );
+    if (cleanArea) areaTaskIds[cleanArea] = [...new Set([...(areaTaskIds[cleanArea] ?? []), taskId])];
+
+    const next: CoordinationState = {
+      meetings: current.meetings,
+      directionTaskIds: [...directionTaskIds],
+      unionTaskIds,
+      areaTaskIds,
+    };
+
+    if (JSON.stringify(next) === JSON.stringify({
+      meetings: current.meetings,
+      directionTaskIds: current.directionTaskIds,
+      unionTaskIds: current.unionTaskIds,
+      areaTaskIds: current.areaTaskIds,
+    })) {
+      return { ok: true, message: 'Coordinación ya estaba actualizada.' };
+    }
+
     const result = await persist(next);
     if (result.ok) set(next);
     return result;

@@ -61,9 +61,7 @@ export function useTaskEditorController({
   const unionTaskIds = useCoordinacionStore((state) => state.unionTaskIds);
   const areaTaskIds = useCoordinacionStore((state) => state.areaTaskIds);
   const loadCoordinacion = useCoordinacionStore((state) => state.load);
-  const setTaskForDirection = useCoordinacionStore((state) => state.setTaskForDirection);
-  const setTaskForUnion = useCoordinacionStore((state) => state.setTaskForUnion);
-  const setTaskForArea = useCoordinacionStore((state) => state.setTaskForArea);
+  const setTaskTargets = useCoordinacionStore((state) => state.setTaskTargets);
   const loadConfiguracion = useConfiguracionStore((state) => state.load);
   const createTask = useTaskStore((state) => state.createWithConcurrencyCheck);
   const updateTask = useTaskStore((state) => state.updateWithConcurrencyCheck);
@@ -253,13 +251,11 @@ export function useTaskEditorController({
   const isCommitteeCircuit = normalizedDraftPhase === 'comite';
   const isParitariaCircuit = normalizedDraftPhase === 'paritaria';
 
-  const updateCoordinationTargets = async (taskId: string) => {
-    const directionResult = await setTaskForDirection(taskId, sendToDirection);
-    if (!directionResult.ok) return directionResult;
-    const unionResult = await setTaskForUnion(taskId, sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null);
-    if (!unionResult.ok) return unionResult;
-    return setTaskForArea(taskId, selectedAreaTarget || null);
-  };
+  const updateCoordinationTargets = (taskId: string) => setTaskTargets(taskId, {
+    direction: sendToDirection,
+    unionName: sendToUnion && selectedUnionOrigin ? selectedUnionOrigin.nombre : null,
+    areaName: selectedAreaTarget || null,
+  });
 
   const recoveryStorageKey = buildRecoverableDraftKey('tareas', task?.id ?? 'new');
   const { clearDraft: clearRecoveryDraft, dialogNode: recoveryDialogNode } = useRecoverableDraft({
