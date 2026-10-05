@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Notice } from './Notice';
 
 describe('Notice', () => {
@@ -13,36 +13,37 @@ describe('Notice', () => {
     expect(screen.getByText('Mensaje informativo')).toBeInTheDocument();
   });
 
-  it('usa el tono "muted" por defecto', () => {
-    render(<Notice>Mensaje</Notice>);
+  it('usa el tono "muted" por defecto con contraste reforzado', () => {
+    const { container } = render(<Notice>Mensaje</Notice>);
 
-    expect(screen.getByText('Mensaje')).toHaveClass('border-metro-border', 'bg-metro-surface');
-  });
-
-  it('aplica las clases del tono "error"', () => {
-    render(<Notice tone="error">Ha ocurrido un error</Notice>);
-
-    expect(screen.getByText('Ha ocurrido un error')).toHaveClass(
-      'border-red-400/40',
-      'text-red-100',
+    expect(container.firstChild).toHaveClass(
+      'border-metro-border',
+      'bg-metro-surface',
+      'text-metro-secondary',
     );
   });
 
-  it('aplica las clases del tono "success"', () => {
-    render(<Notice tone="success">Guardado correctamente</Notice>);
+  it('aplica las clases del tono "error"', () => {
+    const { container } = render(<Notice tone="error">Ha ocurrido un error</Notice>);
 
-    expect(screen.getByText('Guardado correctamente')).toHaveClass('border-metro-success/30');
+    expect(container.firstChild).toHaveClass('border-red-400/40', 'text-red-100');
+  });
+
+  it('aplica las clases del tono "success"', () => {
+    const { container } = render(<Notice tone="success">Guardado correctamente</Notice>);
+
+    expect(container.firstChild).toHaveClass('border-metro-success/30');
   });
 
   it('aplica las clases del tono "warning"', () => {
-    render(<Notice tone="warning">Aviso importante</Notice>);
+    const { container } = render(<Notice tone="warning">Aviso importante</Notice>);
 
-    expect(screen.getByText('Aviso importante')).toHaveClass('border-amber-400/40');
+    expect(container.firstChild).toHaveClass('border-amber-400/40');
   });
 
   it('solo crea una región viva cuando se solicita', () => {
     const { rerender } = render(<Notice>Estático</Notice>);
-    expect(screen.getByText('Estático')).not.toHaveAttribute('aria-live');
+    expect(screen.getByText('Estático').closest('[aria-live]')).toBeNull();
 
     rerender(<Notice live="polite">Bloqueado por otro usuario</Notice>);
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
@@ -51,9 +52,22 @@ describe('Notice', () => {
     expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive');
   });
 
-  it('combina className adicional con las clases base', () => {
-    render(<Notice className="mt-3">Mensaje con margen</Notice>);
+  it('permite título y acción sin convertir todo el aviso en un botón', () => {
+    const onAction = vi.fn();
+    render(
+      <Notice actionLabel="Reintentar" onAction={onAction} title="No se ha podido guardar" tone="error">
+        Comprueba la conexión y vuelve a intentarlo.
+      </Notice>,
+    );
 
-    expect(screen.getByText('Mensaje con margen')).toHaveClass('mt-3', 'rounded-xl');
+    expect(screen.getByText('No se ha podido guardar')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('combina className adicional con las clases base', () => {
+    const { container } = render(<Notice className="mt-3">Mensaje con margen</Notice>);
+
+    expect(container.firstChild).toHaveClass('mt-3', 'rounded-xl');
   });
 });

@@ -27,6 +27,7 @@ type ActionButtonVariant =
   | 'duplicate'
   | 'edit'
   | 'history'
+  | 'create'
   | 'add'
   | 'approve'
   | 'reject'
@@ -38,9 +39,9 @@ interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant: ActionButtonVariant;
   children?: ReactNode;
   iconOnly?: boolean;
-  /** Sobrescribe el icono por defecto de la variante (p. ej. cuando el texto no encaja con el icono habitual, como "Nuevo tipo" sobre la variante "secondary"). Evita tener que colar un icono a mano dentro de children, que duplicaría el icono. */
+  /** Sobrescribe el icono por defecto de la variante. */
   icon?: ActionButtonIcon;
-  /** Muestra un spinner en lugar del icono de la variante y deshabilita el botón. Pensado para operaciones que tardan (guardar, importar, compactar, diagnosticar...). */
+  /** Muestra un spinner en lugar del icono de la variante y deshabilita el botón. */
   loading?: boolean;
   size?: ActionButtonSize;
 }
@@ -88,6 +89,7 @@ function WordIcon({ size }: { size: number }) {
 const iconByVariant: Partial<Record<ActionButtonVariant, ActionButtonIcon>> = {
   add: Plus,
   approve: CheckCircle2,
+  create: Plus,
   delete: Trash2,
   duplicate: Copy,
   edit: Pencil,
@@ -103,6 +105,7 @@ const iconByVariant: Partial<Record<ActionButtonVariant, ActionButtonIcon>> = {
 
 const labelByVariant: Record<ActionButtonVariant, string> = {
   primary: 'Continuar',
+  create: 'Crear',
   add: 'Añadir',
   approve: 'Aprobar',
   delete: 'Eliminar',
@@ -123,9 +126,10 @@ const secondaryActionClass =
   'bg-metro-panel/85 text-metro-text hover:border-metro-red border-metro-border hover:bg-metro-raised';
 
 const colorClassByVariant: Record<ActionButtonVariant, string> = {
-  primary: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
-  add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
-  approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent shadow-sm shadow-emerald-950/25',
+  primary: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
+  create: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
+  add: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
+  approve: 'bg-emerald-700 text-white hover:bg-emerald-800 border-transparent',
   delete: 'border-red-500/45 bg-red-950/20 text-red-200 hover:bg-red-950/35',
   duplicate: secondaryActionClass,
   edit: secondaryActionClass,
@@ -135,7 +139,7 @@ const colorClassByVariant: Record<ActionButtonVariant, string> = {
   outlook: secondaryActionClass,
   print: secondaryActionClass,
   reject: secondaryActionClass,
-  save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent shadow-sm shadow-red-950/25',
+  save: 'bg-metro-red text-white hover:bg-metro-dark border-transparent',
   secondary: secondaryActionClass,
   word: secondaryActionClass,
 };
@@ -169,27 +173,26 @@ export function ActionButton({
 
   return (
     <button
+      aria-busy={loading}
+      aria-label={accessibleTitle}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap border font-semibold transition duration-150 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap border font-semibold transition duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-metro-red disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none',
         sizeClassBySize[size],
         colorClassByVariant[variant],
         iconOnly && 'aspect-square px-0',
         className,
       )}
-      aria-busy={loading}
-      aria-label={accessibleTitle}
-      disabled={disabled || loading}
-      // Tooltip rápido global (TooltipLayer): siempre en botones de solo
-      // icono; en botones con texto, solo si el llamante aporta un title con
-      // información extra.
       data-tip={iconOnly ? accessibleTitle : title}
+      disabled={disabled || loading}
       type={type}
       {...props}
     >
       {loading ? (
-        <Loader2 className="animate-spin" size={iconSize} />
+        <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" size={iconSize} />
       ) : Icon ? (
-        <Icon size={iconSize} />
+        <span aria-hidden="true" className="inline-flex">
+          <Icon size={iconSize} />
+        </span>
       ) : null}
       {!iconOnly && <span>{label}</span>}
     </button>

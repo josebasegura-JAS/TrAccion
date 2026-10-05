@@ -1,5 +1,5 @@
 import type { HTMLAttributes, ReactNode, TableHTMLAttributes } from 'react';
-import { Inbox } from 'lucide-react';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 export type CompactTableDensity = 'compact' | 'comfortable';
 
@@ -55,7 +55,7 @@ export function CompactTableHead({
 }: CompactTableHeadProps) {
   return (
     <thead
-      className={`sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.06em] text-metro-muted shadow-[0_1px_0_rgba(148,163,184,0.16)] backdrop-blur [&>tr>th]:align-middle ${densityClassName[density].headerCell} ${className ?? ''}`}
+      className={`sticky top-0 z-10 bg-metro-topbar/95 text-[11px] font-bold uppercase tracking-[0.04em] text-metro-muted backdrop-blur [&>tr>th]:align-middle ${densityClassName[density].headerCell} ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -81,7 +81,7 @@ export function CompactTableBody({
 
   return (
     <tbody
-      className={`divide-y divide-metro-border/55 bg-metro-surface/75 ${densityClassName[density].bodyCell} ${zebraClassName} [&>tr]:transition-colors [&>tr:hover]:bg-sky-400/[0.08] ${className ?? ''}`}
+      className={`divide-y divide-metro-border/55 bg-metro-surface/75 ${densityClassName[density].bodyCell} ${zebraClassName} [&>tr]:transition-colors motion-reduce:[&>tr]:transition-none [&>tr:hover]:bg-sky-400/[0.08] ${className ?? ''}`}
       {...props}
     >
       {children}
@@ -136,23 +136,27 @@ interface CompactTableEmptyProps {
   colSpan: number;
   message: string;
   title?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export function CompactTableEmpty({
+  actionLabel,
   colSpan,
   message,
+  onAction,
   title = 'Sin registros',
 }: CompactTableEmptyProps) {
   return (
     <tr>
-      <td className="px-3 py-6 text-center text-metro-muted" colSpan={colSpan}>
-        <div className="flex flex-col items-center gap-2">
-          <Inbox aria-hidden="true" className="text-metro-muted/60" size={26} />
-          <div>
-            <p className="text-sm font-semibold text-metro-text">{title}</p>
-            <p className="mt-0.5 text-xs text-metro-muted">{message}</p>
-          </div>
-        </div>
+      <td className="p-0" colSpan={colSpan}>
+        <EmptyState
+          actionLabel={actionLabel}
+          description={message}
+          onAction={onAction}
+          size="compact"
+          title={title}
+        />
       </td>
     </tr>
   );

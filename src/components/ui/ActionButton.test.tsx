@@ -15,6 +15,15 @@ describe('ActionButton', () => {
     expect(button).not.toHaveClass('h-10', 'text-sm');
   });
 
+  it('diferencia Crear de Añadir en el contrato de copy', () => {
+    const { rerender } = render(<ActionButton variant="create" />);
+
+    expect(screen.getByRole('button', { name: 'Crear' })).toHaveTextContent('Crear');
+
+    rerender(<ActionButton variant="add" />);
+    expect(screen.getByRole('button', { name: 'Añadir' })).toHaveTextContent('Añadir');
+  });
+
   it('muestra texto por defecto y usa la etiqueta de la variante como aria-label', () => {
     render(<ActionButton variant="delete" onClick={() => undefined} />);
 
@@ -35,15 +44,25 @@ describe('ActionButton', () => {
     );
   });
 
+  it('es enfocable por teclado y expone un foco visible coherente', () => {
+    render(<ActionButton variant="secondary">Abrir</ActionButton>);
+
+    const button = screen.getByRole('button', { name: 'Abrir' });
+    button.focus();
+
+    expect(button).toHaveFocus();
+    expect(button).toHaveClass('focus-visible:outline-metro-red');
+  });
+
   it('dispara onClick al pulsar', () => {
     const handleClick = vi.fn();
     render(
       <ActionButton iconOnly={false} variant="add" onClick={handleClick}>
-        Nueva tarea
+        Añadir seguimiento
       </ActionButton>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nueva tarea' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir seguimiento' }));
 
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
@@ -63,9 +82,9 @@ describe('ActionButton', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 
-  it('con loading=true se deshabilita, marca aria-busy y no dispara onClick', () => {
+  it('con loading=true se deshabilita, marca aria-busy y respeta reduced motion', () => {
     const handleClick = vi.fn();
-    render(
+    const { container } = render(
       <ActionButton iconOnly={false} loading variant="save" onClick={handleClick}>
         Guardando...
       </ActionButton>,
@@ -74,6 +93,7 @@ describe('ActionButton', () => {
     const button = screen.getByRole('button', { name: 'Guardando...' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(container.querySelector('.motion-reduce\\:animate-none')).toBeInTheDocument();
 
     fireEvent.click(button);
     expect(handleClick).not.toHaveBeenCalled();
