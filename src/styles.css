@@ -29,14 +29,21 @@
   --accent-green: theme('colors.metro.success');
   --accent-amber: theme('colors.metro.warning');
 
-  /* Sistema visual común: una escala pequeña y estable evita que cada módulo
-     invente densidades, radios y separaciones distintas. */
-  --ui-space-xs: 0.5rem;
-  --ui-space-sm: 0.75rem;
-  --ui-space-md: 1rem;
-  --ui-radius-control: 0.75rem;
-  --ui-radius-card: 1rem;
-  --ui-radius-stage: 1.5rem;
+  /* TrAcción UI Standard: escala única de espacio, densidad y radios. */
+  --ui-space-2xs: 0.25rem; /* 4 px */
+  --ui-space-xs: 0.5rem;   /* 8 px */
+  --ui-space-sm: 0.75rem;  /* 12 px */
+  --ui-space-md: 1rem;     /* 16 px */
+  --ui-space-lg: 1.5rem;   /* 24 px */
+  --ui-space-xl: 2rem;     /* 32 px */
+
+  --ui-control-compact: 2.25rem; /* 36 px */
+  --ui-control-standard: 2.5rem; /* 40 px */
+
+  --ui-radius-control: 0.5rem; /* 8 px */
+  --ui-radius-card: 0.75rem;   /* 12 px */
+  --ui-radius-overlay: 1rem;   /* 16 px */
+  --ui-radius-stage: 1rem;     /* 16 px */
   color: var(--text-primary);
   background: var(--app-bg);
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
@@ -55,8 +62,9 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 32rem),
-    linear-gradient(135deg, #374151 0%, #273548 48%, #1f2937 100%);
+    radial-gradient(circle at top left, rgba(220, 38, 38, 0.12), transparent 24rem),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 28rem),
+    linear-gradient(145deg, #0a1220 0%, #101a2e 36%, #141f36 100%);
 }
 
 button,
@@ -128,8 +136,24 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ui-tooltip {
-    transition: none;
+  .ui-tooltip,
+  .inline-save-feedback,
+  .global-busy-indicator__panel,
+  .ui-shortcut-card,
+  .ui-area-selector,
+  .ui-list-row,
+  .ui-button {
+    transition: none !important;
+  }
+
+  .app-boot-screen__loader::after,
+  .module-loading-skeleton__title::after,
+  .module-loading-skeleton__actions span::after,
+  .module-loading-skeleton__filters span::after,
+  .module-loading-skeleton__table-head span::after,
+  .module-loading-skeleton__table-row span::after,
+  .global-busy-indicator__database {
+    animation: none !important;
   }
 }
 
@@ -508,17 +532,6 @@ a {
   filter: saturate(0.72);
 }
 
-/* -----------------------------------------------------------
-   v1.1 visual refresh shell
-   ----------------------------------------------------------- */
-
-body {
-  background:
-    radial-gradient(circle at top left, rgba(220, 38, 38, 0.12), transparent 24rem),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 28rem),
-    linear-gradient(145deg, #0a1220 0%, #101a2e 36%, #141f36 100%);
-}
-
 #root {
   min-height: 100vh;
 }
@@ -527,7 +540,9 @@ body {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: transparent;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(220, 38, 38, 0.08), transparent 26rem),
+    linear-gradient(145deg, #070f1c 0%, #0c1628 46%, #111b2d 100%);
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
   color: var(--text-primary);
 }
@@ -539,7 +554,7 @@ body {
   flex: 1;
   flex-direction: column;
   gap: 0;
-  background: transparent;
+  background: linear-gradient(180deg, rgba(8, 17, 31, 0.8), rgba(17, 24, 39, 0.92));
 }
 
 .app-shell__content {
@@ -547,7 +562,7 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 14px 16px 16px;
+  padding: 0 14px 14px;
 }
 
 .app-shell__content--dashboard {
@@ -557,17 +572,16 @@ body {
 
 .app-module-stage {
   display: flex;
-  min-height: calc(100vh - 118px);
+  min-height: calc(100vh - 124px);
   flex-direction: column;
   gap: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 26px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: var(--ui-radius-stage);
   background:
-    linear-gradient(180deg, rgba(17, 24, 39, 0.96) 0%, rgba(31, 41, 55, 0.94) 100%);
-  box-shadow:
-    0 24px 70px rgba(2, 6, 23, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  padding: 14px;
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.035), transparent 24rem),
+    linear-gradient(180deg, rgba(31, 41, 55, 0.96), rgba(24, 34, 49, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  padding: 12px;
 }
 
 .app-module-stage--dashboard {
@@ -662,47 +676,6 @@ body {
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-/* -----------------------------------------------------------
-   v1.1 mockup-aligned visual system
-   Este bloque es la capa visual sobre la estructura base del shell anterior;
-   evita redefinir layout funcional y concentra aquí solo los overrides visuales.
-   La lógica de negocio no cambia: este bloque solo homogeneiza
-   jerarquía, superficies, densidad y estados visuales.
-   ----------------------------------------------------------- */
-
-.app-shell {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(220, 38, 38, 0.08), transparent 26rem),
-    linear-gradient(145deg, #070f1c 0%, #0c1628 46%, #111b2d 100%);
-}
-
-.app-shell__main {
-  background: linear-gradient(180deg, rgba(8, 17, 31, 0.8), rgba(17, 24, 39, 0.92));
-}
-
-.app-shell__content {
-  padding: 0 14px 14px;
-}
-
-.app-module-stage {
-  min-height: calc(100vh - 124px);
-  border-radius: var(--ui-radius-stage);
-  border-color: rgba(148, 163, 184, 0.14);
-  background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.035), transparent 24rem),
-    linear-gradient(180deg, rgba(31, 41, 55, 0.96), rgba(24, 34, 49, 0.98));
-  box-shadow:
-    0 22px 54px rgba(2, 6, 23, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  padding: 12px;
-}
-
-/* Tarjetas internas: aspecto de panel de producto, no de formulario plano. */
-.app-module-stage :where(section, article)[class*='rounded-'][class*='border'],
-.app-module-stage > :where(div)[class*='rounded-'][class*='border'] {
-  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.12);
 }
 
 .app-module-stage table {
@@ -853,17 +826,17 @@ body {
    ----------------------------------------------------------- */
 .ui-section {
   border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
+  border-radius: var(--ui-radius-card);
   background: linear-gradient(180deg, rgba(31, 41, 55, 0.82), rgba(24, 34, 49, 0.82));
-  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.08);
+  box-shadow: none;
 }
 
 .ui-section--hero {
   border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 16px;
+  border-radius: var(--ui-radius-overlay);
   background: linear-gradient(180deg, rgba(31, 41, 55, 0.88), rgba(24, 34, 49, 0.9));
   padding: 16px;
-  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.1);
+  box-shadow: none;
 }
 
 .ui-subsection {
@@ -913,9 +886,9 @@ body {
 .ui-accordion {
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
+  border-radius: var(--ui-radius-card);
   background: rgba(15, 23, 42, 0.28);
-  box-shadow: 0 3px 12px rgba(2, 6, 23, 0.06);
+  box-shadow: none;
 }
 
 .ui-accordion__summary {
@@ -930,9 +903,9 @@ body {
 }
 
 .ui-control {
-  min-height: 36px;
+  min-height: var(--ui-control-compact);
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   background: rgba(15, 23, 42, 0.5);
   padding: 7px 10px;
   font-size: 13px;
@@ -953,7 +926,7 @@ body {
 
 .ui-button {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--ui-control-compact);
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -1006,12 +979,6 @@ body {
   background: rgba(15, 23, 42, 0.46);
 }
 
-/* Fase 2: el relieve global queda subordinado a la jerarquía de superficies. */
-.app-module-stage :where(section, article)[class*='rounded-'][class*='border'],
-.app-module-stage > :where(div)[class*='rounded-'][class*='border'] {
-  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.08);
-}
-
 
 /* -----------------------------------------------------------
    UI Fase 3 · remate operativo
@@ -1019,7 +986,7 @@ body {
    aumentar el consumo de espacio ni alterar la lógica.
    ----------------------------------------------------------- */
 .ui3-operational-card {
-  box-shadow: 0 3px 12px rgba(2, 6, 23, 0.07);
+  box-shadow: none;
 }
 
 .ui3-empty-state {

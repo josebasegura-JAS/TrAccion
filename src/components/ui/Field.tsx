@@ -12,8 +12,15 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 export const fieldLabelClass = 'mb-1 block text-[11px] font-semibold uppercase tracking-[0.12em] text-metro-muted';
 
+export type FieldDensity = 'compact' | 'standard';
+
 export const fieldInputClass =
-  'h-10 w-full rounded-xl border border-metro-border bg-metro-panel/80 px-3 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red focus:bg-metro-surface required:border-red-400/45 required:bg-red-400/[0.07] disabled:cursor-not-allowed disabled:opacity-60';
+  'w-full rounded-lg border border-metro-border bg-metro-panel/80 px-3 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red focus:bg-metro-surface aria-[invalid=true]:border-red-400/60 aria-[invalid=true]:bg-red-400/[0.07] disabled:cursor-not-allowed disabled:opacity-60';
+
+const fieldDensityClass: Record<FieldDensity, string> = {
+  compact: 'h-9',
+  standard: 'h-10',
+};
 
 interface FieldLabelProps extends LabelHTMLAttributes<HTMLLabelElement> {
   children: ReactNode;
@@ -42,26 +49,30 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
    * Se usa únicamente cuando el significado de la fecha es inequívoco.
    */
   dateTone?: DateInputTone;
+  density?: FieldDensity;
 }
 
 /** Campo de texto estándar de 40 px de altura. */
-export function Input({ className, dateTone, ...props }: InputProps) {
+export function Input({ className, dateTone, density = 'standard', ...props }: InputProps) {
   return (
     <input
-      className={cx(fieldInputClass, dateTone ? dateInputToneClass[dateTone] : undefined, className)}
+      className={cx(fieldInputClass, fieldDensityClass[density], dateTone ? dateInputToneClass[dateTone] : undefined, className)}
       {...props}
     />
   );
 }
 
-type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  density?: FieldDensity;
+}
 
 /** Área de texto estándar; conserva altura flexible. */
-export function Textarea({ className, ...props }: TextareaProps) {
+export function Textarea({ className, density = 'standard', ...props }: TextareaProps) {
   return (
     <textarea
       className={cx(
-        'w-full rounded-xl border border-metro-border bg-metro-panel/80 px-3 py-2.5 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red focus:bg-metro-surface required:border-red-400/45 required:bg-red-400/[0.07] disabled:cursor-not-allowed disabled:opacity-60',
+        'w-full rounded-lg border border-metro-border bg-metro-panel/80 px-3 text-sm normal-case text-metro-text outline-none transition focus:border-metro-red focus:bg-metro-surface aria-[invalid=true]:border-red-400/60 aria-[invalid=true]:bg-red-400/[0.07] disabled:cursor-not-allowed disabled:opacity-60',
+        density === 'compact' ? 'py-2' : 'py-2.5',
         className,
       )}
       {...props}
@@ -69,11 +80,13 @@ export function Textarea({ className, ...props }: TextareaProps) {
   );
 }
 
-type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  density?: FieldDensity;
+}
 
 /** Selector estándar de 40 px de altura. */
-export function Select({ className, ...props }: SelectProps) {
-  return <select className={cx(fieldInputClass, className)} {...props} />;
+export function Select({ className, density = 'standard', ...props }: SelectProps) {
+  return <select className={cx(fieldInputClass, fieldDensityClass[density], className)} {...props} />;
 }
 
 interface FieldProps {
@@ -101,11 +114,12 @@ export function Field({ children, className, error, hint, htmlFor, label, requir
   );
 }
 
-export function ReadonlyValue({ children, className }: { children: ReactNode; className?: string }) {
+export function ReadonlyValue({ children, className, density = 'standard' }: { children: ReactNode; className?: string; density?: FieldDensity }) {
   return (
     <div
       className={cx(
-        'flex min-h-10 items-center rounded-xl border border-metro-border bg-metro-panel/85 px-3 text-sm text-metro-text',
+        'flex items-center rounded-lg border border-metro-border bg-metro-panel/85 px-3 text-sm text-metro-text',
+        density === 'compact' ? 'min-h-9' : 'min-h-10',
         className,
       )}
     >
