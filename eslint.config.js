@@ -25,6 +25,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['build/icon/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.browser },
+    },
+  },
+  {
     files: [
       'electron/**/*.ts',
       'scripts/**/*.{js,mjs}',
