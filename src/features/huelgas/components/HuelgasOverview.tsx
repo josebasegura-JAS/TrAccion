@@ -170,6 +170,8 @@ export function HuelgasOverview({
             onColumnOrderChange={setColumnOrder}
             emptyMessage="Todavía no hay huelgas registradas."
             strongZebra
+            density="compact"
+            stickyActionColumn
             maxHeightClassName="max-h-[52vh]"
           />
         )}

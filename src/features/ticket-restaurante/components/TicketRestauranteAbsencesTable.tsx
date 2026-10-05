@@ -101,6 +101,7 @@ export function AbsencesTable({
       defaultPreferences: defaultTicketAbsencesTablePreferences,
       validColumnIds: ticketAbsencesTableColumnIds,
     });
+
   const absenceColumns = useMemo<
     Array<DataTableColumn<TicketAbsenceDisplayRow, TicketAbsencesTableColumnId>>
   >(
@@ -215,16 +216,16 @@ export function AbsencesTable({
         id: 'actions',
         header: 'Acciones',
         render: (absence) => (
-          <button
-            className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
+          <ActionButton
+            iconOnly
             onClick={(event) => {
               event.stopPropagation();
               onRemove(absence.id);
             }}
-            type="button"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+            size="sm"
+            title={`Eliminar ausencia de ${absence.nombreApellidos}`}
+            variant="delete"
+          />
         ),
         width: 82,
         minWidth: 74,
@@ -249,14 +250,9 @@ export function AbsencesTable({
         <div className="flex flex-col items-start gap-1.5 lg:items-end">
           <div className="flex flex-wrap gap-2">
             <ExportPrintButtons payload={exportPayload} />
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-metro-border px-3 py-1.5 text-xs font-semibold text-metro-text hover:border-metro-red"
-              onClick={onExportModel}
-              type="button"
-            >
-              <FileDown className="h-3.5 w-3.5" />
+            <ActionButton icon={FileDown} iconOnly={false} onClick={onExportModel} size="sm" variant="secondary">
               Modelo ausencias
-            </button>
+            </ActionButton>
             <ActionButton iconOnly={false} onClick={onImport} size="sm" variant="import">
               Importar ausencias
             </ActionButton>
@@ -266,6 +262,7 @@ export function AbsencesTable({
           ) : null}
         </div>
       </div>
+
       <div className="mb-2 flex flex-col gap-2 rounded-lg border border-metro-border bg-metro-surface p-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs font-semibold text-metro-muted">
           Ausencias del mes seleccionado: <span className="text-metro-red">{absences.length}</span>
@@ -280,21 +277,24 @@ export function AbsencesTable({
           year={year}
         />
       </div>
+
       <DataTable
         ariaLabel="Ausencias Ticket Restaurante"
         columnOrder={preferences.columnOrder}
         columnWidths={preferences.columnWidths}
-        onResetColumnWidths={resetColumnWidths}
         columns={absenceColumns}
+        density="compact"
         emptyMessage="No hay ausencias guardadas."
         getRowId={(absence) => absence.id}
         maxHeightClassName="max-h-[420px]"
         onColumnOrderChange={setColumnOrder}
         onColumnWidthChange={setColumnWidth}
+        onResetColumnWidths={resetColumnWidths}
         onRowClick={onEdit}
         onSortChange={setSort}
         rows={absences}
         sort={preferences.sort}
+        stickyActionColumn
       />
     </div>
   );
@@ -334,62 +334,62 @@ export function AbsencePreviewModal({
         </ActionButton>
       </ModalHeader>
       <ModalBody className="space-y-3 overflow-auto">
-          <ImportReviewSummary
-            detail="Corrige las incidencias antes de confirmar. Puedes añadir o eliminar filas manualmente."
-            errors={rows.filter((row) => row.errors.length > 0).length}
-            fileName={fileName}
-            ignored={0}
-            ready={rows.filter((row) => row.errors.length === 0).length}
-            total={rows.length}
-          />
-          <CompactTable minWidthClassName="min-w-[1050px]">
-            <CompactTableHead>
-              <tr>
-                <th className="px-1 py-1">Nº empleado</th>
-                <th className="px-1 py-1">Nombre y apellidos</th>
-                <th className="px-1 py-1">Desde</th>
-                <th className="px-1 py-1">Hasta</th>
-                <th className="px-1 py-1">Motivo</th>
-                <th className="px-1 py-1">Total días</th>
-                <th className="px-1 py-1">Afecta ticket</th>
-                <th className="px-1 py-1">Acciones</th>
+        <ImportReviewSummary
+          detail="Corrige las incidencias antes de confirmar. Puedes añadir o eliminar filas manualmente."
+          errors={rows.filter((row) => row.errors.length > 0).length}
+          fileName={fileName}
+          ignored={0}
+          ready={rows.filter((row) => row.errors.length === 0).length}
+          total={rows.length}
+        />
+        <CompactTable density="compact" minWidthClassName="min-w-[1050px]">
+          <CompactTableHead density="compact">
+            <tr>
+              <th>Nº empleado</th>
+              <th>Nombre y apellidos</th>
+              <th>Desde</th>
+              <th>Hasta</th>
+              <th>Motivo</th>
+              <th>Total días</th>
+              <th className="text-center">Afecta ticket</th>
+              <th>Acciones</th>
+            </tr>
+          </CompactTableHead>
+          <CompactTableBody density="compact" className="[&>tr:hover]:bg-metro-red/10">
+            {rows.map((row) => (
+              <tr className={row.errors.length > 0 ? 'bg-metro-red/10' : ''} key={row.id}>
+                <PreviewInput field="empleado" onChange={onChange} row={row} />
+                <PreviewInput field="nombreApellidos" onChange={onChange} row={row} />
+                <PreviewInput field="desde" onChange={onChange} row={row} type="date" />
+                <PreviewInput field="hasta" onChange={onChange} row={row} type="date" />
+                <PreviewInput field="motivo" onChange={onChange} row={row} />
+                <PreviewInput field="totalDias" onChange={onChange} row={row} type="number" />
+                <td className="align-top text-center">
+                  <input
+                    checked={row.afectaTicket}
+                    className="h-4 w-4 accent-metro-red"
+                    onChange={(event) => onChange(row.id, 'afectaTicket', event.target.checked)}
+                    type="checkbox"
+                  />
+                </td>
+                <td className="align-top">
+                  <ActionButton
+                    iconOnly
+                    onClick={() => onRemove(row.id)}
+                    size="sm"
+                    title={`Eliminar fila ${row.nombreApellidos || row.empleado || ''}`.trim()}
+                    variant="delete"
+                  />
+                  {row.errors.length > 0 ? (
+                    <p className="mt-1 max-w-48 text-xs text-metro-red">
+                      {row.errors.join(' ')}
+                    </p>
+                  ) : null}
+                </td>
               </tr>
-            </CompactTableHead>
-            <CompactTableBody className="[&>tr:hover]:bg-metro-red/10">
-              {rows.map((row) => (
-                <tr className={row.errors.length > 0 ? 'bg-metro-red/10' : ''} key={row.id}>
-                  <PreviewInput field="empleado" onChange={onChange} row={row} />
-                  <PreviewInput field="nombreApellidos" onChange={onChange} row={row} />
-                  <PreviewInput field="desde" onChange={onChange} row={row} type="date" />
-                  <PreviewInput field="hasta" onChange={onChange} row={row} type="date" />
-                  <PreviewInput field="motivo" onChange={onChange} row={row} />
-                  <PreviewInput field="totalDias" onChange={onChange} row={row} type="number" />
-                  <td className="px-1 py-1 align-top text-center">
-                    <input
-                      checked={row.afectaTicket}
-                      className="h-4 w-4 accent-metro-red"
-                      onChange={(event) => onChange(row.id, 'afectaTicket', event.target.checked)}
-                      type="checkbox"
-                    />
-                  </td>
-                  <td className="px-1 py-1 align-top">
-                    <button
-                      className="rounded-md border border-metro-border p-1 text-metro-text hover:border-metro-red"
-                      onClick={() => onRemove(row.id)}
-                      type="button"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                    {row.errors.length > 0 ? (
-                      <p className="mt-1 max-w-48 text-xs text-metro-red">
-                        {row.errors.join(' ')}
-                      </p>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </CompactTableBody>
-          </CompactTable>
+            ))}
+          </CompactTableBody>
+        </CompactTable>
       </ModalBody>
       <ModalFooter>
         <ActionButton disabled={saving} iconOnly={false} onClick={onCancel} variant="secondary">
@@ -419,7 +419,7 @@ function PreviewInput({
   type?: string;
 }) {
   return (
-    <td className="px-1 py-1 align-top">
+    <td className="align-top">
       <Input
         className="mt-0 h-8 min-w-28 px-2 text-xs"
         onChange={(event) => onChange(row.id, field, event.target.value)}
