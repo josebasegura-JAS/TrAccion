@@ -1042,3 +1042,109 @@ a {
 .ui3-ticket-restaurante :where([class*='border-dashed']) {
   background: rgba(15, 23, 42, 0.22);
 }
+
+/* -----------------------------------------------------------
+   UI Fase 4 · jerarquía específica de pantallas
+   ----------------------------------------------------------- */
+
+/* Dashboard: los KPI superiores pasan a ser contexto, no el foco principal.
+   La bandeja Pendiente de atención conserva la mayor jerarquía visual. */
+.dashboard-pro > .grid:nth-child(1) > button {
+  border-color: rgba(125, 211, 252, 0.10) !important;
+  background: rgba(14, 34, 57, 0.72) !important;
+  background-image: none !important;
+  color: rgba(226, 232, 240, 0.88);
+  font-weight: 650;
+}
+
+.dashboard-pro > .grid:nth-child(2) {
+  gap: 8px;
+}
+
+.dashboard-pro > .grid:nth-child(2) > * {
+  border-color: rgba(148, 163, 184, 0.12) !important;
+  border-radius: 10px !important;
+  background: rgba(14, 34, 57, 0.76) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  padding: 7px 9px !important;
+}
+
+.dashboard-pro > .grid:nth-child(2) > * > span:nth-child(2) {
+  display: none;
+}
+
+.dashboard-pro > .grid:nth-child(2) > * > div {
+  gap: 8px !important;
+  padding-top: 0 !important;
+  padding-bottom: 10px !important;
+}
+
+.dashboard-pro > .grid:nth-child(2) > * > div > span:first-child {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.dashboard-pro > .grid:nth-child(2) > * > div > span:nth-child(2) > span:nth-child(2) {
+  font-size: 20px !important;
+  font-weight: 800 !important;
+}
+
+.dashboard-pro > .grid:nth-child(2) > * > div > span:nth-child(2) > span:nth-child(3) {
+  opacity: 0.72;
+}
+
+.dashboard-pro > .grid:nth-child(2) > button:hover {
+  transform: none !important;
+  filter: brightness(1.05);
+}
+
+.dashboard-pro > .grid:nth-child(3) > section,
+.dashboard-pro > .grid:nth-child(4) > section {
+  box-shadow: none !important;
+}
+
+.dashboard-pro > .grid:nth-child(3) > section:first-child {
+  border-color: rgba(248, 113, 113, 0.18) !important;
+  background: rgba(14, 34, 57, 0.96) !important;
+}
+
+/* Ajustes: menos “tarjetas dentro de tarjetas”; los accesos sirven de índice
+   y los acordeones concentran el contenido real. */
+.ui-shortcut-card {
+  min-height: 46px;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.ui-shortcut-card__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.ui-accordion__summary {
+  min-height: 44px;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.ui-accordion[open] > .ui-accordion__summary {
+  background: rgba(148, 163, 184, 0.035);
+}
+
+/* Licencias: las bandejas de trabajo mandan; el contenedor general no añade
+   espacio vertical innecesario entre filtros, flujo y resultados. */
+#licencias-sin-sueldo {
+  gap: 12px;
+}
+
+#licencias-sin-sueldo .ui-section,
+#licencias-sin-sueldo .ui-subsection {
+  box-shadow: none;
+}
+

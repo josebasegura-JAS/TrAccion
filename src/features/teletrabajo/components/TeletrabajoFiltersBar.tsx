@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { SelectFilter } from '../../../shared/filters/SelectFilter';
 import type { TeletrabajoFilters } from '../domain/filters';
 import { TELETRABAJO_ESTADOS, TELETRABAJO_TIPOS_SOLICITUD } from '../domain/solicitud';
@@ -14,39 +14,65 @@ export function TeletrabajoFiltersBar({
   periodos,
   onSetFilter,
 }: TeletrabajoFiltersBarProps) {
+  const hasActiveFilters = Boolean(
+    filters.search || filters.estado || filters.tipoSolicitud || filters.periodo,
+  );
+
+  const clearFilters = () => {
+    onSetFilter('search', '');
+    onSetFilter('estado', '');
+    onSetFilter('tipoSolicitud', '');
+    onSetFilter('periodo', '');
+  };
+
   return (
-    <div className="mb-4 grid grid-cols-[minmax(240px,1.35fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)_minmax(150px,0.8fr)] gap-2.5 overflow-x-auto rounded-2xl border border-metro-border/80 bg-metro-panel/60 p-3 shadow-[0_10px_24px_rgba(2,8,23,0.12)]">
-      <label className="flex h-10 items-center gap-2 rounded-xl border border-metro-border bg-metro-surface px-3 text-sm text-metro-muted focus-within:border-metro-red/70">
-        <Search size={16} />
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-metro-border/75 bg-metro-panel/45 p-2">
+      <label className="flex h-9 min-w-[260px] flex-1 items-center gap-2 rounded-lg border border-metro-border bg-metro-surface px-3 text-sm text-metro-muted focus-within:border-metro-red/70">
+        <Search aria-hidden="true" size={15} />
         <input
-          className="w-full bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
+          className="min-w-0 flex-1 bg-transparent text-metro-text outline-none placeholder:text-metro-muted"
           onChange={(event) => onSetFilter('search', event.target.value)}
-          placeholder="Buscar por empleado o nombre..."
+          placeholder="Buscar empleado o nombre…"
           type="search"
           value={filters.search}
         />
       </label>
+
       <SelectFilter
-        showLabel
+        className="h-9 min-w-[138px] rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
         label="Estado"
         onChange={(value) => onSetFilter('estado', value as typeof filters.estado)}
         options={TELETRABAJO_ESTADOS}
+        placeholder="Estado"
         value={filters.estado}
       />
       <SelectFilter
-        showLabel
+        className="h-9 min-w-[145px] rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
         label="Tipo"
         onChange={(value) => onSetFilter('tipoSolicitud', value as typeof filters.tipoSolicitud)}
         options={TELETRABAJO_TIPOS_SOLICITUD}
+        placeholder="Tipo"
         value={filters.tipoSolicitud}
       />
       <SelectFilter
-        showLabel
+        className="h-9 min-w-[132px] rounded-lg border border-metro-border bg-metro-surface px-2.5 text-sm text-metro-text outline-none focus:border-metro-red"
         label="Periodo"
         onChange={(value) => onSetFilter('periodo', value)}
         options={periodos}
+        placeholder="Periodo"
         value={filters.periodo}
       />
+
+      {hasActiveFilters ? (
+        <button
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-metro-muted transition hover:bg-metro-raised hover:text-metro-text"
+          onClick={clearFilters}
+          type="button"
+        >
+          <X aria-hidden="true" size={14} />
+          Limpiar
+        </button>
+      ) : null}
     </div>
   );
 }
