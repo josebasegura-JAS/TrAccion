@@ -3,9 +3,7 @@ import { useAppDialog } from '../../../hooks/useAppDialog';
 import { useConfiguracionStore } from '../../configuracion/store/useConfiguracionStore';
 import { useEmployeeStore } from '../../plantilla/store/useEmployeeStore';
 import { readJsonStorage, writeJsonStorageAsync } from '../../../services/persistence';
-import { parseXlsxRows } from '../../../shared/import/xlsxParser';
-import { parseHuelgaPersonalRows, type HuelgaPersonalTurno } from './huelgasPersonalImport';
-import { enrichPersonalWithPlantilla, type HuelgaPersonalPlantillaStats } from './huelgasPersonalPlantilla';
+import { type HuelgaPersonalTurno } from './huelgasPersonalImport';
 import { buildCollectionGroups, type HuelgaCollectionGroup } from './huelgasCollectionExport';
 import {
   DEFAULT_HUELGA_MAIL_BODY,
@@ -38,24 +36,22 @@ import {
 import {
   AREAS_STORAGE_KEY,
   EMPTY_ASSIGNMENT_FILTERS,
-  EMPTY_DRAFT,
   PUESTO_RESPONSABLES_STORAGE_KEY,
   STORAGE_KEY,
   ZONAS_STORAGE_KEY,
-  createId,
   employeeToDraft,
   formatDate,
   isHuelgas,
   resolveResidenceOverride,
   sameNormalizedText,
   todayIso,
-  validateDraft,
   type AssignmentFilters,
   type AssignmentSortDirection,
   type AssignmentSortKey,
   type Huelga,
-  type HuelgaDraft,
 } from './huelgasPageModel';
+import { useHuelgaEditor } from './useHuelgaEditor';
+import { useHuelgaPersonalImport } from './useHuelgaPersonalImport';
 
 export function useHuelgasPageController() {
   const { alert, confirm, dialogNode } = useAppDialog();
@@ -66,17 +62,6 @@ export function useHuelgasPageController() {
   const employeesLoading = useEmployeeStore((state) => state.isLoading);
   const updateEmployeeWithConcurrencyCheck = useEmployeeStore((state) => state.updateWithConcurrencyCheck);
   const [huelgas, setHuelgas] = useState<Huelga[]>([]);
-  const [draft, setDraft] = useState<HuelgaDraft>(EMPTY_DRAFT);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [importTargetId, setImportTargetId] = useState<string | null>(null);
-  const [importFileName, setImportFileName] = useState('');
-  const [importPreview, setImportPreview] = useState<HuelgaPersonalTurno[]>([]);
-  const [importSkippedRows, setImportSkippedRows] = useState(0);
-  const [importPlantillaStats, setImportPlantillaStats] = useState<HuelgaPersonalPlantillaStats | null>(null);
-  const [importError, setImportError] = useState('');
-  const [importing, setImporting] = useState(false);
   const [puestoResponsables, setPuestoResponsables] = useState<HuelgaPuestoAsignacion[]>([]);
   const [zonas, setZonas] = useState<HuelgaZona[]>([]);
   const [areas, setAreas] = useState<HuelgaArea[]>([]);
@@ -102,6 +87,45 @@ export function useHuelgasPageController() {
   const [mailSpecificNotes, setMailSpecificNotes] = useState<Record<string, string>>({});
   const [mailPreviewZoneId, setMailPreviewZoneId] = useState<string | null>(null);
   const [mailTemplateZoneId, setMailTemplateZoneId] = useState<string | null>(null);
+
+  const {
+    addTramo,
+    draft,
+    editingId,
+    editorOpen,
+    openEdit,
+    openNew,
+    removeTramo,
+    save,
+    saving,
+    setDraft,
+    setEditorOpen,
+    toggleSindicato,
+    updateTramo,
+  } = useHuelgaEditor({ alert, huelgas, setHuelgas });
+
+  const {
+    closeImport,
+    importError,
+    importFileName,
+    importPlantillaStats,
+    importPreview,
+    importSkippedRows,
+    importTarget,
+    importing,
+    openImport,
+    saveImportedPersonal,
+    selectImportFile,
+  } = useHuelgaPersonalImport({
+    alert,
+    areas,
+    confirm,
+    employees,
+    huelgas,
+    puestoResponsables,
+    setHuelgas,
+    zonas,
+  });
 
   useEffect(() => {
     loadConfiguracion();
@@ -172,181 +196,6 @@ export function useHuelgasPageController() {
   const mailTemplateZone = mailTemplateZoneId
     ? zoneDraft.find((zona) => zona.id === mailTemplateZoneId) ?? null
     : null;
-
-  const openNew = () => {
-    setEditingId(null);
-    setDraft(EMPTY_DRAFT);
-    setEditorOpen(true);
-  };
-
-  const openEdit = (huelga: Huelga) => {
-    setEditingId(huelga.id);
-    setDraft({
-      fecha: huelga.fecha,
-      sindicatos: [...huelga.sindicatos],
-      tipo: huelga.tipo,
-      tramos: huelga.tramos.map((tramo) => ({ ...tramo })),
-      observaciones: huelga.observaciones,
-    });
-    setEditorOpen(true);
-  };
-
-  const toggleSindicato = (sindicato: string) => {
-    setDraft((current) => ({
-      ...current,
-      sindicatos: current.sindicatos.includes(sindicato)
-        ? current.sindicatos.filter((item) => item !== sindicato)
-        : [...current.sindicatos, sindicato],
-    }));
-  };
-
-  const addTramo = () => {
-    setDraft((current) => ({
-      ...current,
-      tramos: [...current.tramos, { id: createId('tramo'), inicio: '', fin: '' }],
-    }));
-  };
-
-  const updateTramo = (id: string, field: 'inicio' | 'fin', value: string) => {
-    setDraft((current) => ({
-      ...current,
-      tramos: current.tramos.map((tramo) => (tramo.id === id ? { ...tramo, [field]: value } : tramo)),
-    }));
-  };
-
-  const removeTramo = (id: string) => {
-    setDraft((current) => ({ ...current, tramos: current.tramos.filter((tramo) => tramo.id !== id) }));
-  };
-
-  const save = async () => {
-    const validation = validateDraft(draft);
-    if (validation) {
-      await alert(validation, { title: 'Revisa la convocatoria', type: 'warning' });
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const current = editingId ? huelgas.find((item) => item.id === editingId) : null;
-    const normalizedDraft: HuelgaDraft = {
-      ...draft,
-      sindicatos: [...draft.sindicatos].sort((a, b) => a.localeCompare(b, 'es')),
-      tramos: draft.tipo === 'jornada-completa' ? [] : draft.tramos,
-      observaciones: draft.observaciones.trim(),
-    };
-    const record: Huelga = {
-      id: current?.id ?? createId('huelga'),
-      ...normalizedDraft,
-      createdAt: current?.createdAt ?? now,
-      updatedAt: now,
-      personalConTurno: current?.personalConTurno,
-      personalImportadoAt: current?.personalImportadoAt ?? null,
-      asignacionesPuesto: current?.asignacionesPuesto,
-      instruccionesCorreoPorZona: current?.instruccionesCorreoPorZona,
-    };
-    const next = current
-      ? huelgas.map((item) => (item.id === current.id ? record : item))
-      : [...huelgas, record];
-
-    setSaving(true);
-    const result = await writeJsonStorageAsync(STORAGE_KEY, next);
-    setSaving(false);
-    if (!result.ok) {
-      await alert(result.message || 'No se ha podido guardar la huelga.', { title: 'Error de guardado', type: 'error' });
-      return;
-    }
-
-    setHuelgas(next);
-    setEditorOpen(false);
-  };
-
-  const importTarget = importTargetId ? huelgas.find((item) => item.id === importTargetId) ?? null : null;
-
-  const openImport = (huelga: Huelga) => {
-    setImportTargetId(huelga.id);
-    setImportFileName('');
-    setImportPreview([]);
-    setImportSkippedRows(0);
-    setImportPlantillaStats(null);
-    setImportError('');
-  };
-
-  const closeImport = () => {
-    if (importing) return;
-    setImportTargetId(null);
-    setImportFileName('');
-    setImportPreview([]);
-    setImportSkippedRows(0);
-    setImportPlantillaStats(null);
-    setImportError('');
-  };
-
-  const selectImportFile = async (file: File | null) => {
-    setImportError('');
-    setImportPreview([]);
-    setImportSkippedRows(0);
-    setImportPlantillaStats(null);
-    setImportFileName(file?.name ?? '');
-    if (!file) return;
-
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      setImportError('Selecciona un archivo Excel .xlsx con el formato de personal por día.');
-      return;
-    }
-
-    try {
-      const rows = await parseXlsxRows(await file.arrayBuffer());
-      const result = parseHuelgaPersonalRows(rows);
-      const enriched = enrichPersonalWithPlantilla(result.records, employees);
-      setImportPreview(enriched.records);
-      setImportPlantillaStats(enriched.stats);
-      setImportSkippedRows(result.skippedRows);
-    } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'No se ha podido leer el Excel.');
-    }
-  };
-
-  const saveImportedPersonal = async () => {
-    if (!importTarget || importPreview.length === 0) return;
-
-    if ((importTarget.personalConTurno?.length ?? 0) > 0) {
-      const accepted = await confirm(
-        `Esta huelga ya tiene ${importTarget.personalConTurno?.length ?? 0} personas importadas. ¿Quieres sustituirlas por las ${importPreview.length} del nuevo Excel?`,
-        { title: 'Sustituir personal importado', confirmLabel: 'Sustituir', cancelLabel: 'Cancelar' },
-      );
-      if (!accepted) return;
-    }
-
-    const now = new Date().toISOString();
-    const asignacionesPuesto = buildAsignacionesForPersonal(
-      importPreview,
-      importTarget.asignacionesPuesto ?? [],
-      puestoResponsables,
-      zonas,
-      areas,
-    );
-    const next = huelgas.map((item) =>
-      item.id === importTarget.id
-        ? {
-            ...item,
-            personalConTurno: importPreview,
-            personalImportadoAt: now,
-            asignacionesPuesto,
-            updatedAt: now,
-          }
-        : item,
-    );
-
-    setImporting(true);
-    const result = await writeJsonStorageAsync(STORAGE_KEY, next);
-    setImporting(false);
-    if (!result.ok) {
-      await alert(result.message || 'No se ha podido guardar el personal importado.', { title: 'Error de guardado', type: 'error' });
-      return;
-    }
-
-    setHuelgas(next);
-    closeImport();
-  };
 
   const assignmentTarget = assignmentTargetId
     ? huelgas.find((item) => item.id === assignmentTargetId) ?? null
@@ -852,7 +701,6 @@ export function useHuelgasPageController() {
     setAssignmentDraft(normalized);
     setAssignmentResidenceOverrides({});
   };
-
 
   const openCollectionMails = async (huelga: Huelga) => {
     const personal = huelga.personalConTurno ?? [];
