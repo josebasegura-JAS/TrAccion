@@ -1,6 +1,6 @@
 {
   "name": "traccion-v1",
-  "version": "1.2.148",
+  "version": "1.2.149",
   "description": "TrAccion - RRLL Dashboard moderno con Electron, React y TypeScript",
   "author": "TrAccion",
   "private": true,
