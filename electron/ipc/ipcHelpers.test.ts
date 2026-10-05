@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../sqlitePersistence.js', () => ({
+  getSqliteStatus: () => ({ available: false }),
+}));
+
 import {
   validateConditionalJsonRecord,
   validateConditionalJsonRecordBatch,
