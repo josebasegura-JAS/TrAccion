@@ -1,6 +1,8 @@
+import { cloneElement, isValidElement, useId } from 'react';
 import type {
   InputHTMLAttributes,
   LabelHTMLAttributes,
+  ReactElement,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
@@ -91,6 +93,7 @@ export function Select({ className, density = 'standard', ...props }: SelectProp
 
 interface FieldProps {
   children: ReactNode;
+  density?: FieldDensity;
   className?: string;
   error?: ReactNode;
   hint?: ReactNode;
@@ -99,17 +102,51 @@ interface FieldProps {
   required?: boolean;
 }
 
-/** Agrupa etiqueta, control y ayuda/error con espaciado uniforme. */
-export function Field({ children, className, error, hint, htmlFor, label, required }: FieldProps) {
+/** Agrupa etiqueta, control y ayuda/error con espaciado uniforme y asociación accesible. */
+export function Field({
+  children,
+  className,
+  density = 'standard',
+  error,
+  hint,
+  htmlFor,
+  label,
+  required,
+}: FieldProps) {
+  const generatedId = useId().replace(/:/g, '');
+  const controlId = htmlFor ?? `field-${generatedId}`;
+  const errorId = `${controlId}-error`;
+  const hintId = `${controlId}-hint`;
+  const describedBy = error ? errorId : hint ? hintId : undefined;
+
+  const isSharedControl =
+    isValidElement(children) &&
+    (children.type === Input || children.type === Select || children.type === Textarea);
+
+  const control = isSharedControl
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        id: (children.props as { id?: string }).id ?? controlId,
+        density: (children.props as { density?: FieldDensity }).density ?? density,
+        required: (children.props as { required?: boolean }).required ?? required,
+        'aria-invalid': error ? true : (children.props as { 'aria-invalid'?: boolean | 'true' | 'false' })['aria-invalid'],
+        'aria-describedby': [
+          (children.props as { 'aria-describedby'?: string })['aria-describedby'],
+          describedBy,
+        ].filter(Boolean).join(' ') || undefined,
+      })
+    : children;
+
   return (
-    <div className={className}>
-      <FieldLabel htmlFor={htmlFor}>
+    <div className={cx(density === 'compact' ? 'space-y-0.5' : 'space-y-1', className)}>
+      <FieldLabel className="mb-0" htmlFor={controlId}>
         {label}
         {required ? <span className="ml-1 text-metro-red" aria-hidden="true">*</span> : null}
       </FieldLabel>
-      {children}
-      {error ? <p className="mt-1 text-xs font-semibold text-red-300">{error}</p> : null}
-      {!error && hint ? <p className="mt-1 text-xs leading-4 text-metro-muted">{hint}</p> : null}
+      {control}
+      {error ? (
+        <p id={errorId} className="text-xs font-semibold text-red-300" role="alert">{error}</p>
+      ) : null}
+      {!error && hint ? <p id={hintId} className="text-xs leading-4 text-metro-muted">{hint}</p> : null}
     </div>
   );
 }
