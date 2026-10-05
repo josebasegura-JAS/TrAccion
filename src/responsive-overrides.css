@@ -1,0 +1,62 @@
+/*
+ * Paquete D · Responsive de portátil
+ * Prioridad: 1366x768 y escalado de Windows al 125%.
+ * Solo ajustes de layout; no modifica reglas de negocio.
+ */
+
+/* Especiales: en portátil el preview no debe imponer una altura de 540 px que
+   obligue a recorrer toda la página para validar el formulario. */
+#especiales [role='textbox'][contenteditable='true'] {
+  min-height: 360px !important;
+}
+
+@media (min-width: 1280px) {
+  #especiales aside {
+    position: sticky;
+    top: 0.5rem;
+    align-self: start;
+  }
+
+  #especiales [role='textbox'][contenteditable='true'] {
+    max-height: calc(100vh - 12rem) !important;
+    overflow: auto !important;
+  }
+}
+
+@media (min-width: 1600px) and (min-height: 900px) {
+  #especiales [role='textbox'][contenteditable='true'] {
+    min-height: 500px !important;
+  }
+}
+
+/* Pantallas bajas: recorta ornamento vertical, no contenido. */
+@media (max-height: 820px) {
+  #especiales {
+    gap: 0.75rem;
+  }
+
+  #especiales > div {
+    padding: 0.75rem;
+  }
+
+  #especiales [role='textbox'][contenteditable='true'] {
+    min-height: 300px !important;
+    max-height: calc(100vh - 11rem) !important;
+  }
+}
+
+/* El rail lateral ya opera como overlay por debajo de 1500 px desde Sidebar.
+   Evita que una animación de ancho provoque scroll horizontal global. */
+@media (max-width: 1499px) {
+  .app-shell,
+  .app-shell__main,
+  .app-shell__content,
+  .app-module-stage {
+    min-width: 0;
+  }
+
+  .app-shell__content,
+  .app-module-stage {
+    overflow-x: clip;
+  }
+}
