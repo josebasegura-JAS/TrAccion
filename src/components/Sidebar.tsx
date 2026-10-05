@@ -12,6 +12,7 @@ import { getGroupForView, navigationGroups, type AppView, type NavigationGroupId
 const traccionLogoSrc = '../assets/logo/traccion-logo.png';
 const SIDEBAR_PINNED_KEY = 'traccion.sidebar.pinned';
 const SIDEBAR_ACTIVE_GROUP_KEY = 'traccion.sidebar.activeGroup';
+const SIDEBAR_PIN_MIN_WIDTH = 1500;
 
 const isNavigationGroupId = (value: string | null): value is NavigationGroupId =>
   navigationGroups.some((group) => group.id === value);
@@ -36,8 +37,6 @@ const formatDatabaseTimestamp = (timestamp: string | null | undefined) => {
   const date = new Date(timestamp);
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
 };
-
-
 
 const buildDatabaseIndicatorViewModel = (
   databaseStatus: TraccionDatabaseStatus | null,
@@ -68,9 +67,12 @@ const buildDatabaseIndicatorViewModel = (
   return { label: 'Revisar', statusText: databaseStatus.message ?? 'ruta no accesible', routeText, lastSyncText, syncStatusText, dotClassName: 'bg-red-500 ring-red-300/25', textClassName: 'text-red-100', icon: 'database', requiresAttention: true };
 };
 
+const isSidebarPinAllowed = () =>
+  typeof window !== 'undefined' && window.innerWidth >= SIDEBAR_PIN_MIN_WIDTH;
+
 const readStoredPinnedPreference = () => {
   if (typeof window === 'undefined') return false;
-  return readStorageItem(SIDEBAR_PINNED_KEY) === 'true';
+  return isSidebarPinAllowed() && readStorageItem(SIDEBAR_PINNED_KEY) === 'true';
 };
 
 const readStoredActiveGroup = (activeView: AppView) => {
@@ -89,6 +91,7 @@ export function Sidebar({
   onViewChange: (view: AppView) => void;
 }) {
   const [isPinned, setIsPinned] = useState(readStoredPinnedPreference);
+  const [isPinAllowed, setIsPinAllowed] = useState(isSidebarPinAllowed);
   const [activeGroupId, setActiveGroupId] = useState(() => readStoredActiveGroup(activeView));
   const [isPanelOpen, setIsPanelOpen] = useState(() => readStoredPinnedPreference());
 
@@ -109,6 +112,19 @@ export function Sidebar({
   useEffect(() => { writeStorageItem(SIDEBAR_PINNED_KEY, String(isPinned)); }, [isPinned]);
   useEffect(() => { writeStorageItem(SIDEBAR_ACTIVE_GROUP_KEY, activeGroupId); }, [activeGroupId]);
   useEffect(() => { if (activeViewGroupId) setActiveGroupId(activeViewGroupId); }, [activeViewGroupId]);
+  useEffect(() => {
+    const handleResize = () => {
+      const pinAllowed = isSidebarPinAllowed();
+      setIsPinAllowed(pinAllowed);
+      if (!pinAllowed) {
+        setIsPinned(false);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleLogoSelect = () => {
     if (!isPinned) setIsPanelOpen(false);
@@ -124,6 +140,7 @@ export function Sidebar({
   };
   const handleViewSelect = (view: AppView) => { onViewChange(view); if (!isPinned) setIsPanelOpen(false); };
   const handlePinToggle = () => {
+    if (!isPinAllowed) return;
     setIsPinned((currentPinnedState) => {
       const nextPinnedState = !currentPinnedState;
       setIsPanelOpen(nextPinnedState || isPanelOpen);
@@ -141,42 +158,33 @@ export function Sidebar({
         </div>
         <nav aria-label="Grupos principales" className="flex flex-1 flex-col items-center px-2 py-4">
           <div className="flex flex-col items-center gap-2">
-            <button aria-current={activeView === 'dashboard' ? 'page' : undefined} aria-label="Inicio" className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${activeView === 'dashboard' ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} data-tip={shouldShowPanel ? 'Inicio' : undefined} onClick={handleHomeSelect} type="button">
+            <button aria-current={activeView === 'dashboard' ? 'page' : undefined} aria-label="Inicio" className={`relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${activeView === 'dashboard' ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} data-tip={!shouldShowPanel ? 'Inicio' : undefined} onClick={handleHomeSelect} type="button">
               {activeView === 'dashboard' && <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />}
               <Home className={activeView === 'dashboard' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
-              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>Inicio</span>
             </button>
             {navigationGroups.map((group) => {
               const Icon = group.icon;
               const isActiveGroup = group.id === activeGroupId;
               const containsActiveView = group.id === activeViewGroupId;
               return (
-                <button aria-label={group.label} className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${isActiveGroup || containsActiveView ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} key={group.id} data-tip={shouldShowPanel ? group.label : undefined} onClick={() => handleGroupSelect(group.id)} type="button">
+                <button aria-label={group.label} className={`relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${isActiveGroup || containsActiveView ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} key={group.id} data-tip={!shouldShowPanel ? group.label : undefined} onClick={() => handleGroupSelect(group.id)} type="button">
                   {(isActiveGroup || containsActiveView) && <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />}
                   <Icon className={containsActiveView ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
-                  <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>{group.label}</span>
                 </button>
               );
             })}
           </div>
           <div className="mt-auto flex flex-col items-center gap-2 border-t border-white/10 pt-3">
-            <button aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`} className="group/rail relative flex w-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white" data-tip={shouldShowPanel ? databaseIndicatorTooltip : undefined} onClick={handleDatabaseIndicatorSelect} type="button">
+            <button aria-label={`Estado de base de datos: ${databaseIndicator.statusText}`} className="relative flex w-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] px-1 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white" data-tip={!shouldShowPanel ? databaseIndicatorTooltip : undefined} onClick={handleDatabaseIndicatorSelect} type="button">
               <span aria-hidden="true" className={`flex h-4 w-4 items-center justify-center rounded-full ring-4 ${databaseIndicator.dotClassName}`}>
                 {databaseIndicator.icon === 'lock' ? <LockKeyhole className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} /> : <Database className="h-2.5 w-2.5 text-slate-950/80" strokeWidth={3} />}
               </span>
               {databaseIndicator.requiresAttention && <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 text-amber-200 drop-shadow" strokeWidth={2.6} />}
               <span className="max-w-full truncate">{databaseIndicator.label}</span>
-              <span className={`pointer-events-none absolute left-14 z-50 w-72 rounded-lg border border-white/10 bg-slate-950/95 px-3 py-2 text-left text-xs font-medium normal-case tracking-normal text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>
-                <span className="block font-semibold">{databaseIndicator.statusText}</span>
-                <span className="mt-1 block break-all text-slate-300">{databaseIndicator.routeText}</span>
-                
-                <span className="mt-1 block text-slate-400">{databaseIndicator.lastSyncText}</span>
-              </span>
             </button>
-            <button aria-current={activeView === 'ajustes' ? 'page' : undefined} aria-label="Ajustes" className={`group/rail relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${activeView === 'ajustes' ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} data-tip={shouldShowPanel ? 'Ajustes' : undefined} onClick={handleSettingsSelect} type="button">
+            <button aria-current={activeView === 'ajustes' ? 'page' : undefined} aria-label="Ajustes" className={`relative flex h-12 w-12 items-center justify-center rounded-xl border border-transparent transition ${activeView === 'ajustes' ? 'border-white/10 bg-white/10 text-white shadow-lg shadow-slate-950/25' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'}`} data-tip={!shouldShowPanel ? 'Ajustes' : undefined} onClick={handleSettingsSelect} type="button">
               {activeView === 'ajustes' && <span className="absolute left-[-0.5rem] h-7 w-1 rounded-r-full bg-metro-red" />}
               <Settings className={activeView === 'ajustes' ? 'text-red-200' : undefined} size={21} strokeWidth={2.1} />
-              <span className={`pointer-events-none absolute left-14 z-50 rounded-lg border border-white/10 bg-slate-950/95 px-2.5 py-1.5 text-xs font-semibold text-slate-100 opacity-0 shadow-xl shadow-slate-950/40 transition ${shouldShowPanel ? 'hidden' : 'group-hover/rail:translate-x-1 group-hover/rail:opacity-100'}`}>Ajustes</span>
             </button>
           </div>
         </nav>
@@ -187,7 +195,7 @@ export function Sidebar({
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
             <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-metro-red">TrAcción 1.2</p><h2 className="truncate text-base font-semibold text-metro-text">{activeGroup.label}</h2></div>
             <div className="flex items-center gap-1">
-              <button aria-label={isPinned ? 'Desfijar panel' : 'Fijar panel'} className={`rounded-full border p-2 transition ${isPinned ? 'border-red-400/30 bg-red-500/10 text-red-100 hover:bg-red-500/15' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'}`} data-tip={isPinned ? 'Desfijar panel' : 'Fijar panel'} onClick={handlePinToggle} type="button">{isPinned ? <Pin size={15} /> : <PinOff size={15} />}</button>
+              <button aria-label={isPinAllowed ? (isPinned ? 'Desfijar panel' : 'Fijar panel') : 'Fijar panel no disponible en este ancho'} className={`rounded-full border p-2 transition ${!isPinAllowed ? 'cursor-not-allowed border-white/5 bg-white/[0.02] text-slate-600' : isPinned ? 'border-red-400/30 bg-red-500/10 text-red-100 hover:bg-red-500/15' : 'border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white'}`} data-tip={isPinAllowed ? (isPinned ? 'Desfijar panel' : 'Fijar panel') : 'Disponible desde 1500 px de ancho'} disabled={!isPinAllowed} onClick={handlePinToggle} type="button">{isPinned ? <Pin size={15} /> : <PinOff size={15} />}</button>
               <button aria-label="Cerrar panel" className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition hover:bg-white/[0.08] hover:text-white" data-tip="Cerrar panel" onClick={() => setIsPanelOpen(false)} type="button"><X size={15} /></button>
             </div>
           </div>
@@ -210,7 +218,11 @@ export function Sidebar({
               {databaseIndicator.requiresAttention && <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0 text-amber-200" strokeWidth={2.5} />}
               <span className="min-w-0"><span className={`block truncate font-semibold ${databaseIndicator.textClassName}`}>{databaseIndicator.label}</span><span className="block truncate text-[11px] text-slate-400">{databaseIndicator.statusText}</span><span className="block truncate text-[11px] text-slate-500">{externalDataSyncStatus.message}</span></span>
             </button>
-            {isPinned ? 'Panel fijado: el área principal reserva espacio en escritorio.' : 'Panel temporal: se oculta al abrir un módulo.'}
+            {isPinAllowed
+              ? isPinned
+                ? 'Panel fijado: el área principal reserva espacio en escritorio.'
+                : 'Panel temporal: se oculta al abrir un módulo.'
+              : 'Panel temporal: el fijado se habilita a partir de 1500 px de ancho.'}
           </div>
         </div>
       )}
