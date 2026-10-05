@@ -28,6 +28,11 @@ function savingMessage(feedback: PersistenceFeedback): string {
   return message.replace(/\.\.\.$/, '…').replace(/ en SQLite…?$/i, '…');
 }
 
+function pageHasInlineSaveFeedback(): boolean {
+  return typeof document !== 'undefined'
+    && Boolean(document.querySelector('[data-inline-save-feedback="true"]'));
+}
+
 export function GlobalBusyIndicator() {
   const [state, setState] = useState<IndicatorState | null>(null);
   const pendingOperationsRef = useRef<Set<string>>(new Set());
@@ -93,6 +98,13 @@ export function GlobalBusyIndicator() {
       if (feedback.kind === 'error') {
         setState({ kind: 'error', message: feedback.message || 'No se han podido guardar los cambios.', slow: false });
         completionTimeoutRef.current = window.setTimeout(() => setState(null), ERROR_VISIBLE_MS);
+        return;
+      }
+
+      // Si la pantalla ya incorpora InlineSaveFeedback, la confirmación final
+      // se muestra allí. El indicador global no repite el mismo "Guardado".
+      if (pageHasInlineSaveFeedback()) {
+        setState(null);
         return;
       }
 

@@ -45,24 +45,39 @@ export function FloatingSaveAction({
   if (!visible || pageHasHeaderActions) return null;
 
   return (
-    <div
-      aria-live="polite"
-      className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-xl border border-metro-border bg-[#0b1725]/95 p-2 shadow-[0_14px_38px_rgba(2,6,23,0.42)] backdrop-blur"
-    >
-      <span className="hidden px-2 text-xs font-semibold text-metro-muted sm:inline">
-        {saving ? savingLabel : pendingLabel}
-      </span>
-      <ActionButton
-        disabled={saving}
-        icon={Save}
-        iconOnly={false}
-        loading={saving}
-        onClick={() => void onSave()}
-        size="sm"
-        variant="save"
+    <>
+      {/*
+        Compatibilidad con pantallas que todavía conservan un <p> de estado
+        inmediatamente después del guardado flotante (Coordinación). Mientras
+        saving=true, el flotante es el único feedback de progreso. En cuanto
+        termina, el texto vuelve a mostrarse para éxito, warning o error.
+      */}
+      <style>{`
+        [data-floating-save-action="true"][data-saving="true"] + p {
+          display: none !important;
+        }
+      `}</style>
+      <div
+        aria-live="polite"
+        className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-xl border border-metro-border bg-[#0b1725]/95 p-2 shadow-[0_14px_38px_rgba(2,6,23,0.42)] backdrop-blur"
+        data-floating-save-action="true"
+        data-saving={saving ? 'true' : 'false'}
       >
-        {saving ? savingLabel : buttonLabel}
-      </ActionButton>
-    </div>
+        <span className="hidden px-2 text-xs font-semibold text-metro-muted sm:inline">
+          {saving ? savingLabel : pendingLabel}
+        </span>
+        <ActionButton
+          disabled={saving}
+          icon={Save}
+          iconOnly={false}
+          loading={saving}
+          onClick={() => void onSave()}
+          size="sm"
+          variant="save"
+        >
+          {saving ? savingLabel : buttonLabel}
+        </ActionButton>
+      </div>
+    </>
   );
 }

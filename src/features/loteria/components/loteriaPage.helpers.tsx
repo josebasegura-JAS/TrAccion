@@ -1,5 +1,11 @@
-import type { ReactNode } from 'react';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+} from 'react';
 import { Check, type LucideIcon } from 'lucide-react';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { cx } from './loteriaPage.utils';
 
@@ -81,6 +87,32 @@ export function StepCard({
   );
 }
 
+type ChildWithOptionalChildren = {
+  children?: ReactNode;
+  variant?: string;
+};
+
+function withoutNestedSaveActions(children: ReactNode): ReactNode {
+  return Children.map(children, (child) => {
+    if (!isValidElement<ChildWithOptionalChildren>(child)) return child;
+
+    // En Lotería cada etapa tiene una única acción de guardado en su cabecera.
+    // Los antiguos guardados repetidos dentro del cuerpo hacían exactamente la
+    // misma persistencia del borrador y se eliminan de la presentación.
+    if (child.type === ActionButton && child.props.variant === 'save') {
+      return null;
+    }
+
+    if (child.props.children === undefined) return child;
+
+    return cloneElement(
+      child,
+      undefined,
+      withoutNestedSaveActions(child.props.children),
+    );
+  });
+}
+
 export function SectionShell({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-metro-border bg-metro-panel p-3.5">
@@ -91,7 +123,7 @@ export function SectionShell({ title, subtitle, actions, children }: { title: st
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      {children}
+      {actions ? withoutNestedSaveActions(children) : children}
     </section>
   );
 }
