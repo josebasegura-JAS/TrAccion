@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, ChevronRight, X } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, RefreshCw, WifiOff, X } from 'lucide-react';
 import { getNavigationBreadcrumb, getNavigationIcon, type AppView } from '../navigation/navigation';
 import { GlobalSearch } from './GlobalSearch';
 import { ModuleHelpButton } from './ModuleHelp';
 import { useModuleHelpRegistry } from '../services/moduleHelpRegistry';
 import { useDatabaseStatus } from '../services/databaseStatus';
+import { useDatabaseConnectivityState } from '../services/databaseConnectivityState';
 import { useExternalDataSyncStatus } from '../services/externalDataSync';
 import { readStorageItem, writeStorageItem } from '../services/persistence';
 import { subscribeToAppNavigation } from '../services/appNavigationBus';
@@ -113,7 +114,31 @@ type HeaderSyncVisual = {
 function buildHeaderSyncVisual(
   databaseReady: boolean,
   syncStatus: ReturnType<typeof useExternalDataSyncStatus>,
+  connectivity: ReturnType<typeof useDatabaseConnectivityState>,
 ): HeaderSyncVisual {
+  if (connectivity.phase === 'reconnecting') {
+    return {
+      label: 'Reconectando…',
+      dotClass: 'bg-amber-400 animate-pulse shadow-[0_0_0_4px_rgba(251,191,36,0.10),0_0_14px_rgba(251,191,36,0.32)]',
+      textClass: 'text-amber-100',
+    };
+  }
+
+  if (connectivity.phase === 'syncing') {
+    return {
+      label: 'Actualizando…',
+      dotClass: 'bg-sky-400 animate-pulse',
+      textClass: 'text-sky-100',
+    };
+  }
+
+  if (connectivity.phase === 'recovered') {
+    return {
+      label: 'Reconectado',
+      dotClass: 'bg-emerald-400',
+      textClass: 'text-emerald-200',
+    };
+  }
   if (!databaseReady) {
     return {
       label: 'Edición bloqueada',
@@ -178,6 +203,7 @@ export function Header({
   const moduleHelp = useModuleHelpRegistry((state) => state.content);
   const dbStatus = useDatabaseStatus();
   const syncStatus = useExternalDataSyncStatus();
+  const connectivity = useDatabaseConnectivityState();
 
   const tasks = useTaskStore((state) => state.tasks);
   const loadTasks = useTaskStore((state) => state.load);
@@ -203,7 +229,7 @@ export function Header({
     [currentResponsible, openedAssignmentIds, tasks, windowsUserName],
   );
 
-  const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus);
+  const syncVisual = buildHeaderSyncVisual(Boolean(dbStatus?.ready), syncStatus, connectivity);
   const userInitials = useMemo(() => getUserInitials(windowsUserName), [windowsUserName]);
 
   useEffect(() => {
@@ -390,8 +416,16 @@ export function Header({
               <p className="truncate text-[13px] font-bold leading-tight text-metro-text" title={windowsUserName}>
                 {windowsUserName}
               </p>
-              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold ${syncVisual.textClass}`} title={syncStatus.message}>
-                <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${syncVisual.dotClass}`} />
+              <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold ${syncVisual.textClass}`} title={connectivity.phase === 'connected' ? syncStatus.message : connectivity.message}>
+                {connectivity.phase === 'reconnecting' ? (
+                  <WifiOff className="shrink-0 animate-pulse" size={12} aria-hidden="true" />
+                ) : connectivity.phase === 'syncing' ? (
+                  <RefreshCw className="shrink-0 animate-spin" size={12} aria-hidden="true" />
+                ) : connectivity.phase === 'recovered' ? (
+                  <CheckCircle2 className="shrink-0" size={12} aria-hidden="true" />
+                ) : (
+                  <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${syncVisual.dotClass}`} />
+                )}
                 <span className="truncate">{syncVisual.label}</span>
               </div>
             </div>

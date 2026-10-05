@@ -1,19 +1,23 @@
 import { publishDatabaseStatus, refreshDatabaseStatus } from './databaseStatus';
 import { publishDatabaseConnectivityBlock } from './editingAvailability';
 import { forceExternalDataRefreshAfterRecovery } from './externalDataSync';
+import { publishDatabaseConnectivityState } from './databaseConnectivityState';
 
-const HEALTH_CHECK_INTERVAL_MS = 12_000;
-const FAILURE_THRESHOLD = 3;
-const RECOVERY_SUCCESS_THRESHOLD = 2;
-const HEALTH_CHECK_TIMEOUT_MS = 8_000;
+const HEALTHY_CHECK_INTERVAL_MS = 8_000;
+const RECONNECT_FAST_INTERVAL_MS = 2_000;
+const RECONNECT_SLOW_INTERVAL_MS = 5_000;
+const RECONNECT_FAST_ATTEMPTS = 5;
+const HEALTH_CHECK_TIMEOUT_MS = 6_000;
 const CONNECTIVITY_MESSAGE =
-  'Se ha perdido la conexión con la base SQLite compartida. La edición permanece bloqueada hasta verificar la recuperación y refrescar los datos.';
+  'Se ha perdido la conexión con la base SQLite compartida. La edición permanece bloqueada mientras TrAcción intenta reconectar.';
 
 let timerId: number | null = null;
 let checkInProgress = false;
 let consecutiveFailures = 0;
-let consecutiveRecoverySuccesses = 0;
 let blockedByHealthMonitor = false;
+let monitorStarted = false;
+let browserOnlineHandler: (() => void) | null = null;
+let browserOfflineHandler: (() => void) | null = null;
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -34,19 +38,48 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+function clearScheduledCheck(): void {
+  if (timerId !== null) {
+    window.clearTimeout(timerId);
+    timerId = null;
+  }
+}
+
+function scheduleNextCheck(delayMs?: number): void {
+  if (!monitorStarted) return;
+  clearScheduledCheck();
+  const reconnectDelay = consecutiveFailures <= RECONNECT_FAST_ATTEMPTS
+    ? RECONNECT_FAST_INTERVAL_MS
+    : RECONNECT_SLOW_INTERVAL_MS;
+  const nextDelay = delayMs ?? (blockedByHealthMonitor ? reconnectDelay : HEALTHY_CHECK_INTERVAL_MS);
+  timerId = window.setTimeout(() => {
+    timerId = null;
+    void runHealthCheck();
+  }, nextDelay);
+}
+
 function blockEditing(message = CONNECTIVITY_MESSAGE): void {
   blockedByHealthMonitor = true;
-  consecutiveRecoverySuccesses = 0;
+  const attempt = Math.max(1, consecutiveFailures);
   publishDatabaseConnectivityBlock(true, message, 'health-monitor');
+  publishDatabaseConnectivityState(
+    'reconnecting',
+    attempt === 1
+      ? 'Conexión interrumpida. Reconectando con la base compartida…'
+      : `Reconectando con la base compartida… intento ${attempt}`,
+    attempt,
+  );
 }
 
 async function completeRecovery(): Promise<void> {
-  // Se mantiene el bloqueo durante toda la validación y el refresco. El usuario
-  // nunca vuelve a editar usando el estado previo a una caída de red.
   publishDatabaseConnectivityBlock(
     true,
-    'Conexión SQLite recuperada. Actualizando los datos compartidos antes de reactivar la edición…',
+    'Conexión recuperada. Actualizando los datos compartidos antes de reactivar la edición…',
     'health-monitor',
+  );
+  publishDatabaseConnectivityState(
+    'syncing',
+    'Conexión recuperada. Actualizando los datos compartidos…',
   );
 
   const status = await refreshDatabaseStatus();
@@ -57,12 +90,16 @@ async function completeRecovery(): Promise<void> {
   await forceExternalDataRefreshAfterRecovery();
   blockedByHealthMonitor = false;
   consecutiveFailures = 0;
-  consecutiveRecoverySuccesses = 0;
   publishDatabaseConnectivityBlock(false, 'Conexión SQLite recuperada y datos compartidos actualizados.', 'health-monitor');
+  publishDatabaseConnectivityState(
+    'recovered',
+    'Conexión restablecida · datos compartidos actualizados.',
+  );
 }
 
 async function runHealthCheck(): Promise<void> {
-  if (checkInProgress || !window.traccion?.databaseHealthCheck) {
+  if (!monitorStarted || checkInProgress || !window.traccion?.databaseHealthCheck) {
+    scheduleNextCheck();
     return;
   }
 
@@ -73,58 +110,63 @@ async function runHealthCheck(): Promise<void> {
 
     if (!result.ok) {
       consecutiveFailures += 1;
-      consecutiveRecoverySuccesses = 0;
-      if (consecutiveFailures >= FAILURE_THRESHOLD) {
-        blockEditing(`${CONNECTIVITY_MESSAGE} ${result.message}`);
-      }
+      blockEditing(`${CONNECTIVITY_MESSAGE} ${result.message}`);
       return;
     }
 
-    consecutiveFailures = 0;
     if (!blockedByHealthMonitor) {
-      return;
-    }
-
-    consecutiveRecoverySuccesses += 1;
-    if (consecutiveRecoverySuccesses < RECOVERY_SUCCESS_THRESHOLD) {
+      consecutiveFailures = 0;
+      publishDatabaseConnectivityState('connected', result.message);
       return;
     }
 
     await completeRecovery();
   } catch (error) {
     consecutiveFailures += 1;
-    consecutiveRecoverySuccesses = 0;
     const message = error instanceof Error ? error.message : 'Error verificando SQLite.';
-    if (blockedByHealthMonitor || consecutiveFailures >= FAILURE_THRESHOLD) {
-      blockEditing(`${CONNECTIVITY_MESSAGE} ${message}`);
-    }
+    blockEditing(`${CONNECTIVITY_MESSAGE} ${message}`);
   } finally {
     checkInProgress = false;
+    scheduleNextCheck();
   }
 }
 
+export function requestDatabaseReconnectCheck(): void {
+  if (!monitorStarted) return;
+  clearScheduledCheck();
+  scheduleNextCheck(0);
+}
+
 export function startDatabaseHealthMonitor(): void {
-  if (typeof window === 'undefined' || timerId !== null || !window.traccion?.databaseHealthCheck) {
+  if (typeof window === 'undefined' || monitorStarted || !window.traccion?.databaseHealthCheck) {
     return;
   }
 
-  void runHealthCheck();
-  timerId = window.setInterval(() => {
-    void runHealthCheck();
-  }, HEALTH_CHECK_INTERVAL_MS);
+  monitorStarted = true;
+  browserOnlineHandler = () => requestDatabaseReconnectCheck();
+  browserOfflineHandler = () => {
+    consecutiveFailures = Math.max(1, consecutiveFailures);
+    blockEditing('Windows ha informado de una pérdida de red. Reconectando con la base compartida…');
+    requestDatabaseReconnectCheck();
+  };
+  window.addEventListener('online', browserOnlineHandler);
+  window.addEventListener('offline', browserOfflineHandler);
+  requestDatabaseReconnectCheck();
 }
 
 export function stopDatabaseHealthMonitor(): void {
   if (typeof window === 'undefined') {
     return;
   }
-  if (timerId !== null) {
-    window.clearInterval(timerId);
-    timerId = null;
-  }
+  monitorStarted = false;
+  clearScheduledCheck();
+  if (browserOnlineHandler) window.removeEventListener('online', browserOnlineHandler);
+  if (browserOfflineHandler) window.removeEventListener('offline', browserOfflineHandler);
+  browserOnlineHandler = null;
+  browserOfflineHandler = null;
   checkInProgress = false;
   consecutiveFailures = 0;
-  consecutiveRecoverySuccesses = 0;
   blockedByHealthMonitor = false;
   publishDatabaseConnectivityBlock(false, undefined, 'health-monitor');
+  publishDatabaseConnectivityState('connected');
 }

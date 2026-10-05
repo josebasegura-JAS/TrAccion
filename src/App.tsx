@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, LockKeyhole } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, LockKeyhole, RefreshCw, WifiOff } from 'lucide-react';
 import { AppUpdateChecker } from './components/AppUpdateChecker';
 import { GlobalBusyIndicator } from './components/GlobalBusyIndicator';
 import { BackgroundActivityIndicator } from './components/BackgroundActivityIndicator';
@@ -9,9 +9,10 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { resolveActiveViewForNavigation, resolveCommitteeOrganForNavigation, type AppView } from './navigation/navigation';
 import { startExternalDataSyncPolling, stopExternalDataSyncPolling } from './services/externalDataSync';
-import { startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
+import { requestDatabaseReconnectCheck, startDatabaseHealthMonitor, stopDatabaseHealthMonitor } from './services/databaseHealthMonitor';
 import { useDatabaseStatus } from './services/databaseStatus';
 import { useEditingAvailability } from './services/editingAvailability';
+import { useDatabaseConnectivityState } from './services/databaseConnectivityState';
 import { hasDirtyEditors } from './services/dirtyEditors';
 import { recordPerformanceMetric } from './services/performanceMetrics';
 import { useAppDialog } from './hooks/useAppDialog';
@@ -114,10 +115,54 @@ function PersistenceErrorBanner({ onGoToAjustes }: { onGoToAjustes: () => void }
   );
 }
 
+function ConnectionRecoveryBanner() {
+  const connectivity = useDatabaseConnectivityState();
+  if (connectivity.phase === 'connected') return null;
+
+  const recovered = connectivity.phase === 'recovered';
+  const syncing = connectivity.phase === 'syncing';
+  return (
+    <section
+      className={`mb-2 flex items-center gap-3 rounded-xl border px-3.5 py-2.5 shadow-sm ${
+        recovered
+          ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+          : 'border-amber-400/25 bg-amber-400/10 text-amber-50'
+      }`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${recovered ? 'bg-emerald-400/15' : 'bg-amber-400/15'}`}>
+        {recovered ? (
+          <CheckCircle2 size={19} aria-hidden="true" />
+        ) : syncing ? (
+          <RefreshCw className="animate-spin" size={19} aria-hidden="true" />
+        ) : (
+          <WifiOff className="animate-pulse" size={19} aria-hidden="true" />
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <strong className="block text-sm">
+          {recovered ? 'Conexión restablecida' : syncing ? 'Sincronizando datos compartidos' : 'Reconectando con la base compartida'}
+        </strong>
+        <p className="mt-0.5 truncate text-xs opacity-80">{connectivity.message}</p>
+      </div>
+      {!recovered && !syncing ? (
+        <button
+          className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/15"
+          onClick={requestDatabaseReconnectCheck}
+          type="button"
+        >
+          Reintentar ahora
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 function SqliteReadOnlyBanner({ onGoToAjustes }: { onGoToAjustes: () => void }) {
   const databaseStatus = useDatabaseStatus();
   const editingAvailability = useEditingAvailability();
-  if (editingAvailability.allowed) return null;
+  if (editingAvailability.allowed || editingAvailability.connectivityBlocked) return null;
   const detail = editingAvailability.reason || databaseStatus?.message || (databaseStatus ? 'SQLite no está activa.' : 'Comprobando la conexión con SQLite.');
   return (
     <section className="sqlite-readonly-banner" role="alert" aria-live="assertive"><LockKeyhole size={20} aria-hidden="true" />
@@ -228,6 +273,7 @@ export function App() {
           <Header activeView={activeView} onViewChange={handleDashboardOpenRecord} />
           <main className={`app-shell__content ${activeView === 'dashboard' ? 'app-shell__content--dashboard' : ''}`}>
             <div className={`app-module-stage ${activeView === 'dashboard' ? 'app-module-stage--dashboard' : ''}`}>
+              <ConnectionRecoveryBanner />
               <SqliteReadOnlyBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <PersistenceErrorBanner onGoToAjustes={() => void changeActiveView('ajustes')} />
               <GlobalBusyIndicator />

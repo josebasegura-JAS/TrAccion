@@ -2,6 +2,7 @@ import {
   publishDatabaseConnectivityBlock,
   resetDatabaseConnectivityBlock,
 } from './editingAvailability';
+import { publishDatabaseConnectivityState } from './databaseConnectivityState';
 
 export type PersistenceFeedbackKind = 'saving' | 'saved' | 'error';
 export type PersistenceFeedbackVisibility = 'visible' | 'silent';
@@ -46,13 +47,10 @@ export function startDatabaseConnectivityIssueListener(): void {
     }
 
     publishDatabaseConnectivityBlock(payload.blocked, payload.message, 'lock-heartbeat');
-    emitPersistenceFeedback({
-      kind: payload.blocked ? 'error' : 'saved',
-      updatedAt: payload.updatedAt,
-      message: payload.message,
-    });
-
-    if (!payload.blocked) {
+    if (payload.blocked) {
+      publishDatabaseConnectivityState('reconnecting', payload.message);
+    } else {
+      publishDatabaseConnectivityState('recovered', payload.message);
       window.dispatchEvent(new CustomEvent(DATABASE_CONNECTIVITY_RECOVERED_EVENT));
     }
   });
