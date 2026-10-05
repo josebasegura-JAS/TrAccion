@@ -803,7 +803,20 @@ export function TicketRestauranteAnnualBalance({
                 {sortedFilteredPeople.map((row) => (
                   <tr className="cursor-pointer border-t border-metro-border/70 hover:bg-metro-surface/60" key={row.empleado} onClick={() => setSelectedEmployee(row.empleado)} title="Ver desglose anual">
                     <td className="px-2 py-1.5 font-bold text-metro-text">{row.empleado}</td>
-                    <td className="px-2 py-1.5 text-metro-text"><span className="font-semibold">{row.nombreApellidos}</span>{row.manual ? <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-bold text-violet-400">MANUAL</span> : null}</td>
+                    <td className="px-2 py-1.5 text-metro-text">
+                      <button
+                        aria-label={`Ver desglose anual de ${row.nombreApellidos}`}
+                        className="rounded-sm font-semibold text-metro-text underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-metro-red"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedEmployee(row.empleado);
+                        }}
+                        type="button"
+                      >
+                        {row.nombreApellidos}
+                      </button>
+                      {row.manual ? <span className="ml-1 rounded bg-violet-500/15 px-1 py-0.5 text-[10px] font-bold text-violet-400">MANUAL</span> : null}
+                    </td>
                     <td className="max-w-[190px] truncate px-2 py-1.5 text-metro-muted" title={row.area}>{row.area}</td>
                     {row.monthlyTickets.map((tickets, index) => {
                       const kind = row.monthlyKinds[index];

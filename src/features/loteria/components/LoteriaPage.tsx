@@ -684,14 +684,13 @@ export function LoteriaPage() {
               onUpdate={updateRequest}
               onTogglePaid={togglePaid}
             />
-            <div className="flex justify-end"><ActionButton icon={Save} iconOnly={false} onClick={() => void persist(draft, 'Décimos y pagos guardados.')} size="sm" variant="save">Guardar pagos</ActionButton></div>
           </div>
         </SectionShell>
       ) : null}
 
       <FloatingSaveAction
         onSave={() => persist(draft, 'Cambios de Lotería guardados.')}
-        visible={dirty}
+        visible={dirty && activeSection !== 'seguimiento'}
       />
 
       {activeSection === 'cierre' ? (
