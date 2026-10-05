@@ -164,7 +164,7 @@ function nextSortState<ColumnId extends string>(
 function isInteractiveRowTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    'button, a, input, select, textarea, [role=\"button\"], [role=\"link\"], [contenteditable=\"true\"]',
+    'button, a, input, select, textarea, [role="button"], [role="link"], [contenteditable="true"]',
   ));
 }
 
