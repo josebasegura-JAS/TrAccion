@@ -13,12 +13,12 @@ afterEach(() => {
 
 describe('databaseConnectivityState', () => {
   it('pasa a reconectando con al menos un intento y conserva el mensaje recibido', () => {
-    publishDatabaseConnectivityState('reconnecting', 'Reconectando…', 0);
+    publishDatabaseConnectivityState('reconnecting', 'Reconectando…');
 
     expect(getDatabaseConnectivityState()).toMatchObject({
       phase: 'reconnecting',
       message: 'Reconectando…',
-      attempt: 0,
+      attempt: 1,
     });
 
     publishDatabaseConnectivityState('reconnecting', 'Segundo intento', 2);
