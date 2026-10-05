@@ -6,13 +6,27 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }
 
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+
+const MODAL_SIZE_CLASS: Record<ModalSize, string> = {
+  sm: 'max-w-lg',
+  md: 'max-w-3xl',
+  lg: 'max-w-5xl',
+  xl: 'max-w-6xl',
+};
+
 interface ModalShellProps {
   children: ReactNode;
   /** Bloquea los atajos globales de editores mientras el modal está abierto. */
   blockEditorShortcuts?: boolean;
   /** id del elemento que sirve de título del diálogo (para aria-labelledby). */
   labelledBy: string;
-  /** Clase de ancho máximo del panel, p.ej. 'max-w-5xl' o 'max-w-3xl'. */
+  /**
+   * Tamaño semántico del diálogo. Preferir size sobre maxWidthClassName en código nuevo.
+   * sm ≈ confirmación/detalle breve, md ≈ formulario, lg ≈ editor amplio, xl ≈ tablas/previews.
+   */
+  size?: ModalSize;
+  /** Compatibilidad para casos especiales que todavía necesiten un ancho explícito. */
   maxWidthClassName?: string;
   onClose: () => void;
   panelClassName?: string;
@@ -24,7 +38,8 @@ export function ModalShell({
   blockEditorShortcuts = true,
   children,
   labelledBy,
-  maxWidthClassName = 'max-w-5xl',
+  size = 'lg',
+  maxWidthClassName,
   onClose,
   panelClassName,
   stacked = false,
@@ -46,7 +61,7 @@ export function ModalShell({
         aria-modal="true"
         className={cx(
           'flex max-h-[calc(100vh-1.25rem)] w-full flex-col overflow-hidden rounded-xl border border-metro-border/75 bg-metro-surface shadow-[0_18px_48px_rgba(2,6,23,0.42)]',
-          maxWidthClassName,
+          maxWidthClassName ?? MODAL_SIZE_CLASS[size],
           panelClassName,
         )}
         role="dialog"
@@ -91,9 +106,7 @@ export function ModalTitle({
 }
 
 export function ModalBody({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={cx('min-h-0 flex-1 overflow-y-auto px-4 py-3', className)}>{children}</div>
-  );
+  return <div className={cx('min-h-0 flex-1 overflow-y-auto px-4 py-3', className)}>{children}</div>;
 }
 
 export function ModalFooter({ children, className }: { children: ReactNode; className?: string }) {

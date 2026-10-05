@@ -1,5 +1,6 @@
-
+import { ActionButton } from '../../components/ui/ActionButton';
 import { ModalCloseButton } from '../../components/ui/ModalCloseButton';
+import { ModalFooter, ModalHeader, ModalShell, ModalTitle } from '../../components/ui/ModalShell';
 
 interface PrintPreviewModalProps {
   html: string;
@@ -53,46 +54,26 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Vista previa de impresión: ${title}`}
-    >
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-metro-border bg-metro-surface shadow-card">
-        <div className="flex items-center justify-between border-b border-metro-border px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold text-metro-red">
-              Vista previa
-            </p>
-            <h3 className="text-lg font-bold text-metro-text">{title}</h3>
-          </div>
-          <ModalCloseButton label="Cerrar vista previa" onClick={onClose} />
-        </div>
-        <div className="overflow-auto bg-slate-200 p-5 text-slate-950">
-          <div
-            className="print-preview-content"
-            dangerouslySetInnerHTML={{ __html: `${printStyles}${html}` }}
-          />
-        </div>
-        <div className="flex justify-end gap-2 border-t border-metro-border px-4 py-3">
-          <button
-            className="rounded-xl border border-metro-border bg-metro-surface px-3 py-2 text-sm font-semibold text-metro-text hover:border-metro-red"
-            onClick={onClose}
-            type="button"
-          >
-            Cancelar
-          </button>
-          <button
-            className="rounded-xl bg-metro-red px-3 py-2 text-sm font-semibold text-white hover:bg-metro-dark"
-            onClick={handlePrint}
-            type="button"
-          >
-            Imprimir
-          </button>
-        </div>
+    <ModalShell labelledBy="print-preview-title" onClose={onClose} size="xl" stacked>
+      <ModalHeader>
+        <ModalTitle id="print-preview-title" subtitle="Vista previa antes de imprimir">
+          {title}
+        </ModalTitle>
+        <ModalCloseButton label="Cerrar vista previa" onClick={onClose} />
+      </ModalHeader>
+
+      <div className="min-h-0 flex-1 overflow-auto bg-slate-200 p-5 text-slate-950">
+        <div
+          className="print-preview-content"
+          dangerouslySetInnerHTML={{ __html: `${printStyles}${html}` }}
+        />
       </div>
-    </div>
+
+      <ModalFooter>
+        <ActionButton variant="secondary" iconOnly={false} onClick={onClose}>Cancelar</ActionButton>
+        <ActionButton variant="print" iconOnly={false} onClick={handlePrint}>Imprimir</ActionButton>
+      </ModalFooter>
+    </ModalShell>
   );
 }
 
