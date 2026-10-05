@@ -1,4 +1,4 @@
-import { FileDown, Trash2 } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 import { useMemo } from 'react';
 import { ActionButton } from '../../../components/ui/ActionButton';
 import { Input } from '../../../components/ui/Field';
