@@ -12,6 +12,7 @@ import { recordPerformanceMetric } from './services/performanceMetrics';
 import './styles.css';
 import './dashboard-overrides.css';
 import './responsive-overrides.css';
+import './visual-polish.css';
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => {

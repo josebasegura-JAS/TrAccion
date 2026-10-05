@@ -1,0 +1,58 @@
+/*
+ * Paquete F · Pulido visual final
+ * Ajustes de baja intensidad para homogeneizar jerarquía, microtipografía,
+ * radios y KPIs sin alterar estructura ni lógica funcional.
+ */
+
+/* Ningún texto operativo debe bajar de 10 px. Se corrigen únicamente utilidades
+   explícitas por debajo de ese umbral; no se modifica la escala tipográfica normal. */
+[class~="text-[7px]"],
+[class~="text-[8px]"],
+[class~="text-[9px]"] {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+}
+
+/* Dashboard: reduce el peso excesivo de KPIs sin quitar jerarquía. */
+.app-module-stage--dashboard [class~="font-black"] {
+  font-weight: 800 !important;
+}
+
+/* Las tarjetas KPI del dashboard tenían un radio intermedio específico
+   (1.05rem). Se alinea con el radio estándar de paneles compactos. */
+.app-module-stage--dashboard [class*="rounded-[1.05rem]"] {
+  border-radius: 0.75rem !important;
+}
+
+/* El dashboard ya tiene color, borde y barra de progreso suficientes para
+   comunicar jerarquía. Se suavizan las sombras para evitar aspecto de tarjeta
+   flotante en cada indicador. */
+.app-module-stage--dashboard [class*="shadow-[inset_0_1px_0"][class*="0_10px_24px"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    0 4px 12px rgba(2, 6, 23, 0.18) !important;
+}
+
+.app-module-stage--dashboard [class*="shadow-[0_10px_30px"] {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14) !important;
+}
+
+/* Evita que los KPI "salten" un píxel al pasar el ratón. El cambio de borde y
+   brillo ya ofrece feedback suficiente y resulta más estable visualmente. */
+.app-module-stage--dashboard button[class*="hover:-translate-y"]:hover {
+  transform: none !important;
+}
+
+/* Reduce tracking cuando una etiqueta compacta ya está en mayúsculas.
+   Mantiene diferenciación sin dispersar tanto la lectura. */
+.app-module-stage--dashboard [class*="uppercase"][class*="tracking-["] {
+  letter-spacing: 0.05em !important;
+}
+
+/* Asegura transiciones discretas también en el pulido añadido. */
+@media (prefers-reduced-motion: reduce) {
+  .app-module-stage--dashboard button,
+  .app-module-stage--dashboard [class*="transition"] {
+    transition-duration: 0.01ms !important;
+  }
+}
