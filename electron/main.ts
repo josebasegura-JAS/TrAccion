@@ -12,7 +12,7 @@ const appIconPath = path.join(__dirname, '../build/icon/traccion-icon-256.ico');
 const splashHtmlPath = path.join(__dirname, '../build/icon/splash.html');
 const shutdownHtmlPath = path.join(__dirname, '../build/icon/shutdown.html');
 const splashMinimumVisibleMs = 800;
-const splashMaximumVisibleMs = 25_000;
+const splashMaximumVisibleMs = 60_000;
 const shutdownPerformanceFileName = 'last-shutdown-performance.json';
 
 interface PersistedShutdownPerformance {
@@ -100,11 +100,26 @@ function createContextMenu(mainWindow: BrowserWindow): void {
     Menu.buildFromTemplate(template).popup({ window: mainWindow });
   });
 }
+type SplashStepStatus = 'pending' | 'active' | 'done' | 'error';
+
 function createSplashWindow(): BrowserWindow {
-  const splashWindow = new BrowserWindow({ width: 460, height: 360, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const splashWindow = new BrowserWindow({ width: 500, height: 540, resizable: false, movable: true, minimizable: false, maximizable: false, closable: true, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cargando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
   splashWindow.center();
   splashWindow.loadFile(splashHtmlPath).catch(() => undefined);
   return splashWindow;
+}
+
+function updateSplashStep(
+  splashWindow: BrowserWindow | null,
+  step: string,
+  status: SplashStepStatus,
+  detail?: string,
+): void {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  const payload = JSON.stringify({ step, status, detail });
+  void splashWindow.webContents
+    .executeJavaScript(`window.__traccionSplashUpdate?.(${payload})`, true)
+    .catch(() => undefined);
 }
 function createShutdownWindow(): BrowserWindow {
   const shutdownWindow = new BrowserWindow({ width: 460, height: 360, resizable: false, movable: true, minimizable: false, maximizable: false, closable: false, frame: false, show: true, alwaysOnTop: true, skipTaskbar: true, title: 'Cerrando TrAcción', backgroundColor: '#0F1F2A', icon: appIconPath, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -148,15 +163,22 @@ function createWindow(splashWindow: BrowserWindow | null = null, splashStartedAt
   createContextMenu(mainWindow);
   setConnectivityIssueNotifier?.((payload) => { if (!mainWindow.isDestroyed()) mainWindow.webContents.send('database:connectivity-issue', payload); });
   let hasRequestedMainWindowShow = false;
-  const requestMainWindowShow = (): void => {
+  const requestMainWindowShow = (markInterfaceReady = true): void => {
     if (hasRequestedMainWindowShow || mainWindow.isDestroyed()) return;
     hasRequestedMainWindowShow = true;
     clearTimeout(forceShowTimer);
+    if (markInterfaceReady) updateSplashStep(splashWindow, 'interface', 'done');
     showMainAfterSplash(splashWindow, mainWindow, splashStartedAt);
   };
-  const forceShowTimer: ReturnType<typeof setTimeout> = setTimeout(requestMainWindowShow, splashMaximumVisibleMs);
+  const forceShowTimer: ReturnType<typeof setTimeout> = setTimeout(() => {
+    updateSplashStep(splashWindow, 'interface', 'error', 'La interfaz no confirmó el arranque en 60 segundos. Se abrirá para permitir el diagnóstico.');
+    requestMainWindowShow(false);
+  }, splashMaximumVisibleMs);
   const onBootVisible = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
   const onRendererReady = (event: IpcMainEvent): void => { if (event.sender === mainWindow.webContents) requestMainWindowShow(); };
+  mainWindow.webContents.once('did-finish-load', () => {
+    updateSplashStep(splashWindow, 'interface', 'active', 'Interfaz cargada. Esperando a que termine su inicialización…');
+  });
   ipcMain.on('app:boot-visible', onBootVisible);
   ipcMain.on('app:renderer-ready', onRendererReady);
   mainWindow.once('closed', () => { clearTimeout(forceShowTimer); ipcMain.removeListener('app:boot-visible', onBootVisible); ipcMain.removeListener('app:renderer-ready', onRendererReady); setConnectivityIssueNotifier?.(null); });
@@ -189,14 +211,46 @@ if (!app.requestSingleInstanceLock()) {
     const splashStartedAt = Date.now();
     const splashWindow = createSplashWindow();
     await waitForSplashPaint(splashWindow);
+    updateSplashStep(splashWindow, 'electron', 'done');
+    updateSplashStep(splashWindow, 'persistence', 'active');
     logStartupPhase(startupStartedAt, 'splash visible');
-    const persistence = await loadSqlitePersistenceModule();
-    logStartupPhase(startupStartedAt, 'persistence module loaded');
-    await Promise.all([persistence.initializeSqlitePersistence(), registerIpcHandlers()]);
-    logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
-    createWindow(splashWindow, splashStartedAt, persistence.setDatabaseConnectivityIssueNotifier);
-    logStartupPhase(startupStartedAt, 'main window loading');
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier); });
+
+    try {
+      const persistence = await loadSqlitePersistenceModule().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        updateSplashStep(splashWindow, 'persistence', 'error', message || 'No se pudo cargar el motor de datos.');
+        throw error;
+      });
+      updateSplashStep(splashWindow, 'persistence', 'done');
+      logStartupPhase(startupStartedAt, 'persistence module loaded');
+
+      updateSplashStep(splashWindow, 'database', 'active');
+      updateSplashStep(splashWindow, 'services', 'active');
+      await Promise.all([
+        persistence.initializeSqlitePersistence().then(() => {
+          updateSplashStep(splashWindow, 'database', 'done');
+        }).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          updateSplashStep(splashWindow, 'database', 'error', message || 'No se pudo inicializar la base de datos.');
+          throw error;
+        }),
+        registerIpcHandlers().then(() => {
+          updateSplashStep(splashWindow, 'services', 'done');
+        }).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          updateSplashStep(splashWindow, 'services', 'error', message || 'No se pudieron preparar los servicios internos.');
+          throw error;
+        }),
+      ]);
+      logStartupPhase(startupStartedAt, 'SQLite and IPC ready');
+
+      updateSplashStep(splashWindow, 'interface', 'active');
+      createWindow(splashWindow, splashStartedAt, persistence.setDatabaseConnectivityIssueNotifier);
+      logStartupPhase(startupStartedAt, 'main window loading');
+      app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(null, Date.now(), persistence.setDatabaseConnectivityIssueNotifier); });
+    } catch (error: unknown) {
+      console.error('[startup] Error durante el arranque de TrAcción.', error);
+    }
   });
   let isQuitAfterSqlitePersistenceClosed = false;
   let isShutdownInProgress = false;
